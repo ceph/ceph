@@ -51,7 +51,7 @@ class LFUDAPolicyFixture: public ::testing::Test {
 	  .dirty = false,
 	  .hostsList = { env->redisHost }
 	},
-	.version = 0,
+	.version = "",
 	.size = bl.length(),
 	.hostsList = { env->redisHost }
       };
@@ -110,7 +110,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, bl.length(), attrs, optional_yield{io, yield}));
-    policyDriver->get_cache_policy()->insert(env->dpp, key, 0, bl.length(), cacheDriver, optional_yield{io, yield});
+    policyDriver->get_cache_policy()->insert(env->dpp, key, 0, bl.length(), "", cacheDriver, optional_yield{io, yield});
 
     /* Change cache age for testing purposes */
     { 
@@ -160,7 +160,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 	.dirty = false,
 	.hostsList = { env->redisHost }
       },
-      .version = 0,
+      .version = "",
       .size = bl.length(),
       .globalWeight = 5,
       .hostsList = { env->redisHost }
@@ -175,7 +175,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 
     ASSERT_EQ(0, dir->set(&victim, optional_yield{io, yield}));
     ASSERT_EQ(0, cacheDriver->put(env->dpp, victim.cacheObj.objName, bl, bl.length(), attrs, optional_yield{io, yield}));
-    policyDriver->get_cache_policy()->insert(env->dpp, victim.cacheObj.objName, 0, bl.length(), cacheDriver, optional_yield{io, yield});
+    policyDriver->get_cache_policy()->insert(env->dpp, victim.cacheObj.objName, 0, bl.length(), "", cacheDriver, optional_yield{io, yield});
 
     /* Remote block */
     block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
@@ -195,8 +195,8 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     boost::system::error_code ec;
     request req;
     req.push("EXISTS", "RedisCache/victimName");
-    req.push("HGET", "testBucket_victimName_0", "globalWeight");
-    req.push("HGET", "testBucket_testName_0", "globalWeight");
+    req.push("HGET", "testBucket_victimName_", "globalWeight");
+    req.push("HGET", "testBucket_testName_", "globalWeight");
     req.push("FLUSHALL");
 
     response<int, std::string, std::string,
@@ -225,7 +225,6 @@ TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
 
     boost::system::error_code ec;
     request req;
-    req.push_range("HMGET", "testBucket_testName", fields);
     req.push("FLUSHALL");
 
     response<boost::redis::ignore_t> resp;

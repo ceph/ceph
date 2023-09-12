@@ -23,7 +23,9 @@ class CachePolicy {
 	std::string key;
 	uint64_t offset;
 	uint64_t len;
-	Entry(std::string& key, uint64_t offset, uint64_t len) : key(key), offset(offset), len(len) {}
+        std::string version;
+	Entry(std::string& key, uint64_t offset, uint64_t len, std:: string version) : key(key), offset(offset), 
+                                                                                       len(len), version(version) {}
     };
     
     //The disposer object function
@@ -47,7 +49,7 @@ class CachePolicy {
     virtual int exist_key(std::string key, optional_yield y) = 0;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
-    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
+    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key) = 0;
     virtual void shutdown() = 0;
 
@@ -61,10 +63,11 @@ class LFUDAPolicy : public CachePolicy {
 	std::string key;
 	uint64_t offset;
 	uint64_t len;
+        std::string version;
         int localWeight;
-	LFUDAEntry(std::string& key, uint64_t offset, uint64_t len, int localWeight) : key(key), offset(offset), 
-									               len(len), 
-										       localWeight(localWeight) {}
+	LFUDAEntry(std::string& key, uint64_t offset, uint64_t len, std::string version, int localWeight) : key(key), offset(offset), 
+									                                    len(len), version(version),
+										                            localWeight(localWeight) {}
     };
     
     //The disposer object function
@@ -113,7 +116,7 @@ class LFUDAPolicy : public CachePolicy {
     virtual int exist_key(std::string key, optional_yield y) override;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
-    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
+    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key);
     virtual void shutdown() override;
 };
@@ -129,7 +132,7 @@ class LRUPolicy : public CachePolicy {
     virtual int exist_key(std::string key, optional_yield y) override;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
-    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
+    virtual void insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key);
     virtual void shutdown() override {}
 };

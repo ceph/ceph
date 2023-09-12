@@ -150,8 +150,8 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
 
   if (!std::get<0>(resp).value()) {
     // Is int_max what we want here? -Sam
-    if (set_min_avg_weight(INT_MAX, ""/* local cache location or keep empty? */, y)) { /* Initialize minimum average weight */
-      return INT_MAX;
+    if (set_min_avg_weight(0, ""/* local cache location or keep empty? */, y)) { /* Initialize minimum average weight */
+      return 0;
     } else {
       return -1;
     }
@@ -185,7 +185,7 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
   CacheBlock victim;
   victim.cacheObj.objName = it->second->key;
   victim.cacheObj.bucketName = cacheNode->get_attr(dpp, victim.cacheObj.objName, "bucket_name", y); // generalize for other cache backends -Sam
-  victim.version = 0; // TODO: figure out how to get version
+  victim.version = it->second->version; 
 
   if (dir->get(&victim, y) < 0) {
     return {};
@@ -245,6 +245,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
         }
       }
     } else if (!exists) { /* No remote copy */
+      // how to get bufferlist data? -Sam
       // do I need to add the block to the local cache here? -Sam
       // update hosts list for block as well?
       // insert entry here? -Sam
@@ -289,7 +290,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
     }
 
     if (it->second->localWeight > avgWeight) {
-      // Todo: push victim block to remote cache
+      // TODO: push victim block to remote cache
     }
   }
 
@@ -305,28 +306,31 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
   } else {
     uint64_t num_entries = entries_map.size();
 
-    if (set_min_avg_weight(avgWeight - (it->second->localWeight/num_entries), ""/*local cache location*/, y) < 0) { // Where else must this be set? -Sam 
-      return 0;
+    if (!avgWeight) {
+      if (set_min_avg_weight(0, ""/*local cache location*/, y) < 0) // Where else must this be set? -Sam 
+	return 0;
     } else {
+      if (set_min_avg_weight(avgWeight - (it->second->localWeight/num_entries), ""/*local cache location*/, y) < 0) { // Where else must this be set? -Sam 
+	return 0;
+    } 
       int age = get_age(y);
       age = std::max(it->second->localWeight, age);
-      if (set_age(age, y) < 0) {
+      if (set_age(age, y) < 0)
 	return 0;
-      }
     }
   }
 
   return victim.size; // this doesn't account for the additional attributes that were removed and need to be set with the new block -Sam
 }
 
-void LFUDAPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y)
+void LFUDAPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y)
 {
   erase(dpp, key);
 
   int age = get_age(y);
   assert(age > -1);
   
-  LFUDAEntry *e = new LFUDAEntry(key, offset, len, age);
+  LFUDAEntry *e = new LFUDAEntry(key, offset, len, version, age);
   entries_lfuda_list.push_back(*e);
   entries_map.emplace(key, e);
 }
@@ -370,11 +374,11 @@ uint64_t LRUPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDri
 }
 
 // why do we need cache node here? -Sam
-void LRUPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, rgw::cache::CacheDriver* cacheNode, optional_yield y)
+void LRUPolicy::insert(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y)
 {
   erase(dpp, key);
 
-  Entry *e = new Entry(key, offset, len);
+  Entry *e = new Entry(key, offset, len, version);
   entries_lru_list.push_back(*e);
   entries_map.emplace(key, e);
 }

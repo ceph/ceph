@@ -565,7 +565,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       // Read From Cache
       auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id); 
 
-      source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, part_len, source->driver->get_cache_driver(), y);
+      source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, part_len, "", source->driver->get_cache_driver(), y);
 
       ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
 
@@ -585,7 +585,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
         // Read From Cache
         auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid, read_ofs, len_to_read, cost, id); 
 
-        source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, obj_max_req_size, source->driver->get_cache_driver(), y);
+        source->driver->get_policy_driver()->get_cache_policy()->insert(dpp, oid_in_cache, adjusted_start_ofs, obj_max_req_size, "", source->driver->get_cache_driver(), y);
 
         ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): Info: flushing data for oid: " << oid_in_cache << dendl;
 
@@ -793,7 +793,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         rgw::d4n::CacheBlock block;
         block.size = bl.length();
         if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
-          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver(), *save_y);
+          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), "", filter->get_cache_driver(), *save_y);
         }
       }
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
@@ -804,7 +804,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
         rgw::d4n::CacheBlock block;
         block.size = bl.length();
         if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
-          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver(), *save_y);
+          filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl.length(), "", filter->get_cache_driver(), *save_y);
         }
       }
     } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
@@ -824,7 +824,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           rgw::d4n::CacheBlock block;
           block.size = bl_rem.length();
           if (filter->get_policy_driver()->get_cache_policy()->get_block(save_dpp, &block, filter->get_cache_driver(), *save_y) == 0) {
-            filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl_rem.length(), filter->get_cache_driver(), *save_y);
+            filter->get_policy_driver()->get_cache_policy()->insert(save_dpp, oid, ofs, bl_rem.length(), "", filter->get_cache_driver(), *save_y);
           }
         }
 

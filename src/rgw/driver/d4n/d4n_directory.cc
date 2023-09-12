@@ -225,7 +225,7 @@ int ObjectDirectory::del(CacheObj* object, optional_yield y) {
 }
 
 std::string BlockDirectory::build_index(CacheBlock* block) {
-  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + boost::lexical_cast<std::string>(block->version);
+  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + block->version;
 }
 
 int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) {
@@ -261,7 +261,7 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
     
   /* Creating a redisValues of the entry's properties */
   redisValues.push_back("version");
-  redisValues.push_back(std::to_string(block->version));
+  redisValues.push_back(block->version);
   redisValues.push_back("size");
   redisValues.push_back(std::to_string(block->size));
   redisValues.push_back("globalWeight");
@@ -346,7 +346,7 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y) {
 	return -1;
       }
 
-      block->version = boost::lexical_cast<uint64_t>(std::get<0>(resp).value()[0]);
+      block->version = std::get<0>(resp).value()[0];
       block->size = boost::lexical_cast<uint64_t>(std::get<0>(resp).value()[1]);
       block->globalWeight = boost::lexical_cast<int>(std::get<0>(resp).value()[2]);
 
