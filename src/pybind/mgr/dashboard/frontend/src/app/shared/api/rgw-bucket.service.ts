@@ -43,6 +43,12 @@ export class RgwBucketService extends ApiClient {
     });
   }
 
+  getTotalBucketsAndUsersLength() {
+    return this.rgwDaemonService.request((params: HttpParams) => {
+      return this.http.get(`ui-${this.url}/buckets_and_users_count`, { params: params });
+    });
+  }
+
   create(
     bucket: string,
     uid: string,
