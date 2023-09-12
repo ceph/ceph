@@ -56,8 +56,7 @@ struct fmt::formatter<test_extent_record_t> : fmt::formatter<std::string_view> {
 
 struct transaction_manager_test_t :
   public seastar_test_suite_t,
-  TMTestState,
-  ::testing::WithParamInterface<const char*> {
+  TMTestState {
 
   std::random_device rd;
   std::mt19937 gen;
@@ -76,14 +75,7 @@ struct transaction_manager_test_t :
   }
 
   seastar::future<> set_up_fut() final {
-    std::string j_type = GetParam();
-    if (j_type == "segmented") {
-      return tm_setup(journal_type_t::SEGMENTED);
-    } else if (j_type == "circularbounded") {
-      return tm_setup(journal_type_t::RANDOM_BLOCK);
-    } else {
-      ceph_assert(0 == "no support");
-    }
+    return tm_setup();
   }
 
   seastar::future<> tear_down_fut() final {
