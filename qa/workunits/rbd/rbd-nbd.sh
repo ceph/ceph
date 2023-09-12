@@ -417,6 +417,16 @@ DEV=
 rbd feature disable ${POOL}/${IMAGE} journaling
 rbd config image rm ${POOL}/${IMAGE} rbd_discard_granularity_bytes
 
+# test that disabling a feature so that the op is proxied to rbd-nbd
+# (arranged here by blkdiscard before "rbd feature disable") doesn't hang
+DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
+get_pid ${POOL}
+rbd feature enable ${POOL}/${IMAGE} journaling
+_sudo blkdiscard --offset 0 --length 4096 ${DEV}
+rbd feature disable ${POOL}/${IMAGE} journaling
+unmap_device ${DEV} ${PID}
+DEV=
+
 # test that rbd_op_threads setting takes effect
 EXPECTED=`ceph-conf --show-config-value librados_thread_count`
 DEV=`_sudo rbd device --device-type nbd map ${POOL}/${IMAGE}`
