@@ -1,5 +1,7 @@
 # deamon_identity.py - classes for identifying daemons & services
 
+import os
+import pathlib
 import re
 
 from typing import Union
@@ -49,6 +51,9 @@ class DaemonIdentity:
     @property
     def unit_name(self) -> str:
         return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}'
+
+    def data_dir(self, base_data_dir: Union[str, os.PathLike]) -> str:
+        return str(pathlib.Path(base_data_dir) / self.fsid / self.daemon_name)
 
     @classmethod
     def from_name(cls, fsid: str, name: str) -> 'DaemonIdentity':
