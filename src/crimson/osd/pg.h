@@ -644,6 +644,12 @@ private:
   std::optional<pg_stat_t> pg_stats;
 
 public:
+  OSDriver &get_osdriver() final {
+    return osdriver;
+  }
+  SnapMapper &get_snap_mapper() final {
+    return snap_mapper;
+  }
   RecoveryBackend* get_recovery_backend() final {
     return recovery_backend.get();
   }
