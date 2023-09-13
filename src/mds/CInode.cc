@@ -2949,19 +2949,23 @@ void CInode::clear_ambiguous_auth()
 bool CInode::can_auth_pin(int *err_ret, bool bypassfreezing) const {
   int err;
   if (!is_auth()) {
+    dout(20) << __func__ << ": error - no auth" << dendl;
     err = ERR_NOT_AUTH;
   } else if (is_freezing_inode()) {
     if (bypassfreezing) {
       dout(20) << "allowing authpin with freezing" << dendl;
       err = 0;
     } else {
+      dout(20) << __func__ << ": error - exporting inode" << dendl;
       err = ERR_EXPORTING_INODE;
     }
   } else if (is_frozen_inode() || is_frozen_auth_pin()) {
+    dout(20) << __func__ << ": error - exporting inode" << dendl;
     err = ERR_EXPORTING_INODE;
   } else {
     if (parent)
       return parent->can_auth_pin(err_ret);
+    dout(20) << __func__ << ": auth!" << dendl;
     err = 0;
   }
   if (err && err_ret)

@@ -1083,6 +1083,8 @@ private:
   void repair_dirfrag_stats(CDir *dir);
   void rdlock_dirfrags_stats(CInode *diri, MDSInternalContext *fin);
 
+  void uninline_data_work(MDRequestRef mdr);
+
   // my leader
   MDSRank *mds;
 
