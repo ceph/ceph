@@ -17,6 +17,7 @@
 #include "mds/MDSRank.h"
 #include "mds/MDCache.h"
 #include "mds/MDSContinuation.h"
+#include "osdc/Objecter.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -227,6 +228,7 @@ void ScrubStack::kick_off_scrubs()
 	// it's a regular file, symlink, or hard link
 	dequeue(in); // we only touch it this once, so remove from stack
 
+	uninline_data(in, new C_MDSInternalNoop);
 	scrub_file_inode(in);
       } else {
 	bool added_children = false;
@@ -1196,4 +1198,17 @@ void ScrubStack::handle_mds_failure(mds_rank_t mds)
   }
   if (kick)
     kick_off_scrubs();
+}
+
+void ScrubStack::uninline_data(CInode *in, Context *fin)
+{
+  dout(10) << "(uninline_data) starting data uninlining for " << *in << dendl;
+
+  MDRequestRef mdr = in->mdcache->request_start_internal(CEPH_MDS_OP_UNINLINE_DATA);
+  mdr->set_filepath(filepath(in->ino()));
+  mdr->snapid = CEPH_NOSNAP;
+  mdr->no_early_reply = true;
+  mdr->internal_op_finish = fin;
+
+  in->mdcache->dispatch_request(mdr);
 }
