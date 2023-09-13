@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 #include "./osd_scrub_sched.h"
 
+#include <string_view>
 #include "osd/OSD.h"
 
 #include "pg_scrubber.h"
@@ -21,13 +22,17 @@ using ScrubJob = Scrub::ScrubJob;
 // ////////////////////////////////////////////////////////////////////////// //
 // ScrubQueue
 
+#define dout_subsys ceph_subsys_osd
 #undef dout_context
 #define dout_context (cct)
 #undef dout_prefix
-#define dout_prefix                                                            \
-  *_dout << "osd." << osd_service.get_nodeid() << " scrub-queue::" << __func__ \
-	 << " "
+#define dout_prefix _prefix_fn(_dout, this, __func__)
 
+template <class T>
+static std::ostream& _prefix_fn(std::ostream* _dout, T* t, std::string fn = "")
+{
+  return t->gen_prefix(*_dout, fn);
+}
 
 ScrubQueue::ScrubQueue(CephContext* cct, Scrub::ScrubSchedListener& osds)
     : cct{cct}
@@ -42,6 +47,12 @@ ScrubQueue::ScrubQueue(CephContext* cct, Scrub::ScrubSchedListener& osds)
   }
 }
 
+std::ostream& ScrubQueue::gen_prefix(std::ostream& out, std::string_view fn)
+    const
+{
+  return out << fmt::format(
+	     "osd.{} scrub-queue:{}: ", osd_service.get_nodeid(), fn);
+}
 
 /*
  * Modify the scrub job state:
