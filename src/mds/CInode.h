@@ -1058,6 +1058,15 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
                            MDSContext *fin);
   static void dump_validation_results(const validated_data& results,
                                       ceph::Formatter *f);
+  bool has_inline_data() {
+    if (is_normal() && is_file()) {
+      auto pin = get_projected_inode();
+      if (pin->inline_data.version != CEPH_INLINE_NONE) {
+	return true;
+      }
+    }
+    return false;
+  }
 
   //bool hack_accessed = false;
   //utime_t hack_load_stamp;
