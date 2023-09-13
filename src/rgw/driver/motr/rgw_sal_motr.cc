@@ -595,8 +595,13 @@ int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_childre
 
     for (const auto& obj : results.objs) {
       rgw_obj_key key(obj.key);
-      /* xxx dang */
-      ret = rgw_remove_object(dpp, store, this, key);
+      if (key.instance.empty()) {
+        key.instance = "null";
+      }
+
+      std::unique_ptr<rgw::sal::Object> object = get_object(key);
+
+      ret = object->delete_object(dpp, null_yield);
       if (ret < 0 && ret != -ENOENT) {
         ldpp_dout(dpp, 0) << "ERROR: remove_bucket rgw_remove_object failed rc=" << ret << dendl;
 	      return ret;
@@ -1143,7 +1148,7 @@ bool MotrZone::get_redirect_endpoint(std::string* endpoint)
 
 bool MotrZone::has_zonegroup_api(const std::string& api) const
 {
-  return (zonegroup->api_name == api);
+  return (zonegroup.group.api_name == api);
 }
 
 const std::string& MotrZone::get_current_period_id()
@@ -1254,7 +1259,7 @@ int MotrObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* dpp, r
   bufferlist& blr = bl;
   auto iter = blr.cbegin();
   ent.decode(iter);
-  decode(attrs, iter);
+  decode(state.attrset, iter);
 
   return 0;
 }
@@ -1267,8 +1272,8 @@ int MotrObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_val, op
     return r;
   }
   set_atomic();
-  attrs[attr_name] = attr_val;
-  return set_obj_attrs(dpp, &attrs, nullptr, y);
+  state.attrset[attr_name] = attr_val;
+  return set_obj_attrs(dpp, &state.attrset, nullptr, y);
 }
 
 int MotrObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name, optional_yield y)
@@ -2504,7 +2509,7 @@ int MotrMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
   string bucket_multipart_iname =
       "motr.rgw.bucket." + meta_obj->get_bucket()->get_name() + ".multiparts";
   rc = store->do_idx_op_by_name(bucket_multipart_iname,
-                                  M0_IC_GET, meta_obj->get_key().to_str(), bl);
+                                  M0_IC_GET, meta_obj->get_oid(), bl);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << __func__ << ": Failed to get multipart upload. rc=" << rc << dendl;
     return rc == -ENOENT ? -ERR_NO_SUCH_UPLOAD : rc;
