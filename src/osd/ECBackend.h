@@ -445,9 +445,8 @@ public:
     CephContext* cct;
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t& sinfo;
-    PGBackend::Listener* parent;
     // TODO: lay an interface down here
-    ECBackend& ec_backend;
+    PGBackend::Listener* parent;
 
     PGBackend::Listener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
@@ -457,13 +456,11 @@ public:
     ReadPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
                 const ECUtil::stripe_info_t& sinfo,
-                PGBackend::Listener* parent,
-                ECBackend& ec_backend)
+                PGBackend::Listener* parent)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
-        parent(parent),
-        ec_backend(ec_backend) {
+        parent(parent) {
     }
 
     int get_remaining_shards(

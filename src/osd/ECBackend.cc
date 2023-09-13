@@ -224,7 +224,7 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
-    read_pipeline(cct, ec_impl, this->sinfo, get_parent(), *this),
+    read_pipeline(cct, ec_impl, this->sinfo, get_parent()),
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent(), *this),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
