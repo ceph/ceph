@@ -18,6 +18,9 @@
 #include "crimson/os/seastore/random_block_manager/rbm_device.h"
 #include "crimson/os/seastore/journal/circular_bounded_journal.h"
 #include "crimson/os/seastore/random_block_manager/block_rb_manager.h"
+#ifdef UNIT_TESTS_BUILT
+#include "test/crimson/gtest_seastar.h"
+#endif
 
 using namespace crimson;
 using namespace crimson::os;
@@ -167,7 +170,12 @@ public:
   void set_primary_device_ref(DeviceRef) final;
 };
 
-class EphemeralTestState : public ::testing::WithParamInterface<const char*> {
+class EphemeralTestState 
+#ifdef UNIT_TESTS_BUILT
+  : public ::testing::WithParamInterface<const char*> {
+#else 
+  {
+#endif
 protected:
   journal_type_t journal_type;
   size_t num_main_device_managers = 0;
@@ -211,17 +219,21 @@ protected:
 
   seastar::future<> tm_setup() {
     LOG_PREFIX(EphemeralTestState::tm_setup);
+#ifdef UNIT_TESTS_BUILT
     std::string j_type = GetParam();
-    if (j_type == "segmented") {
-      devices.reset(new
-        EphemeralSegmentedDevices(
-          num_main_device_managers, num_cold_device_managers));
-    } else {
-      assert(j_type == "circularbounded");
+#else
+    std::string j_type = "segmented";
+#endif
+    if (j_type == "circularbounded") {
       //TODO: multiple devices
       ceph_assert(num_main_device_managers == 1);
       ceph_assert(num_cold_device_managers == 0);
       devices.reset(new EphemeralRandomBlockDevices(1));
+    } else {
+      // segmented by default
+      devices.reset(new
+        EphemeralSegmentedDevices(
+          num_main_device_managers, num_cold_device_managers));
     }
     SUBINFO(test, "begin with {} devices ...", devices->get_num_devices());
     return devices->setup(
