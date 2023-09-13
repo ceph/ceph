@@ -130,6 +130,8 @@ yaml.add_representer(HostDetails, HostDetails.yaml_representer)
 
 
 class DaemonFields(enum.Enum):
+    service_name = 'service_name'
+    daemon_type = 'daemon_type'
     name = 'name'
     host = 'host'
     status = 'status'
@@ -138,6 +140,7 @@ class DaemonFields(enum.Enum):
     mem_use = 'mem_use'
     mem_lim = 'mem_lim'
     image = 'image'
+
 
 class ServiceType(enum.Enum):
     mon = 'mon'
@@ -835,13 +838,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         def ukn(s: Optional[str]) -> str:
             return '<unknown>' if s is None else s
 
-        def sort_by_field(d: DaemonDescription) -> Optional[str]:
+        def sort_by_field(d: DaemonDescription) -> Any:
             if sort_by == DaemonFields.name:
                 return d.name()
             elif sort_by == DaemonFields.host:
                 return d.hostname
             elif sort_by == DaemonFields.status:
-                return d.status
+                return d.status.name if d.status else None
             elif sort_by == DaemonFields.refreshed:
                 return d.last_refresh
             elif sort_by == DaemonFields.age:
@@ -852,6 +855,10 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                 return d.memory_request
             elif sort_by == DaemonFields.image:
                 return d.container_image_id
+            elif sort_by == DaemonFields.daemon_type:
+                return d.daemon_type
+            elif sort_by == DaemonFields.service_name:
+                return d.service_name()
             else:
                 return None
 
