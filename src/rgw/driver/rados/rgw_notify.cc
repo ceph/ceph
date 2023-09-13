@@ -631,12 +631,10 @@ public:
 // TODO make the pointer atomic in allocation and deallocation to avoid race conditions
 static Manager* s_manager = nullptr;
 
-constexpr size_t MAX_QUEUE_SIZE = 128*1000*1000; // 128MB
 constexpr uint32_t Q_LIST_UPDATE_MSEC = 1000*30;     // check queue list every 30seconds
 constexpr uint32_t Q_LIST_RETRY_MSEC = 1000;         // retry every second if queue list update failed
 constexpr uint32_t IDLE_TIMEOUT_USEC = 100*1000;     // idle sleep 100ms
 constexpr uint32_t FAILOVER_TIME_MSEC = 3*Q_LIST_UPDATE_MSEC; // FAILOVER TIME 3x renew time
-constexpr uint32_t WORKER_COUNT = 1;                 // 1 worker thread
 constexpr uint32_t STALE_RESERVATIONS_PERIOD_S = 120;   // cleanup reservations that are more than 2 minutes old
 constexpr uint32_t RESERVATIONS_CLEANUP_PERIOD_S = 30; // reservation cleanup every 30 seconds
 
@@ -645,12 +643,11 @@ bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvide
     return false;
   }
   // TODO: take conf from CephContext
-  s_manager = new Manager(cct, MAX_QUEUE_SIZE, 
-      Q_LIST_UPDATE_MSEC, Q_LIST_RETRY_MSEC, 
-      IDLE_TIMEOUT_USEC, FAILOVER_TIME_MSEC, 
+  s_manager = new Manager(
+      cct, cct->_conf->rgw_persistent_topic_max_queue_size, Q_LIST_UPDATE_MSEC,
+      Q_LIST_RETRY_MSEC, IDLE_TIMEOUT_USEC, FAILOVER_TIME_MSEC,
       STALE_RESERVATIONS_PERIOD_S, RESERVATIONS_CLEANUP_PERIOD_S,
-      WORKER_COUNT,
-      store);
+      cct->_conf->rgw_notification_max_workers, store);
   return true;
 }
 

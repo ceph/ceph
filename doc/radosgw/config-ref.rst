@@ -324,13 +324,17 @@ With these settings you can control how long and how often to retry an
 unsuccessful notification. How long to persistently push can be controlled
 by providing maximum time of retention or maximum amount of retries.
 Frequency of persistent push retries can be controlled with the sleep duration
-parameter.
-
-All of these values have default value 0 (persistent retention is indefinite,
+parameter. All of these values have default value 0 (persistent retention is indefinite,
 and retried as frequently as possible).
+For tunning Persistent topic behavior to be more aggressive for heavy loads, the default 
+values of rgw_persistent_topic_max_queue_size and rgw_notification_max_workers can be 
+changed. This way the queue capacity can be increased to store more notification messages
+and increasing rgw_notification_max_workers allows for parallel thread processing of notifications.
 
 .. confval:: rgw_topic_persistency_time_to_live
 .. confval:: rgw_topic_persistency_max_retries
 .. confval:: rgw_topic_persistency_sleep_duration
+.. confval:: rgw_persistent_topic_max_queue_size
+.. confval:: rgw_notification_max_workers
 
 .. _Bucket Notifications: ../notifications

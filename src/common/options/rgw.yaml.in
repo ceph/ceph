@@ -3850,3 +3850,21 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_persistent_topic_max_queue_size
+  type: size
+  level: advanced
+  desc: The maximum size (in bytes) of rados queue that stores the persistent notifications.
+  default: 128_M
+  services:
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
+- name: rgw_notification_max_workers
+  type: uint
+  level: advanced
+  desc: specifies the maximum number of worker threads that process the notification queue.
+  default: 1
+  services:
+  - rgw
+  with_legacy: true
