@@ -45,6 +45,11 @@ Map options:
   --max-path-len              The value of the maximum path length. Default: 256.
   --file-mode                 The access mode to be used when creating files.
   --dir-mode                  The access mode to be used when creating directories.
+  --case-insensitive          Emulate a case insensitive filesystem by normalizing
+                              paths. The original case is NOT preserved. Existing
+                              paths with a different case cannot be accessed.
+  --force-lowercase           Use lowercase when normalizing paths. Uppercase is
+                              used by default.
 
 Unmap options:
   -l [ --mountpoint ] arg     mountpoint (path or drive letter) (e.g -l x).
@@ -196,6 +201,10 @@ int parse_args(
         *err_msg << "ceph-dokan: Invalid argument for operation-timeout";
         return -EINVAL;
       }
+    } else if (ceph_argparse_flag(args, i, "--case-insensitive", (char *)NULL)) {
+      cfg->case_sensitive = false;
+    } else if (ceph_argparse_flag(args, i, "--force-lowercase", (char *)NULL)) {
+      cfg->convert_to_uppercase = false;
     } else {
       ++i;
     }
