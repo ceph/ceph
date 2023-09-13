@@ -245,6 +245,8 @@ class ScrubQueue {
 				      const pg_info_t& pg_info,
 				      const pool_opts_t& pool_conf) const;
 
+  std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
+
  public:
   void dump_scrubs(ceph::Formatter* f) const;
 
