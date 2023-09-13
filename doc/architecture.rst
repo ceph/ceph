@@ -134,40 +134,45 @@ Decentralized Placement of Replicated Data`_.
 Cluster Map
 ~~~~~~~~~~~
 
-Ceph depends upon Ceph Clients and Ceph OSD Daemons having knowledge of the
-cluster topology, which is inclusive of 5 maps collectively referred to as the
-"Cluster Map":
+In order for a Ceph cluster to function properly, Ceph Clients and Ceph OSDs
+must have current information about the cluster's topology. Current information
+is stored in the "Cluster Map", which is in fact a collection of five maps. The
+five maps that constitute the cluster map are:
 
-#. **The Monitor Map:** Contains the cluster ``fsid``, the position, name 
-   address and port of each monitor. It also indicates the current epoch, 
-   when the map was created, and the last time it changed. To view a monitor
-   map, execute ``ceph mon dump``.   
+#. **The Monitor Map:** Contains the cluster ``fsid``, the position, the name,
+   the address, and the TCP port of each monitor. The monitor map specifies the
+   current epoch, the time of the monitor map's creation, and the time of the
+   monitor map's last modification.  To view a monitor map, run ``ceph mon
+   dump``.   
    
-#. **The OSD Map:** Contains the cluster ``fsid``, when the map was created and
-   last modified, a list of pools, replica sizes, PG numbers, a list of OSDs
-   and their status (e.g., ``up``, ``in``). To view an OSD map, execute
-   ``ceph osd dump``. 
+#. **The OSD Map:** Contains the cluster ``fsid``, the time of the OSD map's
+   creation, the time of the OSD map's last modification, a list of pools, a
+   list of replica sizes, a list of PG numbers, and a list of OSDs and their
+   statuses (for example, ``up``, ``in``). To view an OSD map, run ``ceph
+   osd dump``. 
    
-#. **The PG Map:** Contains the PG version, its time stamp, the last OSD
-   map epoch, the full ratios, and details on each placement group such as
-   the PG ID, the `Up Set`, the `Acting Set`, the state of the PG (e.g., 
-   ``active + clean``), and data usage statistics for each pool.
+#. **The PG Map:** Contains the PG version, its time stamp, the last OSD map
+   epoch, the full ratios, and the details of each placement group. This
+   includes the PG ID, the `Up Set`, the `Acting Set`, the state of the PG (for
+   example, ``active + clean``), and data usage statistics for each pool.
 
 #. **The CRUSH Map:** Contains a list of storage devices, the failure domain
-   hierarchy (e.g., device, host, rack, row, room, etc.), and rules for 
-   traversing the hierarchy when storing data. To view a CRUSH map, execute
-   ``ceph osd getcrushmap -o {filename}``; then, decompile it by executing
-   ``crushtool -d {comp-crushmap-filename} -o {decomp-crushmap-filename}``.
-   You can view the decompiled map in a text editor or with ``cat``. 
+   hierarchy (for example, ``device``, ``host``, ``rack``, ``row``, ``room``),
+   and rules for traversing the hierarchy when storing data. To view a CRUSH
+   map, run ``ceph osd getcrushmap -o {filename}`` and then decompile it by
+   running ``crushtool -d {comp-crushmap-filename} -o
+   {decomp-crushmap-filename}``. Use a text editor or ``cat`` to view the
+   decompiled map.
 
 #. **The MDS Map:** Contains the current MDS map epoch, when the map was 
    created, and the last time it changed. It also contains the pool for 
    storing metadata, a list of metadata servers, and which metadata servers
    are ``up`` and ``in``. To view an MDS map, execute ``ceph fs dump``.
 
-Each map maintains an iterative history of its operating state changes. Ceph
-Monitors maintain a master copy of the cluster map including the cluster
-members, state, changes, and the overall health of the Ceph Storage Cluster.
+Each map maintains a history of changes to its operating state. Ceph Monitors
+maintain a master copy of the cluster map. This master copy includes the
+cluster members, the state of the cluster, changes to the cluster, and
+information recording the overall health of the Ceph Storage Cluster.
 
 .. index:: high availability; monitor architecture
 
