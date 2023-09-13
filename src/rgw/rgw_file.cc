@@ -23,7 +23,7 @@
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
-#include "rgw_file.h"
+#include "rgw_file_int.h"
 #include "rgw_lib_frontend.h"
 #include "rgw_perf_counters.h"
 #include "common/errno.h"
