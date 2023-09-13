@@ -1,0 +1,5 @@
+#!/bin/sh
+
+echo "$0: This tool is obsolete; mons now create these keys on their own, and"
+echo "$0: this tool does nothing except print this message."
+echo "$0: It will be removed in the next release. Please fix your script/tool."

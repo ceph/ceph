@@ -1,0 +1,824 @@
+<cd-modal [pageURL]="pageURL"
+          [modalRef]="activeModal">
+  <span class="modal-title"
+        i18n>{{ action | titlecase }} {{ resource | upperFirst }}</span>
+  <ng-container class="modal-content">
+    <form #frm="ngForm"
+          [formGroup]="serviceForm"
+          novalidate>
+      <div class="modal-body">
+        <cd-alert-panel *ngIf="serviceForm.controls.service_type.value === 'rgw' && showRealmCreationForm"
+                        type="info"
+                        spacingClass="mb-3"
+                        i18n>
+          <a class="text-decoration-underline"
+             (click)="createMultisiteSetup()">
+             Click here</a> to create a new realm/zonegroup/zone
+        </cd-alert-panel>
+        <!-- Service type -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="service_type"
+                 i18n>Type</label>
+          <div class="cd-col-form-input">
+            <select id="service_type"
+                    name="service_type"
+                    class="form-select"
+                    formControlName="service_type"
+                    (change)="getServiceIds($event.target.value)">
+              <option i18n
+                      [ngValue]="null">-- Select a service type --</option>
+              <option *ngFor="let serviceType of serviceTypes"
+                      [value]="serviceType">
+                {{ serviceType }}
+              </option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('service_type', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- backend_service -->
+          <div *ngIf="serviceForm.controls.service_type.value === 'ingress'"
+               class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   [ngClass]="{'required': ['ingress'].includes(serviceForm.controls.service_type.value)}"
+                   for="backend_service">Backend Service</label>
+            <div class="cd-col-form-input">
+              <select id="backend_service"
+                      name="backend_service"
+                      class="form-select"
+                      formControlName="backend_service"
+                      (change)="prePopulateId()">
+                <option *ngIf="services === null"
+                        [ngValue]="null"
+                        i18n>Loading...</option>
+                <option *ngIf="services !== null && services.length === 0"
+                        [ngValue]="null"
+                        i18n>-- No service available --</option>
+                <option *ngIf="services !== null && services.length > 0"
+                        [ngValue]="null"
+                        i18n>-- Select an existing service --</option>
+                <option *ngFor="let service of services"
+                        [value]="service.service_name">{{ service.service_name }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('backend_service', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+        <!-- Service id -->
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value !== 'snmp-gateway'">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': ['mds', 'rgw', 'nfs', 'iscsi', 'ingress'].includes(serviceForm.controls.service_type.value)}"
+                 for="service_id">
+            <span i18n>Id</span>
+            <cd-helper i18n>Used in the service name which is &lt;service_type.service_id&gt;</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input id="service_id"
+                   class="form-control"
+                   type="text"
+                   formControlName="service_id">
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('service_id', frm, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('service_id', frm, 'uniqueName')"
+                  i18n>This service id is already in use.</span>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('service_id', frm, 'mdsPattern')"
+                  i18n>MDS service id must start with a letter and contain alphanumeric characters or '.', '-', and '_'</span>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'rgw'">
+          <label class="cd-col-form-label"
+                 for="realm_name"
+                 i18n>Realm</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="realm_name"
+                    formControlName="realm_name"
+                    name="realm_name"
+                    [attr.disabled]="realmList.length === 0  || editing ? true : null">
+            <option *ngIf="realmList.length === 0"
+                    i18n
+                    selected>-- No realm available --</option>
+            <option *ngFor="let realm of realmList"
+                    [value]="realm.name">
+                  {{ realm.name }}
+            </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'rgw'">
+          <label class="cd-col-form-label"
+                 for="zonegroup_name"
+                 i18n>Zonegroup</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="zonegroup_name"
+                    formControlName="zonegroup_name"
+                    name="zonegroup_name"
+                    [attr.disabled]="zonegroupList.length === 0  || editing ? true : null">
+              <option *ngFor="let zonegroup of zonegroupList"
+                      [value]="zonegroup.name">
+              {{ zonegroup.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'rgw'">
+          <label class="cd-col-form-label"
+                 for="zone_name"
+                 i18n>Zone</label>
+          <div class="cd-col-form-input">
+            <select class="form-select"
+                    id="zone_name"
+                    formControlName="zone_name"
+                    name="zone_name"
+                    [attr.disabled]="zoneList.length === 0  || editing ? true : null">
+              <option *ngFor="let zone of zoneList"
+                      [value]="zone.name">
+              {{ zone.name }}
+              </option>
+            </select>
+          </div>
+        </div>
+
+        <!-- unmanaged -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="unmanaged"
+                     type="checkbox"
+                     formControlName="unmanaged">
+              <label class="custom-control-label"
+                     for="unmanaged"
+                     i18n>Unmanaged</label>
+              <cd-helper i18n>If set to true, the orchestrator will not start nor stop any daemon associated with this service.
+                 Placement and all other properties will be ignored.</cd-helper>
+            </div>
+          </div>
+        </div>
+
+        <!-- Placement -->
+        <div *ngIf="!serviceForm.controls.unmanaged.value"
+             class="form-group row">
+          <label class="cd-col-form-label"
+                 for="placement"
+                 i18n>Placement</label>
+          <div class="cd-col-form-input">
+            <select id="placement"
+                    class="form-select"
+                    formControlName="placement">
+              <option i18n
+                      value="hosts">Hosts</option>
+              <option i18n
+                      value="label">Label</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Label -->
+        <div *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.placement.value === 'label'"
+             class="form-group row">
+          <label i18n
+                 class="cd-col-form-label"
+                 for="label">Label</label>
+          <div class="cd-col-form-input">
+            <input id="label"
+                   class="form-control"
+                   type="text"
+                   formControlName="label"
+                   [ngbTypeahead]="searchLabels"
+                   (focus)="labelFocus.next($any($event).target.value)"
+                   (click)="labelClick.next($any($event).target.value)">
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('label', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Hosts -->
+        <div *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.placement.value === 'hosts'"
+             class="form-group row">
+          <label class="cd-col-form-label"
+                 for="hosts"
+                 i18n>Hosts</label>
+          <div class="cd-col-form-input">
+            <cd-select-badges id="hosts"
+                              [data]="serviceForm.controls.hosts.value"
+                              [options]="hosts.options"
+                              [messages]="hosts.messages">
+            </cd-select-badges>
+          </div>
+        </div>
+
+        <!-- count -->
+        <div *ngIf="!serviceForm.controls.unmanaged.value"
+             class="form-group row">
+          <label class="cd-col-form-label"
+                 for="count">
+            <span i18n>Count</span>
+            <cd-helper i18n>Only that number of daemons will be created.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <input id="count"
+                   class="form-control"
+                   type="number"
+                   formControlName="count"
+                   min="1">
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('count', frm, 'min')"
+                  i18n>The value must be at least 1.</span>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('count', frm, 'pattern')"
+                  i18n>The entered value needs to be a number.</span>
+          </div>
+        </div>
+
+        <!-- RGW -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'rgw'">
+          <!-- rgw_frontend_port -->
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="rgw_frontend_port">Port</label>
+            <div class="cd-col-form-input">
+              <input id="rgw_frontend_port"
+                     class="form-control"
+                     type="number"
+                     formControlName="rgw_frontend_port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('rgw_frontend_port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('rgw_frontend_port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('rgw_frontend_port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- iSCSI -->
+        <!-- pool -->
+        <div class="form-group row"
+             *ngIf="serviceForm.controls.service_type.value === 'iscsi'">
+          <label i18n
+                 class="cd-col-form-label required"
+                 for="pool">Pool</label>
+          <div class="cd-col-form-input">
+            <select id="pool"
+                    name="pool"
+                    class="form-select"
+                    formControlName="pool">
+              <option *ngIf="pools === null"
+                      [ngValue]="null"
+                      i18n>Loading...</option>
+              <option *ngIf="pools && pools.length === 0"
+                      [ngValue]="null"
+                      i18n>-- No pools available --</option>
+              <option *ngIf="pools && pools.length > 0"
+                      [ngValue]="null"
+                      i18n>-- Select a pool --</option>
+              <option *ngFor="let pool of pools"
+                      [value]="pool.pool_name">{{ pool.pool_name }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="serviceForm.showError('pool', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- fields in iSCSI which are hidden when unmanaged is true -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && serviceForm.controls.service_type.value === 'iscsi'">
+          <!-- trusted_ip_list -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="trusted_ip_list">
+              <span i18n>Trusted IPs</span>
+              <cd-helper>
+                <span i18n>Comma separated list of IP addresses.</span>
+                <br>
+                <span i18n>Please add the <b>Ceph Manager</b> IP addresses here, otherwise the iSCSI gateways can't be reached.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="trusted_ip_list"
+                     class="form-control"
+                     type="text"
+                     formControlName="trusted_ip_list">
+            </div>
+          </div>
+
+          <!-- api_port -->
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="api_port">Port</label>
+            <div class="cd-col-form-input">
+              <input id="api_port"
+                     class="form-control"
+                     type="number"
+                     formControlName="api_port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('api_port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('api_port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('api_port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+            </div>
+          </div>
+
+          <!-- api_user -->
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   [ngClass]="{'required': ['iscsi'].includes(serviceForm.controls.service_type.value)}"
+                   for="api_user">User</label>
+            <div class="cd-col-form-input">
+              <input id="api_user"
+                     class="form-control"
+                     type="text"
+                     formControlName="api_user">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('api_user', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <!-- api_password -->
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   [ngClass]="{'required': ['iscsi'].includes(serviceForm.controls.service_type.value)}"
+                   for="api_password">Password</label>
+            <div class="cd-col-form-input">
+              <div class="input-group">
+                <input id="api_password"
+                       class="form-control"
+                       type="password"
+                       autocomplete="new-password"
+                       formControlName="api_password">
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="api_password">
+                </button>
+                <cd-copy-2-clipboard-button source="api_password">
+                </cd-copy-2-clipboard-button>
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('api_password', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- Ingress -->
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'ingress'">
+          <!-- virtual_ip -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   [ngClass]="{'required': ['ingress'].includes(serviceForm.controls.service_type.value)}"
+                   for="virtual_ip">
+              <span i18n>Virtual IP</span>
+              <cd-helper>
+                <span i18n>The virtual IP address and subnet (in CIDR notation) where the ingress service will be available.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="virtual_ip"
+                     class="form-control"
+                     type="text"
+                     formControlName="virtual_ip">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('virtual_ip', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <!-- frontend_port -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   [ngClass]="{'required': ['ingress'].includes(serviceForm.controls.service_type.value)}"
+                   for="frontend_port">
+              <span i18n>Frontend Port</span>
+              <cd-helper>
+                <span i18n>The port used to access the ingress service.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="frontend_port"
+                     class="form-control"
+                     type="number"
+                     formControlName="frontend_port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('frontend_port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('frontend_port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('frontend_port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('frontend_port', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <!-- monitor_port -->
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   [ngClass]="{'required': ['ingress'].includes(serviceForm.controls.service_type.value)}"
+                   for="monitor_port">
+              <span i18n>Monitor Port</span>
+              <cd-helper>
+                <span i18n>The port used by haproxy for load balancer status.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="monitor_port"
+                     class="form-control"
+                     type="number"
+                     formControlName="monitor_port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('monitor_port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('monitor_port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('monitor_port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('monitor_port', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- virtual_interface_networks -->
+          <div class="form-group row"
+               *ngIf="!serviceForm.controls.unmanaged.value">
+            <label class="cd-col-form-label"
+                   for="virtual_interface_networks">
+              <span i18n>CIDR Networks</span>
+              <cd-helper>
+                <span i18n>A list of networks to identify which network interface to use for the virtual IP address.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="virtual_interface_networks"
+                     class="form-control"
+                     type="text"
+                     formControlName="virtual_interface_networks">
+            </div>
+          </div>
+        </ng-container>
+
+        <!-- SNMP-Gateway -->
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'snmp-gateway'">
+          <!-- snmp-version -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="snmp_version"
+                   i18n>Version</label>
+            <div class="cd-col-form-input">
+              <select id="snmp_version"
+                      name="snmp_version"
+                      class="form-select"
+                      formControlName="snmp_version"
+                      (change)="clearValidations()">
+                <option i18n
+                        [ngValue]="null">-- Select SNMP version --</option>
+                <option *ngFor="let snmpVersion of ['V2c', 'V3']"
+                        [value]="snmpVersion">{{ snmpVersion }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('snmp_version', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- Destination -->
+          <div class="form-group row">
+            <label class="cd-col-form-label required"
+                   for="snmp_destination">
+              <span i18n>Destination</span>
+              <cd-helper>
+                <span i18n>Must be of the format hostname:port.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="snmp_destination"
+                     class="form-control"
+                     type="text"
+                     formControlName="snmp_destination">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('snmp_destination', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('snmp_destination', frm, 'snmpDestinationPattern')"
+                    i18n>The value does not match the pattern: <strong>hostname:port</strong></span>
+            </div>
+          </div>
+          <!-- Engine id for snmp V3 -->
+          <div class="form-group row"
+               *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+            <label class="cd-col-form-label required"
+                   for="engine_id">
+              <span i18n>Engine Id</span>
+              <cd-helper>
+                <span i18n>Unique identifier for the device (in hex).</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="engine_id"
+                     class="form-control"
+                     type="text"
+                     formControlName="engine_id">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('engine_id', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('engine_id', frm, 'snmpEngineIdPattern')"
+                    i18n>The value does not match the pattern: <strong>Must be in hexadecimal and length must be multiple of 2 with min value = 10 amd max value = 64.</strong></span>
+            </div>
+          </div>
+          <!-- Auth protocol for snmp V3 -->
+          <div class="form-group row"
+               *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+            <label class="cd-col-form-label required"
+                   for="auth_protocol"
+                   i18n>Auth Protocol</label>
+            <div class="cd-col-form-input">
+              <select id="auth_protocol"
+                      name="auth_protocol"
+                      class="form-select"
+                      formControlName="auth_protocol">
+                <option i18n
+                        [ngValue]="null">-- Select auth protocol --</option>
+                <option *ngFor="let authProtocol of ['SHA', 'MD5']"
+                        [value]="authProtocol">
+                  {{ authProtocol }}
+                </option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('auth_protocol', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+          <!-- Privacy protocol for snmp V3 -->
+          <div class="form-group row"
+               *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+            <label class="cd-col-form-label"
+                   for="privacy_protocol"
+                   i18n>Privacy Protocol</label>
+            <div class="cd-col-form-input">
+              <select id="privacy_protocol"
+                      name="privacy_protocol"
+                      class="form-select"
+                      formControlName="privacy_protocol">
+                <option i18n
+                        [ngValue]="null">-- Select privacy protocol --</option>
+                <option *ngFor="let privacyProtocol of ['DES', 'AES']"
+                        [value]="privacyProtocol">
+                  {{ privacyProtocol }}
+                </option>
+              </select>
+            </div>
+          </div>
+          <!-- Credentials -->
+          <fieldset>
+            <legend i18n>Credentials</legend>
+            <!-- snmp v2c snmp_community -->
+            <div class="form-group row"
+                 *ngIf="serviceForm.controls.snmp_version.value === 'V2c'">
+              <label class="cd-col-form-label required"
+                     for="snmp_community">
+                <span i18n>SNMP Community</span>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="snmp_community"
+                       class="form-control"
+                       type="text"
+                       formControlName="snmp_community">
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('snmp_community', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+            <!-- snmp v3 auth username -->
+            <div class="form-group row"
+                 *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+              <label class="cd-col-form-label required"
+                     for="snmp_v3_auth_username">
+                <span i18n>Username</span>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="snmp_v3_auth_username"
+                       class="form-control"
+                       type="text"
+                       formControlName="snmp_v3_auth_username">
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('snmp_v3_auth_username', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+            <!-- snmp v3 auth password -->
+            <div class="form-group row"
+                 *ngIf="serviceForm.controls.snmp_version.value === 'V3'">
+              <label class="cd-col-form-label required"
+                     for="snmp_v3_auth_password">
+                <span i18n>Password</span>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="snmp_v3_auth_password"
+                       class="form-control"
+                       type="password"
+                       formControlName="snmp_v3_auth_password">
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('snmp_v3_auth_password', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+            <!-- snmp v3 priv password -->
+            <div class="form-group row"
+                 *ngIf="serviceForm.controls.snmp_version.value === 'V3' && serviceForm.controls.privacy_protocol.value !== null && serviceForm.controls.privacy_protocol.value !== undefined">
+              <label class="cd-col-form-label required"
+                     for="snmp_v3_priv_password">
+                <span i18n>Encryption</span>
+              </label>
+              <div class="cd-col-form-input">
+                <input id="snmp_v3_priv_password"
+                       class="form-control"
+                       type="password"
+                       formControlName="snmp_v3_priv_password">
+                <span class="invalid-feedback"
+                      *ngIf="serviceForm.showError('snmp_v3_priv_password', frm, 'required')"
+                      i18n>This field is required.</span>
+              </div>
+            </div>
+          </fieldset>
+        </ng-container>
+        <!-- RGW, Ingress & iSCSI -->
+        <ng-container *ngIf="!serviceForm.controls.unmanaged.value && ['rgw', 'iscsi', 'ingress'].includes(serviceForm.controls.service_type.value)">
+          <!-- ssl -->
+          <div class="form-group row">
+            <div class="cd-col-form-offset">
+              <div class="custom-control custom-checkbox">
+                <input class="custom-control-input"
+                       id="ssl"
+                       type="checkbox"
+                       formControlName="ssl">
+                <label class="custom-control-label"
+                       for="ssl"
+                       i18n>SSL</label>
+              </div>
+            </div>
+          </div>
+
+          <!-- ssl_cert -->
+          <div *ngIf="serviceForm.controls.ssl.value"
+               class="form-group row">
+            <label class="cd-col-form-label"
+                   for="ssl_cert">
+              <span i18n>Certificate</span>
+              <cd-helper i18n>The SSL certificate in PEM format.</cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <textarea id="ssl_cert"
+                        class="form-control resize-vertical text-monospace text-pre"
+                        formControlName="ssl_cert"
+                        rows="5">
+              </textarea>
+              <input type="file"
+                     (change)="fileUpload($event.target.files, 'ssl_cert')">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('ssl_cert', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('ssl_cert', frm, 'pattern')"
+                    i18n>Invalid SSL certificate.</span>
+            </div>
+          </div>
+
+          <!-- ssl_key -->
+          <div *ngIf="serviceForm.controls.ssl.value && !(['rgw', 'ingress'].includes(serviceForm.controls.service_type.value))"
+               class="form-group row">
+            <label class="cd-col-form-label"
+                   for="ssl_key">
+              <span i18n>Private key</span>
+              <cd-helper i18n>The SSL private key in PEM format.</cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <textarea id="ssl_key"
+                        class="form-control resize-vertical text-monospace text-pre"
+                        formControlName="ssl_key"
+                        rows="5">
+              </textarea>
+              <input type="file"
+                     (change)="fileUpload($event.target.files,'ssl_key')">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('ssl_key', frm, 'required')"
+                    i18n>This field is required.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('ssl_key', frm, 'pattern')"
+                    i18n>Invalid SSL private key.</span>
+            </div>
+          </div>
+        </ng-container>
+        <!-- Grafana -->
+        <ng-container *ngIf="serviceForm.controls.service_type.value === 'grafana'">
+          <div class="form-group row">
+            <label class="cd-col-form-label"
+                   for="grafana_port">
+              <span i18n>Grafana Port</span>
+              <cd-helper>
+                <span i18n>The default port used by grafana.</span>
+              </cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <input id="grafana_port"
+                     class="form-control"
+                     type="number"
+                     formControlName="grafana_port"
+                     min="1"
+                     max="65535">
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'pattern')"
+                    i18n>The entered value needs to be a number.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'min')"
+                    i18n>The value must be at least 1.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'max')"
+                    i18n>The value cannot exceed 65535.</span>
+              <span class="invalid-feedback"
+                    *ngIf="serviceForm.showError('grafana_port', frm, 'required')"
+                    i18n>This field is required.</span>
+            </div>
+          </div>
+
+          <div class="form-group row">
+            <label i18n
+                   class="cd-col-form-label"
+                   for="grafana_admin_password">
+              <span>Grafana Password</span>
+              <cd-helper>The password of the default Grafana Admin. Set once on first-run.</cd-helper>
+            </label>
+            <div class="cd-col-form-input">
+              <div class="input-group">
+                <input id="grafana_admin_password"
+                       class="form-control"
+                       type="password"
+                       autocomplete="new-password"
+                       [attr.disabled]="editing ? true:null"
+                       formControlName="grafana_admin_password">
+                <span class="input-group-append">
+                  <button type="button"
+                          class="btn btn-light"
+                          cdPasswordButton="grafana_admin_password">
+                  </button>
+                  <cd-copy-2-clipboard-button source="grafana_admin_password">
+                  </cd-copy-2-clipboard-button>
+                </span>
+              </div>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+
+      <div class="modal-footer">
+        <div class="text-right">
+          <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                                [form]="serviceForm"
+                                [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

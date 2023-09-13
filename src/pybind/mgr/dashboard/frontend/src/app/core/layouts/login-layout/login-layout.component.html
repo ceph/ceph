@@ -1,0 +1,34 @@
+<main class="login full-height">
+  <header>
+    <nav class="navbar p-4">
+      <a class="navbar-brand"></a>
+      <div class="form-inline">
+        <cd-language-selector></cd-language-selector>
+      </div>
+    </nav>
+  </header>
+  <section>
+    <div class="container">
+      <div class="row full-height">
+        <div class="col-sm-12 col-md-6 d-sm-block login-form">
+          <router-outlet></router-outlet>
+        </div>
+        <div class="col-sm-12 col-md-6 d-sm-block branding-info">
+          <img src="assets/Ceph_Ceph_Logo_with_text_white.svg"
+               alt="Ceph"
+               class="img-fluid pb-3">
+          <ul class="list-inline">
+            <li class="list-inline-item p-3"
+                *ngFor="let docItem of docItems">
+              <cd-doc section="{{ docItem.section }}"
+                      docText="{{ docItem.text }}"
+                      noSubscribe="true"
+                      i18n-docText></cd-doc>
+            </li>
+          </ul>
+          <cd-custom-login-banner></cd-custom-login-banner>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>

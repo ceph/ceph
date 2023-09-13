@@ -1,0 +1,21 @@
+#!/bin/sh
+
+DEV=$1
+NUM=`echo $DEV | sed 's#p.*##g; s#[a-z]##g'`
+POOL=`cat /sys/devices/rbd/$NUM/pool`
+if [ -f /sys/devices/rbd/$NUM/pool_ns ]; then
+    NAMESPACE=`cat /sys/devices/rbd/$NUM/pool_ns`
+else
+    NAMESPACE=""
+fi
+IMAGE=`cat /sys/devices/rbd/$NUM/name`
+SNAP=`cat /sys/devices/rbd/$NUM/current_snap`
+
+echo -n "$POOL"
+if [ -n "$NAMESPACE" ]; then
+    echo -n "/$NAMESPACE"
+fi
+echo -n "/$IMAGE"
+if [ "$SNAP" != "-" ]; then
+    echo -n "@$SNAP"
+fi

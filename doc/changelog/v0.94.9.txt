@@ -1,0 +1,72 @@
+commit fe6d859066244b97b24f09d46552afc2071e6f90 (tag: refs/tags/v0.94.9, refs/remotes/gh/hammer)
+Author: Jenkins Build Slave User <jenkins-build@trusty-huge--d6d4765c-3c95-4fe1-a8cb-776094e0d416.localdomain>
+Date:   Tue Aug 30 11:33:34 2016 +0000
+
+    0.94.9
+
+commit d51d10407459bd337f674c6fb0bab1bf55e30c1e
+Merge: b97a974 27d8055
+Author: Alfredo Deza <alfredo@deza.pe>
+Date:   Tue Aug 30 07:12:09 2016 -0400
+
+    Merge pull request #10913 from ceph/wip-revert-random-uuid-hammer
+    
+    hammer: revert use of boost for uuids
+    
+    Reviewed-by: Alfredo Deza <adeza@redhat.com>
+
+commit b97a974878881dc5963c0c8a78a9f83fdd31d5f5
+Merge: 838cd35 a219cf5
+Author: Nathan Cutler <presnypreklad@gmail.com>
+Date:   Tue Aug 30 03:03:57 2016 +0200
+
+    Merge pull request #10898 from SUSE/wip-release-notes-hammer
+    
+    doc: release-notes: add missing hammer releases
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 27d805589552b63a2a152335e4932f996e979d86
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Aug 29 15:29:29 2016 -0400
+
+    Revert "moved to use boost uuid implementation, based on commit 4fe89a7b14c97b2ed7f357132901beb2bdcec551"
+    
+    This reverts commit 174de7fce8080df6e02b363e7821e8cca6f8157f.
+
+commit 21f6f1da0764e1a003a43ef73d6788bdfc3ef848 (refs/remotes/gh/wip-revert-random-uuid-hammer)
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Aug 29 11:55:24 2016 -0400
+
+    Revert "uuid: use boost::random:random_device"
+    
+    This reverts commit 187d308b5b0cb0512b442bbad1bddfda8ef9203f.
+    
+    This breaks precise builds.
+
+commit a219cf5348b5a5d7b013f4dc1cb503d33d609f12
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sun Aug 28 09:27:00 2016 +0200
+
+    doc: release-notes.rst: add missing line to v0.94.8
+    
+    see 46264a3b6cb7f490680c79bf0957c36aeaea5f6c and
+    b83d25d2918cbd880fbaeec976bffcea8868d5d9 in master
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit a6ba10174559d100341e3684e08d74c6de2e79c7
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sat Aug 27 12:50:09 2016 +0200
+
+    doc: add missing changelogs up to 0.94.8
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>
+
+commit f3dad334fa3147490c8aa94323bee16dd2449681
+Author: Nathan Cutler <ncutler@suse.com>
+Date:   Sat Aug 27 09:28:48 2016 +0200
+
+    doc: release-notes: add missing hammer releases
+    
+    Signed-off-by: Nathan Cutler <ncutler@suse.com>

@@ -1,0 +1,15 @@
+tasks:
+- install.upgrade:
+    client.0:
+      branch: quincy
+- print: "**** done install.upgrade on client.0"
+- ceph-fuse:
+    client.0:
+      mounted: false
+    client.1:
+      skip: true
+- ceph-fuse:
+    client.0:
+    client.1:
+      skip: true
+- print: "**** done remount client"

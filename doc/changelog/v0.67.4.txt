@@ -1,0 +1,550 @@
+commit ad85b8bfafea6232d64cb7ba76a8b6e8252fa0c7
+Author: Gary Lowell <gary.lowell@inktank.com>
+Date:   Thu Oct 3 22:41:31 2013 +0000
+
+    v0.67.4
+
+commit 5cd66d3b4bca92b402c95ab256fbc3f0329c446f
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Sep 20 14:04:47 2013 -0700
+
+    rgw: fix keystone token expiration test
+    
+    Fixes: #6360
+    The test was inverted, need expiration to be greater than
+    current time in order for token to be valid.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit e0203c61a3f45fdd6d3d3ece26fef6152bdc036d
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Wed Sep 11 16:55:06 2013 -0700
+
+    osd/OSD.cc: Use MIN() so that we don't exceed osd_recovery_max_active
+    
+    Caused by 944f3b73531af791c90f0f061280160003545c63
+    
+    Fixes: #6291
+    
+    Backport: dumpling
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 139a714e13aa3c7f42091270b55dde8a17b3c4b8)
+    
+    Conflicts:
+    
+    	src/osd/OSD.cc
+
+commit c376708358cedb5561fbb43e9b9e622df3ea7a58
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Wed Sep 25 22:08:24 2013 +0100
+
+    mon: OSDMonitor: do not write full_latest during trim
+    
+    On commit 81983bab we patched OSDMonitor::update_from_paxos() such that we
+    write the latest full map version to 'full_latest' each time the latest
+    full map was built from the incremental versions.
+    
+    This change however clashed with OSDMonitor::encode_trim_extra(), which
+    also wrote to 'full_latest' on each trim, writing instead the version of
+    the *oldest* full map.  This duality of behaviors could lead the store
+    to an inconsistent state across the monitors (although there's no sign of
+    it actually imposing any issues besides rebuilding already existing full
+    maps on some monitors).
+    
+    We now stop OSDMonitor::encode_trim_extra() from writing to 'full_latest'.
+    This function will still write out the oldest full map it has in the store,
+    but it will no longer write to full_latest, instead leaving it up to
+    OSDMonitor::update_from_paxos() to figure it out -- and it already does.
+    
+    Fixes: #6378
+    
+    Backport: dumpling
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit bd0f29a2c28cca496ec830eac932477ebf3182ba)
+
+commit de40d0b3e35ab0124cd3c4ebfcaa435ab8abfab9
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Oct 1 15:53:42 2013 -0700
+
+    crush: invalidate rmap on create (and thus decode)
+    
+    If we have an existing CrushWrapper object and decode from a bufferlist,
+    reset build_rmaps so that they get rebuilt.
+    
+    Remove the build_rmaps() all in decode that was useless on a redecode
+    (because have_rmaps == true in that case and it did nothing).
+    
+    Fixes: #6442
+    Backport: dumpling, maybe cuttlefish
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 9b7a2ae329b6a511064dd3d6e549ba61f52cfd21)
+
+commit 32f5233288c47d95b87c0a9cab5f9c2ffcf15417
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Mon Sep 30 14:58:11 2013 -0700
+
+    Invoke python with /usr/bin/env python instead of directly
+    
+    Fixes: #6311
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit b9000b314b9166845ff302d4a827a996775d9a14)
+
+commit 66aeca5a9079be398403bbff67bd5bf68c6fb111
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Sep 25 10:10:21 2013 -0700
+
+    qa/workunits/mon/crush_ops.sh: fix test
+    
+    Fix root.
+    
+    Fixes: #6392
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit c8cae87e9e08468cc86145e0fd60c05d12826239)
+
+commit beb366302a125dd422c4f092b12eb541cb3bc788
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Sep 23 09:04:34 2013 -0700
+
+    Revert "ceph: parse CEPH_ARGS environment variable"
+    
+    This reverts commit 67a95b9880c9bc6e858150352318d68d64ed74ad.
+    
+    We now put CEPH_ARGS in the actual args we parse in python, which are passed
+    to rados piecemeal later.  This lets you put things like --id ... in there
+    that need to be parsed before librados is initialized.
+    (cherry picked from commit 97f462be4829f0167ed3d65e6694dfc16f1f3243)
+
+commit b475ff9576f145d31c053213c699e13df76d2bcb
+Author: Benoît Knecht <benoit.knecht@fsfe.org>
+Date:   Mon Sep 23 15:58:42 2013 +0200
+
+    Add CEPH_ARGS at the end of sys.argv
+    
+    This allows, for instance, to pass a different client name to ceph by
+    exporting CEPH_ARGS="--id client_id".
+    
+    Signed-off-by: Benoît Knecht <benoit.knecht@fsfe.org>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 30abe3244c86cbbe1f5b005850c29c9c0eafcad4)
+
+commit 94548b4b67cca37366c7d8719209a6d2e7956811
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Sep 24 15:26:03 2013 -0700
+
+    mon/OSDMonitor: fix 'ceph osd crush reweight ...'
+    
+    The adjust method returns a count of adjusted items.
+    
+    Add a test.
+    
+    Fixes: #6382
+    Backport: dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit 3de32562b55c6ece3a6ed783c36f8b9f21460339)
+
+commit 00ff7f5c20e13869d0694379739ba4e61d44b97c
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Sep 10 00:20:41 2013 +0100
+
+    qa: workunits: mon: crush_ops: test 'ceph osd crush move'
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 3bc618b7b46496c5110edde0da9cae5d3e68e0e1)
+
+commit 0ff5b4a96833681e92cc41f019a569134474f4cf
+Author: Loic Dachary <loic@dachary.org>
+Date:   Tue Sep 24 19:04:23 2013 +0200
+
+    osd: change warn_interval_multiplier to uint32_t
+    
+    to prevent overflow in OpTracker::check_ops_in_flight when
+    multiplying warn_interval_multiplier *= 2
+    
+    Backport: cuttlefish, dumpling
+    
+    http://tracker.ceph.com/issues/6370 fixes #6370
+    
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 1bce1f009bffd3e28025a08775fec189907a81db)
+
+commit fb15040b6cec6221baa550ddfffade823f784c4a
+Author: David Zafman <david.zafman@inktank.com>
+Date:   Mon Sep 9 13:01:12 2013 -0700
+
+    crushtool: do not dump core with non-unique bucket IDs
+    
+    Return -EEXIST on duplicate ID
+    BUG FIX: crush_add_bucket() mixes error returns and IDs
+      Add optional argument to return generated ID
+    
+    Fixes: #6246
+    
+    Signed-off-by: David Zafman <david.zafman@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 8c76f3a0f9cf100ea2c941dc2b61c470aa5033d7)
+
+commit 410db3f30c6eb54b807908c1f251ad4026e7d446
+Author: Joao Eduardo Luis <jecluis@gmail.com>
+Date:   Fri Sep 20 17:06:30 2013 +0100
+
+    qa: workunits: cephtool: check if 'heap' commands are parseable
+    
+    Signed-off-by: Joao Eduardo Luis <jecluis@gmail.com>
+    (cherry picked from commit b1eeaddd5f214c1b0883b44fc8cae07c649be7c4)
+
+commit 062060a38bb26ff260cc51accc534413d726de49
+Author: Joao Eduardo Luis <jecluis@gmail.com>
+Date:   Fri Sep 20 17:50:27 2013 +0100
+
+    osd: OSD: add 'heap' command to known osd commands array
+    
+    Must have been forgotten during the cli rework.
+    
+    Backport: dumpling
+    
+    Signed-off-by: Joao Eduardo Luis <jecluis@gmail.com>
+    (cherry picked from commit 296f2d0db31e9f5a59a3a62a1e95b6c440430fa3)
+
+commit 3f32f57b98e0224a1d30b2a81d7d260be0f53800
+Author: Joao Eduardo Luis <jecluis@gmail.com>
+Date:   Fri Sep 20 16:43:27 2013 +0100
+
+    mds: MDS: pass only heap profiler commands instead of the whole cmd vector
+    
+    The heap profiler doesn't care, nor should it, what our command name is.
+    It only cares about the commands it handles.
+    
+    Backport: dumpling
+    
+    Signed-off-by: Joao Eduardo Luis <jecluis@gmail.com>
+    (cherry picked from commit 238fe272c6bdb62d4e57fd8555c0136de99c8129)
+
+commit 46dcc46617d8f35ab8433540b22343ddcbcc3716
+Author: Joao Eduardo Luis <jecluis@gmail.com>
+Date:   Fri Sep 20 16:41:14 2013 +0100
+
+    perfglue/heap_profiler.cc: expect args as first element on cmd vector
+    
+    We used to pass 'heap' as the first element of the cmd vector when
+    handling commands.  We haven't been doing so for a while now, so we
+    needed to fix this.
+    
+    Not expecting 'heap' also makes sense, considering that what we need to
+    know when we reach this function is what command we should handle, and
+    we should not care what the caller calls us when handling his business.
+    
+    Fixes: #6361
+    Backport: dumpling
+    
+    Signed-off-by: Joao Eduardo Luis <jecluis@gmail.com>
+    (cherry picked from commit c98b910d49bd2b46ceafdc430044a31524c29f5b)
+
+commit 9dc5f15fbae22244ad1f62925e17c9d81e856e55
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Sep 16 14:35:25 2013 -0700
+
+    rgw: destroy get_obj handle in copy_obj()
+    
+    Fixes: #6176
+    Backport: dumpling
+    We take different code paths in copy_obj, make sure we close the handle
+    when we exit the function. Move the call to finish_get_obj() out of
+    copy_obj_data() as we don't create the handle there, so that should
+    makes code less confusing and less prone to errors.
+    Also, note that RGWRados::get_obj() also calls finish_get_obj(). For
+    everything to work in concert we need to pass a pointer to the handle
+    and not the handle itself. Therefore we needed to also change the call
+    to copy_obj_data().
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 9e98620e4325d15c88440a890b267131613e1aa1)
+
+commit 471233e98a9f64ad513a4a196b7661b80534cb00
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Mon Sep 9 23:14:11 2013 +0100
+
+    mon: MonCommands: expect a CephString as 1st arg for 'osd crush move'
+    
+    Fixes: #6230
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 7d3799fde19138f957f26ec6be10a8a0000fc1f0)
+
+commit 2908225092bd2aa1b8afcb7848c1cdac5bd9e638
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Sep 23 16:23:33 2013 -0700
+
+    osd: revert 'osd max xattr size' limit
+    
+    Set it to 0 (unlimited) for now.
+    
+    Backport: dumpling
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit abb88d70643c3a76435b7a9d5b04ff29f7502361)
+
+commit b3d3b3747c1eef695138dac828e5fcb435309c7b
+Author: Greg Farnum <greg@inktank.com>
+Date:   Wed Sep 11 16:24:32 2013 -0700
+
+    mds: be more careful about decoding LogEvents
+    
+    We need to wrap the full decode section or we can abort the process
+    if there's an issue (which we may want to just skip by).
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 73289b34b0be5b6612e38944794d59b5e789f841)
+
+commit 06c58132199ed22413b509dfa751321ccdb24225
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Tue Sep 17 17:58:20 2013 +0100
+
+    mon: OSDMonitor: multiple rebuilt full maps per transaction
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 0d20cae0be701c5b6151a26ee5e4fe24d89aa20a)
+
+commit 65bbcaf4b68790dae4506c1f5db237077e1ff0ae
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Sun Sep 15 21:03:50 2013 +0100
+
+    mon: OSDMonitor: update latest_full while rebuilding full maps
+    
+    Not doing so will make the monitor rebuild the osdmap full versions, even
+    though they may have been rebuilt before, every time the monitor starts.
+    
+    This mostly happens when the cluster is left in an unhealthy state for
+    a long period of time and incremental versions build up.  Even though we
+    build the full maps on update_from_paxos(), not updating 'full_latest'
+    leads to the situation initially described.
+    
+    Fixes: #6322
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 81983bab3630520d6c7ee9b7e4a747bc17b8c5c3)
+
+commit 9b9edb04581cca15e67c567332529f5b3f426743
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Sun Sep 15 21:00:55 2013 +0100
+
+    mon: OSDMonitor: smaller transactions when rebuilding full versions
+    
+    Otherwise, for considerably sized rebuilds, the monitor will not only
+    consume vast amounts of memory, but it will also have troubles committing
+    the transaction.  Anyway, it's also a good idea to adjust transactions to
+    the granularity we want, and to be fair we care that each rebuilt full map
+    gets to disk, even if subsequent full maps don't (those can be rebuilt
+    later).
+    
+    Fixes: #6323
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 4ac1570c5cdcd6556dc291cc6d7878fd92d343ae)
+
+commit 298811f7a15541b9ec1015c416ad2aa075be5691
+Author: Joao Eduardo Luis <jecluis@gmail.com>
+Date:   Wed Aug 28 15:51:01 2013 +0100
+
+    mon: OSDMonitor: check if pool is on unmanaged snaps mode on mk/rmsnap
+    
+    Backport: dumpling
+    Fixes: #6047
+    
+    Signed-off-by: Joao Eduardo Luis <jecluis@gmail.com>
+    (cherry picked from commit fab79543c54c2e446d3f76520d7906645c6b0075)
+
+commit a992664435db9dde3745eb7f354cce3fc5400a47
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Sep 12 14:32:17 2013 -0700
+
+    lru_map: don't use list::size()
+    
+    replace list::size() with map::size(), which should have
+    a constant time complexity.
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 7c1d2ded8fa8061bf3f14932800998b963745dd1)
+
+commit 788546ea71c994ff35323747294ed9c177fe7020
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Sep 12 14:30:19 2013 -0700
+
+    common/lru_map: rename tokens to entries
+    
+    This code was originally used in a token cache, now
+    as a generic infrastructure rename token fields.
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 532e41a9985a16b35a6e49cdcba38af0ad166fa8)
+
+commit babeb00c42af760b3e7575166479e95365cfcc0a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Sep 18 10:37:21 2013 -0700
+
+    rgw: use bufferlist::append() instead of bufferlist::push_back()
+    
+    push_back() expects char *, whereas append can append a single char.
+    Appending a NULL char to push_back is cast as a NULL pointer which is
+    bad.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 08fe028bad13096d482454a2f303158727c363ff)
+
+commit daf85c45dd4d158bc7c33a2fb784857bc7db35cd
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Sep 11 13:46:31 2013 -0700
+
+    rgw: NULL terminate buffer before parsing it
+    
+    Fixes: #6175
+    Backport: dumpling
+    We get a buffer off the remote gateway which might
+    not be NULL terminated. The JSON parser needs the
+    buffer to be NULL terminated even though we provide
+    a buffer length as it calls strlen().
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit e7f7483192cddca1159aba439ce62b1e78669d51)
+
+commit c73040a5518971813b9ebaae1624c5bacef315d0
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Sep 11 22:30:12 2013 -0700
+
+    rgw: don't call list::size() in ObjectCache
+    
+    Fixes: #6286
+    Use an external counter instead of calling list::size()
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 31e3a51e933429d286104fe077e98ea883437ad6)
+
+commit a855aba9d18936e9a060119e041518790cd4b831
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Sep 10 12:18:55 2013 -0700
+
+    rgw: drain pending requests before completing write
+    
+    Fixes: #6268
+    When doing aio write of objects (either regular or multipart parts) we
+    need to drain pending aio requests. Otherwise if gateway goes down then
+    object might end up corrupted.
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 626669afaa333d73707553a85f5c874e99e9cbd8)
+
+commit 670db7e80ddc9c26c43a4f66907a5996ce207c4d
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Sep 6 22:33:38 2013 -0700
+
+    rgw: fix get cors, delete cors
+    
+    Remove a couple of variables that overrode class member. Not
+    really clear how it was working before, might have been a bad
+    merge / rebase.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 13872785aeeddbe1b8dd97e49fd6a2d879514f8d)
+
+commit a304016fa01b02efd500135c00b9bf3407a9999c
+Merge: 408cd61 ac0a30f
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Sep 11 09:47:10 2013 -0700
+
+    Merge branch 'wip-6078-dumpling' into dumpling
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit ac0a30feb8c64a3b80d9c519a7b561213403afab
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Aug 28 21:25:20 2013 -0700
+
+    rgw: fix certain return status cases in CORS
+    
+    Change return values in certain cases, reorder
+    checks, etc.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 13b28cc3f1eb8ef42875b630c485ee0105cd244a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Aug 28 21:24:36 2013 -0700
+
+    rgw: add COPY method to be handled by CORS
+    
+    Was missing this http method.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit d45c87ea738807487e72c0719b0d3d459cbe19e9
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Aug 27 19:38:45 2013 -0700
+
+    rgw: fix CORS rule check
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 986fa92a7a1d88111ba28457160adfcfdaabc5d2
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Aug 27 19:38:18 2013 -0700
+
+    rgw: don't handle CORS if rule not found (is NULL)
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 71873aba6553492d3ad71596cefd7c841030a277
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Aug 22 13:38:55 2013 -0700
+
+    rgw: tie CORS header response to all relevant operations
+    
+    Have the CORS responses on all relevant operations. Also add headers
+    on failure cases.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 94e7b594d85dbd26e58d823b41f418032e9f163f
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Aug 22 10:00:53 2013 -0700
+
+    rgw: add a generic CORS response handling
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit c3385d8a102faf5379559bb98cf89637ceda1579
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Aug 21 17:22:46 2013 -0700
+
+    rgw: OPTIONS request doesn't need to read object info
+    
+    This is a bucket-only operation, so we shouldn't look at the
+    object. Object may not exist and we might respond with Not
+    Exists response which is not what we want.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit a5fdd44e5d8ce4b8d82273d83e27aea19e63aa7c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Aug 21 14:43:28 2013 -0700
+
+    rgw: remove use of s->bucket_cors
+    
+    Some old code still tried to use s->bucket_cors, which was
+    abandoned in a cleanup work.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>

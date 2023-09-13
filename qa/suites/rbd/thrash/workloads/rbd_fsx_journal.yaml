@@ -1,0 +1,5 @@
+tasks:
+- rbd_fsx:
+    clients: [client.0]
+    ops: 6000
+    journal_replay: True

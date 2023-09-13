@@ -1,0 +1,316 @@
+<div class="container-fluid"
+     *ngIf="healthData && enabledFeature$ | async as enabledFeature">
+  <div class="row mx-0">
+    <cd-card cardTitle="Details"
+             i18n-title
+             class="col-sm-3 px-3"
+             [ngClass]="{'d-flex': flexHeight}"
+             aria-label="Details card">
+      <dl class="ms-4 me-4">
+        <dt>Cluster ID</dt>
+        <dd>{{ detailsCardData.fsid }}</dd>
+        <dt>Orchestrator</dt>
+        <dd i18n>{{ detailsCardData.orchestrator || 'Orchestrator is not available' }}</dd>
+        <dt>Ceph version</dt>
+        <dd>{{ detailsCardData.cephVersion }}</dd>
+        <dt>Cluster API</dt>
+        <dd>
+          <a routerLink="/api-docs"
+             target="_blank">
+            {{ origin }}/api-docs
+            <i class="fa fa-external-link"></i>
+          </a>
+        </dd>
+        <ng-container>
+          <dt>Telemetry Dashboard
+            <span
+              class="badge"
+              [ngClass]="telemetryEnabled ? 'badge-success' : 'badge-secondary'"
+              [ngbTooltip]="getTelemetryText()" >
+              {{ telemetryEnabled ? 'Active' : 'Inactive' }}
+            </span>
+          </dt>
+          <dd>
+            <a target="_blank"
+               [href]="telemetryURL">
+               {{ telemetryURL }}
+              <i class="fa fa-external-link"></i>
+            </a>
+          </dd>
+        </ng-container>
+      </dl>
+    </cd-card>
+
+    <cd-card cardTitle="Status"
+             i18n-title
+             class="col-sm-6 px-3 d-flex"
+             aria-label="Status card">
+      <div class="d-flex ms-4 me-4 mb-5 center-content">
+        <ng-template #healthChecks>
+          <ng-container *ngTemplateOutlet="logsLink"></ng-container>
+          <ul>
+            <li *ngFor="let check of healthData.health.checks">
+              <span [ngStyle]="check.severity | healthColor"
+                    [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
+              {{ check.type }}</span>: {{ check.summary.message }}
+            </li>
+          </ul>
+        </ng-template>
+        <i *ngIf="healthData.health?.status"
+           [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"
+           [ngStyle]="healthData.health.status | healthColor"
+           [title]="healthData.health.status"></i>
+        <a class="ms-2 mt-n1 lead text-primary"
+           [ngbPopover]="healthChecks"
+           popoverClass="info-card-popover-cluster-status"
+           [openDelay]="300"
+           [closeDelay]="500"
+           triggers="mouseenter:mouseleave"
+           *ngIf="healthData.health?.checks?.length"
+           i18n>Cluster</a>
+        <span class="ms-2 mt-n1 lead"
+              *ngIf="!healthData.health?.checks?.length"
+              i18n>Cluster</span>
+      </div>
+      <section class="border-top mt-5"
+               *ngIf="isAlertmanagerConfigured && (prometheusAlertService.activeCriticalAlerts || prometheusAlertService.activeWarningAlerts)">
+        <div class="d-flex flex-wrap ms-4 me-4">
+          <span class="pt-2"
+                i18n>Alerts</span>
+          <!-- Potentially make widget component -->
+          <button class="btn btn-outline-danger rounded-pill ms-2"
+                  [ngClass]="{'active': showAlerts && alertType === 'critical'}"
+                  title="Danger"
+                  (click)="toggleAlertsWindow('danger')"
+                  id="dangerAlerts"
+                  i18n-title
+                  *ngIf="prometheusAlertService?.activeCriticalAlerts > 0">
+            <i [ngClass]="[icons.danger]"></i>
+            <span>{{ prometheusAlertService.activeCriticalAlerts }}</span>
+          </button>
+
+          <button class="btn btn-outline-warning rounded-pill ms-2"
+                  [ngClass]="{'active': showAlerts && alertType === 'warning'}"
+                  title="Warning"
+                  (click)="toggleAlertsWindow('warning')"
+                  id="warningAlerts"
+                  i18n-title
+                  *ngIf="prometheusAlertService?.activeWarningAlerts > 0">
+            <i [ngClass]="[icons.infoCircle]"></i>
+            <span>{{ prometheusAlertService.activeWarningAlerts }}</span>
+          </button>
+
+          <div class="pt-0 position-right">
+            <button class="btn btn-block dropdown-toggle"
+                    data-toggle="collapse"
+                    aria-label="toggle alert window"
+                    [attr.aria-expanded]="showAlerts"
+                    (click)="toggleAlertsWindow('danger', 'true')"></button>
+
+          </div>
+        </div>
+        <div class="alerts pt-0"
+             *ngIf="showAlerts">
+          <hr class="mt-4">
+          <ngx-simplebar [options]="simplebar">
+            <div class="card-body ps-0 pe-1 pt-1">
+              <ng-container *ngTemplateOutlet="alertsCard"></ng-container>
+            </div>
+          </ngx-simplebar>
+        </div>
+      </section>
+    </cd-card>
+
+    <cd-card cardTitle="Capacity"
+             i18n-title
+             class="col-sm-3 px-3"
+             [ngClass]="{'d-flex': flexHeight}"
+             aria-label="Capacity card">
+      <ng-container class="ms-4 me-4"
+                    *ngIf="capacity && osdSettings">
+        <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
+                          [lowThreshold]="osdSettings.nearfull_ratio"
+                          [highThreshold]="osdSettings.full_ratio">
+        </cd-dashboard-pie>
+      </ng-container>
+    </cd-card>
+  </div>
+  <!-- Second row -->
+  <div class="row mx-0">
+    <!-- Inventory Card -->
+    <cd-card cardTitle="Inventory"
+             i18n-title
+             class="col-sm-3 px-3 d-flex"
+             aria-label="Inventory card">
+      <hr>
+      <!-- Hosts -->
+      <li class="list-group-item">
+        <cd-card-row [data]="healthData.hosts"
+                     link="/hosts"
+                     title="Host"
+                     summaryType="simplified"
+                     *ngIf="healthData.hosts != null"></cd-card-row>
+      </li>
+      <hr>
+      <!-- Monitors -->
+      <li class="list-group-item">
+        <cd-card-row [data]="healthData.mon_status.monmap.mons.length"
+                     link="/monitor"
+                     title="Monitor"
+                     summaryType="simplified"
+                     *ngIf="healthData.mon_status"></cd-card-row>
+      </li>
+      <hr>
+      <!-- Managers -->
+      <li *ngIf="healthData.mgr_map"
+          class="list-group-item">
+        <cd-card-row [data]="healthData.mgr_map | mgrSummary"
+                     title="Manager"
+                     *ngIf="healthData.mgr_map"></cd-card-row>
+      </li>
+      <hr>
+      <!-- OSDs -->
+      <li class="list-group-item">
+        <cd-card-row [data]="healthData.osd_map | osdSummary"
+                     link="/osd"
+                     title="OSD"
+                     summaryType="osd"
+                     *ngIf="healthData.osd_map"></cd-card-row>
+      </li>
+      <hr>
+      <!-- Pools -->
+      <li *ngIf="healthData.pools"
+          class="list-group-item">
+        <cd-card-row [data]="healthData.pools.length"
+                     link="/pool"
+                     title="Pool"
+                     summaryType="simplified"
+                     *ngIf="healthData.pools"></cd-card-row>
+      </li>
+      <hr>
+      <!-- PG Info -->
+      <li class="list-group-item">
+        <cd-card-row [data]="healthData.pg_info | pgSummary"
+                     title="PG"
+                     *ngIf="healthData.pg_info"></cd-card-row>
+      </li>
+      <hr>
+      <!-- Object gateways -->
+      <li *ngIf="enabledFeature.rgw && healthData.rgw != null"
+          class="list-group-item"
+          id="rgw-item">
+        <cd-card-row [data]="healthData.rgw"
+                     link="/rgw/daemon"
+                     title="Object Gateway"
+                     summaryType="simplified"
+                     *ngIf="healthData.rgw || healthData.rgw === 0 "></cd-card-row>
+      </li>
+      <hr>
+      <!-- Metadata Servers -->
+      <li *ngIf="enabledFeature.cephfs && healthData.fs_map"
+          class="list-group-item"
+          id="mds-item">
+        <cd-card-row [data]="healthData.fs_map | mdsSummary"
+                     title="Metadata Server"
+                     *ngIf="healthData.fs_map"></cd-card-row>
+      </li>
+      <hr>
+      <!-- iSCSI Gateways -->
+      <li *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons != null"
+          class="list-group-item"
+          id="iscsi-item">
+        <cd-card-row [data]="healthData.iscsi_daemons"
+                     link="/iscsi/daemon"
+                     title="iSCSI Gateway"
+                     summaryType="iscsi"
+                     *ngIf="healthData.iscsi_daemons"></cd-card-row>
+      </li>
+    </cd-card>
+
+    <cd-card cardTitle="Cluster Utilization"
+             i18n-title
+             class="col-sm-9 px-3 d-flex"
+             aria-label="Cluster utilization card">
+      <div class="ms-4 me-4 mt-0">
+        <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
+        </cd-dashboard-time-selector>
+        <ng-container *ngIf="capacity">
+          <cd-dashboard-area-chart chartTitle="Used Capacity (RAW)"
+                                   [maxValue]="capacity.total_bytes"
+                                   dataUnits="B"
+                                   label="Used Capacity"
+                                   [data]="queriesResults.USEDCAPACITY">
+          </cd-dashboard-area-chart>
+        </ng-container>
+        <cd-dashboard-area-chart chartTitle="IOPS"
+                                 dataUnits=""
+                                 decimals="0"
+                                 label="Reads"
+                                 label2="Writes"
+                                 [data]="queriesResults.READIOPS"
+                                 [data2]="queriesResults.WRITEIOPS">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="OSD Latencies"
+                                 dataUnits="ms"
+                                 decimals="2"
+                                 label="Apply"
+                                 label2="Commit"
+                                 [data]="queriesResults.READLATENCY"
+                                 [data2]="queriesResults.WRITELATENCY">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Client Throughput"
+                                 dataUnits="B/s"
+                                 decimals="2"
+                                 label="Reads"
+                                 label2="Writes"
+                                 [data]="queriesResults.READCLIENTTHROUGHPUT"
+                                 [data2]="queriesResults.WRITECLIENTTHROUGHPUT">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Recovery Throughput"
+                                 dataUnits="B/s"
+                                 decimals="2"
+                                 label="Recovery Throughput"
+                                 [data]="queriesResults.RECOVERYBYTES">
+        </cd-dashboard-area-chart>
+      </div>
+    </cd-card>
+  </div>
+</div>
+
+<ng-template #alertsCard>
+  <ng-container *ngFor="let alert of alerts; let i = index">
+    <div [ngClass]="borderClass"
+         *ngIf="alertType === alert.labels.severity">
+      <div class="card tc_alerts border-0 pt-3">
+        <div class="row no-gutters">
+          <div class="col-sm-1 text-center">
+            <span [ngClass]="[icons.stack, icons.large, textClass]">
+              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
+              <i [ngClass]="[icons.stack1x, icons.inverse, icons.warning]"></i>
+            </span>
+          </div>
+          <div class="col-md-11">
+            <div class="card-body ps-0 pe-1 pt-1">
+              <h6 class="card-title bold">{{ alert.labels.alertname }}</h6>
+              <p class="card-text me-3"
+                 [innerHtml]="alert.annotations.summary"></p>
+              <p class="card-text text-muted me-3">
+                <small class="date"
+                       [title]="alert.startsAt | cdDate"
+                       i18n>Active since: {{ alert.startsAt  | relativeDate }}</small>
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      <hr>
+    </div>
+  </ng-container>
+</ng-template>
+
+<ng-template #logsLink>
+  <ng-container *ngIf="permissions.log.read">
+    <p class="logs-link"
+       i18n><i [ngClass]="[icons.infoCircle]"></i> See <a routerLink="/logs">Logs</a> for more details.</p>
+  </ng-container>
+</ng-template>

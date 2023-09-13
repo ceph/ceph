@@ -1,0 +1,10 @@
+roles:
+- [mon.a, mgr.x, mds.a, mds.d, mds.g, mds.j, osd.0, osd.3, osd.6, osd.9, client.0]
+- [mon.b, mgr.y, mds.b, mds.e, mds.h, mds.k, osd.1, osd.4, osd.7, osd.10]
+- [mon.c, mgr.z, mds.c, mds.f, mds.i, mds.l, osd.2, osd.5, osd.8, osd.11]
+openstack:
+- volumes: # attached to each instance
+    count: 4
+    size: 20 # GB
+- machine:
+    disk: 200 # GB

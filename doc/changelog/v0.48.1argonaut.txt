@@ -1,0 +1,1286 @@
+commit a7ad701b9bd479f20429f19e6fea7373ca6bba7c
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Aug 13 14:58:51 2012 -0700
+
+    v0.48.1argonaut
+
+commit d4849f2f8a8c213c266658467bc5f22763010bc2
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Aug 1 13:22:38 2012 -0700
+
+    rgw: fix usage trim call encoding
+    
+    Fixes: #2841.
+    Usage trim operation was encoding the wrong op structure (usage read).
+    Since the structures somewhat overlapped it somewhat worked, but user
+    info wasn't encoded.
+    
+    Backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 515952d07107d442889754ec3bd6a344fad25d58
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Aug 8 15:21:53 2012 -0700
+
+    cls_rgw: fix rgw_cls_usage_log_trim_op encode/decode
+    
+    It was not encoding user, adding that and reset version
+    compatibility.
+    This changes affects command interface, makes use of
+    radosgw-admin usage trim incompatible. Use of old
+    radosgw-admin usage trim should be avoided, as it may
+    remove more data than requested. In any case, upgraded
+    server code will not handle old client's trim requests.
+    
+    backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 2e77130d5c80220be1612b5499d422de620d2d0b
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Jul 31 16:17:22 2012 -0700
+
+    rgw: expand date format support
+    
+    Relaxing the date format parsing function to allow UTC
+    instead of GMT.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 14fa77d9277b5ef5d0c6683504b368773b39ccc4
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Aug 2 11:13:05 2012 -0700
+
+    rgw: complete multipart upload can handle chunked encoding
+    
+    Fixes: #2878
+    We now allow complete multipart upload to use chunked encoding
+    when sending request data. With chunked encoding the HTTP_LENGTH
+    header is not required.
+    
+    Backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit a06f7783fbcc02e775fc36f30e422fe0f9e0ec2d
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Aug 1 11:19:32 2012 -0700
+
+    rgw_xml: xml_handle_data() appends data string
+    
+    Fixes: #2879.
+    xml_handle_data() appends data to the object instead of just
+    replacing it. Parsed data can arrive in pieces, specifically
+    when data is escaped.
+    
+    Backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit a8b224b9c4877a559ce420a2e04f19f68c8c5680
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Aug 1 13:09:41 2012 -0700
+
+    rgw: ETag is unquoted in multipart upload complete
+    
+    Fixes #2877.
+    Removing quotes from ETag before comparing it to what we
+    have when completing a multipart upload.
+    
+    Backport: argonaut
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 22259c6efda9a5d55221fd036c757bf123796753
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Aug 8 15:24:57 2012 -0700
+
+    MonMap: return error on failure in build_initial
+    
+    If mon_host fails to parse, return an error instead of success.
+    This avoids failing later on an assert monmap.size() > 0 in the
+    monmap in MonClient.
+    
+    Fixes: #2913
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 49b2c7b5a79b8fb4a3941eca2cb0dbaf22f658b7
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Aug 8 15:10:27 2012 -0700
+
+    addr_parsing: report correct error message
+    
+    getaddrinfo uses its return code to report failures.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 7084f29544f431b7c6a3286356f2448ae0333eda
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Aug 8 14:01:53 2012 -0700
+
+    mkcephfs: use default osd_data, _journal values
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 96b1a496cdfda34a5efdb6686becf0d2e7e3a1c0
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Aug 8 14:01:35 2012 -0700
+
+    mkcephfs: use new default keyring locations
+    
+    The ceph-conf command only parses the conf; it does not apply default
+    config values.  This breaks mkcephfs if values are not specified in the
+    config.
+    
+    Let ceph-osd create its own key, fix copying, and fix creation/copying for
+    the mds.
+    
+    Fixes: #2845
+    Reported-by: Florian Haas <florian@hastexo.com>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 4bd466d6ed49c7192df4a5bf0d63bda5d7d7dd9a
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 31 14:01:57 2012 -0700
+
+    osd: peering: detect when log source osd goes down
+    
+    The Peering state has a generic check based on the prior set osds that
+    will restart peering if one of them goes down (or one of the interesting
+    down ones comes up).  The GetLog state, however, can pull the log from
+    a peer that is not in the prior set if it got a notify from them (e.g., an
+    osd in an old interval that was down when the prior set was calculated).
+    If that osd goes down, we don't detect it and will block forward.
+    
+    Fix by adding a simple check in GetLog for the newest_update_osd going
+    down.
+    
+    (BTW GetMissing does not suffer from this problem because
+    peer_missing_requested is a subset of the prior set, so the Peering check
+    is sufficient.)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+
+commit 87defa88a0c6d6aafaa65437a6e4ddd92418f834
+Author: Sylvain Munaut <tnt@246tNt.com>
+Date:   Tue Jul 31 11:55:56 2012 -0700
+
+    rbd: fix off-by-one error in key name
+    
+    Fixes: #2846
+    Signed-off-by: Sylvain Munaut <tnt@246tNt.com>
+
+commit 37d5b46269c8a4227e5df61a88579d94f7b56772
+Author: Sylvain Munaut <tnt@246tNt.com>
+Date:   Tue Jul 31 11:54:29 2012 -0700
+
+    secret: return error on empty secret
+    
+    Signed-off-by: Sylvain Munaut <tnt@246tNt.com>
+
+commit 7b9d37c662313929b52011ddae47cc8abab99095
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jul 28 10:05:47 2012 -0700
+
+    osd: set STRAY on pg load when non-primary
+    
+    The STRAY bit indicates that we should annouce ourselves to the primary,
+    but it is only set in start_peering_interval().  We also need to set it
+    initially, so that a PG that is loaded but whose role does not change
+    (e.g., the stray replica stays a stray) will notify the primary.
+    
+    Observed:
+     - osd starts up
+     - mapping does not change, STRAY not set
+     - does not announce to primary
+     - primary does not re-check must_have_unfound, objects appear unfound
+    
+    Fix this by initializing STRAY when pg is loaded or created whenever we
+    are not the primary.
+    
+    Fixes: #2866
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 96feca450c5505a06868bc012fe998a03371b77f
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 27 16:03:26 2012 -0700
+
+    osd: peering: make Incomplete a Peering substate
+    
+    This allows us to still catch changes in the prior set that would affect
+    our conclusions (that we are incomplete) and, when they happen, restart
+    peering.
+    
+    Consider:
+     - calc prior set, osd A is down
+     - query everyone else, no good info
+     - set down, go to Incomplete (previously WaitActingChange) state.
+     - osd A comes back up (we do nothing)
+     - osd A sends notify message with good info (we ignore)
+    
+    By making this a Peering substate, we catch the Peering AdvMap reaction,
+    which will notice a prior set down osd is now up and move to Reset.
+    
+    Fixes: #2860
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit a71e442fe620fa3a22ad9302413d8344a3a1a969
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 27 15:39:40 2012 -0700
+
+    osd: peering: move to Incomplete when.. incomplete
+    
+    PG::choose_acting() may return false and *not* request an acting set change
+    if it can't find any suitable peers with enough info to recover.  In that
+    case, we should move to Incomplete, not WaitActingChange, just like we do
+    a bit lower in GetLog() if we have non-contiguous logs.  The state name is
+    more accurate, and this is also needed to fix bug #2860.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 623026d9bc8ea4c845eb3b06d79e0ca9bef50deb
+Merge: 87b6e80 9db7809
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 27 14:00:52 2012 -0700
+
+    Merge remote-tracking branch 'gh/stable' into stable-next
+
+commit 9db78090451e609e3520ac3e57a5f53da03f9ee2
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 26 16:35:00 2012 -0700
+
+    osd: fixing sharing of past_intervals on backfill restart
+    
+    We need to share past_intervals whenever we instantiate the PG on a peer.
+    In the PG activation case, this is based on whether our peer_info[] value
+    for that peer is dne().  However, the backfill code was updating the
+    peer info (history) in the block preceeding the dne() check, which meant
+    we never shared past_intervals in this case and the peer would have to
+    chew through a potentially large number of maps if the PG has not been
+    clean recently.
+    
+    Fix by checking dne() prior to the backfill block.  We still need to fill
+    in the message later because it isn't yet instantiated.
+    
+    Fixes: #2849
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 87b6e8045a3a1ff6439d2684e960ad0dc8988b33
+Merge: 81d72e5 7dfdf4f
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 26 15:04:12 2012 -0700
+
+    Merge remote-tracking branch 'gh/wip-rbd-bid' into stable-next
+
+commit 81d72e5d7ba4713eb7c290878d901e21c0709028
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 23 10:47:10 2012 -0700
+
+    mon: make 'ceph osd rm ...' wipe out all state bits, not just EXISTS
+    
+    This ensures that when a new osd reclaims that id it behaves as if it were
+    really new.
+    
+    Backport: argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit ad9c37f2c029f6eb372efb711b234014397057e9
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 9 20:54:19 2012 -0700
+
+    test_stress_watch: just one librados instance
+    
+    This was creating a new cluster connection/session per iteration, and
+    along with it a few service threads and sockets and so forth.
+    
+    Unfortunately, librados leaks like a sieve, starting with CephContext
+    and ceph::crypto::init().  See #845 and #2067.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit c60afe1842a48dd75944822c0872fce6a7229f5a
+Merge: 8833050 35b1326
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 26 15:03:50 2012 -0700
+
+    Merge commit '35b13266923f8095650f45562d66372e618c8824' into stable-next
+    
+    First batch of msgr fixes.
+
+commit 88330505cc772a5528e9405d515aa2b945b0819e
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Jul 9 15:53:31 2012 -0700
+
+    ReplicatedPG: fix replay op ordering
+    
+    After a client reconnect, the client replays outstanding ops.  The
+    OSD then immediately responds with success if the op has already
+    committed (version < ReplicatedPG::get_first_in_progress).
+    Otherwise, we stick it in waiting_for_ondisk to be replied to when
+    eval_repop concludes that waitfor_disk is empty.
+    
+    Fixes #2508
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    
+    Conflicts:
+    
+    	src/osd/ReplicatedPG.cc
+
+commit 682609a9343d0488788b1c6b03bc437b7905e4d6
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 18 12:55:35 2012 -0700
+
+    objecter: always resend linger registrations
+    
+    If a linger op (watch) is sent to the OSD and updates the object, and then
+    the client loses the reply, it will resend the request.  The OSD will see
+    that it is a dup, however, and not set up the in-memory session state for
+    the watch.  This in turn will break the watch (i.e., notifies won't
+    get delivered).
+    
+    Instead, always resend linger registration ops, so that we always have a
+    unique reqid and do the correct session registeration for each session.
+    
+     * track the tid of the registation op for each LingerOp
+     * mark registrations ops as should_resend=false; cancel as needed
+     * when we send a new registration op, cancel the old one to ensure we
+       ignore the reply.  This is needed becuase we resend linger ops on any
+       pg change, not just a primary change.
+     * drop the first_send arg to send_linger(), as we can now infer that
+       from register_tid == 0.
+    
+    The bug was easily reproduced with ms inject socket failures = 500 and the
+    test_stress_watch utility.
+    
+    Fixes: #2796
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 4d7d3e276967d555fed8a689976047f72c96c2db
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 9 13:22:42 2012 -0700
+
+    osd: guard class call decoding
+    
+    Backport: argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 7fbbe4652ffb2826978aa1f1cacce4456d2ef1fc
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 5 18:08:58 2012 -0700
+
+    librados: take lock when signaling notify cond
+    
+    When we are signaling the cond to indicate that a notify is complete,
+    take the appropriate lock.  This removes the possibility of a race
+    that loses our signal.  (That would be very difficult given that there
+    are network round trips involved, but this makes the lock/cond usage
+    "correct.")
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 6ed01df412b4f4745c8f427a94446987c88b6bef
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 22 07:46:11 2012 -0700
+
+    workqueue: kick -> wake or _wake, depending on locking
+    
+    Break kick() into wake() and _wake() methods, depending on whether the
+    lock is already held.  (The rename ensures that we audit/fix all
+    callers.)
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    
+    Conflicts:
+    
+    	src/common/WorkQueue.h
+    	src/osd/OSD.cc
+
+commit d2d40dc3059d91450925534f361f2c03eec9ef88
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 4 15:11:21 2012 -0700
+
+    client: fix locking for SafeCond users
+    
+    Need to wait on flock, not client_lock.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit c963a21a8620779d97d6cbb51572551bdbb50d0b
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 26 15:01:05 2012 -0700
+
+    filestore: check for EIO in read path
+    
+    Check for EIO in read methods and helpers.  Try to do checks in low-level
+    methods (e.g., lfn_*()) to avoid duplication in higher-level methods.
+    
+    The transaction apply function already checks for EIO on writes, and will
+    generate a nicer error message, so we can largely ignore the write path,
+    as long as errors get passed up correctly.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 6bd89aeb1bf3b1cbb663107ae6bcda8a84dd8601
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 26 09:07:46 2012 -0700
+
+    filestore: add 'filestore fail eio' option, default true
+    
+    By default we will assert/fail/crash on EIO from the underlying fs.  We
+    already do this in the write path, but not the read path, or in various
+    internal infrastructure.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit e9b5a289838f17f75efbf9d1640b949e7485d530
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 24 13:53:03 2012 -0700
+
+    config: fix 'config set' admin socket command
+    
+    Fixes: #2832
+    Backport: argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 1a6cd9659abcdad0169fe802ed47967467c448b3
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 25 16:35:09 2012 -0700
+
+    osd: break potentially large transaction into pieces
+    
+    We do a similar trick elsewhere.  Control this via a tunable.  Eventually
+    we'll control the others (in a non-stable branch).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 15e1622959f5a46f7a98502cdbaebfda2247a35b
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 25 14:53:34 2012 -0700
+
+    osd: only commit past intervals at end of parallel build
+    
+    We don't check for gaps in the past intervals, so we should only commit
+    this when we are completely done.  Otherwise a partial run and rsetart will
+    leave the gap in place, which may confuse the peering code that relies on
+    this information.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 16302acefd8def98fc4597366d6ba2845e17fcb6
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 25 10:57:35 2012 -0700
+
+    osd: generate past intervals in parallel on boot
+    
+    Even though we aggressively share past_intervals with notifies etc, it is
+    still possible for an osd to get buried behind a pile of old maps and need
+    to generate these if it has been out of the cluster for a while.  This has
+    happened to us in the past but, sadly, we did not merge the work then.
+    On the bright side, this implementation is much much much cleaner than the
+    old one because of the pg_interval_t helper we've since switched to.
+    
+    On bootup, we look at the intervals each pg needs and calclate the union,
+    and then iterate over that map range.  The inner bit of the loop is
+    functionally identical to PG::build_past_intervals(), keeping the per-pg
+    state in the pistate struct.
+    
+    Backport: argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit fca65ff52a5f7d49bcac83b3b2232963a879e446
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 25 10:58:07 2012 -0700
+
+    osd: move calculation of past_interval range into helper
+    
+    PG::generate_past_intervals() first calculates the range over which it
+    needs to generate past intervals.  Do this in a helper function.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 5979351ef3d3d03bced9286f79cbc22524c4a8de
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 25 10:58:28 2012 -0700
+
+    osd: fix map epoch boot condition
+    
+    We only want to join the cluster if we can catch up to the latest
+    osdmap with a small number of maps, in this case a single map message.
+    
+    Backport: argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 8c7186d02627f8255273009269d50955172efb52
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 24 20:18:01 2012 -0700
+
+    mon: ignore pgtemp messages from down osds
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b17f54671f350fd4247f895f7666d46860736728
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 24 20:16:04 2012 -0700
+
+    mon: ignore osd_alive messages from down osds
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 7dfdf4f8de16155edd434534e161e06ba7c79d7d
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Mon Jul 23 14:05:53 2012 -0700
+
+    librbd: replace assign_bid with client id and random number
+    
+    The assign_bid method has issues with replay because it is a write
+    that also returns data. This means that the replayed operation would
+    return success, but no data, and cause a create to fail. Instead, let
+    the client set the bid based on its global id and a random number.
+    
+    This only affects the creation of new images, since the bid is put
+    into an opaque string as part of the object prefix.
+    
+    Keep the server side assign_bid around in case there are old clients
+    still using it.
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit dc2d67112163bee8b111f75ae3e3ca42884b09b4
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Mon Jul 9 14:11:23 2012 -0700
+
+    librados: add new constructor to form a Rados object from IoCtx
+    
+    This creates a separate reference to an existing connection, for
+    use when a client holding IoCtx needs to consult another (say,
+    for rbd cloning)
+    
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit c99671201de9d9cdf03bbf0f4e28e8afb70c280c
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 18 19:49:58 2012 -0700
+
+    add CRUSH_TUNABLES feature bit
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 0b579546cfddec35095b2aec753028d8e63f3533
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Jul 18 10:24:58 2012 -0700
+
+    ObjectCacher: fix cache_bytes_hit accounting
+    
+    Misses are not hits!
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 2869039b79027e530c2863ebe990662685e4bbe6
+Author: Pascal de Bruijn | Unilogic Networks B.V <pascal@unilogicnetworks.net>
+Date:   Wed Jul 11 15:23:16 2012 +0200
+
+    Robustify ceph-rbdnamer and adapt udev rules
+    
+    Below is a patch which makes the ceph-rbdnamer script more robust and
+    fixes a problem with the rbd udev rules.
+    
+    On our setup we encountered a symlink which was linked to the wrong rbd:
+    
+      /dev/rbd/mypool/myrbd -> /dev/rbd1
+    
+    While that link should have gone to /dev/rbd3 (on which a
+    partition /dev/rbd3p1 was present).
+    
+    Now the old udev rule passes %n to the ceph-rbdnamer script, the problem
+    with %n is that %n results in a value of 3 (for rbd3), but in a value of
+    1 (for rbd3p1), so it seems it can't be depended upon for rbdnaming.
+    
+    In the patch below the ceph-rbdnamer script is made more robust and it
+    now it can be called in various ways:
+    
+      /usr/bin/ceph-rbdnamer /dev/rbd3
+      /usr/bin/ceph-rbdnamer /dev/rbd3p1
+      /usr/bin/ceph-rbdnamer rbd3
+      /usr/bin/ceph-rbdnamer rbd3p1
+      /usr/bin/ceph-rbdnamer 3
+    
+    Even with all these different styles of calling the modified script, it
+    should now return the same rbdname. This change "has" to be combined
+    with calling it from udev with %k though.
+    
+    With that fixed, we hit the second problem. We ended up with:
+    
+      /dev/rbd/mypool/myrbd -> /dev/rbd3p1
+    
+    So the rbdname was symlinked to the partition on the rbd instead of the
+    rbd itself. So what probably went wrong is udev discovering the disk and
+    running ceph-rbdnamer which resolved it to myrbd so the following
+    symlink was created:
+    
+      /dev/rbd/mypool/myrbd -> /dev/rbd3
+    
+    However partitions would be discovered next and ceph-rbdnamer would be
+    run with rbd3p1 (%k) as parameter, resulting in the name myrbd too, with
+    the previous correct symlink being overwritten with a faulty one:
+    
+      /dev/rbd/mypool/myrbd -> /dev/rbd3p1
+    
+    The solution to the problem is in differentiating between disks and
+    partitions in udev and handling them slightly differently. So with the
+    patch below partitions now get their own symlinks in the following style
+    (which is fairly consistent with other udev rules):
+    
+      /dev/rbd/mypool/myrbd-part1 -> /dev/rbd3p1
+    
+    Please let me know any feedback you have on this patch or the approach
+    used.
+    
+    Regards,
+    Pascal de Bruijn
+    Unilogic B.V.
+    
+    Signed-off-by: Pascal de Bruijn <pascal@unilogicnetworks.net>
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 426384f6beccabf9e9b9601efcb8147904ec97c2
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 16 16:02:14 2012 -0700
+
+    log: apply log_level to stderr/syslog logic
+    
+    In non-crash situations, we want to make sure the message is both below the
+    syslog/stderr threshold and also below the normal log threshold.  Otherwise
+    we get anything we gather on those channels, even when the log level is
+    low.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 8dafcc5c1906095cb7d15d648a7c1d7524df3768
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Jul 16 15:40:53 2012 -0700
+
+    log: fix event gather condition
+    
+    We should gather an event if it is below the log or gather threshold.
+    
+    Previously we were only gathering if we were going to print it, which makes
+    the dump no more useful than what was already logged.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit ec5cd6def9817039704b6cc010f2797a700d8500
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Jul 16 13:11:24 2012 -0700
+
+    PG::RecoveryState::Stray::react(LogEvt&): reset last_pg_scrub
+    
+    We need to reset the last_pg_scrub data in the osd since we
+    are replacing the info.
+    
+    Probably fixes #2453
+    
+    In cases like 2453, we hit the following backtrace:
+    
+         0> 2012-05-19 17:24:09.113684 7fe66be3d700 -1 osd/OSD.h: In function 'void OSD::unreg_last_pg_scrub(pg_t, utime_t)' thread 7fe66be3d700 time 2012-05-19 17:24:09.095719
+    osd/OSD.h: 840: FAILED assert(last_scrub_pg.count(p))
+    
+     ceph version 0.46-313-g4277d4d (commit:4277d4d3378dde4264e2b8d211371569219c6e4b)
+     1: (OSD::unreg_last_pg_scrub(pg_t, utime_t)+0x149) [0x641f49]
+     2: (PG::proc_primary_info(ObjectStore::Transaction&, pg_info_t const&)+0x5e) [0x63383e]
+     3: (PG::RecoveryState::ReplicaActive::react(PG::RecoveryState::MInfoRec const&)+0x4a) [0x633eda]
+     4: (boost::statechart::detail::reaction_result boost::statechart::simple_state<PG::RecoveryState::ReplicaActive, PG::RecoveryState::Started, boost::mpl::list<mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na>, (boost::statechart::history_mode)0>::local_react_impl_non_empty::local_react_impl<boost::mpl::list3<boost::statechart::custom_reaction<PG::RecoveryState::MQuery>, boost::statechart::custom_reaction<PG::RecoveryState::MInfoRec>, boost::statechart::custom_reaction<PG::RecoveryState::MLogRec> >, boost::statechart::simple_state<PG::RecoveryState::ReplicaActive, PG::RecoveryState::Started, boost::mpl::list<mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na>, (boost::statechart::history_mode)0> >(boost::statechart::simple_state<PG::RecoveryState::ReplicaActive, PG::RecoveryState::Started, boost::mpl::list<mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na>, (boost::statechart::history_mode)0>&, boost::statechart::event_base const&, void const*)+0x130) [0x6466a0]
+     5: (boost::statechart::simple_state<PG::RecoveryState::ReplicaActive, PG::RecoveryState::Started, boost::mpl::list<mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na, mpl_::na>, (boost::statechart::history_mode)0>::react_impl(boost::statechart::event_base const&, void const*)+0x81) [0x646791]
+     6: (boost::statechart::state_machine<PG::RecoveryState::RecoveryMachine, PG::RecoveryState::Initial, std::allocator<void>, boost::statechart::null_exception_translator>::send_event(boost::statechart::event_base const&)+0x5b) [0x63dfcb]
+     7: (boost::statechart::state_machine<PG::RecoveryState::RecoveryMachine, PG::RecoveryState::Initial, std::allocator<void>, boost::statechart::null_exception_translator>::process_event(boost::statechart::event_base const&)+0x11) [0x63e0f1]
+     8: (PG::RecoveryState::handle_info(int, pg_info_t&, PG::RecoveryCtx*)+0x177) [0x616987]
+     9: (OSD::handle_pg_info(std::tr1::shared_ptr<OpRequest>)+0x665) [0x5d3d15]
+     10: (OSD::dispatch_op(std::tr1::shared_ptr<OpRequest>)+0x2a0) [0x5d7370]
+     11: (OSD::_dispatch(Message*)+0x191) [0x5dd4a1]
+     12: (OSD::ms_dispatch(Message*)+0x153) [0x5ddda3]
+     13: (SimpleMessenger::dispatch_entry()+0x863) [0x77fbc3]
+     14: (SimpleMessenger::DispatchThread::entry()+0xd) [0x746c5d]
+     15: (()+0x7efc) [0x7fe679b1fefc]
+     16: (clone()+0x6d) [0x7fe67815089d]
+     NOTE: a copy of the executable, or `objdump -rdS <executable>` is needed to interpret this.
+    
+    Because we don't clear the scrub state before reseting info,
+    the last_scrub_stamp state in the info.history structure
+    changes without updating the osd state resulting in the
+    above assert failure.
+    
+    Backport: stable
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit 248cfaddd0403c7bae8e1533a3d2e27d1a335b9b
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Jul 9 17:57:03 2012 -0700
+
+    ReplicatedPG: don't warn if backfill peer stats don't match
+    
+    pinfo.stats might be wrong if we did log-based recovery on the
+    backfilled portion in addition to continuing backfill.
+    
+    bug #2750
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit bcb1073f9171253adc37b67ee8d302932ba1667b
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 15 20:30:34 2012 -0700
+
+    mon/MonitorStore: always O_TRUNC when writing states
+    
+    It is possible for a .new file to already exist, potentially with a
+    larger size.  This would happen if:
+    
+     - we were proposing a different value
+     - we crashed (or were stopped) before it got renamed into place
+     - after restarting, a different value was proposed and accepted.
+    
+    This isn't so unlikely for the log state machine, where we're
+    aggregating random messages.  O_TRUNC ensure we avoid getting the tail
+    end of some previous junk.
+    
+    I observed #2593 and found that a logm state value had a larger size on
+    one mon (after slurping) than the others, pointing to put_bl_sn_map().
+    
+    While we are at it, O_TRUNC put_int() too; the same type of bug is
+    possible there, too.
+    
+    Fixes: #2593
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 41a570778a51fe9a36a5b67a177d173889e58363
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Jul 14 14:31:34 2012 -0700
+
+    osd: based misdirected op role calc on acting set
+    
+    We want to look at the acting set here, nothing else.  This was causing us
+    to erroneously queue ops for later (wasting memory) and to erroneously
+    print out a 'misdrected op' message in the cluster log (confusion and
+    incorrect [but ignored] -ENXIO reply).
+    
+    Fixes: #2022
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b3d077c61e977e8ebb91288aa2294fb21c197fe7
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Fri Jul 13 09:42:20 2012 -0700
+
+    qa: download tests from specified branch
+    
+    These python tests aren't installed, so they need to be downloaded
+    
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit e855cb247b5a9eda6845637e2da5b6358f69c2ed
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Mon Jun 25 09:47:37 2012 -0700
+
+    rgw: don't override subuser perm mask if perm not specified
+    
+    Bug #2650. We were overriding subuser perm mask whenever subuser
+    was modified, even if perm mask was not passed.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit d6c766ea425d87a2f2405c08dcec66f000a4e1a0
+Author: James Page <james.page@ubuntu.com>
+Date:   Wed Jul 11 11:34:21 2012 -0700
+
+    debian: fix ceph-fs-common-dbg depends
+    
+    Signed-off-by: James Page <james.page@ubuntu.com>
+
+commit 95e8d87bc3fb12580e4058401674b93e19df6e02
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Jul 11 11:52:24 2012 -0700
+
+    rados tool: remove -t param option for target pool
+    
+    Bug #2772. This fixes an issue that was introduced when we
+    added the 'rados cp' command. The -t param was already used
+    for rados bench. With this change the only way to specify
+    a target pool is using --target-pool.
+    Though this problem is post argonaut, the 'rados cp' command
+    has been backported, so we need this fix there too.
+    
+    Backport: argonaut
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 5b10778399d5bee602e57035df7d40092a649c06
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 11 09:19:00 2012 -0700
+
+    Makefile: don't install crush headers
+    
+    This is leftover from when we built a libcrush.so.  We can re-add when we
+    start doing that again.
+    
+    Reported-by: Laszlo Boszormenyi <gcs@debian.hu>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 35b13266923f8095650f45562d66372e618c8824
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 10 13:18:27 2012 -0700
+
+    msgr: take over existing Connection on Pipe replacement
+    
+    If a new pipe/socket is taking over an existing session, it should also
+    take over the Connection* associated with the existing session.  Because
+    we cannot clear existing->connection_state, we just take another reference.
+    
+    Clean up the comments a bit while we're here.
+    
+    This affects MDS<->client sessions when reconnecting after a socket fault.
+    It probably also affects intra-cluster (osd/osd, mds/mds, mon/mon)
+    sessions as well, but I did not confirm that.
+    
+    Backport: argonaut
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b387077b1d019ee52b28bc3bc5305bfb53dfd892
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 8 20:33:12 2012 -0700
+
+    debian: include librados-config in librados-dev
+    
+    Reported-by: Laszlo Boszormenyi <gcs@debian.hu>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 03c2dc244af11b711e2514fd5f32b9bfa34183f6
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 13:04:28 2012 -0700
+
+    lockdep: increase max locks
+    
+    Hit this limit with the rados api tests.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b554d112c107efe78ec64f85b5fe588f1e7137ce
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 12:07:28 2012 -0700
+
+    config: add unlocked version of get_my_sections; use it internally
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 01da287b8fdc07262be252f1a7c115734d3cc328
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 08:20:06 2012 -0700
+
+    config: fix lock recursion in get_val_from_conf_file()
+    
+    Introduce a private, already-locked version.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit c73c64a0f722477a5b0db93da2e26e313a5f52ba
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 08:15:08 2012 -0700
+
+    config: fix recursive lock in parse_config_files()
+    
+    The _impl() helper is only called from parse_config_files(); don't retake
+    the lock.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 6646e891ff0bd31c935d1ce0870367b1e086ddfd
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 18:51:02 2012 -0700
+
+    rgw: initialize fields of RGWObjEnt
+    
+    This fixes various valgrind warnings triggered by the s3test
+    test_object_create_unreadable.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b33553aae63f70ccba8e3d377ad3068c6144c99a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Jul 6 13:14:53 2012 -0700
+
+    rgw: handle response-* params
+    
+    Handle response-* params that set response header field values.
+    Fixes #2734, #2735.
+    Backport: argonaut
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 74f687501a8a02ef248a76f061fbc4d862a9abc4
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jul 4 13:59:04 2012 -0700
+
+    osd: add missing formatter close_section() to scrub status
+    
+    Also add braces to make the open/close matchups easier to see.  Broken
+    by f36617392710f9b3538bfd59d45fd72265993d57.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 020b29961303b12224524ddf78c0c6763a61242e
+Author: Mike Ryan <mike.ryan@inktank.com>
+Date:   Wed Jun 27 14:14:30 2012 -0700
+
+    pg: report scrub status
+    
+    Signed-off-by: Mike Ryan <mike.ryan@inktank.com>
+
+commit db6d83b3ed51c07b361b27d2e5ce3227a51e2c60
+Author: Mike Ryan <mike.ryan@inktank.com>
+Date:   Wed Jun 27 13:30:45 2012 -0700
+
+    pg: track who we are waiting for maps from
+    
+    Signed-off-by: Mike Ryan <mike.ryan@inktank.com>
+
+commit e1d4855fa18b1cda85923ad9debd95768260d4eb
+Author: Mike Ryan <mike.ryan@inktank.com>
+Date:   Tue Jun 26 16:25:27 2012 -0700
+
+    pg: reduce scrub write lock window
+    
+    Wait for all replicas to construct the base scrub map before finalizing
+    the scrub and locking out writes.
+    
+    Signed-off-by: Mike Ryan <mike.ryan@inktank.com>
+
+commit 27409aa1612c1512bf393de22b62bbfe79b104c1
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 5 15:52:51 2012 -0700
+
+    rgw: don't store bucket info indexed by bucket_id
+    
+    Issue #2701. This info wasn't really used anywhere and we weren't
+    removing it. It was also sharing the same pool namespace as the
+    info indexed by bucket name, which is bad.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 9814374a2b40e15c13eb03ce6b8e642b0f7f93e4
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 5 14:59:22 2012 -0700
+
+    test_rados_tool.sh: test copy pool
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit d75100667a539baf47c79d752b787ed5dcb51d7a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jul 5 13:42:23 2012 -0700
+
+    rados tool: copy object in chunks
+    
+    Instead of reading the entire object and then writing it,
+    we read it in chunks.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 16ea64fbdebb7a74e69e80a18d98f35d68b8d9a1
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Jun 29 14:43:00 2012 -0700
+
+    rados tool: copy entire pool
+    
+    A new rados tool command that copies an entire pool
+    into another existing pool.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 960c2124804520e81086df97905a299c8dd4e08c
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Jun 29 14:09:08 2012 -0700
+
+    rados tool: copy object
+    
+    New rados command: rados cp <src-obj> [dest-obj]
+    
+    Requires specifying source pool. Target pool and locator can be specified.
+    The new command preserves object xattrs and omap data.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 23d31d3e2aa7f2b474a7b8e9d40deb245d8be9de
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 6 08:47:44 2012 -0700
+
+    ceph.spec.in: add ceph-disk-{activate,prepare}
+    
+    Reported-by: Jimmy Tang <jtang@tchpc.tcd.ie>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit ea11c7f9d8fd9795e127cfd7e8a1f28d4f5472e9
+Author: Wido den Hollander <wido@widodh.nl>
+Date:   Thu Jul 5 15:29:54 2012 +0200
+
+    Allow URL-safe base64 cephx keys to be decoded.
+    
+    In these cases + and / are replaced by - and _ to prevent problems when using
+    the base64 strings in URLs.
+    
+    Signed-off-by: Wido den Hollander <wido@widodh.nl>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit f67fe4e368b5f250f0adfb183476f5f294e8a529
+Author: Wido den Hollander <wido@widodh.nl>
+Date:   Wed Jul 4 15:46:04 2012 +0200
+
+    librados: Bump the version to 0.48
+    
+    Signed-off-by: Wido den Hollander <wido@widodh.nl>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 35b9ec881aecf84b3a49ec0395d7208de36dc67d
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Jun 26 17:28:51 2012 -0700
+
+    rgw-admin: use correct modifier with strptime
+    
+    Bug #2658: used %I (12h) instead of %H (24h)
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit da251fe88503d32b86113ee0618db7c446d34853
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jun 21 15:40:27 2012 -0700
+
+    rgw: send both swift x-storage-token and x-auth-token
+    
+    older clients need x-storage-token, newer x-auth-token
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 4c19ecb9a34e77e71d523a0a97e17f747bd5767d
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jun 21 15:17:19 2012 -0700
+
+    rgw: radosgw-admin date params now also accept time
+    
+    The date format now is "YYYY-MM-DD[ hh:mm:ss]". Got rid of
+    the --time param for the old ops log stuff.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    
+    Conflicts:
+    
+    	src/test/cli/radosgw-admin/help.t
+
+commit 6958aeb898fc683159483bfbb798f069a9b5330a
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Thu Jun 21 13:14:47 2012 -0700
+
+    rgw-admin: fix usage help
+    
+    s/show/trim
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+
+commit 83c043f803ab2ed74fa9a84ae9237dd7df2a0c57
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 14:07:16 2012 -0700
+
+    radosgw-admin: fix clit test
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 5674158163e9c1d50985796931240b237676b74d
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 11:32:57 2012 -0700
+
+    ceph: fix cli help test
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 151bf0eef59acae2d1fcf3f0feb8b6aa963dc2f6
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Jul 3 11:23:16 2012 -0700
+
+    ReplicatedPG: remove faulty scrub assert in sub_op_modify_applied
+    
+    This assert assumed that all ops submitted before MOSDRepScrub was
+    submitted were processed by the time that MOSDRepScrub was
+    processed.  In fact, MOSDRepScrub's scrub_to may refer to a
+    last_update yet to be seen by the replica.
+    
+    Bug #2693
+    
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+
+commit 32833e88a1ad793fa4be86101ce9c22b6f677c06
+Author: Kyle Bader <kyle.bader@dreamhost.com>
+Date:   Tue Jul 3 11:20:38 2012 -0700
+
+    ceph: better usage
+    
+    Signed-off-by: Kyle Bader <kyle.bader@dreamhost.com>
+
+commit 67455c21879c9c117f6402259b5e2da84524e169
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 09:20:35 2012 -0700
+
+    debian: strip new ceph-mds package
+    
+    Reported-by: Amon Ott <a.ott@m-privacy.de>
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b53cdb97d15f9276a9b26bec9f29034149f93358
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jul 3 06:46:10 2012 -0700
+
+    config: remove bad argparse_flag argument in parse_option()
+    
+    This is wrong, and thankfully valgrind picks it up.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit f7d4e39740fd2afe82ac40c711bd3fe7a282e816
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 1 17:23:28 2012 -0700
+
+    msgr: restart_queue when replacing existing pipe and taking over the queue
+    
+    The queue may have been previously stopped (by discard_queue()), and needs
+    to be restarted.
+    
+    Fixes consistent failures from the mon_recovery.py integration tests.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 5dfd2a512d309f7f641bcf7c43277f08cf650b01
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Jul 1 15:37:31 2012 -0700
+
+    msgr: choose incoming connection if ours is STANDBY
+    
+    If the connect_seq matches, but our existing connection is in STANDBY, take
+    the incoming one.  Otherwise, the other end will wait indefinitely for us
+    to connect but we won't.
+    
+    Alternatively, we could "win" the race and trigger a connection by sending
+    a keepalive (or similar), but that is more work; we may as well accept the
+    incoming connection we have now.
+    
+    This removes STANDBY from the acceptable WAIT case states.  It also keeps
+    responsibility squarely on the shoulders of the peer with something to
+    deliver.
+    
+    Without this patch, a 3-osd vstart cluster with
+    'ms inject socket failures = 100' and rados bench write -b 4096 would start
+    generating slow request warnings after a few minutes due to the osds
+    failing to connect to each other.  With the patch, I complete a 10 minute
+    run without problems.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit b7007a159f6d941fa8313a24af5810ce295b36ca
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 28 17:50:47 2012 -0700
+
+    msgr: preserve incoming message queue when replacing pipes
+    
+    If we replace an existing pipe with a new one, move the incoming queue
+    of messages that have not yet been dispatched over to the new Pipe so that
+    they are not lost.  This prevents messages from being lost.
+    
+    Alternatively, we could set in_seq = existing->in_seq - existing->in_qlen,
+    but that would make the other end resend those messages, which is a waste
+    of bandwidth.
+    
+    Very easy to reproduce the original bug with 'ms inject socket failures'.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 1f3a722e150f9f27fe7919e9579b5a88dcd15639
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 28 17:45:24 2012 -0700
+
+    msgr: move dispatch_entry into DispatchQueue class
+    
+    A bit cleaner.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 03445290dad5b1213dd138cacf46e379400201c9
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jun 28 17:38:34 2012 -0700
+
+    msgr: move incoming queue to separate class
+    
+    This extricates the incoming queue and its funky relationship with
+    DispatchQueue from Pipe and moves it into IncomingQueue.  There is now a
+    single IncomingQueue attached to each Pipe.  DispatchQueue is now no
+    longer tied to Pipe.
+    
+    This modularizes the code a bit better (tho that is still a work in
+    progress) and (more importantly) will make it possible to move the
+    incoming messages from one pipe to another in accept().
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 0dbc54169512da776c16161ec3b8fa0b3f08e248
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Jun 27 17:06:40 2012 -0700
+
+    msgr: make D_CONNECT constant non-zero, fix ms_handle_connect() callback
+    
+    A while ago we inadvertantly broke ms_handle_connect() callbacks because
+    of a check for m being non-zero in the dispatch_entry() thread.  Adjust the
+    enums so that they get delivered again.
+    
+    This fixes hangs when, for example, the ceph tool sends a command, gets a
+    connection reset, and doesn't get the connect callback to resend after
+    reconnecting to a new monitor.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 2429556a51e8f60b0d9bdee71ef7b34b367f2f38
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 26 17:10:40 2012 -0700
+
+    msgr: fix pipe replacement assert
+    
+    We may replace an existing pipe in the STANDBY state if the previous
+    attempt failed during accept() (see previous patches).
+    
+    This might fix #1378.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 204bc594be1a6046d1b362693d086b49294c2a27
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 26 17:07:31 2012 -0700
+
+    msgr: do not try to reconnect con with CLOSED pipe
+    
+    If we have a con with a closed pipe, drop the message.  For lossless
+    sessions, the state will be STANDBY if we should reconnect.  For lossy
+    sessions, we will end up with CLOSED and we *should* drop the message.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit e6ad6d25a58b8e34a220d090d01e26293c2437b4
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Jun 26 17:06:41 2012 -0700
+
+    msgr: move to STANDBY if we replace during accept and then fail
+    
+    If we replace an existing pipe during accept() and then fail, move to
+    STANDBY so that our connection state (connect_seq, etc.) is preserved.
+    Otherwise, we will throw out that information and falsely trigger a
+    RESETSESSION on the next connection attempt.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>

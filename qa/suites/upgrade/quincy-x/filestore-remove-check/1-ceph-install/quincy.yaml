@@ -1,0 +1,32 @@
+meta:
+- desc: install ceph/quincy latest
+tasks:
+- install:
+    exclude_packages:
+      - ceph-mgr-cephadm
+      - cephadm
+      - libcephfs-dev
+    branch: quincy
+- print: "**** done install quincy"
+- ceph:
+    create_rbd_pool: false
+    conf:
+      global:
+        bluestore_warn_on_legacy_statfs: false
+        bluestore warn on no per pool omap: false
+        mon pg warn min per osd: 0
+      mon:
+        mon_warn_on_insecure_global_id_reclaim: false
+        mon_warn_on_insecure_global_id_reclaim_allowed: false
+    log-ignorelist:
+      - Not found or unloadable
+      - evicting unresponsive client
+- exec:
+    osd.0:
+      - ceph osd require-osd-release quincy
+- print: "**** done ceph"
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon warn on osd down out interval zero: false

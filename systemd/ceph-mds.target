@@ -1,0 +1,9 @@
+[Unit]
+Description=ceph target allowing to start/stop all ceph-mds@.service instances at once
+PartOf=ceph.target
+After=ceph-mon.target
+Before=ceph.target
+Wants=ceph.target ceph-mon.target
+
+[Install]
+WantedBy=multi-user.target ceph.target

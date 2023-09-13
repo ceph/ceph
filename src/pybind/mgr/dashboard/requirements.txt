@@ -1,0 +1,14 @@
+bcrypt
+CherryPy
+more-itertools
+PyJWT
+pyopenssl
+requests
+Routes
+-e ../../../python-common
+prettytable
+pytest
+pyyaml
+natsort
+setuptools
+jsonpatch

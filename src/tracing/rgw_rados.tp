@@ -1,0 +1,50 @@
+#include "tracing/tracing-common.h"
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(rgw_rados, prepare_enter,
+    TP_ARGS(
+        const char*, req_id),
+    TP_FIELDS(
+        ctf_string(req_id, req_id)
+    )
+)
+
+TRACEPOINT_EVENT(rgw_rados, prepare_exit,
+    TP_ARGS(
+        const char*, req_id),
+    TP_FIELDS(
+        ctf_string(req_id, req_id)
+    )
+)
+
+TRACEPOINT_EVENT(rgw_rados, operate_enter,
+    TP_ARGS(
+        const char*, req_id),
+    TP_FIELDS(
+        ctf_string(req_id, req_id)
+    )
+)
+
+TRACEPOINT_EVENT(rgw_rados, operate_exit,
+    TP_ARGS(
+        const char*, req_id),
+    TP_FIELDS(
+        ctf_string(req_id, req_id)
+    )
+)
+
+TRACEPOINT_EVENT(rgw_rados, complete_enter,
+    TP_ARGS(
+        const char*, req_id),
+    TP_FIELDS(
+        ctf_string(req_id, req_id)
+    )
+)
+
+TRACEPOINT_EVENT(rgw_rados, complete_exit,
+    TP_ARGS(
+        const char*, req_id),
+    TP_FIELDS(
+        ctf_string(req_id, req_id)
+    )
+)

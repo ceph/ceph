@@ -1,0 +1,12 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, client.0]
+openstack:
+- volumes: # attached to each instance
+    count: 2
+    size: 10 # GB
+tasks:
+- install:
+- exec:
+    client.0:
+      - mkdir $TESTDIR/archive/ostest && cd $TESTDIR/archive/ostest && ulimit -Sn 16384 && CEPH_ARGS="--no-log-to-stderr --log-file $TESTDIR/archive/ceph_test_objectstore.log --debug-bluestore 20" ceph_test_objectstore --gtest_filter=*/0 --gtest_catch_exceptions=0
+      - rm -rf $TESTDIR/archive/ostest

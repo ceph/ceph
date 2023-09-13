@@ -1,0 +1,7 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        osd debug inject dispatch delay duration: 0.1
+        osd debug inject dispatch delay probability: 0.1
+

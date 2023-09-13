@@ -1,0 +1,38 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+  - osd.2
+  - osd.3
+openstack:
+  - volumes: # attached to each instance
+      count: 4
+      size: 10 # GB
+tasks:
+- install:
+- ceph:
+    create_rbd_pool: false
+    pre-mgr-commands:
+      - sudo ceph config set mgr mgr/devicehealth/enable_monitoring false --force
+    log-ignorelist:
+      - Error
+      - overall HEALTH_
+      - \(OBJECT_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_BACKFILLFULL\)
+      - \(POOL_NEARFULL\)
+      - \(SLOW_OPS\)
+      - \(TOO_FEW_PGS\)
+      - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
+      - slow request
+      - \(POOL_APP_NOT_ENABLED\)
+    conf:
+      osd:
+        osd min pg log entries: 5
+        osd max pg log entries: 5
+- backfill_toofull:

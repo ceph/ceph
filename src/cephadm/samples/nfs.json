@@ -1,0 +1,14 @@
+{
+    "pool" : "nfs-ganesha",
+    "namespace" : "nfs-ns",
+    "files": {
+        "ganesha.conf": [
+            "RADOS_URLS {",
+            "        userid = admin;",
+            "}",
+            "",
+            "%url    rados://nfs-ganesha/nfs-ns/conf-nfs.a",
+            ""
+        ]
+    }
+}

@@ -1,0 +1,18 @@
+# To exercise lock/witness code paths more regularly, try to get all
+# directories replicated.
+overrides:
+  ceph:
+    conf:
+      mds:
+        mds_bal_replicate_threshold: 1
+# Note: dir_update is only sent by an MDS trying to replicate a dir.
+# dir_update is always sent for root, so the count should be more than 2
+  check-counter:
+    counters:
+      mds:
+        -
+          name: mds_cache.dir_update
+          min: 3
+        -
+          name: mds_cache.dir_update_receipt
+          min: 3

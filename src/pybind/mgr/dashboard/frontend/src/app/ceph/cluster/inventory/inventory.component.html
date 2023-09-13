@@ -1,0 +1,14 @@
+<cd-orchestrator-doc-panel *ngIf="showDocPanel"></cd-orchestrator-doc-panel>
+<ng-container *ngIf="orchStatus?.available">
+  <legend i18n>Physical Disks</legend>
+  <div class="row">
+    <div class="col-md-12">
+      <cd-inventory-devices [devices]="devices"
+                            [hiddenColumns]="hostname === undefined ? [] : ['hostname']"
+                            selectionType="single"
+                            (fetchInventory)="refresh()"
+                            [orchStatus]="orchStatus">
+      </cd-inventory-devices>
+    </div>
+  </div>
+</ng-container>

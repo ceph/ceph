@@ -1,0 +1,54 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">Delete Zone</ng-container>
+
+  <ng-container class="modal-content">
+    <form name="zoneForm"
+          [formGroup]="zoneForm"
+          novalidate>
+      <div class="modal-body ms-4">
+        <label i18n>
+          This will delete your <strong>{{zone?.name}}</strong> Zone.
+        </label>
+        <ng-container *ngIf="includedPools.size">
+          <label class="mt-3"
+                 i18n>
+              Do you want to delete the associated pools with the <strong>{{zone?.name}}</strong> Zone?</label>
+          <label class="mb-4"
+                 i18n>
+              This will delete the following pools and any data stored in these pools:</label>
+            <strong *ngFor="let pool of includedPools"
+                    class="block">{{ pool }}</strong>
+          <div class="form-group">
+            <div class="custom-control custom-checkbox mt-2">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     name="deletePools"
+                     id="deletePools"
+                     formControlName="deletePools"
+                     (change)="showDangerText()">
+              <label class="custom-control-label"
+                     for="deletePools"
+                     i18n>Yes, I want to delete the pools.</label>
+            </div>
+            <div *ngIf="displayText"
+                 class="me-4">
+              <cd-alert-panel type="danger"
+                              i18n>
+                              This will delete all the data in the pools!
+              </cd-alert-panel>
+            </div>
+          </div>
+        </ng-container>
+      </div>
+
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="zoneForm"
+                              [submitText]="actionLabels.DELETE">
+        </cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+
+</cd-modal>
