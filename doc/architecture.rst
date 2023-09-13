@@ -179,21 +179,26 @@ information recording the overall health of the Ceph Storage Cluster.
 High Availability Monitors
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Before Ceph Clients can read or write data, they must contact a Ceph Monitor
-to obtain the most recent copy of the cluster map. A Ceph Storage Cluster
-can operate with a single monitor; however, this introduces a single 
-point of failure (i.e., if the monitor goes down, Ceph Clients cannot
-read or write data).
+A Ceph Client must contact a Ceph Monitor and obtain a current copy of the
+cluster map in order to read data from or to write data to the Ceph cluster.
 
-For added reliability and fault tolerance, Ceph supports a cluster of monitors.
-In a cluster of monitors, latency and other faults can cause one or more
-monitors to fall behind the current state of the cluster. For this reason, Ceph
-must have agreement among various monitor instances regarding the state of the
-cluster. Ceph always uses a majority of monitors (e.g., 1, 2:3, 3:5, 4:6, etc.)
-and the `Paxos`_ algorithm to establish a consensus among the monitors about the
-current state of the cluster.
+It is possible for a Ceph cluster to function properly with only a single
+monitor, but a Ceph cluster that has only a single monitor has a single point
+of failure: if the monitor goes down, Ceph clients will be unable to read data
+from or write data to the cluster.
 
-For details on configuring monitors, see the `Monitor Config Reference`_.
+Ceph leverages a cluster of monitors in order to increase reliability and fault
+tolerance. When a cluster of monitors is used, however, one or more of the
+monitors in the cluster can fall behind due to latency or other faults. Ceph
+mitigates these negative effects by requiring multiple monitor instances to
+agree about the state of the cluster. To establish consensus among the monitors
+regarding the state of the cluster, Ceph uses the `Paxos`_ algorithm and a
+majority of monitors (for example, one in a cluster that contains only one
+monitor, two in a cluster that contains three monitors, three in a cluster that
+contains five monitors, four in a cluster that contains six monitors, and so
+on).
+
+See the `Monitor Config Reference`_ for more detail on configuring monitors.
 
 .. index:: architecture; high availability authentication
 
