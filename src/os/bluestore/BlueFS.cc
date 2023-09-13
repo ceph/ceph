@@ -656,16 +656,24 @@ void BlueFS::_init_alloc()
   }
   logger->set(l_bluefs_wal_alloc_unit, wal_alloc_size);
 
+
+  uint64_t shared_alloc_size = cct->_conf->bluefs_shared_alloc_size;
+  if (shared_alloc && shared_alloc->a) {
+    uint64_t unit = shared_alloc->a->get_block_size();
+    shared_alloc_size = std::max(
+      unit,
+      shared_alloc_size);
+    ceph_assert(0 == p2phase(shared_alloc_size, unit));
+  }
   if (bdev[BDEV_SLOW]) {
     alloc_size[BDEV_DB] = cct->_conf->bluefs_alloc_size;
-    alloc_size[BDEV_SLOW] = cct->_conf->bluefs_shared_alloc_size;
-    logger->set(l_bluefs_db_alloc_unit, cct->_conf->bluefs_alloc_size);
-    logger->set(l_bluefs_main_alloc_unit, cct->_conf->bluefs_shared_alloc_size);
+    alloc_size[BDEV_SLOW] = shared_alloc_size;
   } else {
-    alloc_size[BDEV_DB] = cct->_conf->bluefs_shared_alloc_size;
-    logger->set(l_bluefs_main_alloc_unit, 0);
-    logger->set(l_bluefs_db_alloc_unit, cct->_conf->bluefs_shared_alloc_size);
+    alloc_size[BDEV_DB] = shared_alloc_size;
+    alloc_size[BDEV_SLOW] = 0;
   }
+  logger->set(l_bluefs_db_alloc_unit, alloc_size[BDEV_DB]);
+  logger->set(l_bluefs_main_alloc_unit, alloc_size[BDEV_SLOW]);
   // new wal and db devices are never shared
   if (bdev[BDEV_NEWWAL]) {
     alloc_size[BDEV_NEWWAL] = cct->_conf->bluefs_alloc_size;
@@ -679,13 +687,13 @@ void BlueFS::_init_alloc()
       continue;
     }
     ceph_assert(bdev[id]->get_size());
-    ceph_assert(alloc_size[id]);
     if (is_shared_alloc(id)) {
       dout(1) << __func__ << " shared, id " << id << std::hex
               << ", capacity 0x" << bdev[id]->get_size()
               << ", block size 0x" << alloc_size[id]
               << std::dec << dendl;
     } else {
+      ceph_assert(alloc_size[id]);
       std::string name = "bluefs-";
       const char* devnames[] = { "wal","db","slow" };
       if (id <= BDEV_SLOW)
