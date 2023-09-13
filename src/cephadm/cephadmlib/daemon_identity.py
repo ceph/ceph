@@ -89,6 +89,14 @@ class DaemonSubIdentity(DaemonIdentity):
         return name.replace('.', '-')
 
     @property
+    def unit_name(self) -> str:
+        # NB: This is a minor hack because a subcomponent may be running as part
+        # of the same unit as the primary. However, to fix a bug with iscsi
+        # this is a quick and dirty workaround for distinguishing the two types
+        # when generating --cidfile and --conmon-pidfile values.
+        return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}.{self.subcomponent}'
+
+    @property
     def legacy_container_name(self) -> str:
         raise ValueError(
             'legacy_container_name not valid for DaemonSubIdentity'
