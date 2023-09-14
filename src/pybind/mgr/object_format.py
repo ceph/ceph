@@ -228,8 +228,8 @@ class YAMLFormatter(Protocol):
 
 class ReturnValueProvider(Protocol):
     def mgr_return_value(self) -> int:
-        """Return an integer value to provide the Ceph MGR with a error code
-        for the MGR's response tuple. Zero means success. Return an negative
+        """Return an integer value to provide the Ceph MGR with an error code
+        for the MGR's response tuple. Zero means success. Return a negative
         errno otherwise.
         """
         ...  # pragma: no cover
@@ -281,7 +281,7 @@ def _is_yaml_data_provider(obj: YAMLDataProvider) -> bool:
 
 
 def _is_return_value_provider(obj: ReturnValueProvider) -> bool:
-    """Return true if obj is usable as a YAMLDataProvider."""
+    """Return true if obj is usable as a ReturnValueProvider."""
     return callable(getattr(obj, 'mgr_return_value', None))
 
 
