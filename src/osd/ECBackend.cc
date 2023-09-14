@@ -2482,27 +2482,13 @@ void ECBackend::objects_read_and_reconstruct(
 }
 
 void ECBackend::ReadPipeline::objects_read_and_reconstruct(
-  ECBackend& ecbackend,
+  ECBackend& ec_backend,
   const map<hobject_t,
     std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
   > &reads,
   bool fast_read,
   GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func)
 {
-  return [this,
-    kick_reads=[this] (auto...) { return this->kick_reads();},
-    get_want_to_read_shards=[&ecbackend] (auto&&... args) {
-      return ecbackend.get_want_to_read_shards(std::forward<decltype(args)>(args)...);
-    },
-    get_min_avail_to_read_shards=[&ecbackend] (auto&&... args) {
-      return ecbackend.get_min_avail_to_read_shards(std::forward<decltype(args)>(args)...);
-    },
-    cct=(CephContext*)nullptr,
-    // params
-    &reads,
-    fast_read,
-    func=std::move(func)
-  ]() mutable {
   in_progress_client_reads.emplace_back(
     reads.size(), std::move(func));
   if (!reads.size()) {
@@ -2512,12 +2498,12 @@ void ECBackend::ReadPipeline::objects_read_and_reconstruct(
 
   map<hobject_t, set<int>> obj_want_to_read;
   set<int> want_to_read;
-  get_want_to_read_shards(&want_to_read);
+  ec_backend.get_want_to_read_shards(&want_to_read);
     
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&to_read: reads) {
     map<pg_shard_t, vector<pair<int, int>>> shards;
-    int r = get_min_avail_to_read_shards(
+    int r = ec_backend.get_min_avail_to_read_shards(
       to_read.first,
       want_to_read,
       false,
@@ -2543,8 +2529,6 @@ void ECBackend::ReadPipeline::objects_read_and_reconstruct(
     fast_read,
     false,
     std::make_unique<ClientReadCompleter>(*this, &(in_progress_client_reads.back())));
-  }();
-  return;
 }
 
 
