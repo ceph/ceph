@@ -719,8 +719,6 @@ class PgAutoscaler(MgrModule):
             if p['target_bytes'] > 0:
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
-            if not p['would_adjust']:
-                continue
             if p['pg_autoscale_mode'] == 'warn':
                 msg = 'Pool %s has %d placement groups, should have %d' % (
                     p['pool_name'],
@@ -730,7 +728,8 @@ class PgAutoscaler(MgrModule):
                     too_few.append(msg)
                 else:
                     too_many.append(msg)
-
+            if not p['would_adjust']:
+                continue
             if p['pg_autoscale_mode'] == 'on':
                 # Note that setting pg_num actually sets pg_num_target (see
                 # OSDMonitor.cc)
