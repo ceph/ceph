@@ -5447,7 +5447,21 @@ void BlueStore::_close_path()
   path_fd = -1;
 }
 
-int BlueStore::_replicate_bdev_label(const string &path, bluestore_bdev_label_t label) {
+void BlueStore::_unalloc_bdev_label_offset(uint64_t offset) {
+  ceph_assert(alloc);
+  bool existing_allocation_in_offset = true;
+  alloc->foreach([&](uint64_t allocation_offset, uint64_t allocation_length) {
+      if (offset >= allocation_offset && offset <= allocation_offset+allocation_length) {
+      existing_allocation_in_offset = false;
+      }
+      });
+
+  if (!existing_allocation_in_offset) {
+    alloc->init_rm_free(offset, min_alloc_size);
+  }
+}
+
+int BlueStore::_replicate_bdev_label(const string &path, bluestore_bdev_label_t label, bool alloc_available) {
   dout(10) << __func__ << " path " << path << " label " << label << dendl;
   bufferlist bl;
   encode(label, bl);
@@ -5468,18 +5482,11 @@ int BlueStore::_replicate_bdev_label(const string &path, bluestore_bdev_label_t 
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = 0;
   for (uint64_t offset : BDEV_LABEL_OFFSETS) {
-    if (offset >= bdev->get_size()) {
-      continue;
-    }
-    bool existing_allocation_in_offset = true;
-    alloc->foreach([&](uint64_t allocation_offset, uint64_t allocation_length) {
-      if (offset >= allocation_offset && offset <= allocation_offset+allocation_length) {
-        existing_allocation_in_offset = false;
+    if (alloc_available) {
+      if (offset >= bdev->get_size()) {
+        break;
       }
-    });
-
-    if (!existing_allocation_in_offset) {
-      alloc->init_rm_free(offset, min_alloc_size);
+      _unalloc_bdev_label_offset(offset);
     }
 
     dout(10) << __func__ << " replicating label in offset=" << offset << dendl;
@@ -5522,7 +5529,7 @@ int BlueStore::_write_bdev_label(CephContext *cct,
   }
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = 0;
-  for (auto offset : BDEV_LABEL_OFFSETS) {
+  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
     r = bl.write_fd(fd, offset);
     if (r < 0) {
       derr << __func__ << " failed to write to " << path
@@ -5541,14 +5548,14 @@ out:
 }
 
 int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
-				bluestore_bdev_label_t *label)
+				bluestore_bdev_label_t *label, bool replicated)
 {
   dout(10) << __func__ << dendl;
   bufferlist bl;
   string error;
   bluestore_bdev_label_t tmp_label;
   size_t crcs_failed = 0;
-  for (auto offset : BDEV_LABEL_OFFSETS) {
+  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
     bl.clear();
     int r = bl.pread_file(path.c_str(), offset, BDEV_LABEL_BLOCK_SIZE, &error);
     if (r < 0) {
@@ -5577,12 +5584,15 @@ int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
         << " != actual " << crc << " offset=" << offset << dendl;
       dout(10) << __func__ << " got failed label " << tmp_label << dendl;
       crcs_failed++;
+      if (replicated) {
+        break;
+      }
       continue;
     }
     *label = tmp_label;
     break;
   }
-  if (crcs_failed == BDEV_LABEL_OFFSETS.size()) {
+  if ((replicated && crcs_failed == 1) || crcs_failed == BDEV_LABEL_OFFSETS.size()) {
     return -EIO;
   }
 
@@ -7853,6 +7863,11 @@ int BlueStore::_mount()
     return r;
   }
 
+  // Allocate bdev replicated label offsets
+  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
+    _unalloc_bdev_label_offset(offset);
+  }
+
   auto close_db = make_scope_guard([&] {
     if (!mounted) {
       _close_db_and_around();
@@ -9277,6 +9292,13 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
       depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
     << dendl;
 
+  if (repair) {
+    string p = path + "/block";
+    bluestore_bdev_label_t label;
+    _read_bdev_label(cct, p, &label, true);
+    _replicate_bdev_label(p, label, false);
+  }
+
   // in deep mode we need R/W write access to be able to replay deferred ops
   const bool read_only = !(repair || depth == FSCK_DEEP);
   int r = _open_db_and_around(read_only);
@@ -9284,11 +9306,11 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     return r;
   }
 
-  if (repair) {
-    string p = path + "/block";
-    bluestore_bdev_label_t label;
-    _read_bdev_label(cct, p, &label);
-    _replicate_bdev_label(p, label);
+  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
+    if (offset >= bdev->get_size()) {
+      break;
+    }
+    _unalloc_bdev_label_offset(offset);
   }
 
 
