@@ -269,6 +269,8 @@ class MDCache {
   bool is_readonly() { return readonly; }
   void force_readonly();
 
+  void maybe_fragment(CDir* dir);
+
   static file_layout_t gen_default_file_layout(const MDSMap &mdsmap);
   static file_layout_t gen_default_log_layout(const MDSMap &mdsmap);
 
