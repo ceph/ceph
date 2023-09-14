@@ -12,7 +12,7 @@ DEFAULT_CONFIG = {
     'reporter': {
         'check_interval': 5,
         'push_data_max_retries': 30,
-        'endpoint': 'http://127.0.0.1:8150',
+        'endpoint': 'https://127.0.0.1:7150/node-proxy/data',
     },
     'system': {
         'refresh_interval': 5
