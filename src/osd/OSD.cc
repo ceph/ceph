@@ -246,7 +246,7 @@ OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
   osd_skip_data_digest(cct->_conf, "osd_skip_data_digest"),
   publish_lock{ceph::make_mutex("OSDService::publish_lock")},
   pre_publish_lock{ceph::make_mutex("OSDService::pre_publish_lock")},
-  m_scrub_queue{cct, *this},
+  m_osd_scrub{cct, *this, cct->_conf},
   agent_valid_iterator(false),
   agent_ops(0),
   flush_mode_high_count(0),
@@ -2853,7 +2853,7 @@ will start to track new ops received afterwards.";
     f->close_section();
   } else if (prefix == "dump_scrub_reservations") {
     f->open_object_section("scrub_reservations");
-    service.get_scrub_services().dump_scrub_reservations(f);
+    service.get_scrub_services().resource_bookkeeper().dump_scrub_reservations(f);
     f->close_section();
   } else if (prefix == "get_latest_osdmap") {
     get_latest_osdmap();
