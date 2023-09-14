@@ -1,6 +1,8 @@
 # deamon_identity.py - classes for identifying daemons & services
 
-from typing import Union, Optional
+import re
+
+from typing import Union
 
 from .context import CephadmContext
 
@@ -11,12 +13,13 @@ class DaemonIdentity:
         fsid: str,
         daemon_type: str,
         daemon_id: Union[int, str],
-        subcomponent: str = '',
     ) -> None:
         self._fsid = fsid
         self._daemon_type = daemon_type
         self._daemon_id = str(daemon_id)
-        self._subcomponent = subcomponent
+        assert self._fsid
+        assert self._daemon_type
+        assert self._daemon_id
 
     @property
     def fsid(self) -> str:
@@ -31,8 +34,8 @@ class DaemonIdentity:
         return self._daemon_id
 
     @property
-    def subcomponent(self) -> str:
-        return self._subcomponent
+    def daemon_name(self) -> str:
+        return f'{self.daemon_type}.{self.daemon_id}'
 
     @property
     def legacy_container_name(self) -> str:
@@ -41,28 +44,11 @@ class DaemonIdentity:
     @property
     def container_name(self) -> str:
         name = f'ceph-{self.fsid}-{self.daemon_type}-{self.daemon_id}'
-        if self.subcomponent:
-            name = f'{name}-{self.subcomponent}'
         return name.replace('.', '-')
 
-    def _replace(
-        self,
-        *,
-        fsid: Optional[str] = None,
-        daemon_type: Optional[str] = None,
-        daemon_id: Union[None, int, str] = None,
-        subcomponent: Optional[str] = None,
-    ) -> 'DaemonIdentity':
-        return self.__class__(
-            fsid=self.fsid if fsid is None else fsid,
-            daemon_type=(
-                self.daemon_type if daemon_type is None else daemon_type
-            ),
-            daemon_id=self.daemon_id if daemon_id is None else daemon_id,
-            subcomponent=(
-                self.subcomponent if subcomponent is None else subcomponent
-            ),
-        )
+    @property
+    def unit_name(self) -> str:
+        return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}'
 
     @classmethod
     def from_name(cls, fsid: str, name: str) -> 'DaemonIdentity':
@@ -72,3 +58,57 @@ class DaemonIdentity:
     @classmethod
     def from_context(cls, ctx: 'CephadmContext') -> 'DaemonIdentity':
         return cls.from_name(ctx.fsid, ctx.name)
+
+
+class DaemonSubIdentity(DaemonIdentity):
+    def __init__(
+        self,
+        fsid: str,
+        daemon_type: str,
+        daemon_id: Union[int, str],
+        subcomponent: str = '',
+    ) -> None:
+        super().__init__(fsid, daemon_type, daemon_id)
+        self._subcomponent = subcomponent
+        if not re.match('^[a-zA-Z0-9]{1,15}$', self._subcomponent):
+            raise ValueError(
+                f'invalid subcomponent; invalid characters: {subcomponent!r}'
+            )
+
+    @property
+    def subcomponent(self) -> str:
+        return self._subcomponent
+
+    @property
+    def daemon_name(self) -> str:
+        return f'{self.daemon_type}.{self.daemon_id}.{self.subcomponent}'
+
+    @property
+    def container_name(self) -> str:
+        name = f'ceph-{self.fsid}-{self.daemon_type}-{self.daemon_id}-{self.subcomponent}'
+        return name.replace('.', '-')
+
+    @property
+    def unit_name(self) -> str:
+        # NB: This is a minor hack because a subcomponent may be running as part
+        # of the same unit as the primary. However, to fix a bug with iscsi
+        # this is a quick and dirty workaround for distinguishing the two types
+        # when generating --cidfile and --conmon-pidfile values.
+        return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}.{self.subcomponent}'
+
+    @property
+    def legacy_container_name(self) -> str:
+        raise ValueError(
+            'legacy_container_name not valid for DaemonSubIdentity'
+        )
+
+    @classmethod
+    def from_parent(
+        cls, parent: 'DaemonIdentity', subcomponent: str
+    ) -> 'DaemonSubIdentity':
+        return cls(
+            parent.fsid,
+            parent.daemon_type,
+            parent.daemon_id,
+            subcomponent,
+        )
