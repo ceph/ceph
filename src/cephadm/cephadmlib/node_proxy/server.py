@@ -7,12 +7,6 @@ from .basesystem import BaseSystem
 import sys
 import argparse
 
-# for devel purposes
-import os
-DEVEL_ENV_VARS = ['REDFISH_HOST',
-                  'REDFISH_USERNAME',
-                  'REDFISH_PASSWORD']
-
 DEFAULT_CONFIG = {
     'reporter': {
         'check_interval': 5,
@@ -29,11 +23,6 @@ DEFAULT_CONFIG = {
         'level': 20,
     }
 }
-
-#for env_var in DEVEL_ENV_VARS:
-#    if os.environ.get(env_var) is None:
-#        print(f"{env_var} environment variable must be set.")
-#        sys.exit(1)
 
 
 class Memory:
@@ -197,7 +186,10 @@ class API:
         return 'use /system or /admin endpoints'
 
 
-def main() -> None:
+def main(host: str = '',
+         username: str = '',
+         password: str = '') -> None:
+    # TODO: add a check and fail if host/username/password/data aren't passed
 
     # parser = argparse.ArgumentParser(
     #     prog='node-proxy',
@@ -214,10 +206,10 @@ def main() -> None:
     config = Config('/etc/ceph/node-proxy.yml', default_config=DEFAULT_CONFIG)
 
     log = Logger(__name__, level=config.__dict__['logging']['level'])
-    # must be passed as arguments
-    host = os.environ.get('REDFISH_HOST')
-    username = os.environ.get('REDFISH_USERNAME')
-    password = os.environ.get('REDFISH_PASSWORD')
+
+    host = host
+    username = username
+    password = password
 
     # create the redfish system and the obsever
     log.logger.info("Server initialization...")
