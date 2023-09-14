@@ -479,6 +479,8 @@ public:
   virtual std::optional<seastar::future<>> wait() = 0;
 
   /// Releases pipeline resources, after or without waiting
+  // FIXME: currently, exit() will discard the associated future even if it is
+  // still unresolved, which is discouraged by seastar.
   virtual void exit() = 0;
 
   /// Must ensure that resources are released, likely by calling exit()
