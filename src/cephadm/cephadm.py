@@ -1477,6 +1477,10 @@ class CephadmAgent(DaemonForm):
         self.pull_conf_settings()
 
         t_node_proxy = Thread(target=cephadmlib.node_proxy.server.main)
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = True
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        ssl_ctx.load_verify_locations(self.ca_path)
         t_node_proxy.start()
 
         try:
@@ -1498,11 +1502,6 @@ class CephadmAgent(DaemonForm):
 
         if not self.volume_gatherer.is_alive():
             self.volume_gatherer.start()
-
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = True
-        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        ssl_ctx.load_verify_locations(self.ca_path)
 
         while not self.stop:
             start_time = time.monotonic()
