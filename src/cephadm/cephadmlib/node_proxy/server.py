@@ -6,6 +6,7 @@ from typing import Dict
 from .basesystem import BaseSystem
 import sys
 import argparse
+import json
 
 DEFAULT_CONFIG = {
     'reporter': {
@@ -188,7 +189,8 @@ class API:
 
 def main(host: str = '',
          username: str = '',
-         password: str = '') -> None:
+         password: str = '',
+         data: str = '') -> None:
     # TODO: add a check and fail if host/username/password/data aren't passed
 
     # parser = argparse.ArgumentParser(
@@ -210,6 +212,7 @@ def main(host: str = '',
     host = host
     username = username
     password = password
+    data = json.loads(data)
 
     # create the redfish system and the obsever
     log.logger.info("Server initialization...")
@@ -218,7 +221,7 @@ def main(host: str = '',
                          password=password,
                          system_endpoint='/Systems/System.Embedded.1',
                          config=config)
-    reporter_agent = Reporter(system, config.__dict__['reporter']['endpoint'])
+    reporter_agent = Reporter(system, data, config.__dict__['reporter']['endpoint'])
     cherrypy.config.update({
         'node_proxy': config,
         'server.socket_port': config.__dict__['server']['port']
