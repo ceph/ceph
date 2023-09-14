@@ -157,7 +157,18 @@ void map_dokan_with_maxpath(
     const char* mountpoint,
     uint64_t max_path_len)
 {
-    SubProcess* new_mount = new SubProcess("ceph-dokan");
+    SubProcess* new_mount = nullptr;
+
+    bool expect_failure = max_path_len < 256 || max_path_len > 4096;
+    if (expect_failure) {
+        new_mount = new SubProcessTimed(
+            "ceph-dokan",
+            SubProcess::CLOSE, SubProcess::CLOSE, SubProcess::CLOSE,
+            MOUNT_POLL_ATTEMPT * MOUNT_POLL_INTERVAL_MS / 1000);
+    } else {
+        new_mount = new SubProcess("ceph-dokan");
+    }
+
     new_mount->add_cmd_args("map", "--debug", "--dokan-stderr",
                             "--win-vol-name", "TestCeph",
                             "--win-vol-serial", TEST_VOL_SERIAL,
@@ -167,10 +178,10 @@ void map_dokan_with_maxpath(
 
     *mount = new_mount;
     ASSERT_EQ(new_mount->spawn(), 0);
-    if (256 <= max_path_len && max_path_len <= 4096) {
-        ASSERT_EQ(wait_for_mount(mountpoint), 0);
+    if (expect_failure) {
+        ASSERT_NE(0, new_mount->join());
     } else {
-        ASSERT_NE(wait_for_mount(mountpoint), 0);
+        ASSERT_EQ(wait_for_mount(mountpoint), 0);
     }
 }
 
