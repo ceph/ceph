@@ -170,6 +170,7 @@ class ScrubQueue {
 
   friend class TestOSDScrub;
   friend class ScrubSchedTestWrapper; ///< unit-tests structure
+  friend class OsdScrub; ///< transitory - fixed in followup commits
   using sched_params_t = Scrub::sched_params_t;
 
   /**
@@ -359,14 +360,6 @@ class ScrubQueue {
    */
   Scrub::ScrubQContainer collect_ripe_jobs(Scrub::ScrubQContainer& group, utime_t time_now);
 
-
-  /// scrub resources management lock (guarding scrubs_local & scrubs_remote)
-  mutable ceph::mutex resource_lock =
-    ceph::make_mutex("ScrubQueue::resource_lock");
-
-  /// the counters used to manage scrub activity parallelism:
-  int scrubs_local{0};
-  int scrubs_remote{0};
 
   /**
    * The scrubbing of PGs might be delayed if the scrubbed chunk of objects is

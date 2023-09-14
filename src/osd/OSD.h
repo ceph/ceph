@@ -53,7 +53,7 @@
 #include "common/EventTrace.h"
 #include "osd/osd_perf_counters.h"
 #include "common/Finisher.h"
-#include "scrubber/osd_scrub_sched.h"
+#include "scrubber/osd_scrub.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -239,14 +239,11 @@ public:
   void handle_misdirected_op(PG *pg, OpRequestRef op);
 
  private:
-  /**
-   * The entity that maintains the set of PGs we may scrub (i.e. - those that we
-   * are their primary), and schedules their scrubbing.
-   */
-  ScrubQueue m_scrub_queue;
+  /// the entity that offloads all scrubbing-related operations
+  OsdScrub m_osd_scrub;
 
  public:
-  ScrubQueue& get_scrub_services() { return m_scrub_queue; }
+  OsdScrub& get_scrub_services() { return m_osd_scrub; }
 
   /**
    * A callback used by the ScrubQueue object to initiate a scrub on a specific PG.
