@@ -4893,6 +4893,28 @@ WantedBy=ceph-{fsid}.target
             self.device_enhanced_scan = True
         self.volume_gatherer.update_func(lambda: self._ceph_volume(enhanced=self.device_enhanced_scan))
 
+    def query_endpoint(self,
+                       addr: str = '',
+                       port: str = '',
+                       data: Optional[Union[Dict[str, str], str]] = None,
+                       endpoint: str = '',
+                       ssl_ctx: Optional[Any] = None) -> str:
+        _addr = addr if addr else self.target_ip
+        _port = port if port else self.target_port
+        url = f'https://{_addr}:{_port}{endpoint}'
+
+        try:
+            req = Request(url, data, {'Content-Type': 'application/json'})
+            send_time = time.monotonic()
+            with urlopen(req, context=ssl_ctx) as response:
+                response_str = response.read()
+                response_json = json.loads(response_str)
+                total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
+                logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
+        except Exception:
+            raise
+        return response_str
+
     def run(self) -> None:
         self.pull_conf_settings()
 
@@ -4949,15 +4971,10 @@ WantedBy=ceph-{fsid}.target
                                'port': self.listener_port})
             data = data.encode('ascii')
 
-            url = f'https://{self.target_ip}:{self.target_port}/data/'
             try:
-                req = Request(url, data, {'Content-Type': 'application/json'})
-                send_time = time.monotonic()
-                with urlopen(req, context=ssl_ctx) as response:
-                    response_str = response.read()
-                    response_json = json.loads(response_str)
-                    total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
-                    logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
+                self.query_endpoint(data=data,
+                                    endpoint='/data/',
+                                    ssl_ctx=ssl_ctx)
             except Exception as e:
                 logger.error(f'Failed to send metadata to mgr: {e}')
 
