@@ -470,6 +470,7 @@ void ScrubStack::scrub_dirfrag(CDir *dir, bool *done)
                  << " log and `damage ls` output for details";
   }
 
+  mdcache->maybe_fragment(dir);
   dir->scrub_finished();
   dir->auth_unpin(this);
 
