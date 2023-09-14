@@ -253,6 +253,7 @@ options:
 	--no-parallel: dont start all OSDs in parallel
 	--no-restart: dont restart process when using ceph-run
 	--jaeger: use jaegertracing for tracing
+	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
@@ -500,6 +501,10 @@ case $1 in
         ;;
     --with-restful)
         with_mgr_restful=true
+        ;;
+    --seastore-device-size)
+        seastore_size="$2"
+        shift
         ;;
     --seastore-devs)
         parse_block_devs --seastore-devs "$2"
@@ -784,6 +789,14 @@ EOF
         bdev ioring = true"
         fi
     fi
+
+    if [ "$objectstore" == "seastore" ]; then
+      if [[ ${seastore_size+x} ]]; then
+        SEASTORE_OPTS="
+        seastore device size = $seastore_size"
+      fi
+    fi
+
     wconf <<EOF
 [client]
 $CCLIENTDEBUG
@@ -835,6 +848,7 @@ $BLUESTORE_OPTS
         ; kstore
         kstore fsck on mount = true
         osd objectstore = $objectstore
+$SEASTORE_OPTS
 $COSDSHORT
         $(format_conf "${extra_conf}")
 [mon]
