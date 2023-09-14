@@ -57,6 +57,12 @@ class AgentEndpoint:
         d.connect(name='host-data', route='/data/',
                   controller=self.host_data.POST,
                   conditions=dict(method=['POST']))
+        d.connect(name='node-proxy-idrac', route='/node-proxy/idrac',
+                  controller=self.host_data.node_proxy_idrac,
+                  conditions=dict(method=['POST']))
+        d.connect(name='node-proxy-data', route='/node-proxy/data',
+                  controller=self.host_data.node_proxy_data,
+                  conditions=dict(method=['GET','POST']))
         cherrypy.tree.mount(None, '/', config={'/': {'request.dispatch': d}})
 
     def configure_tls(self, server: Server) -> None:
@@ -124,6 +130,56 @@ class HostData(Server):
             # host agent is reporting on is marked offline, it shouldn't be any more
             self.mgr.offline_hosts_remove(data['host'])
             results['result'] = self.handle_metadata(data)
+        return results
+
+    def validate_node_proxy_data(self, data: Dict[str, Any]) -> bool:
+        if 'host' not in data:
+            cherrypy.response.status = 400
+            self.mgr.log.warning('The field \'host\' must be provided.')
+        elif 'keyring' not in data:
+            cherrypy.response.status = 400
+            self.mgr.log.warning(f'The agent keyring must be provided.')
+        elif not self.mgr.agent_cache.agent_keys.get(data['host']):
+            cherrypy.response.status = 400
+            self.mgr.log.warning(f'Make sure the agent is running on {data["host"]}')
+        elif data['keyring'] != self.mgr.agent_cache.agent_keys[data['host']]:
+            cherrypy.response.status = 403
+            self.mgr.log.warning(f'Got wrong keyring from agent on host {data["host"]}.')
+        else:
+            cherrypy.response.status = 200
+
+        return cherrypy.response.status == 200
+
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def node_proxy_idrac(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = cherrypy.request.json
+        results: Dict[str, Any] = {}
+
+        if self.validate_node_proxy_data(data):
+            idrac_details = self.mgr.get_store('node_proxy/idrac')
+            idrac_details_json = json.loads(idrac_details)
+            self.mgr.log.warning(f"{idrac_details_json}")
+            results['result'] = idrac_details_json[data["host"]]
+
+        return results
+
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def node_proxy_data(self) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+
+        if cherrypy.request.method == 'POST':
+            data: Dict[str, Any] = cherrypy.request.json
+            if self.validate_node_proxy_data(data):
+                self.mgr.set_store(f'node_proxy/data/{data["host"]}', json.dumps(data['data']))
+                self.mgr.log.warning(f"{data}")
+                results['result'] = data
+
+        if cherrypy.request.method == 'GET':
+            for k, v in self.mgr.get_store_prefix('node_proxy/data').items():
+                host = k.split('/')[-1:][0]
+                results[host] = json.loads(v)
         return results
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
