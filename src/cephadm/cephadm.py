@@ -1489,7 +1489,8 @@ class CephadmAgent(DaemonForm):
         t_node_proxy = Thread(target=cephadmlib.node_proxy.server.main,
                               kwargs={'host': result_json['result']['addr'],
                                       'username': result_json['result']['username'],
-                                      'password': result_json['result']['password'])
+                                      'password': result_json['result']['password'],
+                                      'data': node_proxy_data})
         t_node_proxy.start()
 
         try:
