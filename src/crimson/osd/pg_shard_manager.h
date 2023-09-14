@@ -161,7 +161,9 @@ public:
         target_shard_services,
         std::move(op));
     }
-    return op->prepare_remote_submission(
+    auto &opref = *op;
+    get_local_state().registry.remove_from_registry(opref);
+    return opref.prepare_remote_submission(
     ).then([op=std::move(op), f=std::move(f), this, core
            ](auto f_conn) mutable {
       return shard_services.invoke_on(
@@ -169,9 +171,9 @@ public:
         [f=std::move(f), op=std::move(op), f_conn=std::move(f_conn)
         ](auto &target_shard_services) mutable {
         op->finish_remote_submission(std::move(f_conn));
+        target_shard_services.local_state.registry.add_to_registry(*op);
         return std::invoke(
           std::move(f),
-          target_shard_services.local_state,
           target_shard_services,
           std::move(op));
       });
@@ -188,16 +190,13 @@ public:
     static_assert(T::can_create());
     logger.debug("{}: can_create", *op);
 
-    get_local_state().registry.remove_from_registry(*op);
     return get_pg_to_shard_mapping().maybe_create_pg(
       op->get_pgid()
     ).then([this, op = std::move(op)](auto core) mutable {
       return this->template with_remote_shard_state_and_op<T>(
         core, std::move(op),
-        [](PerShardState &per_shard_state,
-           ShardServices &shard_services,
+        [](ShardServices &shard_services,
            typename T::IRef op) {
-	per_shard_state.registry.add_to_registry(*op);
 	auto &logger = crimson::get_logger(ceph_subsys_osd);
 	auto &opref = *op;
 	return opref.template with_blocking_event<
@@ -232,16 +231,13 @@ public:
     static_assert(!T::can_create());
     logger.debug("{}: !can_create", *op);
 
-    get_local_state().registry.remove_from_registry(*op);
     return get_pg_to_shard_mapping().maybe_create_pg(
       op->get_pgid()
     ).then([this, op = std::move(op)](auto core) mutable {
       return this->template with_remote_shard_state_and_op<T>(
         core, std::move(op),
-        [](PerShardState &per_shard_state,
-           ShardServices &shard_services,
+        [](ShardServices &shard_services,
            typename T::IRef op) {
-	per_shard_state.registry.add_to_registry(*op);
 	auto &logger = crimson::get_logger(ceph_subsys_osd);
 	auto &opref = *op;
 	return opref.template with_blocking_event<
