@@ -361,6 +361,12 @@ class PVolume(object):
     def __repr__(self):
         return self.__str__()
 
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+    def __hash__(self):
+        return hash((self.pv_uuid, getattr(self, 'lv_uuid', None)))
+
     def set_tags(self, tags):
         """
         :param tags: A dictionary of tag names and values, like::
@@ -475,7 +481,8 @@ def get_pvs(fields=PV_FIELDS, filters='', tags=None):
 
     stdout, stderr, returncode = process.call(args, run_on_host=True, verbose_on_failure=False)
     pvs_report = _output_parser(stdout, fields)
-    return [PVolume(**pv_report) for pv_report in pvs_report]
+    # Return a list based on a set of PVolumes, thus deduplicating them.
+    return list({PVolume(**pv_report) for pv_report in pvs_report})
 
 
 def get_single_pv(fields=PV_FIELDS, filters=None, tags=None):
@@ -831,6 +838,12 @@ class Volume(object):
     def __repr__(self):
         return self.__str__()
 
+    def __eq__(self, other):
+        return hash(self) == hash(other)
+
+    def __hash__(self):
+        return hash(self.lv_uuid)
+
     def as_dict(self):
         obj = {}
         obj.update(self.lv_api)
@@ -1128,7 +1141,8 @@ def get_lvs(fields=LV_FIELDS, filters='', tags=None):
 
     stdout, stderr, returncode = process.call(args, run_on_host=True, verbose_on_failure=False)
     lvs_report = _output_parser(stdout, fields)
-    return [Volume(**lv_report) for lv_report in lvs_report]
+    # Return a list based on a set of Volumes, thus deduplicating them.
+    return list({Volume(**lv_report) for lv_report in lvs_report})
 
 
 def get_single_lv(fields=LV_FIELDS, filters=None, tags=None):
@@ -1185,8 +1199,9 @@ def get_device_lvs(device, name_prefix=''):
         verbose_on_failure=False
     )
     lvs = _output_parser(stdout, LV_FIELDS)
-    return [Volume(**lv) for lv in lvs if lv['lv_name'] and
-            lv['lv_name'].startswith(name_prefix)]
+    # Return a list based on a set of Volumes, thus deduplicating them.
+    return list({Volume(**lv) for lv in lvs if lv['lv_name'] and
+                 lv['lv_name'].startswith(name_prefix)})
 
 def get_lvs_from_path(devpath):
     lvs = []
