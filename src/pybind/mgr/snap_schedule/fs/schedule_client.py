@@ -79,12 +79,12 @@ def get_prune_set(candidates: Set[Tuple[cephfs.DirEntry, datetime]],
         # NOTE: prune set has tz suffix stripped out.
         ("n", SNAPSHOT_TS_FORMAT),
         # TODO remove M for release
-        ("M", '%Y-%m-%d-%H_%M'),
+        ("m", '%Y-%m-%d-%H_%M'),
         ("h", '%Y-%m-%d-%H'),
         ("d", '%Y-%m-%d'),
         ("w", '%G-%V'),
-        ("m", '%Y-%m'),
-        ("y", '%Y'),
+        ("M", '%Y-%m'),
+        ("Y", '%Y'),
     ])
     keep = []
     if not retention:
@@ -212,7 +212,7 @@ class SnapSchedClient(CephfsClient):
         return DBConnectionManager(dbinfo)
 
     def _is_allowed_repeat(self, exec_row: Dict[str, str], path: str) -> bool:
-        if Schedule.parse_schedule(exec_row['schedule'])[1] == 'M':
+        if Schedule.parse_schedule(exec_row['schedule'])[1] == 'm':
             if self.allow_minute_snaps:
                 log.debug(('Minute repeats allowed, '
                            f'scheduling snapshot on path {path}'))
@@ -373,9 +373,10 @@ class SnapSchedClient(CephfsClient):
                                         Optional[str], Optional[str]]) -> None:
         sched = Schedule(*args)
         log.debug(f'repeat is {sched.repeat}')
-        if sched.parse_schedule(sched.schedule)[1] == 'M' and not self.allow_minute_snaps:
+        if sched.parse_schedule(sched.schedule)[1] == 'm' and not self.allow_minute_snaps:
             log.error('not allowed')
-            raise ValueError('no minute snaps allowed')
+            raise ValueError('invalid schedule specified - multiplier should '
+                             'be one of h,d,w,M,Y')
         log.debug(f'attempting to add schedule {sched}')
         with self.get_schedule_db(fs) as conn_mgr:
             db = conn_mgr.dbinfo.db
