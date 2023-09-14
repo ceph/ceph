@@ -144,7 +144,7 @@ const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
 // Label offsets where they might be replicated. It is possible on previous versions where these offsets
 // were already used so labels won't exist there.
-const vector<uint64_t> BDEV_LABEL_OFFSETS = {0, 1073741824, 107374182400, 1099511627776};
+const vector<uint64_t> bdev_label_offsets = {0, 1073741824, 107374182400, 1099511627776};
 
 // write a label in the first block.  always use this size.  note that
 // bluefs makes a matching assumption about the location of its
@@ -5481,7 +5481,7 @@ int BlueStore::_replicate_bdev_label(const string &path, bluestore_bdev_label_t 
   }
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = 0;
-  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
+  for (uint64_t offset : bdev_label_offsets) {
     if (alloc_available) {
       if (offset >= bdev->get_size()) {
         break;
@@ -5529,7 +5529,7 @@ int BlueStore::_write_bdev_label(CephContext *cct,
   }
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = 0;
-  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
+  for (uint64_t offset : bdev_label_offsets) {
     r = bl.write_fd(fd, offset);
     if (r < 0) {
       derr << __func__ << " failed to write to " << path
@@ -5555,7 +5555,7 @@ int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
   string error;
   bluestore_bdev_label_t tmp_label;
   size_t crcs_failed = 0;
-  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
+  for (uint64_t offset : bdev_label_offsets) {
     bl.clear();
     int r = bl.pread_file(path.c_str(), offset, BDEV_LABEL_BLOCK_SIZE, &error);
     if (r < 0) {
@@ -5592,7 +5592,7 @@ int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
     *label = tmp_label;
     break;
   }
-  if ((replicated && crcs_failed == 1) || crcs_failed == BDEV_LABEL_OFFSETS.size()) {
+  if ((replicated && crcs_failed == 1) || crcs_failed == bdev_label_offsets.size()) {
     return -EIO;
   }
 
@@ -7864,7 +7864,7 @@ int BlueStore::_mount()
   }
 
   // Allocate bdev replicated label offsets
-  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
+  for (uint64_t offset : bdev_label_offsets) {
     _unalloc_bdev_label_offset(offset);
   }
 
@@ -9306,7 +9306,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     return r;
   }
 
-  for (uint64_t offset : BDEV_LABEL_OFFSETS) {
+  for (uint64_t offset : bdev_label_offsets) {
     if (offset >= bdev->get_size()) {
       break;
     }
