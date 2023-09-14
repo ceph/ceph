@@ -663,13 +663,6 @@ public:
     ) {
       ec_backend.handle_sub_write(from, std::move(msg), op, trace);
     }
-
-    ECUtil::HashInfoRef get_hash_info(
-      const hobject_t &hoid,
-      bool create
-    ) {
-      return ec_backend.get_hash_info(hoid, create);
-    }
     // end of iface
 
     ceph::ErasureCodeInterfaceRef ec_impl;
