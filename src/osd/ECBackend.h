@@ -32,6 +32,54 @@ struct ECSubRead;
 struct ECSubReadReply;
 
 struct RecoveryMessages;
+
+  // ECListener -- an interface decoupling the pipelines from
+  // particular implementation of ECBackend (crimson vs cassical).
+  // https://stackoverflow.com/q/7872958
+  struct ECListener {
+    virtual ~ECListener() = default;
+    virtual const OSDMapRef& pgb_get_osdmap() const = 0;
+    virtual epoch_t pgb_get_osdmap_epoch() const = 0;
+    virtual const pg_info_t &get_info() const = 0;
+    /**
+     * Called when a pull on soid cannot be completed due to
+     * down peers
+     */
+    virtual void cancel_pull(
+      const hobject_t &soid) = 0;
+    virtual void schedule_recovery_work(
+      GenContext<ThreadPool::TPHandle&> *c,
+      uint64_t cost) = 0;
+
+    virtual epoch_t get_interval_start_epoch() const = 0;
+    virtual const std::set<pg_shard_t> &get_acting_shards() const = 0;
+    virtual const std::set<pg_shard_t> &get_backfill_shards() const = 0;
+    virtual const std::map<hobject_t, std::set<pg_shard_t>> &get_missing_loc_shards()
+      const = 0;
+
+    virtual const std::map<pg_shard_t,
+			   pg_missing_t> &get_shard_missing() const = 0;
+    virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const = 0;
+#if 1
+    virtual const pg_missing_const_i * maybe_get_shard_missing(
+      pg_shard_t peer) const = 0;
+    virtual const pg_info_t &get_shard_info(pg_shard_t peer) const = 0;
+#endif
+    virtual ceph_tid_t get_tid() = 0;
+    virtual pg_shard_t whoami_shard() const = 0;
+#if 0
+    int whoami() const {
+      return whoami_shard().osd;
+    }
+    spg_t whoami_spg_t() const {
+      return get_info().pgid;
+    }
+#endif
+    virtual void send_message_osd_cluster(
+      std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
+
+    virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
+  };
 class ECBackend : public PGBackend {
 public:
   RecoveryHandle *open_recovery_op() override;
@@ -446,9 +494,9 @@ public:
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t& sinfo;
     // TODO: lay an interface down here
-    PGBackend::Listener* parent;
+    ECListener* parent;
 
-    PGBackend::Listener *get_parent() const { return parent; }
+    ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
     epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
     const pg_info_t &get_info() { return get_parent()->get_info(); }
@@ -456,7 +504,7 @@ public:
     ReadPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
                 const ECUtil::stripe_info_t& sinfo,
-                PGBackend::Listener* parent)
+                ECListener* parent)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
