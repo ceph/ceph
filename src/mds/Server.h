@@ -159,6 +159,7 @@ public:
 
   // -- requests --
   void handle_client_request(const cref_t<MClientRequest> &m);
+  void handle_client_reply(const cref_t<MClientReply> &m);
 
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
 			 LogEvent *le, MDSLogContextBase *fin);
