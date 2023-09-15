@@ -31,6 +31,7 @@
 #include "Mutation.h"
 #include "MetricsHandler.h"
 #include "cephfs_features.h"
+#include "MDSContext.h"
 
 #include "msg/Messenger.h"
 
@@ -363,6 +364,9 @@ void Server::dispatch(const cref_t<Message> &m)
     return;
   case CEPH_MSG_CLIENT_REQUEST:
     handle_client_request(ref_cast<MClientRequest>(m));
+    return;
+  case CEPH_MSG_CLIENT_REPLY:
+    handle_client_reply(ref_cast<MClientReply>(m));
     return;
   case CEPH_MSG_CLIENT_RECLAIM:
     handle_client_reclaim(ref_cast<MClientReclaim>(m));
@@ -2563,6 +2567,28 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
 
   dispatch_client_request(mdr);
   return;
+}
+
+void Server::handle_client_reply(const cref_t<MClientReply> &reply)
+{
+  dout(4) << "handle_client_reply " << *reply << dendl;
+
+  ceph_assert(reply->is_safe());
+  ceph_tid_t tid = reply->get_tid();
+
+  if (mds->internal_client_requests.count(tid) == 0) {
+    dout(1) << " no pending request on tid " << tid << dendl;
+    return;
+  }
+
+  switch (reply->get_op()) {
+  case CEPH_MDS_OP_RENAME:
+    break;
+  default:
+    dout(5) << " unknown client op " << reply->get_op() << dendl;
+  }
+
+  mds->internal_client_requests.erase(tid);
 }
 
 void Server::handle_osd_map()
