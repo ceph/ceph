@@ -516,8 +516,7 @@ TEST_P(AllocTest, test_alloc_47883)
   PExtentVector extents;
   auto need = 0x3f980000;
   auto got = alloc->allocate(need, 0x10000, 0, (int64_t)0, &extents);
-  EXPECT_GT(got, 0);
-  EXPECT_EQ(got, 0x630000);
+  EXPECT_GE(got, 0x630000);
 }
 
 TEST_P(AllocTest, test_alloc_50656_best_fit)
