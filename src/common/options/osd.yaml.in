@@ -895,13 +895,13 @@ options:
   desc: Do not store full-object checksums if the backend (bluestore) does its own
     checksums.  Only usable with all BlueStore OSDs.
   default: false
-# PrioritzedQueue (prio), Weighted Priority Queue (wpq ; default),
-# mclock_opclass, mclock_client, or debug_random. "mclock_opclass"
-# and "mclock_client" are based on the mClock/dmClock algorithm
-# (Gulati, et al. 2010). "mclock_opclass" prioritizes based on the
-# class the operation belongs to. "mclock_client" does the same but
-# also works to ienforce fairness between clients. "debug_random"
-# chooses among all four with equal probability.
+# Weighted Priority Queue (wpq), mClock Scheduler (mclock_scheduler: default)
+# or debug_random. "mclock_scheduler" is based on the mClock/dmClock
+# algorithm (Gulati, et al. 2010). "mclock_scheduler" prioritizes based on
+# the class the operation belongs to. "wpq" dequeues ops based on their
+# priorities. "debug_random" chooses among the two with equal probability.
+# Note: PrioritzedQueue (prio) implementation is not used for scheduling ops
+# within OSDs and is therefore not listed.
 - name: osd_op_queue
   type: str
   level: advanced

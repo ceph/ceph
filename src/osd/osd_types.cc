@@ -7371,3 +7371,31 @@ bool PGLSPlainFilter::filter(const hobject_t& obj,
 {
   return xattr_data.contents_equal(val.c_str(), val.size());
 }
+
+std::string_view get_op_queue_type_name(const op_queue_type_t &q)
+{
+  switch (q) {
+    case op_queue_type_t::WeightedPriorityQueue:
+      return "wpq";
+    case op_queue_type_t::mClockScheduler:
+      return "mclock_scheduler";
+    case op_queue_type_t::PrioritizedQueue:
+      return "PrioritizedQueue";
+    default:
+      return "unknown";
+  }
+}
+
+std::optional<op_queue_type_t> get_op_queue_type_by_name(
+  const std::string_view &s)
+{
+  if (s == "wpq") {
+    return op_queue_type_t::WeightedPriorityQueue;
+  } else if (s == "mclock_scheduler") {
+    return op_queue_type_t::mClockScheduler;
+  } else if (s == "PrioritizedQueue") {
+    return op_queue_type_t::PrioritizedQueue;
+  } else {
+    return std::nullopt;
+  }
+}

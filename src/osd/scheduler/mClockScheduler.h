@@ -259,11 +259,16 @@ public:
   void dump(ceph::Formatter &f) const final;
 
   void print(std::ostream &ostream) const final {
-    ostream << "mClockScheduler";
+    ostream << get_op_queue_type_name(get_type());
   }
 
   // Update data associated with the modified mclock config key(s)
   void update_configuration() final;
+
+  // Return the scheduler type
+  op_queue_type_t get_type() const final {
+    return op_queue_type_t::mClockScheduler;
+  }
 
   const char** get_tracked_conf_keys() const final;
   void handle_conf_change(const ConfigProxy& conf,
