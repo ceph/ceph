@@ -27,7 +27,9 @@
 
 <div class="progress"
      data-placement="left"
-     [ngbTooltip]="usageTooltipTpl">
+     [ngbPopover]="usageTooltipTpl"
+     triggers="mouseenter:mouseleave"
+     placement="top">
   <div class="progress-bar bg-info"
        [ngClass]="{'bg-warning': usedPercentage/100 >= warningThreshold, 'bg-danger': usedPercentage/100 >= errorThreshold}"
        role="progressbar"
