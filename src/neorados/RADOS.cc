@@ -12,15 +12,36 @@
  *
  */
 
-#define BOOST_BIND_NO_PLACEHOLDERS
-
+#include <boost/asio/associated_executor.hpp>
+#include <boost/asio/error.hpp>
 #include <optional>
+#include <deque>
+#include <queue>
 #include <string_view>
+
+#include <boost/asio/execution/context.hpp>
+
+#include <boost/asio/any_completion_handler.hpp>
+#include <boost/asio/append.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/consign.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/execution_context.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/query.hpp>
+#include <boost/asio/strand.hpp>
+
+#include <boost/system/error_code.hpp>
+
+#include "common/async/service.h"
+
+#define BOOST_BIND_NO_PLACEHOLDERS
 
 #include <boost/intrusive_ptr.hpp>
 
 #include <fmt/format.h>
 
+#include "include/any.h"
 #include "include/ceph_fs.h"
 
 #include "common/ceph_context.h"
@@ -44,6 +65,8 @@ namespace asio = boost::asio;
 namespace bc = boost::container;
 namespace bs = boost::system;
 namespace cb = ceph::buffer;
+
+namespace async = ceph::async;
 
 namespace neorados {
 // Object
@@ -1341,6 +1364,129 @@ void RADOS::stat_fs_(std::optional<std::int64_t> _pool,
 
 // --- Watch/Notify
 
+class Notifier : public async::service_list_base_hook {
+  friend ceph::async::service<Notifier>;
+
+  struct id_and_handler {
+    uint64_t id = 0;
+    RADOS::NextNotificationComp comp;
+  };
+
+  asio::io_context::executor_type ex;
+  // Zero for unbounded. I would not recommend this.
+  const uint32_t capacity;
+
+  async::service<Notifier>& svc;
+  std::queue<std::pair<bs::error_code, Notification>> notifications;
+  std::deque<id_and_handler> handlers;
+  std::mutex m;
+  uint64_t next_id = 0;
+
+  void service_shutdown() {
+    std::unique_lock l(m);
+    handlers.clear();
+  }
+
+public:
+
+  Notifier(asio::io_context::executor_type ex, uint32_t capacity)
+    : ex(ex), capacity(capacity),
+      svc(asio::use_service<async::service<Notifier>>(
+	    asio::query(ex, boost::asio::execution::context))) {
+    // register for service_shutdown() notifications
+    svc.add(*this);
+  }
+
+  ~Notifier() {
+    while (!handlers.empty()) {
+      auto h = std::move(handlers.front());
+      asio::post(ex, asio::append(std::move(h.comp),
+				  asio::error::operation_aborted,
+				  Notification{}));
+      handlers.pop_front();
+    }
+    svc.remove(*this);
+  }
+
+  auto next_tid() {
+    std::unique_lock l(m);
+    return ++next_id;
+  }
+  void add_handler(uint64_t id, RADOS::NextNotificationComp&& h) {
+    std::unique_lock l(m);
+    if (notifications.empty()) {
+      handlers.push_back({id, std::move(h)});
+    } else {
+      auto [e, n] = std::move(notifications.front());
+      notifications.pop();
+      l.unlock();
+      dispatch(asio::append(std::move(h), std::move(e), std::move(n)));
+    }
+  }
+
+  void cancel(uint64_t id) {
+    std::unique_lock l(m);
+    for (auto i = handlers.begin(); i != handlers.end(); ++i) {
+      if (i->id == id) {
+	dispatch(asio::append(std::move(i->comp),
+			      asio::error::operation_aborted, Notification{}));
+	handlers.erase(i);
+	break;
+      }
+    }
+  }
+
+  void operator ()(bs::error_code ec, uint64_t notify_id, uint64_t cookie,
+		   uint64_t notifier_id, buffer::list&& bl) {
+    std::unique_lock l(m);
+    if (!handlers.empty()) {
+      auto h = std::move(handlers.front());
+      handlers.pop_front();
+      l.unlock();
+      dispatch(asio::append(std::move(h.comp), std::move(ec),
+			    Notification{
+			      .notify_id = notify_id,
+			      .cookie = cookie,
+			      .notifier_id = notifier_id,
+			      .bl = std::move(bl),
+			    }));
+    } else if (capacity && notifications.size() >= capacity) {
+      // We are allowed one over, so the client knows where in the
+      // sequence of notifications we started losing data.
+      notifications.push({errc::notification_overflow, {}});
+    } else {
+      notifications.push({{},
+			  Notification{
+			      .notify_id = notify_id,
+			      .cookie = cookie,
+			      .notifier_id = notifier_id,
+			      .bl = std::move(bl),
+			  }});
+    }
+  }
+};
+
+struct next_notify_cancellation {
+  std::weak_ptr<Notifier> ptr;
+  uint64_t id;
+
+  next_notify_cancellation(std::weak_ptr<Notifier> ptr, uint64_t id)
+    : ptr(std::move(ptr)), id(id) {}
+
+  void operator ()(asio::cancellation_type_t type) {
+    if (type == asio::cancellation_type::total ||
+	type == asio::cancellation_type::terminal) {
+      // Since nobody can cancel until we return (I hope) we shouldn't
+      // need a mutex or anything.
+      auto notifier = ptr.lock();
+      if (notifier) {
+	notifier->cancel(id);
+      }
+    }
+  }
+};
+
+
 void RADOS::watch_(Object o, IOContext _ioc,
 		   std::optional<std::chrono::seconds> timeout, WatchCB cb,
 		   WatchComp c) {
@@ -1364,6 +1510,60 @@ void RADOS::watch_(Object o, IOContext _ioc,
       [c = std::move(c), cookie](bs::error_code e, cb::list) mutable {
 	asio::dispatch(asio::append(std::move(c), e, cookie));
       }), nullptr);
+}
+
+void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
+		   std::optional<std::chrono::seconds> timeout,
+		   std::uint32_t queue_size = 128u) {
+  auto oid = reinterpret_cast<const object_t*>(&o.impl);
+  auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
+
+  ObjectOperation op;
+
+  auto linger_op = impl->objecter->linger_register(*oid, ioc->oloc,
+                                                   ioc->extra_op_flags);
+  uint64_t cookie = linger_op->get_cookie();
+  // Shared pointer to avoid a potential race condition
+  linger_op->user_data.emplace<std::shared_ptr<Notifier>>(
+    std::make_shared<Notifier>(get_executor(), queue_size));
+  auto& n = ceph::any_cast<std::shared_ptr<Notifier>&>(
+    linger_op->user_data);
+  linger_op->handle = std::ref(*n);
+  op.watch(cookie, CEPH_OSD_WATCH_OP_WATCH, timeout.value_or(0s).count());
+  bufferlist bl;
+  auto e = asio::prefer(get_executor(),
+			asio::execution::outstanding_work.tracked);
+  impl->objecter->linger_watch(
+    linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
+    asio::bind_executor(
+      std::move(e),
+      [c = std::move(c), cookie](bs::error_code e, cb::list) mutable {
+	asio::dispatch(asio::append(std::move(c), e, cookie));
+      }), nullptr);
+}
+
+void RADOS::next_notification_(uint64_t cookie, NextNotificationComp c) {
+  Objecter::LingerOp* linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  if (!impl->objecter->is_valid_watch(linger_op)) {
+    dispatch(asio::append(std::move(c),
+			  bs::error_code(ENOTCONN, bs::generic_category()),
+			  Notification{}));
+  } else try {
+      auto n = ceph::any_cast<std::shared_ptr<Notifier>&>(
+	linger_op->user_data);
+      // Arrange for cancellation
+      auto slot = boost::asio::get_associated_cancellation_slot(c);
+      auto id = n->next_tid();
+      if (slot.is_connected()) {
+	slot.template emplace<next_notify_cancellation>(
+	  std::weak_ptr<Notifier>(n), id);
+      }
+      n->add_handler(id, std::move(c));
+    } catch (const std::bad_any_cast&) {
+      dispatch(asio::append(std::move(c),
+			    bs::error_code(errc::polled_callback_watch),
+			    Notification{}));
+    }
 }
 
 void RADOS::notify_ack_(Object o, IOContext _ioc,
@@ -1775,6 +1975,10 @@ const char* category::message(int ev, char*,
     return "Snapshot does not exist";
   case errc::invalid_snapcontext:
     return "Invalid snapcontext";
+  case errc::notification_overflow:
+    return "Notificaton overflow";
+  case errc::polled_callback_watch:
+    return "Attempted to poll a callback watch";
   }
 
   return "Unknown error";
@@ -1792,6 +1996,12 @@ bs::error_condition category::default_error_condition(int ev) const noexcept {
     return ceph::errc::does_not_exist;
   case errc::invalid_snapcontext:
     return bs::errc::invalid_argument;
+  case errc::notification_overflow:
+    // I don't know if this is the right choice, but it at least has a
+    // sense of "Try again". Maybe just map it to itself?
+    return bs::errc::interrupted;
+  case errc::polled_callback_watch:
+    return bs::errc::bad_file_descriptor;
   }
 
   return { ev, *this };
@@ -1808,6 +2018,16 @@ bool category::equivalent(int ev, const bs::error_condition& c) const noexcept {
       return true;
     }
   }
+  if (static_cast<errc>(ev) == errc::notification_overflow) {
+    if (c == bs::errc::interrupted) {
+      return true;
+    }
+  }
+  if (static_cast<errc>(ev) == errc::polled_callback_watch) {
+    if (c == bs::errc::invalid_argument) {
+      return true;
+    }
+  }
 
   return default_error_condition(ev) == c;
 }
@@ -1820,6 +2040,10 @@ int category::from_code(int ev) const noexcept {
     return -ENOENT;
   case errc::invalid_snapcontext:
     return -EINVAL;
+  case errc::notification_overflow:
+    return -EINTR;
+  case errc::polled_callback_watch:
+    return -EBADF;
   }
   return -EDOM;
 }
