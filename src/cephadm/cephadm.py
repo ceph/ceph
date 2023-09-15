@@ -77,7 +77,6 @@ from cephadmlib.constants import (
     LOGROTATE_DIR,
     LOG_DIR,
     LOG_DIR_MODE,
-    NO_DEPRECATED,
     PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
     SYSCTL_DIR,
     UNIT_DIR,
@@ -143,6 +142,11 @@ from cephadmlib.container_types import (
     CephContainer,
     InitContainer,
     is_container_running,
+)
+from cephadmlib.decorators import (
+    deprecated_command,
+    executes_early,
+    require_image
 )
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -1636,19 +1640,6 @@ def infer_image(func: FuncT) -> FuncT:
     return cast(FuncT, _infer_image)
 
 
-def require_image(func: FuncT) -> FuncT:
-    """
-    Require the global --image flag to be set
-    """
-    @wraps(func)
-    def _require_image(ctx: CephadmContext) -> Any:
-        if not ctx.image:
-            raise Error('This command requires the global --image option to be set')
-        return func(ctx)
-
-    return cast(FuncT, _require_image)
-
-
 def default_image(func: FuncT) -> FuncT:
     @wraps(func)
     def _default_image(ctx: CephadmContext) -> Any:
@@ -1681,27 +1672,6 @@ def update_default_image(ctx: CephadmContext) -> None:
         ctx.image = os.environ.get('CEPHADM_IMAGE')
     if not ctx.image:
         ctx.image = _get_default_image(ctx)
-
-
-def executes_early(func: FuncT) -> FuncT:
-    """Decorator that indicates the command function is meant to have no
-    dependencies and no environmental requirements and can therefore be
-    executed as non-root and with no logging, etc. Commands that have this
-    decorator applied must be simple and self-contained.
-    """
-    cast(Any, func)._execute_early = True
-    return func
-
-
-def deprecated_command(func: FuncT) -> FuncT:
-    @wraps(func)
-    def _deprecated_command(ctx: CephadmContext) -> Any:
-        logger.warning(f'Deprecated command used: {func}')
-        if NO_DEPRECATED:
-            raise Error('running deprecated commands disabled')
-        return func(ctx)
-
-    return cast(FuncT, _deprecated_command)
 
 
 def get_container_info(ctx: CephadmContext, daemon_filter: str, by_name: bool) -> Optional[ContainerInfo]:
