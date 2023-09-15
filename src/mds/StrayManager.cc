@@ -675,23 +675,40 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 {
   dout(10) << __func__ << " " << *straydn << " to " << *rdn << dendl;
 
+  if (straydn->reintegration_reqid) {
+    dout(20) << __func__ << ": stray dentry " << *straydn
+             << " is already under reintegrating" << dendl;
+    return;
+  }
+
   logger->inc(l_mdc_strays_reintegrated);
-  
+
   // rename it to remote linkage .
   filepath src(straydn->get_name(), straydn->get_dir()->ino());
   filepath dst(rdn->get_name(), rdn->get_dir()->ino());
 
+  ceph_tid_t tid = mds->issue_tid();
+
   auto req = make_message<MClientRequest>(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
   req->set_filepath2(src);
-  req->set_tid(mds->issue_tid());
+  req->set_tid(tid);
+
+  auto ptr = std::make_unique<StrayEvalRequest>(CEPH_MDS_OP_RENAME, tid, straydn);
+  mds->internal_client_requests.emplace(tid, std::move(ptr));
 
   mds->send_message_mds(req, rdn->authority().first);
 }
- 
+
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 {
   dout(10) << __func__ << " " << *dn << " to mds." << to << dendl;
+
+  if (dn->reintegration_reqid) {
+    dout(20) << __func__ << ": stray dentry " << *dn
+             << " is already under migrating" << dendl;
+    return;
+  }
 
   logger->inc(l_mdc_strays_migrated);
 
@@ -702,10 +719,15 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   filepath src(dn->get_name(), dirino);
   filepath dst(dn->get_name(), MDS_INO_STRAY(to, MDS_INO_STRAY_INDEX(dirino)));
 
+  ceph_tid_t tid = mds->issue_tid();
+
   auto req = make_message<MClientRequest>(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
   req->set_filepath2(src);
-  req->set_tid(mds->issue_tid());
+  req->set_tid(tid);
+
+  auto ptr = std::make_unique<StrayEvalRequest>(CEPH_MDS_OP_RENAME, tid, dn);
+  mds->internal_client_requests.emplace(tid, std::move(ptr));
 
   mds->send_message_mds(req, to);
 }
