@@ -1670,7 +1670,13 @@ struct NotifyHandler : std::enable_shared_from_this<NotifyHandler> {
     if ((acked && finished) || res) {
       objecter->linger_cancel(op);
       ceph_assert(c);
-      asio::dispatch(asio::append(std::move(c), res, std::move(rbl)));
+      bc::flat_map<std::pair<uint64_t, uint64_t>, buffer::list> reply_map;
+      bc::flat_set<std::pair<uint64_t, uint64_t>> missed_set;
+      auto p = rbl.cbegin();
+      decode(reply_map, p);
+      decode(missed_set, p);
+      asio::dispatch(asio::append(std::move(c), res, std::move(reply_map),
+				  std::move(missed_set)));
     }
   }
 };
