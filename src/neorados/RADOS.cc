@@ -12,15 +12,18 @@
  *
  */
 
-#define BOOST_BIND_NO_PLACEHOLDERS
-
 #include <optional>
+#include <queue>
 #include <string_view>
+#include <typeinfo>
+
+#define BOOST_BIND_NO_PLACEHOLDERS
 
 #include <boost/intrusive_ptr.hpp>
 
 #include <fmt/format.h>
 
+#include "include/any.h"
 #include "include/ceph_fs.h"
 
 #include "common/ceph_context.h"
@@ -1334,6 +1337,70 @@ void RADOS::stat_fs_(std::optional<std::int64_t> _pool,
 
 // --- Watch/Notify
 
+class Notifier {
+  // Zero for unbounded. I would not recommend this.
+  const asio::any_io_executor e;
+  const uint32_t capacity;
+  std::queue<std::pair<bs::error_code, Notification>> notifications;
+  std::queue<RADOS::NextNotificationComp> handlers;
+  std::mutex m;
+
+public:
+
+  Notifier(asio::any_io_executor e, uint32_t capacity)
+    : e(e), capacity(capacity) {}
+
+  ~Notifier() {
+    while (!handlers.empty()) {
+      auto h = std::move(handlers.front());
+      dispatch(asio::append(std::move(h),
+			    bs::error_code(ENOTCONN, bs::generic_category()),
+			    Notification{}));
+    }
+  }
+
+  void add_handler(RADOS::NextNotificationComp&& h) {
+    std::unique_lock l(m);
+    if (notifications.empty()) {
+      handlers.push(std::move(h));
+    } else {
+      auto [e, n] = std::move(notifications.front());
+      notifications.pop();
+      l.unlock();
+      dispatch(asio::append(std::move(h), std::move(e), std::move(n)));
+    }
+  }
+
+  void operator ()(bs::error_code ec, uint64_t notify_id, uint64_t cookie,
+		   uint64_t notifier_id, buffer::list&& bl) {
+    std::unique_lock l(m);
+    if (!handlers.empty()) {
+      auto h = std::move(handlers.front());
+      handlers.pop();
+      l.unlock();
+      dispatch(asio::append(std::move(h), std::move(ec),
+			    Notification{
+			      .notify_id = notify_id,
+			      .cookie = cookie,
+			      .notifier_id = notifier_id,
+			      .bl = std::move(bl),
+			    }));
+    } else if (capacity && notifications.size() >= capacity) {
+      // We are allowed one over, so the client knows where in the
+      // sequence of notifications we started losing data.
+      notifications.push({errc::notification_overflow, {}});
+    } else {
+      notifications.push({{},
+			  Notification{
+			      .notify_id = notify_id,
+			      .cookie = cookie,
+			      .notifier_id = notifier_id,
+			      .bl = std::move(bl),
+			  }});
+    }
+  }
+};
+
 void RADOS::watch_(Object o, IOContext _ioc,
 		   std::optional<std::chrono::seconds> timeout, WatchCB cb,
 		   WatchComp c) {
@@ -1357,6 +1424,52 @@ void RADOS::watch_(Object o, IOContext _ioc,
       [c = std::move(c), cookie](bs::error_code e, cb::list) mutable {
 	asio::dispatch(asio::append(std::move(c), e, cookie));
       }), nullptr);
+}
+
+void RADOS::watch_(Object o, IOContext _ioc, WatchComp c,
+		   std::optional<std::chrono::seconds> timeout,
+		   std::uint32_t queue_size = 128u) {
+  auto oid = reinterpret_cast<const object_t*>(&o.impl);
+  auto ioc = reinterpret_cast<const IOContextImpl*>(&_ioc.impl);
+
+  ObjectOperation op;
+
+  auto linger_op = impl->objecter->linger_register(*oid, ioc->oloc,
+                                                   ioc->extra_op_flags);
+  uint64_t cookie = linger_op->get_cookie();
+  linger_op->user_data.emplace<std::unique_ptr<Notifier>>(
+    new Notifier(get_executor(), queue_size));
+  auto& n = ceph::any_cast<std::unique_ptr<Notifier>&>(
+    linger_op->user_data);
+  linger_op->handle = std::ref(*n);
+  op.watch(cookie, CEPH_OSD_WATCH_OP_WATCH, timeout.value_or(0s).count());
+  bufferlist bl;
+  auto e = asio::prefer(get_executor(),
+			asio::execution::outstanding_work.tracked);
+  impl->objecter->linger_watch(
+    linger_op, op, ioc->snapc, ceph::real_clock::now(), bl,
+    asio::bind_executor(
+      std::move(e),
+      [c = std::move(c), cookie](bs::error_code e, cb::list) mutable {
+	asio::dispatch(asio::append(std::move(c), e, cookie));
+      }), nullptr);
+}
+
+void RADOS::next_notification_(uint64_t cookie, NextNotificationComp c) {
+  Objecter::LingerOp* linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
+  if (!impl->objecter->is_valid_watch(linger_op)) {
+    dispatch(asio::append(std::move(c),
+			  bs::error_code(ENOTCONN, bs::generic_category()),
+			  Notification{}));
+  } else try {
+      auto& n = ceph::any_cast<std::unique_ptr<Notifier>&>(
+	linger_op->user_data);
+      n->add_handler(std::move(c));
+    } catch (const std::bad_any_cast&) {
+      dispatch(asio::append(std::move(c),
+			    bs::error_code(errc::polled_callback_watch),
+			    Notification{}));
+    }
 }
 
 void RADOS::notify_ack_(Object o, IOContext _ioc,
@@ -1766,6 +1879,10 @@ const char* category::message(int ev, char*,
     return "Snapshot does not exist";
   case errc::invalid_snapcontext:
     return "Invalid snapcontext";
+  case errc::notification_overflow:
+    return "Notificaton overflow";
+  case errc::polled_callback_watch:
+    return "Attempted to poll a callback watch";
   }
 
   return "Unknown error";
@@ -1783,6 +1900,12 @@ bs::error_condition category::default_error_condition(int ev) const noexcept {
     return ceph::errc::does_not_exist;
   case errc::invalid_snapcontext:
     return bs::errc::invalid_argument;
+  case errc::notification_overflow:
+    // I don't know if this is the right choice, but it at least has a
+    // sense of "Try again". Maybe just map it to itself?
+    return bs::errc::interrupted;
+  case errc::polled_callback_watch:
+    return bs::errc::bad_file_descriptor;
   }
 
   return { ev, *this };
@@ -1799,6 +1922,16 @@ bool category::equivalent(int ev, const bs::error_condition& c) const noexcept {
       return true;
     }
   }
+  if (static_cast<errc>(ev) == errc::notification_overflow) {
+    if (c == bs::errc::interrupted) {
+      return true;
+    }
+  }
+  if (static_cast<errc>(ev) == errc::polled_callback_watch) {
+    if (c == bs::errc::invalid_argument) {
+      return true;
+    }
+  }
 
   return default_error_condition(ev) == c;
 }
@@ -1811,6 +1944,10 @@ int category::from_code(int ev) const noexcept {
     return -ENOENT;
   case errc::invalid_snapcontext:
     return -EINVAL;
+  case errc::notification_overflow:
+    return -EINTR;
+  case errc::polled_callback_watch:
+    return -EBADF;
   }
   return -EDOM;
 }

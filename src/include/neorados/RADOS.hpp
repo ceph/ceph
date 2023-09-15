@@ -1281,6 +1281,14 @@ private:
   std::aligned_storage_t<impl_size> impl;
 };
 
+// Result from `next_notification`
+struct Notification {
+  std::uint64_t notify_id = 0;
+  std::uint64_t cookie = 0;
+  std::uint64_t notifier_id = 0;
+  ceph::buffer::list bl;
+};
+
 // Clang reports a spurious warning that a captured `this` is unused
 // in the public 'wrapper' functions that construct the completion
 // handler and pass it to the actual worker member functions. The `this` is
@@ -1618,6 +1626,38 @@ public:
       }, consigned);
   }
 
+  template<boost::asio::completion_token_for<WatchSig> CompletionToken>
+  auto watch(Object o, IOContext ioc, CompletionToken&& token,
+	     std::optional<std::chrono::seconds> timeout = std::nullopt,
+	     std::uint32_t queue_size = 128u) {
+    auto consigned = boost::asio::consign(
+      std::forward<CompletionToken>(token), boost::asio::make_work_guard(
+	boost::asio::get_associated_executor(token, get_executor())));
+    return boost::asio::async_initiate<decltype(consigned), WatchSig>(
+      [o = std::move(o), ioc = std::move(ioc), timeout, queue_size, this]
+      (auto&& handler) mutable {
+	watch_(std::move(o), std::move(ioc), std::move(handler), timeout,
+	       queue_size);
+      }, consigned);
+  }
+
+  using NextNotificationSig = void(boost::system::error_code ec,
+				   Notification);
+  using NextNotificationComp =
+    boost::asio::any_completion_handler<NextNotificationSig>;
+  template<boost::asio::completion_token_for<
+	     NextNotificationSig> CompletionToken>
+  auto next_notification(uint64_t cookie, CompletionToken&& token) {
+    auto consigned = boost::asio::consign(
+      std::forward<CompletionToken>(token), boost::asio::make_work_guard(
+	boost::asio::get_associated_executor(token, get_executor())));
+    return boost::asio::async_initiate<
+      decltype(consigned), NextNotificationSig>(
+	[cookie, this](auto&& handler) mutable {
+	next_notification_(cookie, std::move(handler));
+	}, consigned);
+  }
+
   template<boost::asio::completion_token_for<SimpleOpSig> CompletionToken>
   auto notify_ack(Object o, IOContext ioc,
 		  uint64_t notify_id, uint64_t cookie,
@@ -1835,6 +1875,12 @@ private:
   void watch_(Object o, IOContext ioc,
 	      std::optional<std::chrono::seconds> timeout,
 	      WatchCB cb, WatchComp c);
+  void watch_(Object o, IOContext ioc, WatchComp c,
+	      std::optional<std::chrono::seconds> timeout,
+	      std::uint32_t queue_size);
+  void next_notification_(uint64_t cookie, NextNotificationComp c);
+  tl::expected<ceph::timespan, boost::system::error_code>
+  watch_check_(std::uint64_t cookie);
   void notify_ack_(Object o, IOContext _ioc,
 		   uint64_t notify_id,
 		   uint64_t cookie,
@@ -1885,7 +1931,13 @@ private:
 enum class errc {
   pool_dne = 1,
   snap_dne,
-  invalid_snapcontext
+  invalid_snapcontext,
+  // Indicates that notifications were received while the queue was
+  // full. The watch is still valid and `next_notification` may be
+  // called again.
+  notification_overflow,
+  // Attempted to poll a callback watch
+  polled_callback_watch
 };
 
 const boost::system::error_category& error_category() noexcept;
