@@ -9524,9 +9524,9 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobTest) {
     string key;
     _key_encode_u64(1, &key);
     bluestore_shared_blob_t sb(1);
-    sb.ref_map.get(0x2000, block_size);
-    sb.ref_map.get(0x4000, block_size);
-    sb.ref_map.get(0x4000, block_size);
+    sb.ref_map.get(0x412000, block_size);
+    sb.ref_map.get(0x414000, block_size);
+    sb.ref_map.get(0x414000, block_size);
     bufferlist bl;
     encode(sb, bl);
     bstore->inject_broken_shared_blob_key(key, bl);
