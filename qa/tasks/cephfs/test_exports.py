@@ -152,6 +152,7 @@ class TestExportPin(CephFSTestCase):
         # vstart.sh sets mds_debug_subtrees to True. That causes a ESubtreeMap
         # to be written out every event. Yuck!
         self.config_set('mds', 'mds_debug_subtrees', False)
+        self.config_rm('mds', 'mds bal split size') # don't split /top
         self.mount_a.run_shell_payload("rm -rf 1")
 
         # flush everything out so ESubtreeMap is the only event in the log
