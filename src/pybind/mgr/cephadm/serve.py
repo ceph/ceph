@@ -334,11 +334,14 @@ class CephadmServe:
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         with_lsm = self.mgr.device_enhanced_scan
+        list_all = self.mgr.inventory_list_all
         inventory_args = ['--', 'inventory',
                           '--format=json-pretty',
                           '--filter-for-batch']
         if with_lsm:
             inventory_args.insert(-1, "--with-lsm")
+        if list_all:
+            inventory_args.insert(-1, "--list-all")
 
         try:
             try:
