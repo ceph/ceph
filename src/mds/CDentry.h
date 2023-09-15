@@ -377,6 +377,8 @@ public:
   mempool::mds_co::map<client_t,ClientLease*> client_lease_map;
   std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
+  ceph_tid_t reintegration_reqid = 0;
+
 
 protected:
   friend class Migrator;
