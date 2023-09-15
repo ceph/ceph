@@ -589,7 +589,7 @@ send_data:
 
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
-  if (skip_decrypt) { // bypass decryption for multisite sync requests
+  if (skip_decrypt || !manifest_bl) { // bypass decryption for multisite sync requests
     return 0;
   }
 
