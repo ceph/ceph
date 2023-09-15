@@ -2377,6 +2377,11 @@ public:
 			      uint64_t cookie,
 			      uint64_t notifier_id,
 			      ceph::buffer::list&& bl)> handle;
+    // I am sorely tempted to replace function2 with cxx_function, as
+    // cxx_function has the `target` method from `std::function` and I
+    // keep having to do annoying circumlocutions like this one to be
+    // able to access function object data with function2.
+    ceph::unique_any user_data;
     OSDSession *session{nullptr};
 
     int ctx_budget{-1};
