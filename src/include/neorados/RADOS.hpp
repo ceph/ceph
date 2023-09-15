@@ -1706,7 +1706,12 @@ public:
   tl::expected<ceph::timespan, boost::system::error_code>
   check_watch(uint64_t cookie);
 
-  using NotifySig = void(boost::system::error_code, ceph::buffer::list);
+  using NotifySig =
+      void(boost::system::error_code,
+           boost::container::flat_map<std::pair<std::uint64_t, std::uint64_t>,
+                                      ceph::buffer::list> reply_map,
+	   boost::container::flat_set<std::pair<std::uint64_t, std::uint64_t>>
+	       missed_set);
   using NotifyComp = boost::asio::any_completion_handler<NotifySig>;
   template<boost::asio::completion_token_for<NotifySig> CompletionToken>
   auto notify(Object o, IOContext ioc, ceph::buffer::list bl,
