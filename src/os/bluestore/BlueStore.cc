@@ -4669,6 +4669,33 @@ void BlueStore::_close_db()
   }
 }
 
+int BlueStore::create_db()
+{
+  dout(5) << __func__ << dendl;
+  int r = _open_db(true/*create*/, false/*to_repair*/, false/*read_only*/);
+  return r;
+}
+
+int BlueStore::open_db(bool read_only, bool to_repair)
+{
+  dout(5) << __func__ << " " << (read_only ? "RO" : "RW")
+	  << " mode:" << (to_repair ? "repair" : "normal") << dendl;
+  int r = _open_db_and_around(read_only, to_repair);
+  return r;
+}
+
+int BlueStore::close_db()
+{
+  dout(5) << __func__ << dendl;
+  _close_db_and_around();
+  return 0;
+}
+
+KeyValueDB* BlueStore::get_db()
+{
+  return db;
+}
+
 void BlueStore::_dump_alloc_on_failure()
 {
   auto dump_interval =
@@ -6011,17 +6038,6 @@ int BlueStore::umount()
       return -EIO;
     }
   }
-  return 0;
-}
-
-int BlueStore::cold_open()
-{
-  return _open_db_and_around(true);
-}
-
-int BlueStore::cold_close()
-{
-  _close_db_and_around();
   return 0;
 }
 
@@ -7383,13 +7399,13 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair, bluestore_stats_t 
 }
 
 int BlueStore::revert_wal_to_plain() {
-  int r = cold_open();
+  int r = open_db(true);
   if (r != 0) {
     dout(1) << __func__ << "failed to open db / allocator" << dendl;
     goto out;
   }
   bluefs->revert_wal_to_plain();
-  cold_close();
+  close_db();
   out:
   return r;
 }

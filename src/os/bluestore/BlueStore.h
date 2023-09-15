@@ -1699,6 +1699,11 @@ public:
   }
   int umount() override;
 
+  int create_db();
+  int open_db(bool read_only = false, bool to_repair = false);
+  int close_db();
+  KeyValueDB* get_db();
+
   int open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair);
   int close_db_environment();
   BlueFS* get_bluefs();
@@ -1708,10 +1713,6 @@ public:
   int read_meta_check(const std::string& key, std::string *value);
 
   int read_meta_conf_check_env();
-
-  // open in read-only and limited mode
-  int cold_open();
-  int cold_close();
 
   int fsck(bool deep) override {
     return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, false);

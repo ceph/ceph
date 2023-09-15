@@ -12313,6 +12313,7 @@ TEST_P(CorruptedOnodesTest, Fsck_ToleratesCorruptionDuringAllocationRecovery)
 
 TEST_P(CorruptedOnodesTest, ColdOpen_StillAssertsOnCorruptOnode)
 {
+  //Note: cold_open() logic is now served by open_db(true == readonly)
   g_ceph_context->_conf._clear_safe_to_start_threads();
   GTEST_FLAG_SET(death_test_style, "threadsafe");   // mount() leaves threads running
   SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
@@ -12325,9 +12326,9 @@ TEST_P(CorruptedOnodesTest, ColdOpen_StillAssertsOnCorruptOnode)
   umount();
   SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "1");
   g_conf().apply_changes(nullptr);
-  // cold_open() is ceph-bluestore-tool trim's entry point: read-only, but it
+  // open_db() is ceph-bluestore-tool trim's entry point: read-only, but it
   // discards space based on the recovered allocation, so it must not tolerate.
-  ASSERT_DEATH(bs->cold_open(), "FAILED ceph_assert");
+  ASSERT_DEATH(bs->open_db(true), "FAILED ceph_assert");
   SetVal(g_conf(), "bluestore_debug_inject_allocation_from_file_failure", "0");
   g_conf().apply_changes(nullptr);
   cleanup_store();
