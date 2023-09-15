@@ -55,6 +55,7 @@
             </li>
           </ul>
         </ng-template>
+        <ng-template #healthWarningAndError>
         <div class="info-card-content-clickable mt-1"
              [ngStyle]="healthData.health.status | healthColor"
              [ngbPopover]="healthChecks"
@@ -62,7 +63,13 @@
             {{ healthData.health.status | healthLabel | uppercase }}
           <i *ngIf="healthData.health?.status !== 'HEALTH_OK'"
              class="fa fa-exclamation-triangle"></i>
+        </div></ng-template>
+
+      <ng-container *ngIf="!healthData.health?.checks?.length; else healthWarningAndError">
+        <div [ngStyle]="healthData.health.status | healthColor">
+          {{ healthData.health.status | healthLabel | uppercase }}
         </div>
+      </ng-container>
       </div>
     </cd-card>
 
