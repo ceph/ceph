@@ -723,7 +723,7 @@ int RadosBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new
 	  attrs[it.first] = it.second;
   }
   return store->ctl()->bucket->set_bucket_instance_attrs(get_info(),
-				new_attrs, &get_info().objv_tracker, y, dpp);
+				attrs, &get_info().objv_tracker, y, dpp);
 }
 
 int RadosBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
