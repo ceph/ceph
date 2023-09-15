@@ -43,6 +43,7 @@
 #include "Server.h"
 #include "MetricsHandler.h"
 #include "osdc/Journaler.h"
+#include "MDSMetaRequest.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
 // benefit of those including this header and using MDSRank::logger
@@ -422,6 +423,8 @@ class MDSRank {
 
     PerfCounters *logger = nullptr, *mlogger = nullptr;
     OpTracker op_tracker;
+
+    std::map<ceph_tid_t, std::unique_ptr<MDSMetaRequest>> internal_client_requests;
 
     // The last different state I held before current
     MDSMap::DaemonState last_state = MDSMap::STATE_BOOT;
