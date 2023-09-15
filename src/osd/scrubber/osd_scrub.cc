@@ -52,6 +52,75 @@ void OsdScrub::log_fwd(std::string_view text)
   dout(20) << text << dendl;
 }
 
+bool OsdScrub::scrub_random_backoff() const
+{
+  if (random_bool_with_probability(conf->osd_scrub_backoff_ratio)) {
+    dout(20) << fmt::format(
+		    "lost coin flip, randomly backing off (ratio: {:.3f})",
+		    conf->osd_scrub_backoff_ratio)
+	     << dendl;
+    return true;  // backing off
+  }
+  return false;
+}
+
+void OsdScrub::initiate_scrub(bool is_recovery_active)
+{
+  if (scrub_random_backoff()) {
+    // dice-roll says we should not scrub now
+    return;
+  }
+
+  if (auto blocked_pgs = get_blocked_pgs_count(); blocked_pgs > 0) {
+    // some PGs managed by this OSD were blocked by a locked object during
+    // scrub. This means we might not have the resources needed to scrub now.
+    dout(10)
+	<< fmt::format(
+	       "PGs are blocked while scrubbing due to locked objects ({} PGs)",
+	       blocked_pgs)
+	<< dendl;
+  }
+
+  // fail fast if no resources are available
+  if (!m_resource_bookkeeper.can_inc_scrubs()) {
+    dout(20) << "too many scrubs already running on this OSD" << dendl;
+    return;
+  }
+
+  // if there is a PG that is just now trying to reserve scrub replica resources -
+  // we should wait and not initiate a new scrub
+  if (is_reserving_now()) {
+    dout(10) << "scrub resources reservation in progress" << dendl;
+    return;
+  }
+
+  Scrub::OSDRestrictions env_conditions;
+
+  if (is_recovery_active && !conf->osd_scrub_during_recovery) {
+    if (!conf->osd_repair_during_recovery) {
+      dout(15) << "not scheduling scrubs due to active recovery" << dendl;
+      return;
+    }
+    dout(10) << "will only schedule explicitly requested repair due to active "
+		"recovery"
+	     << dendl;
+    env_conditions.allow_requested_repair_only = true;
+  }
+
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
+    dout(20) << "scrub scheduling (@tick) starts" << dendl;
+    auto all_jobs = list_registered_jobs();
+    for (const auto& sj : all_jobs) {
+      dout(20) << fmt::format("\tscrub-queue jobs: {}", *sj) << dendl;
+    }
+  }
+
+  auto was_started = select_pg_and_scrub(env_conditions);
+  dout(20) << fmt::format(
+		  "scrub scheduling done ({})",
+		  ScrubQueue::attempt_res_text(was_started))
+	   << dendl;
+}
 
 // ////////////////////////////////////////////////////////////////////////// //
 // scrub initiation - OSD code temporarily moved here from OSD.cc
@@ -62,63 +131,6 @@ static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
 }
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
-
-void OSD::sched_scrub()
-{
-  auto& scrub_scheduler = service.get_scrub_services();
-
-  if (auto blocked_pgs = scrub_scheduler.get_blocked_pgs_count();
-      blocked_pgs > 0) {
-    // some PGs managed by this OSD were blocked by a locked object during
-    // scrub. This means we might not have the resources needed to scrub now.
-    dout(10)
-      << fmt::format(
-	   "{}: PGs are blocked while scrubbing due to locked objects ({} PGs)",
-	   __func__,
-	   blocked_pgs)
-      << dendl;
-  }
-
-  // fail fast if no resources are available
-  if (!scrub_scheduler.can_inc_scrubs()) {
-    dout(20) << __func__ << ": OSD cannot inc scrubs" << dendl;
-    return;
-  }
-
-  // if there is a PG that is just now trying to reserve scrub replica resources -
-  // we should wait and not initiate a new scrub
-  if (scrub_scheduler.is_reserving_now()) {
-    dout(20) << __func__ << ": scrub resources reservation in progress" << dendl;
-    return;
-  }
-
-  Scrub::OSDRestrictions env_conditions;
-
-  if (service.is_recovery_active() && !cct->_conf->osd_scrub_during_recovery) {
-    if (!cct->_conf->osd_repair_during_recovery) {
-      dout(15) << __func__ << ": not scheduling scrubs due to active recovery"
-	       << dendl;
-      return;
-    }
-    dout(10) << __func__
-      << " will only schedule explicitly requested repair due to active recovery"
-      << dendl;
-    env_conditions.allow_requested_repair_only = true;
-  }
-
-  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
-    dout(20) << __func__ << " sched_scrub starts" << dendl;
-    auto all_jobs = scrub_scheduler.list_registered_jobs();
-    for (const auto& sj : all_jobs) {
-      dout(20) << "sched_scrub scrub-queue jobs: " << *sj << dendl;
-    }
-  }
-
-  auto was_started = scrub_scheduler.select_pg_and_scrub(env_conditions);
-  dout(20) << "sched_scrub done (" << ScrubQueue::attempt_res_text(was_started)
-	   << ")" << dendl;
-}
-
 
 Scrub::schedule_result_t OSDService::initiate_a_scrub(spg_t pgid,
 						      bool allow_requested_repair_only)

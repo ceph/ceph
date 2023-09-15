@@ -1864,9 +1864,7 @@ protected:
 
 
   // -- scrubbing --
-  void sched_scrub();
   void resched_all_scrubs();
-  bool scrub_random_backoff();
 
   // -- status reporting --
   MPGStats *collect_pg_stats();
