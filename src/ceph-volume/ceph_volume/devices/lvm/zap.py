@@ -303,9 +303,8 @@ class Zap(object):
         self.zap(devices)
 
     def dmcrypt_close(self, dmcrypt_uuid):
-        dmcrypt_path = "/dev/mapper/{}".format(dmcrypt_uuid)
-        mlogger.info("Closing encrypted path %s", dmcrypt_path)
-        encryption.dmcrypt_close(dmcrypt_path)
+        mlogger.info("Closing encrypted volume %s", dmcrypt_uuid)
+        encryption.dmcrypt_close(mapping=dmcrypt_uuid, skip_path_check=True)
 
     def main(self):
         sub_command_help = dedent("""
