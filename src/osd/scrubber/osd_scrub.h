@@ -35,6 +35,12 @@ class OsdScrub {
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
 
   /**
+   * called periodically by the OSD to select the first scrub-eligible PG
+   * and scrub it.
+   */
+  void initiate_scrub(bool active_recovery);
+
+  /**
    * logs a string at log level 20, using OsdScrub's prefix.
    * An aux function to be used by sub-objects.
    */
@@ -180,4 +186,11 @@ class OsdScrub {
 
   /// number of PGs stuck while scrubbing, waiting for objects
   int get_blocked_pgs_count() const;
+
+  /**
+   * roll a dice to determine whether we should skip this tick, not trying to
+   * schedule a new scrub.
+   * \returns true with probability of osd_scrub_backoff_ratio.
+   */
+  bool scrub_random_backoff() const;
 };

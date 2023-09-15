@@ -6282,9 +6282,7 @@ void OSD::tick_without_osd_lock()
   }
 
   if (is_active()) {
-    if (!scrub_random_backoff()) {
-      sched_scrub();
-    }
+    service.get_scrub_services().initiate_scrub(service.is_recovery_active());
     service.promote_throttle_recalibrate();
     resume_creating_pg();
     bool need_send_beacon = false;
@@ -7595,17 +7593,6 @@ void OSD::handle_fast_scrub(MOSDScrub2 *m)
 	  PeeringState::RequestScrub(m->deep, m->repair))));
   }
   m->put();
-}
-
-bool OSD::scrub_random_backoff()
-{
-  if (random_bool_with_probability(cct->_conf->osd_scrub_backoff_ratio)) {
-    dout(20)
-	<< "scrub_random_backoff lost coin flip, randomly backing off (ratio: "
-	<< cct->_conf->osd_scrub_backoff_ratio << ")" << dendl;
-    return true; // backing off
-  }
-  return false;
 }
 
 MPGStats* OSD::collect_pg_stats()
