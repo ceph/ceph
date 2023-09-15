@@ -18,6 +18,7 @@
 #include <variant>
 
 #include "common/ceph_context.h"
+#include "common/OpQueue.h"
 #include "mon/MonClient.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 
@@ -54,6 +55,9 @@ public:
   // Apply config changes to the scheduler (if any)
   virtual void update_configuration() = 0;
 
+  // Get the scheduler type set for the queue
+  virtual op_queue_type_t get_type() const = 0;
+
   // Destructor
   virtual ~OpScheduler() {};
 };
@@ -63,7 +67,8 @@ using OpSchedulerRef = std::unique_ptr<OpScheduler>;
 
 OpSchedulerRef make_scheduler(
   CephContext *cct, int whoami, uint32_t num_shards, int shard_id,
-  bool is_rotational, std::string_view osd_objectstore, MonClient *monc);
+  bool is_rotational, std::string_view osd_objectstore,
+  op_queue_type_t osd_scheduler, MonClient *monc);
 
 /**
  * Implements OpScheduler in terms of OpQueue
@@ -141,6 +146,10 @@ public:
 
   void update_configuration() final {
     // no-op
+  }
+
+  op_queue_type_t get_type() const final {
+    return queue.get_type();
   }
 
   ~ClassedOpQueueScheduler() final {};
