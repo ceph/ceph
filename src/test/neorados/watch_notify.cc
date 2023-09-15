@@ -125,13 +125,9 @@ CORO_TEST_F(NeoRadosWatchNotify, WatchNotify, NeoRadosWatchNotifyTest) {
   std::vector<neorados::ObjWatcher> watchers;
   co_await execute(notify_oid, ReadOp{}.list_watchers(&watchers));
   EXPECT_EQ(1u, watchers.size());
-  auto reply = co_await rados().notify(notify_oid, pool(), {}, {},
-                                       asio::use_awaitable);
-  std::map<std::pair<uint64_t, uint64_t>, buffer::list> reply_map;
-  std::set<std::pair<uint64_t, uint64_t>> missed_set;
-  auto p = reply.cbegin();
-  decode(reply_map, p);
-  decode(missed_set, p);
+  auto [reply_map, missed_set]
+    = co_await rados().notify(notify_oid, pool(), {}, {},
+			      asio::use_awaitable);
   EXPECT_EQ(1u, notify_cookies.size());
   EXPECT_EQ(1u, notify_cookies.count(handle));
   EXPECT_EQ(1u, reply_map.size());
@@ -186,12 +182,9 @@ CORO_TEST_F(NeoRadosWatchNotifyPoll, WatchNotify, NeoRadosTest) {
   EXPECT_EQ(1u, watchers.size());
   auto notify = [](neorados::RADOS& r, neorados::IOContext ioc)
     -> asio::awaitable<void> {
-    auto reply = co_await r.notify(oid, ioc, {}, {}, asio::use_awaitable);
-    std::map<std::pair<uint64_t, uint64_t>, buffer::list> reply_map;
-    std::set<std::pair<uint64_t, uint64_t>> missed_set;
-    auto p = reply.cbegin();
-    decode(reply_map, p);
-    decode(missed_set, p);
+    auto [reply_map, missed_set]
+      = co_await r.notify(oid, ioc, {}, {}, asio::use_awaitable);
+
     EXPECT_EQ(1u, reply_map.size());
     EXPECT_EQ(5u, reply_map.begin()->second.length());
     EXPECT_EQ(0, strncmp("reply", reply_map.begin()->second.c_str(), 5));
