@@ -44,28 +44,19 @@ Create a volume by running the following command:
 
 .. prompt:: bash #
 
-   ceph fs volume create <vol_name> [<placement>]
+   ceph fs volume create <vol_name> [placement]
 
 This creates a CephFS file system and its data and metadata pools. It can also
 deploy MDS daemons for the filesystem using a ceph-mgr orchestrator module (for
 example Rook). See :doc:`/mgr/orchestrator`.
 
-``<vol_name>`` is the volume name (an arbitrary string). ``<placement>`` is an
-optional string that specifies the hosts that should have an MDS running on
-them and, optionally, the total number of MDS daemons that the cluster should
-have. For example, the following placement string means "deploy MDS on nodes
-``host1`` and ``host2`` (one MDS per host)::
+``<vol_name>`` is the volume name (an arbitrary string). ``[placement]`` is an
+optional string that specifies the :ref:`orchestrator-cli-placement-spec` for
+the MDS. See also :ref:`orchestrator-cli-cephfs` for more examples on
+placement.
 
-    "host1,host2"
-
-The following placement specification means "deploy two MDS daemons on each of
-nodes ``host1`` and ``host2`` (for a total of four MDS daemons in the
-cluster)"::
-
-    "4 host1,host2"
-
-See :ref:`orchestrator-cli-service-spec` for more on placement specification.
-Specifying placement via a YAML file is not supported.
+.. note:: Specifying placement via a YAML file is not supported through the
+          volume interface.
 
 To remove a volume, run the following command:
 
@@ -75,6 +66,11 @@ To remove a volume, run the following command:
 
 This removes a file system and its data and metadata pools. It also tries to
 remove MDS daemons using the enabled ceph-mgr orchestrator module.
+
+.. note:: After volume deletion, it is recommended to restart `ceph-mgr`
+   if a new file system is created on the same cluster and subvolume interface
+   is being used. Please see https://tracker.ceph.com/issues/49605#note-5
+   for more details.
 
 List volumes by running the following command:
 

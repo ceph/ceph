@@ -1,5 +1,11 @@
 import { Component, OnInit } from '@angular/core';
-import { FormArray, FormBuilder, FormControl, NgForm, Validators } from '@angular/forms';
+import {
+  UntypedFormArray,
+  UntypedFormBuilder,
+  UntypedFormControl,
+  NgForm,
+  Validators
+} from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
@@ -35,7 +41,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   zonegroupList: RgwZonegroup[] = [];
   zonegroupNames: string[];
   isMaster = false;
-  placementTargets: FormArray;
+  placementTargets: UntypedFormArray;
   newZonegroupName: string;
   zonegroupZoneNames: string[];
   labelsOption: Array<SelectOption> = [];
@@ -54,7 +60,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
     public actionLabels: ActionLabelsI18n,
     public rgwZonegroupService: RgwZonegroupService,
     public notificationService: NotificationService,
-    private formBuilder: FormBuilder
+    private formBuilder: UntypedFormBuilder
   ) {
     this.action = this.editing
       ? this.actionLabels.EDIT + this.resource
@@ -64,8 +70,8 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
 
   createForm() {
     this.multisiteZonegroupForm = new CdFormGroup({
-      default_zonegroup: new FormControl(false),
-      zonegroupName: new FormControl(null, {
+      default_zonegroup: new UntypedFormControl(false),
+      zonegroupName: new UntypedFormControl(null, {
         validators: [
           Validators.required,
           CdValidators.custom('uniqueName', (zonegroupName: string) => {
@@ -77,9 +83,9 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
           })
         ]
       }),
-      master_zonegroup: new FormControl(false),
-      selectedRealm: new FormControl(null),
-      zonegroup_endpoints: new FormControl(null, [
+      master_zonegroup: new UntypedFormControl(false),
+      selectedRealm: new UntypedFormControl(null),
+      zonegroup_endpoints: new UntypedFormControl(null, [
         CdValidators.custom('endpoint', (value: string) => {
           if (_.isEmpty(value)) {
             return false;
@@ -111,7 +117,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
       const fg = this.addPlacementTarget();
       fg.patchValue(placementTarget);
     });
-    this.placementTargets = this.multisiteZonegroupForm.get('placementTargets') as FormArray;
+    this.placementTargets = this.multisiteZonegroupForm.get('placementTargets') as UntypedFormArray;
     this.realmList =
       this.multisiteInfo[0] !== undefined && this.multisiteInfo[0].hasOwnProperty('realms')
         ? this.multisiteInfo[0]['realms']
@@ -276,13 +282,13 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   }
 
   addPlacementTarget() {
-    this.placementTargets = this.multisiteZonegroupForm.get('placementTargets') as FormArray;
+    this.placementTargets = this.multisiteZonegroupForm.get('placementTargets') as UntypedFormArray;
     const fg = new CdFormGroup({
-      placement_id: new FormControl('', {
+      placement_id: new UntypedFormControl('', {
         validators: [Validators.required]
       }),
-      tags: new FormControl(''),
-      storage_class: new FormControl([])
+      tags: new UntypedFormControl(''),
+      storage_class: new UntypedFormControl([])
     });
     this.placementTargets.push(fg);
     return fg;
@@ -293,7 +299,7 @@ export class RgwMultisiteZonegroupFormComponent implements OnInit {
   }
 
   removePlacementTarget(index: number) {
-    this.placementTargets = this.multisiteZonegroupForm.get('placementTargets') as FormArray;
+    this.placementTargets = this.multisiteZonegroupForm.get('placementTargets') as UntypedFormArray;
     this.placementTargets.removeAt(index);
   }
 

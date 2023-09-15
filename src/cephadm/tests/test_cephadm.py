@@ -47,6 +47,8 @@ class TestCephAdm(object):
 
     @mock.patch('cephadm.logger')
     def test_attempt_bind(self, _logger):
+        from cephadmlib.net_utils import PortOccupiedError, attempt_bind
+
         ctx = None
         address = None
         port = 0
@@ -57,40 +59,93 @@ class TestCephAdm(object):
             return _os_error
 
         for side_effect, expected_exception in (
-            (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
-            (os_error(errno.EAFNOSUPPORT), _cephadm.Error),
-            (os_error(errno.EADDRNOTAVAIL), _cephadm.Error),
+            (os_error(errno.EADDRINUSE), PortOccupiedError),
+            (os_error(errno.EAFNOSUPPORT), OSError),
+            (os_error(errno.EADDRNOTAVAIL), OSError),
             (None, None),
         ):
             _socket = mock.Mock()
             _socket.bind.side_effect = side_effect
             try:
-                _cephadm.attempt_bind(ctx, _socket, address, port)
+                attempt_bind(ctx, _socket, address, port)
             except Exception as e:
                 assert isinstance(e, expected_exception)
             else:
                 if expected_exception is not None:
                     assert False
 
-    @mock.patch('cephadm.attempt_bind')
+    @mock.patch('cephadmlib.net_utils.attempt_bind')
     @mock.patch('cephadm.logger')
     def test_port_in_use(self, _logger, _attempt_bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
+
         empty_ctx = None
 
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
-        _attempt_bind.side_effect = _cephadm.PortOccupiedError('msg')
-        assert _cephadm.port_in_use(empty_ctx, 9100) == True
+        _attempt_bind.side_effect = PortOccupiedError('msg')
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == True
 
         os_error = OSError()
         os_error.errno = errno.EADDRNOTAVAIL
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
 
         os_error = OSError()
         os_error.errno = errno.EAFNOSUPPORT
         _attempt_bind.side_effect = os_error
-        assert _cephadm.port_in_use(empty_ctx, 9100) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('0.0.0.0', 9100)) == False
+
+    @mock.patch('cephadm.socket.socket.bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_special_cases(self, _logger, _bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
+        # port_in_use has special handling for
+        # EAFNOSUPPORT and EADDRNOTAVAIL errno OSErrors.
+        # If we get those specific errors when attempting
+        # to bind to the ip:port we should not say the
+        # port is in use
+
+        def os_error(errno):
+            _os_error = OSError()
+            _os_error.errno = errno
+            return _os_error
+
+        _bind.side_effect = os_error(errno.EADDRNOTAVAIL)
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == False
+
+        _bind.side_effect = os_error(errno.EAFNOSUPPORT)
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == False
+
+        # this time, have it raise the actual port taken error
+        # so it should report the port is in use
+        _bind.side_effect = os_error(errno.EADDRINUSE)
+        in_use = port_in_use(None, _cephadm.EndPoint('1.2.3.4', 10000))
+        assert in_use == True
+
+    @mock.patch('cephadmlib.net_utils.attempt_bind')
+    @mock.patch('cephadm.logger')
+    def test_port_in_use_with_specific_ips(self, _logger, _attempt_bind):
+        from cephadmlib.net_utils import PortOccupiedError, port_in_use
+
+        empty_ctx = None
+
+        def _fake_attempt_bind(ctx, s: socket.socket, addr: str, port: int) -> None:
+            occupied_error = PortOccupiedError('msg')
+            if addr.startswith('200'):
+                raise occupied_error
+            if addr.startswith('100'):
+                if port == 4567:
+                    raise occupied_error
+
+        _attempt_bind.side_effect = _fake_attempt_bind
+
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('200.0.0.0', 9100)) == True
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 9100)) == False
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('100.0.0.0', 4567)) == True
+        assert port_in_use(empty_ctx, _cephadm.EndPoint('155.0.0.0', 4567)) == False
 
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
@@ -112,6 +167,8 @@ class TestCephAdm(object):
     @mock.patch('socket.socket')
     @mock.patch('cephadm.logger')
     def test_check_ip_port_failure(self, _logger, _socket):
+        from cephadmlib.net_utils import PortOccupiedError
+
         ctx = _cephadm.CephadmContext()
         ctx.skip_ping_check = False  # enables executing port check with `check_ip_port`
 
@@ -125,9 +182,9 @@ class TestCephAdm(object):
             ('::', socket.AF_INET6),
         ):
             for side_effect, expected_exception in (
-                (os_error(errno.EADDRINUSE), _cephadm.PortOccupiedError),
-                (os_error(errno.EADDRNOTAVAIL), _cephadm.Error),
-                (os_error(errno.EAFNOSUPPORT), _cephadm.Error),
+                (os_error(errno.EADDRINUSE), PortOccupiedError),
+                (os_error(errno.EADDRNOTAVAIL), OSError),
+                (os_error(errno.EAFNOSUPPORT), OSError),
                 (None, None),
             ):
                 mock_socket_obj = mock.Mock()
@@ -180,11 +237,15 @@ class TestCephAdm(object):
         ("1.6.2-stable2", (1,6,2)),
     ])
     def test_parse_podman_version(self, test_input, expected):
-        assert _cephadm._parse_podman_version(test_input) == expected
+        from cephadmlib.container_engines import _parse_podman_version
+
+        assert _parse_podman_version(test_input) == expected
 
     def test_parse_podman_version_invalid(self):
+        from cephadmlib.container_engines import _parse_podman_version
+
         with pytest.raises(ValueError) as res:
-            _cephadm._parse_podman_version('inval.id')
+            _parse_podman_version('inval.id')
         assert 'inval' in str(res.value)
 
     @mock.patch('cephadm.logger')
@@ -278,11 +339,14 @@ class TestCephAdm(object):
                 'content': 'this\nis\na\nstring',
             }
         ]
-        _get_container.return_value = _cephadm.CephContainer.for_daemon(
-            ctx,
+        ident = _cephadm.DaemonIdentity(
             fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
             daemon_type='grafana',
             daemon_id='host1',
+        )
+        _get_container.return_value = _cephadm.CephContainer.for_daemon(
+            ctx,
+            ident=ident,
             entrypoint='',
             args=[],
             container_args=[],
@@ -293,10 +357,7 @@ class TestCephAdm(object):
             ptrace=False,
             host_network=True,
         )
-        c = _cephadm.get_deployment_container(ctx,
-                                    '9b9d7609-f4d5-4aba-94c8-effa764d96c9',
-                                    'grafana',
-                                    'host1',)
+        c = _cephadm.get_deployment_container(ctx, ident)
 
         assert '--pids-limit=12345' in c.container_args
         assert '--something' in c.container_args
@@ -335,9 +396,11 @@ class TestCephAdm(object):
 
         _get_deployment_container.return_value = _cephadm.CephContainer.for_daemon(
             ctx,
-            fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
-            daemon_type='mon',
-            daemon_id='test',
+            ident=_cephadm.DaemonIdentity(
+                fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
+                daemon_type='mon',
+                daemon_id='test',
+            ),
             entrypoint='',
             args=[],
             container_args=[],
@@ -349,7 +412,7 @@ class TestCephAdm(object):
             host_network=True,
         )
 
-        def _crush_location_checker(ctx, fsid, daemon_type, daemon_id, container, uid, gid, **kwargs):
+        def _crush_location_checker(ctx, ident, container, uid, gid, **kwargs):
             print(container.args)
             raise Exception(' '.join(container.args))
 
@@ -381,7 +444,9 @@ class TestCephAdm(object):
                 'mount_path': '/etc/no-content.conf',
             },
         ]
-        _cephadm._write_custom_conf_files(ctx, 'mon', 'host1', 'fsid', 0, 0)
+        _cephadm._write_custom_conf_files(
+            ctx, _cephadm.DaemonIdentity('fsid', 'mon', 'host1'), 0, 0
+        )
         with open(os.path.join(_cephadm.DATA_DIR, 'fsid', 'custom_config_files', 'mon.host1', 'testing.str'), 'r') as f:
             assert 'this\nis\na\nstring' == f.read()
         with open(os.path.join(_cephadm.DATA_DIR, 'fsid', 'custom_config_files', 'mon.host1', 'testing.conf'), 'r') as f:
@@ -991,7 +1056,7 @@ class TestCephAdm(object):
             infer_config(ctx)
             assert ctx.config == result
 
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.call_wrappers.call')
     def test_extract_uid_gid_fail(self, _call):
         err = """Error: container_linux.go:370: starting container process caused: process_linux.go:459: container init caused: process_linux.go:422: setting cgroup config for procHooks process caused: Unit libpod-056038e1126191fba41d8a037275136f2d7aeec9710b9ee
 ff792c06d8544b983.scope not found.: OCI runtime error"""
@@ -1030,90 +1095,6 @@ ff792c06d8544b983.scope not found.: OCI runtime error"""
                 cluster_network=None,
                 ipv6_cluster_network=False
             )
-
-
-class TestCustomContainer(unittest.TestCase):
-    cc: _cephadm.CustomContainer
-
-    def setUp(self):
-        self.cc = _cephadm.CustomContainer(
-            'e863154d-33c7-4350-bca5-921e0467e55b',
-            'container',
-            config_json={
-                'entrypoint': 'bash',
-                'gid': 1000,
-                'args': [
-                    '--no-healthcheck',
-                    '-p 6800:6800'
-                ],
-                'envs': ['SECRET=password'],
-                'ports': [8080, 8443],
-                'volume_mounts': {
-                    '/CONFIG_DIR': '/foo/conf',
-                    'bar/config': '/bar:ro'
-                },
-                'bind_mounts': [
-                    [
-                        'type=bind',
-                        'source=/CONFIG_DIR',
-                        'destination=/foo/conf',
-                        ''
-                    ],
-                    [
-                        'type=bind',
-                        'source=bar/config',
-                        'destination=/bar:ro',
-                        'ro=true'
-                    ]
-                ]
-            },
-            image='docker.io/library/hello-world:latest'
-        )
-
-    def test_entrypoint(self):
-        self.assertEqual(self.cc.entrypoint, 'bash')
-
-    def test_uid_gid(self):
-        self.assertEqual(self.cc.uid, 65534)
-        self.assertEqual(self.cc.gid, 1000)
-
-    def test_ports(self):
-        self.assertEqual(self.cc.ports, [8080, 8443])
-
-    def test_get_container_args(self):
-        result = self.cc.get_container_args()
-        self.assertEqual(result, [
-            '--no-healthcheck',
-            '-p 6800:6800'
-        ])
-
-    def test_get_container_envs(self):
-        result = self.cc.get_container_envs()
-        self.assertEqual(result, ['SECRET=password'])
-
-    def test_get_container_mounts(self):
-        result = self.cc.get_container_mounts('/xyz')
-        self.assertDictEqual(result, {
-            '/CONFIG_DIR': '/foo/conf',
-            '/xyz/bar/config': '/bar:ro'
-        })
-
-    def test_get_container_binds(self):
-        result = self.cc.get_container_binds('/xyz')
-        self.assertEqual(result, [
-            [
-                'type=bind',
-                'source=/CONFIG_DIR',
-                'destination=/foo/conf',
-                ''
-            ],
-            [
-                'type=bind',
-                'source=/xyz/bar/config',
-                'destination=/bar:ro',
-                'ro=true'
-            ]
-        ])
 
 
 class TestMaintenance:
@@ -1237,7 +1218,9 @@ class TestMonitoring(object):
         daemon_type = 'prometheus'
         daemon_id = 'home'
         fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
-        args = _cephadm.get_daemon_args(ctx, fsid, daemon_type, daemon_id)
+        args = _cephadm.get_daemon_args(
+            ctx, _cephadm.DaemonIdentity(fsid, daemon_type, daemon_id)
+        )
         assert any([x.startswith('--web.external-url=http://') for x in args])
 
     @mock.patch('cephadm.call')
@@ -1269,14 +1252,14 @@ class TestMonitoring(object):
             }
         })
 
-        _cephadm.create_daemon_dirs(ctx,
-                              fsid,
-                              daemon_type,
-                              daemon_id,
-                              uid,
-                              gid,
-                              config=None,
-                              keyring=None)
+        _cephadm.create_daemon_dirs(
+            ctx,
+            _cephadm.DaemonIdentity(fsid, daemon_type, daemon_id),
+            uid,
+            gid,
+            config=None,
+            keyring=None,
+        )
 
         prefix = '{data_dir}/{fsid}/{daemon_type}.{daemon_id}'.format(
             data_dir=ctx.data_dir,
@@ -1299,14 +1282,14 @@ class TestMonitoring(object):
         # assert uid/gid after redeploy
         new_uid = uid+1
         new_gid = gid+1
-        _cephadm.create_daemon_dirs(ctx,
-                              fsid,
-                              daemon_type,
-                              daemon_id,
-                              new_uid,
-                              new_gid,
-                              config=None,
-                              keyring=None)
+        _cephadm.create_daemon_dirs(
+            ctx,
+            _cephadm.DaemonIdentity(fsid, daemon_type, daemon_id),
+            new_uid,
+            new_gid,
+            config=None,
+            keyring=None,
+        )
         for file,content in expected.items():
             file = os.path.join(prefix, file)
             assert os.stat(file).st_uid == new_uid
@@ -1754,15 +1737,14 @@ class TestIscsi:
             ctx.config_json = json.dumps(config_json)
             ctx.fsid = fsid
             _cephadm.get_parm.return_value = config_json
-            c = _cephadm.get_container(ctx, fsid, 'iscsi', 'daemon_id')
 
-            _cephadm.make_data_dir(ctx, fsid, 'iscsi', 'daemon_id')
+            ident = _cephadm.DaemonIdentity(fsid, 'iscsi', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
+            _cephadm.make_data_dir(ctx, ident)
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'iscsi',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -1773,11 +1755,11 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
 # iscsi tcmu-runner container
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id-tcmu 2> /dev/null
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu 2> /dev/null
-/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/tcmu-runner --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
+/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/local/scripts/tcmu-runner-entrypoint.sh --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id-tcmu --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/tcmu-runner-entrypoint.sh:/usr/local/scripts/tcmu-runner-entrypoint.sh -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph &
 # iscsi.daemon_id
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.daemon_id 2> /dev/null
 ! /usr/bin/docker rm -f ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id 2> /dev/null
-/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
+/usr/bin/docker run --rm --ipc=host --stop-signal=SIGTERM --ulimit nofile=1048576 --net=host --entrypoint /usr/bin/rbd-target-api --privileged --group-add=disk --init --name ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-daemon_id --pids-limit=0 -e CONTAINER_IMAGE=ceph/ceph -e NODE_NAME=host1 -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/config:/etc/ceph/ceph.conf:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/keyring:/etc/ceph/keyring:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/configfs:/sys/kernel/config -v /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id/tcmu-runner-entrypoint.sh:/usr/local/scripts/tcmu-runner-entrypoint.sh -v /var/log/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9:/var/log:z -v /dev:/dev --mount type=bind,source=/lib/modules,destination=/lib/modules,ro=true ceph/ceph
 """
 
     def test_get_container(self):
@@ -1790,7 +1772,9 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
         fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
         with with_cephadm_ctx(['--image=ceph/ceph'], list_networks={}) as ctx:
             ctx.fsid = fsid
-            c = _cephadm.get_container(ctx, fsid, 'iscsi', 'something')
+            c = _cephadm.get_container(
+                ctx, _cephadm.DaemonIdentity(fsid, 'iscsi', 'something')
+            )
             assert c.cname == 'ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi-something'
             assert c.old_cname == 'ceph-9b9d7609-f4d5-4aba-94c8-effa764d96c9-iscsi.something'
 
@@ -2048,7 +2032,7 @@ class TestValidateRepo:
             with pytest.raises(_cephadm.Error, match=err_text):
                 pkg.validate()
         else:
-            with mock.patch('cephadm.urlopen', return_value=None):
+            with mock.patch('cephadmlib.packagers.urlopen', return_value=None):
                 pkg.validate()
 
     @pytest.mark.parametrize('values',
@@ -2112,7 +2096,7 @@ class TestValidateRepo:
         ctx.repo_url = 'http://localhost'
         pkg = _cephadm.create_packager(ctx, stable=release, version=version)
 
-        with mock.patch('cephadm.urlopen') as _urlopen:
+        with mock.patch('cephadmlib.packagers.urlopen') as _urlopen:
             _urlopen.side_effect = HTTPError(ctx.repo_url, 404, "not found", None, fp=None)
             if err_text:
                 with pytest.raises(_cephadm.Error, match=err_text):
@@ -2124,10 +2108,14 @@ class TestValidateRepo:
 class TestPull:
 
     @mock.patch('time.sleep')
-    @mock.patch('cephadm.call', return_value=('', '', 0))
     @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
     @mock.patch('cephadm.logger')
-    def test_error(self, _logger, _get_image_info_from_inspect, _call, _sleep):
+    def test_error(self, _logger, _get_image_info_from_inspect, _sleep, monkeypatch):
+        # manually create a mock and use pytest's monkeypatch fixture to set
+        # multiple targets to the *same* mock
+        _call = mock.MagicMock()
+        monkeypatch.setattr('cephadm.call', _call)
+        monkeypatch.setattr('cephadmlib.call_wrappers.call', _call)
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         ctx.insecure = False
@@ -2290,21 +2278,20 @@ class TestSNMPGateway:
             ctx.fsid = fsid
             ctx.tcp_ports = '9464'
             _cephadm.get_parm.return_value = self.V2c_config
-            c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
+            ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
+            _cephadm.make_data_dir(ctx, ident)
 
-            _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
                 conf = f.read().rstrip()
                 assert conf == 'SNMP_NOTIFIER_COMMUNITY=public'
 
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'snmp-gateway',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2320,21 +2307,20 @@ class TestSNMPGateway:
             ctx.fsid = fsid
             ctx.tcp_ports = '9465'
             _cephadm.get_parm.return_value = self.V3_no_priv_config
-            c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
+            ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
+            _cephadm.make_data_dir(ctx, ident)
 
-            _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
                 conf = f.read()
                 assert conf == 'SNMP_NOTIFIER_AUTH_USERNAME=myuser\nSNMP_NOTIFIER_AUTH_PASSWORD=mypassword\n'
 
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'snmp-gateway',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2350,21 +2336,20 @@ class TestSNMPGateway:
             ctx.fsid = fsid
             ctx.tcp_ports = '9464'
             _cephadm.get_parm.return_value = self.V3_priv_config
-            c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
 
-            _cephadm.make_data_dir(ctx, fsid, 'snmp-gateway', 'daemon_id')
+            ident = _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
+            _cephadm.make_data_dir(ctx, ident)
 
-            _cephadm.create_daemon_dirs(ctx, fsid, 'snmp-gateway', 'daemon_id', 0, 0)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             with open(f'/var/lib/ceph/{fsid}/snmp-gateway.daemon_id/snmp-gateway.conf', 'r') as f:
                 conf = f.read()
                 assert conf == 'SNMP_NOTIFIER_AUTH_USERNAME=myuser\nSNMP_NOTIFIER_AUTH_PASSWORD=mypassword\nSNMP_NOTIFIER_PRIV_PASSWORD=mysecret\n'
 
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'snmp-gateway',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2382,7 +2367,10 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.no_destination_config
 
             with pytest.raises(Exception) as e:
-                c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
+                c = _cephadm.get_container(
+                    ctx,
+                    _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id'),
+                )
             assert str(e.value) == "config is missing destination attribute(<ip>:<port>) of the target SNMP listener"
 
     def test_unit_run_bad_version(self, cephadm_fs):
@@ -2395,7 +2383,10 @@ class TestSNMPGateway:
             _cephadm.get_parm.return_value = self.bad_version_config
 
             with pytest.raises(Exception) as e:
-                c = _cephadm.get_container(ctx, fsid, 'snmp-gateway', 'daemon_id')
+                c = _cephadm.get_container(
+                    ctx,
+                    _cephadm.DaemonIdentity(fsid, 'snmp-gateway', 'daemon_id'),
+                )
             assert str(e.value) == 'not a valid snmp version: V1'
 
 class TestNetworkValidation:
@@ -2563,14 +2554,13 @@ class TestJaeger:
             import json
             ctx.config_json = json.dumps(self.single_es_node_conf)
             ctx.fsid = fsid
-            c = _cephadm.get_container(ctx, fsid, 'jaeger-collector', 'daemon_id')
-            _cephadm.create_daemon_dirs(ctx, fsid, 'jaeger-collector', 'daemon_id', 0, 0)
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'jaeger-collector',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2584,14 +2574,13 @@ class TestJaeger:
             import json
             ctx.config_json = json.dumps(self.multiple_es_nodes_conf)
             ctx.fsid = fsid
-            c = _cephadm.get_container(ctx, fsid, 'jaeger-collector', 'daemon_id')
-            _cephadm.create_daemon_dirs(ctx, fsid, 'jaeger-collector', 'daemon_id', 0, 0)
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-collector', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'jaeger-collector',
-                'daemon_id',
                 c,
                 True, True
             )
@@ -2605,14 +2594,13 @@ class TestJaeger:
             import json
             ctx.config_json = json.dumps(self.agent_conf)
             ctx.fsid = fsid
-            c = _cephadm.get_container(ctx, fsid, 'jaeger-agent', 'daemon_id')
-            _cephadm.create_daemon_dirs(ctx, fsid, 'jaeger-agent', 'daemon_id', 0, 0)
+            ident = _cephadm.DaemonIdentity(fsid, 'jaeger-agent', 'daemon_id')
+            c = _cephadm.get_container(ctx, ident)
+            _cephadm.create_daemon_dirs(ctx, ident, 0, 0)
             _cephadm.deploy_daemon_units(
                 ctx,
-                fsid,
+                ident,
                 0, 0,
-                'jaeger-agent',
-                'daemon_id',
                 c,
                 True, True
             )

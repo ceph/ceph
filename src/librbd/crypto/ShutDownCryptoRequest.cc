@@ -6,7 +6,6 @@
 #include "common/dout.h"
 #include "common/errno.h"
 #include "librbd/Utils.h"
-#include "librbd/crypto/CryptoImageDispatch.h"
 #include "librbd/crypto/CryptoObjectDispatch.h"
 #include "librbd/crypto/EncryptionFormat.h"
 #include "librbd/io/ImageDispatcherInterface.h"
@@ -55,36 +54,8 @@ void ShutDownCryptoRequest<I>::handle_shut_down_object_dispatch(int r) {
   if (r < 0) {
     lderr(m_image_ctx->cct) << "failed to shut down object dispatch: "
                             << cpp_strerror(r) << dendl;
-    finish(r);
-    return;
   }
 
-  shut_down_image_dispatch();
-}
-
-template <typename I>
-void ShutDownCryptoRequest<I>::shut_down_image_dispatch() {
-  if (!m_image_ctx->io_image_dispatcher->exists(
-          io::IMAGE_DISPATCH_LAYER_CRYPTO)) {
-    finish(0);
-    return;
-  }
-
-  auto ctx = create_context_callback<
-        ShutDownCryptoRequest<I>,
-        &ShutDownCryptoRequest<I>::handle_shut_down_image_dispatch>(this);
-  m_image_ctx->io_image_dispatcher->shut_down_dispatch(
-          io::IMAGE_DISPATCH_LAYER_CRYPTO, ctx);
-}
-
-template <typename I>
-void ShutDownCryptoRequest<I>::handle_shut_down_image_dispatch(int r) {
-  ldout(m_image_ctx->cct, 20) << "r=" << r << dendl;
-
-  if (r < 0) {
-    lderr(m_image_ctx->cct) << "failed to shut down image dispatch: "
-                            << cpp_strerror(r) << dendl;
-  }
   finish(r);
 }
 

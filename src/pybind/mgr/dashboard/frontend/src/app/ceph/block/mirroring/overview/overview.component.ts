@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { UntypedFormControl } from '@angular/forms';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { Subscription } from 'rxjs';
@@ -81,7 +81,7 @@ export class OverviewComponent implements OnInit, OnDestroy {
 
   private createForm() {
     this.rbdmirroringForm = new CdFormGroup({
-      siteName: new FormControl({ value: '', disabled: true })
+      siteName: new UntypedFormControl({ value: '', disabled: true })
     });
   }
 

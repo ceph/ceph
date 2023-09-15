@@ -827,7 +827,7 @@ bool AuthMonitor::prep_auth(MonOpRequestRef op, bool paxos_writable)
     }
     if (ret > 0) {
       if (!s->authenticated &&
-	  mon.ms_handle_authentication(s->con.get()) > 0) {
+	  mon.ms_handle_fast_authentication(s->con.get()) > 0) {
 	finished = true;
       }
       ret = 0;
@@ -1705,15 +1705,16 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     string mds_cap_string, osd_cap_string;
     string osd_cap_wanted = "r";
 
-    std::shared_ptr<const Filesystem> fs;
+    const Filesystem* fs = nullptr;
     if (filesystem != "*" && filesystem != "all") {
-      fs = mon.mdsmon()->get_fsmap().get_filesystem(filesystem);
+      const auto& fsmap = mon.mdsmon()->get_fsmap();
+      fs = fsmap.get_filesystem(filesystem);
       if (fs == nullptr) {
 	ss << "filesystem " << filesystem << " does not exist.";
 	err = -EINVAL;
 	goto done;
       } else {
-	mon_cap_string += " fsname=" + std::string(fs->mds_map.get_fs_name());
+	mon_cap_string += " fsname=" + std::string(fs->get_mds_map().get_fs_name());
       }
     }
 
@@ -1760,7 +1761,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       mds_cap_string += "allow " + cap;
 
       if (filesystem != "*" && filesystem != "all" && fs != nullptr) {
-	mds_cap_string += " fsname=" + std::string(fs->mds_map.get_fs_name());
+	mds_cap_string += " fsname=" + std::string(fs->get_mds_map().get_fs_name());
       }
 
       if (path != "/") {
@@ -1778,36 +1779,42 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       + " data=" + filesystem;
 
     map<string, bufferlist> encoded_caps;
-    map<string, string> wanted_caps = {
+    map<string, string> newcaps = {
       {"mon", mon_cap_string},
       {"osd", osd_cap_string},
       {"mds", mds_cap_string}
     };
-    if (err = _check_and_encode_caps(wanted_caps, encoded_caps, ss); err < 0) {
+    if (err = _check_and_encode_caps(newcaps, encoded_caps, ss); err < 0) {
       goto done;
     }
 
     EntityAuth entity_auth;
     if (mon.key_server.get_auth(entity, entity_auth)) {
-      for (const auto &sys_cap : encoded_caps) {
-	if (entity_auth.caps.count(sys_cap.first) == 0 ||
-	    !entity_auth.caps[sys_cap.first].contents_equal(sys_cap.second)) {
-	  ss << entity << " already has fs capabilities that differ from "
-	     << "those supplied. To generate a new auth key for " << entity
-	     << ", first remove " << entity << " from configuration files, "
-	     << "execute 'ceph auth rm " << entity << "', then execute this "
-	     << "command again.";
-	  err = -EINVAL;
-	  goto done;
-	}
+      int rv = _gen_wanted_caps(entity_auth, newcaps, ss);
+      ceph_assert(rv == CAPS_UPDATE_REQD or rv == CAPS_UPDATE_NOT_REQD or
+	          rv == CAPS_PARSING_ERR);
+      if (rv == CAPS_PARSING_ERR) {
+	goto done;
+      } else if (rv == CAPS_UPDATE_NOT_REQD) {
+	ss << "no update for caps of " << entity;
+	err = 0;
+	goto done;
       }
 
-      _encode_key(entity, entity_auth, rdata, f.get(), false, &encoded_caps);
-      err = 0;
-      goto done;
+      dout(20) << "caps that will be enforced -" << dendl;
+      for (const auto& it : newcaps) {
+	dout(20) << it.first << " cap = \"" << it.second << "\"" << dendl;
+      }
+
+      err = _update_caps(entity, newcaps, op, ds, &rdata, f.get());
+      if (err == 0) {
+	return true;
+      } else {
+	goto done;
+      }
     }
 
-    err = _create_entity(entity, wanted_caps, op, ds, &rdata, f.get());
+    err = _create_entity(entity, newcaps, op, ds, &rdata, f.get());
     if (err == 0) {
       return true;
     } else {
@@ -1840,6 +1847,75 @@ done:
   getline(ss, rs, '\0');
   mon.reply_command(op, err, rs, rdata, get_last_committed());
   return false;
+}
+
+template<typename CAP_ENTITY_CLASS>
+AuthMonitor::caps_update AuthMonitor::_merge_caps(const string& cap_entity,
+  const string& new_cap_str, const string& cur_cap_str,
+  map<string, string>& newcaps, ostream& out)
+{
+  CAP_ENTITY_CLASS cur_cap, new_cap;
+
+  if (not cur_cap.parse(cur_cap_str, &out)) {
+    out << "error parsing " << cap_entity << "caps client already holds";
+    return CAPS_PARSING_ERR;
+  }
+  if (not new_cap.parse(new_cap_str, &out)) {
+    out << "error parsing new " << cap_entity << "caps";
+    return CAPS_PARSING_ERR;
+  }
+
+  if (cur_cap.merge(new_cap)) {
+    newcaps[cap_entity] = cur_cap.to_string();
+    return CAPS_UPDATE_REQD;
+  } else {
+    newcaps[cap_entity] = cur_cap_str;
+    return CAPS_UPDATE_NOT_REQD;
+  }
+}
+
+/* Generate the caps that should be present in the entity's auth keyring
+ * after running the "fs authorize" command. This is done by merging the
+ * caps already present in the client's auth keyring with the new caps
+ * provided by the user at "fs authorize" command.
+ */
+AuthMonitor::caps_update AuthMonitor::_gen_wanted_caps(EntityAuth& e_auth,
+  map<string, string>& newcaps, ostream& out)
+{
+  caps_update is_caps_update_reqd = CAPS_UPDATE_NOT_REQD;
+
+  if (e_auth.caps.empty()) {
+    return CAPS_UPDATE_REQD;
+  }
+
+  // new_cap_str is the new cap to be added to the current cap
+  for (const auto& [cap_entity, new_cap_str] : newcaps) {
+    string cur_cap_str; // current cap held by entity's auth keyring
+
+    if (e_auth.caps.count(cap_entity) == 0) {
+      is_caps_update_reqd = CAPS_UPDATE_REQD;
+      continue;
+    }
+
+    auto iter = e_auth.caps[cap_entity].cbegin();
+    decode(cur_cap_str, iter);
+    if (cur_cap_str == new_cap_str) {
+      continue;
+    }
+
+    if (cap_entity == "mon") {
+      is_caps_update_reqd = _merge_caps<MonCap>(cap_entity, new_cap_str,
+	cur_cap_str, newcaps, out);
+    } else if (cap_entity == "osd") {
+      is_caps_update_reqd = _merge_caps<OSDCap>(cap_entity, new_cap_str,
+	cur_cap_str, newcaps, out);
+    } else if (cap_entity == "mds") {
+      is_caps_update_reqd = _merge_caps<MDSAuthCaps>(cap_entity, new_cap_str,
+	cur_cap_str, newcaps, out);
+    }
+  }
+
+  return is_caps_update_reqd;
 }
 
 void AuthMonitor::_encode_keyring(KeyRing& kr, const EntityName& entity,

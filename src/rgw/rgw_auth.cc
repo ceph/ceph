@@ -172,7 +172,7 @@ strategy_handle_rejected(rgw::auth::Engine::result_t&& engine_result,
 
     case Control::FALLBACK:
       /* Don't try next. */
-      return std::make_pair(false, std::move(strategy_result));
+      return std::make_pair(false, std::move(engine_result));
 
     default:
       /* Huh, memory corruption? */

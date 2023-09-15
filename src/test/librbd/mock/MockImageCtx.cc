@@ -146,4 +146,11 @@ IOContext MockImageCtx::duplicate_data_io_context() {
   return std::make_shared<neorados::IOContext>(*get_data_io_context());
 }
 
+uint64_t MockImageCtx::get_data_offset() const {
+  if (encryption_format != nullptr) {
+    return encryption_format->get_crypto()->get_data_offset();
+  }
+  return 0;
+}
+
 } // namespace librbd

@@ -1,6 +1,0 @@
-tasks:
-- cephadm:
-    roleless: true
-    image: quay.io/ceph/ceph:v16.2.5
-    cephadm_branch: v16.2.5
-    cephadm_git_url: https://github.com/ceph/ceph

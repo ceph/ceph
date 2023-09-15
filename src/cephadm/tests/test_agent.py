@@ -34,6 +34,9 @@ def _check_file(path, content):
         assert fcontent == content
 
 
+# FIXME(refactor): call is handled by with_cephadm_ctx but not call_throws
+# this leaves the test somewhat inconsistent and slightly confusing but we
+# are not going to change this while we break cephadm up into multiple files.
 @mock.patch('cephadm.call_throws')
 def test_agent_deploy_daemon_unit(_call_throws, cephadm_fs):
     _call_throws.return_value = ('', '', 0)
@@ -433,8 +436,8 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
     host = AGENT_ID
     device_enhanced_scan = False
 
-    def _fake_port_in_use(ctx, port):
-        if port == open_listener_port:
+    def _fake_port_in_use(ctx, endpoint):
+        if endpoint.port == open_listener_port:
             return False
         return True
 

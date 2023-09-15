@@ -98,12 +98,12 @@ things to do:
 
 .. code:: bash
 
-   ceph config set mds mds_heartbeat_reset_grace 3600
+   ceph config set mds mds_heartbeat_grace 3600
 
-  This has the effect of having the MDS continue to send beacons to the monitors
-  even when its internal "heartbeat" mechanism has not been reset (beat) in one
-  hour. Note the previous mechanism for achieving this was via the
-  `mds_beacon_grace` monitor setting.
+.. note:: This has the effect of having the MDS continue to send beacons to the monitors
+          even when its internal "heartbeat" mechanism has not been reset (beat) in one
+          hour. The previous mechanism for achieving this was via the
+          `mds_beacon_grace` monitor setting.
 
 * **Disable open file table prefetch.** Normally, the MDS will prefetch
   directory contents during recovery to heat up its cache. During long

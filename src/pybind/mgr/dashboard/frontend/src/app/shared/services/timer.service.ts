@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import { Observable, timer } from 'rxjs';
 import { observeOn, shareReplay, switchMap } from 'rxjs/operators';
 
-import { whenPageVisible } from '../rxjs/operators/page-visibilty.operator';
+import { whenPageVisible } from '../rxjs/operators/page-visibility.operator';
 import { NgZoneSchedulerService } from './ngzone-scheduler.service';
 
 @Injectable({

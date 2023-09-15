@@ -120,7 +120,11 @@ struct fltree_onode_manager_test_t
       }).unsafe_get0();
       std::invoke(f, t, *onode, p_kv->value);
       with_trans_intr(t, [&](auto &t) {
-        return manager->write_dirty(t, {onode});
+	if (onode->is_alive()) {
+	  return manager->write_dirty(t, {onode});
+	} else {
+	  return OnodeManager::write_dirty_iertr::now();
+	}
       }).unsafe_get0();
     });
   }
@@ -235,7 +239,7 @@ struct fltree_onode_manager_test_t
   fltree_onode_manager_test_t() {}
 };
 
-TEST_F(fltree_onode_manager_test_t, 1_single)
+TEST_P(fltree_onode_manager_test_t, 1_single)
 {
   run_async([this] {
     uint64_t block_size = tm->get_block_size();
@@ -263,7 +267,7 @@ TEST_F(fltree_onode_manager_test_t, 1_single)
   });
 }
 
-TEST_F(fltree_onode_manager_test_t, 2_synthetic)
+TEST_P(fltree_onode_manager_test_t, 2_synthetic)
 {
   run_async([this] {
     uint64_t block_size = tm->get_block_size();
@@ -315,3 +319,12 @@ TEST_F(fltree_onode_manager_test_t, 2_synthetic)
     validate_list_onodes(pool);
   });
 }
+
+INSTANTIATE_TEST_SUITE_P(
+  fltree_onode__manager_test,
+  fltree_onode_manager_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);

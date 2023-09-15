@@ -97,7 +97,7 @@ export class ImagesPageHelper extends PageHelper {
     // Check for visibility of modal container
     cy.get('.modal-header').should('be.visible');
 
-    // If purgeing a specific pool, selects that pool if given
+    // If purging a specific pool, selects that pool if given
     if (pool !== undefined) {
       this.selectOption('poolName', pool);
       cy.get('#poolName').should('have.class', 'ng-valid'); // check if pool is selected

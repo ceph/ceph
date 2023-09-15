@@ -3345,19 +3345,9 @@ void PGMap::get_health_checks(
     for (auto &it : pools) {
       const pg_pool_t &pool = it.second;
       const string& pool_name = osdmap.get_pool_name(it.first);
-      auto it2 = pg_pool_sum.find(it.first);
-      if (it2 == pg_pool_sum.end()) {
-        continue;
-      }
-      const pool_stat_t *pstat = &it2->second;
-      if (pstat == nullptr) {
-        continue;
-      }
-      const object_stat_sum_t& sum = pstat->stats.sum;
       // application metadata is not encoded until luminous is minimum
       // required release
-      if (sum.num_objects > 0 && pool.application_metadata.empty() &&
-          !pool.is_tier()) {
+      if (pool.application_metadata.empty() && !pool.is_tier()) {
         stringstream ss;
         ss << "application not enabled on pool '" << pool_name << "'";
         detail.push_back(ss.str());

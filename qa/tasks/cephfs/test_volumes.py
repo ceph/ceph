@@ -442,9 +442,21 @@ class TestVolumes(TestVolumesHelper):
 
         if not (volname in ([volume['name'] for volume in volumels])):
             raise RuntimeError("Error creating volume '{0}'".format(volname))
-        else:
-            # clean up
-            self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
+
+        # check that the pools were created with the correct config
+        pool_details = json.loads(self._raw_cmd("osd", "pool", "ls", "detail", "--format=json"))
+        pool_flags = {}
+        for pool in pool_details:
+            pool_flags[pool["pool_id"]] = pool["flags_names"].split(",")
+
+        volume_details = json.loads(self._fs_cmd("get", volname, "--format=json"))
+        for data_pool_id in volume_details['mdsmap']['data_pools']:
+            self.assertIn("bulk", pool_flags[data_pool_id])
+        meta_pool_id = volume_details['mdsmap']['metadata_pool']
+        self.assertNotIn("bulk", pool_flags[meta_pool_id])
+
+        # clean up
+        self._fs_cmd("volume", "rm", volname, "--yes-i-really-mean-it")
 
     def test_volume_ls(self):
         """
@@ -648,6 +660,24 @@ class TestVolumes(TestVolumesHelper):
                           f"'{md}' key not present in metadata of volume")
         self.assertEqual(vol_info["used_size"], 0,
                          "Size should be zero when volumes directory is empty")
+
+    def test_volume_info_pending_subvol_deletions(self):
+        """
+        Tests the pending_subvolume_deletions in 'fs volume info' command
+        """
+        subvolname = self._generate_random_subvolume_name()
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--mode=777")
+        # create 3K zero byte files
+        self._do_subvolume_io(subvolname, number_of_files=3000, file_size=0)
+        # Delete the subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+        # get volume metadata
+        vol_info = json.loads(self._get_volume_info(self.volname))
+        self.assertNotEqual(vol_info['pending_subvolume_deletions'], 0,
+                            "pending_subvolume_deletions should be 1")
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_volume_info_without_subvolumegroup(self):
         """

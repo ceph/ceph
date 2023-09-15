@@ -6,7 +6,6 @@ import { BrowserDynamicTestingModule } from '@angular/platform-browser-dynamic/t
 
 import { NgbModal, NgbNav, NgbNavItem, NgbNavLink } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
-import { configureSuite } from '@apteco/ngth';
 import { of } from 'rxjs';
 
 import { InventoryDevice } from '~/app/ceph/cluster/inventory/inventory-devices/inventory-device.model';
@@ -31,15 +30,18 @@ import {
 } from '~/app/shared/models/prometheus-alerts';
 
 export function configureTestBed(configuration: any, entryComponents?: any) {
-  configureSuite(() => {
+  beforeEach(async () => {
     if (entryComponents) {
       // Declare entryComponents without having to add them to a module
       // This is needed since Jest doesn't yet support not declaring entryComponents
-      TestBed.configureTestingModule(configuration).overrideModule(BrowserDynamicTestingModule, {
-        set: { entryComponents: entryComponents }
-      });
+      await TestBed.configureTestingModule(configuration).overrideModule(
+        BrowserDynamicTestingModule,
+        {
+          set: { entryComponents: entryComponents }
+        }
+      );
     } else {
-      TestBed.configureTestingModule(configuration);
+      await TestBed.configureTestingModule(configuration);
     }
   });
 }

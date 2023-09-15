@@ -1984,7 +1984,6 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 
 void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue)
 {
-  ceph_assert(!lock->is_stable());
   if (lock->get_type() != CEPH_LOCK_DN &&
       lock->get_type() != CEPH_LOCK_ISNAP &&
       lock->get_type() != CEPH_LOCK_IPOLICY &&
@@ -2878,7 +2877,6 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
     metablob = &eu->metablob;
     le = eu;
   }
-  mds->mdlog->start_entry(le);
 
   mdcache->predirty_journal_parents(mut, metablob, in, 0, PREDIRTY_PRIMARY);
   // no cow, here!
@@ -2989,7 +2987,6 @@ void Locker::adjust_cap_wanted(Capability *cap, int wanted, int issue_seq)
     if (mdcache->open_file_table.should_log_open(cur)) {
       ceph_assert(cur->last == CEPH_NOSNAP);
       EOpen *le = new EOpen(mds->mdlog);
-      mds->mdlog->start_entry(le);
       le->add_clean_inode(cur);
       mds->mdlog->submit_entry(le);
     }
@@ -3100,7 +3097,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
   snapid_t follows = m->get_snap_follows();
   auto op = m->get_op();
   auto dirty = m->get_dirty();
-  dout(7) << "handle_client_caps "
+  dout(7) << "handle_client_caps"
 	  << " on " << m->get_ino()
 	  << " tid " << m->get_client_tid() << " follows " << follows
 	  << " op " << ceph_cap_op_name(op)
@@ -3603,7 +3600,6 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
   }
 
   EUpdate *le = new EUpdate(mds->mdlog, "snap flush");
-  mds->mdlog->start_entry(le);
   MutationRef mut = new MutationImpl();
   mut->ls = mds->mdlog->get_current_segment();
 
@@ -3899,7 +3895,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
   // do the update.
   EUpdate *le = new EUpdate(mds->mdlog, "cap update");
-  mds->mdlog->start_entry(le);
 
   bool xattr = (dirty & CEPH_CAP_XATTR_EXCL) &&
                m->xattrbl.length() &&
@@ -5005,7 +5000,6 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   lock->start_flush();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
-  mds->mdlog->start_entry(le);
 
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in);

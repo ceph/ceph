@@ -35,7 +35,7 @@ from .api import PSTopicS3, \
     admin
 
 from nose import SkipTest
-from nose.tools import assert_not_equal, assert_equal, assert_in
+from nose.tools import assert_not_equal, assert_equal, assert_in, assert_true
 import boto.s3.tagging
 
 # configure logging for the tests module
@@ -43,6 +43,7 @@ log = logging.getLogger(__name__)
 
 TOPIC_SUFFIX = "_topic"
 NOTIFICATION_SUFFIX = "_notif"
+UID_PREFIX = "superman"
 
 
 num_buckets = 0
@@ -531,7 +532,7 @@ def connection2():
 def another_user(tenant=None):
     access_key = str(time.time())
     secret_key = str(time.time())
-    uid = 'superman' + str(time.time())
+    uid = UID_PREFIX + str(time.time())
     if tenant:
         _, result = admin(['user', 'create', '--uid', uid, '--tenant', tenant, '--access-key', access_key, '--secret-key', secret_key, '--display-name', '"Super Man"'])  
     else:
@@ -666,6 +667,8 @@ def test_ps_s3_topic_admin_on_master():
     result = admin(['topic', 'get', '--topic', topic_name+'_3', '--tenant', tenant])  
     parsed_result = json.loads(result[0])
     assert_equal(parsed_result['arn'], topic_arn3)
+    matches = [tenant, UID_PREFIX]
+    assert_true( all([x in parsed_result['user'] for x in matches]))
 
     # delete topic 3
     _, result = admin(['topic', 'rm', '--topic', topic_name+'_3', '--tenant', tenant])  
@@ -3056,7 +3059,7 @@ def test_ps_s3_persistent_topic_stats():
     response, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
-    delay = 20
+    delay = 30
     time.sleep(delay)
     http_server.close()
 
@@ -3067,7 +3070,7 @@ def test_ps_s3_persistent_topic_stats():
     assert_equal(result[1], 0)
 
     # create objects in the bucket (async)
-    number_of_objects = 10
+    number_of_objects = 100
     client_threads = []
     start_time = time.time()
     for i in range(number_of_objects):
@@ -3127,6 +3130,143 @@ def test_ps_s3_persistent_topic_stats():
     conn.delete_bucket(bucket_name)
     time.sleep(delay)
     http_server.close()
+
+def ps_s3_persistent_topic_configs(persistency_time, config_dict):
+    conn = connection()
+    zonegroup = 'default'
+
+    # create random port for the http server
+    host = get_ip()
+    http_port = random.randint(10000, 20000)
+
+    # start an http server in a separate thread
+    http_server = StreamingHTTPServer(host, http_port, num_workers=10, delay=0.5)
+
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(http_port)
+    endpoint_args = 'push-endpoint='+endpoint_address+'&persistent=true&'+create_persistency_config_string(config_dict)
+    topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    delay = 20
+    time.sleep(delay)
+    http_server.close()
+    # topic get
+    result = admin(['topic', 'get', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    parsed_result_dest = parsed_result["dest"]
+    for key, value in config_dict.items():
+        assert_equal(parsed_result_dest[key], str(value))
+    assert_equal(result[1], 0)
+
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
+    assert_equal(result[1], 0)
+
+    # create objects in the bucket (async)
+    number_of_objects = 10
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key('key-'+str(i))
+        content = str(os.urandom(1024*1024))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads]
+    time_diff = time.time() - start_time
+    print('average time for creation + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
+    assert_equal(result[1], 0)
+
+    # wait as much as ttl and check if the persistent topics have expired
+    time.sleep(persistency_time)
+    result = admin(['topic', 'stats', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
+    assert_equal(result[1], 0)
+
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    count = 0
+    for key in bucket.list():
+        count += 1
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+        if count%100 == 0:
+            [thr.join() for thr in client_threads]
+            time_diff = time.time() - start_time
+            print('average time for deletion + async http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds')
+            client_threads = []
+            start_time = time.time()
+
+    # topic stats
+    result = admin(['topic', 'stats', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], number_of_objects)
+    assert_equal(result[1], 0)
+
+    # wait as much as ttl and check if the persistent topics have expired
+    time.sleep(persistency_time)
+    result = admin(['topic', 'stats', '--topic', topic_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Topic Stats']['Entries'], 0)
+    assert_equal(result[1], 0)
+
+    # cleanup
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn.delete_bucket(bucket_name)
+    time.sleep(delay)
+
+def create_persistency_config_string(config_dict):
+    str_ret = ""
+    for key, value in config_dict.items():
+        if key != "None":
+            str_ret += key + "=" + str(value) + '&'
+
+    return str_ret[:-1]
+
+@attr('basic_test')
+def test_ps_s3_persistent_topic_configs_ttl():
+    """ test persistent topic configurations with time_to_live """
+    config_dict = {"time_to_live": 30, "max_retries": "None", "retry_sleep_duration": "None"}
+    buffer = 10
+    persistency_time =config_dict["time_to_live"] + buffer
+
+    ps_s3_persistent_topic_configs(persistency_time, config_dict)
+
+@attr('basic_test')
+def test_ps_s3_persistent_topic_configs_max_retries():
+    """ test persistent topic configurations with max_retries and retry_sleep_duration """
+    config_dict = {"time_to_live": "None", "max_retries": 20, "retry_sleep_duration": 1}
+    buffer = 20
+    persistency_time = config_dict["max_retries"]*config_dict["retry_sleep_duration"] + buffer
+
+    ps_s3_persistent_topic_configs(persistency_time, config_dict)
 
 @attr('manual_test')
 def test_ps_s3_persistent_notification_pushback():

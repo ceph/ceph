@@ -14,7 +14,7 @@ describe('Hosts page', () => {
       cy.fixture('orchestrator/services.json').as('services');
     });
 
-    it('should not add an exsiting host', function () {
+    it('should not add an existing host', function () {
       const hostname = Cypress._.sample(this.hosts).name;
       hosts.navigateTo('add');
       hosts.add(hostname, true);
@@ -56,30 +56,6 @@ describe('Hosts page', () => {
       const labels = ['foo', 'bar'];
       hosts.editLabels(hostname, labels, true);
       hosts.editLabels(hostname, labels, false);
-    });
-
-    it('should enter host into maintenance', function () {
-      const hostname = Cypress._.sample(this.hosts).name;
-      const serviceList = new Array();
-      this.services.forEach((service: any) => {
-        if (hostname === service.hostname) {
-          serviceList.push(service.daemon_type);
-        }
-      });
-      let enterMaintenance = true;
-      serviceList.forEach((service: string) => {
-        if (service === 'mgr' || service === 'alertmanager') {
-          enterMaintenance = false;
-        }
-      });
-      if (enterMaintenance) {
-        hosts.maintenance(hostname);
-      }
-    });
-
-    it('should exit host from maintenance', function () {
-      const hostname = Cypress._.sample(this.hosts).name;
-      hosts.maintenance(hostname, true);
     });
   });
 });

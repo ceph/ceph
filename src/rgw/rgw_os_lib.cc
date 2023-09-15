@@ -5,7 +5,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_user.h"
 #include "rgw_os_lib.h"
-#include "rgw_file.h"
+#include "rgw_file_int.h"
 #include "rgw_lib_frontend.h"
 
 namespace rgw {

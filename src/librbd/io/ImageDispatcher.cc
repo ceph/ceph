@@ -6,7 +6,6 @@
 #include "common/AsyncOpTracker.h"
 #include "common/dout.h"
 #include "librbd/ImageCtx.h"
-#include "librbd/crypto/CryptoImageDispatch.h"
 #include "librbd/io/ImageDispatch.h"
 #include "librbd/io/ImageDispatchInterface.h"
 #include "librbd/io/ImageDispatchSpec.h"
@@ -264,32 +263,6 @@ void ImageDispatcher<I>::unblock_writes() {
 template <typename I>
 void ImageDispatcher<I>::wait_on_writes_unblocked(Context *on_unblocked) {
   m_write_block_dispatch->wait_on_writes_unblocked(on_unblocked);
-}
-
-template <typename I>
-void ImageDispatcher<I>::remap_to_physical(Extents& image_extents,
-                                           ImageArea area) {
-  std::shared_lock locker{this->m_lock};
-  auto it = this->m_dispatches.find(IMAGE_DISPATCH_LAYER_CRYPTO);
-  if (it == this->m_dispatches.end()) {
-    ceph_assert(area == ImageArea::DATA);
-    return;
-  }
-  auto crypto_image_dispatch = static_cast<crypto::CryptoImageDispatch*>(
-      it->second.dispatch);
-  crypto_image_dispatch->remap_to_physical(image_extents, area);
-}
-
-template <typename I>
-ImageArea ImageDispatcher<I>::remap_to_logical(Extents& image_extents) {
-  std::shared_lock locker{this->m_lock};
-  auto it = this->m_dispatches.find(IMAGE_DISPATCH_LAYER_CRYPTO);
-  if (it == this->m_dispatches.end()) {
-    return ImageArea::DATA;
-  }
-  auto crypto_image_dispatch = static_cast<crypto::CryptoImageDispatch*>(
-      it->second.dispatch);
-  return crypto_image_dispatch->remap_to_logical(image_extents);
 }
 
 template <typename I>

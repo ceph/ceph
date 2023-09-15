@@ -341,9 +341,12 @@ struct rgw_pubsub_dest {
   std::string arn_topic;
   bool stored_secret = false;
   bool persistent = false;
+  uint32_t time_to_live;
+  uint32_t max_retries;
+  uint32_t retry_sleep_duration;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(5, 1, bl);
+    ENCODE_START(6, 1, bl);
     encode("", bl);
     encode("", bl);
     encode(push_endpoint, bl);
@@ -351,6 +354,9 @@ struct rgw_pubsub_dest {
     encode(arn_topic, bl);
     encode(stored_secret, bl);
     encode(persistent, bl);
+    encode(time_to_live, bl);
+    encode(max_retries, bl);
+    encode(retry_sleep_duration, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -371,6 +377,11 @@ struct rgw_pubsub_dest {
     }
     if (struct_v >= 5) {
         decode(persistent, bl);
+    }
+    if (struct_v >= 6) {
+      decode(time_to_live, bl);
+      decode(max_retries, bl);
+      decode(retry_sleep_duration, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -615,15 +626,21 @@ public:
   // create a topic with a name only
   // if the topic already exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
-  int create_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const;
-  // create a topic with push destination information and ARN
-  // if the topic already exists the destination and ARN values may be updated (considered succsess)
-  // return 0 on success, error code otherwise
-  int create_topic(const DoutPrefixProvider *dpp, const std::string& name, const rgw_pubsub_dest& dest, 
-      const std::string& arn, const std::string& opaque_data, optional_yield y) const;
+  int create_topic(const DoutPrefixProvider* dpp, const std::string& name,
+                   const rgw_pubsub_dest& dest, const std::string& arn,
+                   const std::string& opaque_data, const rgw_user& user,
+                   optional_yield y) const;
   // remove a topic according to its name
   // if the topic does not exists it is a no-op (considered success)
   // return 0 on success, error code otherwise
   int remove_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const;
 };
 
+namespace rgw::notify {
+
+  // Denotes that the topic has not overridden the global configurations for (time_to_live / max_retries / retry_sleep_duration)
+  // defaults: (rgw_topic_persistency_time_to_live / rgw_topic_persistency_max_retries / rgw_topic_persistency_sleep_duration)
+  constexpr uint32_t DEFAULT_GLOBAL_VALUE = UINT32_MAX;
+  // Used in case the topic is using the default global value for dumping in a formatter
+  constexpr static const std::string_view DEFAULT_CONFIG{"None"};
+}

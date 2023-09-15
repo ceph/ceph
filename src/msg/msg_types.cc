@@ -229,6 +229,21 @@ std::ostream& operator<<(std::ostream& out, const entity_addr_t &addr)
   return out;
 }
 
+std::string entity_addr_t::fmt_print() const
+{
+  if (type == entity_addr_t::TYPE_NONE) {
+    return "-";
+  }
+  std::ostringstream out;  //< \todo use fmt::format
+  out << get_sockaddr();
+
+  if (type == entity_addr_t::TYPE_ANY) {
+    return fmt::format("{}/{}", out.str(), nonce);
+  } else {
+    return fmt::format("{}:{}/{}", get_type_name(type), out.str(), nonce);
+  }
+}
+
 std::ostream& operator<<(std::ostream& out, const sockaddr *psa)
 {
   char buf[NI_MAXHOST] = { 0 };

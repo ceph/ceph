@@ -154,6 +154,7 @@ struct RGWObjManifestRule {
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
+  static void generate_test_instances(std::list<RGWObjManifestRule*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjManifestRule)
 
@@ -180,6 +181,7 @@ struct RGWObjTier {
       DECODE_FINISH(bl);
     }
     void dump(Formatter *f) const;
+    static void generate_test_instances(std::list<RGWObjTier*>& o);
 };
 WRITE_CLASS_ENCODER(RGWObjTier)
 
@@ -543,6 +545,10 @@ public:
     /* current ofs relative to start of rgw object */
     uint64_t get_ofs() const {
       return ofs;
+    }
+
+    int get_cur_part_id() const {
+      return cur_part_id;
     }
 
     /* stripe number */

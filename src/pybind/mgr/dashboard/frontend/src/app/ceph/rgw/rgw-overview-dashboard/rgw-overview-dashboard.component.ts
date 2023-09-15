@@ -1,22 +1,23 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Subscription } from 'rxjs';
+import { Observable, ReplaySubject, Subscription, of } from 'rxjs';
 
-import { HealthService } from '~/app/shared/api/health.service';
 import { Permissions } from '~/app/shared/models/permissions';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { RefreshIntervalService } from '~/app/shared/services/refresh-interval.service';
 import { RgwDaemonService } from '~/app/shared/api/rgw-daemon.service';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
-import { RgwUserService } from '~/app/shared/api/rgw-user.service';
-import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
-import {
-  FeatureTogglesMap$,
-  FeatureTogglesService
-} from '~/app/shared/services/feature-toggles.service';
+import { PrometheusService } from '~/app/shared/api/prometheus.service';
+
+import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
+import { HealthService } from '~/app/shared/api/health.service';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
+import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-rgw-overview-dashboard',
@@ -24,9 +25,10 @@ import {
   styleUrls: ['./rgw-overview-dashboard.component.scss']
 })
 export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
+  icons = Icons;
+
   interval = new Subscription();
   permissions: Permissions;
-  enabledFeature$: FeatureTogglesMap$;
   rgwDaemonCount = 0;
   rgwRealmCount = 0;
   rgwZonegroupCount = 0;
@@ -39,15 +41,33 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   realmData: any;
   daemonSub: Subscription;
   realmSub: Subscription;
+  multisiteInfo: object[] = [];
   ZonegroupSub: Subscription;
   ZoneSUb: Subscription;
-  UserSub: Subscription;
   HealthSub: Subscription;
   BucketSub: Subscription;
+  queriesResults: any = {
+    RGW_REQUEST_PER_SECOND: '',
+    BANDWIDTH: '',
+    AVG_GET_LATENCY: '',
+    AVG_PUT_LATENCY: ''
+  };
+  timerGetPrometheusDataSub: Subscription;
+  chartTitles = ['Metadata Sync', 'Data Sync'];
+  realm: string;
+  zonegroup: string;
+  zone: string;
+  metadataSyncInfo: string;
+  replicaZonesInfo: any = [];
+  metadataSyncData: {};
+  showMultisiteCard = true;
+  loading = true;
+  multisiteSyncStatus$: Observable<any>;
+  subject = new ReplaySubject<any>();
+  syncCardLoading = true;
 
   constructor(
     private authStorageService: AuthStorageService,
-    private featureToggles: FeatureTogglesService,
     private healthService: HealthService,
     private refreshIntervalService: RefreshIntervalService,
     private rgwDaemonService: RgwDaemonService,
@@ -55,10 +75,10 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     private rgwZonegroupService: RgwZonegroupService,
     private rgwZoneService: RgwZoneService,
     private rgwBucketService: RgwBucketService,
-    private rgwUserService: RgwUserService
+    private prometheusService: PrometheusService,
+    private rgwMultisiteService: RgwMultisiteService
   ) {
     this.permissions = this.authStorageService.getPermissions();
-    this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
@@ -66,18 +86,19 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
       this.daemonSub = this.rgwDaemonService.list().subscribe((data: any) => {
         this.rgwDaemonCount = data.length;
       });
-      this.BucketSub = this.rgwBucketService.list().subscribe((data: any) => {
-        this.rgwBucketCount = data.length;
-      });
-      this.UserSub = this.rgwUserService.list().subscribe((data: any) => {
-        this.UserCount = data.length;
-      });
       this.HealthSub = this.healthService.getClusterCapacity().subscribe((data: any) => {
         this.objectCount = data['total_objects'];
         this.totalPoolUsedBytes = data['total_pool_bytes_used'];
         this.averageObjectSize = data['average_object_size'];
       });
+      this.getSyncStatus();
     });
+    this.BucketSub = this.rgwBucketService
+      .getTotalBucketsAndUsersLength()
+      .subscribe((data: any) => {
+        this.rgwBucketCount = data['buckets_count'];
+        this.UserCount = data['users_count'];
+      });
     this.realmSub = this.rgwRealmService.list().subscribe((data: any) => {
       this.rgwRealmCount = data['realms'].length;
     });
@@ -87,6 +108,32 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     this.ZoneSUb = this.rgwZoneService.list().subscribe((data: any) => {
       this.rgwZoneCount = data['zones'].length;
     });
+    this.getPrometheusData(this.prometheusService.lastHourDateObject);
+    this.multisiteSyncStatus$ = this.subject.pipe(
+      switchMap(() =>
+        this.rgwMultisiteService.getSyncStatus().pipe(
+          tap((data: any) => {
+            this.loading = false;
+            this.replicaZonesInfo = data['dataSyncInfo'];
+            this.metadataSyncInfo = data['metadataSyncInfo'];
+            if (this.replicaZonesInfo.length === 0) {
+              this.showMultisiteCard = false;
+              this.syncCardLoading = false;
+              this.loading = false;
+            }
+            [this.realm, this.zonegroup, this.zone] = data['primaryZoneData'];
+          }),
+          catchError((err) => {
+            this.showMultisiteCard = false;
+            this.syncCardLoading = false;
+            this.loading = false;
+            err.preventDefault();
+            return of(true);
+          })
+        )
+      ),
+      shareReplay(1)
+    );
   }
 
   ngOnDestroy() {
@@ -96,7 +143,26 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     this.ZonegroupSub.unsubscribe();
     this.ZoneSUb.unsubscribe();
     this.BucketSub.unsubscribe();
-    this.UserSub.unsubscribe();
     this.HealthSub.unsubscribe();
+    if (this.timerGetPrometheusDataSub) {
+      this.timerGetPrometheusDataSub.unsubscribe();
+    }
+  }
+
+  getPrometheusData(selectedTime: any) {
+    this.queriesResults = this.prometheusService.getPrometheusQueriesData(
+      selectedTime,
+      queries,
+      this.queriesResults,
+      true
+    );
+  }
+
+  getSyncStatus() {
+    this.subject.next();
+  }
+
+  trackByFn(zone: any) {
+    return zone;
   }
 }

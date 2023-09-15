@@ -413,24 +413,36 @@ void rgw_pubsub_topics::dump_xml(Formatter *f) const
 
 void rgw_pubsub_dest::dump(Formatter *f) const
 {
+  using rgw::notify::DEFAULT_GLOBAL_VALUE;
+  using rgw::notify::DEFAULT_CONFIG;
   encode_json("push_endpoint", push_endpoint, f);
   encode_json("push_endpoint_args", push_endpoint_args, f);
   encode_json("push_endpoint_topic", arn_topic, f);
   encode_json("stored_secret", stored_secret, f);
   encode_json("persistent", persistent, f);
+  encode_json("time_to_live", time_to_live!=DEFAULT_GLOBAL_VALUE? std::to_string(time_to_live): DEFAULT_CONFIG, f);
+  encode_json("max_retries", max_retries!=DEFAULT_GLOBAL_VALUE? std::to_string(max_retries): DEFAULT_CONFIG, f);
+  encode_json("retry_sleep_duration", retry_sleep_duration!=DEFAULT_GLOBAL_VALUE? std::to_string(retry_sleep_duration): DEFAULT_CONFIG, f);
 }
 
 void rgw_pubsub_dest::dump_xml(Formatter *f) const
 {
+  using rgw::notify::DEFAULT_GLOBAL_VALUE;
+  using rgw::notify::DEFAULT_CONFIG;
   encode_xml("EndpointAddress", push_endpoint, f);
   encode_xml("EndpointArgs", push_endpoint_args, f);
   encode_xml("EndpointTopic", arn_topic, f);
   encode_xml("HasStoredSecret", stored_secret, f);
   encode_xml("Persistent", persistent, f);
+  encode_xml("TimeToLive", time_to_live!=DEFAULT_GLOBAL_VALUE? std::to_string(time_to_live): DEFAULT_CONFIG, f);
+  encode_xml("MaxRetries", max_retries!=DEFAULT_GLOBAL_VALUE? std::to_string(max_retries): DEFAULT_CONFIG, f);
+  encode_xml("RetrySleepDuration", retry_sleep_duration!=DEFAULT_GLOBAL_VALUE? std::to_string(retry_sleep_duration): DEFAULT_CONFIG, f);
 }
 
 std::string rgw_pubsub_dest::to_json_str() const
 {
+  using rgw::notify::DEFAULT_GLOBAL_VALUE;
+  using rgw::notify::DEFAULT_CONFIG;
   JSONFormatter f;
   f.open_object_section("");
   encode_json("EndpointAddress", push_endpoint, &f);
@@ -438,6 +450,9 @@ std::string rgw_pubsub_dest::to_json_str() const
   encode_json("EndpointTopic", arn_topic, &f);
   encode_json("HasStoredSecret", stored_secret, &f);
   encode_json("Persistent", persistent, &f);
+  encode_json("TimeToLive", time_to_live!=DEFAULT_GLOBAL_VALUE? std::to_string(time_to_live): DEFAULT_CONFIG, &f);
+  encode_json("MaxRetries", max_retries!=DEFAULT_GLOBAL_VALUE? std::to_string(max_retries): DEFAULT_CONFIG, &f);
+  encode_json("RetrySleepDuration", retry_sleep_duration!=DEFAULT_GLOBAL_VALUE? std::to_string(retry_sleep_duration): DEFAULT_CONFIG, &f);
   f.close_section();
   std::stringstream ss;
   f.flush(ss);
@@ -676,12 +691,11 @@ int RGWPubSub::Bucket::remove_notifications(const DoutPrefixProvider *dpp, optio
   return 0;
 }
 
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& name, optional_yield y) const {
-  return create_topic(dpp, name, rgw_pubsub_dest{}, "", "", y);
-}
-
-int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& name, const rgw_pubsub_dest& dest, 
-    const std::string& arn, const std::string& opaque_data, optional_yield y) const {
+int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
+                            const std::string& name,
+                            const rgw_pubsub_dest& dest, const std::string& arn,
+                            const std::string& opaque_data,
+                            const rgw_user& user, optional_yield y) const {
   RGWObjVersionTracker objv_tracker;
   rgw_pubsub_topics topics;
 
@@ -693,7 +707,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider *dpp, const std::string& na
   }
  
   rgw_pubsub_topic& new_topic = topics.topics[name];
-  new_topic.user = rgw_user("", tenant);
+  new_topic.user = user;
   new_topic.name = name;
   new_topic.dest = dest;
   new_topic.arn = arn;

@@ -1,5 +1,5 @@
-import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { Component, OnInit } from '@angular/core';
+import { UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -23,19 +23,13 @@ import { RoleFormModel } from './role-form.model';
   styleUrls: ['./role-form.component.scss']
 })
 export class RoleFormComponent extends CdForm implements OnInit {
-  @ViewChild('headerPermissionCheckboxTpl', { static: true })
-  headerPermissionCheckboxTpl: TemplateRef<any>;
-  @ViewChild('cellScopeCheckboxTpl', { static: true })
-  cellScopeCheckboxTpl: TemplateRef<any>;
-  @ViewChild('cellPermissionCheckboxTpl', { static: true })
-  cellPermissionCheckboxTpl: TemplateRef<any>;
-
   roleForm: CdFormGroup;
   response: RoleFormModel;
 
   columns: CdTableColumn[];
   scopes: Array<string> = [];
   scopes_permissions: Array<any> = [];
+  initialValue = {};
 
   roleFormMode = RoleFormMode;
   mode: RoleFormMode;
@@ -54,17 +48,17 @@ export class RoleFormComponent extends CdForm implements OnInit {
     super();
     this.resource = $localize`role`;
     this.createForm();
-    this.listenToChanges();
+    // this.listenToChanges();
   }
 
   createForm() {
     this.roleForm = new CdFormGroup({
-      name: new FormControl('', {
+      name: new UntypedFormControl('', {
         validators: [Validators.required],
         asyncValidators: [CdValidators.unique(this.roleService.exists, this.roleService)]
       }),
-      description: new FormControl(''),
-      scopes_permissions: new FormControl({})
+      description: new UntypedFormControl(''),
+      scopes_permissions: new UntypedFormControl({})
     });
   }
 
@@ -73,41 +67,31 @@ export class RoleFormComponent extends CdForm implements OnInit {
       {
         prop: 'scope',
         name: $localize`All`,
-        flexGrow: 2,
-        cellTemplate: this.cellScopeCheckboxTpl,
-        headerTemplate: this.headerPermissionCheckboxTpl
+        flexGrow: 2
       },
       {
         prop: 'read',
         name: $localize`Read`,
         flexGrow: 1,
-        cellClass: 'text-center',
-        cellTemplate: this.cellPermissionCheckboxTpl,
-        headerTemplate: this.headerPermissionCheckboxTpl
+        cellClass: 'text-center'
       },
       {
         prop: 'create',
         name: $localize`Create`,
         flexGrow: 1,
-        cellClass: 'text-center',
-        cellTemplate: this.cellPermissionCheckboxTpl,
-        headerTemplate: this.headerPermissionCheckboxTpl
+        cellClass: 'text-center'
       },
       {
         prop: 'update',
         name: $localize`Update`,
         flexGrow: 1,
-        cellClass: 'text-center',
-        cellTemplate: this.cellPermissionCheckboxTpl,
-        headerTemplate: this.headerPermissionCheckboxTpl
+        cellClass: 'text-center'
       },
       {
         prop: 'delete',
         name: $localize`Delete`,
         flexGrow: 1,
-        cellClass: 'text-center',
-        cellTemplate: this.cellPermissionCheckboxTpl,
-        headerTemplate: this.headerPermissionCheckboxTpl
+        cellClass: 'text-center'
       }
     ];
     if (this.router.url.startsWith('/user-management/roles/edit')) {
@@ -127,7 +111,6 @@ export class RoleFormComponent extends CdForm implements OnInit {
     // Load the scopes and initialize the default scopes/permissions data.
     this.scopeService.list().subscribe((scopes: Array<string>) => {
       this.scopes = scopes;
-      this.roleForm.get('scopes_permissions').setValue({});
 
       this.loadingReady();
     });
@@ -146,123 +129,11 @@ export class RoleFormComponent extends CdForm implements OnInit {
         ['name', 'description', 'scopes_permissions'].forEach((key) =>
           this.roleForm.get(key).setValue(resp[1][key])
         );
+        this.initialValue = resp[1]['scopes_permissions'];
 
         this.loadingReady();
       });
     });
-  }
-
-  listenToChanges() {
-    // Create/Update the data which is used by the data table to display the
-    // scopes/permissions every time the form field value has been changed.
-    this.roleForm.get('scopes_permissions').valueChanges.subscribe((value) => {
-      const scopes_permissions: any[] = [];
-      _.each(this.scopes, (scope) => {
-        // Set the defaults values.
-        const scope_permission: any = { read: false, create: false, update: false, delete: false };
-        scope_permission['scope'] = scope;
-        // Apply settings from the given value if they exist.
-        if (scope in value) {
-          _.each(value[scope], (permission) => {
-            scope_permission[permission] = true;
-          });
-        }
-        scopes_permissions.push(scope_permission);
-      });
-      this.scopes_permissions = scopes_permissions;
-    });
-  }
-
-  /**
-   * Checks if the specified row checkbox needs to be rendered as checked.
-   * @param {string} scope The scope to be checked, e.g. 'cephfs', 'grafana',
-   *   'osd', 'pool' ...
-   * @return Returns true if all permissions (read, create, update, delete)
-   *   are checked for the specified scope, otherwise false.
-   */
-  isRowChecked(scope: string) {
-    const scope_permission = _.find(this.scopes_permissions, (o) => {
-      return o['scope'] === scope;
-    });
-    if (_.isUndefined(scope_permission)) {
-      return false;
-    }
-    return (
-      scope_permission['read'] &&
-      scope_permission['create'] &&
-      scope_permission['update'] &&
-      scope_permission['delete']
-    );
-  }
-
-  /**
-   * Checks if the specified header checkbox needs to be rendered as checked.
-   * @param {string} property The property/permission (read, create,
-   *   update, delete) to be checked. If 'scope' is given, all permissions
-   *   are checked.
-   * @return Returns true if specified property/permission is selected
-   *   for all scopes, otherwise false.
-   */
-  isHeaderChecked(property: string) {
-    let permissions = [property];
-    if ('scope' === property) {
-      permissions = ['read', 'create', 'update', 'delete'];
-    }
-    return permissions.every((permission) => {
-      return this.scopes_permissions.every((scope_permission) => {
-        return scope_permission[permission];
-      });
-    });
-  }
-
-  onClickCellCheckbox(scope: string, property: string, event: any = null) {
-    // Use a copy of the form field data to do not trigger the redrawing of the
-    // data table with every change.
-    const scopes_permissions = _.cloneDeep(this.roleForm.getValue('scopes_permissions'));
-    let permissions = [property];
-    if ('scope' === property) {
-      permissions = ['read', 'create', 'update', 'delete'];
-    }
-    if (!(scope in scopes_permissions)) {
-      scopes_permissions[scope] = [];
-    }
-    // Add or remove the given permission(s) depending on the click event or if no
-    // click event is given then add/remove them if they are absent/exist.
-    if (
-      (event && event.target['checked']) ||
-      !_.isEqual(permissions.sort(), _.intersection(scopes_permissions[scope], permissions).sort())
-    ) {
-      scopes_permissions[scope] = _.union(scopes_permissions[scope], permissions);
-    } else {
-      scopes_permissions[scope] = _.difference(scopes_permissions[scope], permissions);
-      if (_.isEmpty(scopes_permissions[scope])) {
-        _.unset(scopes_permissions, scope);
-      }
-    }
-    this.roleForm.get('scopes_permissions').setValue(scopes_permissions);
-  }
-
-  onClickHeaderCheckbox(property: 'scope' | 'read' | 'create' | 'update' | 'delete', event: any) {
-    // Use a copy of the form field data to do not trigger the redrawing of the
-    // data table with every change.
-    const scopes_permissions = _.cloneDeep(this.roleForm.getValue('scopes_permissions'));
-    let permissions = [property];
-    if ('scope' === property) {
-      permissions = ['read', 'create', 'update', 'delete'];
-    }
-    _.each(permissions, (permission) => {
-      _.each(this.scopes, (scope) => {
-        if (event.target['checked']) {
-          scopes_permissions[scope] = _.union(scopes_permissions[scope], [permission]);
-        } else {
-          scopes_permissions[scope] = _.difference(scopes_permissions[scope], [permission]);
-          if (_.isEmpty(scopes_permissions[scope])) {
-            _.unset(scopes_permissions, scope);
-          }
-        }
-      });
-    });
-    this.roleForm.get('scopes_permissions').setValue(scopes_permissions);
   }
 
   getRequest(): RoleFormModel {

@@ -39,9 +39,6 @@ public:
 
   MOCK_METHOD0(unblock_writes, void());
   MOCK_METHOD1(wait_on_writes_unblocked, void(Context*));
-
-  MOCK_METHOD2(remap_to_physical, void(Extents&, ImageArea));
-  MOCK_METHOD1(remap_to_logical, ImageArea(Extents&));
 };
 
 } // namespace io

@@ -47,6 +47,7 @@ import { ModuleStatusGuardService } from './shared/services/module-status-guard.
 import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
 import { UpgradeComponent } from './ceph/cluster/upgrade/upgrade.component';
 import { CephfsVolumeFormComponent } from './ceph/cephfs/cephfs-form/cephfs-form.component';
+import { UpgradeProgressComponent } from './ceph/cluster/upgrade/upgrade-progress/upgrade-progress.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -286,8 +287,29 @@ const routes: Routes = [
       },
       {
         path: 'upgrade',
-        component: UpgradeComponent,
-        data: { breadcrumbs: 'Cluster/Upgrade' }
+        canActivate: [ModuleStatusGuardService],
+        data: {
+          moduleStatusGuardConfig: {
+            uiApiPath: 'orchestrator',
+            redirectTo: 'error',
+            backend: 'cephadm',
+            section: 'orch',
+            section_info: 'Orchestrator',
+            header: 'Orchestrator is not available'
+          },
+          breadcrumbs: 'Cluster/Upgrade'
+        },
+        children: [
+          {
+            path: '',
+            component: UpgradeComponent
+          },
+          {
+            path: 'progress',
+            component: UpgradeProgressComponent,
+            data: { breadcrumbs: 'Progress' }
+          }
+        ]
       },
       {
         path: 'perf_counters/:type/:id',

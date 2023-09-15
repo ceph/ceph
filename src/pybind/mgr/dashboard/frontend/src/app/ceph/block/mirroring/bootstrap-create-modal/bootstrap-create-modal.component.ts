@@ -1,5 +1,5 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { FormControl, FormGroup, ValidatorFn, Validators } from '@angular/forms';
+import { UntypedFormControl, UntypedFormGroup, ValidatorFn, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -36,16 +36,16 @@ export class BootstrapCreateModalComponent implements OnDestroy, OnInit {
 
   createForm() {
     this.createBootstrapForm = new CdFormGroup({
-      siteName: new FormControl('', {
+      siteName: new UntypedFormControl('', {
         validators: [Validators.required]
       }),
-      pools: new FormGroup(
+      pools: new UntypedFormGroup(
         {},
         {
           validators: [this.validatePools()]
         }
       ),
-      token: new FormControl('', {})
+      token: new UntypedFormControl('', {})
     });
   }
 
@@ -65,7 +65,7 @@ export class BootstrapCreateModalComponent implements OnDestroy, OnInit {
         return acc;
       }, []);
 
-      const poolsControl = this.createBootstrapForm.get('pools') as FormGroup;
+      const poolsControl = this.createBootstrapForm.get('pools') as UntypedFormGroup;
       _.each(this.pools, (pool) => {
         const poolName = pool['name'];
         const mirroring_disabled = pool['mirror_mode'] === 'disabled';
@@ -80,7 +80,7 @@ export class BootstrapCreateModalComponent implements OnDestroy, OnInit {
         } else {
           poolsControl.addControl(
             poolName,
-            new FormControl({ value: !mirroring_disabled, disabled: !mirroring_disabled })
+            new UntypedFormControl({ value: !mirroring_disabled, disabled: !mirroring_disabled })
           );
         }
       });
@@ -94,7 +94,7 @@ export class BootstrapCreateModalComponent implements OnDestroy, OnInit {
   }
 
   validatePools(): ValidatorFn {
-    return (poolsControl: FormGroup): { [key: string]: any } => {
+    return (poolsControl: UntypedFormGroup): { [key: string]: any } => {
       let checkedCount = 0;
       _.each(poolsControl.controls, (control) => {
         if (control.value === true) {
@@ -115,7 +115,7 @@ export class BootstrapCreateModalComponent implements OnDestroy, OnInit {
 
     let bootstrapPoolName = '';
     const poolNames: string[] = [];
-    const poolsControl = this.createBootstrapForm.get('pools') as FormGroup;
+    const poolsControl = this.createBootstrapForm.get('pools') as UntypedFormGroup;
     _.each(poolsControl.controls, (control, poolName) => {
       if (control.value === true) {
         bootstrapPoolName = poolName;

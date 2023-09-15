@@ -145,7 +145,7 @@ int SubProcess::join() {
   int status = 0;
 
   if (WaitForSingleObject(proc_handle, INFINITE) != WAIT_FAILED) {
-    if (!GetExitCodeProcess(proc_handle, &status)) {
+    if (!GetExitCodeProcess(proc_handle, (DWORD*)&status)) {
       errstr << cmd << ": Could not get exit code: " << pid
              << ". Error code: " << GetLastError();
       status = -ECHILD;

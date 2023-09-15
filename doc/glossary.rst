@@ -58,7 +58,7 @@
                 as QEMU or Xen, and (3) a hypervisor abstraction layer such as
                 ``libvirt``.
 
-	Ceph Client
+	:ref:`Ceph Client <architecture_ceph_clients>`
                 Any of the Ceph components that can access a Ceph Storage
                 Cluster. This includes the Ceph Object Gateway, the Ceph Block
                 Device, the Ceph File System, and their corresponding
@@ -327,6 +327,13 @@
 
 	Pools
                 See :term:`pool`.
+
+	:ref:`Primary Affinity <rados_ops_primary_affinity>`
+                The characteristic of an OSD that governs the likelihood that
+                a given OSD will be selected as the primary OSD (or "lead
+                OSD") in an acting set. Primary affinity was introduced in
+                Firefly (v. 0.80). See :ref:`Primary Affinity
+                <rados_ops_primary_affinity>`.
 
 	RADOS
                 **R**\eliable **A**\utonomic **D**\istributed **O**\bject

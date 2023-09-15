@@ -30,6 +30,7 @@
 #include "librbd/exclusive_lock/AutomaticPolicy.h"
 #include "librbd/exclusive_lock/StandardPolicy.h"
 #include "librbd/crypto/EncryptionFormat.h"
+#include "librbd/crypto/CryptoInterface.h"
 #include "librbd/io/AioCompletion.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/ImageDispatcher.h"
@@ -943,6 +944,13 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
 
   Journal<ImageCtx> *ImageCtx::create_journal() {
     return new Journal<ImageCtx>(*this);
+  }
+
+  uint64_t ImageCtx::get_data_offset() const {
+    if (encryption_format != nullptr) {
+      return encryption_format->get_crypto()->get_data_offset();
+    }
+    return 0;
   }
 
   void ImageCtx::set_image_name(const std::string &image_name) {

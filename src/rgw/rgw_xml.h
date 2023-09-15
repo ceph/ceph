@@ -331,6 +331,7 @@ static void encode_xml(const char *name, const char *ns, const T& val, ceph::For
 }
 
 void encode_xml(const char *name, const std::string& val, ceph::Formatter *f);
+void encode_xml(const char *name, const std::string_view& val, ceph::Formatter *f);
 void encode_xml(const char *name, const char *val, ceph::Formatter *f);
 void encode_xml(const char *name, bool val, ceph::Formatter *f);
 void encode_xml(const char *name, int val, ceph::Formatter *f);

@@ -183,6 +183,16 @@ class AuthManagerTool(cherrypy.Tool):
             if user:
                 self._check_authorization(user.username)
                 return
+
+        resp_head = cherrypy.response.headers
+        req_head = cherrypy.request.headers
+        req_header_cross_origin_url = req_head.get('Access-Control-Allow-Origin')
+        cross_origin_urls = mgr.get_module_option('cross_origin_url', '')
+        cross_origin_url_list = [url.strip() for url in cross_origin_urls.split(',')]
+
+        if req_header_cross_origin_url in cross_origin_url_list:
+            resp_head['Access-Control-Allow-Origin'] = req_header_cross_origin_url
+
         self.logger.debug('Unauthorized access to %s',
                           cherrypy.url(relative='server'))
         raise cherrypy.HTTPError(401, 'You are not authorized to access '

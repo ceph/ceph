@@ -637,9 +637,9 @@ class Module(MgrModule, OrchestratorClientMixin):
                 'read_bytes': {'type': self.PERFCOUNTER_COUNTER,
                                'desc': 'RBD image bytes read'},
                 'write_latency': {'type': self.PERFCOUNTER_LONGRUNAVG,
-                                  'desc': 'RBD image writes latency (msec)'},
+                                  'desc': 'RBD image writes latency (nsec)'},
                 'read_latency': {'type': self.PERFCOUNTER_LONGRUNAVG,
-                                 'desc': 'RBD image reads latency (msec)'},
+                                 'desc': 'RBD image reads latency (nsec)'},
             },
         }  # type: Dict[str, Any]
         global _global_instance
@@ -1641,7 +1641,6 @@ class Module(MgrModule, OrchestratorClientMixin):
 
     def get_all_daemon_health_metrics(self) -> None:
         daemon_metrics = self.get_daemon_health_metrics()
-        self.log.debug('metrics jeje %s' % (daemon_metrics))
         for daemon_name, health_metrics in daemon_metrics.items():
             for health_metric in health_metrics:
                 path = 'daemon_health_metrics'

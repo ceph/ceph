@@ -21,6 +21,7 @@ import { CdValidators } from '~/app/shared/forms/cd-validators';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Permission } from '~/app/shared/models/permissions';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 
 @Component({
   selector: 'cd-cephfs-form',
@@ -62,7 +63,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     super();
     this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
-    this.resource = $localize`volume`;
+    this.resource = $localize`File System`;
     this.hosts = {
       options: [],
       messages: new SelectMessages({
@@ -79,7 +80,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     });
     this.form = this.formBuilder.group({
       name: new FormControl('', {
-        validators: [Validators.pattern(/^[.A-Za-z0-9_/-]+$/), Validators.required]
+        validators: [Validators.pattern(/^[.A-Za-z0-9_-]+$/), Validators.required]
       }),
       placement: ['hosts'],
       hosts: [[]],
@@ -97,7 +98,8 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
   }
 
   ngOnInit() {
-    this.hostService.list('false').subscribe((resp: object[]) => {
+    const hostContext = new CdTableFetchDataContext(() => undefined);
+    this.hostService.list(hostContext.toParams(), 'false').subscribe((resp: object[]) => {
       const options: SelectOption[] = [];
       _.forEach(resp, (host: object) => {
         if (_.get(host, 'sources.orchestrator', false)) {

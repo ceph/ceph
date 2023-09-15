@@ -93,7 +93,7 @@ def step_impl(context, interval):
 def step_impl(context, eval_time):
     eval_time_without_unit, unit = resolve_time_and_unit(eval_time)
     if eval_time_without_unit is None:
-        raise ValueError(f'Invalid evalution time: {eval_time}. ' +
+        raise ValueError(f'Invalid evaluation time: {eval_time}. ' +
                            'A valid time looks like "1m" where you have a number plus a unit')
     global_context.promql_expr_test.set_eval_time(eval_time_without_unit, unit)
 

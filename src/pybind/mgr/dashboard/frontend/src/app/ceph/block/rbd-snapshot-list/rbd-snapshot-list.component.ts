@@ -118,7 +118,7 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
         pipe: this.dimlessBinaryPipe
       },
       {
-        name: $localize`Provisioned`,
+        name: $localize`Used`,
         prop: 'disk_usage',
         flexGrow: 1,
         cellClass: 'text-right',

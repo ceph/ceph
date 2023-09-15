@@ -58,7 +58,8 @@ class HealthTest(DashboardTestCase):
             'allow_snaps': bool,
             'allow_multimds_snaps': bool,
             'allow_standby_replay': bool,
-            'refuse_client_session': bool
+            'refuse_client_session': bool,
+            'refuse_standby_for_another_fs': bool
         }),
         'ever_allowed_features': int,
         'root': int

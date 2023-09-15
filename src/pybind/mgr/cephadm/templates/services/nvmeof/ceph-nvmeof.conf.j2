@@ -1,7 +1,7 @@
 # {{ cephadm_managed }}
 [gateway]
 name = {{ name }}
-group = {{ spec.group }}
+group = {{ spec.group if spec.group is not none else '' }}
 addr = {{ addr }}
 port = {{ port }}
 enable_auth = {{ spec.enable_auth }}
@@ -11,6 +11,7 @@ state_update_interval_sec = 5
 [ceph]
 pool = {{ spec.pool }}
 config_file = /etc/ceph/ceph.conf
+id = {{ rados_id }}
 
 [mtls]
 server_key = {{ spec.server_key }}

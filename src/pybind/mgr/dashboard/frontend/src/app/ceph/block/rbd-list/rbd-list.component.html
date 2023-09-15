@@ -142,3 +142,13 @@
     </strong>
   </div>
 </ng-template>
+
+<ng-template #imageUsageTpl
+             let-row="row">
+  <cd-usage-bar *ngIf="row"
+                [total]="row.size"
+                [used]="row.disk_usage"
+                [title]="row.name"
+                decimals="2">
+  </cd-usage-bar>
+</ng-template>

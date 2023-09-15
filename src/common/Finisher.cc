@@ -38,6 +38,12 @@ void Finisher::wait_for_empty()
   finisher_empty_wait = false;
 }
 
+bool Finisher::is_empty()
+{
+  std::unique_lock ul(finisher_lock);
+  return finisher_queue.empty();
+}
+
 void *Finisher::finisher_thread_entry()
 {
   std::unique_lock ul(finisher_lock);

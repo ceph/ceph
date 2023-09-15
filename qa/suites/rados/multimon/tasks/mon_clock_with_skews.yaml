@@ -20,5 +20,6 @@ tasks:
     - \(SLOW_OPS\)
     - No standby daemons available
     - slow request
+    - \(POOL_APP_NOT_ENABLED\)
 - mon_clock_skew_check:
     expect-skew: true

@@ -2592,7 +2592,7 @@ ref_t<MClientRequest> Client::build_client_request(MetaRequest *request, mds_ran
     }
   }
 
-  auto req = make_message<MClientRequest>(request->get_op(), old_version);
+  auto req = make_message<MClientRequest>(request->get_op(), session->mds_features);
   req->set_tid(request->tid);
   req->set_stamp(request->op_stamp);
   memcpy(&req->head, &request->head, sizeof(ceph_mds_request_head));
@@ -4487,11 +4487,19 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
   if (flags & CEPH_CAP_FLAG_AUTH) {
     if (in->auth_cap != &cap &&
         (!in->auth_cap || ceph_seq_cmp(in->auth_cap->mseq, mseq) < 0)) {
-      if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
-	ldout(cct, 10) << __func__ << " changing auth cap: "
-		       << "add myself to new auth MDS' flushing caps list" << dendl;
-	adjust_session_flushing_caps(in, in->auth_cap->session, mds_session);
+      if (in->auth_cap) {
+        if (in->flushing_cap_item.is_on_list()) {
+          ldout(cct, 10) << __func__ << " changing auth cap: "
+                         << "add myself to new auth MDS' flushing caps list" << dendl;
+          adjust_session_flushing_caps(in, in->auth_cap->session, mds_session);
+        }
+        if (in->dirty_cap_item.is_on_list()) {
+          ldout(cct, 10) << __func__ << " changing auth cap: "
+                         << "add myself to new auth MDS' dirty caps list" << dendl;
+          mds_session->get_dirty_list().push_back(&in->dirty_cap_item);
+        }
       }
+
       in->auth_cap = &cap;
     }
   }
@@ -6181,7 +6189,8 @@ int Client::resolve_mds(
   int role_r = fsmap->parse_role(mds_spec, &role, *css);
   if (role_r == 0) {
     // We got a role, resolve it to a GID
-    auto& info = fsmap->get_filesystem(role.fscid)->mds_map.get_info(role.rank);
+    const auto& mdsmap = fsmap->get_filesystem(role.fscid).get_mds_map();
+    auto& info = mdsmap.get_info(role.rank);
     ldout(cct, 10) << __func__ << ": resolved " << mds_spec << " to role '"
       << role << "' aka " << info.human_name() << dendl;
     targets->push_back(info.global_id);
@@ -6963,10 +6972,9 @@ void Client::tick()
 void Client::start_tick_thread()
 {
   upkeeper = std::thread([this]() {
-    using time = ceph::coarse_mono_time;
     using sec = std::chrono::seconds;
 
-    auto last_tick = time::min();
+    auto last_tick = clock::zero();
 
     std::unique_lock cl(client_lock);
     while (!tick_thread_stopped) {
@@ -12144,7 +12152,9 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
    * blocks.  We use 4MB only because it is big enough, and because it
    * actually *is* the (ceph) default block size.
    */
-  stbuf->f_frsize = CEPH_4M_BLOCK_SIZE;
+  const int CEPH_BLOCK_SHIFT = 22;
+  stbuf->f_frsize = 1 << CEPH_BLOCK_SHIFT;
+  stbuf->f_bsize = 1 << CEPH_BLOCK_SHIFT;
   stbuf->f_files = total_files_on_fs;
   stbuf->f_ffree = -1;
   stbuf->f_favail = -1;
@@ -12184,19 +12194,11 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // Special case: if there is a size quota set on the Inode acting
     // as the root for this client mount, then report the quota status
     // as the filesystem statistics.
-    fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_4M_BLOCK_SHIFT;
-    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_4M_BLOCK_SHIFT;
+    const fsblkcnt_t total = quota_root->quota.max_bytes >> CEPH_BLOCK_SHIFT;
+    const fsblkcnt_t used = quota_root->rstat.rbytes >> CEPH_BLOCK_SHIFT;
     // It is possible for a quota to be exceeded: arithmetic here must
     // handle case where used > total.
-    fsblkcnt_t free = total > used ? total - used : 0;
-
-    // For quota size less than 4KB, report the total=used=4KB,free=0
-    // when quota is full and total=free=4KB, used=0 otherwise.
-    if (!total) {
-      total = 1;
-      free = quota_root->quota.max_bytes > quota_root->rstat.rbytes ? 1 : 0;
-      stbuf->f_frsize = CEPH_4K_BLOCK_SIZE;
-    }
+    const fsblkcnt_t free = total > used ? total - used : 0;
 
     stbuf->f_blocks = total;
     stbuf->f_bfree = free;
@@ -12205,11 +12207,10 @@ int Client::statfs(const char *path, struct statvfs *stbuf,
     // General case: report the cluster statistics returned from RADOS. Because
     // multiple pools may be used without one filesystem namespace via
     // layouts, this is the most correct thing we can do.
-    stbuf->f_blocks = stats.kb >> CEPH_4K_BLOCK_SHIFT;
-    stbuf->f_bfree = stats.kb_avail >> CEPH_4K_BLOCK_SHIFT;
-    stbuf->f_bavail = stats.kb_avail >> CEPH_4K_BLOCK_SHIFT;
+    stbuf->f_blocks = stats.kb >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_bfree = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
+    stbuf->f_bavail = stats.kb_avail >> (CEPH_BLOCK_SHIFT - 10);
   }
-  stbuf->f_bsize = stbuf->f_frsize;
 
   return rval;
 }
@@ -14443,6 +14444,8 @@ int Client::_mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_MKNOD);
 
+  req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
+
   filepath path;
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
@@ -14587,6 +14590,8 @@ int Client::_create(Inode *dir, const char *name, int flags, mode_t mode,
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_CREATE);
 
+  req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
+
   filepath path;
   dir->make_nosnap_relative_path(path);
   path.push_dentry(name);
@@ -14663,6 +14668,9 @@ int Client::_mkdir(Inode *dir, const char *name, mode_t mode, const UserPerm& pe
   bool is_snap_op = dir->snapid == CEPH_SNAPDIR;
   MetaRequest *req = new MetaRequest(is_snap_op ?
 				     CEPH_MDS_OP_MKSNAP : CEPH_MDS_OP_MKDIR);
+
+  if (!is_snap_op)
+    req->set_inode_owner_uid_gid(perm.uid(), perm.gid());
 
   filepath path;
   dir->make_nosnap_relative_path(path);
@@ -14801,6 +14809,8 @@ int Client::_symlink(Inode *dir, const char *name, const char *target,
   }
 
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_SYMLINK);
+
+  req->set_inode_owner_uid_gid(perms.uid(), perms.gid());
 
   filepath path;
   dir->make_nosnap_relative_path(path);

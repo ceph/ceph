@@ -145,6 +145,7 @@ struct MockImageCtx {
   MOCK_METHOD0(rebuild_data_io_context, void());
   IOContext get_data_io_context();
   IOContext duplicate_data_io_context();
+  uint64_t get_data_offset() const;
 
   static void set_timer_instance(MockSafeTimer *timer, ceph::mutex *timer_lock);
   static void get_timer_instance(CephContext *cct, MockSafeTimer **timer,

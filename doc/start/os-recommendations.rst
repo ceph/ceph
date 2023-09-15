@@ -35,20 +35,38 @@ Linux Kernel
 Platforms
 =========
 
-The charts below show how Ceph's requirements map onto various Linux
-platforms.  Generally speaking, there is very little dependence on
-specific distributions outside of the kernel and system initialization
-package (i.e., sysvinit, systemd).
+The chart below shows which Linux platforms Ceph provides packages for, and
+which platforms Ceph has been tested on. 
 
-+--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
-| Release Name | Tag    | CentOS                 | Ubuntu                         | OpenSUSE :sup:`C` | Debian :sup:`C` |
-+==============+========+========================+================================+===================+=================+
-| Quincy       | 17.2.z | 8 :sup:`A`             | 20.04 :sup:`A`                 | 15.3              | 11              |
-+--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
-| Pacific      | 16.2.z | 8 :sup:`A`             | 18.04 :sup:`C`, 20.04 :sup:`A` | 15.2              | 10, 11          |
-+--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
-| Octopus      | 15.2.z | 7 :sup:`B` 8 :sup:`A`  | 18.04 :sup:`C`, 20.04 :sup:`A` | 15.2              | 10              |
-+--------------+--------+------------------------+--------------------------------+-------------------+-----------------+
+Ceph does not require a specific Linux distribution. Ceph can run on any
+distribution that includes a supported kernel and supported system startup
+framework, for example ``sysvinit`` or ``systemd``. Ceph is sometimes ported to
+non-Linux systems but these are not supported by the core Ceph effort.
+
+
++---------------+---------------+-----------------+------------------+------------------+
+|               | Reef (18.2.z) | Quincy (17.2.z) | Pacific (16.2.z) | Octopus (15.2.z) |
++===============+===============+=================+==================+==================+
+| Centos 7      |               |                 |         A        |      B           |
++---------------+---------------+-----------------+------------------+------------------+
+| Centos 8      |    A          |     A           |         A        |      A           |
++---------------+---------------+-----------------+------------------+------------------+
+| Centos 9      |    A          |                 |                  |                  |
++---------------+---------------+-----------------+------------------+------------------+
+| Debian 10     |    C          |                 |         C        |      C           |
++---------------+---------------+-----------------+------------------+------------------+
+| Debian 11     |    C          |     C           |         C        |                  |
++---------------+---------------+-----------------+------------------+------------------+
+| OpenSUSE 15.2 |    C          |                 |         C        |      C           |
++---------------+---------------+-----------------+------------------+------------------+
+| OpenSUSE 15.3 |    C          |     C           |                  |                  |
++---------------+---------------+-----------------+------------------+------------------+
+| Ubuntu 18.04  |               |                 |         C        |      C           |
++---------------+---------------+-----------------+------------------+------------------+
+| Ubuntu 20.04  |    A          |     A           |         A        |      A           |
++---------------+---------------+-----------------+------------------+------------------+
+| Ubuntu 22.04  |    A          |                 |                  |                  |
++---------------+---------------+-----------------+------------------+------------------+
 
 - **A**: Ceph provides packages and has done comprehensive tests on the software in them.
 - **B**: Ceph provides packages and has done basic tests on the software in them.

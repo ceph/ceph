@@ -825,11 +825,9 @@ def test_get_pool(testdir):
 
 def test_disk_quota_exceeeded_error(testdir):
     cephfs.mkdir("/dir-1", 0o755)
-    cephfs.setxattr("/dir-1", "ceph.quota.max_bytes", b"4096", 0)
+    cephfs.setxattr("/dir-1", "ceph.quota.max_bytes", b"5", 0)
     fd = cephfs.open(b'/dir-1/file-1', 'w', 0o755)
-    cephfs.ftruncate(fd, 4092)
-    cephfs.lseek(fd, 4090, os.SEEK_SET)
-    assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdeghiklmnopqrstuvwxyz1234567890qwertyuioddd", -1)
+    assert_raises(libcephfs.DiskQuotaExceeded, cephfs.write, fd, b"abcdeghiklmnopqrstuvwxyz", 0)
     cephfs.close(fd)
     cephfs.unlink(b"/dir-1/file-1")
 

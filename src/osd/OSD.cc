@@ -80,10 +80,7 @@
 #include "messages/MOSDFull.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
-#include "messages/MOSDBackoff.h"
 #include "messages/MOSDBeacon.h"
-#include "messages/MOSDRepOp.h"
-#include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDBoot.h"
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDPGReadyToMerge.h"
@@ -92,22 +89,12 @@
 #include "messages/MMonGetOSDMap.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGNotify2.h"
-#include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
-#include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGCreate2.h"
-#include "messages/MBackfillReserve.h"
-#include "messages/MRecoveryReserve.h"
 #include "messages/MOSDForceRecovery.h"
-#include "messages/MOSDECSubOpWrite.h"
-#include "messages/MOSDECSubOpWriteReply.h"
-#include "messages/MOSDECSubOpRead.h"
-#include "messages/MOSDECSubOpReadReply.h"
 #include "messages/MOSDPGCreated.h"
-#include "messages/MOSDPGUpdateLogMissing.h"
-#include "messages/MOSDPGUpdateLogMissingReply.h"
 
 #include "messages/MOSDPeeringOp.h"
 
@@ -3608,7 +3595,7 @@ int OSD::init()
   std::lock_guard lock(osd_lock);
   if (is_stopping())
     return 0;
-  tracing::osd::tracer.init("osd");
+  tracing::osd::tracer.init(cct, "osd");
   tick_timer.init();
   tick_timer_without_osd_lock.init();
   service.recovery_request_timer.init();
@@ -5317,7 +5304,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
   }
 
   pg->handle_initialize(rctx);
-  pg->handle_activate_map(rctx);
+  pg->handle_activate_map(rctx, startmap->get_epoch());
 
   dispatch_context(rctx, pg.get(), osdmap, nullptr);
 
@@ -7514,7 +7501,7 @@ void OSD::ms_fast_dispatch(Message *m)
   OID_EVENT_TRACE_WITH_MSG(m, "MS_FAST_DISPATCH_END", false);
 }
 
-int OSD::ms_handle_authentication(Connection *con)
+int OSD::ms_handle_fast_authentication(Connection *con)
 {
   int ret = 0;
   auto s = ceph::ref_cast<Session>(con->get_priv());
@@ -7945,37 +7932,51 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-void OSD::trim_maps(epoch_t oldest, int nreceived, bool skip_maps)
+void OSD::trim_maps(epoch_t oldest, bool skip_maps)
 {
+  /* There's a possible leak here. skip_maps is set to true if the received
+   * MOSDMap message indicates that there's a discontinuity between
+   * the Monitor cluster's stored set of maps and our set of stored
+   * maps such that there is a "gap". This happens generally when an OSD
+   * is down for a while and the cluster has trimmed maps in the mean time.
+   *
+   * Because the superblock cannot represent two discontinuous sets of maps,
+   * OSD::handle_osd_map unconditionally sets superblock.oldest_map to the first
+   * map in the message. OSD::trim_maps here, however, will only trim up to
+   * service.map_cache.cached_key_lower_bound() resulting in the maps between
+   * service.map_cache.cached_key_lower_bound() and MOSDMap::get_first() being
+   * leaked. Note, trimming past service.map_cache.cached_key_lower_bound()
+   * here won't work as there may still be PGs with those map epochs recorded.
+   *
+   * Fixing this is future work: https://tracker.ceph.com/issues/61962
+   */
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
+  dout(20) <<  __func__ << ": min=" << min << " oldest_map="
+           << superblock.oldest_map << " skip_maps=" << skip_maps
+           << dendl;
   if (min <= superblock.oldest_map)
     return;
 
-  int num = 0;
+  // Trim from the superblock's oldest_map up to `min`.
+  // Break if we have exceeded the txn target size.
+  // If skip_maps is true, we will trim up `min` unconditionally.
   ObjectStore::Transaction t;
-  for (epoch_t e = superblock.oldest_map; e < min; ++e) {
-    dout(20) << " removing old osdmap epoch " << e << dendl;
-    t.remove(coll_t::meta(), get_osdmap_pobject_name(e));
-    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(e));
-    superblock.oldest_map = e + 1;
-    num++;
-    if (num >= cct->_conf->osd_target_transaction_size && num >= nreceived) {
+  while (superblock.oldest_map < min) {
+    dout(20) << " removing old osdmap epoch " << superblock.oldest_map << dendl;
+    t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.oldest_map));
+    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.oldest_map));
+    ++superblock.oldest_map;
+    if (t.get_num_ops() > cct->_conf->osd_target_transaction_size) {
       service.publish_superblock(superblock);
       write_superblock(cct, superblock, t);
-      int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+      int tr = store->queue_transaction(service.meta_ch, t.claim_and_reset(), nullptr);
       ceph_assert(tr == 0);
-      num = 0;
-      if (!skip_maps) {
-	// skip_maps leaves us with a range of old maps if we fail to remove all
-	// of them before moving superblock.oldest_map forward to the first map
-	// in the incoming MOSDMap msg. so we should continue removing them in
-	// this case, even we could do huge series of delete transactions all at
-	// once.
-	break;
+      if (skip_maps == false) {
+        break;
       }
     }
   }
-  if (num > 0) {
+  if (t.get_num_ops() > 0) {
     service.publish_superblock(superblock);
     write_superblock(cct, superblock, t);
     int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
@@ -8103,6 +8104,9 @@ void OSD::handle_osd_map(MOSDMap *m)
       m->put();
       return;
     }
+    // The superblock's oldest_map should be moved forward (skipped)
+    // to the `first` osdmap of the incoming MOSDMap message.
+    // Trim all of the skipped osdmaps before updating the oldest_map.
     skip_maps = true;
   }
 
@@ -8224,9 +8228,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   if (superblock.oldest_map) {
-    // make sure we at least keep pace with incoming maps
-    trim_maps(m->cluster_osdmap_trim_lower_bound,
-              last - first + 1, skip_maps);
+    trim_maps(m->cluster_osdmap_trim_lower_bound, skip_maps);
     pg_num_history.prune(superblock.oldest_map);
   }
 
@@ -8725,10 +8727,11 @@ bool OSD::advance_pg(
   OSDMapRef lastmap = pg->get_osdmap();
   set<PGRef> new_pgs;  // any split children
   bool ret = true;
+  auto first_new_epoch = pg->get_osdmap_epoch() + 1;
 
   unsigned old_pg_num = lastmap->have_pg_pool(pg->pg_id.pool()) ?
     lastmap->get_pg_num(pg->pg_id.pool()) : 0;
-  for (epoch_t next_epoch = pg->get_osdmap_epoch() + 1;
+  for (epoch_t next_epoch = first_new_epoch;
        next_epoch <= osd_epoch;
        ++next_epoch) {
     OSDMapRef nextmap = service.try_get_map(next_epoch);
@@ -8901,7 +8904,7 @@ bool OSD::advance_pg(
     old_pg_num = new_pg_num;
     handle.reset_tp_timeout();
   }
-  pg->handle_activate_map(rctx);
+  pg->handle_activate_map(rctx, first_new_epoch);
 
   ret = true;
  out:
@@ -11244,19 +11247,15 @@ void OSD::ShardedOpWQ::_enqueue_front(OpSchedulerItem&& item)
 
 void OSD::ShardedOpWQ::stop_for_fast_shutdown()
 {
-  uint32_t shard_index = 0;
   m_fast_shutdown = true;
 
-  for (; shard_index < osd->num_shards; shard_index++) {
+  for (int shard_index = 0; shard_index < osd->num_shards; shard_index++) {
     auto& sdata = osd->shards[shard_index];
     ceph_assert(sdata);
-    sdata->shard_lock.lock();
-    int work_count = 0;
-    while(! sdata->scheduler->empty() ) {
-      auto work_item = sdata->scheduler->dequeue();
-      work_count++;
+    std::lock_guard l(sdata->shard_lock);
+    while (!sdata->scheduler->empty()) {
+      sdata->scheduler->dequeue();
     }
-    sdata->shard_lock.unlock();
   }
 }
 

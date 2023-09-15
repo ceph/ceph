@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 import cherrypy
@@ -108,6 +109,14 @@ class RgwMultisiteStatus(RESTController):
                                                          secret_key)
         return result
 
+    @RESTController.Collection(method='GET', path='/sync_status')
+    @allow_empty_body
+    # pylint: disable=W0102,W0613
+    def get_sync_status(self):
+        multisite_instance = RgwMultisite()
+        result = multisite_instance.get_multisite_sync_status()
+        return result
+
 
 @APIRouter('/rgw/daemon', Scope.RGW)
 @APIDoc("RGW Daemon Management API", "RgwDaemon")
@@ -135,7 +144,7 @@ class RgwDaemon(RESTController):
                     'zonegroup_name': metadata['zonegroup_name'],
                     'zone_name': metadata['zone_name'],
                     'default': instance.daemon.name == metadata['id'],
-                    'port': int(metadata['frontend_config#0'].split('port=')[1])
+                    'port': int(re.findall(r'port=(\d+)', metadata['frontend_config#0'])[0])
                 }
 
                 daemons.append(daemon)
@@ -429,6 +438,27 @@ class RgwBucket(RgwRESTController):
     @allow_empty_body
     def get_encryption_config(self, daemon_name=None, owner=None):
         return CephService.get_encryption_config(daemon_name)
+
+
+@UIRouter('/rgw/bucket', Scope.RGW)
+class RgwBucketUi(RgwBucket):
+    @Endpoint('GET')
+    @ReadPermission
+    # pylint: disable=W0613
+    def buckets_and_users_count(self, daemon_name=None):
+        buckets_count = 0
+        users_count = 0
+        daemon_object = RgwDaemon()
+        daemons = json.loads(daemon_object.list())
+        for daemon in daemons:
+            buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
+            users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
+            users_count += len(users)
+            buckets_count += len(buckets)
+        return {
+            'buckets_count': buckets_count,
+            'users_count': users_count
+        }
 
 
 @APIRouter('/rgw/user', Scope.RGW)

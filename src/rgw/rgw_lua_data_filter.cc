@@ -14,12 +14,9 @@ void push_bufferlist_byte(lua_State* L, bufferlist::iterator& it) {
 }
 
 struct BufferlistMetaTable : public EmptyMetaTable {
-
-  static std::string TableName() {return "Data";}
-  static std::string Name() {return TableName() + "Meta";}
-  
   static int IndexClosure(lua_State* L) {
-    auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(1)));
+    std::ignore = table_name_upvalue(L);
+    auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     const auto index = luaL_checkinteger(L, 2);
     if (index <= 0 || index > bl->length()) {
       // lua arrays start from 1
@@ -37,19 +34,12 @@ struct BufferlistMetaTable : public EmptyMetaTable {
   }
 
   static int PairsClosure(lua_State* L) {
-    auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(FIRST_UPVAL)));
-    ceph_assert(bl);
-    lua_pushlightuserdata(L, bl);
-    lua_pushcclosure(L, stateless_iter, ONE_UPVAL); // push the stateless iterator function
-    lua_pushnil(L);                                 // indicate this is the first call
-    // return stateless_iter, nil
-
-    return TWO_RETURNVALS;
+    return Pairs<bufferlist, stateless_iter>(L);
   }
   
   static int stateless_iter(lua_State* L) {
-    // based on: http://lua-users.org/wiki/GeneralizedPairsAndIpairs
-    auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(1)));
+    std::ignore = table_name_upvalue(L);
+    auto bl = reinterpret_cast<bufferlist*>(lua_touserdata(L, lua_upvalueindex(SECOND_UPVAL)));
     lua_Integer index;
     if (lua_isnil(L, -1)) {
       index = 1;
@@ -84,33 +74,35 @@ struct BufferlistMetaTable : public EmptyMetaTable {
 };
 
 int RGWObjFilter::execute(bufferlist& bl, off_t offset, const char* op_name) const {
-  auto L = luaL_newstate();
-  lua_state_guard lguard(L);
-
-  open_standard_libs(L);
-
-  create_debug_action(L, s->cct);  
-
-  // create the "Data" table
-  create_metatable<BufferlistMetaTable>(L, true, &bl);
-  lua_getglobal(L, BufferlistMetaTable::TableName().c_str());
-  ceph_assert(lua_istable(L, -1));
-
-  // create the "Request" table
-  request::create_top_metatable(L, s, op_name);
-
-  // create the "Offset" variable
-  lua_pushinteger(L, offset);
-  lua_setglobal(L, "Offset");
-
-  if (s->penv.lua.background) {
-    // create the "RGW" table
-    s->penv.lua.background->create_background_metatable(L);
-    lua_getglobal(L, rgw::lua::RGWTable::TableName().c_str());
-    ceph_assert(lua_istable(L, -1));
+  lua_state_guard lguard(s->cct->_conf->rgw_lua_max_memory_per_state, s);
+  auto L = lguard.get();
+  if (!L) {
+    ldpp_dout(s, 1) << "Failed to create state for Lua data context" << dendl;
+    return -ENOMEM;
   }
-
   try {
+    open_standard_libs(L);
+
+    create_debug_action(L, s->cct);  
+
+    // create the "Data" table
+    static const char* data_metatable_name = "Data";
+    create_metatable<BufferlistMetaTable>(L, "", data_metatable_name, true, &bl);
+    lua_getglobal(L, data_metatable_name);
+    ceph_assert(lua_istable(L, -1));
+
+    // create the "Request" table
+    request::create_top_metatable(L, s, op_name);
+
+    // create the "Offset" variable
+    lua_pushinteger(L, offset);
+    lua_setglobal(L, "Offset");
+
+    if (s->penv.lua.background) {
+      // create the "RGW" table
+      s->penv.lua.background->create_background_metatable(L);
+    }
+
     // execute the lua script
     if (luaL_dostring(L, script.c_str()) != LUA_OK) {
       const std::string err(lua_tostring(L, -1));

@@ -127,7 +127,7 @@ public:
   bool is_valid_cap_type(const std::string& tp);
   void dump(Formatter *f) const;
   void dump(Formatter *f, const char *name) const;
-
+  static void generate_test_instances(std::list<RGWUserCaps*>& o);
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWUserCaps)

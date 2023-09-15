@@ -1,3 +1,23 @@
+>=19.0.0
+
+* RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
+  multi-site. Previously, the replicas of such objects were corrupted on decryption.
+  A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
+  identify these original multipart uploads. The ``LastModified`` timestamp of any
+  identified object is incremented by 1ns to cause peer zones to replicate it again.
+  For multi-site deployments that make any use of Server-Side Encryption, we
+  recommended running this command against every bucket in every zone after all
+  zones have upgraded.
+* CEPHFS: MDS evicts clients which are not advancing their request tids which causes
+  a large buildup of session metadata resulting in the MDS going read-only due to
+  the RADOS operation exceeding the size threshold. `mds_session_metadata_threshold`
+  config controls the maximum size that a (encoded) session metadata can grow.
+* CephFS: For clusters with multiple CephFS file systems, all the snap-schedule
+  commands now expect the '--fs' argument.
+* CephFS: The period specifier ``m`` now implies minutes and the period specifier
+  ``M`` now implies months. This has been made consistent with the rest
+  of the system.
+
 >=18.0.0
 
 * The RGW policy parser now rejects unknown principals by default. If you are
@@ -173,6 +193,11 @@
   than the number mentioned against the config tunable `mds_max_snaps_per_dir`
   so that a new snapshot can be created and retained during the next schedule
   run.
+* cephfs: Running the command "ceph fs authorize" for an existing entity now
+  upgrades the entity's capabilities instead of printing an error. It can now
+  also change read/write permissions in a capability that the entity already
+  holds. If the capability passed by user is same as one of the capabilities
+  that the entity already holds, idempotency is maintained.
 
 >=17.2.1
 
@@ -231,3 +256,8 @@ Relevant tracker: https://tracker.ceph.com/issues/57090
   key/value set for a filesystem extended attributes.  It effectively replaces
   the old per-MDS `max_xattr_pairs_size` setting, which is now dropped.
   Relevant tracker: https://tracker.ceph.com/issues/55725
+
+* Introduced a new file system flag `refuse_standby_for_another_fs` that can be
+set using the `fs set` command. This flag prevents using a standby for another
+file system (join_fs = X) when standby for the current filesystem is not available.
+Relevant tracker: https://tracker.ceph.com/issues/61599

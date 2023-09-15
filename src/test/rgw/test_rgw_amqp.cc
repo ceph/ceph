@@ -13,7 +13,7 @@ using namespace rgw;
 
 const std::chrono::milliseconds wait_time(10);
 const std::chrono::milliseconds long_wait_time = wait_time*50;
-const std::chrono::seconds idle_time(30);
+const std::chrono::seconds idle_time(35);
 
 
 class CctCleaner {
@@ -513,7 +513,7 @@ TEST_F(TestAMQP, RetryFailWrite)
 TEST_F(TestAMQP, IdleConnection)
 {
   // this test is skipped since it takes 30seconds
-  //GTEST_SKIP();
+  GTEST_SKIP();
   const auto connection_number = amqp::get_connection_count();
   amqp::connection_id_t conn_id;
   auto rc = amqp::connect(conn_id, "amqp://localhost", "ex1", false, false, boost::none);

@@ -453,15 +453,14 @@ private:
 #endif
 
   int64_t _maybe_extend_log();
-  void _extend_log();
+  void _extend_log(uint64_t amount);
   uint64_t _log_advance_seq();
   void _consume_dirty(uint64_t seq);
   void _clear_dirty_set_stable_D(uint64_t seq_stable);
   void _release_pending_allocations(std::vector<interval_set<uint64_t>>& to_release);
 
-  void _flush_and_sync_log_core(int64_t available_runway);
-  int _flush_and_sync_log_jump_D(uint64_t jump_to,
-			       int64_t available_runway);
+  void _flush_and_sync_log_core();
+  int _flush_and_sync_log_jump_D(uint64_t jump_to);
   int _flush_and_sync_log_LD(uint64_t want_seq = 0);
 
   uint64_t _estimate_transaction_size(bluefs_transaction_t* t);
@@ -637,7 +636,6 @@ public:
   }
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
-                       uint64_t reserved,
 		       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev) const;

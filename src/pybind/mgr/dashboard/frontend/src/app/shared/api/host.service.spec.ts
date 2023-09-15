@@ -2,6 +2,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
+import { CdTableFetchDataContext } from '../models/cd-table-fetch-data-context';
 import { HostService } from './host.service';
 
 describe('HostService', () => {
@@ -27,13 +28,15 @@ describe('HostService', () => {
   });
 
   it('should call list', fakeAsync(() => {
-    let result;
-    service.list('true').subscribe((resp) => (result = resp));
-    const req = httpTesting.expectOne('api/host?facts=true');
+    let result: any[] = [{}, {}];
+    const hostContext = new CdTableFetchDataContext(() => undefined);
+    service.list(hostContext.toParams(), 'true').subscribe((resp) => (result = resp));
+    const req = httpTesting.expectOne('api/host?offset=0&limit=10&search=&sort=%2Bname&facts=true');
     expect(req.request.method).toBe('GET');
-    req.flush(['foo', 'bar']);
+    req.flush([{ foo: 1 }, { bar: 2 }]);
     tick();
-    expect(result).toEqual(['foo', 'bar']);
+    expect(result[0].foo).toEqual(1);
+    expect(result[1].bar).toEqual(2);
   }));
 
   it('should make a GET request on the devices endpoint when requesting devices', () => {

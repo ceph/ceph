@@ -10,8 +10,14 @@
           [formGroup]="upgradeForm"
           novalidate>
       <div class="modal-body">
-        <div class="form-group row">
-          <label class="cd-col-form-label required"
+        <cd-alert-panel type="warning"
+                        spacingClass="mb-3"
+                        *ngIf="showImageField"
+                        i18n>Make sure to put the correct image. Passing an incorrect image can lead the cluster into an undesired state.</cd-alert-panel>
+        <div *ngIf="versions"
+             class="form-group row">
+          <label class="cd-col-form-label"
+                 [ngClass]="{'required': !showImageField}"
                  for="availableVersions"
                  i18n>New Version</label>
           <div class="cd-col-form-input">
@@ -36,11 +42,45 @@
                   i18n>This field is required!</span>
           </div>
         </div>
+
+        <div *ngIf="versions"
+             class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="useImage"
+                     name="useImage"
+                     formControlName="useImage"
+                     (click)="useImage()">
+              <label class="custom-control-label"
+                     for="useImage"
+                     i18n>Use image</label>
+            </div>
+          </div>
+        </div>
+
+        <!-- Custom image name input-->
+        <div class="form-group row"
+             *ngIf="showImageField || !versions">
+          <label class="cd-col-form-label required"
+                 for="customImageName"
+                 i18n>Image</label>
+          <div class="cd-col-form-input">
+            <input type="text"
+                   class="form-control"
+                   id="customImageName"
+                   name="customImageName"
+                   formControlName="customImageName">
+            <span class="invalid-feedback"
+                  *ngIf="upgradeForm.showError('customImageName', formDir, 'required')"
+                  i18n>This field is required!</span>
+          </div>
+        </div>
       </div>
 
       <div class="modal-footer">
-        <cd-form-button-panel *ngIf="versions"
-                              (submitActionEvent)="startUpgrade()"
+        <cd-form-button-panel (submitActionEvent)="startUpgrade()"
                               [form]="upgradeForm"
                               [submitText]="actionLabels.START_UPGRADE"></cd-form-button-panel>
       </div>
