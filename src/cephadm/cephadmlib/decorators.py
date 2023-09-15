@@ -17,10 +17,13 @@ def require_image(func: FuncT) -> FuncT:
     """
     Require the global --image flag to be set
     """
+
     @wraps(func)
     def _require_image(ctx: CephadmContext) -> Any:
         if not ctx.image:
-            raise Error('This command requires the global --image option to be set')
+            raise Error(
+                'This command requires the global --image option to be set'
+            )
         return func(ctx)
 
     return cast(FuncT, _require_image)
