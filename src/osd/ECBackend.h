@@ -79,6 +79,20 @@ struct RecoveryMessages;
       std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
 
     virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
+
+    // RMWPipeline
+    virtual const pg_pool_t &get_pool() const = 0;
+    virtual const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
+    virtual bool should_send_op(
+      pg_shard_t peer,
+      const hobject_t &hoid) = 0;
+    virtual const std::map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
+    virtual spg_t primary_spg_t() const = 0;
+    virtual const PGLog &get_log() const = 0;
+    virtual DoutPrefixProvider *get_dpp() = 0;
+    virtual void apply_stats(
+       const hobject_t &soid,
+       const object_stat_sum_t &delta_stats) = 0;
   };
 class ECBackend : public PGBackend {
 public:
@@ -678,12 +692,11 @@ public:
     void call_write_ordered(std::function<void(void)> &&cb);
 
     CephContext* cct;
-    PGBackend::Listener *get_parent() const { return parent; }
+    ECListener *get_parent() const { return parent; }
     const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
     epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
     const pg_info_t &get_info() { return get_parent()->get_info(); }
 
-    // TODO: this will is going to be the RMWPipeline::Listener
     template <typename Func>
     void objects_read_async_no_cache(
       const std::map<hobject_t,extent_set> &to_read,
@@ -715,7 +728,7 @@ public:
 
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t& sinfo;
-    PGBackend::Listener* parent;
+    ECListener* parent;
 
     // TODO: lay an interface down here
     ECBackend& ec_backend;
@@ -723,7 +736,7 @@ public:
     RMWPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
                 const ECUtil::stripe_info_t& sinfo,
-                PGBackend::Listener* parent,
+                ECListener* parent,
                 ECBackend& ec_backend)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
