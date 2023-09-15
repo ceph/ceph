@@ -225,7 +225,7 @@ ECBackend::ECBackend(
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
-    rmw_pipeline(cct, ec_impl, this->sinfo, get_parent(), *this),
+    rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   ceph_assert((ec_impl->get_data_chunk_count() *
