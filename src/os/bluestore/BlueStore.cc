@@ -4106,6 +4106,7 @@ free_bluefs:
 
 int BlueStore::_open_bluefs(bool create, bool read_only)
 {
+  ceph_assert(!(create && read_only)); // can't have create and read_only at the same time
   int r = _minimal_open_bluefs(create);
   if (r < 0) {
     return r;
@@ -4155,7 +4156,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
     bluefs->mkfs(fsid, bluefs_layout);
   }
   bluefs->set_volume_selector(vselector);
-  r = bluefs->mount();
+  r = bluefs->mount(read_only);
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
   }
@@ -4165,7 +4166,7 @@ int BlueStore::_open_bluefs(bool create, bool read_only)
 
 void BlueStore::_close_bluefs()
 {
-  bluefs->umount(db_was_opened_read_only);
+  bluefs->umount();
   _minimal_close_bluefs();
 }
 
@@ -4523,6 +4524,9 @@ int BlueStore::_prepare_db_environment(bool create, bool read_only,
 
 int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 {
+  dout(10) << __func__ << " create=" << create
+	   << " to_repair_db=" << to_repair_db
+	   << " read_only=" << read_only << dendl;
   int r;
   ceph_assert(!(create && read_only));
   string options;
