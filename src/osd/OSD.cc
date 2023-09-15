@@ -2393,13 +2393,39 @@ OSD::OSD(CephContext *cct_,
   trace_endpoint.copy_name(ss.str());
 #endif
 
+  // Determine scheduler type for this OSD
+  auto get_op_queue_type = [this, &conf = cct->_conf]() {
+    op_queue_type_t queue_type;
+    if (auto type = conf.get_val<std::string>("osd_op_queue");
+        type != "debug_random") {
+      if (auto qt = get_op_queue_type_by_name(type); qt.has_value()) {
+        queue_type = *qt;
+      } else {
+        // This should never happen
+        dout(0) << "Invalid value passed for 'osd_op_queue': " << type << dendl;
+        ceph_assert(0 == "Unsupported op queue type");
+      }
+    } else {
+      static const std::vector<op_queue_type_t> index_lookup = {
+        op_queue_type_t::mClockScheduler,
+        op_queue_type_t::WeightedPriorityQueue
+      };
+      std::mt19937 random_gen(std::random_device{}());
+      auto which = random_gen() % index_lookup.size();
+      queue_type = index_lookup[which];
+    }
+    return queue_type;
+  };
+  op_queue_type_t op_queue = get_op_queue_type();
+
   // initialize shards
   num_shards = get_num_op_shards();
   for (uint32_t i = 0; i < num_shards; i++) {
     OSDShard *one_shard = new OSDShard(
       i,
       cct,
-      this);
+      this,
+      op_queue);
     shards.push_back(one_shard);
   }
 }
@@ -10531,6 +10557,16 @@ bool OSD::unsupported_objstore_for_qos()
                    store->get_type()) != unsupported_objstores.end();
 }
 
+op_queue_type_t OSD::osd_op_queue_type() const
+{
+  /**
+   * All OSD shards employ the same scheduler type. Therefore, return
+   * the scheduler type set on the OSD shard with lowest id(0).
+   */
+  ceph_assert(shards.size());
+  return shards[0]->get_op_queue_type();
+}
+
 void OSD::update_log_config()
 {
   auto parsed_options = clog->parse_client_options(cct);
@@ -11031,17 +11067,16 @@ void OSDShard::update_scheduler_config()
   scheduler->update_configuration();
 }
 
-std::string OSDShard::get_scheduler_type()
+op_queue_type_t OSDShard::get_op_queue_type() const
 {
-  std::ostringstream scheduler_type;
-  scheduler_type << *scheduler;
-  return scheduler_type.str();
+  return scheduler->get_type();
 }
 
 OSDShard::OSDShard(
   int id,
   CephContext *cct,
-  OSD *osd)
+  OSD *osd,
+  op_queue_type_t osd_op_queue)
   : shard_id(id),
     cct(cct),
     osd(osd),
@@ -11053,7 +11088,7 @@ OSDShard::OSDShard(
     shard_lock{make_mutex(shard_lock_name)},
     scheduler(ceph::osd::scheduler::make_scheduler(
       cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
-      osd->store->get_type(), osd->monc)),
+      osd->store->get_type(), osd_op_queue, osd->monc)),
     context_queue(sdata_wait_lock, sdata_cond)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;

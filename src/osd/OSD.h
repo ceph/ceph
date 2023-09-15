@@ -1053,12 +1053,13 @@ struct OSDShard {
   void register_and_wake_split_child(PG *pg);
   void unprime_split_children(spg_t parent, unsigned old_pg_num);
   void update_scheduler_config();
-  std::string get_scheduler_type();
+  op_queue_type_t get_op_queue_type() const;
 
   OSDShard(
     int id,
     CephContext *cct,
-    OSD *osd);
+    OSD *osd,
+    op_queue_type_t osd_op_queue);
 };
 
 class OSD : public Dispatcher,
@@ -2094,6 +2095,9 @@ public:
 public:
   OSDService service;
   friend class OSDService;
+
+  /// op queue type set for the OSD
+  op_queue_type_t osd_op_queue_type() const;
 
 private:
   void set_perf_queries(const ConfigPayload &config_payload);
