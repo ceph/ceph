@@ -584,7 +584,7 @@ bool CephXAuthorizer::add_challenge(CephContext *cct,
   auto p = challenge.begin();
   if (!p.end()) {
     std::string error;
-    CephXAuthorizeChallenge ch;
+    CephXAuthorizeChallenge ch{};
     decode_decrypt_enc_bl(cct, ch, session_key, challenge, error);
     if (!error.empty()) {
       ldout(cct, 0) << "failed to decrypt challenge (" << challenge.length() << " bytes): "
