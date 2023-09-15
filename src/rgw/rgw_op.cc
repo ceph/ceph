@@ -3355,7 +3355,7 @@ void RGWCreateBucket::execute(optional_yield y)
     }
   }
 
-  s->bucket_owner.set_id(s->user->get_id()); /* XXX dang use s->bucket->owner */
+  s->bucket_owner.set_id(s->user->get_id());
   s->bucket_owner.set_name(s->user->get_display_name());
 
   string zonegroup_id;
@@ -4896,7 +4896,6 @@ void RGWPutMetadataObject::pre_exec()
 
 void RGWPutMetadataObject::execute(optional_yield y)
 {
-  rgw_obj target_obj;
   rgw::sal::Attrs attrs, rmattrs;
 
   s->object->set_atomic();
@@ -4912,7 +4911,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
   }
 
   /* check if obj exists, read orig attrs */
-  op_ret = s->object->get_obj_attrs(s->yield, s, &target_obj);
+  op_ret = s->object->get_obj_attrs(s->yield, s);
   if (op_ret < 0) {
     return;
   }
