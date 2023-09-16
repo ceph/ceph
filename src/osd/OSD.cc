@@ -7595,6 +7595,17 @@ void OSD::handle_fast_scrub(MOSDScrub2 *m)
   m->put();
 }
 
+std::optional<PGLockWrapper> OSDService::get_locked_pg(spg_t pgid)
+{
+  auto pg = osd->lookup_lock_pg(pgid);
+  if (pg) {
+    return PGLockWrapper{std::move(pg)};
+  } else {
+    return std::nullopt;
+  }
+}
+
+
 MPGStats* OSD::collect_pg_stats()
 {
   dout(15) << __func__ << dendl;

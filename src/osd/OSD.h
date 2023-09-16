@@ -260,6 +260,12 @@ public:
     spg_t pgid,
     bool allow_requested_repair_only) final;
 
+  /**
+   * locks the named PG, returning an RAII wrapper that unlocks upon
+   * destruction.
+   * returns nullopt if failing to lock.
+   */
+  std::optional<PGLockWrapper> get_locked_pg(spg_t pgid) final;
 
  private:
   // -- agent shared state --

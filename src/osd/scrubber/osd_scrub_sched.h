@@ -109,8 +109,8 @@ ScrubQueue interfaces (main functions):
 
 #include <optional>
 #include "utime.h"
-#include "scrub_job.h"
-class PG;
+#include "osd/scrubber/scrub_job.h"
+#include "osd/PG.h"
 
 namespace Scrub {
 
@@ -131,6 +131,13 @@ enum class schedule_result_t {
 class ScrubSchedListener {
  public:
   virtual int get_nodeid() const = 0;  // returns the OSD number ('whoami')
+
+  /**
+   * locks the named PG, returning an RAII wrapper that unlocks upon
+   * destruction.
+   * returns nullopt if failing to lock.
+   */
+  virtual std::optional<PGLockWrapper> get_locked_pg(spg_t pgid) = 0;
 
   /**
    * A callback used by the ScrubQueue object to initiate a scrub on a specific

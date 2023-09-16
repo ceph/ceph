@@ -114,6 +114,12 @@ class FakeOsd : public Scrub::ScrubSchedListener {
     m_next_response[pgid] = result;
   }
 
+  std::optional<PGLockWrapper> get_locked_pg(spg_t pgid)
+  {
+    std::ignore = pgid;
+    return std::nullopt;
+  }
+
  private:
   int m_osd_num;
   std::map<spg_t, schedule_result_t> m_next_response;
