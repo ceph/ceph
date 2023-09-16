@@ -2836,3 +2836,11 @@ void PG::with_heartbeat_peers(std::function<void(int)>&& f)
 uint64_t PG::get_min_alloc_size() const {
   return osd->store->get_min_alloc_size();
 }
+
+PGLockWrapper::~PGLockWrapper()
+{
+  if (m_pg) {
+    // otherwise - we were 'moved from'
+    m_pg->unlock();
+  }
+}
