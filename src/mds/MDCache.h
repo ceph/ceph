@@ -255,6 +255,10 @@ class MDCache {
     return symlink_recovery;
   }
 
+  bool get_bal_export_pin(void) const {
+    return bal_export_pin;
+  }
+
   /**
    * Call this when you know that a CDentry is ready to be passed
    * on to StrayManager (i.e. this is a stray you've just created)
@@ -1509,6 +1513,7 @@ private:
   bool export_ephemeral_distributed_config;
   bool export_ephemeral_random_config;
   unsigned export_ephemeral_dist_frag_bits;
+  bool bal_export_pin;
 
   // Stores the symlink target on the file object's head
   bool symlink_recovery;
