@@ -50,6 +50,7 @@ public:
   void tick();
 
   void handle_export_pins(void);
+  void handle_rank_mask(void);
 
   void subtract_export(CDir *ex);
   void add_import(CDir *im);
@@ -75,6 +76,10 @@ public:
   void handle_mds_failure(mds_rank_t who);
 
   int dump_loads(Formatter *f, int64_t depth = -1) const;
+  int get_rank_mask_bitset(CDir *dir, std::bitset<MAX_MDS>& rank_mask_bitset, bool inherit=true);
+  std::string bitmask_to_str(std::bitset<MAX_MDS> &bitmask);
+  void print_auth_subtrees(std::vector<CDir*> authsubs);
+  int rank_mask_list_str_to_bitset(CInode *cur, std::string& rank_mask_list_str, std::bitset<MAX_MDS>& rank_mask_bitset, std::ostream& ss);
 
 private:
   typedef struct {
@@ -156,5 +161,9 @@ private:
   // per-epoch state
   double my_load = 0;
   double target_load = 0;
+
+  // rank mask
+  std::bitset<MAX_MDS> bal_rank_mask_bitset;
+  uint32_t num_mdss_in_rank_mask_bitset;
 };
 #endif

@@ -1231,14 +1231,16 @@ void MDSMap::update_num_mdss_in_rank_mask_bitset()
   }
 
   if (r == -EINVAL) {
+    bal_rank_mask_bitset.reset();
     if (check_special_bal_rank_mask(bal_rank_mask, BAL_RANK_MASK_TYPE_NONE)) {
       dout(10) << "Balancer is disabled with bal_rank_mask " << bal_rank_mask << dendl;
-      bal_rank_mask_bitset.reset();
       num_mdss_in_rank_mask_bitset = 0;
     } else {
       dout(10) << "Balancer distributes mds workloads to all ranks as bal_rank_mask is empty or invalid" << dendl;
-      bal_rank_mask_bitset.set();
-      num_mdss_in_rank_mask_bitset = get_max_mds();
+      for (mds_rank_t mds_rank = 0; mds_rank < get_max_mds(); mds_rank++) {
+        bal_rank_mask_bitset.set(mds_rank);
+      }
+      num_mdss_in_rank_mask_bitset = bal_rank_mask_bitset.count();
     }
   }
 

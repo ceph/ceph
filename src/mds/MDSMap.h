@@ -299,6 +299,7 @@ public:
   unsigned get_num_mdss_in_rank_mask_bitset() const { return num_mdss_in_rank_mask_bitset; }
   void update_num_mdss_in_rank_mask_bitset();
   int hex2bin(std::string hex_string, std::string &bin_string, unsigned int max_bits, std::ostream& ss) const;
+  std::string get_bal_rank_mask() const { return bal_rank_mask; }
 
   typedef enum
   {
