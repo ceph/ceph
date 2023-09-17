@@ -207,8 +207,8 @@ See the `Monitor Config Reference`_ for more detail on configuring monitors.
 High Availability Authentication
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To identify users and protect against man-in-the-middle attacks, Ceph provides
-its ``cephx`` authentication system to authenticate users and daemons.
+The ``cephx`` authentication system is used by Ceph to authenticate users and
+daemons and to protect against man-in-the-middle attacks. 
 
 .. note:: The ``cephx`` protocol does not address data encryption in transport 
    (e.g., SSL/TLS) or encryption at rest.
