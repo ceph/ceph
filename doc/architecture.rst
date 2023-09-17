@@ -94,6 +94,8 @@ created date, and the last modified date.
 
 .. index:: architecture; high availability, scalability
 
+.. _arch_scalability_and_high_availability:
+
 Scalability and High Availability
 ---------------------------------
 
@@ -211,20 +213,27 @@ The ``cephx`` authentication system is used by Ceph to authenticate users and
 daemons and to protect against man-in-the-middle attacks. 
 
 .. note:: The ``cephx`` protocol does not address data encryption in transport 
-   (e.g., SSL/TLS) or encryption at rest.
+   (for example, SSL/TLS) or encryption at rest.
 
-Cephx uses shared secret keys for authentication, meaning both the client and
-the monitor cluster have a copy of the client's secret key. The authentication
-protocol is such that both parties are able to prove to each other they have a
-copy of the key without actually revealing it. This provides mutual
-authentication, which means the cluster is sure the user possesses the secret
-key, and the user is sure that the cluster has a copy of the secret key.
+``cephx`` uses shared secret keys for authentication. This means that both the
+client and the monitor cluster keep a copy of the client's secret key. 
 
-A key scalability feature of Ceph is to avoid a centralized interface to the
-Ceph object store, which means that Ceph clients must be able to interact with
-OSDs directly. To protect data, Ceph provides its ``cephx`` authentication
-system, which authenticates users operating Ceph clients. The ``cephx`` protocol
-operates in a manner with behavior similar to `Kerberos`_. 
+The ``cephx`` protocol makes it possible for each party to prove to the other
+that it has a copy of the key without revealing it. This provides mutual
+authentication and allows the cluster to confirm (1) that the user has the
+secret key and (2) that the user can be confident that the cluster has a copy
+of the secret key.
+
+As stated in :ref:`Scalability and High Availability
+<arch_scalability_and_high_availability>`, Ceph does not have any centralized
+interface between clients and the Ceph object store. By avoiding such a
+centralized interface, Ceph avoids the bottlenecks that attend such centralized
+interfaces. However, this means that clients must interact directly with OSDs.
+Direct interactions between Ceph clients and OSDs require authenticated
+connections. The ``cephx`` authentication system establishes and sustains these
+authenticated connections.
+
+The ``cephx`` protocol operates in a manner similar to `Kerberos`_. 
 
 A user/actor invokes a Ceph client to contact a monitor. Unlike Kerberos, each
 monitor can authenticate users and distribute keys, so there is no single point
@@ -349,12 +358,15 @@ monitors, OSDs and metadata servers can verify with their shared secret.
 The protection offered by this authentication is between the Ceph client and the
 Ceph server hosts. The authentication is not extended beyond the Ceph client. If
 the user accesses the Ceph client from a remote host, Ceph authentication is not
-applied to the connection between the user's host and the client host.
 
+See `Cephx Config Guide`_ for more on configuration details. 
 
-For configuration details, see `Cephx Config Guide`_. For user management 
-details, see `User Management`_.
+See `User Management`_ for more on user management.
 
+See :ref:`A Detailed Description of the Cephx Authentication Protocol
+<cephx_2012_peter>` for more on the distinction between authorization and
+authentication and for a step-by-step explanation of the setup of ``cephx``
+tickets and session keys.
 
 .. index:: architecture; smart daemons and scalability
 
