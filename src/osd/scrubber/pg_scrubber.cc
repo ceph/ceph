@@ -2264,7 +2264,7 @@ void PgScrubber::replica_handling_done()
 std::chrono::milliseconds PgScrubber::get_scrub_sleep_time() const
 {
   return m_osds->get_scrub_services().scrub_sleep_time(
-    m_flags.required);
+    ceph_clock_now(), m_flags.required);
 }
 
 void PgScrubber::queue_for_scrub_resched(Scrub::scrub_prio_t prio)

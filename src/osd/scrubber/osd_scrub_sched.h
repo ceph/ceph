@@ -282,18 +282,6 @@ class ScrubQueue {
   void clear_pg_scrub_blocked(spg_t blocked_pg);
   int get_blocked_pgs_count() const;
 
-  /**
-   * scrub_sleep_time
-   *
-   * Returns std::chrono::milliseconds indicating how long to wait between
-   * chunks.
-   *
-   * Implementation Note: Returned value will either osd_scrub_sleep or
-   * osd_scrub_extended_sleep depending on must_scrub_param and time
-   * of day (see configs osd_scrub_begin*)
-   */
-  std::chrono::milliseconds scrub_sleep_time(bool must_scrub) const;
-
  private:
   CephContext* cct;
   Scrub::ScrubSchedListener& osd_service;
@@ -364,8 +352,6 @@ class ScrubQueue {
   std::atomic_int_fast16_t blocked_scrubs_cnt{0};
 
   std::atomic_bool a_pg_is_reserving{false};
-
-  [[nodiscard]] bool scrub_time_permit(utime_t now) const;
 
   /**
    * If the scrub job was not explicitly requested, we postpone it by some
