@@ -125,7 +125,9 @@ class OsdScrub {
    * osd_scrub_extended_sleep, depending on must_scrub_param and time
    * of day (see configs osd_scrub_begin*)
    */
-  std::chrono::milliseconds scrub_sleep_time(bool high_priority_scrub) const;
+  std::chrono::milliseconds scrub_sleep_time(
+      utime_t t,
+      bool high_priority_scrub) const;
 
   /**
    * No new scrub session will start while a scrub was initiated on a PG,

@@ -483,55 +483,53 @@ static inline bool isbetween_modulo(int64_t from, int64_t till, int p)
 
 bool OsdScrub::scrub_time_permit(utime_t now) const
 {
-  return m_queue.scrub_time_permit(now);
-}
-
-bool ScrubQueue::scrub_time_permit(utime_t now) const
-{
+  const time_t tt = now.sec();
   tm bdt;
-  time_t tt = now.sec();
   localtime_r(&tt, &bdt);
 
-  bool day_permit = isbetween_modulo(conf()->osd_scrub_begin_week_day,
-				     conf()->osd_scrub_end_week_day,
-				     bdt.tm_wday);
-  if (!day_permit) {
-    dout(20) << "should run between week day "
-	     << conf()->osd_scrub_begin_week_day << " - "
-	     << conf()->osd_scrub_end_week_day << " now " << bdt.tm_wday
-	     << " - no" << dendl;
+  bool day_permits = isbetween_modulo(
+      conf->osd_scrub_begin_week_day, conf->osd_scrub_end_week_day,
+      bdt.tm_wday);
+  if (!day_permits) {
+    dout(20) << fmt::format(
+		    "should run between week day {} - {} now {} - no",
+		    conf->osd_scrub_begin_week_day,
+		    conf->osd_scrub_end_week_day, bdt.tm_wday)
+	     << dendl;
     return false;
   }
 
-  bool time_permit = isbetween_modulo(conf()->osd_scrub_begin_hour,
-				      conf()->osd_scrub_end_hour,
-				      bdt.tm_hour);
-  dout(20) << "should run between " << conf()->osd_scrub_begin_hour << " - "
-	   << conf()->osd_scrub_end_hour << " now (" << bdt.tm_hour
-	   << ") = " << (time_permit ? "yes" : "no") << dendl;
-  return time_permit;
+  bool time_permits = isbetween_modulo(
+      conf->osd_scrub_begin_hour, conf->osd_scrub_end_hour, bdt.tm_hour);
+  dout(20) << fmt::format(
+		  "{}: should run between {} - {} now {} = {}", __func__,
+		  conf->osd_scrub_begin_hour, conf->osd_scrub_end_hour,
+		  bdt.tm_hour, (time_permits ? "yes" : "no"))
+	   << dendl;
+  return time_permits;
 }
 
-std::chrono::milliseconds OsdScrub::scrub_sleep_time(bool must_scrub) const
-{
-  return m_queue.scrub_sleep_time(must_scrub);
-}
 
-std::chrono::milliseconds ScrubQueue::scrub_sleep_time(bool must_scrub) const
+std::chrono::milliseconds OsdScrub::scrub_sleep_time(
+    utime_t t,
+    bool high_priority_scrub) const
 {
-  std::chrono::milliseconds regular_sleep_period{
-    uint64_t(std::max(0.0, conf()->osd_scrub_sleep) * 1000)};
+  const milliseconds regular_sleep_period =
+      milliseconds{int64_t(std::max(0.0, 1'000 * conf->osd_scrub_sleep))};
 
-  if (must_scrub || scrub_time_permit(time_now())) {
+  if (high_priority_scrub || scrub_time_permit(t)) {
     return regular_sleep_period;
   }
 
   // relevant if scrubbing started during allowed time, but continued into
   // forbidden hours
-  std::chrono::milliseconds extended_sleep{
-    uint64_t(std::max(0.0, conf()->osd_scrub_extended_sleep) * 1000)};
-  dout(20) << "w/ extended sleep (" << extended_sleep << ")" << dendl;
-
+  const milliseconds extended_sleep =
+      milliseconds{int64_t(1'000 * conf->osd_scrub_extended_sleep)};
+  dout(20) << fmt::format(
+		  "scrubbing started during allowed time, but continued into "
+		  "forbidden hours. regular_sleep_period {} extended_sleep {}",
+		  regular_sleep_period, extended_sleep)
+	   << dendl;
   return std::max(extended_sleep, regular_sleep_period);
 }
 
