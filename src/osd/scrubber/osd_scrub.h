@@ -185,10 +185,6 @@ class OsdScrub {
   ScrubQueue m_queue;
 
  public:
-  // for this transitory commit only - to be removed
-  Scrub::schedule_result_t select_pg_and_scrub(
-      Scrub::OSDRestrictions preconds);
-
   // for this transitory commit only - to be moved elsewhere
   /**
    * @return the list (not std::set!) of all scrub jobs registered

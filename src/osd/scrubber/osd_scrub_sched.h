@@ -181,22 +181,19 @@ class ScrubQueue {
   using sched_params_t = Scrub::sched_params_t;
 
   /**
-   * called periodically by the OSD to select the first scrub-eligible PG
-   * and scrub it.
+   *  returns the list of all scrub targets that are ready to be scrubbed.
+   *  Note that the following changes are expected in the near future (as part
+   *  of the scheduling refactoring):
+   *  - only one target will be requested by the OsdScrub (the OSD's sub-object
+   *    that initiates scrubs);
+   *  - that target would name a PG X scrub type;
    *
-   * Selection is affected by:
-   * - time of day: scheduled scrubbing might be configured to only happen
-   *   during certain hours;
-   * - same for days of the week, and for the system load;
-   *
-   * @param preconds: what types of scrub are allowed, given system status &
-   *                  config. Some of the preconditions are calculated here.
-   * @return Scrub::attempt_t::scrubbing if a scrub session was successfully
-   *         initiated. Otherwise - the failure cause.
-   *
-   * locking: locks jobs_lock
+   * @param restrictions: what types of scrub are allowed, given system status
+   *               & config. Some of the preconditions are calculated here.
    */
-  Scrub::schedule_result_t select_pg_and_scrub(Scrub::OSDRestrictions preconds);
+  std::vector<ScrubTargetId> ready_to_scrub(
+      Scrub::OSDRestrictions restrictions, // 4B! copy
+      utime_t scrub_tick);
 
   /**
    * Translate attempt_ values into readable text
@@ -336,8 +333,10 @@ class ScrubQueue {
    * scrub jobs.
    * Note also that OSDRestrictions is 1L size, thus copied.
    */
-  Scrub::ScrubQContainer collect_ripe_jobs(Scrub::ScrubQContainer& group, utime_t time_now);
-
+  Scrub::ScrubQContainer collect_ripe_jobs(
+      Scrub::ScrubQContainer& group,
+      Scrub::OSDRestrictions restrictions,
+      utime_t time_now);
 
   /**
    * The scrubbing of PGs might be delayed if the scrubbed chunk of objects is
@@ -373,11 +372,6 @@ class ScrubQueue {
    * locking: called with job_lock held
    */
   void move_failed_pgs(utime_t now_is);
-
-  Scrub::schedule_result_t select_from_group(
-    Scrub::ScrubQContainer& group,
-    Scrub::OSDRestrictions preconds,
-    utime_t now_is);
 
 protected: // used by the unit-tests
   /**
