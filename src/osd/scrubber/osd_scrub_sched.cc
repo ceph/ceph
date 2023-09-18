@@ -37,15 +37,7 @@ static std::ostream& _prefix_fn(std::ostream* _dout, T* t, std::string fn = "")
 ScrubQueue::ScrubQueue(CephContext* cct, Scrub::ScrubSchedListener& osds)
     : cct{cct}
     , osd_service{osds}
-{
-  // initialize the daily loadavg with current 15min loadavg
-  if (double loadavgs[3]; getloadavg(loadavgs, 3) == 3) {
-    daily_loadavg = loadavgs[2];
-  } else {
-    derr << "OSD::init() : couldn't read loadavgs\n" << dendl;
-    daily_loadavg = 1.0;
-  }
-}
+{}
 
 std::ostream& ScrubQueue::gen_prefix(std::ostream& out, std::string_view fn)
     const

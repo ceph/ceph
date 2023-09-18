@@ -35,6 +35,7 @@ OsdScrub::OsdScrub(
     , m_resource_bookkeeper{[this](std::string msg) { log_fwd(msg); }, conf}
     , m_queue{cct, m_osd_svc}
     , m_log_prefix{fmt::format("osd.{}: osd-scrub:", m_osd_svc.get_nodeid())}
+    , m_load_tracker{cct, conf, m_osd_svc.get_nodeid()}
 {}
 
 std::ostream& OsdScrub::gen_prefix(std::ostream& out, std::string_view fn) const
@@ -89,22 +90,24 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 
   // if there is a PG that is just now trying to reserve scrub replica resources -
   // we should wait and not initiate a new scrub
-  if (is_reserving_now()) {
+  if (m_queue.is_reserving_now()) {
     dout(10) << "scrub resources reservation in progress" << dendl;
     return;
   }
 
-  Scrub::OSDRestrictions env_conditions;
+  utime_t scrub_time = ceph_clock_now();
+  dout(10) << fmt::format(
+		  "{}: time now:{}, recover is active?:{}", __func__,
+		  scrub_time, is_recovery_active)
+	   << dendl;
 
-  if (is_recovery_active && !conf->osd_scrub_during_recovery) {
-    if (!conf->osd_repair_during_recovery) {
-      dout(15) << "not scheduling scrubs due to active recovery" << dendl;
-      return;
-    }
-    dout(10) << "will only schedule explicitly requested repair due to active "
-		"recovery"
-	     << dendl;
-    env_conditions.allow_requested_repair_only = true;
+  // check the OSD-wide environment conditions (scrub resources, time, etc.).
+  // These may restrict the type of scrubs we are allowed to start, or just
+  // prevent us from starting any scrub at all.
+  auto env_restrictions =
+      restrictions_on_scrubbing(is_recovery_active, scrub_time);
+  if (!env_restrictions) {
+    return;
   }
 
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
@@ -115,12 +118,52 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
     }
   }
 
-  auto was_started = select_pg_and_scrub(env_conditions);
+  auto was_started = select_pg_and_scrub(*env_restrictions);
   dout(20) << fmt::format(
 		  "scrub scheduling done ({})",
 		  ScrubQueue::attempt_res_text(was_started))
 	   << dendl;
 }
+
+
+std::optional<Scrub::OSDRestrictions> OsdScrub::restrictions_on_scrubbing(
+    bool is_recovery_active,
+    utime_t scrub_clock_now) const
+{
+  // our local OSD may already be running too many scrubs
+  if (!m_resource_bookkeeper.can_inc_scrubs()) {
+    dout(10) << "OSD cannot inc scrubs" << dendl;
+    return std::nullopt;
+  }
+
+  // if there is a PG that is just now trying to reserve scrub replica resources
+  // - we should wait and not initiate a new scrub
+  if (m_queue.is_reserving_now()) {
+    dout(10) << "scrub resources reservation in progress" << dendl;
+    return std::nullopt;
+  }
+
+  Scrub::OSDRestrictions env_conditions;
+  env_conditions.time_permit = scrub_time_permit(scrub_clock_now);
+  env_conditions.load_is_low = m_load_tracker.scrub_load_below_threshold();
+  env_conditions.only_deadlined =
+      !env_conditions.time_permit || !env_conditions.load_is_low;
+
+  if (is_recovery_active && !conf->osd_scrub_during_recovery) {
+    if (!conf->osd_repair_during_recovery) {
+      dout(15) << "not scheduling scrubs due to active recovery" << dendl;
+      return std::nullopt;
+    }
+
+    dout(10) << "will only schedule explicitly requested repair due to active "
+		"recovery"
+	     << dendl;
+    env_conditions.allow_requested_repair_only = true;
+  }
+
+  return env_conditions;
+}
+
 
 // ////////////////////////////////////////////////////////////////////////// //
 // scrub initiation - OSD code temporarily moved here from OSD.cc
@@ -223,16 +266,12 @@ void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
  *    - try that one. If not suitable, discard from 'to_scrub_copy'
  */
 Scrub::schedule_result_t ScrubQueue::select_pg_and_scrub(
-  Scrub::OSDRestrictions& preconds)
+  Scrub::OSDRestrictions preconds)
 {
   dout(10) << " reg./pen. sizes: " << to_scrub.size() << " / "
 	   << penalized.size() << dendl;
 
   utime_t now_is = time_now();
-
-  preconds.time_permit = scrub_time_permit(now_is);
-  preconds.load_is_low = scrub_load_below_threshold();
-  preconds.only_deadlined = !preconds.time_permit || !preconds.load_is_low;
 
   //  create a list of candidates (copying, as otherwise creating a deadlock):
   //  - possibly restore penalized
@@ -283,7 +322,7 @@ Scrub::schedule_result_t ScrubQueue::select_pg_and_scrub(
 // not holding jobs_lock. 'group' is a copy of the actual list.
 Scrub::schedule_result_t ScrubQueue::select_from_group(
     Scrub::ScrubQContainer& group,
-    const Scrub::OSDRestrictions& preconds,
+    Scrub::OSDRestrictions preconds,
     utime_t now_is)
 {
   dout(15) << "jobs #: " << group.size() << dendl;
@@ -347,27 +386,42 @@ Scrub::schedule_result_t ScrubQueue::select_from_group(
 // ////////////////////////////////////////////////////////////////////////// //
 // CPU load tracking and related
 
+OsdScrub::LoadTracker::LoadTracker(
+    CephContext* cct,
+    const ceph::common::ConfigProxy& config,
+    int node_id)
+    : cct{cct}
+    , conf{config}
+    , log_prefix{fmt::format("osd.{} scrub-queue::load-tracker::", node_id)}
+{
+  // initialize the daily loadavg with current 15min loadavg
+  if (double loadavgs[3]; getloadavg(loadavgs, 3) == 3) {
+    daily_loadavg = loadavgs[2];
+  } else {
+    derr << "OSD::init() : couldn't read loadavgs\n" << dendl;
+    daily_loadavg = 1.0;
+  }
+}
 
 ///\todo replace with Knuth's algo (to reduce the numerical error)
-std::optional<double> ScrubQueue::update_load_average()
+std::optional<double> OsdScrub::LoadTracker::update_load_average()
 {
-  int hb_interval = conf()->osd_heartbeat_interval;
+  int hb_interval = conf->osd_heartbeat_interval;
   int n_samples = std::chrono::duration_cast<seconds>(24h).count();
   if (hb_interval > 1) {
     n_samples = std::max(n_samples / hb_interval, 1);
   }
 
-  // get CPU load avg
   double loadavg;
   if (getloadavg(&loadavg, 1) == 1) {
     daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavg) / n_samples;
     return 100 * loadavg;
   }
 
-  return std::nullopt;
+  return std::nullopt;	// getloadavg() failed
 }
 
-bool ScrubQueue::scrub_load_below_threshold() const
+bool OsdScrub::LoadTracker::scrub_load_below_threshold() const
 {
   double loadavgs[3];
   if (getloadavg(loadavgs, 3) != 3) {
@@ -378,10 +432,10 @@ bool ScrubQueue::scrub_load_below_threshold() const
   // allow scrub if below configured threshold
   long cpus = sysconf(_SC_NPROCESSORS_ONLN);
   double loadavg_per_cpu = cpus > 0 ? loadavgs[0] / cpus : loadavgs[0];
-  if (loadavg_per_cpu < conf()->osd_scrub_load_threshold) {
+  if (loadavg_per_cpu < conf->osd_scrub_load_threshold) {
     dout(20) << fmt::format(
 		    "loadavg per cpu {:.3f} < max {:.3f} = yes",
-		    loadavg_per_cpu, conf()->osd_scrub_load_threshold)
+		    loadavg_per_cpu, conf->osd_scrub_load_threshold)
 	     << dendl;
     return true;
   }
@@ -399,19 +453,23 @@ bool ScrubQueue::scrub_load_below_threshold() const
   dout(10) << fmt::format(
 		  "loadavg {:.3f} >= max {:.3f} and ( >= daily_loadavg {:.3f} "
 		  "or >= 15m avg {:.3f} ) = no",
-		  loadavgs[0], conf()->osd_scrub_load_threshold, daily_loadavg,
+		  loadavgs[0], conf->osd_scrub_load_threshold, daily_loadavg,
 		  loadavgs[2])
 	   << dendl;
   return false;
 }
 
+std::ostream& OsdScrub::LoadTracker::gen_prefix(
+    std::ostream& out,
+    std::string_view fn) const
+{
+  return out << log_prefix << fn << ": ";
+}
 
 std::optional<double> OsdScrub::update_load_average()
 {
-  return m_queue.update_load_average();
+  return m_load_tracker.update_load_average();
 }
-
-
 
 // ////////////////////////////////////////////////////////////////////////// //
 
@@ -563,7 +621,7 @@ Scrub::ScrubQContainer OsdScrub::list_registered_jobs() const
 }
 
 Scrub::schedule_result_t OsdScrub::select_pg_and_scrub(
-    Scrub::OSDRestrictions& preconds)
+    Scrub::OSDRestrictions preconds)
 {
   return m_queue.select_pg_and_scrub(preconds);
 }
