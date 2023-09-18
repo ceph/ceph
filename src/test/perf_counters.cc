@@ -124,6 +124,13 @@ TEST(PerfCounters, SinglePerfCounters) {
 	    "\"element3\":{\"avgcount\":3,\"sum\":120.000000000,\"avgtime\":40.000000000}}}"), msg);
 
   fake_pf->reset();
+  fake_pf->tinc_with_max(TEST_PERFCOUNTERS1_ELEMENT_3, utime_t(100, 0));
+  fake_pf->tinc_with_max(TEST_PERFCOUNTERS1_ELEMENT_3, utime_t(50, 0));
+  ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
+  ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":1,"
+	    "\"element2\":0.000000000,\"element3\":{\"avgcount\":2,\"sum\":150.000000000,\"max_inc\":100.000000000,\"avgtime\":75.000000000}}}"), msg);
+
+  fake_pf->reset();
   msg.clear();
   ASSERT_EQ("", client.do_request("{ \"prefix\": \"perf dump\", \"format\": \"json\" }", &msg));
   ASSERT_EQ(sd("{\"test_perfcounter_1\":{\"element1\":1,"
