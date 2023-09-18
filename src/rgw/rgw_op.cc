@@ -2529,10 +2529,9 @@ void RGWListBuckets::execute(optional_yield y)
      * isn't actually used in a given account. In such situation its usage
      * stats would be simply full of zeros. */
     std::set<std::string> targets;
-    if (driver->get_zone()->get_zonegroup().get_placement_target_names(targets)) {
-      for (const auto& policy : targets) {
-	policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
-      }
+    driver->get_zone()->get_zonegroup().get_placement_target_names(targets);
+    for (const auto& policy : targets) {
+      policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
     }
 
     std::map<std::string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();

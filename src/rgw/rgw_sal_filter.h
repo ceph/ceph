@@ -68,8 +68,8 @@ public:
     { return next->is_master_zonegroup(); }
   virtual const std::string& get_api_name() const override
     { return next->get_api_name(); }
-  virtual int get_placement_target_names(std::set<std::string>& names) const override
-    { return next->get_placement_target_names(names); }
+  virtual void get_placement_target_names(std::set<std::string>& names) const override
+    { next->get_placement_target_names(names); }
   virtual const std::string& get_default_placement_name() const override
     { return next->get_default_placement_name(); }
   virtual int get_hostnames(std::list<std::string>& names) const override
