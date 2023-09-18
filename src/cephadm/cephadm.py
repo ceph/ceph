@@ -4932,7 +4932,9 @@ WantedBy=ceph-{fsid}.target
                               kwargs={'host': result_json['result']['addr'],
                                       'username': result_json['result']['username'],
                                       'password': result_json['result']['password'],
-                                      'data': node_proxy_data})
+                                      'data': node_proxy_data,
+                                      'mgr_target_ip': self.target_ip,
+                                      'mgr_target_port': self.target_port})
         t_node_proxy.start()
 
         try:
