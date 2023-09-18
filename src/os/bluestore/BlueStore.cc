@@ -146,14 +146,6 @@ const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 // were already used so labels won't exist there.
 const vector<uint64_t> bdev_label_offsets = {0, 1073741824, 107374182400, 1099511627776};
 
-// write a label in the first block.  always use this size.  note that
-// bluefs makes a matching assumption about the location of its
-// superblock (always the second block of the device).
-#define BDEV_LABEL_BLOCK_SIZE  4096
-
-// reserve: label (4k) + bluefs super (4k), which means we start at 8k.
-#define SUPER_RESERVED  8192
-
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
 
 
@@ -5450,11 +5442,11 @@ void BlueStore::_close_path()
 void BlueStore::_unalloc_bdev_label_offset(uint64_t offset) {
   ceph_assert(alloc);
   bool existing_allocation_in_offset = true;
-  alloc->foreach([&](uint64_t allocation_offset, uint64_t allocation_length) {
-      if (offset >= allocation_offset && offset <= allocation_offset+allocation_length) {
+  alloc->foreach([&](uint64_t extent_offset, uint64_t extent_length) {
+    if (offset >= extent_offset && offset + min_alloc_size <= extent_offset + extent_length) {
       existing_allocation_in_offset = false;
-      }
-      });
+    }
+  });
 
   if (!existing_allocation_in_offset) {
     alloc->init_rm_free(offset, min_alloc_size);
@@ -5548,11 +5540,12 @@ out:
 }
 
 int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
-				bluestore_bdev_label_t *label, bool replicated)
+				bluestore_bdev_label_t *label, bool recovery_mode)
 {
   dout(10) << __func__ << dendl;
   bufferlist bl;
   string error;
+  std::vector<bluestore_bdev_label_t> labels;
   bluestore_bdev_label_t tmp_label;
   size_t crcs_failed = 0;
   for (uint64_t offset : bdev_label_offsets) {
@@ -5584,20 +5577,56 @@ int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
         << " != actual " << crc << " offset=" << offset << dendl;
       dout(10) << __func__ << " got failed label " << tmp_label << dendl;
       crcs_failed++;
-      if (replicated) {
+      if (!recovery_mode) {
         break;
       }
       continue;
     }
     *label = tmp_label;
-    break;
+    if (!recovery_mode) {
+      break;
+    }
+
+    labels.push_back(tmp_label);
   }
-  if ((replicated && crcs_failed == 1) || crcs_failed == bdev_label_offsets.size()) {
+  if ((!recovery_mode && crcs_failed == 1) || crcs_failed == bdev_label_offsets.size()) {
     return -EIO;
   }
 
+  int r = 0;
+  // check difference in labels
+  if (recovery_mode) {
+    for (auto &label1 : labels) {
+      for (auto &label2 : labels) {
+        if (label1.osd_uuid != label2.osd_uuid) {
+          derr << "fsck error: label 'osd_uuid' mismtach " << label1.osd_uuid << "!=" << label2.osd_uuid << dendl;
+          r = -EIO;
+        }
+        if (label1.size != label2.size) {
+          derr << "fsck error: label 'size' mismtach " << label1.size << "!=" << label2.size << dendl;
+          r = -EIO;
+        }
+        if (label1.btime != label2.btime) {
+          derr << "fsck error: label 'btime' mismtach " << label1.btime << "!=" << label2.btime << dendl;
+          r = -EIO;
+        }
+        if (label1.description != label2.description) {
+          derr << "fsck error: label 'description' mismtach " << label1.description << "!=" << label2.description << dendl;
+          r = -EIO;
+        }
+        for (auto &[meta_key, meta_value] : label1.meta) {
+          if (label1.meta.find(meta_key)->second != label2.meta.find(meta_key)->second) {
+            derr << "fsck error: label metadata='" << meta_key << "' mismtach " << 
+              label1.meta.find(meta_key)->second << "!=" << label2.meta.find(meta_key)->second << dendl;
+            r = -EIO;
+          }
+        }
+      }
+    }
+  }
+
   dout(10) << __func__ << " got " << *label << dendl;
-  return 0;
+  return r;
 }
 
 int BlueStore::_check_or_set_bdev_label(
@@ -7339,12 +7368,6 @@ int BlueStore::mkfs()
   alloc->init_add_free(reserved,
     p2align(bdev->get_size(), min_alloc_size) - reserved);
 
-  {
-    string p = path + "/block";
-    bluestore_bdev_label_t label;
-    _read_bdev_label(cct, p, &label);
-    _replicate_bdev_label(p, label);
-  }
 #ifdef HAVE_LIBZBD
   if (bdev->is_smr() && alloc != shared_alloc.a) {
     shared_alloc.a->init_add_free(reserved,
@@ -7420,6 +7443,13 @@ int BlueStore::mkfs()
     }
   }
 
+  {
+    string p = path + "/block";
+    bluestore_bdev_label_t label;
+    _read_bdev_label(cct, p, &label);
+    _replicate_bdev_label(p, label);
+  }
+
  out_close_fm:
   _close_fm();
  out_close_db:
@@ -7454,6 +7484,8 @@ int BlueStore::mkfs()
   } else {
     dout(0) << __func__ << " success" << dendl;
   }
+
+
   return r;
 }
 
@@ -7865,6 +7897,9 @@ int BlueStore::_mount()
 
   // Allocate bdev replicated label offsets
   for (uint64_t offset : bdev_label_offsets) {
+    if (offset >= bdev->get_size()) {
+      break;
+    }
     _unalloc_bdev_label_offset(offset);
   }
 
@@ -9292,11 +9327,31 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
       depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
     << dendl;
 
+  string p = path + "/block";
+  bluestore_bdev_label_t label;
+  if (!repair) {
+    int r = _read_bdev_label(cct, p, &label, false);
+    if (r < 0) {
+      if (r == -EIO) {
+        derr << __func__ << " fsck error: corrupted block device labels found" << dendl;
+      }
+      return r;
+    }
+  } else {
+    int r = _read_bdev_label(cct, p, &label, true);
+    if (r < 0) {
+      if (r == -EIO) {
+        derr << __func__ << " fsck error: all block device labels corrupted" << dendl;
+      }
+      return r;
+    }
+  }
   if (repair) {
-    string p = path + "/block";
-    bluestore_bdev_label_t label;
-    _read_bdev_label(cct, p, &label, true);
-    _replicate_bdev_label(p, label, false);
+    int r = _replicate_bdev_label(p, label, false);
+    if (r < 0) {
+      derr << __func__ << "repaired all block device labels" << dendl;
+      return r;
+    }
   }
 
   // in deep mode we need R/W write access to be able to replay deferred ops
@@ -9305,14 +9360,6 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   if (r < 0) {
     return r;
   }
-
-  for (uint64_t offset : bdev_label_offsets) {
-    if (offset >= bdev->get_size()) {
-      break;
-    }
-    _unalloc_bdev_label_offset(offset);
-  }
-
 
   auto close_db = make_scope_guard([&] {
     _close_db_and_around();
@@ -9418,8 +9465,15 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 
   bluefs_used_blocks = used_blocks;
 
+  for (uint64_t offset : bdev_label_offsets) {
+    if (offset >= bdev->get_size()) {
+      break;
+    }
+    _unalloc_bdev_label_offset(offset);
+  }
+
   apply_for_bitset_range(
-    0, std::max<uint64_t>(min_alloc_size, DB_SUPER_RESERVED), alloc_size, used_blocks,
+    0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), alloc_size, used_blocks,
     [&](uint64_t pos, mempool_dynamic_bitset &bs) {
       bs.set(pos);
     }
@@ -10116,14 +10170,14 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	    [&](uint64_t pos, mempool_dynamic_bitset &bs) {
 	      ceph_assert(pos < bs.size());
 	      if (bs.test(pos) && !bluefs_used_blocks.test(pos)) {
-		if (offset == DB_SUPER_RESERVED &&
-		    length == min_alloc_size - DB_SUPER_RESERVED) {
+		if (offset == SUPER_RESERVED &&
+		    length == min_alloc_size - SUPER_RESERVED) {
 		  // this is due to the change just after luminous to min_alloc_size
 		  // granularity allocations, and our baked in assumption at the top
-		  // of _fsck that 0~round_up_to(DB_SUPER_RESERVED,min_alloc_size) is used
-		  // (vs luminous's round_up_to(DB_SUPER_RESERVED,block_size)).  harmless,
+		  // of _fsck that 0~round_up_to(SUPER_RESERVED,min_alloc_size) is used
+		  // (vs luminous's round_up_to(SUPER_RESERVED,block_size)).  harmless,
 		  // since we will never allocate this region below min_alloc_size.
-		  dout(10) << __func__ << " ignoring free extent between DB_SUPER_RESERVED"
+		  dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
 			   << " and min_alloc_size, 0x" << std::hex << offset << "~"
 			   << length << std::dec << dendl;
 		} else {
@@ -12397,7 +12451,7 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
 uint64_t BlueStore::_get_ondisk_reserved() const {
   ceph_assert(min_alloc_size);
   return round_up_to(
-    std::max<uint64_t>(DB_SUPER_RESERVED, min_alloc_size), min_alloc_size);
+    std::max<uint64_t>(SUPER_RESERVED, min_alloc_size), min_alloc_size);
 }
 
 void BlueStore::_prepare_ondisk_format_super(KeyValueDB::Transaction& t)
@@ -19266,7 +19320,7 @@ int BlueStore::read_allocation_from_onodes(SimpleBitmap *sbmap, read_alloc_stats
 int BlueStore::reconstruct_allocations(SimpleBitmap *sbmap, read_alloc_stats_t &stats)
 {
   // first set space used by superblock
-  auto super_length = std::max<uint64_t>(min_alloc_size, DB_SUPER_RESERVED);
+  auto super_length = std::max<uint64_t>(min_alloc_size, SUPER_RESERVED);
   set_allocation_in_simple_bmap(sbmap, 0, super_length);
   stats.extent_count++;
 
