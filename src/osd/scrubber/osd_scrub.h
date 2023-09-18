@@ -157,6 +157,25 @@ class OsdScrub {
   Scrub::ScrubSchedListener& m_osd_svc;
   const ceph::common::ConfigProxy& conf;
 
+  /**
+   * check the OSD-wide environment conditions (scrub resources, time, etc.).
+   * These may restrict the type of scrubs we are allowed to start, or just
+   * prevent us from starting any scrub at all.
+   *
+   * Specifically:
+   * a nullopt is returned if we are not allowed to scrub at all, for either of
+   * the following reasons: no local resources (too many scrubs on this OSD);
+   * a dice roll says we will not scrub in this tick;
+   * a recovery is in progress, and we are not allowed to scrub while recovery;
+   * a PG is trying to acquire replica resources.
+   *
+   * If we are allowed to scrub, the returned value specifies whether the only
+   * high priority scrubs or only overdue ones are allowed to go on.
+   */
+  std::optional<Scrub::OSDRestrictions> restrictions_on_scrubbing(
+      bool is_recovery_active,
+      utime_t scrub_clock_now) const;
+
   /// resource reservation management
   Scrub::ScrubResources m_resource_bookkeeper;
 
@@ -165,11 +184,8 @@ class OsdScrub {
 
  public:
   // for this transitory commit only - to be removed
-  bool can_inc_scrubs() { return m_resource_bookkeeper.can_inc_scrubs(); }
-
-  // for this transitory commit only - to be removed
   Scrub::schedule_result_t select_pg_and_scrub(
-      Scrub::OSDRestrictions& preconds);
+      Scrub::OSDRestrictions preconds);
 
   // for this transitory commit only - to be moved elsewhere
   /**
@@ -193,4 +209,29 @@ class OsdScrub {
    * \returns true with probability of osd_scrub_backoff_ratio.
    */
   bool scrub_random_backoff() const;
+
+  /**
+   * tracking the average load on the CPU. Used both by the
+   * OSD logger, and by the scrub queue (as no scrubbing is allowed if
+   * the load is too high).
+   */
+  class LoadTracker {
+    CephContext* cct;
+    const ceph::common::ConfigProxy& conf;
+    const std::string log_prefix;
+    double daily_loadavg{0.0};
+
+   public:
+    explicit LoadTracker(
+	CephContext* cct,
+	const ceph::common::ConfigProxy& config,
+	int node_id);
+
+    std::optional<double> update_load_average();
+
+    [[nodiscard]] bool scrub_load_below_threshold() const;
+
+    std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
+  };
+  LoadTracker m_load_tracker;
 };

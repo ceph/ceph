@@ -49,9 +49,12 @@ function TEST_scrub_test() {
 
     run_mon $dir a --osd_pool_default_size=3 || return 1
     run_mgr $dir x || return 1
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2"
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd || return 1
+      run_osd $dir $osd $ceph_osd_args || return 1
     done
 
     # Create a pool with a single pg
@@ -211,16 +214,17 @@ function TEST_scrub_extended_sleep() {
 
     run_mon $dir a --osd_pool_default_size=3 || return 1
     run_mgr $dir x || return 1
+
+    local ceph_osd_args="--osd-scrub-interval-randomize-ratio=0 --osd-deep-scrub-randomize-ratio=0 "
+    ceph_osd_args+="--osd_scrub_backoff_ratio=0 --osd_stats_update_period_not_scrubbing=3 "
+    ceph_osd_args+="--osd_stats_update_period_scrubbing=2 --osd_scrub_sleep=0 "
+    ceph_osd_args+="--osd_scrub_extended_sleep=20 --osd_scrub_begin_week_day=$DAY_START "
+    ceph_osd_args+="--osd_op_queue=wpq --osd_scrub_end_week_day=$DAY_END "
+    ceph_osd_args+="--bluestore_cache_autotune=false" # why needed?
+
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd --osd_scrub_sleep=0 \
-                        --osd_scrub_extended_sleep=20 \
-                        --bluestore_cache_autotune=false \
-	                --osd_deep_scrub_randomize_ratio=0.0 \
-	                --osd_scrub_interval_randomize_ratio=0 \
-			--osd_scrub_begin_week_day=$DAY_START \
-			--osd_scrub_end_week_day=$DAY_END \
-			|| return 1
+      run_osd $dir $osd $ceph_osd_args || return 1
     done
 
     # Create a pool with a single pg
@@ -527,6 +531,8 @@ function TEST_dump_scrub_schedule() {
             --osd_scrub_interval_randomize_ratio=0 \
             --osd_scrub_backoff_ratio=0.0 \
             --osd_op_queue=wpq \
+            --osd_stats_update_period_not_scrubbing=3 \
+            --osd_stats_update_period_scrubbing=2 \
             --osd_scrub_sleep=0.2"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
