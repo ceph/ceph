@@ -365,10 +365,6 @@ TEST(BucketCache, UpdateInotify1)
     sf::path ttp{tp / fmt::format("{}{}", fbase, ix)};
     sf::remove(ttp);
   }
-
-  /* this step is async, temporally consistent */
-  std::cout << "waiting 1000ms for cache sync" << std::endl;
-  std::this_thread::sleep_for(1000ms);
 } /* SetupInotify1 */
 
 TEST(BucketCache, List2Inotify1)
@@ -376,6 +372,7 @@ TEST(BucketCache, List2Inotify1)
   std::string bucket{"inotify1"};
   std::string marker{""};
   std::vector<std::string> names;
+  int timeout = 50;
 
   auto f = [&](const rgw_bucket_dir_entry& bde) -> int {
     //std::cout << fmt::format("called back with {}", bde.key.name) << std::endl;
@@ -384,7 +381,17 @@ TEST(BucketCache, List2Inotify1)
   };
 
   MockSalBucket sb{bucket};
-  (void) bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
+
+  /* Do a timed backoff up to ~20 seconds to pass on CI */
+  while (timeout < 16000) {
+    (void)bucket_cache->list_bucket(dpp, null_yield, &sb, marker, f);
+    if (names.size() == 25)
+      break;
+    std::cout << fmt::format("waiting for {}ms for cache sync", timeout) << std::endl;
+    std::this_thread::sleep_for(1000ms);
+    timeout *= 2;
+    names.clear();
+  }
   ASSERT_EQ(names.size(), 25);
 
   /* check these */
