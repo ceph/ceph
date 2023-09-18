@@ -190,7 +190,9 @@ class API:
 def main(host: str = '',
          username: str = '',
          password: str = '',
-         data: str = '') -> None:
+         data: str = '',
+         mgr_target_ip: str = '',
+         mgr_target_port: str = '') -> None:
     # TODO: add a check and fail if host/username/password/data aren't passed
 
     # parser = argparse.ArgumentParser(
@@ -221,7 +223,7 @@ def main(host: str = '',
                          password=password,
                          system_endpoint='/Systems/System.Embedded.1',
                          config=config)
-    reporter_agent = Reporter(system, data, config.__dict__['reporter']['endpoint'])
+    reporter_agent = Reporter(system, data, f"https://{mgr_target_ip}:{mgr_target_port}/node-proxy/data")
     cherrypy.config.update({
         'node_proxy': config,
         'server.socket_port': config.__dict__['server']['port']
