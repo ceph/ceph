@@ -133,6 +133,20 @@ void Filesystem::dump(Formatter *f) const
 void FSMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", epoch);
+  {
+    struct tm bdt;
+    time_t tt = decltype(btime)::clock::to_time_t(btime);
+    localtime_r(&tt, &bdt);
+    char tz[32] = {0};
+    strftime(tz, sizeof(tz), "%z", &bdt);
+    auto s = fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}:{:06}{}",
+             (bdt.tm_year + 1900), (bdt.tm_mon + 1), bdt.tm_mday, bdt.tm_hour,
+             bdt.tm_min, bdt.tm_sec,
+             duration_cast<std::chrono::microseconds>(
+             btime.time_since_epoch() % std::chrono::seconds(1)).count(),
+             tz);
+    f->dump_string("btime", s);
+  }
   // Use 'default' naming to match 'set-default' CLI
   f->dump_int("default_fscid", legacy_client_fscid);
 
@@ -166,6 +180,7 @@ void FSMap::dump(Formatter *f) const
 FSMap &FSMap::operator=(const FSMap &rhs)
 {
   epoch = rhs.epoch;
+  btime = rhs.btime;
   next_filesystem_id = rhs.next_filesystem_id;
   legacy_client_fscid = rhs.legacy_client_fscid;
   default_compat = rhs.default_compat;
@@ -206,6 +221,20 @@ void FSMap::generate_test_instances(std::list<FSMap*>& ls)
 void FSMap::print(ostream& out) const
 {
   out << "e" << epoch << std::endl;
+  {
+    struct tm bdt;
+    time_t tt = decltype(btime)::clock::to_time_t(btime);
+    localtime_r(&tt, &bdt);
+    char tz[32] = {0};
+    strftime(tz, sizeof(tz), "%z", &bdt);
+    auto s = fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}:{:06}{}",
+             (bdt.tm_year + 1900), (bdt.tm_mon + 1), bdt.tm_mday, bdt.tm_hour,
+             bdt.tm_min, bdt.tm_sec,
+             duration_cast<std::chrono::microseconds>(
+             btime.time_since_epoch() % std::chrono::seconds(1)).count(),
+             tz);
+    out << "btime " << s << std::endl;
+  }
   out << "enable_multiple, ever_enabled_multiple: " << enable_multiple << ","
       << ever_enabled_multiple << std::endl;
   out << "default compat: " << default_compat << std::endl;
@@ -296,6 +325,20 @@ void FSMap::print_summary(Formatter *f, ostream *out) const
 {
   if (f) {
     f->dump_unsigned("epoch", get_epoch());
+    {
+      struct tm bdt;
+      time_t tt = decltype(btime)::clock::to_time_t(btime);
+      localtime_r(&tt, &bdt);
+      char tz[32] = {0};
+      strftime(tz, sizeof(tz), "%z", &bdt);
+      auto s = fmt::format("{:04}-{:02}-{:02}T{:02}:{:02}:{:02}:{:06}{}",
+               (bdt.tm_year + 1900), (bdt.tm_mon + 1), bdt.tm_mday, bdt.tm_hour,
+               bdt.tm_min, bdt.tm_sec,
+               duration_cast<std::chrono::microseconds>(
+               btime.time_since_epoch() % std::chrono::seconds(1)).count(),
+               tz);
+      f->dump_string("btime", s);
+    }
     for (const auto &p : filesystems) {
       auto& fs = p.second;
       f->dump_unsigned("id", fs->fscid);
@@ -651,6 +694,7 @@ void FSMap::encode(bufferlist& bl, uint64_t features) const
   encode(standby_daemons, bl, features);
   encode(standby_epochs, bl);
   encode(ever_enabled_multiple, bl);
+  encode(btime, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -679,6 +723,9 @@ void FSMap::decode(bufferlist::const_iterator& p)
   decode(standby_epochs, p);
   if (struct_v >= 7) {
     decode(ever_enabled_multiple, p);
+  }
+  if (struct_v >= 8) {
+    decode(btime, p);
   }
   DECODE_FINISH(p);
 }
