@@ -986,6 +986,52 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
       ds << fsmap;
     }
     r = 0;
+  } else if (prefix == "mds last-seen") {
+    std::string id;
+    cmd_getval(cmdmap, "id", id);
+
+    dout(10) << "last seen check for " << id << dendl;
+
+    auto& history = get_fsmap_history();
+    auto now = real_clock::now();
+    bool found = false;
+    /* Special case:
+     * If the mons consider the MDS "in" the latest FSMap, then the mds
+     * is always "last seen" **now** (for the purposes of this API).  We
+     * don't look at past beacons because that is only managed by the
+     * leader and the logic is fudged in places in the event of suspected
+     * network partitions.
+     */
+    std::chrono::seconds since = std::chrono::seconds(0);
+
+    for (auto& [epoch, fsmaph] : boost::adaptors::reverse(history)) {
+      dout(25) << "looking at epoch " << epoch << dendl;
+      auto* info = fsmaph.find_by_name(id);
+      if (info) {
+        dout(10) << "found: " << *info << dendl;
+        found = true;
+        if (f) {
+          f->open_object_section("mds last-seen");
+          f->dump_object("info", *info);
+          f->dump_string("last-seen", fmt::format("{}", since));
+          f->dump_int("epoch", epoch);
+          f->close_section();
+          f->flush(ds);
+        } else {
+          ds << fmt::format("{}", since);
+        }
+        break;
+      }
+      /* If the MDS appears in the next epoch, then it went away as of this epoch's btime.
+       */
+      since = std::chrono::duration_cast<std::chrono::seconds>(now - fsmaph.get_btime());
+    }
+    if (found) {
+      r = 0;
+    } else {
+      ss << "mds " << id << " not found in recent FSMaps";
+      r = -ENOENT;
+    }
   } else if (prefix == "mds ok-to-stop") {
     vector<string> ids;
     if (!cmd_getval(cmdmap, "ids", ids)) {
@@ -2340,6 +2386,39 @@ bool MDSMonitor::maybe_promote_standby(FSMap &fsmap, Filesystem& fs)
 
 void MDSMonitor::tick()
 {
+  {
+    auto _history_prune_time = g_conf().get_val<std::chrono::seconds>("mon_fsmap_prune_threshold");
+    set_fsmap_history_threshold(_history_prune_time);
+    dout(20) << _history_prune_time << dendl;
+    prune_fsmap_history();
+    auto& history = get_fsmap_history();
+    auto now = real_clock::now();
+    if (auto it = history.begin(); it != history.end()) {
+      auto start = it->second.get_epoch();
+      dout(20) << "oldest epoch in history is " << start << dendl;
+      for (;;) {
+        --start;
+        bufferlist bl;
+        FSMap fsmaph;
+        int err = get_version(start, bl);
+        if (err == -ENOENT) {
+          break;
+        }
+	ceph_assert(err == 0);
+	ceph_assert(bl.length());
+	fsmaph.decode(bl);
+        auto btime = fsmaph.get_btime();
+        auto since = std::chrono::duration_cast<std::chrono::milliseconds>(now - btime);
+        dout(20) << "loaded epoch " << fsmaph.get_epoch() << " which is " << since << " old" << dendl;
+        if (since <= _history_prune_time) {
+          put_fsmap_history(fsmaph);
+        } else {
+          break;
+        }
+      }
+    }
+  }
+
   if (!is_active() || !is_leader()) return;
 
   auto &pending = get_pending_fsmap_writeable();
