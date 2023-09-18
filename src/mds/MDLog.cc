@@ -286,7 +286,9 @@ LogSegment* MDLog::_start_new_segment(SegmentBoundary* sb)
   sb->set_seq(event_seq);
 
   // Adjust to next stray dir
-  mds->mdcache->advance_stray();
+  if (!mds->is_stopping()) {
+    mds->mdcache->advance_stray();
+  }
   return ls;
 }
 
