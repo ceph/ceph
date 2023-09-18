@@ -192,8 +192,16 @@ void PerfCounters::inc(int idx, uint64_t amt)
   if (!(data.type & PERFCOUNTER_U64))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
+    uint64_t m_new = amt;
     data.avgcount++;
-    data.u64 += amt;
+    data.u64 += m_new;
+    uint64_t m;
+    do {
+      m = data.max_u64_inc.load();
+      if (m_new <= m) {
+        break;
+      }
+    } while(!data.max_u64_inc.compare_exchange_weak(m, m_new));
     data.avgcount2++;
   } else {
     data.u64 += amt;
@@ -268,8 +276,16 @@ void PerfCounters::tinc(int idx, utime_t amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
+    uint64_t m_new = amt.to_nsec();
     data.avgcount++;
-    data.u64 += amt.to_nsec();
+    data.u64 += m_new;
+    uint64_t m;
+    do {
+      m = data.max_u64_inc.load();
+      if (m_new <= m) {
+        break;
+      }
+    } while(!data.max_u64_inc.compare_exchange_weak(m, m_new));
     data.avgcount2++;
   } else {
     data.u64 += amt.to_nsec();
@@ -289,8 +305,16 @@ void PerfCounters::tinc(int idx, ceph::timespan amt)
   if (!(data.type & PERFCOUNTER_TIME))
     return;
   if (data.type & PERFCOUNTER_LONGRUNAVG) {
+    uint64_t m_new = amt.count();
     data.avgcount++;
-    data.u64 += amt.count();
+    data.u64 += m_new;
+    uint64_t m;
+    do {
+      m = data.max_u64_inc.load();
+      if (m_new <= m) {
+        break;
+      }
+    } while(!data.max_u64_inc.compare_exchange_weak(m, m_new));
     data.avgcount2++;
   } else {
     data.u64 += amt.count();
@@ -361,8 +385,7 @@ pair<uint64_t, uint64_t> PerfCounters::get_tavg_ns(int idx) const
     return make_pair(0, 0);
   if (!(data.type & PERFCOUNTER_LONGRUNAVG))
     return make_pair(0, 0);
-  pair<uint64_t,uint64_t> a = data.read_avg();
-  return make_pair(a.second, a.first);
+  return data.read_avg();
 }
 
 void PerfCounters::reset()
@@ -463,17 +486,22 @@ void PerfCounters::dump_formatted_generic(Formatter *f, bool schema,
     } else {
       if (d->type & PERFCOUNTER_LONGRUNAVG) {
 	f->open_object_section(d->name);
-	pair<uint64_t,uint64_t> a = d->read_avg();
+	std::tuple<uint64_t,uint64_t,uint64_t> a = d->read_avg_ex();
 	if (d->type & PERFCOUNTER_U64) {
-	  f->dump_unsigned("avgcount", a.second);
-	  f->dump_unsigned("sum", a.first);
+	  f->dump_unsigned("sum", std::get<0>(a));
+	  f->dump_unsigned("avgcount", std::get<1>(a));
+	  f->dump_unsigned("max_inc", std::get<2>(a));
 	} else if (d->type & PERFCOUNTER_TIME) {
-	  f->dump_unsigned("avgcount", a.second);
+          uint64_t sum_ns = std::get<0>(a);
+          uint64_t count = std::get<1>(a);
+          uint64_t max_ns = std::get<2>(a);
+	  f->dump_unsigned("avgcount", count);
 	  f->dump_format_unquoted("sum", "%" PRId64 ".%09" PRId64,
-				  a.first / 1000000000ull,
-				  a.first % 1000000000ull);
-          uint64_t count = a.second;
-          uint64_t sum_ns = a.first;
+				  sum_ns / 1000000000ull,
+				  sum_ns % 1000000000ull);
+	  f->dump_format_unquoted("max_inc", "%" PRId64 ".%09" PRId64,
+				  max_ns / 1000000000ull,
+				  max_ns % 1000000000ull);
           if (count) {
             uint64_t avg_ns = sum_ns / count;
             f->dump_format_unquoted("avgtime", "%" PRId64 ".%09" PRId64,
