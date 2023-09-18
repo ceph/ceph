@@ -103,8 +103,8 @@ def check_orchestrator(func: FuncT) -> FuncT:
 
 class Module(orchestrator.OrchestratorClientMixin, MgrModule):
     MODULE_OPTIONS: List[Option] = [
-        Option(name='usage_trim_realms',
-               default='',
+        Option(name='usage_realms_to_trim',
+               default='*',
                desc='Comma separated list of realms or asterisk for all realms'),
         Option(name='usage_trim_older_than_days',
                default=0,
@@ -387,11 +387,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             startDate = '1970-01-01'
             endDate = (datetime.today() - timedelta(days=usage_trim_older_than_days)).strftime('%Y-%m-%d')
 
-            usage_trim_realms = cast(str, self.get_module_option('usage_trim_realms'))
-            if usage_trim_realms == '*':
+            usage_realms_to_trim = cast(str, self.get_module_option('usage_realms_to_trim'))
+            if usage_realms_to_trim == '*':
                 realms = am.realm_op().list()
             else:
-                realms = usage_trim_realms.split(',')
+                realms = usage_realms_to_trim.split(',')
 
             for realm in realms:
                 self.log.info(f'Running usage trim for realm {realm} with startDate={startDate} and endDate={endDate}')

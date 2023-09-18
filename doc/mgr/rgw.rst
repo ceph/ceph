@@ -143,21 +143,22 @@ RGW admin command
 Automatic usage log trimming
 ----------------------------
 
-Enable automatic usage log trimming for one or more RGW realms by
-setting the config option ``usage_trim_realms`` to a comma separated
-list of realms or to an asterisk (``*``) for all realms.
+Enable automatic usage log trimming for one or more RGW realms by setting the
+``usage_trim_older_than_days`` config option to the amount of days usage logs
+older than this should be trimmed.
 
-Set the ``usage_trim_older_than_days`` config option to the amount of
-days usage logs older than this should be trimmed. Optionally you can
-set the interval in minutes that trim will be performed with
-``usage_trim_interval``, it defaults to every twelve hours (720 minutes).
+Optionally you can set the interval in minutes that trim will be performed
+with ``usage_trim_interval``, it defaults to every twelve hours (720 minutes).
+
+You can set the config option ``usage_realms_to_trim`` to a comma separated
+list of realms or to an asterisk (``*``) (the default) for all realms.
 
 The below example will trim logs from start date 1970-01-01 to the current
 date minus 30 days.
 
 ::
 
-    ceph config set mgr mgr/rgw/usage_trim_realms default
+    ceph config set mgr mgr/rgw/usage_realms_to_trim default
     ceph config set mgr mgr/rgw/usage_trim_older_than_days 30
 
 The above is equivalent to running the following command assuming that todays
