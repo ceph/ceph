@@ -155,12 +155,124 @@ class C_ExecAndReply;
 class QuiesceDbManager;
 class QuiesceAgent;
 
+class MDSRank;
+
+struct MDSRankBase
+{
+  virtual MDSMap* get_mds_map() const = 0;
+  virtual const LogChannelRef& get_clog_ref() const = 0;
+  virtual MDCache* get_cache() const = 0;
+  virtual MDLog* get_log() const = 0;
+  virtual Finisher* get_finisher() const = 0;
+  virtual Objecter* get_objecter() const = 0;
+  virtual MDBalancer* get_balancer() const = 0;    
+  virtual MDSTableClient *get_table_client(int t) const = 0;
+  virtual MDSTableServer *get_table_server(int t) const = 0;
+
+  virtual inline ceph::fair_mutex& get_lock() const = 0;
+  virtual mds_rank_t get_nodeid() const = 0;
+  virtual int64_t get_metadata_pool() const = 0;
+  virtual mono_time get_starttime() const = 0;
+
+  virtual bool is_daemon_stopping() const = 0;
+
+  virtual MDSMap::DaemonState get_state() const = 0;
+  virtual MDSMap::DaemonState get_want_state() const = 0;
+  virtual int get_incarnation() const = 0;
+
+  inline bool is_creating() const { return get_state() == MDSMap::STATE_CREATING; }
+  inline bool is_starting() const { return get_state() == MDSMap::STATE_STARTING; }
+  inline bool is_standby() const { return get_state() == MDSMap::STATE_STANDBY; }
+  inline bool is_replay() const { return get_state() == MDSMap::STATE_REPLAY; }
+  inline bool is_standby_replay() const { return get_state() == MDSMap::STATE_STANDBY_REPLAY; }
+  inline bool is_resolve() const { return get_state() == MDSMap::STATE_RESOLVE; }
+  inline bool is_reconnect() const { return get_state() == MDSMap::STATE_RECONNECT; }
+  inline bool is_rejoin() const { return get_state() == MDSMap::STATE_REJOIN; }
+  inline bool is_clientreplay() const { return get_state() == MDSMap::STATE_CLIENTREPLAY; }
+  inline bool is_active() const { return get_state() == MDSMap::STATE_ACTIVE; }
+  inline bool is_stopping() const { return get_state() == MDSMap::STATE_STOPPING; }
+  inline bool is_any_replay() const { return (is_replay() || is_standby_replay()); }
+
+  virtual bool is_stopped() const = 0;
+  virtual bool is_cluster_degraded() const = 0;
+  virtual bool allows_multimds_snaps() const = 0;
+
+  inline bool is_cache_trimmable() const
+  {
+    return is_standby_replay() || is_clientreplay() || is_active() || is_stopping();
+  }
+
+  virtual void handle_write_error(int err) = 0;
+  inline void handle_write_error_unlocked(int err)
+  {
+    std::lock_guard l{ get_lock() };
+    handle_write_error(err);
+  }
+
+  virtual void update_mlogger() = 0;
+
+  virtual void queue_waiter(MDSContext* c)
+  {
+    MDSContext::vec v { c };
+    queue_waiters(v);
+  }
+  virtual void queue_waiter_front(MDSContext* c)
+  {
+    MDSContext::vec v { c };
+    queue_waiters_front(v);
+  }
+
+  virtual void queue_waiters(MDSContext::vec& ls) = 0;
+  virtual void queue_waiters_front(MDSContext::vec& ls) = 0;
+
+  // Daemon lifetime functions: these guys break the abstraction
+  // and call up into the parent MDSDaemon instance.  It's kind
+  // of unavoidable: if we want any depth into our calls
+  // to be able to e.g. tear down the whole process, we have to
+  // have a reference going all the way down.
+  // >>>
+  virtual void suicide() = 0;
+  virtual void respawn() = 0;
+  // <<<
+
+  /**
+   * Call this periodically if inside a potentially long running piece
+   * of code while holding the mds_lock
+   */
+  virtual void heartbeat_reset() = 0;
+  virtual int heartbeat_reset_grace(int count = 1) = 0;
+
+  /**
+   * Report state DAMAGED to the mon, and then pass on to respawn().  Call
+   * this when an unrecoverable error is encountered while attempting
+   * to load an MDS rank's data structures.  This is *not* for use with
+   * errors affecting normal dirfrag/inode objects -- they should be handled
+   * through cleaner scrub/repair mechanisms.
+   *
+   * Callers must already hold mds_lock.
+   */
+  virtual void damaged() = 0;
+
+  /**
+   * Wrapper around `damaged` for users who are not
+   * already holding mds_lock.
+   *
+   * Callers must not already hold mds_lock.
+   */
+  inline void damaged_unlocked()
+  {
+    std::lock_guard l{ get_lock() };
+    damaged();
+  }
+  virtual ~MDSRankBase() { }
+};
+
 /**
  * The public part of this class's interface is what's exposed to all
  * the various subsystems (server, mdcache, etc), such as pointers
  * to the other subsystems, and message-sending calls.
  */
-class MDSRank {
+class MDSRank : public MDSRankBase {
   public:
     friend class C_Flush_Journal;
     friend class C_Drop_Cache;
@@ -169,6 +281,26 @@ class MDSRank {
     friend class C_ScrubControlExecAndReply;
 
     CephContext *cct;
+
+    /* from_base
+    * these functions exist to recover the MDSRank object from a virtual base pointer
+    * There are some legitimate cases to use it, for example in the local contexts
+    * of the MDSRank class where it needs to access private fields and methods
+    * However, in many cases this is used to defer rewriting methods that
+    * historically access internal interfaces of MDSRank but now receive
+    * the MDSRankBase pointer via the context or as the argument
+    */
+    static inline const MDSRank* from_base(const MDSRankBase* iface)
+    {
+      const MDSRank* rank = dynamic_cast<const MDSRank*>(iface);
+      ceph_assert(rank);
+      return rank;
+    }
+
+    static inline MDSRank* from_base(MDSRankBase *iface)
+    {
+      return const_cast<MDSRank*>(from_base((const MDSRankBase*)iface));
+    }
 
     MDSRank(
         mds_rank_t whoami_,
@@ -190,6 +322,15 @@ class MDSRank {
         return metadata_pool;
     }
 
+    inline ceph::fair_mutex& get_lock() const { return mds_lock; }
+    inline const LogChannelRef& get_clog_ref() const { return clog; }
+    inline MDCache* get_cache() const { return mdcache; }
+    inline MDLog* get_log() const { return mdlog; }
+    inline Finisher* get_finisher() const { return finisher; }
+    inline MDBalancer* get_balancer() const { return balancer; }
+    inline Objecter* get_objecter() const { return objecter; }
+    int get_incarnation() const { return incarnation; }
+
     mono_time get_starttime() const {
       return starttime;
     }
@@ -200,8 +341,8 @@ class MDSRank {
 
     bool is_daemon_stopping() const;
 
-    MDSTableClient *get_table_client(int t);
-    MDSTableServer *get_table_server(int t);
+    MDSTableClient *get_table_client(int t) const;
+    MDSTableServer *get_table_server(int t) const;
 
     Session *get_session(client_t client) {
       return sessionmap.get_session(entity_name_t::CLIENT(client.v));
@@ -371,7 +512,7 @@ class MDSRank {
 
     ceph_tid_t issue_tid() { return ++last_tid; }
 
-    MDSMap *get_mds_map() { return mdsmap.get(); }
+    MDSMap *get_mds_map() const { return mdsmap.get(); }
 
     uint64_t get_num_requests() const { return logger->get(l_mds_request); }
   
@@ -676,12 +817,15 @@ private:
     std::atomic_bool m_is_active = false; /* accessed outside mds_lock */
 };
 
+template<class T>
+MDSHolder<T>::MDSHolder(MDSRank* mds) : MDSHolder((MDSRankBase*)mds) {}
+
 class C_MDS_RetryMessage : public MDSInternalContext {
 public:
   C_MDS_RetryMessage(MDSRank *mds, const cref_t<Message> &m)
     : MDSInternalContext(mds), m(m) {}
   void finish(int r) override {
-    get_mds()->retry_dispatch(m);
+    MDSRank::from_base(get_mds())->retry_dispatch(m);
   }
 protected:
   cref_t<Message> m;

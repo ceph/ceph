@@ -62,15 +62,15 @@ using TOPNSPC::common::cmd_getval_or;
 
 class C_Flush_Journal : public MDSInternalContext {
 public:
-  C_Flush_Journal(MDCache *mdcache, MDLog *mdlog, MDSRank *mds,
+  C_Flush_Journal(MDCache *mdcache, MDLog *mdlog, MDSRankBase *mds,
                   std::ostream *ss, Context *on_finish)
     : MDSInternalContext(mds),
       mdcache(mdcache), mdlog(mdlog), ss(ss), on_finish(on_finish),
-      whoami(mds->whoami), incarnation(mds->incarnation) {
+      whoami(mds->get_nodeid()), incarnation(mds->get_incarnation()) {
   }
 
   void send() {
-    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked(mds->get_lock()));
 
     dout(20) << __func__ << dendl;
 
@@ -199,9 +199,9 @@ private:
     dout(20) << __func__ << dendl;
 
     Context *ctx = new C_OnFinisher(new LambdaContext([this](int) {
-          std::lock_guard locker(mds->mds_lock);
+          std::lock_guard locker(mds->get_lock());
           trim_expired_segments();
-        }), mds->finisher);
+        }), mds->get_finisher());
     ctx->complete(0);
   }
 
@@ -224,7 +224,7 @@ private:
     dout(20) << __func__ << dendl;
 
     Context *ctx = new LambdaContext([this](int r) {
-        std::lock_guard locker(mds->mds_lock);
+        std::lock_guard locker(mds->get_lock());
         handle_write_head(r);
       });
     // Flush the journal header so that readers will start from after
@@ -272,7 +272,7 @@ public:
   void send() {
     // not really a hard requirement here, but lets ensure this in
     // case we change the logic here.
-    ceph_assert(ceph_mutex_is_locked(mds->mds_lock));
+    ceph_assert(ceph_mutex_is_locked(mds->get_lock()));
 
     dout(20) << __func__ << dendl;
     f->open_object_section("result");
@@ -286,7 +286,7 @@ private:
   // needs to be explicitly freed.
   class C_ContextTimeout : public MDSInternalContext {
   public:
-    C_ContextTimeout(MDSRank *mds, uint64_t timeout, Context *on_finish)
+    C_ContextTimeout(MDSRankBase *mds, uint64_t timeout, Context *on_finish)
       : MDSInternalContext(mds),
         timeout(timeout),
         on_finish(on_finish) {
@@ -304,7 +304,7 @@ private:
           timer_task = nullptr;
           complete(-CEPHFS_ETIMEDOUT);
         });
-      mds->timer.add_event_after(timeout, timer_task);
+      MDSRank::from_base(mds)->timer.add_event_after(timeout, timer_task);
     }
 
     void finish(int r) override {
@@ -319,7 +319,7 @@ private:
     }
     void complete(int r) override {
       if (timer_task != nullptr) {
-        mds->timer.cancel_event(timer_task);
+        MDSRank::from_base(mds)->timer.cancel_event(timer_task);
       }
 
       finish(r);
@@ -435,7 +435,7 @@ private:
       auto timer = new LambdaContext([this](int) {
         trim_cache();
       });
-      mds->timer.add_event_after(1.0, timer);
+      MDSRank::from_base(mds)->timer.add_event_after(1.0, timer);
     } else {
       cache_status();
     }
@@ -694,7 +694,7 @@ public:
   C_MDS_MonCommand(MDSRank *m, std::string_view c)
     : MDSInternalContext(m), cmd(c) {}
   void finish(int r) override {
-    mds->_mon_command_finish(r, cmd, outs);
+    MDSRank::from_base(mds)->_mon_command_finish(r, cmd, outs);
   }
 };
 
@@ -908,11 +908,11 @@ class C_MDS_VoidFn : public MDSInternalContext
 
   void finish(int r) override
   {
-    (mds->*fn)();
+    (MDSRank::from_base(mds)->*fn)();
   }
 };
 
-MDSTableClient *MDSRank::get_table_client(int t)
+MDSTableClient *MDSRank::get_table_client(int t) const
 {
   switch (t) {
   case TABLE_ANCHOR: return NULL;
@@ -921,7 +921,7 @@ MDSTableClient *MDSRank::get_table_client(int t)
   }
 }
 
-MDSTableServer *MDSRank::get_table_server(int t)
+MDSTableServer *MDSRank::get_table_server(int t) const
 {
   switch (t) {
   case TABLE_ANCHOR: return NULL;
@@ -1003,7 +1003,7 @@ void MDSRank::handle_write_error_unlocked(int err)
 
 void *MDSRank::ProgressThread::entry()
 {
-  std::unique_lock l(mds->mds_lock);
+  std::unique_lock l(mds->get_lock());
   while (true) {
     cond.wait(l, [this] {
       return (mds->stopping ||
@@ -1024,7 +1024,7 @@ void *MDSRank::ProgressThread::entry()
 
 void MDSRank::ProgressThread::shutdown()
 {
-  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->get_lock()));
   ceph_assert(mds->stopping);
 
   if (am_self()) {
@@ -1032,10 +1032,10 @@ void MDSRank::ProgressThread::shutdown()
   } else {
     // Kick the thread to notice mds->stopping, and join it
     cond.notify_all();
-    mds->mds_lock.unlock();
+    mds->get_lock().unlock();
     if (is_started())
       join();
-    mds->mds_lock.lock();
+    mds->get_lock().lock();
   }
 }
 
@@ -1466,7 +1466,7 @@ public:
   C_MDS_RetrySendMessageMDS(MDSRank* mds, mds_rank_t who, ref_t<Message> m)
     : MDSInternalContext(mds), who(who), m(std::move(m)) {}
   void finish(int r) override {
-    mds->send_message_mds(m, who);
+    MDSRank::from_base(mds)->send_message_mds(m, who);
   }
 private:
   mds_rank_t who;
@@ -1615,7 +1615,7 @@ public:
   C_MDS_BootStart(MDSRank *m, MDSRank::BootStep n)
     : MDSInternalContext(m), nextstep(n) {}
   void finish(int r) override {
-    mds->boot_start(nextstep, r);
+    MDSRank::from_base(mds)->boot_start(nextstep, r);
   }
 };
 
@@ -1826,7 +1826,7 @@ public:
   C_MDS_StandbyReplayRestartFinish(MDSRank *mds_, uint64_t old_read_pos_) :
     MDSIOContext(mds_), old_read_pos(old_read_pos_) {}
   void finish(int r) override {
-    mds->_standby_replay_restart_finish(r, old_read_pos);
+    MDSRank::from_base(mds)->_standby_replay_restart_finish(r, old_read_pos);
   }
   void print(ostream& out) const override {
     out << "standby_replay_restart";
@@ -1854,7 +1854,7 @@ public:
   explicit C_MDS_StandbyReplayRestart(MDSRank *m) : MDSInternalContext(m) {}
   void finish(int r) override {
     ceph_assert(!r);
-    mds->standby_replay_restart();
+    MDSRank::from_base(mds)->standby_replay_restart();
   }
 };
 

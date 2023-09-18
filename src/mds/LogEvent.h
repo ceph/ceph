@@ -50,7 +50,7 @@
 #include "include/Context.h"
 #include "include/utime.h"
 
-class MDSRank;
+class MDSRankBase;
 class LogSegment;
 class EMetaBlob;
 
@@ -104,7 +104,7 @@ public:
   /*** recovery ***/
   /* replay() - replay given event.  this is idempotent.
    */
-  virtual void replay(MDSRank *m) { ceph_abort(); }
+  virtual void replay(MDSRankBase *m) { ceph_abort(); }
 
   /**
    * If the subclass embeds a MetaBlob, return it here so that

@@ -1577,11 +1577,7 @@ private:
 class MDCacheIOContext : public virtual MDSIOContextBase {
 protected:
   MDCache *mdcache;
-  MDSRank *get_mds() override
-  {
-    ceph_assert(mdcache != NULL);
-    return mdcache->mds;
-  }
+  MDSRankBase *get_mds() override;
 public:
   explicit MDCacheIOContext(MDCache *mdc_, bool track=true) :
     MDSIOContextBase(track), mdcache(mdc_) {}

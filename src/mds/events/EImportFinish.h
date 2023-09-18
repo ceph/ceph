@@ -45,7 +45,7 @@ class EImportFinish : public LogEvent {
   void dump(Formatter *f) const override;
   static void generate_test_instances(std::list<EImportFinish*>& ls);
   
-  void replay(MDSRank *mds) override;
+  void replay(MDSRankBase *mdsb) override;
 
 };
 WRITE_CLASS_ENCODER_FEATURES(EImportFinish)

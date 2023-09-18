@@ -22,9 +22,9 @@
 #define dout_subsys ceph_subsys_mds
 
 void MDSContext::complete(int r) {
-  MDSRank *mds = get_mds();
+  MDSRankBase *mds = get_mds();
   ceph_assert(mds != nullptr);
-  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->get_lock()));
   dout(10) << "MDSContext::complete: " << typeid(*this).name() << dendl;
   mds->heartbeat_reset();
   return Context::complete(r);
@@ -93,14 +93,14 @@ bool MDSIOContextBase::check_ios_in_flight(ceph::coarse_mono_time cutoff,
 }
 
 void MDSIOContextBase::complete(int r) {
-  MDSRank *mds = get_mds();
+  MDSRankBase *mds = get_mds();
 
   dout(10) << "MDSIOContextBase::complete: " << typeid(*this).name() << dendl;
   ceph_assert(mds != NULL);
   // Note, MDSIOContext is passed outside the MDS and, strangely, we grab the
   // lock here when MDSContext::complete would otherwise assume the lock is
   // already acquired.
-  std::lock_guard l(mds->mds_lock);
+  std::lock_guard l(mds->get_lock());
 
   if (mds->is_daemon_stopping()) {
     dout(4) << "MDSIOContextBase::complete: dropping for stopping "
@@ -120,7 +120,7 @@ void MDSIOContextBase::complete(int r) {
 }
 
 void MDSLogContextBase::complete(int r) {
-  MDLog *mdlog = get_mds()->mdlog;
+  MDLog *mdlog = get_mds()->get_log();
   uint64_t safe_pos = write_pos;
   pre_finish(r);
   // MDSIOContext::complete() free this
@@ -138,7 +138,7 @@ void C_IO_Wrapper::complete(int r)
 {
   if (async) {
     async = false;
-    get_mds()->finisher->queue(this, r);
+    get_mds()->get_finisher()->queue(this, r);
   } else {
     MDSIOContext::complete(r);
   }
