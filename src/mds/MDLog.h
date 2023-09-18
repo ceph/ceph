@@ -59,13 +59,13 @@ enum {
 class Journaler;
 class JournalPointer;
 class LogEvent;
-class MDSRank;
+class MDSRankBase;
 class LogSegment;
 class ESubtreeMap;
 
 class MDLog {
 public:
-  MDLog(MDSRank *m);
+  MDLog(MDSRankBase *m);
   ~MDLog();
 
   const std::set<LogSegment*> &get_expiring_segments() const
@@ -160,7 +160,7 @@ public:
 
   void dump_replay_status(Formatter *f) const;
 
-  MDSRank *mds;
+  MDSRankBase *mds;
   // replay state
   std::map<inodeno_t, std::set<inodeno_t>> pending_exports;
 

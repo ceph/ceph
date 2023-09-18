@@ -34,7 +34,7 @@ public:
   }
 
   void update_segment() override;
-  void replay(MDSRank *mds) override;
+  void replay(MDSRankBase *mdsb) override;
 
 protected:
   interval_set<inodeno_t> inos;

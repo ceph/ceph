@@ -63,7 +63,7 @@ class ESession : public LogEvent {
   }
   
   void update_segment() override;
-  void replay(MDSRank *mds) override;
+  void replay(MDSRankBase *mdsb) override;
   entity_inst_t get_client_inst() const {return client_inst;}
 };
 WRITE_CLASS_ENCODER_FEATURES(ESession)

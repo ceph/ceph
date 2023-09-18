@@ -41,7 +41,7 @@ public:
   void dump(Formatter *f) const override;
   static void generate_test_instances(std::list<ESubtreeMap*>& ls);
 
-  void replay(MDSRank *mds) override;
+  void replay(MDSRankBase *mdsb) override;
   bool is_major_segment_boundary() const override {
     return true;
   }

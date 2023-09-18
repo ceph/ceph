@@ -24,6 +24,7 @@
 #include "include/spinlock.h"
 #include "common/ceph_time.h"
 
+class MDSRankBase;
 class MDSRank;
 
 /**
@@ -45,7 +46,7 @@ template<template<typename> class A>
   using que = que_alloc<std::allocator>;
 
   void complete(int r) override;
-  virtual MDSRank *get_mds() = 0;
+  virtual MDSRankBase *get_mds() = 0;
 };
 
 /* Children of this could have used multiple inheritance with MDSHolder and
@@ -55,17 +56,18 @@ template<class T>
 class MDSHolder : public T
 {
 public:
-  MDSRank* get_mds() override {
+  MDSRankBase* get_mds() override {
     return mds;
   }
 
 protected:
   MDSHolder() = delete;
-  MDSHolder(MDSRank* mds) : mds(mds) {
+  MDSHolder(MDSRankBase* mds) : mds(mds) {
     ceph_assert(mds != nullptr);
   }
+  MDSHolder(MDSRank* mds);
 
-  MDSRank* mds;
+  MDSRankBase* mds;
 };
 
 /**
@@ -77,6 +79,7 @@ public:
   MDSInternalContext() = delete;
 
 protected:
+  explicit MDSInternalContext(MDSRankBase *mds_) : MDSHolder(mds_) {}
   explicit MDSInternalContext(MDSRank *mds_) : MDSHolder(mds_) {}
 };
 
@@ -90,6 +93,7 @@ protected:
   Context *fin = nullptr;
   void finish(int r) override;
 public:
+  MDSInternalContextWrapper(MDSRankBase *m, Context *c) : MDSInternalContext(m), fin(c) {}
   MDSInternalContextWrapper(MDSRank *m, Context *c) : MDSInternalContext(m), fin(c) {}
 };
 
@@ -141,6 +145,7 @@ public:
 class MDSIOContext : public MDSHolder<MDSIOContextBase>
 {
 public:
+  explicit MDSIOContext(MDSRankBase *mds_) : MDSHolder(mds_) {}
   explicit MDSIOContext(MDSRank *mds_) : MDSHolder(mds_) {}
 };
 
@@ -153,6 +158,7 @@ class MDSIOContextWrapper : public MDSHolder<MDSIOContextBase>
 protected:
   Context *fin;
 public:
+  MDSIOContextWrapper(MDSRankBase *m, Context *c) : MDSHolder(m), fin(c) {}
   MDSIOContextWrapper(MDSRank *m, Context *c) : MDSHolder(m), fin(c) {}
   void finish(int r) override;
   void print(std::ostream& out) const override {
@@ -169,7 +175,7 @@ public:
   void finish(int r) override {}
   void complete(int r) override { delete this; }
 protected:
-  MDSRank* get_mds() override final {ceph_abort();}
+  MDSRankBase* get_mds() override final {ceph_abort();}
 };
 
 
@@ -187,6 +193,10 @@ protected:
     wrapped = nullptr;
   }
 public:
+  C_IO_Wrapper(MDSRankBase *mds_, Context *wrapped_) :
+    MDSIOContext(mds_), async(true), wrapped(wrapped_) {
+    ceph_assert(wrapped != NULL);
+  }
   C_IO_Wrapper(MDSRank *mds_, Context *wrapped_) :
     MDSIOContext(mds_), async(true), wrapped(wrapped_) {
     ceph_assert(wrapped != NULL);

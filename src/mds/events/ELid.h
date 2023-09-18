@@ -36,7 +36,7 @@ public:
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  void replay(MDSRank *mds) override;
+  void replay(MDSRankBase *mdsb) override;
   static void generate_test_instances(std::list<ELid*>& ls);
 };
 WRITE_CLASS_ENCODER_FEATURES(ELid)

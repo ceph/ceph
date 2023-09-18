@@ -13488,7 +13488,7 @@ void MDCache::upkeep_main(void)
     auto trim_interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_trim_interval"));
     if (since >= trim_interval*.90) {
       lock.unlock(); /* mds_lock -> upkeep_mutex */
-      std::scoped_lock mds_lock(mds->mds_lock);
+      std::scoped_lock mds_lock(mds->get_lock());
       lock.lock();
       if (upkeep_trim_shutdown.load())
         return;
@@ -13530,4 +13530,10 @@ void MDCache::upkeep_main(void)
     dout(20) << "upkeep thread waiting interval " << interval << dendl;
     upkeep_cvar.wait_for(lock, interval);
   }
+}
+
+MDSRankBase* MDCacheIOContext::get_mds()
+{
+  ceph_assert(mdcache != NULL);
+  return mdcache->mds;
 }

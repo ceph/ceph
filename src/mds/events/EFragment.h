@@ -74,7 +74,7 @@ public:
   void decode(bufferlist::const_iterator &bl) override;
   void dump(Formatter *f) const override;
   static void generate_test_instances(std::list<EFragment*>& ls);
-  void replay(MDSRank *mds) override;
+  void replay(MDSRankBase *mdsb) override;
 };
 WRITE_CLASS_ENCODER_FEATURES(EFragment)
 

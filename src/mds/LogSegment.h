@@ -31,7 +31,7 @@ using ceph::unordered_set;
 class CDir;
 class CInode;
 class CDentry;
-class MDSRank;
+class MDSRankBase;
 struct MDPeerUpdate;
 
 class LogSegment {
@@ -51,7 +51,7 @@ class LogSegment {
     dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree))
   {}
 
-  void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
+  void try_to_expire(MDSRankBase *mds, MDSGatherBuilder &gather_bld, int op_prio);
   void purge_inodes_finish(interval_set<inodeno_t>& inos){
     purging_inodes.subtract(inos);
     if (NULL != purged_cb &&
