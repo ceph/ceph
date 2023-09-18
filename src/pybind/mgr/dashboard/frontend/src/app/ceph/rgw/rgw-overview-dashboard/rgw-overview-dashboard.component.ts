@@ -144,9 +144,7 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     this.ZoneSUb.unsubscribe();
     this.BucketSub.unsubscribe();
     this.HealthSub.unsubscribe();
-    if (this.timerGetPrometheusDataSub) {
-      this.timerGetPrometheusDataSub.unsubscribe();
-    }
+    this.prometheusService.unsubscribe();
   }
 
   getPrometheusData(selectedTime: any) {
