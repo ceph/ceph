@@ -414,7 +414,7 @@ class DaosZoneGroup : public StoreZoneGroup {
   virtual const std::string& get_api_name() const override {
     return group.api_name;
   };
-  virtual int get_placement_target_names(
+  virtual void get_placement_target_names(
       std::set<std::string>& names) const override;
   virtual const std::string& get_default_placement_name() const override {
     return group.default_placement.name;
