@@ -238,6 +238,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (!g_conf()->mon_mds_skip_sanity) {
     pending.sanity(true);
   }
+  pending.set_btime();
 
   // apply to paxos
   ceph_assert(get_last_committed() + 1 == pending.get_epoch());
