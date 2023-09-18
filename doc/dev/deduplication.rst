@@ -243,7 +243,7 @@ object size in ``POOL`` is zero (evicted) and chunks objects are genereated---th
 4. Read/write I/Os
 
 After step 3, the users don't need to consider anything about I/Os. Deduplicated objects are
-completely compatible with existing RAODS operations.
+completely compatible with existing RADOS operations.
 
 
 5. Run scrub to fix reference count 
