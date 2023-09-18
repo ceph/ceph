@@ -62,7 +62,8 @@ class ScrubSchedTestWrapper : public ScrubQueue {
 
   ScrubQContainer collect_ripe_jobs()
   {
-    return ScrubQueue::collect_ripe_jobs(to_scrub, time_now());
+    return ScrubQueue::collect_ripe_jobs(
+	to_scrub, Scrub::OSDRestrictions{}, time_now());
   }
 
   /**

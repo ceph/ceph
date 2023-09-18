@@ -260,6 +260,61 @@ std::string_view ScrubJob::qu_state_text(qu_state_t st)
 }
 // clang-format on
 
+std::vector<ScrubTargetId> ScrubQueue::ready_to_scrub(
+    OSDRestrictions restrictions,  // note: 4B in size! (copy)
+    utime_t scrub_tick)
+{
+  dout(10) << fmt::format(
+		  " @{:s}: reg./pen. sizes: {} / {} ({})", scrub_tick,
+		  to_scrub.size(), penalized.size(), restrictions)
+	   << dendl;
+  //  create a list of candidates (copying, as otherwise creating a deadlock):
+  //  - possibly restore penalized
+  //  - (if we didn't handle directly) remove invalid jobs
+  //  - create a copy of the to_scrub (possibly up to first not-ripe)
+  //  - same for the penalized (although that usually be a waste)
+  //  unlock, then try the lists
+
+  std::unique_lock lck{jobs_lock};
+
+  // pardon all penalized jobs that have deadlined (or were updated)
+  scan_penalized(restore_penalized, scrub_tick);
+  restore_penalized = false;
+
+  // remove the 'updated' flag from all entries
+  std::for_each(
+      to_scrub.begin(), to_scrub.end(),
+      [](const auto& jobref) -> void { jobref->updated = false; });
+
+  // add failed scrub attempts to the penalized list
+  move_failed_pgs(scrub_tick);
+
+  // collect all valid & ripe jobs from the two lists. Note that we must copy,
+  // as when we use the lists we will not be holding jobs_lock (see
+  // explanation above)
+
+  // and in this step 1 of the refactoring (Aug 2023): the set returned must be
+  // transformed into a vector of targets (which, in this phase, are
+  // the PG id-s).
+  auto to_scrub_copy = collect_ripe_jobs(to_scrub, restrictions, scrub_tick);
+  auto penalized_copy = collect_ripe_jobs(penalized, restrictions, scrub_tick);
+  lck.unlock();
+
+  std::vector<ScrubTargetId> all_ready;
+  std::transform(
+      to_scrub_copy.cbegin(), to_scrub_copy.cend(),
+      std::back_inserter(all_ready),
+      [](const auto& jobref) -> ScrubTargetId { return jobref->pgid; });
+  // not bothering to handle the "reached the penalized - so all should be
+  // forgiven" case, as the penalty queue is destined to be removed in a
+  // followup PR.
+  std::transform(
+      penalized_copy.cbegin(), penalized_copy.cend(),
+      std::back_inserter(all_ready),
+      [](const auto& jobref) -> ScrubTargetId { return jobref->pgid; });
+  return all_ready;
+}
+
 
 // must be called under lock
 void ScrubQueue::rm_unregistered_jobs(ScrubQContainer& group)
@@ -289,28 +344,32 @@ struct cmp_sched_time_t {
 
 // called under lock
 ScrubQContainer ScrubQueue::collect_ripe_jobs(
-  ScrubQContainer& group,
-  utime_t time_now)
+    ScrubQContainer& group,
+    OSDRestrictions restrictions,
+    utime_t time_now)
 {
-  rm_unregistered_jobs(group);
+  auto filtr = [time_now, restrictions](const auto& jobref) -> bool {
+    return jobref->schedule.scheduled_at <= time_now &&
+	   (!restrictions.only_deadlined ||
+	    (!jobref->schedule.deadline.is_zero() &&
+	     jobref->schedule.deadline <= time_now));
+  };
 
-  // copy ripe jobs
+  rm_unregistered_jobs(group);
+  // copy ripe jobs (unless prohibited by 'restrictions')
   ScrubQContainer ripes;
   ripes.reserve(group.size());
 
-  std::copy_if(group.begin(),
-	       group.end(),
-	       std::back_inserter(ripes),
-	       [time_now](const auto& jobref) -> bool {
-		 return jobref->schedule.scheduled_at <= time_now;
-	       });
+  std::copy_if(group.begin(), group.end(), std::back_inserter(ripes), filtr);
   std::sort(ripes.begin(), ripes.end(), cmp_sched_time_t{});
 
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (const auto& jobref : group) {
-      if (jobref->schedule.scheduled_at > time_now) {
-	dout(20) << " not ripe: " << jobref->pgid << " @ "
-		 << jobref->schedule.scheduled_at << dendl;
+      if (!filtr(jobref)) {
+	dout(20) << fmt::format(
+			" not ripe: {} @ {:s}", jobref->pgid,
+			jobref->schedule.scheduled_at)
+		 << dendl;
       }
     }
   }

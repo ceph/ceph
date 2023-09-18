@@ -11,6 +11,7 @@
 using namespace ::std::chrono;
 using namespace ::std::chrono_literals;
 using namespace ::std::literals;
+using schedule_result_t = Scrub::schedule_result_t;
 
 
 #define dout_subsys ceph_subsys_osd
@@ -65,6 +66,7 @@ bool OsdScrub::scrub_random_backoff() const
   return false;
 }
 
+
 void OsdScrub::initiate_scrub(bool is_recovery_active)
 {
   if (scrub_random_backoff()) {
@@ -97,8 +99,8 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 
   utime_t scrub_time = ceph_clock_now();
   dout(10) << fmt::format(
-		  "{}: time now:{}, recover is active?:{}", __func__,
-		  scrub_time, is_recovery_active)
+		  "time now:{}, recover is active?:{}", scrub_time,
+		  is_recovery_active)
 	   << dendl;
 
   // check the OSD-wide environment conditions (scrub resources, time, etc.).
@@ -118,11 +120,68 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
     }
   }
 
-  auto was_started = select_pg_and_scrub(*env_restrictions);
-  dout(20) << fmt::format(
-		  "scrub scheduling done ({})",
-		  ScrubQueue::attempt_res_text(was_started))
-	   << dendl;
+  // at this phase of the refactoring: minimal changes to the
+  // queue interface used here: we ask for a list of
+  // eligible targets (based on the known restrictions).
+  // We try all elements of this list until a (possibly temporary) success.
+  auto candidates = m_queue.ready_to_scrub(*env_restrictions, scrub_time);
+  auto res{schedule_result_t::none_ready};
+  for (const auto& candidate : candidates) {
+    dout(20) << fmt::format("initiating scrub on pg[{}]", candidate) << dendl;
+
+    // we have a candidate to scrub. But we may fail when trying to initiate that
+    // scrub. For some failures - we can continue with the next candidate. For
+    // others - we should stop trying to scrub at this tick.
+    res = m_osd_svc.initiate_a_scrub(
+	candidate, env_restrictions->allow_requested_repair_only);
+    switch (res) {
+      case schedule_result_t::scrub_initiated:
+	// the happy path. We are done
+	dout(20) << fmt::format("scrub initiated for pg[{}]", candidate.pgid)
+		 << dendl;
+	break;
+
+      case schedule_result_t::already_started:
+      case schedule_result_t::preconditions:
+      case schedule_result_t::bad_pg_state:
+	// continue with the next job
+	dout(20) << fmt::format(
+			"pg[{}] failed (state/cond/started)", candidate.pgid)
+		 << dendl;
+	break;
+
+      case schedule_result_t::no_such_pg:
+	// The pg is no longer there
+	dout(20) << fmt::format("pg[{}] failed (no PG)", candidate.pgid)
+		 << dendl;
+	// \todo better handling of this case
+	break;
+
+      case schedule_result_t::no_local_resources:
+	// failure to secure local resources. No point in trying the other
+	// PGs at this time. Note that this is not the same as replica resources
+	// failure!
+	dout(20) << "failed (local resources)" << dendl;
+	break;
+
+      case schedule_result_t::none_ready:
+	// can't happen. Just for the compiler.
+	dout(5) << fmt::format(
+		       "failed!! (possible bug. pg[{}])", candidate.pgid)
+		<< dendl;
+	break;
+    }
+
+    if (res == schedule_result_t::no_local_resources) {
+      break;
+    }
+
+    if (res == schedule_result_t::scrub_initiated) {
+      // note: in the full implementation: we need to dequeue the target
+      // at this time
+      break;
+    }
+  }
 }
 
 
@@ -175,7 +234,8 @@ static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
 
-Scrub::schedule_result_t OSDService::initiate_a_scrub(spg_t pgid,
+
+schedule_result_t OSDService::initiate_a_scrub(spg_t pgid,
 						      bool allow_requested_repair_only)
 {
   dout(20) << __func__ << " trying " << pgid << dendl;
@@ -188,21 +248,21 @@ Scrub::schedule_result_t OSDService::initiate_a_scrub(spg_t pgid,
     // the PG was dequeued in the short timespan between creating the candidates list
     // (collect_ripe_jobs()) and here
     dout(5) << __func__ << " pg  " << pgid << " not found" << dendl;
-    return Scrub::schedule_result_t::no_such_pg;
+    return schedule_result_t::no_such_pg;
   }
 
   // This has already started, so go on to the next scrub job
   if (pg->is_scrub_queued_or_active()) {
     pg->unlock();
     dout(20) << __func__ << ": already in progress pgid " << pgid << dendl;
-    return Scrub::schedule_result_t::already_started;
+    return schedule_result_t::already_started;
   }
   // Skip other kinds of scrubbing if only explicitly requested repairing is allowed
   if (allow_requested_repair_only && !pg->get_planned_scrub().must_repair) {
     pg->unlock();
     dout(10) << __func__ << " skip " << pgid
 	     << " because repairing is not explicitly requested on it" << dendl;
-    return Scrub::schedule_result_t::preconditions;
+    return schedule_result_t::preconditions;
   }
 
   auto scrub_attempt = pg->sched_scrub();
@@ -253,133 +313,6 @@ void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
       [&f](const Scrub::ScrubJobRef& j) { j->dump(f); });
 
   f->close_section();
-}
-
-/**
- *  a note regarding 'to_scrub_copy':
- *  'to_scrub_copy' is a sorted set of all the ripe jobs from to_copy.
- *  As we usually expect to refer to only the first job in this set, we could
- *  consider an alternative implementation:
- *  - have collect_ripe_jobs() return the copied set without sorting it;
- *  - loop, performing:
- *    - use std::min_element() to find a candidate;
- *    - try that one. If not suitable, discard from 'to_scrub_copy'
- */
-Scrub::schedule_result_t ScrubQueue::select_pg_and_scrub(
-  Scrub::OSDRestrictions preconds)
-{
-  dout(10) << " reg./pen. sizes: " << to_scrub.size() << " / "
-	   << penalized.size() << dendl;
-
-  utime_t now_is = time_now();
-
-  //  create a list of candidates (copying, as otherwise creating a deadlock):
-  //  - possibly restore penalized
-  //  - (if we didn't handle directly) remove invalid jobs
-  //  - create a copy of the to_scrub (possibly up to first not-ripe)
-  //  - same for the penalized (although that usually be a waste)
-  //  unlock, then try the lists
-
-  std::unique_lock lck{jobs_lock};
-
-  // pardon all penalized jobs that have deadlined (or were updated)
-  scan_penalized(restore_penalized, now_is);
-  restore_penalized = false;
-
-  // remove the 'updated' flag from all entries
-  std::for_each(to_scrub.begin(),
-		to_scrub.end(),
-		[](const auto& jobref) -> void { jobref->updated = false; });
-
-  // add failed scrub attempts to the penalized list
-  move_failed_pgs(now_is);
-
-  //  collect all valid & ripe jobs from the two lists. Note that we must copy,
-  //  as when we use the lists we will not be holding jobs_lock (see
-  //  explanation above)
-
-  auto to_scrub_copy = collect_ripe_jobs(to_scrub, now_is);
-  auto penalized_copy = collect_ripe_jobs(penalized, now_is);
-  lck.unlock();
-
-  // try the regular queue first
-  auto res = select_from_group(to_scrub_copy, preconds, now_is);
-
-  // in the sole scenario in which we've gone over all ripe jobs without success
-  // - we will try the penalized
-  if (res == Scrub::schedule_result_t::none_ready && !penalized_copy.empty()) {
-    res = select_from_group(penalized_copy, preconds, now_is);
-    dout(10) << "tried the penalized. Res: "
-	     << ScrubQueue::attempt_res_text(res) << dendl;
-    restore_penalized = true;
-  }
-
-  dout(15) << dendl;
-  return res;
-}
-
-
-// not holding jobs_lock. 'group' is a copy of the actual list.
-Scrub::schedule_result_t ScrubQueue::select_from_group(
-    Scrub::ScrubQContainer& group,
-    Scrub::OSDRestrictions preconds,
-    utime_t now_is)
-{
-  dout(15) << "jobs #: " << group.size() << dendl;
-
-  for (auto& candidate : group) {
-
-    // we expect the first job in the list to be a good candidate (if any)
-
-    dout(20) << "try initiating scrub for " << candidate->pgid << dendl;
-
-    if (preconds.only_deadlined && (candidate->schedule.deadline.is_zero() ||
-				    candidate->schedule.deadline >= now_is)) {
-      dout(15) << " not scheduling scrub for " << candidate->pgid << " due to "
-	       << (preconds.time_permit ? "high load" : "time not permitting")
-	       << dendl;
-      continue;
-    }
-
-    // we have a candidate to scrub. We turn to the OSD to verify that the PG
-    // configuration allows the specified type of scrub, and to initiate the
-    // scrub.
-    switch (osd_service.initiate_a_scrub(
-	candidate->pgid, preconds.allow_requested_repair_only)) {
-
-      case Scrub::schedule_result_t::scrub_initiated:
-	// the happy path. We are done
-	dout(20) << " initiated for " << candidate->pgid << dendl;
-	return Scrub::schedule_result_t::scrub_initiated;
-
-      case Scrub::schedule_result_t::already_started:
-      case Scrub::schedule_result_t::preconditions:
-      case Scrub::schedule_result_t::bad_pg_state:
-	// continue with the next job
-	dout(20) << "failed (state/cond/started) " << candidate->pgid << dendl;
-	break;
-
-      case Scrub::schedule_result_t::no_such_pg:
-	// The pg is no longer there
-	dout(20) << "failed (no pg) " << candidate->pgid << dendl;
-	break;
-
-      case Scrub::schedule_result_t::no_local_resources:
-	// failure to secure local resources. No point in trying the other
-	// PGs at this time. Note that this is not the same as replica resources
-	// failure!
-	dout(20) << "failed (local) " << candidate->pgid << dendl;
-	return Scrub::schedule_result_t::no_local_resources;
-
-      case Scrub::schedule_result_t::none_ready:
-	// can't happen. Just for the compiler.
-	dout(5) << "failed !!! " << candidate->pgid << dendl;
-	return Scrub::schedule_result_t::none_ready;
-    }
-  }
-
-  dout(20) << " returning 'none ready'" << dendl;
-  return Scrub::schedule_result_t::none_ready;
 }
 
 
@@ -616,10 +549,4 @@ bool OsdScrub::is_reserving_now() const
 Scrub::ScrubQContainer OsdScrub::list_registered_jobs() const
 {
   return m_queue.list_registered_jobs();
-}
-
-Scrub::schedule_result_t OsdScrub::select_pg_and_scrub(
-    Scrub::OSDRestrictions preconds)
-{
-  return m_queue.select_pg_and_scrub(preconds);
 }

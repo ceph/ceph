@@ -15,6 +15,13 @@
 #include "osd/osd_types_fmt.h"
 #include "osd/scrubber_common.h"
 
+/**
+ * The ID used to name a candidate to scrub:
+ * - in this version: a PG is identified by its spg_t
+ * - in the (near) future: a PG + a scrub type (shallow/deep)
+ */
+using ScrubTargetId = spg_t;
+
 
 namespace Scrub {
 
