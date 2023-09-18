@@ -25,6 +25,7 @@
 #include <errno.h>
 
 #include "include/types.h"
+#include "common/ceph_time.h"
 #include "common/Clock.h"
 #include "mds/MDSMap.h"
 
@@ -246,9 +247,10 @@ class FSMap {
 public:
   friend class MDSMonitor;
   friend class PaxosFSMap;
+  using real_clock = ceph::real_clock;
   using mds_info_t = MDSMap::mds_info_t;
 
-  static const version_t STRUCT_VERSION = 7;
+  static const version_t STRUCT_VERSION = 8;
   static const version_t STRUCT_VERSION_TRIM_TO = 7;
 
   FSMap() : default_compat(MDSMap::get_compat_set_default()) {}
@@ -256,6 +258,7 @@ public:
   FSMap(const FSMap &rhs)
     :
       epoch(rhs.epoch),
+      btime(rhs.btime),
       next_filesystem_id(rhs.next_filesystem_id),
       legacy_client_fscid(rhs.legacy_client_fscid),
       default_compat(rhs.default_compat),
@@ -533,6 +536,13 @@ public:
   epoch_t get_epoch() const { return epoch; }
   void inc_epoch() { epoch++; }
 
+  void set_btime() {
+    btime = real_clock::now();
+  }
+  auto get_btime() const {
+    return btime;
+  }
+
   version_t get_struct_version() const { return struct_version; }
   bool is_struct_old() const {
     return struct_version < STRUCT_VERSION_TRIM_TO;
@@ -607,6 +617,8 @@ public:
 
 protected:
   epoch_t epoch = 0;
+  ceph::real_time btime = real_clock::zero();
+
   uint64_t next_filesystem_id = FS_CLUSTER_ID_ANONYMOUS + 1;
   fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
   CompatSet default_compat;

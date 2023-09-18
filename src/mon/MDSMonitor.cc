@@ -193,6 +193,7 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (!g_conf()->mon_mds_skip_sanity) {
     pending.sanity(true);
   }
+  pending.set_btime();
 
   // Set 'modified' on maps modified this epoch
   for (auto &p : pending.filesystems) {
