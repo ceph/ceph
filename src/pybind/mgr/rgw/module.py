@@ -154,6 +154,8 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                     self.get_ceph_option(opt))
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))  # type: ignore
 
+        self.event.set()
+
     @CLICommand('rgw admin', perm='rw')
     def _cmd_rgw_admin(self, params: Sequence[str]) -> HandleCommandResult:
         """rgw admin"""
