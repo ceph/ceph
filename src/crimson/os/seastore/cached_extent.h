@@ -707,9 +707,10 @@ protected:
       length(other.get_length()),
       version(other.version),
       poffset(other.poffset) {
+      assert((length % CEPH_PAGE_SIZE) == 0);
       if (other.is_fully_loaded()) {
-        ptr = std::make_optional<ceph::bufferptr>
-          (other.ptr->c_str(), other.ptr->length());
+        ptr.emplace(buffer::create_page_aligned(length));
+        other.ptr->copy_out(0, length, ptr->c_str());
       } else {
         // the extent must be fully loaded before CoW
         assert(length == 0); // in case of root
