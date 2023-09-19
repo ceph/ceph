@@ -55,7 +55,7 @@ using ceph::Formatter;
 static ostream& _prefix(std::ostream *_dout, ECBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
-static ostream& _prefix(std::ostream *_dout, ECBackend::RMWPipeline *rmw_pipeline) {
+static ostream& _prefix(std::ostream *_dout, ECCommon::RMWPipeline *rmw_pipeline) {
   return rmw_pipeline->get_parent()->gen_dbg_prefix(*_dout);
 }
 static ostream& _prefix(std::ostream *_dout, ECCommon::ReadPipeline *read_pipeline) {
@@ -66,11 +66,11 @@ struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
   list<ECBackend::RecoveryOp> ops;
 };
 
-ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs) {
+ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::pipeline_state_t &rhs) {
   switch (rhs.pipeline_state) {
-  case ECBackend::RMWPipeline::pipeline_state_t::CACHE_VALID:
+  case ECCommon::RMWPipeline::pipeline_state_t::CACHE_VALID:
     return lhs << "CACHE_VALID";
-  case ECBackend::RMWPipeline::pipeline_state_t::CACHE_INVALID:
+  case ECCommon::RMWPipeline::pipeline_state_t::CACHE_INVALID:
     return lhs << "CACHE_INVALID";
   default:
     ceph_abort_msg("invalid pipeline state");
@@ -161,7 +161,7 @@ void ECCommon::ReadOp::dump(Formatter *f) const
   f->dump_stream("in_progress") << in_progress;
 }
 
-ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::Op &rhs)
+ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::Op &rhs)
 {
   lhs << "Op(" << rhs.hoid
       << " v=" << rhs.version
@@ -1506,7 +1506,7 @@ void ECCommon::ReadPipeline::on_change()
   in_progress_client_reads.clear();
 }
 
-void ECBackend::RMWPipeline::on_change()
+void ECCommon::RMWPipeline::on_change()
 {
   dout(10) << __func__ << dendl;
 
@@ -1556,7 +1556,7 @@ void ECBackend::dump_recovery_info(Formatter *f) const
   f->close_section();
 }
 
-struct ECClassicalOp : ECBackend::RMWPipeline::Op {
+struct ECClassicalOp : ECCommon::RMWPipeline::Op {
   PGTransactionUPtr t;
 
   void generate_transactions(
@@ -1652,7 +1652,7 @@ void ECBackend::submit_transaction(
   rmw_pipeline.start_rmw(std::move(op));
 }
 
-void ECBackend::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
+void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
   if (!waiting_state.empty()) {
     waiting_state.back().on_write.emplace_back(std::move(cb));
   } else if (!waiting_reads.empty()) {
@@ -1978,7 +1978,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
   return ref;
 }
 
-void ECBackend::RMWPipeline::start_rmw(OpRef op)
+void ECCommon::RMWPipeline::start_rmw(OpRef op)
 {
   ceph_assert(op);
   dout(10) << __func__ << ": " << *op << dendl;
@@ -1989,7 +1989,7 @@ void ECBackend::RMWPipeline::start_rmw(OpRef op)
   check_ops();
 }
 
-bool ECBackend::RMWPipeline::try_state_to_reads()
+bool ECCommon::RMWPipeline::try_state_to_reads()
 {
   if (waiting_state.empty())
     return false;
@@ -2063,7 +2063,7 @@ bool ECBackend::RMWPipeline::try_state_to_reads()
   return true;
 }
 
-bool ECBackend::RMWPipeline::try_reads_to_commit()
+bool ECCommon::RMWPipeline::try_reads_to_commit()
 {
   if (waiting_reads.empty())
     return false;
@@ -2221,7 +2221,7 @@ bool ECBackend::RMWPipeline::try_reads_to_commit()
   return true;
 }
 
-bool ECBackend::RMWPipeline::try_finish_rmw()
+bool ECCommon::RMWPipeline::try_finish_rmw()
 {
   if (waiting_commit.empty())
     return false;
@@ -2270,7 +2270,7 @@ bool ECBackend::RMWPipeline::try_finish_rmw()
   return true;
 }
 
-void ECBackend::RMWPipeline::check_ops()
+void ECCommon::RMWPipeline::check_ops()
 {
   while (try_state_to_reads() ||
 	 try_reads_to_commit() ||
