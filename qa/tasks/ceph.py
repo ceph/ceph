@@ -23,7 +23,7 @@ import yaml
 from paramiko import SSHException
 from tasks.ceph_manager import CephManager, write_conf, get_valgrind_args
 from tarfile import ReadError
-from tasks.cephfs.filesystem import MDSCluster, Filesystem
+from tasks.cephfs.filesystem import MDSCluster, Filesystem, gen_fsname
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import exceptions
@@ -496,7 +496,7 @@ def cephfs_setup(ctx, config):
     if mdss.remotes:
         log.info('Setting up CephFS filesystem(s)...')
         cephfs_config = config.get('cephfs', {})
-        fs_configs =  cephfs_config.pop('fs', [{'name': 'cephfs'}])
+        fs_configs = cephfs_config.get('fs', [{'name': gen_fsname()}])
 
         # wait for standbys to become available (slow due to valgrind, perhaps)
         mdsc = MDSCluster(ctx)
