@@ -23,6 +23,7 @@ import { PrometheusListHelper } from '~/app/shared/helpers/prometheus-list-helpe
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
 import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { AlertClass } from '~/app/shared/enum/health-icon.enum';
 
 @Component({
   selector: 'cd-dashboard-v3',
@@ -43,15 +44,13 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   prometheusAlerts$: Observable<AlertmanagerAlert[]>;
 
   icons = Icons;
-  showAlerts = false;
   flexHeight = true;
   simplebar = {
-    autoHide: false
+    autoHide: true
   };
-  textClass: string;
   borderClass: string;
   alertType: string;
-  alerts: AlertmanagerAlert[];
+  alertClass = AlertClass;
   healthData: any;
   categoryPgAmount: Record<string, number> = {};
   totalPgs = 0;
@@ -115,23 +114,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     });
   }
 
-  toggleAlertsWindow(type: string, isToggleButton: boolean = false) {
-    this.triggerPrometheusAlerts();
-    if (isToggleButton) {
-      this.showAlerts = !this.showAlerts;
-      this.flexHeight = !this.flexHeight;
-    } else if (
-      !this.showAlerts ||
-      (this.alertType === type && type !== 'danger') ||
-      (this.alertType !== 'warning' && type === 'danger')
-    ) {
-      this.showAlerts = !this.showAlerts;
-      this.flexHeight = !this.flexHeight;
-    }
-
-    type === 'danger' ? (this.alertType = 'critical') : (this.alertType = type);
-    this.textClass = `text-${type}`;
-    this.borderClass = `border-${type}`;
+  toggleAlertsWindow(type: AlertClass) {
+    this.alertType === type ? (this.alertType = null) : (this.alertType = type);
   }
 
   getDetailsCardData() {
@@ -160,14 +144,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     });
   }
 
-  triggerPrometheusAlerts() {
-    this.prometheusService.ifAlertmanagerConfigured(() => {
-      this.prometheusService.getAlerts().subscribe((alerts) => {
-        this.alerts = alerts;
-      });
-    });
-  }
-
   public getPrometheusData(selectedTime: any) {
     this.queriesResults = this.prometheusService.getPrometheusQueriesData(
       selectedTime,
@@ -180,5 +156,9 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.mgrModuleService.getConfig('telemetry').subscribe((resp: any) => {
       this.telemetryEnabled = resp?.enabled;
     });
+  }
+
+  trackByFn(index: any) {
+    return index;
   }
 }

@@ -154,7 +154,7 @@
                 <cd-card *ngFor="let zone of replicaZonesInfo; trackBy: trackByFn"
                          cardTitle="{{zone.name}}"
                          cardType="zone"
-                         shadow="true"
+                         shadowClass="shadow"
                          i18n-title
                          class="col-sm-9 col-lg-6 align-replica-zones d-flex pt-4"
                          aria-label="Source Zones Card">
@@ -163,7 +163,8 @@
                              [cardTitle]="title"
                              i18n-title
                              cardType="syncCards"
-                             removeBorder="true"
+                             bgColor="bg-color"
+                             borderClass="border-0"
                              class="col-sm-9 col-lg-6"
                              [ngClass]="{ 'border-left': title === 'Data Sync' }"
                              aria-label="Charts Card">
