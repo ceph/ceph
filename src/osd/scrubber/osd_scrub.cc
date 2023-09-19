@@ -132,7 +132,7 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
     // we have a candidate to scrub. But we may fail when trying to initiate that
     // scrub. For some failures - we can continue with the next candidate. For
     // others - we should stop trying to scrub at this tick.
-    res = m_osd_svc.initiate_a_scrub(
+    res = initiate_a_scrub(
 	candidate, env_restrictions->allow_requested_repair_only);
     switch (res) {
       case schedule_result_t::scrub_initiated:
@@ -224,6 +224,43 @@ std::optional<Scrub::OSDRestrictions> OsdScrub::restrictions_on_scrubbing(
 }
 
 
+Scrub::schedule_result_t OsdScrub::initiate_a_scrub(
+    spg_t pgid,
+    bool allow_requested_repair_only)
+{
+  dout(20) << fmt::format("trying pg[{}]", pgid) << dendl;
+
+  // we have a candidate to scrub. We need some PG information to
+  // know if scrubbing is allowed
+
+  auto locked_pg = m_osd_svc.get_locked_pg(pgid);
+  if (!locked_pg) {
+    // the PG was dequeued in the short timespan between creating the
+    // candidates list (ready_to_scrub()) and here
+    dout(5) << fmt::format("pg[{}] not found", pgid) << dendl;
+    return Scrub::schedule_result_t::no_such_pg;
+  }
+
+  // This one is already scrubbing, so go on to the next scrub job
+  if (locked_pg->pg()->is_scrub_queued_or_active()) {
+    dout(10) << fmt::format("pg[{}]: scrub already in progress", pgid) << dendl;
+    return Scrub::schedule_result_t::already_started;
+  }
+  // Skip other kinds of scrubbing if only explicitly requested repairing is allowed
+  if (allow_requested_repair_only &&
+      !locked_pg->pg()->get_planned_scrub().must_repair) {
+    dout(10) << fmt::format(
+		    "skipping pg[{}] as repairing was not explicitly "
+		    "requested for that pg",
+		    pgid)
+	     << dendl;
+    return Scrub::schedule_result_t::preconditions;
+  }
+
+  return locked_pg->pg()->sched_scrub();
+}
+
+
 // ////////////////////////////////////////////////////////////////////////// //
 // scrub initiation - OSD code temporarily moved here from OSD.cc
 
@@ -233,43 +270,6 @@ static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
 }
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
-
-
-schedule_result_t OSDService::initiate_a_scrub(spg_t pgid,
-						      bool allow_requested_repair_only)
-{
-  dout(20) << __func__ << " trying " << pgid << dendl;
-
-  // we have a candidate to scrub. We need some PG information to know if scrubbing is
-  // allowed
-
-  PGRef pg = osd->lookup_lock_pg(pgid);
-  if (!pg) {
-    // the PG was dequeued in the short timespan between creating the candidates list
-    // (collect_ripe_jobs()) and here
-    dout(5) << __func__ << " pg  " << pgid << " not found" << dendl;
-    return schedule_result_t::no_such_pg;
-  }
-
-  // This has already started, so go on to the next scrub job
-  if (pg->is_scrub_queued_or_active()) {
-    pg->unlock();
-    dout(20) << __func__ << ": already in progress pgid " << pgid << dendl;
-    return schedule_result_t::already_started;
-  }
-  // Skip other kinds of scrubbing if only explicitly requested repairing is allowed
-  if (allow_requested_repair_only && !pg->get_planned_scrub().must_repair) {
-    pg->unlock();
-    dout(10) << __func__ << " skip " << pgid
-	     << " because repairing is not explicitly requested on it" << dendl;
-    return schedule_result_t::preconditions;
-  }
-
-  auto scrub_attempt = pg->sched_scrub();
-  pg->unlock();
-  return scrub_attempt;
-}
-
 
 void OSD::resched_all_scrubs()
 {
