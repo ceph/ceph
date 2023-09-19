@@ -634,7 +634,7 @@ void ECBackend::continue_recovery_op(
       }
 
       map<pg_shard_t, vector<pair<int, int>>> to_read;
-      int r = get_min_avail_to_read_shards(
+      int r = read_pipeline.get_min_avail_to_read_shards(
 	op.hoid, want, true, false, &to_read);
       if (r != 0) {
 	// we must have lost a recovery source
@@ -1728,7 +1728,7 @@ void ECCommon::ReadPipeline::get_all_avail_shards(
   }
 }
 
-int ECBackend::get_min_avail_to_read_shards(
+int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   const hobject_t &hoid,
   const set<int> &want,
   bool for_recovery,
@@ -1742,7 +1742,7 @@ int ECBackend::get_min_avail_to_read_shards(
   map<shard_id_t, pg_shard_t> shards;
   set<pg_shard_t> error_shards;
 
-  read_pipeline.get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
+  get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
 
   map<int, vector<pair<int, int>>> need;
   int r = ec_impl->minimum_to_decode(want, have, &need);
@@ -2478,11 +2478,20 @@ void ECBackend::objects_read_and_reconstruct(
   GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func)
 {
   return read_pipeline.objects_read_and_reconstruct(
-    *this, reads, fast_read, std::move(func));
+    reads, fast_read, std::move(func));
+}
+
+void ECCommon::ReadPipeline::get_want_to_read_shards(
+  std::set<int> *want_to_read) const
+{
+  const std::vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+  for (int i = 0; i < (int)ec_impl->get_data_chunk_count(); ++i) {
+    int chunk = (int)chunk_mapping.size() > i ? chunk_mapping[i] : i;
+    want_to_read->insert(chunk);
+  }
 }
 
 void ECCommon::ReadPipeline::objects_read_and_reconstruct(
-  ECBackend& ec_backend,
   const map<hobject_t,
     std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
   > &reads,
@@ -2498,12 +2507,12 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
 
   map<hobject_t, set<int>> obj_want_to_read;
   set<int> want_to_read;
-  ec_backend.get_want_to_read_shards(&want_to_read);
+  get_want_to_read_shards(&want_to_read);
     
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&to_read: reads) {
     map<pg_shard_t, vector<pair<int, int>>> shards;
-    int r = ec_backend.get_min_avail_to_read_shards(
+    int r = get_min_avail_to_read_shards(
       to_read.first,
       want_to_read,
       false,
