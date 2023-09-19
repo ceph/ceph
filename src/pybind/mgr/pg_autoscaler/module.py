@@ -567,7 +567,6 @@ class PgAutoscaler(MgrModule):
 
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
 
-            pool_logical_used = pool_stats[pool_id]['stored']
             bias = p['options'].get('pg_autoscale_bias', 1.0)
             target_bytes = 0
             # ratio takes precedence if both are set
@@ -575,10 +574,10 @@ class PgAutoscaler(MgrModule):
                 target_bytes = p['options'].get('target_size_bytes', 0)
 
             # What proportion of space are we using?
-            actual_raw_used = pool_logical_used * raw_used_rate
+            actual_raw_used = pool_stats[pool_id]['bytes_used']
             actual_capacity_ratio = float(actual_raw_used) / capacity
 
-            pool_raw_used = max(pool_logical_used, target_bytes) * raw_used_rate
+            pool_raw_used = max(actual_raw_used, target_bytes * raw_used_rate)
             capacity_ratio = float(pool_raw_used) / capacity
 
             self.log.info("effective_target_ratio {0} {1} {2} {3}".format(
@@ -622,7 +621,7 @@ class PgAutoscaler(MgrModule):
                 'crush_root_id': root_id,
                 'pg_autoscale_mode': p['pg_autoscale_mode'],
                 'pg_num_target': p['pg_num_target'],
-                'logical_used': pool_logical_used,
+                'logical_used': float(actual_raw_used)/raw_used_rate,
                 'target_bytes': target_bytes,
                 'raw_used_rate': raw_used_rate,
                 'subtree_capacity': capacity,
