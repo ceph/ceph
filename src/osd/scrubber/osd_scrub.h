@@ -28,9 +28,6 @@ class OsdScrub {
 
   ~OsdScrub() = default;
 
-  // temporary friendship - only required in this transitory commit
-  friend class OSD;
-
   // note: public, as accessed by the dout macros
   std::ostream& gen_prefix(std::ostream& out, std::string_view fn) const;
 
@@ -52,6 +49,16 @@ class OsdScrub {
   }
 
   void dump_scrubs(ceph::Formatter* f) const;  ///< fwd to the queue
+
+  /**
+   * on_config_change() (the refactored "OSD::sched_all_scrubs()")
+   *
+   * for each PG registered with the OSD (i.e. - for which we are the primary):
+   * lock that PG, and call its on_scrub_schedule_input_change() method
+   * to handle a possible change in one of the configuration parameters
+   * that affect scrub scheduling.
+   */
+  void on_config_change();
 
 
   // implementing the PGs interface to the scrub scheduling objects
