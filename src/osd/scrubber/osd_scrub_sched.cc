@@ -247,17 +247,6 @@ std::string_view ScrubQueue::attempt_res_text(Scrub::schedule_result_t v)
   // g++ (unlike CLANG), requires an extra 'return' here
   return "(unknown)"sv;
 }
-
-std::string_view ScrubJob::qu_state_text(qu_state_t st)
-{
-  switch (st) {
-    case qu_state_t::not_registered: return "not registered w/ OSD"sv;
-    case qu_state_t::registered: return "registered"sv;
-    case qu_state_t::unregistering: return "unregistering"sv;
-  }
-  // g++ (unlike CLANG), requires an extra 'return' here
-  return "(unknown)"sv;
-}
 // clang-format on
 
 std::vector<ScrubTargetId> ScrubQueue::ready_to_scrub(
@@ -450,14 +439,21 @@ void ScrubQueue::scan_penalized(bool forgive_all, utime_t time_now)
   }
 }
 
-void ScrubJob::dump(ceph::Formatter* f) const
+void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
 {
-  f->open_object_section("scrub");
-  f->dump_stream("pgid") << pgid;
-  f->dump_stream("sched_time") << schedule.scheduled_at;
-  f->dump_stream("deadline") << schedule.deadline;
-  f->dump_bool("forced",
-	       schedule.scheduled_at == PgScrubber::scrub_must_stamp());
+  ceph_assert(f != nullptr);
+  std::lock_guard lck(jobs_lock);
+
+  f->open_array_section("scrubs");
+
+  std::for_each(
+      to_scrub.cbegin(), to_scrub.cend(),
+      [&f](const Scrub::ScrubJobRef& j) { j->dump(f); });
+
+  std::for_each(
+      penalized.cbegin(), penalized.cend(),
+      [&f](const Scrub::ScrubJobRef& j) { j->dump(f); });
+
   f->close_section();
 }
 

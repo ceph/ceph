@@ -278,24 +278,6 @@ void OsdScrub::on_config_change()
   }
 }
 
-void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
-{
-  ceph_assert(f != nullptr);
-  std::lock_guard lck(jobs_lock);
-
-  f->open_array_section("scrubs");
-
-  std::for_each(
-      to_scrub.cbegin(), to_scrub.cend(),
-      [&f](const Scrub::ScrubJobRef& j) { j->dump(f); });
-
-  std::for_each(
-      penalized.cbegin(), penalized.cend(),
-      [&f](const Scrub::ScrubJobRef& j) { j->dump(f); });
-
-  f->close_section();
-}
-
 
 // ////////////////////////////////////////////////////////////////////////// //
 // CPU load tracking and related
