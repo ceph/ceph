@@ -64,17 +64,6 @@ std::ostream& operator<<(std::ostream& out, const signedspan& d)
 }
 }
 
-template <typename T>
-struct fmt::formatter<std::optional<T>> : fmt::formatter<T> {
-  template <typename FormatContext>
-  auto format(const std::optional<T>& v, FormatContext& ctx) const {
-    if (v.has_value()) {
-      return fmt::formatter<T>::format(*v, ctx);
-    }
-    return fmt::format_to(ctx.out(), "<null>");
-  }
-};
-
 namespace crimson::osd {
 
 using crimson::common::local_conf;
