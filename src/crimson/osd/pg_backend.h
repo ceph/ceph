@@ -70,6 +70,7 @@ public:
   static std::unique_ptr<PGBackend> create(pg_t pgid,
 					   const pg_shard_t pg_shard,
 					   const pg_pool_t& pool,
+					   crimson::osd::PG &pg,
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile,
