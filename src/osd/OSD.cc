@@ -4490,10 +4490,12 @@ int OSD::shutdown()
     store->umount();
 
     utime_t end_time = ceph_clock_now();
-    if (cct->_conf->osd_fast_shutdown_timeout) {
-      ceph_assert(end_time - start_time_func < cct->_conf->osd_fast_shutdown_timeout);
-    }
     dout(0) <<"Fast Shutdown duration total     :" << end_time              - start_time_func       << " seconds" << dendl;
+    if (cct->_conf->osd_fast_shutdown_timeout &&
+        end_time - start_time_func > cct->_conf->osd_fast_shutdown_timeout) {
+      dout(0) << "Fast Shutdown duration exceeded :" << cct->_conf->osd_fast_shutdown_timeout       << " seconds"
+              << dendl;
+    }
     dout(0) <<"Fast Shutdown duration osd_drain :" << start_time_umount     - start_time_osd_drain  << " seconds" << dendl;
     dout(0) <<"Fast Shutdown duration umount    :" << end_time              - start_time_umount     << " seconds" << dendl;
     dout(0) <<"Fast Shutdown duration timer     :" << start_time_osd_drain  - start_time_timer      << " seconds" << dendl;
