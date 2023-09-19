@@ -321,6 +321,11 @@ class TestClientLimits(CephFSTestCase):
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
         self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests // 10, check_in_detail=str(self.mount_a.client_id))
 
+        # reset the config val
+        self.set_conf('client', 'client inject fixed oldest tid', 'false')
+        self.mount_a.teardown()
+        self.mount_a.mount_wait()
+
     def _test_client_cache_size(self, mount_subdir):
         """
         check if client invalidate kernel dcache according to its cache size config
