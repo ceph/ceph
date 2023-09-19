@@ -33,68 +33,72 @@ struct ECSubReadReply;
 
 struct RecoveryMessages;
 
-  // ECListener -- an interface decoupling the pipelines from
-  // particular implementation of ECBackend (crimson vs cassical).
-  // https://stackoverflow.com/q/7872958
-  struct ECListener {
-    virtual ~ECListener() = default;
-    virtual const OSDMapRef& pgb_get_osdmap() const = 0;
-    virtual epoch_t pgb_get_osdmap_epoch() const = 0;
-    virtual const pg_info_t &get_info() const = 0;
-    /**
-     * Called when a pull on soid cannot be completed due to
-     * down peers
-     */
-    virtual void cancel_pull(
-      const hobject_t &soid) = 0;
-    virtual void schedule_recovery_work(
-      GenContext<ThreadPool::TPHandle&> *c,
-      uint64_t cost) = 0;
+// ECListener -- an interface decoupling the pipelines from
+// particular implementation of ECBackend (crimson vs cassical).
+// https://stackoverflow.com/q/7872958
+struct ECListener {
+  virtual ~ECListener() = default;
+  virtual const OSDMapRef& pgb_get_osdmap() const = 0;
+  virtual epoch_t pgb_get_osdmap_epoch() const = 0;
+  virtual const pg_info_t &get_info() const = 0;
+  /**
+   * Called when a pull on soid cannot be completed due to
+   * down peers
+   */
+  // XXX
+  virtual void cancel_pull(
+    const hobject_t &soid) = 0;
+  // XXX
+  virtual void schedule_recovery_work(
+    GenContext<ThreadPool::TPHandle&> *c,
+    uint64_t cost) = 0;
 
-    virtual epoch_t get_interval_start_epoch() const = 0;
-    virtual const std::set<pg_shard_t> &get_acting_shards() const = 0;
-    virtual const std::set<pg_shard_t> &get_backfill_shards() const = 0;
-    virtual const std::map<hobject_t, std::set<pg_shard_t>> &get_missing_loc_shards()
-      const = 0;
+  virtual epoch_t get_interval_start_epoch() const = 0;
+  virtual const std::set<pg_shard_t> &get_acting_shards() const = 0;
+  virtual const std::set<pg_shard_t> &get_backfill_shards() const = 0;
+  virtual const std::map<hobject_t, std::set<pg_shard_t>> &get_missing_loc_shards()
+    const = 0;
 
-    virtual const std::map<pg_shard_t,
-			   pg_missing_t> &get_shard_missing() const = 0;
-    virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const = 0;
+  virtual const std::map<pg_shard_t,
+			 pg_missing_t> &get_shard_missing() const = 0;
+  virtual const pg_missing_const_i &get_shard_missing(pg_shard_t peer) const = 0;
 #if 1
-    virtual const pg_missing_const_i * maybe_get_shard_missing(
-      pg_shard_t peer) const = 0;
-    virtual const pg_info_t &get_shard_info(pg_shard_t peer) const = 0;
+  virtual const pg_missing_const_i * maybe_get_shard_missing(
+    pg_shard_t peer) const = 0;
+  virtual const pg_info_t &get_shard_info(pg_shard_t peer) const = 0;
 #endif
-    virtual ceph_tid_t get_tid() = 0;
-    virtual pg_shard_t whoami_shard() const = 0;
+  virtual ceph_tid_t get_tid() = 0;
+  virtual pg_shard_t whoami_shard() const = 0;
 #if 0
-    int whoami() const {
-      return whoami_shard().osd;
-    }
-    spg_t whoami_spg_t() const {
-      return get_info().pgid;
-    }
+  int whoami() const {
+    return whoami_shard().osd;
+  }
+  spg_t whoami_spg_t() const {
+    return get_info().pgid;
+  }
 #endif
-    virtual void send_message_osd_cluster(
-      std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
+  // XXX
+  virtual void send_message_osd_cluster(
+    std::vector<std::pair<int, Message*>>& messages, epoch_t from_epoch) = 0;
 
-    virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
+  virtual std::ostream& gen_dbg_prefix(std::ostream& out) const = 0;
 
-    // RMWPipeline
-    virtual const pg_pool_t &get_pool() const = 0;
-    virtual const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
-    virtual bool should_send_op(
-      pg_shard_t peer,
-      const hobject_t &hoid) = 0;
-    virtual const std::map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
-    virtual spg_t primary_spg_t() const = 0;
-    virtual const PGLog &get_log() const = 0;
-    virtual DoutPrefixProvider *get_dpp() = 0;
-    // XXX
-    virtual void apply_stats(
-       const hobject_t &soid,
-       const object_stat_sum_t &delta_stats) = 0;
-  };
+  // RMWPipeline
+  virtual const pg_pool_t &get_pool() const = 0;
+  virtual const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const = 0;
+  // XXX
+  virtual bool should_send_op(
+    pg_shard_t peer,
+    const hobject_t &hoid) = 0;
+  virtual const std::map<pg_shard_t, pg_info_t> &get_shard_info() const = 0;
+  virtual spg_t primary_spg_t() const = 0;
+  virtual const PGLog &get_log() const = 0;
+  virtual DoutPrefixProvider *get_dpp() = 0;
+  // XXX
+  virtual void apply_stats(
+     const hobject_t &soid,
+     const object_stat_sum_t &delta_stats) = 0;
+};
 
 struct ECCommon {
   virtual ~ECCommon() = default;
