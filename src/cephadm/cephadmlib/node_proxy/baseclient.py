@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Dict, Any
 
 
 class BaseClient:
@@ -10,10 +10,10 @@ class BaseClient:
         self.username = username
         self.password = password
 
-    def login(self) -> None:
+    def login(self) -> Dict[str, Any]:
         raise NotImplementedError()
 
-    def logout(self) -> None:
+    def logout(self) -> Dict[str, Any]:
         raise NotImplementedError()
 
     def get_path(self, path: str) -> Dict:
