@@ -99,17 +99,6 @@ class FakeOsd : public Scrub::ScrubSchedListener {
 
   int get_nodeid() const final { return m_osd_num; }
 
-  schedule_result_t initiate_a_scrub(spg_t pgid,
-				     bool allow_requested_repair_only) final
-  {
-    std::ignore = allow_requested_repair_only;
-    auto res = m_next_response.find(pgid);
-    if (res == m_next_response.end()) {
-      return schedule_result_t::no_such_pg;
-    }
-    return m_next_response[pgid];
-  }
-
   void set_initiation_response(spg_t pgid, schedule_result_t result)
   {
     m_next_response[pgid] = result;

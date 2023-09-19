@@ -246,21 +246,6 @@ public:
   OsdScrub& get_scrub_services() { return m_osd_scrub; }
 
   /**
-   * A callback used by the ScrubQueue object to initiate a scrub on a specific PG.
-   *
-   * The request might fail for multiple reasons, as ScrubQueue cannot by its own
-   * check some of the PG-specific preconditions and those are checked here. See
-   * attempt_t definition.
-   *
-   * @param pgid to scrub
-   * @param allow_requested_repair_only
-   * @return a Scrub::attempt_t detailing either a success, or the failure reason.
-   */
-  Scrub::schedule_result_t initiate_a_scrub(
-    spg_t pgid,
-    bool allow_requested_repair_only) final;
-
-  /**
    * locks the named PG, returning an RAII wrapper that unlocks upon
    * destruction.
    * returns nullopt if failing to lock.

@@ -178,6 +178,19 @@ class OsdScrub {
       bool is_recovery_active,
       utime_t scrub_clock_now) const;
 
+  /**
+   * initiate a scrub on a specific PG
+   * The PG is locked, enabling us to query its state. Specifically, we
+   * verify that the PG is not already scrubbing, and that
+   * a possible 'allow requested repair only' condition is not in conflict.
+   *
+   * \returns a schedule_result_t object, indicating whether the scrub was
+   *          initiated, and if not - why.
+   */
+  Scrub::schedule_result_t initiate_a_scrub(
+      spg_t pgid,
+      bool allow_requested_repair_only);
+
   /// resource reservation management
   Scrub::ScrubResources m_resource_bookkeeper;
 
