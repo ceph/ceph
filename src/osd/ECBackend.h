@@ -90,12 +90,12 @@ struct RecoveryMessages;
     virtual spg_t primary_spg_t() const = 0;
     virtual const PGLog &get_log() const = 0;
     virtual DoutPrefixProvider *get_dpp() = 0;
+    // XXX
     virtual void apply_stats(
        const hobject_t &soid,
        const object_stat_sum_t &delta_stats) = 0;
   };
 
-struct ECBackend;
 struct ECCommon {
   struct read_request_t {
     const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
@@ -237,7 +237,6 @@ struct ECCommon {
   };
   struct ReadPipeline {
     void objects_read_and_reconstruct(
-      ECBackend& ecbackend,
       const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
       > &reads,
       bool fast_read,
@@ -315,6 +314,17 @@ struct ECCommon {
 
     friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);
     friend struct FinishReadOp;
+
+    void get_want_to_read_shards(std::set<int> *want_to_read) const;
+
+    /// Returns to_read replicas sufficient to reconstruct want
+    int get_min_avail_to_read_shards(
+      const hobject_t &hoid,     ///< [in] object
+      const std::set<int> &want,      ///< [in] desired shards
+      bool for_recovery,         ///< [in] true if we may use non-acting replicas
+      bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
+      std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
+      ); ///< @return error code, 0 on success
   };
 };
 
@@ -444,16 +454,6 @@ private:
     return round_up_to(cct->_conf->osd_recovery_max_chunk,
 			sinfo.get_stripe_width());
   }
-
-public:
-  void get_want_to_read_shards(std::set<int> *want_to_read) const {
-    const std::vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
-    for (int i = 0; i < (int)ec_impl->get_data_chunk_count(); ++i) {
-      int chunk = (int)chunk_mapping.size() > i ? chunk_mapping[i] : i;
-      want_to_read->insert(chunk);
-    }
-  }
-private:
 
   /**
    * Recovery
@@ -830,15 +830,6 @@ public:
     CephContext *cct,
     ceph::ErasureCodeInterfaceRef ec_impl,
     uint64_t stripe_width);
-
-  /// Returns to_read replicas sufficient to reconstruct want
-  int get_min_avail_to_read_shards(
-    const hobject_t &hoid,     ///< [in] object
-    const std::set<int> &want,      ///< [in] desired shards
-    bool for_recovery,         ///< [in] true if we may use non-acting replicas
-    bool do_redundant_reads,   ///< [in] true if we want to issue redundant reads to reduce latency
-    std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
-    ); ///< @return error code, 0 on success
 
   int objects_get_attrs(
     const hobject_t &hoid,
