@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "./scrub_job.h"
+#include "pg_scrubber.h"
 
 using qu_state_t = Scrub::qu_state_t;
 using must_scrub_t = Scrub::must_scrub_t;
@@ -80,4 +81,28 @@ std::string ScrubJob::scheduling_state(utime_t now_is, bool is_deep_expected)
 std::ostream& ScrubJob::gen_prefix(std::ostream& out, std::string_view fn) const
 {
   return out << log_msg_prefix << fn << ": ";
+}
+
+// clang-format off
+std::string_view ScrubJob::qu_state_text(qu_state_t st)
+{
+  switch (st) {
+    case qu_state_t::not_registered: return "not registered w/ OSD"sv;
+    case qu_state_t::registered: return "registered"sv;
+    case qu_state_t::unregistering: return "unregistering"sv;
+  }
+  // g++ (unlike CLANG), requires an extra 'return' here
+  return "(unknown)"sv;
+}
+// clang-format on
+
+void ScrubJob::dump(ceph::Formatter* f) const
+{
+  f->open_object_section("scrub");
+  f->dump_stream("pgid") << pgid;
+  f->dump_stream("sched_time") << schedule.scheduled_at;
+  f->dump_stream("deadline") << schedule.deadline;
+  f->dump_bool("forced",
+	       schedule.scheduled_at == PgScrubber::scrub_must_stamp());
+  f->close_section();
 }
