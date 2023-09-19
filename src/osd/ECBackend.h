@@ -97,6 +97,21 @@ struct RecoveryMessages;
   };
 
 struct ECCommon {
+  virtual ~ECCommon() = default;
+
+  virtual void handle_sub_write(
+    pg_shard_t from,
+    OpRequestRef msg,
+    ECSubWrite &op,
+    const ZTracer::Trace &trace
+    ) = 0;
+
+  virtual void objects_read_and_reconstruct(
+    const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
+    > &reads,
+    bool fast_read,
+    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func) = 0;
+
   struct read_request_t {
     const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
@@ -363,7 +378,7 @@ public:
     OpRequestRef msg,
     ECSubWrite &op,
     const ZTracer::Trace &trace
-    );
+    ) override;
   void handle_sub_read(
     pg_shard_t from,
     const ECSubRead &op,
@@ -437,7 +452,7 @@ public:
     const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
     > &reads,
     bool fast_read,
-    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func);
+    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func) override;
 
   void objects_read_async(
     const hobject_t &hoid,
@@ -738,15 +753,13 @@ public:
     ceph::ErasureCodeInterfaceRef ec_impl;
     const ECUtil::stripe_info_t& sinfo;
     ECListener* parent;
-
-    // TODO: lay an interface down here
-    ECBackend& ec_backend;
+    ECCommon& ec_backend;
 
     RMWPipeline(CephContext* cct,
                 ceph::ErasureCodeInterfaceRef ec_impl,
                 const ECUtil::stripe_info_t& sinfo,
                 ECListener* parent,
-                ECBackend& ec_backend)
+                ECCommon& ec_backend)
       : cct(cct),
         ec_impl(std::move(ec_impl)),
         sinfo(sinfo),
