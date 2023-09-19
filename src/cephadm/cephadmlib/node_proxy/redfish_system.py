@@ -14,7 +14,7 @@ class RedfishSystem(BaseSystem):
         self.username: str = kw['username']
         self.password: str = kw['password']
         self.system_endpoint = kw.get('system_endpoint', '/Systems/1')
-        self.client = RedFishClient(self.host, self.username, self.password)
+        self.client = RedFishClient(host=self.host, username=self.username, password=self.password)
         self.log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
 
         self._system: Dict[str, Dict[str, Any]] = {}
@@ -55,7 +55,7 @@ class RedfishSystem(BaseSystem):
 
     def start_client(self) -> None:
         if not self.client:
-            self.client = RedFishClient(self.host, self.username, self.password)
+            self.client = RedFishClient(host=self.host, username=self.username, password=self.password)
         self.client.login()
 
     def get_system(self) -> Dict[str, Dict[str, Dict]]:
