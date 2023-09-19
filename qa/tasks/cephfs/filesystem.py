@@ -309,6 +309,15 @@ class CephClusterBase(RunCephCmd):
         log.warn(f'The address {addr} is not blocklisted')
         return False
 
+def gen_fsname():
+    '''
+    Let's attach date-time string to CephFS name as a suffix and make
+    the CephFS name unique.
+    '''
+    return 'testcephfs_' + \
+           datetime.datetime.now().strftime('%Y%b%d_%H_%M_%S')
+
+
 CephCluster = CephClusterBase
 
 class MDSClusterBase(CephClusterBase):
@@ -410,11 +419,12 @@ class MDSClusterBase(CephClusterBase):
     def mds_is_running(self, mds_id):
         return self.mds_daemons[mds_id].running()
 
-    def newfs(self, name='cephfs', create=True, **kwargs):
+    def newfs(self, name=None, create=True, **kwargs):
         """
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
         yes_i_really_really_mean_it: bool and fs_ops: list[str]
         """
+        name = gen_fsname() if name is None else name
         return Filesystem(self._ctx, name=name, create=create, **kwargs)
 
     def status(self, epoch=None):
@@ -556,6 +566,9 @@ class FilesystemBase(MDSClusterBase):
         super(FilesystemBase, self).__init__(ctx, cluster_name=cluster_name)
 
         self.name = name
+        # TODO: remove this line if testing goes well with it being commented
+        # out
+        #self.name = gen_fsname() if name is None else name
         self.id = None
         self.metadata_pool_name = None
         self.data_pool_name = None
@@ -708,8 +721,7 @@ class FilesystemBase(MDSClusterBase):
         kwargs accepts recover: bool, allow_dangerous_metadata_overlay: bool,
         yes_i_really_really_mean_it: bool and fs_ops: list[str]
         """
-        if self.name is None:
-            self.name = "cephfs"
+        self.name = gen_fsname() if self.name is None else self.name
         if self.metadata_pool_name is None:
             self.metadata_pool_name = "{0}_metadata".format(self.name)
         if self.data_pool_name is None:
