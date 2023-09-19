@@ -4426,6 +4426,11 @@ void PeeringState::calc_trim_to()
                              cct->_conf->osd_pg_log_trim_max);
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
         cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
+      // PeeringState::pg_trim_to is reset when starting peering, we need to make
+      // sure it's consistent with the pglog tail after peering.
+      if (pg_trim_to == eversion_t()) {
+	pg_trim_to = pg_log.get_tail();
+      }
       return;
     }
     auto it = pg_log.get_log().log.begin();
@@ -4467,6 +4472,11 @@ void PeeringState::calc_trim_to_aggressive()
     psdout(10) << "num_to_trim =  " << num_to_trim << dendl;
     if (num_to_trim < cct->_conf->osd_pg_log_trim_min &&
 	cct->_conf->osd_pg_log_trim_max >= cct->_conf->osd_pg_log_trim_min) {
+      // PeeringState::pg_trim_to is reset when starting peering, we need to make
+      // sure it's consistent with the pglog tail after peering.
+      if (pg_trim_to == eversion_t()) {
+	pg_trim_to = pg_log.get_tail();
+      }
       return;
     }
     auto it = pg_log.get_log().log.begin(); // oldest log entry
