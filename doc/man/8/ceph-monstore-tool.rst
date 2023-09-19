@@ -79,7 +79,7 @@ Commands
 Availability
 ============
 
-**ceph-kvstore-tool** is part of Ceph, a massively scalable, open-source,
+**ceph-monstore-tool** is part of Ceph, a massively scalable, open-source,
 distributed storage system. See the Ceph documentation at
 https://docs.ceph.com for more information.
 
