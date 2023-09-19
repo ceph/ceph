@@ -115,6 +115,7 @@ PG::PG(
 	pgid.pgid,
 	pg_shard,
 	pool,
+        *this,
 	coll_ref,
 	shard_services,
 	profile,
@@ -761,8 +762,7 @@ PG::submit_transaction(
   ceph_assert(!has_reset_since(osd_op_p.at_version.epoch));
 
   peering_state.pre_submit_op(obc->obs.oi.soid, log_entries, osd_op_p.at_version);
-  peering_state.append_log_with_trim_to_updated(std::move(log_entries), osd_op_p.at_version,
-						txn, true, false);
+  peering_state.update_trim_to();
 
   auto [submitted, all_completed] = backend->mutate_object(
       peering_state.get_acting_recovery_backfill(),
