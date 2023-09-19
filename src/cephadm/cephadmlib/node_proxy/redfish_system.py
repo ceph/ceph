@@ -5,18 +5,17 @@ from time import sleep
 from .util import Logger, retry, normalize_dict, to_snake_case
 from typing import Dict, Any, List
 
-log = Logger(__name__)
-
 
 class RedfishSystem(BaseSystem):
     def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
+        self.log = Logger(__name__)
         self.host: str = kw['host']
         self.username: str = kw['username']
         self.password: str = kw['password']
         self.system_endpoint = kw.get('system_endpoint', '/Systems/1')
-        log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
         self.client = RedFishClient(self.host, self.username, self.password)
+        self.log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
 
         self._system: Dict[str, Dict[str, Any]] = {}
         self.run: bool = False
@@ -30,7 +29,7 @@ class RedfishSystem(BaseSystem):
     def _get_path(self, path: str) -> Dict:
         result = self.client.get_path(path)
         if result is None:
-            log.logger.error(f"The client reported an error when getting path: {path}")
+            self.log.logger.error(f"The client reported an error when getting path: {path}")
             raise RuntimeError(f"Could not get path: {path}")
         return result
 
@@ -50,7 +49,7 @@ class RedfishSystem(BaseSystem):
                 try:
                     result[member_id][to_snake_case(field)] = member_info[field]
                 except KeyError:
-                    log.logger.warning(f"Could not find field: {field} in member_info: {member_info}")
+                    self.log.logger.warning(f"Could not find field: {field} in member_info: {member_info}")
 
         return normalize_dict(result)
 
@@ -125,9 +124,9 @@ class RedfishSystem(BaseSystem):
         #  - caching logic
         try:
             while self.run:
-                log.logger.debug("waiting for a lock.")
+                self.log.logger.debug("waiting for a lock.")
                 self.lock.acquire()
-                log.logger.debug("lock acquired.")
+                self.log.logger.debug("lock acquired.")
                 try:
                     self._update_system()
                     # following calls in theory can be done in parallel
@@ -141,21 +140,21 @@ class RedfishSystem(BaseSystem):
                     sleep(5)
                 finally:
                     self.lock.release()
-                    log.logger.debug("lock released.")
+                    self.log.logger.debug("lock released.")
         # Catching 'Exception' is probably not a good idea (devel only)
         except Exception as e:
-            log.logger.error(f"Error detected, logging out from redfish api.\n{e}")
+            self.log.logger.error(f"Error detected, logging out from redfish api.\n{e}")
             self.client.logout()
             raise
 
     def flush(self) -> None:
-        log.logger.info("Acquiring lock to flush data.")
+        self.log.logger.info("Acquiring lock to flush data.")
         self.lock.acquire()
-        log.logger.info("Lock acquired, flushing data.")
+        self.log.logger.info("Lock acquired, flushing data.")
         self._system = {}
         self.previous_data = {}
-        log.logger.info("Data flushed.")
+        self.log.logger.info("Data flushed.")
         self.data_ready = False
-        log.logger.info("Data marked as not ready.")
+        self.log.logger.info("Data marked as not ready.")
         self.lock.release()
-        log.logger.info("Lock released.")
+        self.log.logger.info("Lock released.")
