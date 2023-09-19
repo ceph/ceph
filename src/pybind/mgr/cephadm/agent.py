@@ -174,6 +174,8 @@ class HostData(Server):
             if self.validate_node_proxy_data(data):
                 self.mgr.set_store(f'node_proxy/data/{data["host"]}', json.dumps(data['data']))
                 self.mgr.log.warning(f"{data}")
+                self.raise_alert(data)
+
                 results['result'] = data
 
         if cherrypy.request.method == 'GET':
@@ -181,6 +183,50 @@ class HostData(Server):
                 host = k.split('/')[-1:][0]
                 results[host] = json.loads(v)
         return results
+
+    def get_nok_members(self,
+                        component: str,
+                        data: Dict[str, Any]) -> List[Dict[str, str]]:
+        nok_members: List[Dict[str, str]] = []
+
+        for member in data[component].keys():
+            # Force a fake error for testing purpose
+            if component == 'storage':
+                _status = 'critical'
+                state = "Fake error"
+            else:
+                _status = data[component][member]['status']['health'].lower()
+            if _status.lower() != 'ok':
+                # state = data[component][member]['status']['state']
+                _member = dict(
+                    member=member,
+                    status=_status,
+                    state=state
+                )
+                nok_members.append(_member)
+
+        return nok_members
+
+    def raise_alert(self, data: Dict[str, Any]) -> None:
+        mapping: Dict[str, str] = {
+            'storage': 'NODE_PROXY_STORAGE',
+            'memory': 'NODE_PROXY_MEMORY',
+            'processors': 'NODE_PROXY_PROCESSORS',
+            'network': 'NODE_PROXY_NETWORK',
+        }
+
+        for component in data['data'].keys():
+            nok_members = self.get_nok_members(component,
+                                                data['data'])
+
+            if nok_members:
+                count = len(nok_members)
+                self.mgr.set_health_warning(
+                    mapping[component],
+                    summary=f'{count} {component} member{"s" if count > 1 else ""} {"are" if count > 1 else "is"} not ok',
+                    count=count,
+                    detail=[f"{member['member']} is {member['status']}: {member['state']}" for member in nok_members],
+                )
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
         fields = '{' + ', '.join([key for key in data.keys()]) + '}'
