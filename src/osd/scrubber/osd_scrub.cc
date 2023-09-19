@@ -260,42 +260,23 @@ Scrub::schedule_result_t OsdScrub::initiate_a_scrub(
   return locked_pg->pg()->sched_scrub();
 }
 
-
-// ////////////////////////////////////////////////////////////////////////// //
-// scrub initiation - OSD code temporarily moved here from OSD.cc
-
-// temporary dout() support for OSD members:
-static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
-  return *_dout << "osd." << whoami << " " << epoch << " ";
-}
-#undef dout_prefix
-#define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
-
-void OSD::resched_all_scrubs()
+void OsdScrub::on_config_change()
 {
-  dout(10) << __func__ << ": start" << dendl;
-  auto all_jobs = service.get_scrub_services().list_registered_jobs();
-  for (auto& e : all_jobs) {
+  auto to_notify = m_queue.list_registered_jobs();
 
-    auto& job = *e;
-    dout(20) << __func__ << ": examine " << job.pgid << dendl;
-
-    PGRef pg = _lookup_lock_pg(job.pgid);
-    if (!pg)
+  for (const auto& p : to_notify) {
+    dout(30) << fmt::format("rescheduling pg[{}] scrubs", *p) << dendl;
+    auto locked_pg = m_osd_svc.get_locked_pg(p->pgid);
+    if (!locked_pg)
       continue;
 
-    dout(15) << __func__ << ": updating scrub schedule on " << job.pgid << dendl;
-    pg->on_scrub_schedule_input_change();
-
-    pg->unlock();
+    dout(15) << fmt::format(
+		    "updating scrub schedule on {}",
+		    (locked_pg->pg())->get_pgid())
+	     << dendl;
+    locked_pg->pg()->on_scrub_schedule_input_change();
   }
-  dout(10) << __func__ << ": done" << dendl;
 }
-
-
-// restoring local dout() settings (to be removed in a followup commit)
-#undef dout_prefix
-#define dout_prefix _prefix_fn(_dout, this, __func__)
 
 void ScrubQueue::dump_scrubs(ceph::Formatter* f) const
 {
