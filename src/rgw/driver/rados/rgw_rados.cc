@@ -5576,6 +5576,13 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     (void) CLSRGWIssueBucketIndexClean(index_pool,
 				       bucket_objs,
 				       cct->_conf->rgw_bucket_index_max_aio)();
+  } else {
+    bucket_info.deleted = true;
+    map<string, bufferlist> attrs;
+    r = put_bucket_instance_info(bucket_info, false, real_time(), &attrs, dpp, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "WARNING: put_bucket_info on bucket=" << bucket_info.bucket.name << " returned err=" << r << dendl;
+    }
   }
 
   return 0;

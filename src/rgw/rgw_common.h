@@ -1062,6 +1062,7 @@ struct RGWBucketInfo {
   bool has_instance_obj{false};
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
   RGWQuotaInfo quota;
+  bool deleted{false};
 
   // layout of bucket index objects
   rgw::BucketLayout layout;
