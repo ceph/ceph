@@ -312,13 +312,15 @@ public:
 using FSCryptKeyHandlerRef = std::shared_ptr<FSCryptKeyHandler>;
 
 class FSCryptKeyStore {
+  CephContext *cct;
+
   ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyStore");
   int64_t epoch = 0;
   std::map<ceph_fscrypt_key_identifier, FSCryptKeyHandlerRef> m;
 
   int _find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyHandlerRef& key);
 public:
-  FSCryptKeyStore() {}
+  FSCryptKeyStore(CephContext *_cct) : cct(_cct) {}
 
   int create(const char *k, int klen, FSCryptKeyHandlerRef& key);
   int find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyHandlerRef& key);
@@ -346,7 +348,7 @@ class FSCrypt {
   FSCryptDenc *init_denc(FSCryptContextRef& ctx, FSCryptKeyValidatorRef *kv,
                          std::function<FSCryptDenc *()> gen_denc);
 public:
-  FSCrypt(CephContext *_cct) : cct(_cct) {}
+  FSCrypt(CephContext *_cct) : cct(_cct), key_store(cct) {}
 
   FSCryptContextRef init_ctx(const std::vector<unsigned char>& fscrypt_auth);
 

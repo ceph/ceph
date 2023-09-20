@@ -11578,6 +11578,279 @@ bool Client::C_Write_Finisher::try_complete()
   return false;
 }
 
+Client::WriteEncMgr::WriteEncMgr(Client *clnt,
+                                 Fh *f, int64_t offset, uint64_t size,
+                                 bufferlist& bl,
+                                 bool async) : clnt(clnt), whoami(clnt->whoami),
+                                                   cct(clnt->cct), fscrypt(clnt->fscrypt.get()),
+                                                   f(f), in(f->inode.get()),
+                                                   offset(offset), size(size), bl(bl),
+                                                   async(async)
+{
+  denc = fscrypt->get_fdata_denc(in->fscrypt_ctx, &in->fscrypt_key_validator);
+
+  pbl = &bl;
+}
+
+Client::WriteEncMgr::~WriteEncMgr()
+{
+}
+
+int Client::WriteEncMgr::init()
+{
+  if (!denc) {
+    return 0;
+  }
+
+  endoff = offset + size;
+
+  int want = CEPH_CAP_FILE_RD;
+  int have;
+  int r = clnt->get_caps(f, CEPH_CAP_FILE_RD, want, &have, endoff);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int Client::WriteEncMgr::read_async(uint64_t off, uint64_t len, bufferlist *bl,
+                                     iofinish_method_ctx<WriteEncMgr> *ioctx)
+{
+  get();
+
+  if (off >= in->size) {
+    ioctx->finish(0);
+    return 0;
+  }
+
+  int r = clnt->_read_async(f, off, len, bl, ioctx->ctx());
+  if (r < 0) {
+    ioctx->cancel(r);
+    put();
+  }
+
+  ioctx->release();
+
+  return r;
+}
+
+int Client::WriteEncMgr::read_modify_write(Context *_iofinish)
+{
+  iofinish = _iofinish;
+
+  if (!denc) {
+    return do_write();
+  }
+
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+
+  int r = 0;
+
+  start_block = fscrypt_block_from_ofs(offset);
+  start_block_ofs = fscrypt_block_start(offset);
+  ofs_in_start_block = fscrypt_ofs_in_block(offset);
+  end_block = fscrypt_block_from_ofs(endoff - 1);
+  end_block_ofs = fscrypt_block_start(endoff - 1);
+  ofs_in_end_block = fscrypt_ofs_in_block(endoff - 1);
+
+  need_read_start = ofs_in_start_block > 0;
+  need_read_end = (endoff < in->effective_size() && ofs_in_end_block < FSCRYPT_BLOCK_SIZE - 1 && start_block != end_block);
+
+  read_start_size = (need_read_start && need_read_end && start_block == end_block ?
+                     FSCRYPT_BLOCK_SIZE : ofs_in_start_block);
+  
+  bool need_read = need_read_start | need_read_start;
+
+
+  if (read_start_size > 0) {
+    finish_read_start_ctx.reset(new iofinish_method_ctx<WriteEncMgr>(*this, &WriteEncMgr::finish_read_start_cb, &aioc));
+
+    r = read_async(start_block_ofs, read_start_size, &startbl, finish_read_start_ctx.get());
+    if (r < 0) {
+      finish_read_start_ctx.reset();
+
+      ldout(cct, 0) << "failed to read first block: r=" << r << dendl;
+      goto done;
+    }
+  }
+
+  if (need_read_end) {
+    finish_read_end_ctx.reset(new iofinish_method_ctx<WriteEncMgr>(*this, &WriteEncMgr::finish_read_end_cb, &aioc));
+
+    r = read_async(end_block_ofs, FSCRYPT_BLOCK_SIZE, &endbl, finish_read_end_ctx.get());
+    if (r < 0) {
+      finish_read_end_ctx.reset();
+
+      ldout(cct, 0) << "failed to read end block: r=" << r << dendl;
+      goto done;
+    }
+  }
+
+  is_ready_to_finish = true;
+
+  if (need_read && !async) {
+    clnt->client_lock.unlock();
+
+    if (finish_read_start_ctx) {
+      finish_read_start_ctx->wait();
+    }
+
+    if (finish_read_end_ctx) {
+      finish_read_end_ctx->wait();
+    }
+
+    clnt->client_lock.lock();
+
+    r = aioc.get_retcode();
+    if (r < 0) {
+      goto done;
+    }
+  }
+
+
+done:
+  if (async) {
+    if (finish_read_start_ctx) {
+      finish_read_start_ctx->release();
+    }
+
+    if (finish_read_end_ctx) {
+      finish_read_end_ctx->release();
+    }
+  }
+
+  try_finish(r);
+
+  return r;
+}
+
+
+void Client::WriteEncMgr::finish_read_start(int r)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+
+  if (r >= 0) {
+    std::lock_guard l{lock};
+    int read_len = startbl.length();
+    if (read_len < read_start_size) {
+      startbl.append_zero(read_start_size - read_len);
+    }
+
+    /* prepend data from the start of the first block */
+    bufferlist newbl;
+    startbl.splice(0, ofs_in_start_block, &newbl);
+
+    int orig_len = bl.length();
+
+    /* append new data */
+    newbl.claim_append(bl);
+
+    if (startbl.length() > orig_len) {
+      /* can happen if start and end are in the same block */
+      bufferlist tail;
+      startbl.splice(orig_len, startbl.length()-orig_len, &tail);
+      newbl.claim_append(tail);
+
+      if (newbl.length() < FSCRYPT_BLOCK_SIZE) {
+        newbl.append_zero(FSCRYPT_BLOCK_SIZE - newbl.length());
+      }
+    }
+
+    bl.swap(newbl);
+  }
+
+  try_finish(r);
+}
+
+void Client::WriteEncMgr::finish_read_end(int r)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+
+  if (r >= 0) {
+    std::lock_guard l{lock};
+    if (endbl.length() > ofs_in_end_block) {
+      bufferlist tail;
+      endbl.splice(ofs_in_end_block + 1, endbl.length() - ofs_in_end_block - 1, &tail);
+
+      bl.claim_append(tail);
+    }
+  }
+
+  try_finish(r);
+}
+
+bool Client::WriteEncMgr::do_try_finish(int r)
+{
+  ceph_assert(ceph_mutex_is_locked_by_me(clnt->client_lock));
+
+  if (!aioc.is_complete()) {
+    return false;
+  }
+
+  if (r >= 0) {
+    offset = start_block_ofs;
+
+    pbl = &encbl;
+    r = denc->encrypt_bl(offset, bl.length(), bl, &encbl);
+    if (r < 0) {
+      ldout(cct, 0) << "failed to encrypt bl: r=" << r << dendl;
+    }
+
+    size = encbl.length();
+  }
+
+  clnt->put_cap_ref(in, CEPH_CAP_FILE_RD);
+  in->mark_caps_dirty(CEPH_CAP_FILE_RD);
+
+  update_write_params();
+
+  r = do_write();
+
+  return true;
+}
+
+void Client::WriteEncMgr_Buffered::update_write_params()
+{
+  if (iofinish) {
+    static_cast<CWF_iofinish *>(iofinish)->CWF->update_write_params(offset, size);
+  }
+}
+
+int Client::WriteEncMgr_Buffered::do_write()
+{
+  int r =  0;
+
+  // do buffered write
+  if (!in->oset.dirty_or_tx)
+    clnt->get_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
+
+  clnt->get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
+  // async, caching, non-blocking.
+  r = clnt->objectcacher->file_write(&in->oset, &in->layout,
+                                     in->snaprealm->get_snap_context(),
+                                     offset, size, *pbl, ceph::real_clock::now(),
+                                     0, iofinish,
+                                     !async
+                                     ? clnt->objectcacher->CFG_block_writes_upfront()
+                                     : false);
+
+  return r;
+}
+
+int Client::WriteEncMgr_NotBuffered::do_write()
+{
+  clnt->get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
+
+  clnt->filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
+                           offset, size, *pbl, ceph::real_clock::now(), 0,
+                           in->truncate_size, in->truncate_seq,
+                           iofinish);
+
+  return 0;
+}
+
 int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 	                const struct iovec *iov, int iovcnt, Context *onfinish,
 	                bool do_fsync, bool syncdataonly)
@@ -11659,109 +11932,6 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     }
   }
 
-  uint64_t request_offset = offset;
-  uint64_t request_size = size;
-
-  bufferlist encbl;
-  bufferlist *pbl = &bl;
-
-  auto denc = fscrypt->get_fdata_denc(in->fscrypt_ctx, &in->fscrypt_key_validator);
-  if (denc) {
-#if 0
-    int want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_RD;
-    int have;
-    if (f->mode & CEPH_FILE_MODE_LAZY) {
-      want |= CEPH_CAP_FILE_LAZYIO;
-    }
-#endif
-    int want = CEPH_CAP_FILE_RD;
-    int have;
-    int r = get_caps(f, CEPH_CAP_FILE_RD, want, &have, endoff);
-    if (r < 0) {
-      return r;
-    }
-    auto start_block = fscrypt_block_from_ofs(offset);
-    auto start_block_ofs = fscrypt_block_start(offset);
-    auto ofs_in_start_block = fscrypt_ofs_in_block(offset);
-    auto end_block = fscrypt_block_from_ofs(endoff - 1);
-    auto end_block_ofs = fscrypt_block_start(endoff - 1);
-    auto ofs_in_end_block = fscrypt_ofs_in_block(endoff - 1);
-
-    bool need_read_start = ofs_in_start_block > 0;
-    bool need_read_end = (endoff < in->effective_size() && ofs_in_end_block < FSCRYPT_BLOCK_SIZE - 1);
-
-    int read_start_size = (need_read_start && need_read_end && start_block == end_block ?
-                           FSCRYPT_BLOCK_SIZE : ofs_in_start_block);
-    if (read_start_size > 0) {
-      bufferlist startbl;
-
-      int r = _read(f, start_block_ofs, read_start_size, &startbl);
-      if (r < 0) {
-        ldout(cct, 0) << "failed to read first block: r=" << r << dendl;
-        return r;
-      }
-
-      int read_len = startbl.length();
-      if (read_len < read_start_size) {
-        startbl.append_zero(read_start_size - read_len);
-      }
-
-      /* prepend data from the start of the first block */
-      bufferlist newbl;
-      startbl.splice(0, ofs_in_start_block, &newbl);
-
-      int orig_len = bl.length();
-
-      /* append new data */
-      newbl.claim_append(bl);
-
-      if (startbl.length() > orig_len) {
-        /* can happen if start and end are in the same block */
-        bufferlist tail;
-        startbl.splice(orig_len, startbl.length()-orig_len, &tail);
-        newbl.claim_append(tail);
-
-        if (newbl.length() < FSCRYPT_BLOCK_SIZE) {
-          newbl.append_zero(FSCRYPT_BLOCK_SIZE - newbl.length());
-        }
-
-        need_read_end = false;
-      }
-
-      bl.swap(newbl);
-    }
-
-    if (need_read_end) {
-      bufferlist endbl;
-      int r = _read(f, end_block_ofs, FSCRYPT_BLOCK_SIZE, &endbl);
-      if (r < 0) {
-        ldout(cct, 0) << "failed to read first block: r=" << r << dendl;
-        return r;
-      }
-
-      if (endbl.length() > ofs_in_end_block) {
-        bufferlist tail;
-        endbl.splice(ofs_in_end_block + 1, endbl.length() - ofs_in_end_block - 1, &tail);
-
-        bl.claim_append(tail);
-      }
-    }
-
-    put_cap_ref(in, CEPH_CAP_FILE_RD);
-    in->mark_caps_dirty(CEPH_CAP_FILE_RD);
-
-    offset = start_block_ofs;
-
-    pbl = &encbl;
-    r = denc->encrypt_bl(offset, bl.length(), bl, &encbl);
-    if (r < 0) {
-      ldout(cct, 0) << "failed to encrypt bl: r=" << r << dendl;
-      return r;
-    }
-
-    size = encbl.length();
-  }
-
   int want, have;
   if (f->mode & CEPH_FILE_MODE_LAZY)
     want = CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO;
@@ -11780,9 +11950,32 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
     }
   }
 
-#warning buffered encrypted writes handling
+  uint64_t request_offset = offset;
+  uint64_t request_size = size;
+
   if (f->flags & O_DIRECT)
     have &= ~(CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO);
+
+  bool buffered_write = (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO));
+  ceph::ref_t<WriteEncMgr> enc_mgr;
+
+  if (buffered_write) {
+    enc_mgr = ceph::make_ref<WriteEncMgr_Buffered>(this, f,
+                                           offset, size, bl,
+                                           !!onfinish);
+  } else {
+    enc_mgr = ceph::make_ref<WriteEncMgr_NotBuffered>(this, f,
+                                           offset, size, bl,
+                                           !!onfinish);
+  }
+
+
+  r = enc_mgr->init();
+  if (r < 0) {
+    ldout(cct, 0) << __func__ << "(): enc_mgr init failed (r=" << r << ")" << dendl;
+    put_cap_ref(in, CEPH_CAP_FILE_WR);
+    return r;
+  }
 
   ldout(cct, 10) << " snaprealm " << *in->snaprealm << dendl;
 
@@ -11829,27 +12022,22 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
                         start, f, in, fpos,
                         request_offset, request_size,
                         offset, size,
-                        do_fsync, syncdataonly, !!denc));
+                        do_fsync, syncdataonly, enc_mgr->encrypted()));
 
     cwf_iofinish->CWF = cwf.get();
   }
 
   if (cct->_conf->client_oc &&
       (have & (CEPH_CAP_FILE_BUFFER | CEPH_CAP_FILE_LAZYIO))) {
+
     // do buffered write
-    if (!in->oset.dirty_or_tx)
-      get_cap_ref(in, CEPH_CAP_FILE_CACHE | CEPH_CAP_FILE_BUFFER);
 
-    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-
-    // async, caching, non-blocking.
-    r = objectcacher->file_write(&in->oset, &in->layout,
-				 in->snaprealm->get_snap_context(),
-				 offset, size, *pbl, ceph::real_clock::now(),
-				 0, iofinish.get(),
-				 onfinish == nullptr
-				   ? objectcacher->CFG_block_writes_upfront()
-				   : false);
+    r = enc_mgr->read_modify_write(iofinish.get());
+    if (r < 0) {
+      ldout(cct, 0) << __func__ << "(): enc_mgr read failed (r=" << r << ")" << dendl;
+      put_cap_ref(in, CEPH_CAP_FILE_WR);
+      return r;
+    }
 
     if (onfinish) {
       // handle non-blocking caller (onfinish != nullptr), we can now safely
@@ -11904,12 +12092,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
       iofinish.reset(cond_iofinish);
     }
 
-    get_cap_ref(in, CEPH_CAP_FILE_BUFFER);
-
-    filer->write_trunc(in->ino, &in->layout, in->snaprealm->get_snap_context(),
-		       offset, size, *pbl, ceph::real_clock::now(), 0,
-		       in->truncate_size, in->truncate_seq,
-		       iofinish.get());
+    enc_mgr->read_modify_write(iofinish.get());
 
     if (onfinish) {
       // handle non-blocking caller (onfinish != nullptr), we can now safely
@@ -11934,7 +12117,7 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
 success:
 
   // do not get here if non-blocking caller (onfinish != nullptr)
-  r = _write_success(f, start, fpos, request_offset, request_size, offset, size, in, !!denc);
+  r = _write_success(f, start, fpos, request_offset, request_size, enc_mgr->get_ofs(), enc_mgr->get_size(), in, enc_mgr->encrypted());
 
   if (r >= 0 && do_fsync) {
     int64_t r1;
