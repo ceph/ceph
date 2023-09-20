@@ -137,7 +137,7 @@ from cephadmlib.net_utils import (
 from cephadmlib.locking import FileLock
 from cephadmlib.daemon_identity import DaemonIdentity, DaemonSubIdentity
 from cephadmlib.packagers import create_packager, Packager
-from cephadmlib.logging import cephadm_init_logging
+from cephadmlib.logging import cephadm_init_logging, Highlight, LogDestination
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -201,12 +201,6 @@ class DeploymentType(Enum):
     # Reconfiguring a daemon. Rewrites config
     # files and potentially restarts daemon.
     RECONFIG = 'Reconfig'
-
-
-class termcolor:
-    yellow = '\033[93m'
-    red = '\033[31m'
-    end = '\033[0m'
 
 ##################################
 
@@ -1615,7 +1609,7 @@ For information regarding the latest stable release:
     https://docs.ceph.com/docs/{}/cephadm/install
 """.format(LATEST_STABLE_RELEASE)
         for line in warn.splitlines():
-            logger.warning('{}{}{}'.format(termcolor.yellow, line, termcolor.end))
+            logger.warning(line, extra=Highlight.WARNING.extra())
     return DEFAULT_IMAGE
 
 
@@ -2519,9 +2513,9 @@ def _get_container_mounts_for_type(
                 mounts[ceph_folder + '/monitoring/ceph-mixin/dashboards_out'] = '/etc/grafana/dashboards/ceph-dashboard'
                 mounts[ceph_folder + '/monitoring/ceph-mixin/prometheus_alerts.yml'] = '/etc/prometheus/ceph/ceph_default_alerts.yml'
             else:
-                logger.error('{}{}{}'.format(termcolor.red,
-                                             'Ceph shared source folder does not exist.',
-                                             termcolor.end))
+                logger.error(
+                    'Ceph shared source folder does not exist.',
+                    extra=Highlight.FAILURE.extra())
     except AttributeError:
         pass
     return mounts
@@ -5669,6 +5663,16 @@ def command_bootstrap(ctx):
             cli(['config', 'assimilate-conf',
                  '-i', '/var/lib/ceph/user.conf'],
                 {tmp.name: '/var/lib/ceph/user.conf:z'})
+
+    if getattr(ctx, 'log_dest', None):
+        ldkey = 'mgr/cephadm/cephadm_log_destination'
+        cp = read_config(ctx.config)
+        if cp.has_option('mgr', ldkey):
+            logger.info('The cephadm log destination is set by the config file, ignoring cli option')
+        else:
+            value = ','.join(sorted(getattr(ctx, 'log_dest')))
+            logger.info('Setting cephadm log destination to match logging for cephadm boostrap: %s', value)
+            cli(['config', 'set', 'mgr', ldkey, value, '--force'])
 
     # wait for mgr to restart (after enabling a module)
     def wait_for_mgr_restart() -> None:
@@ -8819,6 +8823,11 @@ def _get_parser():
         '--verbose', '-v',
         action='store_true',
         help='Show debug-level log messages')
+    parser.add_argument(
+        '--log-dest',
+        action='append',
+        choices=[v.name for v in LogDestination],
+        help='select one or more destination for persistent logging')
     parser.add_argument(
         '--timeout',
         type=int,
