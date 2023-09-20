@@ -1054,6 +1054,9 @@ public:
   }
 
   virtual bool is_stable() const = 0;
+  bool is_zero_reserved() const {
+    return !get_val().is_real();
+  }
 
   virtual ~PhysicalNodeMapping() {}
 protected:
