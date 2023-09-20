@@ -751,6 +751,7 @@ void CDir::unlink_inode_work(CDentry *dn)
         dn->unlink_remote(dn->get_linkage());
 
       dn->get_linkage()->set_remote(0, 0);
+      dn->get_linkage()->ref_inode = 0;
   } else if (dn->get_linkage()->is_primary()) {
     // primary
     // unpin dentry?
