@@ -14,13 +14,11 @@ class ConfigValues;
 // the changes of settings at runtime.
 template<class ConfigObs>
 class ObserverMgr : public ConfigTracker {
-  // Maps configuration options to the observer listening for them.
-  using obs_map_t = std::multimap<std::string, ConfigObs*>;
-  obs_map_t observers;
-
 public:
-  typedef std::map<ConfigObs*, std::set<std::string>> rev_obs_map;
-  typedef std::function<void(ConfigObs*, const std::string&)> config_gather_cb;
+  using config_obs_ptr = std::shared_ptr<ConfigObs*>;
+  using config_obs_wptr = std::weak_ptr<ConfigObs*>;
+  typedef std::map<config_obs_ptr, std::set<std::string>> rev_obs_map;
+  typedef std::function<void(config_obs_ptr, const std::string&)> config_gather_cb;
 
   // Adds a new observer to this configuration. You can do this at any time,
   // but it will only receive notifications for the changes that happen after
@@ -37,15 +35,18 @@ public:
   // you need to delete it yourself.
   // This function will assert if you try to delete an observer that isn't
   // there.
-  void remove_observer(ConfigObs* observer);
+  config_obs_wptr remove_observer(ConfigObs* observer);
   // invoke callback for every observers tracking keys
   void for_each_observer(config_gather_cb callback);
   // invoke callback for observers keys tracking the provided change set
-  template<class ConfigProxyT>
-  void for_each_change(const std::set<std::string>& changes,
-                       ConfigProxyT& proxy,
+  void for_each_change(const std::map<std::string,bool>& changes,
                        config_gather_cb callback, std::ostream *oss);
   bool is_tracking(const std::string& name) const override;
+
+private:
+  // Maps configuration options to the observer listening for them.
+  using obs_map_t = std::multimap<std::string, config_obs_ptr>;
+  obs_map_t observers;
 };
 
 // we could put the implementations in a .cc file, and only instantiate the
@@ -60,17 +61,20 @@ template<class ConfigObs>
 void ObserverMgr<ConfigObs>::add_observer(ConfigObs* observer)
 {
   const char **keys = observer->get_tracked_conf_keys();
+  auto ptr = std::make_shared<ConfigObs*>(observer);
   for (const char ** k = keys; *k; ++k) {
-    observers.emplace(*k, observer);
+    observers.emplace(*k, ptr);
   }
 }
 
 template<class ConfigObs>
-void ObserverMgr<ConfigObs>::remove_observer(ConfigObs* observer)
+typename ObserverMgr<ConfigObs>::config_obs_wptr ObserverMgr<ConfigObs>::remove_observer(ConfigObs* observer)
 {
   [[maybe_unused]] bool found_obs = false;
+  config_obs_ptr ptr;
   for (auto o = observers.begin(); o != observers.end(); ) {
-    if (o->second == observer) {
+    if (*o->second == observer) {
+      ptr = std::move(o->second);
       observers.erase(o++);
       found_obs = true;
     } else {
@@ -78,6 +82,7 @@ void ObserverMgr<ConfigObs>::remove_observer(ConfigObs* observer)
     }
   }
   ceph_assert(found_obs);
+  return config_obs_wptr(ptr);
 }
 
 template<class ConfigObs>
@@ -89,17 +94,15 @@ void ObserverMgr<ConfigObs>::for_each_observer(config_gather_cb callback)
 }
 
 template<class ConfigObs>
-template<class ConfigProxyT>
-void ObserverMgr<ConfigObs>::for_each_change(const std::set<std::string>& changes,
-                                             ConfigProxyT& proxy,
+void ObserverMgr<ConfigObs>::for_each_change(const std::map<std::string,bool>& changes,
                                              config_gather_cb callback, std::ostream *oss)
 {
   // create the reverse observer mapping, mapping observers to the set of
   // changed keys that they'll get.
   std::string val;
-  for (auto& key : changes) {
+  for (auto& [key, present] : changes) {
     auto [first, last] = observers.equal_range(key);
-    if ((oss) && !proxy.get_val(key, &val)) {
+    if ((oss) && present) {
       (*oss) << key << " = '" << val << "' ";
       if (first == last) {
         (*oss) << "(not observed, change may require restart) ";
