@@ -56,7 +56,8 @@ os._exit = os_exit_noop   # type: ignore
 
 _global_instance = None  # type: Optional[Module]
 cherrypy.config.update({
-    'response.headers.server': 'Ceph-Prometheus'
+    'response.headers.server': 'Ceph-Prometheus',
+    'log.screen': False
 })
 
 
