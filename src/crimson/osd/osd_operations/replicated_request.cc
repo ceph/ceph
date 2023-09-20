@@ -71,10 +71,16 @@ seastar::future<> RepRequest::with_pg(
       });
     }).then_interruptible([this, pg] (auto) {
       return pg->handle_rep_op(req);
+    }).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
     });
-  }, [ref](std::exception_ptr) {
+  }, [](std::exception_ptr) {
     return seastar::now();
-  }, pg);
+  }, pg).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

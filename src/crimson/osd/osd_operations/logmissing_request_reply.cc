@@ -61,8 +61,17 @@ seastar::future<> LogMissingRequestReply::with_pg(
 
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    return pg->do_update_log_missing_reply(std::move(req));
-  }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
+    return pg->do_update_log_missing_reply(std::move(req)
+    ).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
+    });
+  }, [](std::exception_ptr) {
+    return seastar::now();
+  }, pg).finally([this, ref] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

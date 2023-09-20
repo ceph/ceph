@@ -85,8 +85,9 @@ seastar::future<> PeeringEvent<T>::with_pg(
       return this->template enter_stage<interruptor>(peering_pp(*pg).process);
     }).then_interruptible([this, pg, &shard_services] {
       return pg->do_peering_event(evt, ctx
-      ).then_interruptible([this, pg, &shard_services] {
-	that()->get_handle().exit();
+      ).then_interruptible([this] {
+	return that()->get_handle().complete();
+      }).then_interruptible([this, pg, &shard_services] {
 	return complete_rctx(shard_services, pg);
       });
     }).then_interruptible([pg, &shard_services]()
@@ -100,7 +101,10 @@ seastar::future<> PeeringEvent<T>::with_pg(
     });
   }, [this](std::exception_ptr ep) {
     logger().debug("{}: interrupted with {}", *this, ep);
-  }, pg);
+  }, pg).finally([this] {
+    logger().debug("{}: exit", *this);
+    that()->get_handle().exit();
+  });
 }
 
 template <class T>
