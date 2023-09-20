@@ -1560,7 +1560,7 @@ def infer_config(func: FuncT) -> FuncT:
 
         def config_path(daemon_type: str, daemon_name: str) -> str:
             ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_name)
-            data_dir = get_data_dir(ident, ctx.data_dir)
+            data_dir = ident.data_dir(ctx.data_dir)
             return os.path.join(data_dir, 'config')
 
         def get_mon_daemon_name(fsid: str) -> Optional[str]:
@@ -1765,12 +1765,6 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
     return None
 
 
-def get_data_dir(ident: 'DaemonIdentity', data_dir: str) -> str:
-    return os.path.join(
-        data_dir, ident.fsid, f'{ident.daemon_type}.{ident.daemon_id}'
-    )
-
-
 def get_log_dir(fsid, log_dir):
     # type: (str, str) -> str
     return os.path.join(log_dir, fsid)
@@ -1795,7 +1789,7 @@ def make_data_dir(
     if uid is None or gid is None:
         uid, gid = extract_uid_gid(ctx)
     make_data_dir_base(ident.fsid, ctx.data_dir, uid, gid)
-    data_dir = get_data_dir(ident, ctx.data_dir)
+    data_dir = ident.data_dir(ctx.data_dir)
     makedirs(data_dir, uid, gid, DATA_DIR_MODE)
     return data_dir
 
@@ -2166,7 +2160,7 @@ def create_daemon_dirs(
         config_dir = ''
         data_dir_root = ''
         if daemon_type == 'prometheus':
-            data_dir_root = get_data_dir(ident, ctx.data_dir)
+            data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/prometheus'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'alerting'), uid, gid, 0o755)
@@ -2174,7 +2168,7 @@ def create_daemon_dirs(
             recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
             recursive_chown(os.path.join(data_dir_root, 'data'), uid, gid)
         elif daemon_type == 'grafana':
-            data_dir_root = get_data_dir(ident, ctx.data_dir)
+            data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/grafana'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'certs'), uid, gid, 0o755)
@@ -2182,22 +2176,22 @@ def create_daemon_dirs(
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
             touch(os.path.join(data_dir_root, 'data', 'grafana.db'), uid, gid)
         elif daemon_type == 'alertmanager':
-            data_dir_root = get_data_dir(ident, ctx.data_dir)
+            data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/alertmanager'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, config_dir, 'data'), uid, gid, 0o755)
         elif daemon_type == 'promtail':
-            data_dir_root = get_data_dir(ident, ctx.data_dir)
+            data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/promtail'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
         elif daemon_type == 'loki':
-            data_dir_root = get_data_dir(ident, ctx.data_dir)
+            data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/loki'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
         elif daemon_type == 'node-exporter':
-            data_dir_root = get_data_dir(ident, ctx.data_dir)
+            data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/node-exporter'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             recursive_chown(os.path.join(data_dir_root, 'etc'), uid, gid)
@@ -2442,7 +2436,7 @@ def get_container_binds(
         binds.extend(CephNvmeof.get_container_binds())
     elif ident.daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         binds.extend(cc.get_container_binds(data_dir))
 
     return binds
@@ -2538,7 +2532,7 @@ def get_container_mounts(
     assert ident.fsid
     assert ident.daemon_id
     if daemon_type in Ceph.daemons:
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         if daemon_type == 'rgw':
             cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (ident.daemon_id)
         else:
@@ -2552,7 +2546,7 @@ def get_container_mounts(
             mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, ident.daemon_id)
 
     if daemon_type in Monitoring.components:
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         log_dir = get_log_dir(fsid, ctx.log_dir)
         if daemon_type == 'prometheus':
             mounts[os.path.join(data_dir, 'etc/prometheus')] = '/etc/prometheus:Z'
@@ -2578,20 +2572,20 @@ def get_container_mounts(
             mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/etc/alertmanager:Z'
 
     if daemon_type == NFSGanesha.daemon_type:
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         nfs_ganesha = NFSGanesha.init(ctx, fsid, ident.daemon_id)
         mounts.update(nfs_ganesha.get_container_mounts(data_dir))
 
     if daemon_type == HAproxy.daemon_type:
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         mounts.update(HAproxy.get_container_mounts(data_dir))
 
     if daemon_type == CephNvmeof.daemon_type:
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         mounts.update(CephNvmeof.get_container_mounts(data_dir))
 
     if daemon_type == CephIscsi.daemon_type:
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         # Removes ending ".tcmu" from data_dir a tcmu-runner uses the same data_dir
         # as rbd-runner-api
         if data_dir.endswith('.tcmu'):
@@ -2600,12 +2594,12 @@ def get_container_mounts(
         mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
 
     if daemon_type == Keepalived.daemon_type:
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         mounts.update(Keepalived.get_container_mounts(data_dir))
 
     if daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, fsid, ident.daemon_id)
-        data_dir = get_data_dir(ident, ctx.data_dir)
+        data_dir = ident.data_dir(ctx.data_dir)
         mounts.update(cc.get_container_mounts(data_dir))
 
     _update_podman_mounts(ctx, mounts)
@@ -2867,7 +2861,7 @@ def deploy_daemon(
             else:
                 raise Error("TCP Port(s) '{}' required for {} already in use".format(','.join(map(str, endpoints)), daemon_type))
 
-    data_dir = get_data_dir(ident, ctx.data_dir)
+    data_dir = ident.data_dir(ctx.data_dir)
     if deployment_type == DeploymentType.RECONFIG and not os.path.exists(data_dir):
         raise Error('cannot reconfig, data path %s does not exist' % data_dir)
     if daemon_type == 'mon' and not os.path.exists(data_dir):
@@ -2882,7 +2876,7 @@ def deploy_daemon(
         # --mkfs
         create_daemon_dirs(ctx, ident, uid, gid)
         assert ident.daemon_type == 'mon'
-        mon_dir = get_data_dir(ident, ctx.data_dir)
+        mon_dir = ident.data_dir(ctx.data_dir)
         log_dir = get_log_dir(ident.fsid, ctx.log_dir)
         CephContainer(
             ctx,
@@ -3093,7 +3087,7 @@ def deploy_daemon_units(
     daemon_type = ident.daemon_type
     daemon_id = ident.daemon_id
 
-    data_dir = get_data_dir(ident, ctx.data_dir)
+    data_dir = ident.data_dir(ctx.data_dir)
     run_file_path = data_dir + '/unit.run'
     meta_file_path = data_dir + '/unit.meta'
     with write_new(run_file_path) as f, write_new(meta_file_path) as metaf:
@@ -4012,10 +4006,7 @@ class InitContainer(BasicContainer):
         if not vmounts:
             vmounts = primary.volume_mounts
         else:
-            data_dir = data_dir or get_data_dir(
-                primary.identity,
-                ctx.data_dir,
-            )
+            data_dir = data_dir or primary.identity.data_dir(ctx.data_dir)
             vmounts = {
                 os.path.join(data_dir, src): dst
                 for src, dst in vmounts.items()
@@ -4959,7 +4950,7 @@ def prepare_create_mon(
     logger.info('Creating mon...')
     ident = DaemonIdentity(fsid, 'mon', mon_id)
     create_daemon_dirs(ctx, ident, uid, gid)
-    mon_dir = get_data_dir(ident, ctx.data_dir)
+    mon_dir = ident.data_dir(ctx.data_dir)
     log_dir = get_log_dir(fsid, ctx.log_dir)
     out = CephContainer(
         ctx,
@@ -7335,7 +7326,7 @@ def command_rm_daemon(ctx):
              verbosity=CallVerbosity.DEBUG)
 
     ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
-    data_dir = get_data_dir(ident, ctx.data_dir)
+    data_dir = ident.data_dir(ctx.data_dir)
     if daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
         # rename it out of the way -- do not delete
