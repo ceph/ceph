@@ -70,7 +70,7 @@ override_dh_auto_build:
 
 override_dh_auto_clean:
 	dh_auto_clean --buildsystem=cmake
-	rm -f debian/radosgw.init debian/ceph.logrotate
+	rm -f debian/radosgw.init debian/ceph.logrotate debian/ceph-base.docs
 
 override_dh_auto_install:
 	dh_auto_install --buildsystem=cmake --destdir=$(DESTDIR)
@@ -85,8 +85,6 @@ override_dh_auto_install:
 # doc/changelog is a directory, which confuses dh_installchangelogs
 override_dh_installchangelogs:
 	dh_installchangelogs --exclude doc/changelog
-
-override_dh_installdocs:
 
 override_dh_installlogrotate:
 	cp src/logrotate.conf debian/ceph-common.logrotate
@@ -149,4 +147,4 @@ override_dh_python3:
 # do not run tests
 override_dh_auto_test:
 
-.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_build override_dh_auto_clean override_dh_auto_install override_dh_installdocs override_dh_installlogrotate override_dh_installinit override_dh_strip override_dh_auto_test
+.PHONY: override_dh_autoreconf override_dh_auto_configure override_dh_auto_build override_dh_auto_clean override_dh_auto_install override_dh_installlogrotate override_dh_installinit override_dh_strip override_dh_auto_test
