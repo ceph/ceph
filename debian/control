@@ -4,7 +4,7 @@ Priority: optional
 Homepage: http://ceph.com/
 Vcs-Git: git://github.com/ceph/ceph.git
 Vcs-Browser: https://github.com/ceph/ceph
-Maintainer: Ceph Maintainers <ceph-maintainers@lists.ceph.com>
+Maintainer: Ceph Maintainers <ceph-maintainers@ceph.io>
 Uploaders: Ken Dreyer <kdreyer@redhat.com>,
            Alfredo Deza <adeza@redhat.com>,
 Build-Depends: automake,
