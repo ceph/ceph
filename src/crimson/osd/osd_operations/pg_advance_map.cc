@@ -122,8 +122,12 @@ seastar::future<> PGAdvanceMap::start()
 	  return shard_services.send_pg_temp();
 	});
     });
-  }).then([this, ref=std::move(ref)] {
+  }).then([this] {
     logger().debug("{}: complete", *this);
+    return handle.complete();
+  }).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
   });
 }
 

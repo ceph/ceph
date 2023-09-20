@@ -340,7 +340,14 @@ public:
 	opref.get_connection_pipeline().get_pg);
     }).then([this, &opref] {
       return get_pg_to_shard_mapping().maybe_create_pg(opref.get_pgid());
-    }).then([this, &logger, op=std::move(op)](auto core) mutable {
+    }).then_wrapped([this, &logger, op=std::move(op)](auto fut) mutable {
+      if (unlikely(fut.failed())) {
+        logger.error("{}: failed before with_pg", *op);
+        op->get_handle().exit();
+        return seastar::make_exception_future<>(fut.get_exception());
+      }
+
+      auto core = fut.get();
       logger.debug("{}: can_create={}, target-core={}",
                    *op, T::can_create(), core);
       return this->template with_remote_shard_state_and_op<T>(

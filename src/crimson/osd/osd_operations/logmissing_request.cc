@@ -72,8 +72,16 @@ seastar::future<> LogMissingRequest::with_pg(
       });
     }).then_interruptible([this, pg](auto) {
       return pg->do_update_log_missing(req, conn);
+    }).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
     });
-  }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
+  }, [](std::exception_ptr) {
+    return seastar::now();
+  }, pg).finally([this, ref] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

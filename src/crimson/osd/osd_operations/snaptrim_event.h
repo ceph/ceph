@@ -53,8 +53,6 @@ public:
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
   snap_trim_ertr::future<seastar::stop_iteration> start();
-  snap_trim_ertr::future<seastar::stop_iteration> with_pg(
-    ShardServices &shard_services, Ref<PG> pg);
 
 private:
   CommonPGPipeline& client_pp();
@@ -140,8 +138,6 @@ public:
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
   remove_or_update_iertr::future<> start();
-  remove_or_update_iertr::future<> with_pg(
-    ShardServices &shard_services, Ref<PG> pg);
 
   CommonPGPipeline& client_pp();
 
