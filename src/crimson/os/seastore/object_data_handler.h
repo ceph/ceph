@@ -16,8 +16,24 @@
 
 namespace crimson::os::seastore {
 
+struct block_delta_t {
+  uint64_t offset = 0;
+  extent_len_t len = 0;
+  bufferlist bl;
+
+  DENC(block_delta_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.offset, p);
+    denc(v.len, p);
+    denc(v.bl, p);
+    DENC_FINISH(p);
+  }
+};
+
 struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
   using Ref = TCachedExtentRef<ObjectDataBlock>;
+
+  std::vector<block_delta_t> delta = {};
 
   explicit ObjectDataBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
@@ -35,16 +51,15 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
     return TYPE;
   }
 
-  ceph::bufferlist get_delta() final {
-    /* Currently, we always allocate fresh ObjectDataBlock's rather than
-     * mutating existing ones. */
-    ceph_assert(0 == "Should be impossible");
+  void overwrite(extent_len_t offset, bufferlist bl) {
+    auto iter = bl.cbegin();
+    iter.copy(bl.length(), get_bptr().c_str() + offset);
+    delta.push_back({offset, bl.length(), bl});
   }
 
-  void apply_delta(const ceph::bufferlist &bl) final {
-    // See get_delta()
-    ceph_assert(0 == "Should be impossible");
-  }
+  ceph::bufferlist get_delta() final;
+
+  void apply_delta(const ceph::bufferlist &bl) final;
 };
 using ObjectDataBlockRef = TCachedExtentRef<ObjectDataBlock>;
 
@@ -52,7 +67,9 @@ class ObjectDataHandler {
 public:
   using base_iertr = TransactionManager::base_iertr;
 
-  ObjectDataHandler(uint32_t mos) : max_object_size(mos) {}
+  ObjectDataHandler(uint32_t mos) : max_object_size(mos),
+    delta_based_overwrite_max_extent_size(
+      crimson::common::get_conf<Option::size_t>("seastore_data_delta_based_overwrite")) {}
 
   struct context_t {
     TransactionManager &tm;
@@ -147,9 +164,12 @@ private:
    * these regions and remove this assumption.
    */
   const uint32_t max_object_size = 0;
+  extent_len_t delta_based_overwrite_max_extent_size = 0; // enable only if rbm is used
 };
 
 }
+
+WRITE_CLASS_DENC_BOUNDED(crimson::os::seastore::block_delta_t)
 
 #if FMT_VERSION >= 90000
 template <> struct fmt::formatter<crimson::os::seastore::ObjectDataBlock> : fmt::ostream_formatter {};
