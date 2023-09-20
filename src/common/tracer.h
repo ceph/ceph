@@ -67,7 +67,8 @@ struct jspan_context {
   jspan_context(bool sampled_flag, bool is_remote) {}
 };
 
-struct span_stub {
+namespace opentelemetry::trace {
+struct Span {
   jspan_context _ctx;
   template <typename T>
   void SetAttribute(std::string_view key, const T& value) const noexcept {}
@@ -78,17 +79,21 @@ struct span_stub {
   void UpdateName(std::string_view) {}
   bool IsRecording() { return false; }
 };
+}
 
 class jspan {
-  span_stub span;
- public:
-  span_stub& operator*() { return span; }
-  const span_stub& operator*() const { return span; }
+  opentelemetry::trace::Span span;
+public:
+  opentelemetry::trace::Span& operator*() { return span; }
+  const opentelemetry::trace::Span& operator*() const { return span; }
 
-  span_stub* operator->() { return &span; }
-  const span_stub* operator->() const { return &span; }
+  opentelemetry::trace::Span* operator->() { return &span; }
+  const opentelemetry::trace::Span* operator->() const { return &span; }
 
   operator bool() const { return false; }
+
+  opentelemetry::trace::Span* get() { return &span; }
+  const opentelemetry::trace::Span* get() const { return &span; }
 };
 
 namespace tracing {

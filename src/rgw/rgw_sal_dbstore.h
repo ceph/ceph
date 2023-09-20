@@ -524,12 +524,12 @@ protected:
       struct DBReadOp : public ReadOp {
         private:
           DBObject* source;
-          RGWObjectCtx* rctx;
+          RGWObjectCtx* octx;
           DB::Object op_target;
           DB::Object::Read parent_op;
 
         public:
-          DBReadOp(DBObject *_source, RGWObjectCtx *_rctx);
+          DBReadOp(DBObject *_source, RGWObjectCtx *_octx);
 
           virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
 
@@ -688,7 +688,7 @@ protected:
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
                          rgw_zone_set *zones_trace, bool *canceled,
-                         optional_yield y) override;
+                         const req_context& rctx) override;
   };
 
   class DBMultipartWriter : public StoreWriter {
@@ -736,7 +736,7 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) override;
+                       const req_context& rctx) override;
   };
 
   class DBStore : public StoreDriver {

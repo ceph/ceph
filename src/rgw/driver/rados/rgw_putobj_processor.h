@@ -191,7 +191,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled,
-               optional_yield y) override;
+               const req_context& rctx) override;
 
 };
 
@@ -238,7 +238,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                const char *if_match, const char *if_nomatch,
                const std::string *user_data,
                rgw_zone_set *zones_trace, bool *canceled,
-               optional_yield y) override;
+               const req_context& rctx) override;
 
 };
 
@@ -274,7 +274,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
                  std::map<std::string, bufferlist>& attrs, ceph::real_time delete_at,
                  const char *if_match, const char *if_nomatch, const std::string *user_data,
                  rgw_zone_set *zones_trace, bool *canceled,
-                 optional_yield y) override;
+                 const req_context& rctx) override;
   };
 
 } // namespace putobj
