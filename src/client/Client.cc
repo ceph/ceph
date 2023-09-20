@@ -11098,6 +11098,16 @@ void Client::C_Read_Async_Finisher::finish(int r)
 {
   clnt->client_lock.lock();
 
+  if (denc && r >= 0) {
+      std::vector<ObjectCacher::ObjHole> holes;
+      r = denc->decrypt_bl(off, len, read_start, holes, bl);
+      if (r < 0) {
+        // ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
+      } else {
+        r = bl->length();
+      }
+  }
+
   clnt->do_readahead(f, in, off, len);
 
   onfinish->complete(r);
@@ -11152,8 +11162,9 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     io_finish_cond = new C_SaferCond("Client::_read_async flock");
     io_finish.reset(io_finish_cond);
   } else {
-    io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in,
-                                              f->pos, off, len));
+    io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in, bl,
+                                              f->pos, off, len,
+                                              fscrypt_denc, read_start, read_len));
   }
 
   std::vector<ObjectCacher::ObjHole> holes;

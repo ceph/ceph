@@ -1375,17 +1375,26 @@ private:
   class C_Read_Async_Finisher : public Context {
   public:
     C_Read_Async_Finisher(Client *clnt, Context *onfinish, Fh *f, Inode *in,
-                          uint64_t fpos, uint64_t off, uint64_t len)
-      : clnt(clnt), onfinish(onfinish), f(f), in(in), off(off), len(len) {}
+                          bufferlist *bl,
+                          uint64_t fpos, uint64_t off, uint64_t len,
+                          FSCryptFDataDencRef denc,
+                          uint64_t read_start,
+                          uint64_t read_len)
+      : clnt(clnt), onfinish(onfinish), f(f), in(in), bl(bl), off(off), len(len),
+        denc(denc), read_start(read_start), read_len(read_len) {}
 
   private:
     Client *clnt;
     Context *onfinish;
     Fh *f;
     Inode *in;
+    bufferlist *bl;
     uint64_t off;
     uint64_t len;
 
+    FSCryptFDataDencRef denc;
+    uint64_t read_start;
+    uint64_t read_len;
     void finish(int r) override;
   };
 
