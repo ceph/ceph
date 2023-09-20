@@ -383,12 +383,12 @@ public:
     list_params.prefix = prefix;
   }
 
-  int init(const DoutPrefixProvider *dpp) {
-    return fetch(dpp);
+  int init(const DoutPrefixProvider *dpp, bool null_verid) {
+    return fetch(dpp, null_verid);
   }
 
-  int fetch(const DoutPrefixProvider *dpp) {
-    int ret = bucket->list(dpp, list_params, 1000, list_results, null_yield);
+  int fetch(const DoutPrefixProvider *dpp, bool null_verid) {
+    int ret = bucket->list(dpp, list_params, 1000, list_results, null_yield, null_verid);
     if (ret < 0) {
       return ret;
     }
@@ -402,7 +402,7 @@ public:
     std::this_thread::sleep_for(std::chrono::milliseconds(delay_ms));
   }
 
-  bool get_obj(const DoutPrefixProvider *dpp, rgw_bucket_dir_entry **obj,
+  bool get_obj(const DoutPrefixProvider *dpp, rgw_bucket_dir_entry **obj, bool null_verid,
 	       std::function<void(void)> fetch_barrier
 	       = []() { /* nada */}) {
     if (obj_iter == list_results.objs.end()) {
@@ -412,7 +412,7 @@ public:
       } else {
 	fetch_barrier();
         list_params.marker = pre_obj.key;
-        int ret = fetch(dpp);
+        int ret = fetch(dpp, null_verid);
         if (ret < 0) {
           ldpp_dout(dpp, 0) << "ERROR: list_op returned ret=" << ret
 				 << dendl;
@@ -813,7 +813,7 @@ static inline bool worker_should_stop(time_t stop_at, bool once)
 
 int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 				       const multimap<string, lc_op>& prefix_map,
-				       LCWorker* worker, time_t stop_at, bool once)
+				       LCWorker* worker, bool null_verid, time_t stop_at, bool once)
 {
   MultipartMetaFilter mp_filter;
   int ret;
@@ -876,7 +876,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
     do {
       auto offset = 0;
       results.objs.clear();
-      ret = target->list(this, params, 1000, results, null_yield);
+      ret = target->list(this, params, 1000, results, null_yield, null_verid);
       if (ret < 0) {
           if (ret == (-ENOENT))
             return 0;
@@ -1507,7 +1507,7 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
 
 }
 
-int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
+int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker, bool null_verid,
 			     time_t stop_at, bool once)
 {
   RGWLifecycleConfiguration  config(cct);
@@ -1633,7 +1633,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       continue;
     }
 
-    ret = ol.init(this);
+    ret = ol.init(this, null_verid);
     if (ret < 0) {
       if (ret == (-ENOENT))
         return 0;
@@ -1645,7 +1645,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     LCOpRule orule(oenv);
     orule.build(); // why can't ctor do it?
     rgw_bucket_dir_entry* o{nullptr};
-    for (auto offset = 0; ol.get_obj(this, &o /* , fetch_barrier */); ++offset, ol.next()) {
+    for (auto offset = 0; ol.get_obj(this, &o, null_verid /* , fetch_barrier */); ++offset, ol.next()) {
       orule.update();
       std::tuple<LCOpRule, rgw_bucket_dir_entry> t1 = {orule, *o};
       worker->workpool->enqueue(WorkItem{t1});
@@ -1661,7 +1661,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     worker->workpool->drain();
   }
 
-  ret = handle_multipart_expiration(bucket.get(), prefix_map, worker, stop_at, once);
+  ret = handle_multipart_expiration(bucket.get(), prefix_map, worker, null_verid, stop_at, once);
   return ret;
 }
 

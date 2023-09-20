@@ -820,7 +820,7 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpStat
 }
 
 int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
-				    optional_yield y, const DoutPrefixProvider *dpp, 
+				    optional_yield y, const DoutPrefixProvider *dpp, bool null_verid,
                                     bool bypass_gc, bool keep_index_consistent)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
@@ -832,7 +832,7 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpSt
     return ret;
 
   if (bypass_gc)
-    ret = bucket->remove_bucket_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp);
+    ret = bucket->remove_bucket_bypass_gc(op_state.get_max_aio(), keep_index_consistent, y, dpp, null_verid);
   else
     ret = bucket->remove_bucket(dpp, op_state.will_delete_children(),
 				false, nullptr, y);

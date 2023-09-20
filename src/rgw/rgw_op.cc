@@ -1720,7 +1720,7 @@ static int iterate_user_manifest_parts(const DoutPrefixProvider *dpp,
                                                  void *param,
                                                  bool swift_slo),
                                        void * const cb_param,
-				       optional_yield y)
+				       optional_yield y, bool null_verid)
 {
   uint64_t obj_ofs = 0, len_count = 0;
   bool found_start = false, found_end = false, handled_end = false;
@@ -1738,7 +1738,7 @@ static int iterate_user_manifest_parts(const DoutPrefixProvider *dpp,
   etag_sum.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   do {
     static constexpr auto MAX_LIST_OBJS = 100u;
-    int r = bucket->list(dpp, params, MAX_LIST_OBJS, results, y);
+    int r = bucket->list(dpp, params, MAX_LIST_OBJS, results, y, null_verid);
     if (r < 0) {
       return r;
     }
@@ -1901,7 +1901,7 @@ static int get_obj_user_manifest_iterate_cb(rgw::sal::Bucket* bucket,
     bucket, ent, bucket_acl, bucket_policy, start_ofs, end_ofs, swift_slo);
 }
 
-int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
+int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y, bool null_verid)
 {
   const std::string_view prefix_view(prefix);
   ldpp_dout(this, 2) << "RGWGetObj::handle_user_manifest() prefix="
@@ -1954,7 +1954,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         nullptr, &s->obj_size, &lo_etag,
-	nullptr /* cb */, nullptr /* cb arg */, y);
+	nullptr /* cb */, nullptr /* cb arg */, y, null_verid);
   if (r < 0) {
     return r;
   }
@@ -1968,7 +1968,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         &total_len, nullptr, nullptr,
-	nullptr, nullptr, y);
+	nullptr, nullptr, y, null_verid);
   if (r < 0) {
     return r;
   }
@@ -1982,7 +1982,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
         pbucket, obj_prefix, bucket_acl, *bucket_policy,
         nullptr, nullptr, nullptr,
-	get_obj_user_manifest_iterate_cb, (void *)this, y);
+	get_obj_user_manifest_iterate_cb, (void *)this, y, null_verid);
   if (r < 0) {
     return r;
   }
@@ -3015,7 +3015,7 @@ void RGWListBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWListBucket::execute(optional_yield y)
+void RGWListBucket::execute(optional_yield y, bool null_verid)
 {
   if (!s->bucket_exists) {
     op_ret = -ERR_NO_SUCH_BUCKET;
@@ -3044,7 +3044,7 @@ void RGWListBucket::execute(optional_yield y)
 
   rgw::sal::Bucket::ListResults results;
 
-  op_ret = s->bucket->list(this, params, max, results, y);
+  op_ret = s->bucket->list(this, params, max, results, y, null_verid);
   if (op_ret >= 0) {
     next_marker = results.next_marker;
     is_truncated = results.is_truncated;
@@ -3503,7 +3503,7 @@ void RGWDeleteBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
-void RGWDeleteBucket::execute(optional_yield y)
+void RGWDeleteBucket::execute(optional_yield y, bool null_verid)
 {
   if (s->bucket_name.empty()) {
     op_ret = -EINVAL;
@@ -3540,7 +3540,7 @@ void RGWDeleteBucket::execute(optional_yield y)
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
 
-  op_ret = s->bucket->check_empty(this, y);
+  op_ret = s->bucket->check_empty(this, y, null_verid);
   if (op_ret < 0) {
     return;
   }

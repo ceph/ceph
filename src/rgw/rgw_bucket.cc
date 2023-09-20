@@ -134,7 +134,7 @@ int rgw_parse_url_bucket(const string &bucket, const string& auth_tenant,
 int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* bucket,
 				 rgw::sal::User* new_user,
 				 const std::string& marker, std::string *err_msg,
-				 const DoutPrefixProvider *dpp, optional_yield y)
+				 const DoutPrefixProvider *dpp, optional_yield y, bool null_verid)
 {
   /* Chown on the bucket */
   int ret = bucket->chown(dpp, *new_user, y);
@@ -159,7 +159,7 @@ int rgw_chown_bucket_and_objects(rgw::sal::Driver* driver, rgw::sal::Bucket* buc
 
   do {
     results.objs.clear();
-    ret = bucket->list(dpp, params, max_entries, results, y);
+    ret = bucket->list(dpp, params, max_entries, results, y, null_verid);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: list objects failed: " << cpp_strerror(-ret) << dendl;
       return ret;

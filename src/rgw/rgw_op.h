@@ -260,7 +260,7 @@ public:
   virtual int verify_permission(optional_yield y) = 0;
   virtual int verify_op_mask();
   virtual void pre_exec() {}
-  virtual void execute(optional_yield y) = 0;
+  virtual void execute(optional_yield y, bool null_verid) = 0;
   virtual void send_response() {}
   virtual void complete() {
     send_response();
@@ -412,7 +412,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_verid) override;
   int parse_range();
   int read_user_manifest_part(
     rgw::sal::Bucket* bucket,
@@ -929,7 +929,7 @@ public:
 		    allow_unordered(false), shard_id(-1) {}
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_verid) override;
 
   void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
     RGWOp::init(driver, s, h);
@@ -1126,7 +1126,7 @@ public:
 
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_verid) override;
 
   void send_response() override = 0;
   const char* name() const override { return "delete_bucket"; }

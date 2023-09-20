@@ -640,7 +640,7 @@ class Bucket {
     /** Get an @a Object belonging to this bucket */
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) = 0;
     /** List the contents of this bucket */
-    virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) = 0;
+    virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y, bool null_verid) = 0;
     /** Get the cached attributes associated with this bucket */
     virtual Attrs& get_attrs(void) = 0;
     /** Set the cached attributes on this bucket */
@@ -651,7 +651,8 @@ class Bucket {
     virtual int remove_bucket_bypass_gc(int concurrent_max, bool
 					keep_index_consistent,
 					optional_yield y, const
-					DoutPrefixProvider *dpp) = 0;
+					DoutPrefixProvider *dpp,
+                                        bool null_verid) = 0;
     /** Get then ACL for this bucket */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     /** Set the ACL for this bucket */
@@ -692,7 +693,7 @@ class Bucket {
     /** Get the owner of this bucket in the form of an ACLOwner object */
     virtual ACLOwner get_acl_owner(void) = 0;
     /** Check in the backing store if this bucket is empty */
-    virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y, bool null_verid) = 0;
     /** Chec k if the given size fits within the quota */
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) = 0;
     /** Set the attributes in attrs, leaving any other existing attrs set, and

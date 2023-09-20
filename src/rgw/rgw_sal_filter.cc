@@ -671,9 +671,10 @@ int FilterBucket::remove_bucket(const DoutPrefixProvider* dpp,
 int FilterBucket::remove_bucket_bypass_gc(int concurrent_max,
 					  bool keep_index_consistent,
 					  optional_yield y,
-					  const DoutPrefixProvider *dpp)
+					  const DoutPrefixProvider *dpp,
+                                          bool null_verid)
 {
-  return next->remove_bucket_bypass_gc(concurrent_max, keep_index_consistent, y, dpp);
+  return next->remove_bucket_bypass_gc(concurrent_max, keep_index_consistent, y, dpp, null_verid);
 }
 
 int FilterBucket::set_acl(const DoutPrefixProvider* dpp,

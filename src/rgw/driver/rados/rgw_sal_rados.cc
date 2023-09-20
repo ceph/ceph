@@ -503,7 +503,8 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
 int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
 					 keep_index_consistent,
 					 optional_yield y, const
-					 DoutPrefixProvider *dpp)
+					 DoutPrefixProvider *dpp,
+                                         bool null_verid)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -592,7 +593,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
         } // for all shadow objs
 
         ret = store->getRados()->delete_obj_aio(dpp, head_obj, get_info(), astate,
-                                                handles, keep_index_consistent, y);
+                                                handles, keep_index_consistent, y, null_verid);
         if (ret < 0) {
           ldpp_dout(dpp, -1) << "ERROR: delete obj aio failed with " << ret << dendl;
           return ret;
@@ -780,9 +781,9 @@ bool RadosBucket::is_owner(User* user)
   return (info.owner.compare(user->get_id()) == 0);
 }
 
-int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y, bool null_verid)
 {
-  return store->getRados()->check_bucket_empty(dpp, info, y);
+  return store->getRados()->check_bucket_empty(dpp, info, y, null_verid);
 }
 
 int RadosBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size,
@@ -890,7 +891,7 @@ std::unique_ptr<Object> RadosBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<RadosObject>(this->store, k, this);
 }
 
-int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max, ListResults& results, optional_yield y)
+int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max, ListResults& results, optional_yield y, bool null_verid)
 {
   RGWRados::Bucket target(store->getRados(), get_info());
   if (params.shard_id >= 0) {
@@ -910,7 +911,7 @@ int RadosBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int max
   list_op.params.list_versions = params.list_versions;
   list_op.params.allow_unordered = params.allow_unordered;
 
-  int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y);
+  int ret = list_op.list_objects(dpp, max, &results.objs, &results.common_prefixes, &results.is_truncated, y, null_verid);
   if (ret >= 0) {
     results.next_marker = list_op.get_next_marker();
     params.marker = results.next_marker;
