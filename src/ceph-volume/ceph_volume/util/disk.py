@@ -359,6 +359,10 @@ def is_device(dev):
         if not allow_loop_devices():
             return False
 
+    TYPE = lsblk(dev).get('TYPE')
+    if TYPE:
+        return TYPE in ['disk', 'mpath']
+
     # fallback to stat
     return _stat_is_device(os.lstat(dev).st_mode)
 
