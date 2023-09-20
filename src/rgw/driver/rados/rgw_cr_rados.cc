@@ -752,6 +752,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
   std::string etag;
 
   std::optional<uint64_t> bytes_transferred;
+  const req_context rctx{dpp, null_yield, nullptr};
   int r = store->getRados()->fetch_remote_obj(obj_ctx,
                        user_id.value_or(rgw_user()),
                        NULL, /* req_info */
@@ -778,8 +779,8 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
                        &etag, /* string *petag, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL, /* void *progress_data*); */
-                       dpp,
-                       filter.get(), null_yield,
+                       rctx,
+                       filter.get(),
                        stat_follow_olh,
                        stat_dest_obj,
                        source_trace_entry,

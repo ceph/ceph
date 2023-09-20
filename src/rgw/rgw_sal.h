@@ -20,6 +20,7 @@
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
 #include "common/tracer.h"
+#include "rgw_req_context.h"
 #include "rgw_datalog_notify.h"
 #include "include/random.h"
 
@@ -244,7 +245,7 @@ class ObjectProcessor : public DataProcessor {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) = 0;
+                       const req_context& rctx) = 0;
 };
 
 /** A list of key-value attributes */
@@ -1387,7 +1388,7 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) = 0;
+                       const req_context& rctx) = 0;
 };
 
 

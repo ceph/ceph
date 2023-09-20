@@ -2914,7 +2914,7 @@ int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
 {
   int ret;
   POSIXUploadPartInfo info;
@@ -2945,16 +2945,16 @@ int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& eta
   attrs[RGW_POSIX_ATTR_MPUPLOAD] = bl;
 
   for (auto& attr : attrs) {
-    ret = obj->write_attr(dpp, y, attr.first, attr.second);
+    ret = obj->write_attr(rctx.dpp, rctx.y, attr.first, attr.second);
     if (ret < 0) {
-      ldpp_dout(dpp, 20) << "ERROR: failed writing attr " << attr.first << dendl;
+      ldpp_dout(rctx.dpp, 20) << "ERROR: failed writing attr " << attr.first << dendl;
       return ret;
     }
   }
 
   ret = obj->close();
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: failed closing file" << dendl;
+    ldpp_dout(rctx.dpp, 20) << "ERROR: failed closing file" << dendl;
     return ret;
   }
 
@@ -2981,7 +2981,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
 {
   int ret;
 
@@ -3023,14 +3023,14 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
   attrs[RGW_POSIX_ATTR_OWNER] = bl;
 
   for (auto attr : attrs) {
-    ret = obj.write_attr(dpp, y, attr.first, attr.second);
+    ret = obj.write_attr(rctx.dpp, rctx.y, attr.first, attr.second);
     if (ret < 0) {
-      ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing attr " << attr.first << dendl;
+      ldpp_dout(rctx.dpp, 20) << "ERROR: POSIXAtomicWriter failed writing attr " << attr.first << dendl;
       return ret;
     }
   }
 
-  ret = obj.link_temp_file(dpp, y);
+  ret = obj.link_temp_file(rctx.dpp, rctx.y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing temp file" << dendl;
     return ret;
@@ -3038,7 +3038,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
 
   ret = obj.close();
   if (ret < 0) {
-    ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
+    ldpp_dout(rctx.dpp, 20) << "ERROR: POSIXAtomicWriter failed closing file" << dendl;
     return ret;
   }
 
