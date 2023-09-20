@@ -1427,6 +1427,7 @@ private:
     FSCryptFDataDencRef denc;
     uint64_t read_start;
     uint64_t read_len;
+
     void finish(int r) override;
   };
 
@@ -1443,6 +1444,259 @@ private:
     Context *onfinish;
 
     void finish(int r) override;
+  };
+
+  struct aio_collection {
+    ceph::mutex lock = ceph::make_mutex("Client::aio_collection");
+
+    aio_collection() {}
+
+    struct aio_status {
+      int r = 0;
+      bool complete{false};
+    };
+
+    int num_complete = 0;
+    int total = 0;
+
+    int retcode = 0;
+
+    std::vector<aio_status> status;
+
+    int add_io() {
+      std::unique_lock l{lock};
+      int old_total = total++;
+      status.resize(total);
+
+      return old_total;
+    }
+
+    bool is_complete() {
+      std::unique_lock l{lock};
+      return num_complete == total;
+    }
+
+    int finish_io(int id, int r) {
+      std::unique_lock l{lock};
+      status[id].r = r;
+      status[id].complete = true;
+
+      ++num_complete;
+
+      if (r < 0 && retcode == 0) {
+        retcode = r;
+      }
+
+      return r;
+    }
+
+    int get_retcode() {
+      std::unique_lock l{lock};
+      return retcode;
+    }
+  };
+
+  template<typename T>
+  struct iofinish_method_ctx {
+    struct _Ctx : Context {
+      iofinish_method_ctx *ioc;
+
+      _Ctx(iofinish_method_ctx *_ioc) : ioc(_ioc) {}
+
+      void finish(int r) override {
+        ioc->finish(r);
+      }
+    };
+
+    std::unique_ptr<_Ctx> _ctx;
+
+    T& t;
+    void (T::*call)(int);
+    ceph::mutex lock = ceph::make_mutex("Client::iofinish_method_ctx");
+    ceph::condition_variable cond;
+    bool done{false};
+    bool canceled{false};
+
+    aio_collection *aioc;
+    int io_id;
+
+    iofinish_method_ctx(T& _t, void (T::*_call)(int), aio_collection *_aioc) : t(_t), call(_call),
+                                                                               aioc(_aioc) {
+      _ctx.reset(new _Ctx(this));
+
+      if (aioc) {
+        io_id = aioc->add_io();
+      }
+    }
+
+    Context *ctx() { return _ctx.get(); }
+
+    void wait() {
+      std::unique_lock l{lock};
+      if (!done) {
+        cond.wait(l);
+      }
+    }
+
+    Context *release() {
+      auto ctx = _ctx.release();
+      _ctx.reset();
+      return ctx;
+    }
+
+    void cancel(int r) {
+      std::unique_lock l{lock};
+      canceled = true;
+      done = true;
+      if (aioc) {
+        aioc->finish_io(io_id, r);
+      }
+    }
+
+    void finish(int r) {
+      std::unique_lock l{lock};
+      if (!canceled) {
+        /* avoid any callback when canceled, calling object might have been destroyed */
+        if (aioc) {
+          aioc->finish_io(io_id, r);
+        }
+        (t.*(call))(r);
+      }
+      done = true;
+      cond.notify_all();
+    }
+  };
+
+  struct CWF_iofinish;
+
+  class WriteEncMgr : public RefCountedObject {
+  protected:
+    Client *clnt;
+    client_t const whoami;
+
+    CephContext *cct;
+    FSCrypt *fscrypt;
+
+    ceph::mutex lock = ceph::make_mutex("Client::WriteEncMgr");
+
+    Fh *f;
+    Inode *in;
+
+    Context *iofinish{nullptr};
+
+    int64_t offset;
+    uint64_t size;
+
+    bufferlist bl;
+    bufferlist encbl;
+    bufferlist *pbl;
+
+    bool async;
+
+    FSCryptFDataDencRef denc;
+
+    uint64_t start_block;
+    uint64_t start_block_ofs;
+    uint64_t ofs_in_start_block;
+    uint64_t end_block;
+    uint64_t end_block_ofs;
+    uint64_t ofs_in_end_block;
+
+    uint64_t endoff;
+
+    bool need_read_start{false};
+    bool need_read_end{false};
+
+    int read_start_size;
+
+    bufferlist startbl;
+    bufferlist endbl;
+
+    aio_collection aioc;
+
+    bool is_ready_to_finish{false};
+    bool is_finished{false};
+
+    std::unique_ptr<iofinish_method_ctx<WriteEncMgr> > finish_read_start_ctx;
+    std::unique_ptr<iofinish_method_ctx<WriteEncMgr> > finish_read_end_ctx;
+
+    bool try_finish(int r) {
+      if (is_finished) {
+        return true;
+      }
+
+      if (!is_ready_to_finish) {
+        return false;
+      }
+
+      is_finished = do_try_finish(r);
+
+      return is_finished;
+    }
+
+    int read_async(uint64_t off, uint64_t len, bufferlist *bl, iofinish_method_ctx<WriteEncMgr> *ioctx);
+
+  protected:
+    virtual int do_write() = 0;
+    virtual void update_write_params() = 0;
+
+  public:
+    WriteEncMgr(Client *clnt,
+                Fh *f, int64_t offset, uint64_t size,
+                bufferlist& bl,
+                bool async);
+    virtual ~WriteEncMgr();
+
+    int init();
+
+    void get_write_params(int64_t *poffset, uint64_t *psize, bufferlist **ppbl) const {
+      *poffset = offset;
+      *psize = size;
+      *ppbl = pbl;
+    }
+
+    bool encrypted() const {
+      return !!denc;
+    }
+
+    int read_modify_write(Context *iofinish);
+
+    void finish_read_start_cb(int r) {
+      finish_read_start(r);
+      put();
+    }
+    void finish_read_end_cb(int r) {
+      finish_read_end(r);
+      put();
+    }
+    void finish_read_start(int r);
+    void finish_read_end(int r);
+    bool do_try_finish(int r);
+
+    int64_t get_ofs() { return offset; }
+    uint64_t get_size() { return size; }
+  };
+
+  class WriteEncMgr_Buffered : public WriteEncMgr {
+  public:
+    WriteEncMgr_Buffered(Client *clnt,
+                         Fh *f, int64_t offset, uint64_t size,
+                         bufferlist& bl,
+                         bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
+
+    void update_write_params() override;
+    int do_write() override;
+  };
+
+  class WriteEncMgr_NotBuffered : public WriteEncMgr {
+  public:
+    WriteEncMgr_NotBuffered(Client *clnt,
+                         Fh *f, int64_t offset, uint64_t size,
+                         bufferlist& bl,
+                         bool async) : WriteEncMgr(clnt, f, offset, size, bl, async) {}
+
+    void update_write_params() override {}
+    int do_write() override;
   };
 
   class C_Write_Finisher : public Context {
@@ -1472,6 +1726,11 @@ private:
 
     void finish(int r) override {
       // We need to override finish, but have nothing to do.
+    }
+
+    void update_write_params(int64_t _ofs, uint64_t _size) {
+      offset = _ofs;
+      size = _size;
     }
 
   private:
