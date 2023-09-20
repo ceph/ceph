@@ -163,6 +163,10 @@ from cephadmlib.decorators import (
 )
 from cephadmlib.host_facts import HostFacts, list_networks
 from cephadmlib.ssh import authorize_ssh_key, check_ssh_connectivity
+from cephadmlib.daemon_form import (
+    DaemonForm,
+    register as register_daemon_form,
+)
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -208,15 +212,38 @@ class DeploymentType(Enum):
 ##################################
 
 
-class Ceph(object):
+@register_daemon_form
+class Ceph(DaemonForm):
     daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror', 'ceph-exporter')
     gateways = ('iscsi', 'nfs', 'nvmeof')
 
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        # TODO: figure out a way to un-special-case osd
+        return daemon_type in cls.daemons and daemon_type != 'osd'
+
+    def __init__(self, ident: DaemonIdentity) -> None:
+        self._identity = ident
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
+        return cls(ident)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return self._identity
+
 ##################################
 
 
-class OSD(object):
+@register_daemon_form
+class OSD(Ceph):
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        # TODO: figure out a way to un-special-case osd
+        return daemon_type == 'osd'
+
     @staticmethod
     def get_sysctl_settings() -> List[str]:
         return [
@@ -229,13 +256,18 @@ class OSD(object):
 ##################################
 
 
-class SNMPGateway:
+@register_daemon_form
+class SNMPGateway(DaemonForm):
     """Defines an SNMP gateway between Prometheus and SNMP monitoring Frameworks"""
     daemon_type = 'snmp-gateway'
     SUPPORTED_VERSIONS = ['V2c', 'V3']
     default_image = DEFAULT_SNMP_GATEWAY_IMAGE
     DEFAULT_PORT = 9464
     env_filename = 'snmp-gateway.conf'
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -270,6 +302,14 @@ class SNMPGateway:
         cfgs = fetch_configs(ctx)
         assert cfgs  # assert some config data was found
         return cls(ctx, fsid, daemon_id, cfgs, ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'SNMPGateway':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
     def get_version(ctx: CephadmContext, fsid: str, daemon_id: str) -> Optional[str]:
@@ -371,7 +411,8 @@ class SNMPGateway:
 
 
 ##################################
-class Monitoring(object):
+@register_daemon_form
+class Monitoring(DaemonForm):
     """Define the configs for the monitoring containers"""
 
     port_map = {
@@ -454,6 +495,10 @@ class Monitoring(object):
         },
     }  # type: ignore
 
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return daemon_type in cls.components
+
     @staticmethod
     def get_version(ctx, container_id, daemon_type):
         # type: (CephadmContext, str, str) -> str
@@ -486,10 +531,22 @@ class Monitoring(object):
                 version = out.split(' ')[2]
         return version
 
+    def __init__(self, ident: DaemonIdentity) -> None:
+        self._identity = ident
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Monitoring':
+        return cls(ident)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return self._identity
+
 ##################################
 
 
-class NFSGanesha(object):
+@register_daemon_form
+class NFSGanesha(DaemonForm):
     """Defines a NFS-Ganesha container"""
 
     daemon_type = 'nfs'
@@ -501,6 +558,10 @@ class NFSGanesha(object):
     port_map = {
         'nfs': 2049,
     }
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx,
@@ -529,6 +590,14 @@ class NFSGanesha(object):
     def init(cls, ctx, fsid, daemon_id):
         # type: (CephadmContext, str, Union[int, str]) -> NFSGanesha
         return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'NFSGanesha':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def get_container_mounts(self, data_dir):
         # type: (str) -> Dict[str, str]
@@ -626,13 +695,18 @@ class NFSGanesha(object):
 ##################################
 
 
-class CephIscsi(object):
+@register_daemon_form
+class CephIscsi(DaemonForm):
     """Defines a Ceph-Iscsi container"""
 
     daemon_type = 'iscsi'
     entrypoint = '/usr/bin/rbd-target-api'
 
     required_files = ['iscsi-gateway.cfg']
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx,
@@ -657,6 +731,14 @@ class CephIscsi(object):
         # type: (CephadmContext, str, Union[int, str]) -> CephIscsi
         return cls(ctx, fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephIscsi':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
     def get_container_mounts(data_dir, log_dir):
@@ -813,12 +895,17 @@ done
 ##################################
 
 
-class CephNvmeof(object):
+@register_daemon_form
+class CephNvmeof(DaemonForm):
     """Defines a Ceph-Nvmeof container"""
 
     daemon_type = 'nvmeof'
     required_files = ['ceph-nvmeof.conf']
     default_image = DEFAULT_NVMEOF_IMAGE
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx,
@@ -843,6 +930,14 @@ class CephNvmeof(object):
         # type: (CephadmContext, str, Union[int, str]) -> CephNvmeof
         return cls(ctx, fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephNvmeof':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
     def get_container_mounts(data_dir: str) -> Dict[str, str]:
@@ -938,7 +1033,8 @@ class CephNvmeof(object):
 ##################################
 
 
-class CephExporter(object):
+@register_daemon_form
+class CephExporter(DaemonForm):
     """Defines a Ceph exporter container"""
 
     daemon_type = 'ceph-exporter'
@@ -947,6 +1043,10 @@ class CephExporter(object):
     port_map = {
         'ceph-exporter': DEFAULT_PORT,
     }
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -974,6 +1074,14 @@ class CephExporter(object):
         return cls(ctx, fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
 
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephExporter':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
+
     @staticmethod
     def get_container_mounts() -> Dict[str, str]:
         mounts = dict()
@@ -998,11 +1106,16 @@ class CephExporter(object):
 ##################################
 
 
-class HAproxy(object):
+@register_daemon_form
+class HAproxy(DaemonForm):
     """Defines an HAproxy container"""
     daemon_type = 'haproxy'
     required_files = ['haproxy.cfg']
     default_image = DEFAULT_HAPROXY_IMAGE
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -1023,6 +1136,14 @@ class HAproxy(object):
              fsid: str, daemon_id: Union[int, str]) -> 'HAproxy':
         return cls(ctx, fsid, daemon_id, fetch_configs(ctx),
                    ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'HAproxy':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """Create files under the container data dir"""
@@ -1086,11 +1207,16 @@ class HAproxy(object):
 ##################################
 
 
-class Keepalived(object):
+@register_daemon_form
+class Keepalived(DaemonForm):
     """Defines an Keepalived container"""
     daemon_type = 'keepalived'
     required_files = ['keepalived.conf']
     default_image = DEFAULT_KEEPALIVED_IMAGE
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -1111,6 +1237,14 @@ class Keepalived(object):
              daemon_id: Union[int, str]) -> 'Keepalived':
         return cls(ctx, fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Keepalived':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """Create files under the container data dir"""
@@ -1182,7 +1316,8 @@ class Keepalived(object):
 ##################################
 
 
-class Tracing(object):
+@register_daemon_form
+class Tracing(DaemonForm):
     """Define the configs for the jaeger tracing containers"""
 
     components: Dict[str, Dict[str, Any]] = {
@@ -1201,6 +1336,10 @@ class Tracing(object):
         },
     }  # type: ignore
 
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return daemon_type in cls.components
+
     @staticmethod
     def set_configuration(config: Dict[str, str], daemon_type: str) -> None:
         if daemon_type in ['jaeger-collector', 'jaeger-query']:
@@ -1215,12 +1354,28 @@ class Tracing(object):
                 '--processor.jaeger-compact.server-host-port=6799'
             ]
 
+    def __init__(self, ident: DaemonIdentity) -> None:
+        self._identity = ident
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Tracing':
+        return cls(ident)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return self._identity
+
 ##################################
 
 
-class CustomContainer(object):
+@register_daemon_form
+class CustomContainer(DaemonForm):
     """Defines a custom container"""
     daemon_type = 'container'
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  fsid: str, daemon_id: Union[int, str],
@@ -1247,6 +1402,14 @@ class CustomContainer(object):
              fsid: str, daemon_id: Union[int, str]) -> 'CustomContainer':
         return cls(fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CustomContainer':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """
