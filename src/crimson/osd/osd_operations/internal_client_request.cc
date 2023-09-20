@@ -108,9 +108,14 @@ seastar::future<> InternalClientRequest::start()
               });
             });
           });
-        }).handle_error_interruptible(PG::load_obc_ertr::all_same_way([] {
-          return seastar::now();
-        })).then_interruptible([] {
+        }).si_then([this] {
+          logger().debug("{}: complete", *this);
+          return handle.complete();
+        }).handle_error_interruptible(
+          PG::load_obc_ertr::all_same_way([] {
+            return seastar::now();
+          })
+        ).then_interruptible([] {
           return seastar::stop_iteration::yes;
         });
       }, [this](std::exception_ptr eptr) {
@@ -122,6 +127,9 @@ seastar::future<> InternalClientRequest::start()
       }, pg);
     }).then([this] {
       track_event<CompletionEvent>();
+    }).finally([this] {
+      logger().debug("{}: exit", *this);
+      handle.exit();
     });
   });
 }
