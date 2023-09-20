@@ -140,6 +140,10 @@ override_dh_python3:
 	@for pkg in $(py3_packages); do \
 	  dh_python3 -p $$pkg;          \
 	done
+	dh_python3 -p ceph-base --shebang=/usr/bin/python3
+	dh_python3 -p ceph-common --shebang=/usr/bin/python3
+	dh_python3 -p ceph-fuse --shebang=/usr/bin/python3
+	dh_python3 -p ceph-volume --shebang=/usr/bin/python3
 
 # do not run tests
 override_dh_auto_test:
