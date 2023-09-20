@@ -150,22 +150,31 @@ older than this should be trimmed.
 Optionally you can set the interval in minutes that trim will be performed
 with ``usage_trim_interval``, it defaults to every twelve hours (720 minutes).
 
-You can set the config option ``usage_realms_to_trim`` to a comma separated
-list of realms or to an asterisk (``*``) (the default) for all realms.
+Optionally you can set the config option ``usage_realms_to_trim`` to a comma
+separated list of realms or to an asterisk (``*``, the default for this config
+option) for all realms.
 
 The below example will trim logs from start date 1970-01-01 to the current
-date minus 30 days.
+date minus 30 days for all realms.
 
 ::
 
-    ceph config set mgr mgr/rgw/usage_realms_to_trim default
     ceph config set mgr mgr/rgw/usage_trim_older_than_days 30
 
-The above is equivalent to running the following command assuming that todays
-date is 2022-11-13.
+The above is equivalent to running the following commands assuming that todays
+date is 2022-11-13 and that there are two realms.
+
 ::
 
-    radosgw-admin --rgw-realm=default usage trim --start-date=1970-01-01 --end-date=2022-10-14
+    radosgw-admin --rgw-realm=realm1 usage trim --start-date=1970-01-01 --end-date=2022-10-14
+    radosgw-admin --rgw-realm=realm2 usage trim --start-date=1970-01-01 --end-date=2022-10-14
 
 End date is thus calculated as (today - usage_trim_older_than_days) which is
 equal to (2022-11-13 - 30 days) = 2022-10-14.
+
+If you want to only trim the usage log for a realm named ``realm1`` you can
+set ``usage_realms_to_trim`` like below.
+
+::
+
+    ceph config set mgr mgr/rgw/usage_realms_to_trim realm1
