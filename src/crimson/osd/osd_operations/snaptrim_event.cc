@@ -80,27 +80,15 @@ void SnapTrimEvent::dump_detail(Formatter *f) const
   f->close_section();
 }
 
-SnapTrimEvent::snap_trim_ertr::future<seastar::stop_iteration>
-SnapTrimEvent::start()
-{
-  logger().debug("{}: {}", *this, __func__);
-  return with_pg(
-    pg->get_shard_services(), pg
-  ).finally([ref=IRef{this}, this] {
-    logger().debug("{}: complete", *ref);
-    return handle.complete();
-  });
-}
-
 CommonPGPipeline& SnapTrimEvent::client_pp()
 {
   return pg->request_pg_pipeline;
 }
 
 SnapTrimEvent::snap_trim_ertr::future<seastar::stop_iteration>
-SnapTrimEvent::with_pg(
-  ShardServices &shard_services, Ref<PG> _pg)
+SnapTrimEvent::start()
 {
+  ShardServices &shard_services = pg->get_shard_services();
   return interruptor::with_interruption([&shard_services, this] {
     return enter_stage<interruptor>(
       client_pp().wait_for_active
@@ -176,7 +164,7 @@ SnapTrimEvent::with_pg(
           return subop_blocker.wait_completion();
         }).finally([this] {
 	  pg->snaptrim_mutex.unlock();
-	}).safe_then_interruptible([this] {
+	}).si_then([this] {
           if (!needs_pause) {
             return interruptor::now();
           }
@@ -193,35 +181,30 @@ SnapTrimEvent::with_pg(
             return seastar::sleep(
               std::chrono::milliseconds(std::lround(time_to_sleep * 1000)));
           });
-        }).safe_then_interruptible([this] {
+        }).si_then([this] {
           logger().debug("{}: all completed", *this);
           return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(
             seastar::stop_iteration::no);
+        });
+      }).si_then([this](auto stop) {
+        return handle.complete().then([stop] {
+          return snap_trim_iertr::make_ready_future<seastar::stop_iteration>(stop);
         });
       });
     });
   }, [this](std::exception_ptr eptr) -> snap_trim_ertr::future<seastar::stop_iteration> {
     logger().debug("{}: interrupted {}", *this, eptr);
     return crimson::ct_error::eagain::make();
-  }, pg);
+  }, pg).finally([this] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 
 CommonPGPipeline& SnapTrimObjSubEvent::client_pp()
 {
   return pg->request_pg_pipeline;
-}
-
-SnapTrimObjSubEvent::remove_or_update_iertr::future<>
-SnapTrimObjSubEvent::start()
-{
-  logger().debug("{}: start", *this);
-  return with_pg(
-    pg->get_shard_services(), pg
-  ).finally([ref=IRef{this}, this] {
-    logger().debug("{}: complete", *ref);
-    return handle.complete();
-  });
 }
 
 SnapTrimObjSubEvent::remove_or_update_iertr::future<>
@@ -466,7 +449,7 @@ SnapTrimObjSubEvent::remove_or_update(
                   *this, coid, old_snaps, new_snaps);
     ret = adjust_snaps(obc, head_obc, new_snaps, txn, log_entries);
   }
-  return std::move(ret).safe_then_interruptible(
+  return std::move(ret).si_then(
     [&txn, obc, num_objects_before_trim, log_entries=std::move(log_entries), head_obc=std::move(head_obc), this]() mutable {
     osd_op_p.at_version = pg->next_version();
 
@@ -484,7 +467,7 @@ SnapTrimObjSubEvent::remove_or_update(
       //  num_objects_before_trim - delta_stats.num_objects;
       //add_objects_trimmed_count(num_objects_trimmed);
     }
-  }).safe_then_interruptible(
+  }).si_then(
     [&txn, log_entries=std::move(log_entries)] () mutable {
     return remove_or_update_iertr::make_ready_future<remove_or_update_ret_t>(
       std::make_pair(std::move(txn), std::move(log_entries)));
@@ -493,8 +476,7 @@ SnapTrimObjSubEvent::remove_or_update(
 }
 
 SnapTrimObjSubEvent::remove_or_update_iertr::future<>
-SnapTrimObjSubEvent::with_pg(
-  ShardServices &shard_services, Ref<PG> _pg)
+SnapTrimObjSubEvent::start()
 {
   return enter_stage<interruptor>(
     client_pp().wait_for_active
@@ -544,10 +526,16 @@ SnapTrimObjSubEvent::with_pg(
           });
         });
       });
+    }).si_then([this] {
+      logger().debug("{}: completed", *this);
+      return handle.complete();
     }).handle_error_interruptible(
       remove_or_update_iertr::pass_further{},
       crimson::ct_error::assert_all{"unexpected error in SnapTrimObjSubEvent"}
     );
+  }).finally([this] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
   });
 }
 
