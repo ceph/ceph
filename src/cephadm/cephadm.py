@@ -2506,8 +2506,11 @@ def _get_container_mounts_for_type(
         if ctx.shared_ceph_folder:  # make easy manager modules/ceph-volume development
             ceph_folder = pathify(ctx.shared_ceph_folder)
             if os.path.exists(ceph_folder):
+                cephadm_binary = ceph_folder + '/src/cephadm/cephadm'
+                if not os.path.exists(pathify(cephadm_binary)):
+                    raise Error("cephadm binary does not exist. Please run './build.sh cephadm' from ceph/src/cephadm/ directory.")
+                mounts[cephadm_binary] = '/usr/sbin/cephadm'
                 mounts[ceph_folder + '/src/ceph-volume/ceph_volume'] = '/usr/lib/python3.6/site-packages/ceph_volume'
-                mounts[ceph_folder + '/src/cephadm/cephadm.py'] = '/usr/sbin/cephadm'
                 mounts[ceph_folder + '/src/pybind/mgr'] = '/usr/share/ceph/mgr'
                 mounts[ceph_folder + '/src/python-common/ceph'] = '/usr/lib/python3.6/site-packages/ceph'
                 mounts[ceph_folder + '/monitoring/ceph-mixin/dashboards_out'] = '/etc/grafana/dashboards/ceph-dashboard'
