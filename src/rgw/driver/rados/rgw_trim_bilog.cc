@@ -534,6 +534,7 @@ private:
     return 0;
   }
 
+
  public:
   BucketTrimInstanceCR(rgw::sal::RadosStore* store, RGWHTTPManager *http,
                        BucketTrimObserver *observer,
@@ -758,14 +759,25 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 			    << cpp_strerror(retcode) << dendl;
 	  return set_cr_error(retcode);
 	}
+
+  //remove bucket instance metadata
+  if (clean_info->first.layout.logs.front().layout.type == rgw::BucketLogType::Deleted) {
+  retcode = store->ctl()->bucket->remove_bucket_instance_info(bucket, clean_info->first, null_yield, dpp);
+    if (retcode < 0) {
+      ldpp_dout(dpp, 0) << "failed to remove instance bucket info: "
+                        << cpp_strerror(retcode) << dendl;
+      return set_cr_error(retcode);
+    }
+  }
+
 	clean_info = std::nullopt;
       }
     } else {
       if (totrim.layout.type != rgw::BucketLogType::InIndex) {
-	ldpp_dout(dpp, 0) << "Unable to convert log of unknown type "
-			  << totrim.layout.type
-			  << " to rgw::bucket_index_layout_generation " << dendl;
-	return set_cr_error(-EINVAL);
+       ldpp_dout(dpp, 0) << "Unable to convert log of unknown type "
+                         << totrim.layout.type
+                         << " to rgw::bucket_index_layout_generation " << dendl;
+       return set_cr_error(-EINVAL);
       }
       // To avoid hammering the OSD too hard, either trim old
       // generations OR trim the current one.
