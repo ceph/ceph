@@ -11304,6 +11304,18 @@ void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
 
 void Client::C_Read_Async_Finisher::finish(int r)
 {
+  clnt->client_lock.lock();
+
+  if (denc && r >= 0) {
+      std::vector<ObjectCacher::ObjHole> holes;
+      r = denc->decrypt_bl(off, len, read_start, holes, bl);
+      if (r < 0) {
+        // ldout(cct, 20) << __func__ << "(): failed to decrypt buffer: r=" << r << dendl;
+      } else {
+        r = bl->length();
+      }
+  }
+
   // Do read ahead as long as we aren't completing with 0 bytes
   if (r != 0)
     clnt->do_readahead(f, in, off, len);
@@ -11322,14 +11334,25 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   C_SaferCond *io_finish_cond = nullptr;
 
   ldout(cct, 10) << __func__ << " " << *in << " " << off << "~" << len << dendl;
+  
+  uint64_t read_start;
+  uint64_t read_len;
+
+  FSCryptFDataDencRef fscrypt_denc;
+  fscrypt->prepare_data_read(in->fscrypt_ctx,
+                             &in->fscrypt_key_validator,
+                             off, len, in->size,
+                             &read_start, &read_len,
+                             &fscrypt_denc);
 
   // get Fc cap ref before commencing read
   get_cap_ref(in, CEPH_CAP_FILE_CACHE);
 
   auto effective_size = in->effective_size();
   if (onfinish != nullptr) {
-    io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in,
-                                              f->pos, off, len));
+    io_finish.reset(new C_Read_Async_Finisher(this, onfinish, f, in, bl,
+                                              f->pos, off, len,
+                                              fscrypt_denc, read_start, read_len));
   }
 
   // trim read based on file size?
@@ -11364,16 +11387,6 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
   ldout(cct, 10) << " min_bytes=" << f->readahead.get_min_readahead_size()
                  << " max_bytes=" << f->readahead.get_max_readahead_size()
                  << " max_periods=" << conf->client_readahead_max_periods << dendl;
-
-  uint64_t read_start;
-  uint64_t read_len;
-
-  FSCryptFDataDencRef fscrypt_denc;
-  fscrypt->prepare_data_read(in->fscrypt_ctx,
-                             &in->fscrypt_key_validator,
-                             off, len, in->size,
-                             &read_start, &read_len,
-                             &fscrypt_denc);
 
   // read (and possibly block)
   //
