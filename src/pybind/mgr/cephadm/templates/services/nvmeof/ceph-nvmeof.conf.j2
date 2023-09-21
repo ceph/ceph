@@ -30,5 +30,5 @@ transports = {{ spec.transports }}
 transport_tcp_options = {{ transport_tcp_options }}
 {% endif %}
 {% if spec.tgt_cmd_extra_args %}
-tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args | tojson }}
+tgt_cmd_extra_args = {{ spec.tgt_cmd_extra_args }}
 {% endif %}
