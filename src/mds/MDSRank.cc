@@ -41,6 +41,7 @@
 #include "events/ESubtreeMap.h"
 #include "events/ELid.h"
 #include "Mutation.h"
+#include "RadosJournalPointerStore.h"
 
 
 #include "MDSRank.h"
@@ -197,7 +198,7 @@ private:
     Context *ctx = new C_OnFinisher(new LambdaContext([this](int) {
           std::lock_guard locker(mds->get_lock());
           trim_expired_segments();
-        }), mds->get_finisher());
+        }), MDSRank::from_base(mds)->get_finisher());
     ctx->complete(0);
   }
 
@@ -548,6 +549,8 @@ MDSRank::MDSRank(
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
 
+  journal_pointer_store.reset(new RadosJournalPointerStore(whoami, metadata_pool, objecter));
+
   _heartbeat_reset_grace = g_conf().get_val<uint64_t>("mds_heartbeat_reset_grace");
   heartbeat_grace = g_conf().get_val<double>("mds_heartbeat_grace");
   op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
@@ -600,6 +603,18 @@ MDSRank::~MDSRank()
 
   delete objecter;
   objecter = nullptr;
+}
+
+inline Journaler* MDSRank::make_journaler(const char* name, inodeno_t ino, const char* magic, PerfCounters* latency_logger, int latency_key) const {
+  return new RadosJournaler(
+    name,
+    ino,
+    get_metadata_pool(),
+    magic,
+    get_objecter(),
+    latency_logger,
+    latency_key,
+    get_finisher());
 }
 
 void MDSRankDispatcher::init()
