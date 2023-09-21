@@ -589,7 +589,7 @@ send_data:
 
 int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> *filter, RGWGetObj_Filter* cb, bufferlist* manifest_bl)
 {
-  if (skip_decrypt || !manifest_bl) { // bypass decryption for multisite sync requests
+  if (skip_decrypt) { // bypass decryption for multisite sync requests
     return 0;
   }
 
@@ -616,7 +616,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
       ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
       return -EIO;
     }
-  } else {
+  } else if (manifest_bl) {
     // otherwise, we read the part lengths from the manifest
     res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
                                                       parts_len);
@@ -2789,7 +2789,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
       ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
       return -EIO;
     }
-  } else {
+  } else if (manifest_bl) {
     // otherwise, we read the part lengths from the manifest
     res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
                                                       parts_len);
