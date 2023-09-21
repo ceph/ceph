@@ -340,7 +340,7 @@
           "displayAliasType": "Warning / Critical",
           "displayType": "Annotation",
           "displayValueWithAlias": "Never",
-          "expr": "count(ceph_mon_quorum_status) / sum(ceph_mon_quorum_status)",
+          "expr": "count(ceph_mon_quorum_status) - sum(ceph_mon_quorum_status)",
           "format": "time_series",
           "intervalFactor": 1,
           "legendFormat": "MONs out of Quorum",
