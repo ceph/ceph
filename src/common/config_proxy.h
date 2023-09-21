@@ -150,12 +150,15 @@ public:
 				       std::forward<Args>(args)...);
   }
   void config_options(ceph::Formatter *f) const {
+    std::lock_guard l{lock};
     config.config_options(f);
   }
   const decltype(md_config_t::schema)& get_schema() const {
+    std::lock_guard l{lock};
     return config.schema;
   }
   const Option* get_schema(const std::string_view key) const {
+    std::lock_guard l{lock};
     auto found = config.schema.find(key);
     if (found == config.schema.end()) {
       return nullptr;
@@ -164,6 +167,7 @@ public:
     }
   }
   const Option *find_option(const std::string& name) const {
+    std::lock_guard l{lock};
     return config.find_option(name);
   }
   void diff(ceph::Formatter *f, const std::string& name = {}) const {
@@ -186,6 +190,7 @@ public:
 					 sections, key, out, emeta);
   }
   unsigned get_osd_pool_default_min_size(uint8_t size) const {
+    std::lock_guard l{lock};
     return config.get_osd_pool_default_min_size(values, size);
   }
   void early_expand_meta(std::string &val,
@@ -225,9 +230,11 @@ public:
     call_observers(locker, rev_obs);
   }
   void set_safe_to_start_threads() {
+    std::lock_guard l(lock);
     config.set_safe_to_start_threads();
   }
   void _clear_safe_to_start_threads() {
+    std::lock_guard l(lock);
     config._clear_safe_to_start_threads();
   }
   void show_config(std::ostream& out) {
@@ -319,12 +326,15 @@ public:
 				     conf_files, warnings, flags);
   }
   bool has_parse_error() const {
+    std::lock_guard l(lock);
     return !config.parse_error.empty();
   }
   std::string get_parse_error() {
+    std::lock_guard l(lock);
     return config.parse_error;
   }
   void complain_about_parse_error(CephContext *cct) {
+    std::lock_guard l(lock);
     return config.complain_about_parse_error(cct);
   }
   void do_argv_commands() const {
@@ -342,9 +352,11 @@ public:
     config.get_defaults_bl(values, bl);
   }
   const std::string& get_conf_path() const {
+    std::lock_guard l(lock);
     return config.get_conf_path();
   }
   std::optional<std::string> get_val_default(std::string_view key) {
+    std::lock_guard l(lock);
     return config.get_val_default(key);
   }
 };
