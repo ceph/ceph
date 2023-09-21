@@ -10,3 +10,5 @@ overrides:
         rgw crypt require ssl: false
   rgw:
     storage classes: LUKEWARM, FROZEN
+  s3tests:
+    storage classes: LUKEWARM, FROZEN
