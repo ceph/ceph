@@ -114,7 +114,7 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     dout(20) << "scrub scheduling (@tick) starts" << dendl;
-    auto all_jobs = list_registered_jobs();
+    auto all_jobs = m_queue.list_registered_jobs();
     for (const auto& sj : all_jobs) {
       dout(20) << fmt::format("\tscrub-queue jobs: {}", *sj) << dendl;
     }
@@ -502,14 +502,4 @@ bool OsdScrub::set_reserving_now()
 void OsdScrub::clear_reserving_now()
 {
   m_queue.clear_reserving_now();
-}
-
-bool OsdScrub::is_reserving_now() const
-{
-  return m_queue.is_reserving_now();
-}
-
-Scrub::ScrubQContainer OsdScrub::list_registered_jobs() const
-{
-  return m_queue.list_registered_jobs();
 }
