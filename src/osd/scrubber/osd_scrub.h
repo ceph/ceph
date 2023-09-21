@@ -204,18 +204,6 @@ class OsdScrub {
   /// the queue of PGs waiting to be scrubbed
   ScrubQueue m_queue;
 
- public:
-  // for this transitory commit only - to be moved elsewhere
-  /**
-   * @return the list (not std::set!) of all scrub jobs registered
-   *   (apart from PGs in the process of being removed)
-   */
-  Scrub::ScrubQContainer list_registered_jobs() const;
-
-  /// one of this OSD's PGs is trying to acquire replica resources
-  bool is_reserving_now() const;
-
- private:
   const std::string m_log_prefix{};
 
   /// number of PGs stuck while scrubbing, waiting for objects
