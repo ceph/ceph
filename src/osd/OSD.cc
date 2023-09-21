@@ -1705,7 +1705,7 @@ void OSDService::queue_recovery_context(
   epoch_t e = get_osdmap_epoch();
 
   uint64_t cost_for_queue = [this, cost] {
-    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+    if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
       return cost;
     } else {
       /* We retain this legacy behavior for WeightedPriorityQueue. It seems to
@@ -1773,7 +1773,7 @@ int64_t OSDService::get_scrub_cost()
 {
 
   int64_t cost_for_queue = cct->_conf->osd_scrub_cost;
-  if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+  if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
     cost_for_queue = cct->_conf->osd_scrub_event_cost *
                      cct->_conf->osd_scrub_chunk_max;
   }
@@ -2057,7 +2057,7 @@ void OSDService::_queue_for_recovery(
   ceph_assert(ceph_mutex_is_locked_by_me(recovery_lock));
 
   uint64_t cost_for_queue = [this, &reserved_pushes, &p] {
-    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+    if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
       return p.cost_per_object * reserved_pushes;
     } else {
       /* We retain this legacy behavior for WeightedPriorityQueue. It seems to
@@ -10261,7 +10261,7 @@ void OSD::maybe_override_max_osd_capacity_for_qos()
   // If the scheduler enabled is mclock, override the default
   // osd capacity with the value obtained from running the
   // osd bench test. This is later used to setup mclock.
-  if ((cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler") &&
+  if ((op_queue_type_t::mClockScheduler == osd_op_queue_type()) &&
       (cct->_conf.get_val<bool>("osd_mclock_skip_benchmark") == false) &&
       (!unsupported_objstore_for_qos())) {
     std::string max_capacity_iops_config;
@@ -10361,7 +10361,7 @@ bool OSD::maybe_override_options_for_qos(const std::set<std::string> *changed)
 {
   // Override options only if the scheduler enabled is mclock and the
   // underlying objectstore is supported by mclock
-  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
+  if (op_queue_type_t::mClockScheduler == osd_op_queue_type() &&
       !unsupported_objstore_for_qos()) {
     static const std::map<std::string, uint64_t> recovery_qos_defaults {
       {"osd_recovery_max_active", 0},
@@ -10463,9 +10463,8 @@ void OSD::maybe_override_sleep_options_for_qos()
 {
   // Override options only if the scheduler enabled is mclock and the
   // underlying objectstore is supported by mclock
-  if (cct->_conf.get_val<std::string>("osd_op_queue") == "mclock_scheduler" &&
+  if (op_queue_type_t::mClockScheduler == osd_op_queue_type() &&
       !unsupported_objstore_for_qos()) {
-
     // Override the various sleep settings
     // Disable recovery sleep
     cct->_conf.set_val("osd_recovery_sleep", std::to_string(0));
