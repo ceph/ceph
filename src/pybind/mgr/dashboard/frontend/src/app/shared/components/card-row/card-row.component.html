@@ -32,28 +32,31 @@
 </li>
 
 <ng-template #defaultSummary>
-  <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">
-    <span *ngIf="data.success || (data.success === 0 && data.total === 0)">
-      {{ data.success }}
-    </span>
-    <span *ngIf="data.categoryPgAmount?.clean">
-      {{ data.categoryPgAmount?.clean }}
-    </span>
+  <span *ngIf="(data.success && data.success !== total)"
+        ngbTooltip="Success">
+    {{ data.success }}
+    <i class="text-success"
+       [ngClass]="[icons.success]">
+    </i>
+  </span>
+  <span *ngIf="(data.categoryPgAmount?.clean && data.categoryPgAmount?.clean !== total)"
+        ngbTooltip="Clean">
+    {{ data.categoryPgAmount?.clean }}
     <i class="text-success"
        [ngClass]="[icons.success]">
     </i>
   </span>
   <span *ngIf="data.info"
-        class="ms-2">
-    <span *ngIf="data.info">
-      {{ data.info }}
-    </span>
+        class="ms-2"
+        ngbTooltip="Info">
+    {{ data.info }}
     <i class="text-info"
        [ngClass]="[icons.danger]">
     </i>
   </span>
   <span *ngIf="data.warn || data.categoryPgAmount?.warning"
-        class="ms-2">
+        class="ms-2"
+        ngbTooltip="Warning">
     <span *ngIf="data.warn">
       {{ data.warn }}
     </span>
@@ -64,20 +67,24 @@
        [ngClass]="[icons.warning]">
     </i>
   </span>
-  <span *ngIf="data.error || data.categoryPgAmount?.unknown"
-        class="ms-2">
-    <span *ngIf="data.error">
-      {{ data.error }}
-    </span>
-    <span *ngIf="data.categoryPgAmount?.unknown">
-      {{ data.categoryPgAmount?.unknown }}
-    </span>
+  <span *ngIf="data.error"
+        class="ms-2"
+        ngbTooltip="Error">
+    {{ data.error }}
+    <i class="text-danger"
+       [ngClass]="[icons.danger]">
+    </i>
+  </span>
+  <span *ngIf="data.categoryPgAmount?.unknown"
+        ngbTooltip="Unknown">
+    {{ data.categoryPgAmount?.unknown }}
     <i class="text-danger"
        [ngClass]="[icons.danger]">
     </i>
   </span>
   <span *ngIf="data.categoryPgAmount?.working"
-        class="ms-2">
+        class="ms-2"
+        ngbTooltip="Working">
     <span *ngIf="data.categoryPgAmount?.working">
       {{ data.categoryPgAmount?.working }}
     </span>
@@ -88,7 +95,8 @@
 </ng-template>
 
 <ng-template #osdSummary>
-  <span *ngIf="data.up === data.in">
+  <span *ngIf="data.up === data.in && total !== data.in"
+        ngbTooltip="Up">
     {{ data.up }}
     <i class="text-success"
        [ngClass]="[icons.success]">
@@ -96,38 +104,41 @@
   </span>
   <span *ngIf="data.up !== data.in">
     {{ data.up }}
-    <span class="fw-bold text-success">
+    <span class="fw-bold text-success"
+          ngbTooltip="Up">
         up
     </span>
-  </span>
-  <span *ngIf="data.in !== data.up"
-        class="ms-2">
     {{ data.in }}
-    <span class="fw-bold text-success">
-        in
+    <span class="fw-bold text-success"
+          ngbTooltip="In">
+      in
     </span>
   </span>
   <span *ngIf="data.down"
-        class="ms-2">
+        class="ms-2"
+        ngbTooltip="Down">
     {{ data.down }}
     <span class="fw-bold text-danger me-2">
         down
     </span>
   </span>
   <span *ngIf="data.out"
-        class="ms-2">
+        class="ms-2"
+        ngbTooltip="Out">
     {{ data.out }}
     <span class="fw-bold text-danger me-2">
         out
     </span>
   </span>
   <span *ngIf="data.nearfull"
-        class="ms-2">
+        class="ms-2"
+        ngbTooltip="Near Full">
         {{ data.nearfull }}
     <span class="fw-bold text-warning me-2">
       nearfull</span></span>
   <span *ngIf="data.full"
-        class="ms-2">
+        class="ms-2"
+        ngbTooltip="Full">
         {{ data.full }}
     <span class="fw-bold text-danger">
       full
@@ -136,16 +147,18 @@
 </ng-template>
 
 <ng-template #iscsiSummary>
-  <span>
+  <span *ngIf="data.up !== total"
+        ngbTooltip="Up">
     {{ data.up }}
     <i class="text-success"
-       *ngIf="data.up || data.up === 0"
+       *ngIf="data.up"
        [ngClass]="[icons.success]">
     </i>
   </span>
   <span *ngIf="data.down"
-        class="ms-2">
-        {{ data.down }}
+        class="ms-2"
+        ngbTooltip="Down">
+    {{ data.down }}
     <i class="text-danger"
        [ngClass]="[icons.danger]">
     </i>
@@ -153,11 +166,6 @@
 </ng-template>
 
 <ng-template #simplifiedSummary>
-  <span>
-    {{ data }}
-    <i class="text-success"
-       [ngClass]="[icons.success]"></i>
-  </span>
 </ng-template>
 
 <ng-template #noLinkTitle>
