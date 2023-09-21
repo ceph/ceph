@@ -5,7 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgbDropdownModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
-import { ChartsModule } from 'ng2-charts';
+import { NgChartsModule } from 'ng2-charts';
 
 import { ComponentsModule } from '~/app/shared/components/components.module';
 import { RbdConfigurationEntry } from '~/app/shared/models/configuration';
@@ -27,7 +27,7 @@ describe('RbdConfigurationListComponent', () => {
       RouterTestingModule,
       ComponentsModule,
       NgbDropdownModule,
-      ChartsModule,
+      NgChartsModule,
       SharedModule,
       NgbTooltipModule
     ],

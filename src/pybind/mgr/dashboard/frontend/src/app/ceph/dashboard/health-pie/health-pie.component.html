@@ -2,10 +2,9 @@
   <canvas baseChart
           #chartCanvas
           [datasets]="chartConfig.dataset"
-          [chartType]="chartConfig.chartType"
+          [type]="chartConfig.chartType"
           [options]="chartConfig.options"
           [labels]="chartConfig.labels"
-          [colors]="chartConfig.colors"
           [plugins]="doughnutChartPlugins"
           class="chart-canvas">
   </canvas>

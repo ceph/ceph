@@ -13,7 +13,7 @@ import {
   NgbTooltipModule
 } from '@ng-bootstrap/ng-bootstrap';
 import { ClickOutsideModule } from 'ng-click-outside';
-import { ChartsModule } from 'ng2-charts';
+import { NgChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { MotdComponent } from '~/app/shared/components/motd/motd.component';
@@ -61,7 +61,7 @@ import { CardRowComponent } from './card-row/card-row.component';
     NgbPopoverModule,
     NgbProgressbarModule,
     NgbTooltipModule,
-    ChartsModule,
+    NgChartsModule,
     ReactiveFormsModule,
     PipesModule,
     DirectivesModule,

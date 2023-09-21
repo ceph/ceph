@@ -37,7 +37,8 @@ export class ChartTooltip {
    * @param {any} tooltip
    * @memberof ChartTooltip
    */
-  customTooltips(tooltip: any) {
+  customTooltips(context: any) {
+    const tooltip = context.tooltip;
     // Hide if no tooltip
     if (tooltip.opacity === 0) {
       this.tooltipEl.style.opacity = 0;
@@ -102,7 +103,7 @@ export class ChartTooltip {
     this.tooltipEl.style.fontFamily = tooltip._fontFamily;
     this.tooltipEl.style.fontSize = tooltip.fontSize;
     this.tooltipEl.style.fontStyle = tooltip._fontStyle;
-    this.tooltipEl.style.padding = tooltip.yPadding + 'px ' + tooltip.xPadding + 'px';
+    this.tooltipEl.style.padding = 6 + 'px ' + 6 + 'px';
   }
 
   getBody(body: string) {

@@ -2,7 +2,6 @@ import { Component, Input, OnChanges, OnInit } from '@angular/core';
 
 import * as Chart from 'chart.js';
 import _ from 'lodash';
-import { PluginServiceGlobalRegistrationAndOptions } from 'ng2-charts';
 
 import { CssHelper } from '~/app/shared/classes/css-helper';
 import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
@@ -22,15 +21,15 @@ export class DashboardPieComponent implements OnChanges, OnInit {
 
   color: string;
 
-  chartConfig: any = {};
+  chartConfig: any;
 
-  public doughnutChartPlugins: PluginServiceGlobalRegistrationAndOptions[] = [
+  public doughnutChartPlugins: any[] = [
     {
       id: 'center_text',
-      beforeDraw(chart: Chart) {
+      beforeDraw(chart: any) {
         const cssHelper = new CssHelper();
         const defaultFontFamily = 'Helvetica Neue, Helvetica, Arial, sans-serif';
-        Chart.defaults.global.defaultFontFamily = defaultFontFamily;
+        Chart.defaults.font.family = defaultFontFamily;
         const ctx = chart.ctx;
         if (!chart.options.plugins.center_text || !chart.data.datasets[0].label) {
           return;
@@ -80,66 +79,67 @@ export class DashboardPieComponent implements OnChanges, OnInit {
         }
       ],
       options: {
-        cutoutPercentage: 70,
+        cutout: '70%',
         events: ['click', 'mouseout', 'touchstart'],
-        legend: {
-          display: true,
-          position: 'right',
-          labels: {
-            boxWidth: 10,
-            usePointStyle: false,
-            generateLabels: (chart: any) => {
-              const labels = { 0: {}, 1: {}, 2: {} };
-              labels[0] = {
-                text: $localize`Used: ${chart.data.datasets[1].data[2]}`,
-                fillStyle: chart.data.datasets[1].backgroundColor[0],
-                strokeStyle: chart.data.datasets[1].backgroundColor[0]
-              };
-              labels[1] = {
-                text: $localize`Warning: ${chart.data.datasets[0].data[0]}%`,
-                fillStyle: chart.data.datasets[0].backgroundColor[1],
-                strokeStyle: chart.data.datasets[0].backgroundColor[1]
-              };
-              labels[2] = {
-                text: $localize`Danger: ${
-                  chart.data.datasets[0].data[0] + chart.data.datasets[0].data[1]
-                }%`,
-                fillStyle: chart.data.datasets[0].backgroundColor[2],
-                strokeStyle: chart.data.datasets[0].backgroundColor[2]
-              };
-
-              return labels;
-            }
-          }
-        },
+        aspectRatio: 2,
         plugins: {
-          center_text: true
-        },
-        tooltips: {
-          enabled: true,
-          displayColors: false,
-          backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
-          cornerRadius: 0,
-          bodyFontSize: 14,
-          bodyFontStyle: '600',
-          position: 'nearest',
-          xPadding: 12,
-          yPadding: 12,
-          filter: (tooltipItem: any) => {
-            return tooltipItem.datasetIndex === 1;
-          },
-          callbacks: {
-            label: (item: Record<string, any>, data: Record<string, any>) => {
-              let text = data.labels[item.index];
-              if (!text.includes('%')) {
-                text = `${text} (${data.datasets[item.datasetIndex].data[item.index]}%)`;
+          center_text: true,
+          legend: {
+            display: true,
+            position: 'right',
+            labels: {
+              boxWidth: 10,
+              usePointStyle: false,
+              generateLabels: (chart: any) => {
+                let labels = chart.data.labels.slice(0, this.chartConfig.labels.length);
+                labels[0] = {
+                  text: $localize`Used: ${chart.data.datasets[1].data[2]}`,
+                  fillStyle: chart.data.datasets[1].backgroundColor[0],
+                  strokeStyle: chart.data.datasets[1].backgroundColor[0]
+                };
+                labels[1] = {
+                  text: $localize`Warning: ${chart.data.datasets[0].data[0]}%`,
+                  fillStyle: chart.data.datasets[0].backgroundColor[1],
+                  strokeStyle: chart.data.datasets[0].backgroundColor[1]
+                };
+                labels[2] = {
+                  text: $localize`Danger: ${
+                    chart.data.datasets[0].data[0] + chart.data.datasets[0].data[1]
+                  }%`,
+                  fillStyle: chart.data.datasets[0].backgroundColor[2],
+                  strokeStyle: chart.data.datasets[0].backgroundColor[2]
+                };
+
+                return labels;
               }
-              return text;
             }
+          },
+          tooltip: {
+            enabled: true,
+            displayColors: false,
+            backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
+            cornerRadius: 0,
+            bodyFontSize: 14,
+            bodyFontStyle: '600',
+            position: 'nearest',
+            xPadding: 12,
+            yPadding: 12,
+            filter: (tooltipItem: any) => {
+              return tooltipItem.datasetIndex === 1;
+            },
+            callbacks: {
+              label: (item: Record<string, any>, data: Record<string, any>) => {
+                let text = data.labels[item.index];
+                if (!text.includes('%')) {
+                  text = `${text} (${data.datasets[item.datasetIndex].data[item.index]}%)`;
+                }
+                return text;
+              }
+            }
+          },
+          title: {
+            display: false
           }
-        },
-        title: {
-          display: false
         }
       }
     };
