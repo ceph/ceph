@@ -35,7 +35,7 @@ OsdScrub::OsdScrub(
     , conf{config}
     , m_resource_bookkeeper{[this](std::string msg) { log_fwd(msg); }, conf}
     , m_queue{cct, m_osd_svc}
-    , m_log_prefix{fmt::format("osd.{}: osd-scrub:", m_osd_svc.get_nodeid())}
+    , m_log_prefix{fmt::format("osd.{} osd-scrub:", m_osd_svc.get_nodeid())}
     , m_load_tracker{cct, conf, m_osd_svc.get_nodeid()}
 {}
 
@@ -321,7 +321,7 @@ bool OsdScrub::LoadTracker::scrub_load_below_threshold() const
 {
   double loadavgs[3];
   if (getloadavg(loadavgs, 3) != 3) {
-    dout(10) << fmt::format("{}: couldn't read loadavgs", __func__) << dendl;
+    dout(10) << "couldn't read loadavgs" << dendl;
     return false;
   }
 
@@ -398,7 +398,7 @@ bool OsdScrub::scrub_time_permit(utime_t now) const
   bool time_permits = isbetween_modulo(
       conf->osd_scrub_begin_hour, conf->osd_scrub_end_hour, bdt.tm_hour);
   dout(20) << fmt::format(
-		  "{}: should run between {} - {} now {} = {}", __func__,
+		  "should run between {} - {} now {} = {}",
 		  conf->osd_scrub_begin_hour, conf->osd_scrub_end_hour,
 		  bdt.tm_hour, (time_permits ? "yes" : "no"))
 	   << dendl;
