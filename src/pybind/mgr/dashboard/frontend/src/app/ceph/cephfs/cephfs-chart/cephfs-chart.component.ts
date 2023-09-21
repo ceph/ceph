@@ -1,8 +1,8 @@
 import { Component, ElementRef, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 
-import { ChartDataSets, ChartOptions, ChartPoint, ChartType } from 'chart.js';
 import _ from 'lodash';
 import moment from 'moment';
+import 'chartjs-adapter-moment';
 
 import { ChartTooltip } from '~/app/shared/models/chart-tooltip';
 
@@ -24,78 +24,78 @@ export class CephfsChartComponent implements OnChanges, OnInit {
   rhsCounter = 'mds_server.handle_client_request';
 
   chart: {
-    datasets: ChartDataSets[];
-    options: ChartOptions;
-    chartType: ChartType;
+    datasets: any[];
+    options: any;
+    chartType: any;
   } = {
     datasets: [
       {
         label: this.lhsCounter,
         yAxisID: 'LHS',
         data: [],
-        lineTension: 0.1
+        tension: 0.1,
+        fill: {
+          target: 'origin'
+        }
       },
       {
         label: this.rhsCounter,
         yAxisID: 'RHS',
         data: [],
-        lineTension: 0.1
+        tension: 0.1,
+        fill: {
+          target: 'origin'
+        }
       }
     ],
     options: {
-      title: {
-        text: '',
-        display: true
+      plugins: {
+        title: {
+          text: '',
+          display: true
+        },
+        tooltip: {
+          enabled: false,
+          mode: 'index',
+          intersect: false,
+          position: 'nearest',
+          callbacks: {
+            // Pick the Unix timestamp of the first tooltip item.
+            title: (context: any): string => {
+              let ts = '';
+              if (context.length > 0) {
+                ts = context[0].label;
+              }
+              return moment(ts).format('LTS');
+            }
+          }
+        },
+        legend: {
+          position: 'top'
+        }
       },
       responsive: true,
       maintainAspectRatio: false,
-      legend: {
-        position: 'top'
-      },
       scales: {
-        xAxes: [
-          {
-            position: 'top',
-            type: 'time',
-            time: {
-              displayFormats: {
-                quarter: 'MMM YYYY'
-              }
-            },
-            ticks: {
-              maxRotation: 0
+        x: {
+          position: 'top',
+          type: 'time',
+          time: {
+            displayFormats: {
+              quarter: 'MMM YYYY'
             }
-          }
-        ],
-        yAxes: [
-          {
-            id: 'LHS',
-            type: 'linear',
-            position: 'left'
           },
-          {
-            id: 'RHS',
-            type: 'linear',
-            position: 'right'
+          ticks: {
+            maxRotation: 0
           }
-        ]
-      },
-      tooltips: {
-        enabled: false,
-        mode: 'index',
-        intersect: false,
-        position: 'nearest',
-        callbacks: {
-          // Pick the Unix timestamp of the first tooltip item.
-          title: (tooltipItems, data): string => {
-            let ts = 0;
-            if (tooltipItems.length > 0) {
-              const item = tooltipItems[0];
-              const point = data.datasets[item.datasetIndex].data[item.index] as ChartPoint;
-              ts = point.x as number;
-            }
-            return ts.toString();
-          }
+        },
+        LHS: {
+          type: 'linear',
+          position: 'left'
+        },
+        RHS: {
+          type: 'linear',
+          position: 'right'
         }
       }
     },
@@ -124,21 +124,20 @@ export class CephfsChartComponent implements OnChanges, OnInit {
       (tooltip: any) => tooltip.caretX + 'px',
       (tooltip: any) => tooltip.caretY - tooltip.height - 23 + 'px'
     );
-    chartTooltip.getTitle = (ts) => moment(ts, 'x').format('LTS');
     chartTooltip.checkOffset = true;
-    const chartOptions: ChartOptions = {
+    const chartOptions: any = {
       title: {
         text: this.mdsCounter.name
       },
-      tooltips: {
-        custom: (tooltip) => chartTooltip.customTooltips(tooltip)
+      tooltip: {
+        external: (context: any) => chartTooltip.customTooltips(context)
       }
     };
-    _.merge(this.chart, { options: chartOptions });
+    _.merge(this.chart, { options: { plugins: chartOptions } });
   }
 
   private updateChart() {
-    const chartDataSets: ChartDataSets[] = [
+    const chartDataset: any[] = [
       {
         data: this.convertTimeSeries(this.mdsCounter[this.lhsCounter])
       },
@@ -147,7 +146,7 @@ export class CephfsChartComponent implements OnChanges, OnInit {
       }
     ];
     _.merge(this.chart, {
-      datasets: chartDataSets
+      datasets: chartDataset
     });
     this.chart.datasets = [...this.chart.datasets]; // Force angular to update
   }

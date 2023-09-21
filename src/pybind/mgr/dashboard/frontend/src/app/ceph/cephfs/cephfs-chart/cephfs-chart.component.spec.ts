@@ -1,9 +1,10 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
-import { ChartsModule } from 'ng2-charts';
+import { NgChartsModule } from 'ng2-charts';
 
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { CephfsChartComponent } from './cephfs-chart.component';
+import { ResizeObserver as ResizeObserverPolyfill } from '@juggle/resize-observer';
 
 describe('CephfsChartComponent', () => {
   let component: CephfsChartComponent;
@@ -17,7 +18,7 @@ describe('CephfsChartComponent', () => {
   ];
 
   configureTestBed({
-    imports: [ChartsModule],
+    imports: [NgChartsModule],
     declarations: [CephfsChartComponent]
   });
 
@@ -29,6 +30,9 @@ describe('CephfsChartComponent', () => {
       'mds_mem.ino': counter,
       name: 'a'
     };
+    if (typeof window !== 'undefined') {
+      window.ResizeObserver = window.ResizeObserver || ResizeObserverPolyfill;
+    }
     fixture.detectChanges();
   });
 
