@@ -3,12 +3,14 @@ import pytest
 from unittest import mock
 from tests.fixtures import host_sysfs, import_cephadm
 
+from cephadmlib.host_facts import Enclosure
+
 _cephadm = import_cephadm()
 
 
 @pytest.fixture
 def enclosure(host_sysfs):
-    e = _cephadm.Enclosure(
+    e = Enclosure(
         enc_id='1',
         enc_path='/sys/class/scsi_generic/sg2/device/enclosure/0:0:1:0',
         dev_path='/sys/class/scsi_generic/sg2')
