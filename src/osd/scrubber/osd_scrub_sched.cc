@@ -477,6 +477,8 @@ ScrubQContainer ScrubQueue::list_registered_jobs() const
   return all_jobs;
 }
 
+// ////////////////////////////////////////////////////////////////////////// //
+// ScrubQueue - maintaining the 'blocked on a locked object' count
 
 void ScrubQueue::clear_pg_scrub_blocked(spg_t blocked_pg)
 {

@@ -335,6 +335,13 @@ class ScrubQueue {
    */
   std::atomic_int_fast16_t blocked_scrubs_cnt{0};
 
+  /**
+   * One of the OSD's primary PGs is in the initial phase of a scrub,
+   * trying to secure its replicas' resources. We will refrain from initiating
+   * any other scrub sessions until this one is done.
+   *
+   * \todo keep the ID of the reserving PG; possibly also the time it started.
+   */
   std::atomic_bool a_pg_is_reserving{false};
 
   /**
