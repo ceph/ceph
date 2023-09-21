@@ -165,6 +165,8 @@ from cephadmlib.host_facts import HostFacts, list_networks
 from cephadmlib.ssh import authorize_ssh_key, check_ssh_connectivity
 from cephadmlib.daemon_form import (
     DaemonForm,
+    SysctlDaemonForm,
+    create as daemon_form_create,
     register as register_daemon_form,
 )
 
@@ -2955,7 +2957,7 @@ def deploy_daemon_units(
             f.write(container.image + '\n')
 
     # sysctl
-    install_sysctl(ctx, fsid, daemon_type)
+    install_sysctl(ctx, fsid, daemon_form_create(ctx, ident))
 
     # systemd
     install_base_units(ctx, fsid)
@@ -3211,7 +3213,7 @@ def update_firewalld(ctx, daemon_type):
         firewall.apply_rules()
 
 
-def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
+def install_sysctl(ctx: CephadmContext, fsid: str, daemon: DaemonForm) -> None:
     """
     Set up sysctl settings
     """
@@ -3225,17 +3227,13 @@ def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
         with write_new(conf, owner=None, perms=None) as f:
             f.write('\n'.join(lines))
 
-    conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
-    lines: List = []
+    if not isinstance(daemon, SysctlDaemonForm):
+        return
 
-    if daemon_type == 'osd':
-        lines = OSD.get_sysctl_settings()
-    elif daemon_type == 'haproxy':
-        lines = HAproxy.get_sysctl_settings()
-    elif daemon_type == 'keepalived':
-        lines = Keepalived.get_sysctl_settings()
-    elif daemon_type == CephNvmeof.daemon_type:
-        lines = CephNvmeof.get_sysctl_settings()
+    daemon_type = daemon.identity.daemon_type
+    conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
+
+    lines = daemon.get_sysctl_settings()
     lines = filter_sysctl_settings(ctx, lines)
 
     # apply the sysctl settings
