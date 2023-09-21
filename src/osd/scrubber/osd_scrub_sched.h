@@ -117,15 +117,11 @@ namespace Scrub {
 
 using namespace ::std::literals;
 
-// possible outcome when trying to select a PG and scrub it
+/// possible outcome when trying to select a PG and scrub it
 enum class schedule_result_t {
-  scrub_initiated,     // successfully started a scrub
-  none_ready,	       // no pg to scrub
-  no_local_resources,  // failure to secure local OSD scrub resource
-  already_started,     // failed, as already started scrubbing this pg
-  no_such_pg,	       // can't find this pg
-  bad_pg_state,	       // pg state (clean, active, etc.)
-  preconditions	       // time, configuration, etc.
+  scrub_initiated,	    // successfully started a scrub
+  target_specific_failure,  // failed to scrub this specific target
+  osd_wide_failure	    // failed to scrub any target
 };
 
 // the OSD services provided to the scrub scheduler
@@ -179,11 +175,6 @@ class ScrubQueue {
   std::vector<ScrubTargetId> ready_to_scrub(
       Scrub::OSDRestrictions restrictions, // 4B! copy
       utime_t scrub_tick);
-
-  /**
-   * Translate attempt_ values into readable text
-   */
-  static std::string_view attempt_res_text(Scrub::schedule_result_t v);
 
   /**
    * remove the pg from set of PGs to be scanned for scrubbing.
