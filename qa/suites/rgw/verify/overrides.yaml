@@ -12,3 +12,5 @@ overrides:
   rgw:
     compression type: random
     storage classes: LUKEWARM, FROZEN
+  s3tests:
+    storage classes: LUKEWARM, FROZEN
