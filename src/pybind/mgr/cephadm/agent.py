@@ -53,17 +53,10 @@ class AgentEndpoint:
         self.server_addr = self.mgr.get_mgr_ip()
 
     def configure_routes(self) -> None:
-        d = cherrypy.dispatch.RoutesDispatcher()
-        d.connect(name='host-data', route='/data/',
-                  controller=self.host_data.POST,
-                  conditions=dict(method=['POST']))
-        d.connect(name='node-proxy-idrac', route='/node-proxy/idrac',
-                  controller=self.host_data.node_proxy_idrac,
-                  conditions=dict(method=['POST']))
-        d.connect(name='node-proxy-data', route='/node-proxy/data',
-                  controller=self.host_data.node_proxy_data,
-                  conditions=dict(method=['GET','POST']))
-        cherrypy.tree.mount(None, '/', config={'/': {'request.dispatch': d}})
+        conf = {'/': {'tools.trailing_slash.on': False}}
+
+        cherrypy.tree.mount(self.host_data, '/data', config=conf)
+        cherrypy.tree.mount(self.node_proxy, '/node-proxy', config=conf)
 
     def configure_tls(self, server: Server) -> None:
         old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
@@ -93,43 +86,38 @@ class AgentEndpoint:
 
     def configure(self) -> None:
         self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
+        self.node_proxy = NodeProxy(self.mgr)
         self.configure_tls(self.host_data)
         self.configure_routes()
         self.find_free_port()
 
 
-class HostData(Server):
-    exposed = True
-
-    def __init__(self, mgr: "CephadmOrchestrator", port: int, host: str):
+class NodeProxy:
+    def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
-        super().__init__()
-        self.socket_port = port
-        self.socket_host = host
-        self.subscribe()
 
-    def stop(self) -> None:
-        # we must call unsubscribe before stopping the server,
-        # otherwise the port is not released and we will get
-        # an exception when trying to restart it
-        self.unsubscribe()
-        super().stop()
+    def _cp_dispatch(self, vpath: List[str]) -> "NodeProxy":
+        if len(vpath) == 2:
+            hostname = vpath.pop(0)
+            cherrypy.request.params['hostname'] = hostname
+        cmd = vpath.pop(0)
+        cherrypy.request.params['cmd'] = cmd
 
+        return self
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['POST'])
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
-    def POST(self) -> Dict[str, Any]:
+    def idrac(self) -> Dict[str, Any]:
         data: Dict[str, Any] = cherrypy.request.json
         results: Dict[str, Any] = {}
-        try:
-            self.check_request_fields(data)
-        except Exception as e:
-            results['result'] = f'Bad metadata: {e}'
-            self.mgr.log.warning(f'Received bad metadata from an agent: {e}')
-        else:
-            # if we got here, we've already verified the keyring of the agent. If
-            # host agent is reporting on is marked offline, it shouldn't be any more
-            self.mgr.offline_hosts_remove(data['host'])
-            results['result'] = self.handle_metadata(data)
+
+        if self.validate_node_proxy_data(data):
+            idrac_details = self.mgr.get_store('node_proxy/idrac')
+            idrac_details_json = json.loads(idrac_details)
+            results['result'] = idrac_details_json[data["host"]]
+
         return results
 
     def validate_node_proxy_data(self, data: Dict[str, Any]) -> bool:
@@ -149,40 +137,6 @@ class HostData(Server):
             cherrypy.response.status = 200
 
         return cherrypy.response.status == 200
-
-    @cherrypy.tools.json_in()
-    @cherrypy.tools.json_out()
-    def node_proxy_idrac(self) -> Dict[str, Any]:
-        data: Dict[str, Any] = cherrypy.request.json
-        results: Dict[str, Any] = {}
-
-        if self.validate_node_proxy_data(data):
-            idrac_details = self.mgr.get_store('node_proxy/idrac')
-            idrac_details_json = json.loads(idrac_details)
-            self.mgr.log.warning(f"{idrac_details_json}")
-            results['result'] = idrac_details_json[data["host"]]
-
-        return results
-
-    @cherrypy.tools.json_in()
-    @cherrypy.tools.json_out()
-    def node_proxy_data(self) -> Dict[str, Any]:
-        results: Dict[str, Any] = {}
-
-        if cherrypy.request.method == 'POST':
-            data: Dict[str, Any] = cherrypy.request.json
-            if self.validate_node_proxy_data(data):
-                self.mgr.set_store(f'node_proxy/data/{data["host"]}', json.dumps(data['data']))
-                self.mgr.log.warning(f"{data}")
-                self.raise_alert(data)
-
-                results['result'] = data
-
-        if cherrypy.request.method == 'GET':
-            for k, v in self.mgr.get_store_prefix('node_proxy/data').items():
-                host = k.split('/')[-1:][0]
-                results[host] = json.loads(v)
-        return results
 
     def get_nok_members(self,
                         component: str,
@@ -227,6 +181,153 @@ class HostData(Server):
                     count=count,
                     detail=[f"{member['member']} is {member['status']}: {member['state']}" for member in nok_members],
                 )
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['POST'])
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def data(self) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+
+        data: Dict[str, Any] = cherrypy.request.json
+        if self.validate_node_proxy_data(data):
+            self.mgr.set_store(f'node_proxy/data/{data["host"]}', json.dumps(data['data']))
+            self.raise_alert(data)
+
+            results['result'] = data
+
+        return results
+
+    def get_full_report(self) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+
+        for k, v in self.mgr.get_store_prefix('node_proxy/data').items():
+            host = k.split('/')[-1:][0]
+            results[host] = json.loads(v)
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def fullreport(self, **kw: Any) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+        results = self.get_full_report()
+        hostname = kw.get('hostname',)
+
+        if hostname not in results.keys():
+            return results
+        else:
+            return results[hostname]
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def summary(self, **kw: Any) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+        status: List[str] = []
+        hostname = kw.get('hostname',)
+
+        results = self.get_full_report()
+
+        mapper: Dict[bool, str] = {
+            True: 'error',
+            False: 'ok'
+        }
+
+        _result = {}
+
+        for host, data in results.items():
+            _result[host] = {}
+            for component, details in data.items():
+                res = any([member['status']['health'].lower() != 'ok' for member in data[component].values()])
+                _result[host][component] = mapper[res]
+
+        if hostname and hostname in results.keys():
+            return _result[hostname]
+        else:
+            return _result
+
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def common(self, **kw) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+        status: List[str] = []
+        hostname = kw.get('hostname',)
+        cmd = kw.get('cmd',)
+        results = self.get_full_report()
+
+        _result = {}
+
+        for host, data in results.items():
+            try:
+                _result[host] = data[cmd]
+            except KeyError:
+                raise RuntimeError(f'invalid endpoint {cmd}')
+
+        if hostname and hostname in results.keys():
+            return _result[hostname]
+        else:
+            return _result
+
+    def dispatch(self, hostname='', cmd=''):
+        kw = dict(hostname=hostname, cmd=cmd)
+        try:
+            func = getattr(self, cmd)
+            result = func(**kw)
+        except AttributeError:
+            try:
+                result = self.common(**kw)
+            except RuntimeError:
+                cherrypy.response.status = 404
+                result = {}
+            return {"error": "Not a valid endpoint."}
+        finally:
+            return result
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out()
+    def index(self, hostname=None, cmd=''):
+        result = self.dispatch(hostname, cmd)
+        return result
+
+
+class HostData(Server):
+    exposed = True
+
+    def __init__(self, mgr: "CephadmOrchestrator", port: int, host: str):
+        self.mgr = mgr
+        super().__init__()
+        self.socket_port = port
+        self.socket_host = host
+        self.subscribe()
+
+    def stop(self) -> None:
+        # we must call unsubscribe before stopping the server,
+        # otherwise the port is not released and we will get
+        # an exception when trying to restart it
+        self.unsubscribe()
+        super().stop()
+
+    @cherrypy.tools.allow(methods=['POST'])
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    @cherrypy.expose
+    def index(self) -> Dict[str, Any]:
+        data: Dict[str, Any] = cherrypy.request.json
+        results: Dict[str, Any] = {}
+        try:
+            self.check_request_fields(data)
+        except Exception as e:
+            results['result'] = f'Bad metadata: {e}'
+            self.mgr.log.warning(f'Received bad metadata from an agent: {e}')
+        else:
+            # if we got here, we've already verified the keyring of the agent. If
+            # host agent is reporting on is marked offline, it shouldn't be any more
+            self.mgr.offline_hosts_remove(data['host'])
+            results['result'] = self.handle_metadata(data)
+        return results
 
     def check_request_fields(self, data: Dict[str, Any]) -> None:
         fields = '{' + ', '.join([key for key in data.keys()]) + '}'
