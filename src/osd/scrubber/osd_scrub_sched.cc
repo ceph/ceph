@@ -226,29 +226,6 @@ void ScrubQueue::move_failed_pgs(utime_t now_is)
   }
 }
 
-// clang-format off
-/*
- * Implementation note:
- * Clang (10 & 11) produces here efficient table-based code, comparable to using
- * a direct index into an array of strings.
- * Gcc (11, trunk) is almost as efficient.
- */
-std::string_view ScrubQueue::attempt_res_text(Scrub::schedule_result_t v)
-{
-  switch (v) {
-    case Scrub::schedule_result_t::scrub_initiated: return "scrubbing"sv;
-    case Scrub::schedule_result_t::none_ready: return "no ready job"sv;
-    case Scrub::schedule_result_t::no_local_resources: return "local resources shortage"sv;
-    case Scrub::schedule_result_t::already_started: return "denied as already started"sv;
-    case Scrub::schedule_result_t::no_such_pg: return "pg not found"sv;
-    case Scrub::schedule_result_t::bad_pg_state: return "prevented by pg state"sv;
-    case Scrub::schedule_result_t::preconditions: return "preconditions not met"sv;
-  }
-  // g++ (unlike CLANG), requires an extra 'return' here
-  return "(unknown)"sv;
-}
-// clang-format on
-
 std::vector<ScrubTargetId> ScrubQueue::ready_to_scrub(
     OSDRestrictions restrictions,  // note: 4B in size! (copy)
     utime_t scrub_tick)

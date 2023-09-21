@@ -125,60 +125,32 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
   // eligible targets (based on the known restrictions).
   // We try all elements of this list until a (possibly temporary) success.
   auto candidates = m_queue.ready_to_scrub(*env_restrictions, scrub_time);
-  auto res{schedule_result_t::none_ready};
+  if (candidates.empty()) {
+    dout(20) << "no PGs are ready for scrubbing" << dendl;
+    return;
+  }
+
   for (const auto& candidate : candidates) {
     dout(20) << fmt::format("initiating scrub on pg[{}]", candidate) << dendl;
 
     // we have a candidate to scrub. But we may fail when trying to initiate that
     // scrub. For some failures - we can continue with the next candidate. For
     // others - we should stop trying to scrub at this tick.
-    res = initiate_a_scrub(
+    auto res = initiate_a_scrub(
 	candidate, env_restrictions->allow_requested_repair_only);
-    switch (res) {
-      case schedule_result_t::scrub_initiated:
-	// the happy path. We are done
-	dout(20) << fmt::format("scrub initiated for pg[{}]", candidate.pgid)
-		 << dendl;
-	break;
 
-      case schedule_result_t::already_started:
-      case schedule_result_t::preconditions:
-      case schedule_result_t::bad_pg_state:
-	// continue with the next job
-	dout(20) << fmt::format(
-			"pg[{}] failed (state/cond/started)", candidate.pgid)
-		 << dendl;
-	break;
-
-      case schedule_result_t::no_such_pg:
-	// The pg is no longer there
-	dout(20) << fmt::format("pg[{}] failed (no PG)", candidate.pgid)
-		 << dendl;
-	// \todo better handling of this case
-	break;
-
-      case schedule_result_t::no_local_resources:
-	// failure to secure local resources. No point in trying the other
-	// PGs at this time. Note that this is not the same as replica resources
-	// failure!
-	dout(20) << "failed (local resources)" << dendl;
-	break;
-
-      case schedule_result_t::none_ready:
-	// can't happen. Just for the compiler.
-	dout(5) << fmt::format(
-		       "failed!! (possible bug. pg[{}])", candidate.pgid)
-		<< dendl;
-	break;
-    }
-
-    if (res == schedule_result_t::no_local_resources) {
+    if (res == schedule_result_t::target_specific_failure) {
+      // continue with the next job.
+      // \todo: consider separate handling of "no such PG", as - later on -
+      // we should be removing both related targets.
+      continue;
+    } else if (res == schedule_result_t::osd_wide_failure) {
+      // no point in trying the other candidates at this time
       break;
-    }
-
-    if (res == schedule_result_t::scrub_initiated) {
-      // note: in the full implementation: we need to dequeue the target
-      // at this time
+    } else {
+      // the happy path. We are done
+      dout(20) << fmt::format("scrub initiated for pg[{}]", candidate.pgid)
+               << dendl;
       break;
     }
   }
@@ -238,13 +210,13 @@ Scrub::schedule_result_t OsdScrub::initiate_a_scrub(
     // the PG was dequeued in the short timespan between creating the
     // candidates list (ready_to_scrub()) and here
     dout(5) << fmt::format("pg[{}] not found", pgid) << dendl;
-    return Scrub::schedule_result_t::no_such_pg;
+    return Scrub::schedule_result_t::target_specific_failure;
   }
 
   // This one is already scrubbing, so go on to the next scrub job
   if (locked_pg->pg()->is_scrub_queued_or_active()) {
     dout(10) << fmt::format("pg[{}]: scrub already in progress", pgid) << dendl;
-    return Scrub::schedule_result_t::already_started;
+    return Scrub::schedule_result_t::target_specific_failure;
   }
   // Skip other kinds of scrubbing if only explicitly requested repairing is allowed
   if (allow_requested_repair_only &&
@@ -254,7 +226,7 @@ Scrub::schedule_result_t OsdScrub::initiate_a_scrub(
 		    "requested for that pg",
 		    pgid)
 	     << dendl;
-    return Scrub::schedule_result_t::preconditions;
+    return Scrub::schedule_result_t::target_specific_failure;
   }
 
   return locked_pg->pg()->sched_scrub();
