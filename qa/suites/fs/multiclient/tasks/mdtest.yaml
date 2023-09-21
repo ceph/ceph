@@ -2,6 +2,7 @@
 tasks:
 - pexec:
     clients:
+      - set -x
       - cd $TESTDIR
       - sudo apt purge -y mpich
       - sudo apt install -y mpich
