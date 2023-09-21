@@ -21,42 +21,44 @@
 
 class Objecter;
 
-// This always lives in the same location for a given MDS
-// instance, it tells the daemon where to look for the journal.
-class JournalPointer {
-  public:
-  JournalPointer(int node_id_, int64_t pool_id_) : node_id(node_id_), pool_id(pool_id_) {}
-  JournalPointer() {}
+struct JournalPointer
+{
+  inodeno_t front = 0;
+  inodeno_t back = 0;
 
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(front, bl);
-    encode(back, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(front, bl);
-    decode(back, bl);
-    DECODE_FINISH(bl);
-  }
-
-  int load(Objecter *objecter);
-  int save(Objecter *objecter) const;
-  void save(Objecter *objecter, Context *completion) const;
-
-  bool is_null() const {
+  bool is_null() const
+  {
     return front == 0 && back == 0;
   }
 
-  void dump(Formatter *f) const {
+  void dump(Formatter* f) const
+  {
     f->open_object_section("journal_pointer");
     {
       f->dump_unsigned("front", front);
       f->dump_unsigned("back", back);
     }
     f->close_section(); // journal_header
+  }
+
+  void encode(bufferlist& bl) const
+  {
+    ENCODE_START(1, 1, bl);
+    encode(front, bl);
+    encode(back, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl)
+  {
+    DECODE_START(1, bl);
+    decode(front, bl);
+    decode(back, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void rotate() {
+    std::swap(front, back);
   }
 
   static void generate_test_instances(std::list<JournalPointer*> &ls)
@@ -66,20 +68,18 @@ class JournalPointer {
     ls.back()->front = 0xdeadbeef;
     ls.back()->back = 0xfeedbead;
   }
-
-  // The currently active journal
-  inodeno_t front = 0;
-  // The backup journal, if any (may be 0)
-  inodeno_t back = 0;
-
-  private:
-  // MDS rank
-  int node_id = -1;
-  // Metadata pool ID
-  int64_t pool_id = -1;
-
-  std::string get_object_id() const;
 };
 WRITE_CLASS_ENCODER(JournalPointer)
+
+// This always lives in the same location for a given MDS
+// instance, it tells the daemon where to look for the journal.
+struct JournalPointerStore {
+  JournalPointer pointer;
+
+  virtual int load() = 0;
+  virtual int save() const = 0;
+  virtual void save(Context *completion) const = 0;
+  virtual ~JournalPointerStore() {}
+};
 
 #endif // JOURNAL_POINTER_H

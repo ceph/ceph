@@ -44,6 +44,7 @@
 #include "Server.h"
 #include "MetricsHandler.h"
 #include "osdc/Journaler.h"
+#include "JournalPointer.h"
 #include "MDSMetaRequest.h"
 
 // Full .h import instead of forward declaration for PerfCounter, for the
@@ -164,10 +165,17 @@ struct MDSRankBase
   virtual MDCache* get_cache() const = 0;
   virtual MDLog* get_log() const = 0;
   virtual Finisher* get_finisher() const = 0;
-  virtual Objecter* get_objecter() const = 0;
-  virtual MDBalancer* get_balancer() const = 0;    
+  virtual MDBalancer* get_balancer() const = 0;
   virtual MDSTableClient *get_table_client(int t) const = 0;
   virtual MDSTableServer *get_table_server(int t) const = 0;
+  virtual JournalPointerStore* get_journal_pointer_store() = 0;
+
+  virtual Journaler *make_journaler(
+    const char * name, 
+    inodeno_t ino, 
+    const char * magic, 
+    PerfCounters *latency_logger = 0, 
+    int latency_logger_key = 0) const = 0;
 
   virtual inline ceph::fair_mutex& get_lock() const = 0;
   virtual mds_rank_t get_nodeid() const = 0;
@@ -331,8 +339,15 @@ class MDSRank : public MDSRankBase {
     inline Objecter* get_objecter() const { return objecter; }
     int get_incarnation() const { return incarnation; }
 
-    mono_time get_starttime() const {
-      return starttime;
+    inline Journaler* make_journaler(const char* name, inodeno_t ino, const char* magic, PerfCounters* latency_logger = 0, int latency_key = 0) const;
+
+    virtual JournalPointerStore* get_journal_pointer_store() {
+      return journal_pointer_store.get();
+    };
+
+    mono_time get_starttime() const
+    {
+        return starttime;
     }
     std::chrono::duration<double> get_uptime() const {
       mono_time now = mono_clock::now();
@@ -783,6 +798,8 @@ class MDSRank : public MDSRankBase {
     Messenger *messenger;
     MonClient *monc;
     MgrClient *mgrc;
+
+    std::unique_ptr<JournalPointerStore> journal_pointer_store;
 
     Context *respawn_hook;
     Context *suicide_hook;

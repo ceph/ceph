@@ -2,7 +2,7 @@
 #include "mds/JournalPointer.h"
 TYPE(JournalPointer)
 
-#include "osdc/Journaler.h"
+#include "osdc/RadosJournaler.h"
 TYPE(Journaler::Header)
 
 #include "mds/snap.h"

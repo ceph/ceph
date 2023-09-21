@@ -16,7 +16,7 @@
 #include "common/dout.h"
 #include "include/Context.h"
 #include "msg/Messenger.h"
-#include "osdc/Journaler.h"
+#include "osdc/RadosJournaler.h"
 #include "common/errno.h"
 #include "include/ceph_assert.h"
 #include "common/Finisher.h"
@@ -29,17 +29,16 @@
 using namespace std;
 using std::chrono::seconds;
 
-
-class Journaler::C_DelayFlush : public Context {
-  Journaler *journaler;
+class RadosJournaler::C_DelayFlush : public Context {
+  RadosJournaler *journaler;
   public:
-  explicit C_DelayFlush(Journaler *j) : journaler(j) {}
+  explicit C_DelayFlush(RadosJournaler *j) : journaler(j) {}
   void finish(int r) override {
     journaler->_do_delayed_flush();
   }
 };
 
-void Journaler::set_readonly()
+void RadosJournaler::set_readonly()
 {
   lock_guard l(lock);
 
@@ -47,7 +46,7 @@ void Journaler::set_readonly()
   readonly = true;
 }
 
-void Journaler::set_writeable()
+void RadosJournaler::set_writeable()
 {
   lock_guard l(lock);
 
@@ -55,7 +54,7 @@ void Journaler::set_writeable()
   readonly = false;
 }
 
-void Journaler::create(file_layout_t *l, stream_format_t const sf)
+void RadosJournaler::create(file_layout_t const *l, stream_format_t const sf)
 {
   lock_guard lk(lock);
 
@@ -75,13 +74,13 @@ void Journaler::create(file_layout_t *l, stream_format_t const sf)
 		<< std::dec << ", format=" << stream_format << dendl;
 }
 
-void Journaler::set_layout(file_layout_t const *l)
+void RadosJournaler::set_layout(file_layout_t const *l)
 {
     lock_guard lk(lock);
     _set_layout(l);
 }
 
-void Journaler::_set_layout(file_layout_t const *l)
+void RadosJournaler::_set_layout(file_layout_t const *l)
 {
   layout = *l;
 
@@ -111,51 +110,51 @@ ostream& operator<<(ostream &out, const Journaler::Header &h)
 	     << ")";
 }
 
-class Journaler::C_ReadHead : public Context {
-  Journaler *ls;
+class RadosJournaler::C_ReadHead : public Context {
+  RadosJournaler *ls;
 public:
   bufferlist bl;
-  explicit C_ReadHead(Journaler *l) : ls(l) {}
+  explicit C_ReadHead(RadosJournaler *l) : ls(l) {}
   void finish(int r) override {
     ls->_finish_read_head(r, bl);
   }
 };
 
-class Journaler::C_RereadHead : public Context {
-  Journaler *ls;
+class RadosJournaler::C_RereadHead : public Context {
+  RadosJournaler* ls;
   Context *onfinish;
 public:
   bufferlist bl;
-  C_RereadHead(Journaler *l, Context *onfinish_) : ls (l),
+  C_RereadHead(RadosJournaler *l, Context *onfinish_) : ls (l),
 						   onfinish(onfinish_) {}
   void finish(int r) override {
     ls->_finish_reread_head(r, bl, onfinish);
   }
 };
 
-class Journaler::C_ProbeEnd : public Context {
-  Journaler *ls;
+class RadosJournaler::C_ProbeEnd : public Context {
+  RadosJournaler *ls;
 public:
   uint64_t end;
-  explicit C_ProbeEnd(Journaler *l) : ls(l), end(-1) {}
+  explicit C_ProbeEnd(RadosJournaler *l) : ls(l), end(-1) {}
   void finish(int r) override {
     ls->_finish_probe_end(r, end);
   }
 };
 
-class Journaler::C_ReProbe : public Context {
-  Journaler *ls;
+class RadosJournaler::C_ReProbe : public Context {
+  RadosJournaler* ls;
   C_OnFinisher *onfinish;
 public:
   uint64_t end;
-  C_ReProbe(Journaler *l, C_OnFinisher *onfinish_) :
+  C_ReProbe(RadosJournaler *l, C_OnFinisher *onfinish_) :
     ls(l), onfinish(onfinish_), end(0) {}
   void finish(int r) override {
     ls->_finish_reprobe(r, end, onfinish);
   }
 };
 
-void Journaler::recover(Context *onread) 
+void RadosJournaler::recover(Context *onread) 
 {
   lock_guard l(lock);
   if (is_stopping()) {
@@ -181,7 +180,7 @@ void Journaler::recover(Context *onread)
   _read_head(fin, &fin->bl);
 }
 
-void Journaler::_read_head(Context *on_finish, bufferlist *bl)
+void RadosJournaler::_read_head(Context *on_finish, bufferlist *bl)
 {
   // lock is locked
   ceph_assert(state == STATE_READHEAD || state == STATE_REREADHEAD);
@@ -191,7 +190,7 @@ void Journaler::_read_head(Context *on_finish, bufferlist *bl)
   objecter->read_full(oid, oloc, CEPH_NOSNAP, bl, 0, wrap_finisher(on_finish));
 }
 
-void Journaler::reread_head(Context *onfinish)
+void RadosJournaler::reread_head(Context *onfinish)
 {
   lock_guard l(lock);
   _reread_head(wrap_finisher(onfinish));
@@ -205,7 +204,7 @@ void Journaler::reread_head(Context *onfinish)
  * Also, don't call this until the Journaler has finished its recovery and has
  * gone STATE_ACTIVE!
  */
-void Journaler::_reread_head(Context *onfinish)
+void RadosJournaler::_reread_head(Context *onfinish)
 {
   ldout(cct, 10) << "reread_head" << dendl;
   ceph_assert(state == STATE_ACTIVE);
@@ -215,7 +214,7 @@ void Journaler::_reread_head(Context *onfinish)
   _read_head(fin, &fin->bl);
 }
 
-void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
+void RadosJournaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
 {
   lock_guard l(lock);
   if (is_stopping()) {
@@ -247,7 +246,7 @@ void Journaler::_finish_reread_head(int r, bufferlist& bl, Context *finish)
   finish->complete(r);
 }
 
-void Journaler::_finish_read_head(int r, bufferlist& bl)
+void RadosJournaler::_finish_read_head(int r, bufferlist& bl)
 {
   lock_guard l(lock);
   if (is_stopping())
@@ -317,7 +316,7 @@ void Journaler::_finish_read_head(int r, bufferlist& bl)
   _probe(fin, &fin->end);
 }
 
-void Journaler::_probe(Context *finish, uint64_t *end)
+void RadosJournaler::_probe(Context *finish, uint64_t *end)
 {
   // lock is locked
   ldout(cct, 1) << "probing for end of the log" << dendl;
@@ -327,7 +326,7 @@ void Journaler::_probe(Context *finish, uint64_t *end)
 	      write_pos, end, true, 0, wrap_finisher(finish));
 }
 
-void Journaler::_reprobe(C_OnFinisher *finish)
+void RadosJournaler::_reprobe(C_OnFinisher *finish)
 {
   ldout(cct, 10) << "reprobe" << dendl;
   ceph_assert(state == STATE_ACTIVE);
@@ -338,7 +337,7 @@ void Journaler::_reprobe(C_OnFinisher *finish)
 }
 
 
-void Journaler::_finish_reprobe(int r, uint64_t new_end,
+void RadosJournaler::_finish_reprobe(int r, uint64_t new_end,
 				C_OnFinisher *onfinish)
 {
   lock_guard l(lock);
@@ -356,7 +355,7 @@ void Journaler::_finish_reprobe(int r, uint64_t new_end,
   onfinish->complete(r);
 }
 
-void Journaler::_finish_probe_end(int r, uint64_t end)
+void RadosJournaler::_finish_probe_end(int r, uint64_t end)
 {
   lock_guard l(lock);
   if (is_stopping())
@@ -389,19 +388,22 @@ out:
   finish_contexts(cct, ls, r);
 }
 
-class Journaler::C_RereadHeadProbe : public Context
+class RadosJournaler::C_RereadHeadProbe : public Context
 {
-  Journaler *ls;
+  RadosJournaler* ls;
   C_OnFinisher *final_finish;
 public:
-  C_RereadHeadProbe(Journaler *l, C_OnFinisher *finish) :
-    ls(l), final_finish(finish) {}
+    C_RereadHeadProbe(RadosJournaler* l, C_OnFinisher* finish)
+        : ls(l)
+        , final_finish(finish)
+    {
+    }
   void finish(int r) override {
     ls->_finish_reread_head_and_probe(r, final_finish);
   }
 };
 
-void Journaler::reread_head_and_probe(Context *onfinish)
+void RadosJournaler::reread_head_and_probe(Context *onfinish)
 {
   lock_guard l(lock);
 
@@ -409,7 +411,7 @@ void Journaler::reread_head_and_probe(Context *onfinish)
   _reread_head(new C_RereadHeadProbe(this, wrap_finisher(onfinish)));
 }
 
-void Journaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
+void RadosJournaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
 {
   // Expect to be called back from finish_reread_head, which already takes lock
   // lock is locked
@@ -432,26 +434,30 @@ void Journaler::_finish_reread_head_and_probe(int r, C_OnFinisher *onfinish)
 
 // WRITING
 
-class Journaler::C_WriteHead : public Context {
+class RadosJournaler::C_WriteHead : public Context {
 public:
-  Journaler *ls;
+  RadosJournaler *ls;
   Header h;
   C_OnFinisher *oncommit;
-  C_WriteHead(Journaler *l, Header& h_, C_OnFinisher *c) : ls(l), h(h_),
-							   oncommit(c) {}
+  C_WriteHead(RadosJournaler* l, Header& h_, C_OnFinisher* c)
+      : ls(l)
+      , h(h_)
+      , oncommit(c)
+  {
+  }
   void finish(int r) override {
     ls->_finish_write_head(r, h, oncommit);
   }
 };
 
-void Journaler::write_head(Context *oncommit)
+void RadosJournaler::write_head(Context *oncommit)
 {
   lock_guard l(lock);
   _write_head(oncommit);
 }
 
 
-void Journaler::_write_head(Context *oncommit)
+void RadosJournaler::_write_head(Context *oncommit)
 {
   ceph_assert(!readonly);
   ceph_assert(state == STATE_ACTIVE);
@@ -481,7 +487,7 @@ void Journaler::_write_head(Context *oncommit)
 		       0, 0, write_iohint);
 }
 
-void Journaler::_finish_write_head(int r, Header &wrote,
+void RadosJournaler::_finish_write_head(int r, Header &wrote,
 				   C_OnFinisher *oncommit)
 {
   lock_guard l(lock);
@@ -504,19 +510,19 @@ void Journaler::_finish_write_head(int r, Header &wrote,
 
 /***************** WRITING *******************/
 
-class Journaler::C_Flush : public Context {
-  Journaler *ls;
+class RadosJournaler::C_Flush : public Context {
+  RadosJournaler *ls;
   uint64_t start;
   ceph::real_time stamp;
 public:
-  C_Flush(Journaler *l, int64_t s, ceph::real_time st)
+  C_Flush(RadosJournaler *l, int64_t s, ceph::real_time st)
     : ls(l), start(s), stamp(st) {}
   void finish(int r) override {
     ls->_finish_flush(r, start, stamp);
   }
 };
 
-void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
+void RadosJournaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
 {
   lock_guard l(lock);
   ceph_assert(!readonly);
@@ -568,7 +574,7 @@ void Journaler::_finish_flush(int r, uint64_t start, ceph::real_time stamp)
 
 
 
-uint64_t Journaler::append_entry(bufferlist& bl)
+uint64_t RadosJournaler::append_entry(bufferlist& bl)
 {
   unique_lock l(lock);
 
@@ -614,7 +620,7 @@ uint64_t Journaler::append_entry(bufferlist& bl)
 }
 
 
-void Journaler::_do_flush(unsigned amount)
+void RadosJournaler::_do_flush(unsigned amount)
 {
   if (is_stopping())
     return;
@@ -701,7 +707,7 @@ void Journaler::_do_flush(unsigned amount)
 }
 
 
-void Journaler::wait_for_flush(Context *onsafe)
+void RadosJournaler::wait_for_flush(Context *onsafe)
 {
   lock_guard l(lock);
   if (is_stopping()) {
@@ -712,7 +718,7 @@ void Journaler::wait_for_flush(Context *onsafe)
   _wait_for_flush(onsafe);
 }
 
-void Journaler::_wait_for_flush(Context *onsafe)
+void RadosJournaler::_wait_for_flush(Context *onsafe)
 {
   ceph_assert(!readonly);
 
@@ -735,7 +741,7 @@ void Journaler::_wait_for_flush(Context *onsafe)
   }
 }
 
-void Journaler::flush(Context *onsafe)
+void RadosJournaler::flush(Context *onsafe)
 {
   lock_guard l(lock);
   if (is_stopping()) {
@@ -746,7 +752,7 @@ void Journaler::flush(Context *onsafe)
   _flush(wrap_finisher(onsafe));
 }
 
-void Journaler::_flush(C_OnFinisher *onsafe)
+void RadosJournaler::_flush(C_OnFinisher *onsafe)
 {
   ceph_assert(!readonly);
 
@@ -770,7 +776,7 @@ void Journaler::_flush(C_OnFinisher *onsafe)
   }
 }
 
-bool Journaler::_write_head_needed()
+bool RadosJournaler::_write_head_needed() const
 {
   return last_wrote_head + seconds(cct->_conf.get_val<int64_t>("journaler_write_head_interval"))
       < ceph::real_clock::now();
@@ -780,16 +786,20 @@ bool Journaler::_write_head_needed()
 /*************** prezeroing ******************/
 
 struct C_Journaler_Prezero : public Context {
-  Journaler *journaler;
+  RadosJournaler *journaler;
   uint64_t from, len;
-  C_Journaler_Prezero(Journaler *j, uint64_t f, uint64_t l)
-    : journaler(j), from(f), len(l) {}
+  C_Journaler_Prezero(RadosJournaler* j, uint64_t f, uint64_t l)
+      : journaler(j)
+      , from(f)
+      , len(l)
+  {
+  }
   void finish(int r) override {
     journaler->_finish_prezero(r, from, len);
   }
 };
 
-void Journaler::_issue_prezero()
+void RadosJournaler::_issue_prezero()
 {
   ceph_assert(prezeroing_pos >= flush_pos);
 
@@ -831,7 +841,7 @@ void Journaler::_issue_prezero()
 // Lock cycle because we get called out of objecter callback (holding
 // objecter read lock), but there are also cases where we take the journaler
 // lock before calling into objecter to do I/O.
-void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
+void RadosJournaler::_finish_prezero(int r, uint64_t start, uint64_t len)
 {
   lock_guard l(lock);
 
@@ -875,7 +885,7 @@ void Journaler::_finish_prezero(int r, uint64_t start, uint64_t len)
 		 << dendl;
 }
 
-void Journaler::wait_for_prezero(Context *onfinish)
+void RadosJournaler::wait_for_prezero(Context *onfinish)
 {
   ceph_assert(onfinish);
   lock_guard l(lock);
@@ -891,22 +901,22 @@ void Journaler::wait_for_prezero(Context *onfinish)
 /***************** READING *******************/
 
 
-class Journaler::C_Read : public Context {
-  Journaler *ls;
+class RadosJournaler::C_Read : public Context {
+  RadosJournaler *ls;
   uint64_t offset;
   uint64_t length;
 public:
   bufferlist bl;
-  C_Read(Journaler *j, uint64_t o, uint64_t l) : ls(j), offset(o), length(l) {}
+  C_Read(RadosJournaler *j, uint64_t o, uint64_t l) : ls(j), offset(o), length(l) {}
   void finish(int r) override {
     ls->_finish_read(r, offset, length, bl);
   }
 };
 
-class Journaler::C_RetryRead : public Context {
-  Journaler *ls;
+class RadosJournaler::C_RetryRead : public Context {
+  RadosJournaler *ls;
 public:
-  explicit C_RetryRead(Journaler *l) : ls(l) {}
+  explicit C_RetryRead(RadosJournaler *l) : ls(l) {}
 
   void finish(int r) override {
     // Should only be called from waitfor_safe i.e. already inside lock
@@ -915,7 +925,7 @@ public:
   }
 };
 
-void Journaler::_finish_read(int r, uint64_t offset, uint64_t length,
+void RadosJournaler::_finish_read(int r, uint64_t offset, uint64_t length,
 			     bufferlist& bl)
 {
   lock_guard l(lock);
@@ -959,7 +969,7 @@ void Journaler::_finish_read(int r, uint64_t offset, uint64_t length,
   _prefetch();
 }
 
-void Journaler::_assimilate_prefetch()
+void RadosJournaler::_assimilate_prefetch()
 {
   bool was_readable = readable;
 
@@ -1007,7 +1017,7 @@ void Journaler::_assimilate_prefetch()
   }
 }
 
-void Journaler::_issue_read(uint64_t len)
+void RadosJournaler::_issue_read(uint64_t len)
 {
   // stuck at safe_pos?  (this is needed if we are reading the tail of
   // a journal we are also writing to)
@@ -1063,7 +1073,7 @@ void Journaler::_issue_read(uint64_t len)
   }
 }
 
-void Journaler::_prefetch()
+void RadosJournaler::_prefetch()
 {
   if (is_stopping())
     return;
@@ -1117,7 +1127,7 @@ void Journaler::_prefetch()
 /*
  * _have_next_entry() - return true if next entry is ready.
  */
-bool Journaler::_have_next_entry()
+bool RadosJournaler::_have_next_entry()
 {
   // anything to read?
   if (read_pos == write_pos)
@@ -1165,13 +1175,13 @@ bool Journaler::_have_next_entry()
 /*
  * is_readable() - kickstart prefetch, too
  */
-bool Journaler::is_readable()
+bool RadosJournaler::is_readable()
 {
   lock_guard l(lock);
   return _is_readable();
 }
 
-bool Journaler::_is_readable()
+bool RadosJournaler::_is_readable()
 {
   if (error != 0) {
     return false;
@@ -1182,11 +1192,11 @@ bool Journaler::_is_readable()
   return r;
 }
 
-class Journaler::C_EraseFinish : public Context {
-  Journaler *journaler;
+class RadosJournaler::C_EraseFinish : public Context {
+  RadosJournaler *journaler;
   C_OnFinisher *completion;
   public:
-  C_EraseFinish(Journaler *j, C_OnFinisher *c) : journaler(j), completion(c) {}
+  C_EraseFinish(RadosJournaler *j, C_OnFinisher *c) : journaler(j), completion(c) {}
   void finish(int r) override {
     journaler->_finish_erase(r, completion);
   }
@@ -1196,7 +1206,7 @@ class Journaler::C_EraseFinish : public Context {
  * Entirely erase the journal, including header.  For use when you
  * have already made a copy of the journal somewhere else.
  */
-void Journaler::erase(Context *completion)
+void RadosJournaler::erase(Context *completion)
 {
   lock_guard l(lock);
 
@@ -1214,7 +1224,7 @@ void Journaler::erase(Context *completion)
   // header thereby lose our reference to the data.
 }
 
-void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
+void RadosJournaler::_finish_erase(int data_result, C_OnFinisher *completion)
 {
   lock_guard l(lock);
   if (is_stopping()) {
@@ -1238,7 +1248,7 @@ void Journaler::_finish_erase(int data_result, C_OnFinisher *completion)
  *  read entry into bl if it's ready.
  *  otherwise, do nothing.
  */
-bool Journaler::try_read_entry(bufferlist& bl)
+bool RadosJournaler::try_read_entry(bufferlist& bl)
 {
   lock_guard l(lock);
 
@@ -1287,13 +1297,13 @@ bool Journaler::try_read_entry(bufferlist& bl)
   return true;
 }
 
-void Journaler::wait_for_readable(Context *onreadable)
+void RadosJournaler::wait_for_readable(Context *onreadable)
 {
   lock_guard l(lock);
   _wait_for_readable(onreadable); 
 }
 
-void Journaler::_wait_for_readable(Context *onreadable)
+void RadosJournaler::_wait_for_readable(Context *onreadable)
 {
   if (is_stopping()) {
     finisher->queue(onreadable, -EAGAIN);
@@ -1311,7 +1321,7 @@ void Journaler::_wait_for_readable(Context *onreadable)
   }
 }
 
-bool Journaler::have_waiter() const
+bool RadosJournaler::have_waiter() const
 {
   return on_readable != nullptr;
 }
@@ -1322,23 +1332,23 @@ bool Journaler::have_waiter() const
 /***************** TRIMMING *******************/
 
 
-class Journaler::C_Trim : public Context {
-  Journaler *ls;
+class RadosJournaler::C_Trim : public Context {
+  RadosJournaler *ls;
   uint64_t to;
 public:
-  C_Trim(Journaler *l, int64_t t) : ls(l), to(t) {}
+  C_Trim(RadosJournaler *l, int64_t t) : ls(l), to(t) {}
   void finish(int r) override {
     ls->_finish_trim(r, to);
   }
 };
 
-void Journaler::trim()
+void RadosJournaler::trim()
 {
   lock_guard l(lock);
   _trim();
 }
 
-void Journaler::_trim()
+void RadosJournaler::_trim()
 {
   if (is_stopping())
     return;
@@ -1381,7 +1391,7 @@ void Journaler::_trim()
   trimming_pos = trim_to;
 }
 
-void Journaler::_finish_trim(int r, uint64_t to)
+void RadosJournaler::_finish_trim(int r, uint64_t to)
 {
   lock_guard l(lock);
 
@@ -1403,7 +1413,7 @@ void Journaler::_finish_trim(int r, uint64_t to)
   trimmed_pos = to;
 }
 
-void Journaler::handle_write_error(int r)
+void RadosJournaler::handle_write_error(int r)
 {
   // lock is locked
 
@@ -1489,7 +1499,7 @@ bool JournalStream::readable(bufferlist &read_buf, uint64_t *need) const
  *          the inner serialized LogEvent and not the envelope.
  */
 size_t JournalStream::read(bufferlist &from, bufferlist *entry,
-			   uint64_t *start_ptr)
+			   uint64_t *start_ptr) const
 {
   ceph_assert(start_ptr != NULL);
   ceph_assert(entry != NULL);
@@ -1529,7 +1539,7 @@ size_t JournalStream::read(bufferlist &from, bufferlist *entry,
  * Append one entry
  */
 size_t JournalStream::write(bufferlist &entry, bufferlist *to,
-			    uint64_t const &start_ptr)
+			    uint64_t const &start_ptr) const
 {
   ceph_assert(to != NULL);
 
@@ -1564,7 +1574,7 @@ size_t JournalStream::write(bufferlist &entry, bufferlist *to,
  *
  * @param c callback/context to trigger on error
  */
-void Journaler::set_write_error_handler(Context *c) {
+void RadosJournaler::set_write_error_handler(Context *c) {
   lock_guard l(lock);
   ceph_assert(!on_write_error);
   on_write_error = wrap_finisher(c);
@@ -1578,7 +1588,7 @@ void Journaler::set_write_error_handler(Context *c) {
  * Utility function to avoid lots of error-prone and verbose
  * NULL checking on contexts passed in.
  */
-C_OnFinisher *Journaler::wrap_finisher(Context *c)
+C_OnFinisher *RadosJournaler::wrap_finisher(Context *c)
 {
   if (c != NULL) {
     return new C_OnFinisher(c, finisher);
@@ -1587,7 +1597,7 @@ C_OnFinisher *Journaler::wrap_finisher(Context *c)
   }
 }
 
-void Journaler::shutdown()
+void RadosJournaler::shutdown()
 {
   lock_guard l(lock);
 
@@ -1613,19 +1623,4 @@ void Journaler::shutdown()
     finish_contexts(cct, i->second, -EAGAIN);
   }
   waitfor_safe.clear();
-}
-
-void Journaler::check_isreadable()
-{
-  std::unique_lock l(lock);
-  while (!_is_readable() &&
-      get_read_pos() < get_write_pos() &&
-      !get_error()) {
-    C_SaferCond readable_waiter;
-    _wait_for_readable(&readable_waiter);
-    l.unlock();
-    readable_waiter.wait();
-    l.lock();
-  }
-  return ;
 }

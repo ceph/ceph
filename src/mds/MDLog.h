@@ -58,7 +58,7 @@ enum {
 #include <map>
 
 class Journaler;
-class JournalPointer;
+class JournalPointerStore;
 class LogEvent;
 class MDSRankBase;
 class LogSegment;
@@ -222,7 +222,7 @@ protected:
   void _replay_thread();  // new way
 
   void _recovery_thread(MDSContext *completion);
-  void _reformat_journal(JournalPointer const &jp, Journaler *old_journal, MDSContext *completion);
+  void _reformat_journal(JournalPointerStore *jps, Journaler *old_journal, MDSContext *completion);
 
   void set_safe_pos(uint64_t pos)
   {
