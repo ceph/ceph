@@ -320,7 +320,7 @@ update:
     goto reply;
   }
   force_immediate_propose();  // faster response
-  wait_for_finished_proposal(
+  wait_for_commit(
     op,
     new Monitor::C_Command(
       mon, op, 0, ss.str(), odata,
