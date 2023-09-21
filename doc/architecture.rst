@@ -235,29 +235,31 @@ authenticated connections.
 
 The ``cephx`` protocol operates in a manner similar to `Kerberos`_. 
 
-A user/actor invokes a Ceph client to contact a monitor. Unlike Kerberos, each
-monitor can authenticate users and distribute keys, so there is no single point
-of failure or bottleneck when using ``cephx``. The monitor returns an
-authentication data structure similar to a Kerberos ticket that contains a
-session key for use in obtaining Ceph services.  This session key is itself
-encrypted with the user's permanent  secret key, so that only the user can
-request services from the Ceph Monitor(s). The client then uses the session key
-to request its desired services from the monitor, and the monitor provides the
-client with a ticket that will authenticate the client to the OSDs that actually
-handle data. Ceph Monitors and OSDs share a secret, so the client can use the
-ticket provided by the monitor with any OSD or metadata server in the cluster.
-Like Kerberos, ``cephx`` tickets expire, so an attacker cannot use an expired
-ticket or session key obtained surreptitiously. This form of authentication will
-prevent attackers with access to the communications medium from either creating
-bogus messages under another user's identity or altering another user's
-legitimate messages, as long as the user's secret key is not divulged before it
-expires.
+A user invokes a Ceph client to contact a monitor. Unlike Kerberos, each
+monitor can authenticate users and distribute keys, which means that there is
+no single point of failure and no bottleneck when using ``cephx``. The monitor
+returns an authentication data structure that is similar to a Kerberos ticket.
+This authentication data structure contains a session key for use in obtaining
+Ceph services. The session key is itself encrypted with the user's permanent
+secret key, which means that only the user can request services from the Ceph
+Monitors. The client then uses the session key to request services from the
+monitors, and the monitors provide the client with a ticket that authenticates
+the client against the OSDs that actually handle data. Ceph Monitors and OSDs
+share a secret, which means that the clients can use the ticket provided by the
+monitors to authenticate against any OSD or metadata server in the cluster. 
 
-To use ``cephx``, an administrator must set up users first. In the following
-diagram, the ``client.admin`` user invokes  ``ceph auth get-or-create-key`` from
+Like Kerberos tickets, ``cephx`` tickets expire. An attacker cannot use an
+expired ticket or session key that has been obtained surreptitiously. This form
+of authentication prevents attackers who have access to the communications
+medium from creating bogus messages under another user's identity and prevents
+attackers from altering another user's legitimate messages, as long as the
+user's secret key is not divulged before it expires.
+
+An administrator must set up users before using ``cephx``.  In the following
+diagram, the ``client.admin`` user invokes ``ceph auth get-or-create-key`` from
 the command line to generate a username and secret key. Ceph's ``auth``
-subsystem generates the username and key, stores a copy with the monitor(s) and
-transmits the user's secret back to the ``client.admin`` user. This means that 
+subsystem generates the username and key, stores a copy on the monitor(s), and
+transmits the user's secret back to the ``client.admin`` user. This means that
 the client and the monitor share a secret key.
 
 .. note:: The ``client.admin`` user must provide the user ID and 
@@ -275,7 +277,6 @@ the client and the monitor share a secret key.
                 |<--------------|<---------+ store key
                 | transmit key  |
                 |               |
-
 
 To authenticate with the monitor, the client passes in the user name to the
 monitor, and the monitor generates a session key and encrypts it with the secret
@@ -358,6 +359,8 @@ monitors, OSDs and metadata servers can verify with their shared secret.
 The protection offered by this authentication is between the Ceph client and the
 Ceph server hosts. The authentication is not extended beyond the Ceph client. If
 the user accesses the Ceph client from a remote host, Ceph authentication is not
+applied to the connection between the user's host and the client host.
+
 
 See `Cephx Config Guide`_ for more on configuration details. 
 
@@ -408,7 +411,7 @@ ability to leverage this computing power leads to several major benefits:
    and a new ``MOSDBeacon`` in luminous).  If the Ceph Monitor doesn't see that
    message after a configurable period of time then it marks the OSD down.
    This mechanism is a failsafe, however. Normally, Ceph OSD Daemons will
-   determine if a neighboring OSD is down and report it to the Ceph Monitor(s).
+   determine if a neighboring OSD is down and report it to the Ceph Monitors.
    This assures that Ceph Monitors are lightweight processes.  See `Monitoring
    OSDs`_ and `Heartbeats`_ for additional details.
 
