@@ -2506,8 +2506,10 @@ cluster_network=3.3.3.0/24, 4.4.4.0/24
         assert _str_to_networks(cluster_network) == ['3.3.3.0/24', '4.4.4.0/24']
 
 class TestSysctl:
-    @mock.patch('cephadm.sysctl_get')
+    @mock.patch('cephadmlib.sysctl.sysctl_get')
     def test_filter_sysctl_settings(self, _sysctl_get):
+        from cephadmlib.sysctl import filter_sysctl_settings
+
         ctx = _cephadm.CephadmContext()
         input = [
             # comment-only lines should be ignored
@@ -2531,7 +2533,7 @@ class TestSysctl:
             "65530",
             "something else",
         ]
-        result = _cephadm.filter_sysctl_settings(ctx, input)
+        result = filter_sysctl_settings(ctx, input)
         assert len(_sysctl_get.call_args_list) == 6
         assert _sysctl_get.call_args_list[0].args[1] == "something"
         assert _sysctl_get.call_args_list[1].args[1] == "fs.aio-max-nr"
