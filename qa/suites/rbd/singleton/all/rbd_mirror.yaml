@@ -7,7 +7,6 @@ tasks:
     log-ignorelist:
       - overall HEALTH_
       - \(CACHE_POOL_NO_HIT_SET\)
-      - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all: [rbd/test_rbd_mirror.sh]
