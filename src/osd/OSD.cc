@@ -11140,7 +11140,7 @@ void OSD::ShardedOpWQ::stop_for_fast_shutdown()
 {
   m_fast_shutdown = true;
 
-  for (int shard_index = 0; shard_index < osd->num_shards; shard_index++) {
+  for (uint32_t shard_index = 0; shard_index < osd->num_shards; shard_index++) {
     auto& sdata = osd->shards[shard_index];
     ceph_assert(sdata);
     std::lock_guard l(sdata->shard_lock);
