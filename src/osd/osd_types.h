@@ -1936,7 +1936,7 @@ public:
   SnapContext get_snap_context() const;
 
   /// hash a object name+namespace key to a hash position
-  uint32_t hash_key(const std::string& key, const std::string& ns) const;
+  uint32_t hash_key(std::string_view key, std::string_view ns) const;
 
   /// round a hash position down to a pg num
   uint32_t raw_hash_to_pg(uint32_t v) const;
