@@ -714,7 +714,7 @@ int MotrBucket::put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::re
   return rc;
 }
 
-int MotrBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats)
+int MotrBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y)
 {
   // Get bucket instance using bucket's name (string). or bucket id?
   bufferlist bl;
@@ -825,17 +825,14 @@ int MotrBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int MotrBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+int MotrBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                RGWBucketEnt* ent)
 {
   return 0;
 }
 
-int MotrBucket::update_container_stats(const DoutPrefixProvider *dpp)
-{
-  return 0;
-}
-
-int MotrBucket::check_bucket_shards(const DoutPrefixProvider *dpp)
+int MotrBucket::check_bucket_shards(const DoutPrefixProvider *dpp,
+                                    uint64_t num_objs)
 {
   return 0;
 }

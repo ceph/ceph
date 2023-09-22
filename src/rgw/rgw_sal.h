@@ -23,6 +23,7 @@
 #include "rgw_datalog_notify.h"
 #include "include/random.h"
 
+struct RGWBucketEnt;
 class RGWRESTMgr;
 class RGWAccessListFilter;
 class RGWLC;
@@ -453,6 +454,18 @@ class Driver {
 };
 
 /**
+ * @brief A list of buckets
+ *
+ * This is the result from a bucket listing operation.
+ */
+struct BucketList {
+  /// The list of results, sorted by bucket name
+  std::vector<RGWBucketEnt> buckets;
+  /// The next marker to resume listing, or empty
+  std::string next_marker;
+};
+
+/**
  * @brief User abstraction
  *
  * This represents a user.  In general, there will be a @a User associated with an OP
@@ -660,9 +673,8 @@ class Bucket {
     // XXXX hack
     virtual void set_owner(rgw::sal::User* _owner) = 0;
 
-    /** Load this bucket from the backing store.  Requires the key to be set, fills other fields.
-     * If @a get_stats is true, then statistics on the bucket are also looked up. */
-    virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats = false) = 0;
+    /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
+    virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
     virtual int read_stats(const DoutPrefixProvider *dpp,
 			   const bucket_index_layout_generation& idx_layout,
@@ -675,11 +687,11 @@ class Bucket {
 				 const bucket_index_layout_generation& idx_layout,
 				 int shard_id, RGWGetBucketStats_CB* ctx) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
-    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-    /** Refresh the metadata stats (size, count, and so on) from the backing store */
-    virtual int update_container_stats(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                RGWBucketEnt* optional_ent) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
-    virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int check_bucket_shards(const DoutPrefixProvider* dpp,
+                                    uint64_t num_objs, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
      * change ownership of the objects in the bucket. */
     virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) = 0;
@@ -717,10 +729,6 @@ class Bucket {
     virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
     /** Remove this specific bucket instance from the backing store.  May be removed from API */
     virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-    /** Set the cached object count of this bucket */
-    virtual void set_count(uint64_t _count) = 0;
-    /** Set the cached size of this bucket */
-    virtual void set_size(uint64_t _size) = 0;
 
     /** Check if this instantiation is empty */
     virtual bool empty() const = 0;
@@ -732,12 +740,6 @@ class Bucket {
     virtual const std::string& get_marker() const = 0;
     /** Get the cached ID of this bucket */
     virtual const std::string& get_bucket_id() const = 0;
-    /** Get the cached size of this bucket */
-    virtual size_t get_size() const = 0;
-    /** Get the cached rounded size of this bucket */
-    virtual size_t get_size_rounded() const = 0;
-    /** Get the cached object count of this bucket */
-    virtual uint64_t get_count() const = 0;
     /** Get the cached placement rule of this bucket */
     virtual rgw_placement_rule& get_placement_rule() = 0;
     /** Get the cached creation time of this bucket */
@@ -815,51 +817,6 @@ class Bucket {
 
     virtual bool operator==(const Bucket& b) const = 0;
     virtual bool operator!=(const Bucket& b) const = 0;
-
-    friend class BucketList;
-};
-
-/**
- * @brief A list of buckets
- *
- * This is the result from a bucket listing operation.
- */
-class BucketList {
-  std::map<std::string, std::unique_ptr<Bucket>> buckets;
-  bool truncated;
-
-public:
-  BucketList() : buckets(), truncated(false) {}
-  BucketList(BucketList&& _bl) :
-    buckets(std::move(_bl.buckets)),
-    truncated(_bl.truncated)
-    { }
-  BucketList& operator=(const BucketList&) = delete;
-  BucketList& operator=(BucketList&& _bl) {
-    for (auto& ent : _bl.buckets) {
-      buckets.emplace(ent.first, std::move(ent.second));
-    }
-    truncated = _bl.truncated;
-    return *this;
-  };
-
-  /** Get the list of buckets.  The list is a map of <bucket-name, Bucket> pairs. */
-  std::map<std::string, std::unique_ptr<Bucket>>& get_buckets() { return buckets; }
-  /** True if the list is truncated (that is, there are more buckets to list) */
-  bool is_truncated(void) const { return truncated; }
-  /** Set the truncated state of the list */
-  void set_truncated(bool trunc) { truncated = trunc; }
-  /** Add a bucket to the list.  Takes ownership of the bucket */
-  void add(std::unique_ptr<Bucket> bucket) {
-    buckets.emplace(bucket->get_name(), std::move(bucket));
-  }
-  /** The number of buckets in this list */
-  size_t count() const { return buckets.size(); }
-  /** Clear the list */
-  void clear(void) {
-    buckets.clear();
-    truncated = false;
-  }
 };
 
 /**

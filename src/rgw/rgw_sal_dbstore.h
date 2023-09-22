@@ -149,12 +149,6 @@ protected:
         acls() {
         }
 
-      DBBucket(DBStore *_st, const RGWBucketEnt& _e)
-        : StoreBucket(_e),
-        store(_st),
-        acls() {
-        }
-
       DBBucket(DBStore *_st, const RGWBucketInfo& _i)
         : StoreBucket(_i),
         store(_st),
@@ -163,12 +157,6 @@ protected:
 
       DBBucket(DBStore *_st, const rgw_bucket& _b, User* _u)
         : StoreBucket(_b, _u),
-        store(_st),
-        acls() {
-        }
-
-      DBBucket(DBStore *_st, const RGWBucketEnt& _e, User* _u)
-        : StoreBucket(_e, _u),
         store(_st),
         acls() {
         }
@@ -190,7 +178,7 @@ protected:
 					DoutPrefixProvider *dpp) override;
       virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
       virtual int set_acl(const DoutPrefixProvider *dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
-      virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats = false) override;
+      virtual int load_bucket(const DoutPrefixProvider *dpp, optional_yield y) override;
       virtual int read_stats(const DoutPrefixProvider *dpp,
 			     const bucket_index_layout_generation& idx_layout,
 			     int shard_id,
@@ -199,9 +187,10 @@ protected:
           std::string *max_marker = nullptr,
           bool *syncstopped = nullptr) override;
       virtual int read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB* ctx) override;
-      virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
-      virtual int update_container_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
-      virtual int check_bucket_shards(const DoutPrefixProvider *dpp, optional_yield y) override;
+      int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                          RGWBucketEnt* ent) override;
+      int check_bucket_shards(const DoutPrefixProvider *dpp,
+                              uint64_t num_objs, optional_yield y) override;
       virtual int chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y) override;
       virtual int put_info(const DoutPrefixProvider *dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
       virtual int check_empty(const DoutPrefixProvider *dpp, optional_yield y) override;

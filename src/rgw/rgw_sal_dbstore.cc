@@ -34,23 +34,27 @@ namespace rgw::sal {
 
   int DBUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
       const string& end_marker, uint64_t max, bool need_stats,
-      BucketList &buckets, optional_yield y)
+      BucketList &result, optional_yield y)
   {
     RGWUserBuckets ulist;
     bool is_truncated = false;
-    int ret;
 
-    buckets.clear();
-    ret = store->getDB()->list_buckets(dpp, "", info.user_id, marker, end_marker, max,
-        need_stats, &ulist, &is_truncated);
+    int ret = store->getDB()->list_buckets(dpp, "", info.user_id, marker,
+        end_marker, max, need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
 
-    buckets.set_truncated(is_truncated);
-    for (const auto& ent : ulist.get_buckets()) {
-      buckets.add(std::make_unique<DBBucket>(this->store, ent.second, this));
+    result.buckets.clear();
+
+    for (auto& ent : ulist.get_buckets()) {
+      result.buckets.push_back(std::move(ent.second));
     }
 
+    if (is_truncated && !result.buckets.empty()) {
+      result.next_marker = result.buckets.back().bucket.name;
+    } else {
+      result.next_marker.clear();
+    }
     return 0;
   }
 
@@ -280,7 +284,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y, bool get_stats)
+  int DBBucket::load_bucket(const DoutPrefixProvider *dpp, optional_yield y)
   {
     int ret = 0;
 
@@ -306,17 +310,14 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+  int DBBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                RGWBucketEnt* ent)
   {
     return 0;
   }
 
-  int DBBucket::update_container_stats(const DoutPrefixProvider *dpp, optional_yield y)
-  {
-    return 0;
-  }
-
-  int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp, optional_yield y)
+  int DBBucket::check_bucket_shards(const DoutPrefixProvider *dpp,
+                                    uint64_t num_objs, optional_yield y)
   {
     return 0;
   }

@@ -140,23 +140,28 @@ static int drain_aio(std::list<librados::AioCompletion*>& handles)
 
 int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
 			       const std::string& end_marker, uint64_t max, bool need_stats,
-			       BucketList &buckets, optional_yield y)
+			       BucketList &result, optional_yield y)
 {
   RGWUserBuckets ulist;
   bool is_truncated = false;
-  int ret;
 
-  buckets.clear();
-  ret = store->ctl()->user->list_buckets(dpp, info.user_id, marker, end_marker, max,
-					 need_stats, &ulist, &is_truncated, y);
+  int ret = store->ctl()->user->list_buckets(dpp, get_id(), marker, end_marker,
+                                             max, need_stats, &ulist,
+                                             &is_truncated, y);
   if (ret < 0)
     return ret;
 
-  buckets.set_truncated(is_truncated);
-  for (const auto& ent : ulist.get_buckets()) {
-    buckets.add(std::unique_ptr<Bucket>(new RadosBucket(this->store, ent.second, this)));
+  result.buckets.clear();
+
+  for (auto& ent : ulist.get_buckets()) {
+    result.buckets.push_back(std::move(ent.second));
   }
 
+  if (is_truncated && !result.buckets.empty()) {
+    result.next_marker = result.buckets.back().bucket.name;
+  } else {
+    result.next_marker.clear();
+  }
   return 0;
 }
 
@@ -617,7 +622,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
     return ret;
   }
 
-  sync_user_stats(dpp, y);
+  sync_user_stats(dpp, y, nullptr);
   if (ret < 0) {
      ldpp_dout(dpp, 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -636,7 +641,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   return ret;
 }
 
-int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats)
+int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
 
@@ -662,10 +667,6 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bo
 
   bucket_version = ep_ot.read_version;
 
-  if (get_stats) {
-    ret = store->ctl()->bucket->read_bucket_stats(info.bucket, &ent, y, dpp);
-  }
-
   return ret;
 }
 
@@ -685,42 +686,16 @@ int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return store->getRados()->get_bucket_stats_async(dpp, get_info(), idx_layout, shard_id, ctx);
 }
 
-int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* ent)
 {
-  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
+  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, ent);
 }
 
-int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
+                                     uint64_t num_objs, optional_yield y)
 {
-  int ret;
-  map<std::string, RGWBucketEnt> m;
-
-  m[info.bucket.name] = ent;
-  ret = store->getRados()->update_containers_stats(m, dpp, y);
-  if (!ret)
-    return -EEXIST;
-  if (ret < 0)
-    return ret;
-
-  map<std::string, RGWBucketEnt>::iterator iter = m.find(info.bucket.name);
-  if (iter == m.end())
-    return -EINVAL;
-
-  ent.count = iter->second.count;
-  ent.size = iter->second.size;
-  ent.size_rounded = iter->second.size_rounded;
-  ent.creation_time = iter->second.creation_time;
-  ent.placement_rule = std::move(iter->second.placement_rule);
-
-  info.creation_time = ent.creation_time;
-  info.placement_rule = ent.placement_rule;
-
-  return 0;
-}
-
-int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
-{
-      return store->getRados()->check_bucket_shards(info, info.bucket, get_count(), dpp, y);
+  return store->getRados()->check_bucket_shards(info, num_objs, dpp, y);
 }
 
 int RadosBucket::link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv)
