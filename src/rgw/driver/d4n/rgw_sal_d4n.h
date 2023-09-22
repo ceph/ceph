@@ -43,7 +43,6 @@ class D4NFilterDriver : public FilterDriver {
     rgw::cache::CacheDriver* cacheDriver;
     rgw::d4n::ObjectDirectory* objDir;
     rgw::d4n::BlockDirectory* blockDir;
-    rgw::d4n::CacheBlock* cacheBlock;
     rgw::d4n::PolicyDriver* policyDriver;
 
   public:
