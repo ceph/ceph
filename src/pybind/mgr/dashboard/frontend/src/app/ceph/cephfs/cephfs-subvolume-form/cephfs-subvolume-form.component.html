@@ -27,6 +27,9 @@
             <span class="invalid-feedback"
                   *ngIf="subvolumeForm.showError('subvolumeName', formDir, 'notUnique')"
                   i18n>The subvolume already exists.</span>
+            <span *ngIf="subvolumeForm.showError('subvolumeName', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Subvolume name can only contain letters, numbers, '.', '-' or '_'</span>
           </div>
         </div>
 

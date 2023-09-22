@@ -101,7 +101,7 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
     this.subvolumeForm = new CdFormGroup({
       volumeName: new FormControl({ value: this.fsName, disabled: true }),
       subvolumeName: new FormControl('', {
-        validators: [Validators.required],
+        validators: [Validators.required, Validators.pattern(/^[.A-Za-z0-9_-]+$/)],
         asyncValidators: [
           CdValidators.unique(
             this.cephFsSubvolumeService.exists,
