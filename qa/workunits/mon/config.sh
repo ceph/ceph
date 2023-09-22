@@ -98,11 +98,11 @@ ceph tell osd.0 config unset debug_asok
 ceph tell osd.0 config unset debug_asok
 
 ceph config rm osd.0 debug_asok
-while ceph config show osd.0 | grep debug_asok | grep mon
+while ceph config show osd.0 | grep '^debug_asok[:[space]:]' | grep mon
 do
     sleep 1
 done
-ceph config show osd.0 | grep -c debug_asok | grep 0
+ceph config show osd.0 | grep -c '^debug_asok[:[space]:]' | grep 0
 
 ceph config set osd.0 osd_scrub_cost 123
 while ! ceph config show osd.0 | grep osd_scrub_cost | grep mon
