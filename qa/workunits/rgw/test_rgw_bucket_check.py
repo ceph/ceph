@@ -53,7 +53,15 @@ def main():
     ok_keys = ['a', 'b', 'c', 'd']
     unlinked_keys = ['c', 'd', 'e', 'f']
     ok_objs = put_objects(bucket, ok_keys)
-
+    
+    # TESTCASE 'recalculated bucket check stats are correct'
+    log.debug('TEST: recalculated bucket check stats are correct\n')
+    exec_cmd(f'radosgw-admin bucket check --fix --bucket {BUCKET_NAME}')
+    out = exec_cmd(f'radosgw-admin bucket stats --bucket {BUCKET_NAME}')
+    json_out = json.loads(out)
+    log.debug(json_out['usage'])
+    assert json_out['usage']['rgw.main']['num_objects'] == 6
+    
     # TESTCASE 'bucket check unlinked does not report normal entries'
     log.debug('TEST: bucket check unlinked does not report normal entries\n')
     out = exec_cmd(f'radosgw-admin bucket check unlinked --bucket {BUCKET_NAME} --min-age-hours 0 --dump-keys')
