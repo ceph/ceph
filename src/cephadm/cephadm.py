@@ -165,6 +165,7 @@ from cephadmlib.host_facts import HostFacts, list_networks
 from cephadmlib.ssh import authorize_ssh_key, check_ssh_connectivity
 from cephadmlib.daemon_form import (
     DaemonForm,
+    FirewalledServiceDaemonForm,
     create as daemon_form_create,
     register as register_daemon_form,
 )
@@ -237,6 +238,13 @@ class Ceph(DaemonForm):
     def identity(self) -> DaemonIdentity:
         return self._identity
 
+    def firewall_service_name(self) -> str:
+        if self.identity.daemon_type == 'mon':
+            return 'ceph-mon'
+        elif self.identity.daemon_type in ['mgr', 'mds']:
+            return 'ceph'
+        return ''
+
 ##################################
 
 
@@ -254,6 +262,9 @@ class OSD(Ceph):
             'fs.aio-max-nr = 1048576',
             'kernel.pid_max = 4194304',
         ]
+
+    def firewall_service_name(self) -> str:
+        return 'ceph'
 
 
 ##################################
@@ -694,6 +705,9 @@ class NFSGanesha(DaemonForm):
             keyring_path = os.path.join(data_dir, 'keyring.rgw')
             with write_new(keyring_path, owner=(uid, gid)) as f:
                 f.write(self.rgw.get('keyring', ''))
+
+    def firewall_service_name(self) -> str:
+        return 'nfs'
 
 ##################################
 
@@ -2745,7 +2759,7 @@ def deploy_daemon(
     with write_new(data_dir + '/unit.configured', owner=(uid, gid)) as f:
         f.write('mtime is time we were last configured\n')
 
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
     # Open ports explicitly required for the daemon
     if endpoints:
@@ -3123,19 +3137,10 @@ class Firewalld(object):
         logger.info('firewalld ready')
         return True
 
-    def enable_service_for(self, daemon_type):
-        # type: (str) -> None
+    def enable_service_for(self, svc: str) -> None:
+        assert svc, 'service name not provided'
         if not self.available:
-            logger.debug('Not possible to enable service <%s>. firewalld.service is not available' % daemon_type)
-            return
-
-        if daemon_type == 'mon':
-            svc = 'ceph-mon'
-        elif daemon_type in ['mgr', 'mds', 'osd']:
-            svc = 'ceph'
-        elif daemon_type == NFSGanesha.daemon_type:
-            svc = 'nfs'
-        else:
+            logger.debug('Not possible to enable service <%s>. firewalld.service is not available' % svc)
             return
 
         if not self.cmd:
@@ -3206,11 +3211,15 @@ class Firewalld(object):
         call_throws(self.ctx, [self.cmd, '--reload'])
 
 
-def update_firewalld(ctx, daemon_type):
-    # type: (CephadmContext, str) -> None
-    if not ('skip_firewalld' in ctx and ctx.skip_firewalld):
+def update_firewalld(ctx: CephadmContext, daemon: DaemonForm) -> None:
+    if not ('skip_firewalld' in ctx and ctx.skip_firewalld) and isinstance(
+        daemon, FirewalledServiceDaemonForm
+    ):
+        svc = daemon.firewall_service_name()
+        if not svc:
+            return
         firewall = Firewalld(ctx)
-        firewall.enable_service_for(daemon_type)
+        firewall.enable_service_for(svc)
         firewall.apply_rules()
 
 
@@ -6206,7 +6215,7 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
         start=(state == 'running' or ctx.force_start),
         osd_fsid=osd_fsid,
     )
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
 
 def command_adopt_prometheus(ctx, daemon_id, fsid):
@@ -6252,7 +6261,7 @@ def command_adopt_prometheus(ctx, daemon_id, fsid):
         deployment_type=DeploymentType.REDEPLOY,
         endpoints=endpoints,
     )
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
 
 def command_adopt_grafana(ctx, daemon_id, fsid):
@@ -6323,7 +6332,7 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
         deployment_type=DeploymentType.REDEPLOY,
         endpoints=endpoints,
     )
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
 
 def command_adopt_alertmanager(ctx, daemon_id, fsid):
@@ -6370,7 +6379,7 @@ def command_adopt_alertmanager(ctx, daemon_id, fsid):
         deployment_type=DeploymentType.REDEPLOY,
         endpoints=endpoints,
     )
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
 
 def _adjust_grafana_ini(filename):

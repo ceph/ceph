@@ -294,15 +294,20 @@ class TestCephAdm(object):
         """
 
         ctx = _cephadm.CephadmContext()
+        mon = _cephadm.Ceph.create(ctx, _cephadm.DaemonIdentity(
+            fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
+            daemon_type='mon',
+            daemon_id='a',
+        ))
         with pytest.raises(Exception):
-            _cephadm.update_firewalld(ctx, 'mon')
+            _cephadm.update_firewalld(ctx, mon)
 
         ctx.skip_firewalld = True
-        _cephadm.update_firewalld(ctx, 'mon')
+        _cephadm.update_firewalld(ctx, mon)
 
         ctx.skip_firewalld = False
         with pytest.raises(Exception):
-            _cephadm.update_firewalld(ctx, 'mon')
+            _cephadm.update_firewalld(ctx, mon)
 
         ctx = _cephadm.CephadmContext()
         ctx.ssl_dashboard_port = 8888
