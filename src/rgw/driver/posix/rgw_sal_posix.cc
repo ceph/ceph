@@ -510,16 +510,17 @@ int POSIXDriver::close()
   return 0;
 }
 
+// TODO: marker and other params
 int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
 			     const std::string& end_marker, uint64_t max,
-			     bool need_stats, BucketList &buckets, optional_yield y)
+			     bool need_stats, BucketList &result, optional_yield y)
 {
   DIR* dir;
   struct dirent* entry;
   int dfd;
   int ret;
 
-  buckets.clear();
+  result.buckets.clear();
 
   /* it's not sufficient to dup(root_fd), as as the new fd would share
    * the file position of root_fd */
@@ -557,7 +558,6 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
 	<< cpp_strerror(ret) << dendl;
-      buckets.clear();
       return -ret;
     }
 
@@ -572,25 +572,12 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
       continue;
     }
 
-    /* TODO Use stat_to_ent */
-    //RGWBucketEnt ent;
-    //ent.bucket.name = decode_name(entry->d_name);
-    //bucket_statx_save(stx, ent, mtime);
-    RGWBucketInfo info;
-    info.bucket.name = url_decode(entry->d_name);
-    info.owner.id = std::to_string(stx.stx_uid); // TODO convert to owner name
-    info.creation_time = from_statx_timestamp(stx.stx_btime);
+    RGWBucketEnt ent;
+    ent.bucket.name = url_decode(entry->d_name);
+    ent.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
+    // TODO: ent.size and ent.count
 
-    std::unique_ptr<rgw::sal::Bucket> bucket;
-    ret = driver->get_bucket(this, info, &bucket);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: could not get bucket " << info.bucket << ": "
-	<< cpp_strerror(ret) << dendl;
-      buckets.clear();
-      return -ret;
-    }
-
-    buckets.add(std::move(bucket));
+    result.buckets.push_back(std::move(ent));
 
     errno = 0;
   }
@@ -598,7 +585,6 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
   if (ret != 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not list buckets for " << get_display_name() << ": "
       << cpp_strerror(ret) << dendl;
-    buckets.clear();
     return -ret;
   }
 
@@ -980,8 +966,7 @@ int POSIXBucket::remove_bucket_bypass_gc(int concurrent_max,
   return remove_bucket(dpp, true, false, nullptr, y);
 }
 
-int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-			      bool get_stats)
+int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
 
@@ -994,8 +979,8 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     return ret;
   }
 
-  bucket_statx_save(stx, ent, mtime);
-  info.creation_time = ent.creation_time;
+  mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
+  info.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
 
   if (owner) {
     info.owner = owner->get_id();
@@ -1023,8 +1008,6 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
     // TODO dang: fake info up (UID to owner conversion?)
   }
 
-  info.creation_time = ent.creation_time;
-
   return 0;
 }
 
@@ -1049,7 +1032,33 @@ int POSIXBucket::read_stats(const DoutPrefixProvider *dpp,
 			    std::map<RGWObjCategory, RGWStorageStats>& stats,
 			    std::string* max_marker, bool* syncstopped)
 {
-  return 0;
+  auto& main = stats[RGWObjCategory::Main];
+
+  // TODO: bucket stats shouldn't have to list all objects
+  return for_each(dpp, [this, dpp, &main] (const char* name) {
+    if (name[0] == '.') {
+      /* Skip dotfiles */
+      return 0;
+    }
+
+    struct statx lstx;
+    int ret = statx(dir_fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &lstx);
+    if (ret < 0) {
+      ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
+	<< cpp_strerror(ret) << dendl;
+      return -ret;
+    }
+
+    if (S_ISREG(lstx.stx_mode) || S_ISDIR(lstx.stx_mode)) {
+      main.num_objects++;
+      main.size += lstx.stx_size;
+      main.size_rounded += lstx.stx_size;
+      main.size_utilized += lstx.stx_size;
+    }
+
+    return 0;
+  });
 }
 
 int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
@@ -1059,57 +1068,16 @@ int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int POSIXBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+int POSIXBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* ent)
 {
   return 0;
 }
 
-int POSIXBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
+int POSIXBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
+                                     uint64_t num_objs, optional_yield y)
 {
-  /* Force re-stat */
-  stat_done = false;
-  int ret = stat(dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  bucket_statx_save(stx, ent, mtime);
-  info.creation_time = ent.creation_time;
-  ent.count = 0;
-  ent.size = 0;
-
-  // TODO dang: store size/count in attributes
-  ret = for_each(dpp, [this, &dpp](const char* name) {
-    int ret;
-    struct statx lstx;
-
-    if (name[0] == '.') {
-      /* Skip dotfiles */
-      return 0;
-    }
-
-    ret = statx(dir_fd, name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &lstx);
-    if (ret < 0) {
-      ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not stat object " << name << ": "
-	<< cpp_strerror(ret) << dendl;
-      return -ret;
-    }
-
-    if (S_ISREG(lstx.stx_mode) || S_ISDIR(lstx.stx_mode)) {
-      ent.count++;
-      ent.size += lstx.stx_size;
-    }
-
-    return 0;
-  });
-
   return 0;
-}
-
-int POSIXBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
-{
-      return 0;
 }
 
 int POSIXBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
@@ -1199,14 +1167,9 @@ int POSIXBucket::check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uin
 
 int POSIXBucket::try_refresh_info(const DoutPrefixProvider* dpp, ceph::real_time* pmtime, optional_yield y)
 {
-  int ret = update_container_stats(dpp, y);
-  if (ret < 0) {
-    return ret;
-  }
-
   *pmtime = mtime;
 
-  ret = open(dpp);
+  int ret = open(dpp);
   if (ret < 0) {
     return ret;
   }

@@ -135,7 +135,7 @@ public:
     return 0;
   }
   void send_response_begin(bool has_buckets) override;
-  void send_response_data(rgw::sal::BucketList& buckets) override;
+  void send_response_data(std::span<const RGWBucketEnt> buckets) override;
   void send_response_end() override;
 };
 

@@ -87,11 +87,11 @@ void list_all_buckets_end(req_state *s)
   s->formatter->close_section();
 }
 
-void dump_bucket(req_state *s, rgw::sal::Bucket& obj)
+void dump_bucket(req_state *s, const RGWBucketEnt& ent)
 {
   s->formatter->open_object_section("Bucket");
-  s->formatter->dump_string("Name", obj.get_name());
-  dump_time(s, "CreationDate", obj.get_creation_time());
+  s->formatter->dump_string("Name", ent.bucket.name);
+  dump_time(s, "CreationDate", ent.creation_time);
   s->formatter->close_section();
 }
 
@@ -1454,16 +1454,13 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
   }
 }
 
-void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::BucketList& buckets)
+void RGWListBuckets_ObjStore_S3::send_response_data(std::span<const RGWBucketEnt> buckets)
 {
   if (!sent_data)
     return;
 
-  auto& m = buckets.get_buckets();
-
-  for (auto iter = m.begin(); iter != m.end(); ++iter) {
-    auto& bucket = iter->second;
-    dump_bucket(s, *bucket);
+  for (const auto& ent : buckets) {
+    dump_bucket(s, ent);
   }
   rgw_flush_formatter(s, s->formatter);
 }
@@ -2338,10 +2335,12 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket)
+static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket,
+                                 RGWStorageStats& stats)
 {
-  dump_header(s, "X-RGW-Object-Count", static_cast<long long>(bucket->get_count()));
-  dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(bucket->get_size()));
+  dump_header(s, "X-RGW-Object-Count", static_cast<long long>(stats.num_objects));
+  dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(stats.size));
+
   // only bucket's owner is allowed to get the quota settings of the account
   if (bucket->is_owner(s->user.get())) {
     auto user_info = s->user->get_info();
@@ -2357,7 +2356,7 @@ static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket)
 void RGWStatBucket_ObjStore_S3::send_response()
 {
   if (op_ret >= 0) {
-    dump_bucket_metadata(s, bucket.get());
+    dump_bucket_metadata(s, bucket.get(), stats);
   }
 
   set_req_state_err(s, op_ret);

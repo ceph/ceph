@@ -95,51 +95,39 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
 				   optional_yield y,
                                    const DoutPrefixProvider *dpp)
 {
-  rgw::sal::BucketList user_buckets;
-  string marker;
+  size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
-  CephContext *cct = driver->ctx();
-
-  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-
+  rgw::sal::BucketList listing;
   do {
-    int ret = user.list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
+    int ret = user.list_buckets(dpp, listing.next_marker, string(),
+                                max_entries, false, listing, y);
     if (ret < 0) {
-      ldout(driver->ctx(), 0) << "failed to read user buckets: "
-			     << cpp_strerror(-ret) << dendl;
+      ldpp_dout(dpp, 0) << "failed to read user buckets: "
+          << cpp_strerror(-ret) << dendl;
       return;
     }
 
-    map<string, std::unique_ptr<rgw::sal::Bucket>>& buckets = user_buckets.get_buckets();
-    for (auto i = buckets.begin();
-         i != buckets.end();
-         ++i) {
-      marker = i->first;
-
-      auto& bucket = i->second;
-
-      std::unique_ptr<rgw::sal::Bucket> actual_bucket;
-      int r = driver->get_bucket(dpp, &user, user.get_tenant(), bucket->get_name(), &actual_bucket, y);
+    for (const auto& ent : listing.buckets) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      int r = driver->get_bucket(dpp, &user, user.get_tenant(), ent.bucket.name, &bucket, y);
       if (r < 0) {
-        ldout(driver->ctx(), 0) << "could not get bucket info for bucket=" << bucket << dendl;
+        ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
       }
 
-      if (actual_bucket->get_name().compare(bucket->get_name()) != 0 ||
-          actual_bucket->get_tenant().compare(bucket->get_tenant()) != 0 ||
-          actual_bucket->get_marker().compare(bucket->get_marker()) != 0 ||
-          actual_bucket->get_bucket_id().compare(bucket->get_bucket_id()) != 0) {
-        cout << "bucket info mismatch: expected " << actual_bucket << " got " << bucket << std::endl;
+      if (ent.bucket != bucket->get_key()) {
+        cout << "bucket info mismatch: expected " << ent.bucket
+            << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-	  r = actual_bucket->chown(dpp, user, y);
+	  r = bucket->chown(dpp, user, y);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
         }
       }
     }
-  } while (user_buckets.is_truncated());
+  } while (!listing.next_marker.empty());
 }
 
 // returns true if entry is in the empty namespace. note: function
@@ -1393,32 +1381,24 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
   formatter->open_array_section("users");
 
   for (const auto& user_id : user_ids) {
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_id));
 
     formatter->open_object_section("user");
     formatter->dump_string("user_id", user_id);
     formatter->open_array_section("buckets");
 
-    string marker;
-    rgw::sal::BucketList buckets;
+    rgw::sal::BucketList listing;
     do {
-      std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_id));
-
-      ret = user->list_buckets(dpp, marker, string(), max_entries, false, buckets, y);
-
+      ret = user->list_buckets(dpp, listing.next_marker, string(),
+                               max_entries, false, listing, y);
       if (ret < 0)
         return ret;
 
-      map<string, std::unique_ptr<rgw::sal::Bucket>>& m_buckets = buckets.get_buckets();
-
-      for (const auto& iter : m_buckets) {
-	auto& bucket = iter.second;
+      for (const auto& ent : listing.buckets) {
 	uint64_t num_objects = 0;
 
-	marker = bucket->get_name(); /* Casey's location for marker update,
-				     * as we may now not reach the end of
-				     * the loop body */
-
-	ret = bucket->load_bucket(dpp, y);
+	std::unique_ptr<rgw::sal::Bucket> bucket;
+	ret = driver->get_bucket(dpp, user.get(), ent.bucket, &bucket, y);
 	if (ret < 0)
 	  continue;
 
@@ -1470,7 +1450,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 	}
       }
       formatter->flush(cout);
-    } while (buckets.is_truncated()); /* foreach: bucket */
+    } while (!listing.next_marker.empty()); /* foreach: bucket */
 
     formatter->close_section();
     formatter->close_section();
@@ -1504,58 +1484,42 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
 
-  CephContext *cct = driver->ctx();
-
-  const size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-
   const bool show_stats = op_state.will_fetch_stats();
   const rgw_user& user_id = op_state.get_user_id();
-  if (op_state.is_user_op()) {
-    formatter->open_array_section("buckets");
-
-    rgw::sal::BucketList buckets;
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
-    std::string marker;
-    const std::string empty_end_marker;
-    constexpr bool no_need_stats = false; // set need_stats to false
-
-    do {
-      ret = user->list_buckets(dpp, marker, empty_end_marker, max_entries,
-			      no_need_stats, buckets, y);
-      if (ret < 0) {
-        return ret;
-      }
-
-      const std::string* marker_cursor = nullptr;
-      map<string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();
-
-      for (const auto& i : m) {
-        const std::string& obj_name = i.first;
-        if (!bucket_name.empty() && bucket_name != obj_name) {
-          continue;
-        }
-
-        if (show_stats) {
-          bucket_stats(driver, user_id.tenant, obj_name, formatter, dpp, y);
-	} else {
-          formatter->dump_string("bucket", obj_name);
-	}
-
-        marker_cursor = &obj_name;
-      } // for loop
-      if (marker_cursor) {
-	marker = *marker_cursor;
-      }
-
-      flusher.flush();
-    } while (buckets.is_truncated());
-
-    formatter->close_section();
-  } else if (!bucket_name.empty()) {
+  if (!bucket_name.empty()) {
     ret = bucket_stats(driver, user_id.tenant, bucket_name, formatter, dpp, y);
     if (ret < 0) {
       return ret;
     }
+  } else if (op_state.is_user_op()) {
+    formatter->open_array_section("buckets");
+
+    std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
+    const std::string empty_end_marker;
+    const size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+    constexpr bool no_need_stats = false; // set need_stats to false
+
+    rgw::sal::BucketList listing;
+    listing.next_marker = op_state.marker;
+    do {
+      ret = user->list_buckets(dpp, listing.next_marker, empty_end_marker,
+                               max_entries, no_need_stats, listing, y);
+      if (ret < 0) {
+        return ret;
+      }
+
+      for (const auto& ent : listing.buckets) {
+        if (show_stats) {
+          bucket_stats(driver, user_id.tenant, ent.bucket.name, formatter, dpp, y);
+	} else {
+          formatter->dump_string("bucket", ent.bucket.name);
+	}
+      } // for loop
+
+      flusher.flush();
+    } while (!listing.next_marker.empty());
+
+    formatter->close_section();
   } else {
     void *handle = nullptr;
     bool truncated = true;

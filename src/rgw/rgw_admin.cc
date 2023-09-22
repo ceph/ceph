@@ -7005,6 +7005,7 @@ int main(int argc, const char **argv)
           return -ENOENT;
         }
       }
+      bucket_op.marker = marker;
       RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
@@ -8727,7 +8728,7 @@ next:
           cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
-        ret = bucket->sync_user_stats(dpp(), null_yield);
+        ret = bucket->sync_user_stats(dpp(), null_yield, nullptr);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " <<
 	    cpp_strerror(-ret) << std::endl;

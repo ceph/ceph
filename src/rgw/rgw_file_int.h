@@ -1405,17 +1405,14 @@ public:
     sent_data = true;
   }
 
-  void send_response_data(rgw::sal::BucketList& buckets) override {
+  void send_response_data(std::span<const RGWBucketEnt> buckets) override {
     if (!sent_data)
       return;
-    auto& m = buckets.get_buckets();
-    for (const auto& iter : m) {
-      std::string_view marker{iter.first};
-      auto& ent = iter.second;
-      if (! this->operator()(ent->get_name(), marker)) {
+    for (const auto& ent : buckets) {
+      if (! this->operator()(ent.bucket.name, ent.bucket.name)) {
 	/* caller cannot accept more */
 	lsubdout(cct, rgw, 5) << "ListBuckets rcb failed"
-			      << " dirent=" << ent->get_name()
+			      << " dirent=" << ent.bucket.name
 			      << " call count=" << ix
 			      << dendl;
 	rcb_eof = true;
@@ -2352,10 +2349,10 @@ public:
 
   void send_response() override {
     bucket->get_creation_time() = get_state()->bucket->get_info().creation_time;
-    bs.size = bucket->get_size();
-    bs.size_rounded = bucket->get_size_rounded();
+    bs.size = stats.size;
+    bs.size_rounded = stats.size_rounded;
     bs.creation_time = bucket->get_creation_time();
-    bs.num_entries = bucket->get_count();
+    bs.num_entries = stats.num_objects;
     std::swap(attrs, get_state()->bucket_attrs);
   }
 

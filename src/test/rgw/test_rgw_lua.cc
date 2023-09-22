@@ -74,7 +74,7 @@ public:
     return std::unique_ptr<User>(new TestUser(*this));
   }
 
-  virtual int list_buckets(const DoutPrefixProvider *dpp, const string&, const string&, uint64_t, bool, sal::BucketList&, optional_yield y) override {
+  virtual int list_buckets(const DoutPrefixProvider *dpp, const string&, const string&, uint64_t, bool, sal::BucketList& results, optional_yield y) {
     return 0;
   }
 
@@ -321,8 +321,6 @@ TEST(TestRGWLua, Bucket)
     assert(Request.Bucket.Marker == "mymarker")
     assert(Request.Bucket.Name == "myname")
     assert(Request.Bucket.Tenant == "mytenant")
-    assert(Request.Bucket.Count == 0)
-    assert(Request.Bucket.Size == 0)
     assert(Request.Bucket.ZoneGroupId)
     assert(Request.Bucket.CreationTime)
     assert(Request.Bucket.MTime)
