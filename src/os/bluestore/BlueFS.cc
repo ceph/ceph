@@ -4023,8 +4023,8 @@ int BlueFS::open_for_write(
     dir = p->second;
   }
 
-  map<string,FileRef>::iterator q = dir->file_map.find(filename);
-  if (q == dir->file_map.end()) {
+  map<string,FileRef>::iterator q = dir->file_map.lower_bound(filename);
+  if (q == dir->file_map.end() || q->first != filename) {
     if (overwrite) {
       dout(20) << __func__ << " dir " << dirname << " (" << dir
 	       << ") file " << filename
@@ -4034,7 +4034,7 @@ int BlueFS::open_for_write(
     file = ceph::make_ref<File>();
     file->fnode.ino = ++ino_last;
     nodes.file_map[ino_last] = file;
-    dir->file_map[string{filename}] = file;
+    dir->file_map.emplace_hint(q, string{filename}, file);
     ++file->refs;
     create = true;
     logger->set(l_bluefs_num_files, nodes.file_map.size());
@@ -4263,7 +4263,7 @@ int BlueFS::rmdir(std::string_view dirname)/*_LN*/
     dout(20) << __func__ << " dir " << dirname << " not empty" << dendl;
     return -ENOTEMPTY;
   }
-  nodes.dir_map.erase(string{dirname});
+  nodes.dir_map.erase(p);
   log.t.op_dir_remove(dirname);
   return 0;
 }
@@ -4317,9 +4317,9 @@ int BlueFS::lock_file(std::string_view dirname, std::string_view filename,
     return -ENOENT;
   }
   DirRef dir = p->second;
-  auto q = dir->file_map.find(filename);
+  auto q = dir->file_map.lower_bound(filename);
   FileRef file;
-  if (q == dir->file_map.end()) {
+  if (q == dir->file_map.end() || q->first != filename) {
     dout(20) << __func__ << " dir " << dirname << " (" << dir
 	     << ") file " << filename
 	     << " not found, creating" << dendl;
@@ -4327,7 +4327,7 @@ int BlueFS::lock_file(std::string_view dirname, std::string_view filename,
     file->fnode.ino = ++ino_last;
     file->fnode.mtime = ceph_clock_now();
     nodes.file_map[ino_last] = file;
-    dir->file_map[string{filename}] = file;
+    dir->file_map.emplace_hint(q, string{filename}, file);
     logger->set(l_bluefs_num_files, nodes.file_map.size());
     ++file->refs;
     log.t.op_file_update(file->fnode);
@@ -4412,7 +4412,7 @@ int BlueFS::unlink(std::string_view dirname, std::string_view filename)/*_LND*/
              << " is locked" << dendl;
     return -EBUSY;
   }
-  dir->file_map.erase(string{filename});
+  dir->file_map.erase(q);
   log.t.op_dir_unlink(dirname, filename);
   _drop_link_D(file);
   logger->tinc(l_bluefs_unlink_lat, mono_clock::now() - t0);
