@@ -5163,7 +5163,6 @@ bool RGWHandler_REST_S3Website::web_dir() const {
 
   RGWObjectCtx& obj_ctx = *static_cast<RGWObjectCtx *>(s->obj_ctx);
   obj->set_atomic(&obj_ctx);
-  obj->set_prefetch_data(&obj_ctx);
 
   RGWObjState* state = nullptr;
   if (obj->get_obj_state(s, &obj_ctx, &state, s->yield) < 0) {
