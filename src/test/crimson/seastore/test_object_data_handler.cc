@@ -127,14 +127,19 @@ struct object_data_handler_test_t:
 	offset,
 	len));
     with_trans_intr(t, [&](auto &t) {
-      return ObjectDataHandler(MAX_OBJECT_SIZE).write(
-        ObjectDataHandler::context_t{
-          *tm,
-          t,
-          *onode,
-        },
-        offset,
-        bl);
+      return seastar::do_with(
+	std::move(bl),
+	ObjectDataHandler(MAX_OBJECT_SIZE),
+	[=, this, &t](auto &bl, auto &objhandler) {
+	  return objhandler.write(
+	    ObjectDataHandler::context_t{
+	      *tm,
+	      t,
+	      *onode,
+	    },
+	    offset,
+	    bl);
+	});
     }).unsafe_get0();
   }
   void write(objaddr_t offset, extent_len_t len, char fill) {
@@ -150,13 +155,17 @@ struct object_data_handler_test_t:
 	0,
 	size - offset);
       with_trans_intr(t, [&](auto &t) {
-        return ObjectDataHandler(MAX_OBJECT_SIZE).truncate(
-          ObjectDataHandler::context_t{
-            *tm,
-            t,
-            *onode
-          },
-          offset);
+      return seastar::do_with(
+	ObjectDataHandler(MAX_OBJECT_SIZE),
+	[=, this, &t](auto &objhandler) {
+	  return objhandler.truncate(
+	    ObjectDataHandler::context_t{
+	      *tm,
+	      t,
+	      *onode
+	    },
+	    offset);
+	});
       }).unsafe_get0();
     }
     size = offset;
@@ -222,21 +231,15 @@ struct object_data_handler_test_t:
     size = 0;
     return tm_teardown();
   }
-};
 
-TEST_P(object_data_handler_test_t, single_write)
-{
-  run_async([this] {
-    write(1<<20, 8<<10, 'c');
+  void set_overwrite_threshold() {
+    crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite", "131072").get();
+  }
+  void unset_overwrite_threshold() {
+    crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite", "0").get();
+  }
 
-    read_near(1<<20, 8<<10, 1);
-    read_near(1<<20, 8<<10, 512);
-  });
-}
-
-TEST_P(object_data_handler_test_t, multi_write)
-{
-  run_async([this] {
+  void test_multi_write() {
     write((1<<20) - (4<<10), 4<<10, 'a');
     write(1<<20, 4<<10, 'b');
     write((1<<20) + (4<<10), 4<<10, 'c');
@@ -246,12 +249,9 @@ TEST_P(object_data_handler_test_t, multi_write)
 
     read_near((1<<20)-(4<<10), 12<<10, 1);
     read_near((1<<20)-(4<<10), 12<<10, 512);
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, write_hole)
-{
-  run_async([this] {
+  void test_write_hole() {
     write((1<<20) - (4<<10), 4<<10, 'a');
     // hole at 1<<20
     write((1<<20) + (4<<10), 4<<10, 'c');
@@ -261,23 +261,17 @@ TEST_P(object_data_handler_test_t, write_hole)
 
     read_near((1<<20)-(4<<10), 12<<10, 1);
     read_near((1<<20)-(4<<10), 12<<10, 512);
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, overwrite_single)
-{
-  run_async([this] {
+  void test_overwrite_single() {
     write((1<<20), 4<<10, 'a');
     write((1<<20), 4<<10, 'c');
 
     read_near(1<<20, 4<<10, 1);
     read_near(1<<20, 4<<10, 512);
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, overwrite_double)
-{
-  run_async([this] {
+  void test_overwrite_double() {
     write((1<<20), 4<<10, 'a');
     write((1<<20)+(4<<10), 4<<10, 'c');
     write((1<<20), 8<<10, 'b');
@@ -290,12 +284,9 @@ TEST_P(object_data_handler_test_t, overwrite_double)
 
     read_near((1<<20) + (4<<10), 4<<10, 1);
     read_near((1<<20) + (4<<10), 4<<10, 512);
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, overwrite_partial)
-{
-  run_async([this] {
+  void test_overwrite_partial() {
     write((1<<20), 12<<10, 'a');
     read_near(1<<20, 12<<10, 1);
 
@@ -315,12 +306,9 @@ TEST_P(object_data_handler_test_t, overwrite_partial)
 
     read_near((1<<20) + (4<<10), 4<<10, 1);
     read_near((1<<20) + (4<<10), 4<<10, 512);
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, unaligned_write)
-{
-  run_async([this] {
+  void test_unaligned_write() {
     objaddr_t base = 1<<20;
     write(base, (4<<10)+(1<<10), 'a');
     read_near(base-(4<<10), 12<<10, 512);
@@ -332,12 +320,9 @@ TEST_P(object_data_handler_test_t, unaligned_write)
     base = (1<<20) + (128<<10);
     write(base-(1<<10), (4<<10)+(2<<20), 'c');
     read_near(base-(4<<10), 12<<10, 512);
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, unaligned_overwrite)
-{
-  run_async([this] {
+  void test_unaligned_overwrite() {
     objaddr_t base = 1<<20;
     write(base, (128<<10) + (16<<10), 'x');
 
@@ -353,12 +338,9 @@ TEST_P(object_data_handler_test_t, unaligned_overwrite)
     read_near(base-(4<<10), 12<<10, 2<<10);
 
     read(base, (128<<10) + (16<<10));
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, truncate)
-{
-  run_async([this] {
+  void test_truncate() {
     objaddr_t base = 1<<20;
     write(base, 8<<10, 'a');
     write(base+(8<<10), 8<<10, 'b');
@@ -375,11 +357,9 @@ TEST_P(object_data_handler_test_t, truncate)
 
     truncate(base - (12<<10));
     read(base, 64<<10);
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, no_split) {
-  run_async([this] {
+  void write_same() {
     write(0, 8<<10, 'x');
     write(0, 8<<10, 'a');
 
@@ -387,66 +367,24 @@ TEST_P(object_data_handler_test_t, no_split) {
     EXPECT_EQ(pins.size(), 1);
 
     read(0, 8<<10);
-  });
-}
+  }
 
-TEST_P(object_data_handler_test_t, split_left) {
-  run_async([this] {
+  void write_right() {
     write(0, 128<<10, 'x');
-
     write(64<<10, 60<<10, 'a');
+  }
 
-    auto pins = get_mappings(0, 128<<10);
-    EXPECT_EQ(pins.size(), 2);
-
-    size_t res[2] = {0, 64<<10};
-    auto base = pins.front()->get_key();
-    int i = 0;
-    for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
-      i++;
-    }
-    read(0, 128<<10);
-  });
-}
-
-TEST_P(object_data_handler_test_t, split_right) {
-  run_async([this] {
+  void write_left() {
     write(0, 128<<10, 'x');
     write(4<<10, 60<<10, 'a');
+  }
 
-    auto pins = get_mappings(0, 128<<10);
-    EXPECT_EQ(pins.size(), 2);
-
-    size_t res[2] = {0, 64<<10};
-    auto base = pins.front()->get_key();
-    int i = 0;
-    for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
-      i++;
-    }
-    read(0, 128<<10);
-  });
-}
-TEST_P(object_data_handler_test_t, split_left_right) {
-  run_async([this] {
+  void write_right_left() {
     write(0, 128<<10, 'x');
     write(48<<10, 32<<10, 'a');
+  }
 
-    auto pins = get_mappings(0, 128<<10);
-    EXPECT_EQ(pins.size(), 3);
-
-    size_t res[3] = {0, 48<<10, 80<<10};
-    auto base = pins.front()->get_key();
-    int i = 0;
-    for (auto &pin : pins) {
-      EXPECT_EQ(pin->get_key() - base, res[i]);
-      i++;
-    }
-  });
-}
-TEST_P(object_data_handler_test_t, multiple_split) {
-  run_async([this] {
+  void multiple_write() {
     write(0, 128<<10, 'x');
 
     auto t = create_mutate_transaction();
@@ -464,7 +402,249 @@ TEST_P(object_data_handler_test_t, multiple_split) {
     write(*t, 60<<10, 8<<10, 'f');
 
     submit_transaction(std::move(t));
+  }
+};
 
+TEST_P(object_data_handler_test_t, single_write)
+{
+  run_async([this] {
+    write(1<<20, 8<<10, 'c');
+
+    read_near(1<<20, 8<<10, 1);
+    read_near(1<<20, 8<<10, 512);
+  });
+}
+
+TEST_P(object_data_handler_test_t, multi_write)
+{
+  run_async([this] {
+    test_multi_write();
+  });
+}
+
+TEST_P(object_data_handler_test_t, delta_over_multi_write)
+{
+  run_async([this] {
+    set_overwrite_threshold();
+    test_multi_write();
+  });
+}
+
+TEST_P(object_data_handler_test_t, write_hole)
+{
+  run_async([this] {
+    test_write_hole();
+  });
+}
+
+TEST_P(object_data_handler_test_t, delta_over_write_hole)
+{
+  run_async([this] {
+    set_overwrite_threshold();
+    test_write_hole();
+  });
+}
+
+TEST_P(object_data_handler_test_t, overwrite_single)
+{
+  run_async([this] {
+    test_overwrite_single();
+  });
+}
+
+TEST_P(object_data_handler_test_t, delta_over_overwrite_single)
+{
+  run_async([this] {
+    set_overwrite_threshold();
+    test_overwrite_single();
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, overwrite_double)
+{
+  run_async([this] {
+    test_overwrite_double();
+  });
+}
+
+TEST_P(object_data_handler_test_t, delta_over_overwrite_double)
+{
+  run_async([this] {
+    set_overwrite_threshold();
+    test_overwrite_double();
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, overwrite_partial)
+{
+  run_async([this] {
+    test_overwrite_partial();
+  });
+}
+
+TEST_P(object_data_handler_test_t, delta_over_overwrite_partial)
+{
+  run_async([this] {
+    set_overwrite_threshold();
+    test_overwrite_partial();
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, unaligned_write)
+{
+  run_async([this] {
+    test_unaligned_write();
+  });
+}
+
+TEST_P(object_data_handler_test_t, delta_over_unaligned_write)
+{
+  run_async([this] {
+    set_overwrite_threshold();
+    test_unaligned_write();
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, unaligned_overwrite)
+{
+  run_async([this] {
+    test_unaligned_overwrite();
+  });
+}
+
+TEST_P(object_data_handler_test_t, delta_over_unaligned_overwrite)
+{
+  run_async([this] {
+    set_overwrite_threshold();
+    test_unaligned_overwrite();
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, truncate)
+{
+  run_async([this] {
+    test_truncate();
+  });
+}
+
+TEST_P(object_data_handler_test_t, delta_over_truncate)
+{
+  run_async([this] {
+    set_overwrite_threshold();
+    test_truncate();
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, no_remap) {
+  run_async([this] {
+    write_same();
+  });
+}
+
+TEST_P(object_data_handler_test_t, no_overwrite) {
+  run_async([this] {
+    set_overwrite_threshold();
+    write_same();
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, remap_left) {
+  run_async([this] {
+    write_right();
+
+    auto pins = get_mappings(0, 128<<10);
+    EXPECT_EQ(pins.size(), 2);
+
+    size_t res[2] = {0, 64<<10};
+    auto base = pins.front()->get_key();
+    int i = 0;
+    for (auto &pin : pins) {
+      EXPECT_EQ(pin->get_key() - base, res[i]);
+      i++;
+    }
+    read(0, 128<<10);
+  });
+}
+
+TEST_P(object_data_handler_test_t, overwrite_right) {
+  run_async([this] {
+    set_overwrite_threshold();
+    write_right();
+
+    auto pins = get_mappings(0, 128<<10);
+    EXPECT_EQ(pins.size(), 1);
+    read(0, 128<<10);
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, remap_right) {
+  run_async([this] {
+    write_left();
+
+    auto pins = get_mappings(0, 128<<10);
+    EXPECT_EQ(pins.size(), 2);
+
+    size_t res[2] = {0, 64<<10};
+    auto base = pins.front()->get_key();
+    int i = 0;
+    for (auto &pin : pins) {
+      EXPECT_EQ(pin->get_key() - base, res[i]);
+      i++;
+    }
+    read(0, 128<<10);
+  });
+}
+
+TEST_P(object_data_handler_test_t, overwrite_left) {
+  run_async([this] {
+    set_overwrite_threshold();
+    write_left();
+    auto pins = get_mappings(0, 128<<10);
+    EXPECT_EQ(pins.size(), 1);
+    read(0, 128<<10);
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, remap_right_left) {
+  run_async([this] {
+    write_right_left();
+
+    auto pins = get_mappings(0, 128<<10);
+    EXPECT_EQ(pins.size(), 3);
+
+    size_t res[3] = {0, 48<<10, 80<<10};
+    auto base = pins.front()->get_key();
+    int i = 0;
+    for (auto &pin : pins) {
+      EXPECT_EQ(pin->get_key() - base, res[i]);
+      i++;
+    }
+  });
+}
+
+TEST_P(object_data_handler_test_t, overwrite_right_left) {
+  run_async([this] {
+    set_overwrite_threshold();
+    write_right_left();
+    auto pins = get_mappings(0, 128<<10);
+    EXPECT_EQ(pins.size(), 1);
+    read(0, 128<<10);
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, multiple_remap) {
+  run_async([this] {
+    multiple_write();
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 10);
 
@@ -480,6 +660,17 @@ TEST_P(object_data_handler_test_t, multiple_split) {
   });
 }
 
+TEST_P(object_data_handler_test_t, multiple_overwrite) {
+  run_async([this] {
+    set_overwrite_threshold();
+    multiple_write();
+    auto pins = get_mappings(0, 128<<10);
+    EXPECT_EQ(pins.size(), 1);
+    read(0, 128<<10);
+    unset_overwrite_threshold();
+  });
+}
+
 INSTANTIATE_TEST_SUITE_P(
   object_data_handler_test,
   object_data_handler_test_t,
@@ -488,5 +679,3 @@ INSTANTIATE_TEST_SUITE_P(
     "circularbounded"
   )
 );
-
-
