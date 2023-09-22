@@ -130,6 +130,21 @@ rm -f $t1 $t2
 
 expect_false ceph config reset
 expect_false ceph config reset -1
+
+
+# test parallel config set
+# reproducer for https://tracker.ceph.com/issues/62832
+ceph config reset 0
+for ((try = 0; try < 10; try++)); do
+    set +x
+    for ((i = 0; i < 100; i++)); do
+        # Use a config that will get "handled" by the Objecter instantiated by the ceph binary
+        ceph config set client rados_mon_op_timeout $((i+300)) &
+    done 2> /dev/null
+    set -x
+    wait
+done
+
 # we are at end of testing, so it's okay to revert everything
 ceph config reset 0
 
