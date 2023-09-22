@@ -32,3 +32,10 @@ add_executable(unittest_mds_quiesce_agent
 )
 add_ceph_unittest(unittest_mds_quiesce_agent)
 target_link_libraries(unittest_mds_quiesce_agent ceph-common global)
+
+add_executable(unittest_memory_journaler
+  TestMemoryJournaler.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_memory_journaler)
+target_link_libraries(unittest_memory_journaler osdc ceph-common global)
