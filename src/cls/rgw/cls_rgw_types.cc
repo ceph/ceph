@@ -389,7 +389,7 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
   accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
   accounted_stats->actual_size += entry.meta.size;
   if (type == BIIndexType::Plain) {
-    return entry.exists && entry.key.instance.empty();
+    return entry.exists && entry.flags == 0;
   } else if (type == BIIndexType::Instance) {
     return entry.exists;
   }
