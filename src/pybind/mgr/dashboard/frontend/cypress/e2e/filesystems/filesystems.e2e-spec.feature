@@ -16,7 +16,7 @@ Feature: CephFS Management
         Given I am on the "cephfs" page
         And I select a row "test_cephfs"
         And I click on "Edit" button
-        And enter "name" "test_cephfs_edit" in the modal
+        And enter "name" "test_cephfs_edit"
         And I click on "Edit File System" button
         Then I should see a row with "test_cephfs_edit"
 
