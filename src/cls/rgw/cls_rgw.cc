@@ -3090,7 +3090,7 @@ static int check_index(cls_method_context_t hctx,
         return -EIO;
       }
 
-      if (entry.exists && entry.key.instance.empty()) {
+      if (entry.exists && entry.flags == 0) {
         rgw_bucket_category_stats& stats = calc_header->stats[entry.meta.category];
         stats.num_entries++;
         stats.total_size += entry.meta.accounted_size;
