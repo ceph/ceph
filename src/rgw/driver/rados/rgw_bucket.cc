@@ -1226,9 +1226,11 @@ int RGWBucketAdminOp::check_index(rgw::sal::Driver* driver, RGWBucketAdminOpStat
   if (ret < 0)
     return ret;
 
-  ret = bucket.check_object_index(dpp, op_state, flusher, y);
-  if (ret < 0)
-    return ret;
+  if (op_state.will_check_objects()) {
+    ret = bucket.check_object_index(dpp, op_state, flusher, y);
+    if (ret < 0)
+      return ret;
+  }
 
   ret = bucket.check_index(dpp, op_state, existing_stats, calculated_stats);
   if (ret < 0)
