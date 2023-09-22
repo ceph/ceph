@@ -40,7 +40,6 @@ class D4NFilterDriver : public FilterDriver {
     rgw::cache::CacheDriver* cacheDriver;
     rgw::d4n::ObjectDirectory* objDir;
     rgw::d4n::BlockDirectory* blockDir;
-    rgw::d4n::CacheBlock* cacheBlock;
     rgw::d4n::PolicyDriver* policyDriver;
     rgw::d4n::PolicyDriver* lruPolicyDriver;
 
@@ -63,7 +62,6 @@ class D4NFilterDriver : public FilterDriver {
     rgw::cache::CacheDriver* get_cache_driver() { return cacheDriver; }
     rgw::d4n::ObjectDirectory* get_obj_dir() { return objDir; }
     rgw::d4n::BlockDirectory* get_block_dir() { return blockDir; }
-    rgw::d4n::CacheBlock* get_cache_block() { return cacheBlock; }
     rgw::d4n::PolicyDriver* get_policy_driver() { return lruPolicyDriver; }
 };
 
