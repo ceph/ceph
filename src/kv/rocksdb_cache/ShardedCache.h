@@ -66,11 +66,14 @@ class ShardedCache : public rocksdb::Cache, public PriorityCache::PriCache {
   virtual ~ShardedCache() = default;
   // rocksdb::Cache
   virtual const char* Name() const override = 0;
+  using rocksdb::Cache::Insert;
   virtual rocksdb::Status Insert(const rocksdb::Slice& key, void* value, size_t charge,
                                  DeleterFn,
                                  rocksdb::Cache::Handle** handle, Priority priority) override;
+  using rocksdb::Cache::Lookup;
   virtual rocksdb::Cache::Handle* Lookup(const rocksdb::Slice& key, rocksdb::Statistics* stats) override;
   virtual bool Ref(rocksdb::Cache::Handle* handle) override;
+  using rocksdb::Cache::Release;
   virtual bool Release(rocksdb::Cache::Handle* handle, bool force_erase = false) override;
   virtual void* Value(Handle* handle) override = 0;
   virtual void Erase(const rocksdb::Slice& key) override;
