@@ -46,6 +46,7 @@ enum {
   l_bluefs_main_alloc_unit,
   l_bluefs_db_alloc_unit,
   l_bluefs_wal_alloc_unit,
+  l_bluefs_read_random_lat,
   l_bluefs_read_random_count,
   l_bluefs_read_random_bytes,
   l_bluefs_read_random_disk_count,
@@ -55,6 +56,7 @@ enum {
   l_bluefs_read_random_disk_bytes_slow,
   l_bluefs_read_random_buffer_count,
   l_bluefs_read_random_buffer_bytes,
+  l_bluefs_read_lat,
   l_bluefs_read_count,
   l_bluefs_read_bytes,
   l_bluefs_read_disk_count,
@@ -69,6 +71,10 @@ enum {
   l_bluefs_write_bytes,
   l_bluefs_compaction_lat,
   l_bluefs_compaction_lock_lat,
+  l_bluefs_fsync_lat,
+  l_bluefs_flush_lat,
+  l_bluefs_unlink_lat,
+  l_bluefs_truncate_lat,
   l_bluefs_alloc_shared_dev_fallbacks,
   l_bluefs_alloc_shared_size_fallbacks,
   l_bluefs_read_zeros_candidate,
@@ -445,7 +451,6 @@ private:
   int _flush_data(FileWriter *h, uint64_t offset, uint64_t length, bool buffered);
   int _flush_F(FileWriter *h, bool force, bool *flushed = nullptr);
   uint64_t _flush_special(FileWriter *h);
-  int _fsync(FileWriter *h);
 
 #ifdef HAVE_LIBAIO
   void _claim_completed_aios(FileWriter *h, std::list<aio_t> *ls);
