@@ -7188,12 +7188,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -EINVAL;
 	  goto fail;
 	}
-	pg_t raw_pg;
-	result = get_osdmap()->object_locator_to_pg(target_name, target_oloc, raw_pg);
-	if (result < 0) {
-	  dout(5) << " pool information is invalid: " << result << dendl;
+        auto maybe_pg = get_osdmap()->object_locator_to_expected_pg(target_name, target_oloc);
+	if (!maybe_pg) {
+	  dout(5) << " pool information is invalid: " << maybe_pg.error() << dendl;
 	  break;
 	}
+	pg_t raw_pg = *maybe_pg;
 	hobject_t target(target_name, target_oloc.key, target_snapid,
 		raw_pg.ps(), raw_pg.pool(),
 		target_oloc.nspace);
@@ -7340,13 +7340,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  }
 	}
 
-	pg_t raw_pg;
-	chunk_info_t chunk_info;
-	result = get_osdmap()->object_locator_to_pg(tgt_name, tgt_oloc, raw_pg);
-	if (result < 0) {
-	  dout(5) << " pool information is invalid: " << result << dendl;
+	auto maybe_pg = get_osdmap()->object_locator_to_expected_pg(tgt_name, tgt_oloc);
+	if (!maybe_pg) {
+	  dout(5) << " pool information is invalid: " << maybe_pg.error() << dendl;
 	  break;
 	}
+	pg_t raw_pg = *maybe_pg;
 	hobject_t target(tgt_name, tgt_oloc.key, snapid_t(),
 			 raw_pg.ps(), raw_pg.pool(),
 			 tgt_oloc.nspace);
@@ -7357,6 +7356,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  dout(5) << " the object is already a manifest " << dendl;
 	  break;
 	}
+	chunk_info_t chunk_info;
 	chunk_info.oid = target;
 	chunk_info.offset = tgt_offset;
 	chunk_info.length = src_length;
@@ -8161,10 +8161,14 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 		   src_version);
 	if (op_finisher == nullptr) {
 	  // start
-	  pg_t raw_pg;
-	  get_osdmap()->object_locator_to_pg(src_name, src_oloc, raw_pg);
+          auto raw_pg =
+	    get_osdmap()->object_locator_to_expected_pg(src_name, src_oloc);
+	  if (!raw_pg) {
+	    result = -EINVAL;
+	    break;
+	  }
 	  hobject_t src(src_name, src_oloc.key, src_snapid,
-			raw_pg.ps(), raw_pg.pool(),
+			raw_pg.value().ps(), raw_pg.value().pool(),
 			src_oloc.nspace);
 	  if (src == soid) {
 	    dout(20) << " copy from self is invalid" << dendl;
