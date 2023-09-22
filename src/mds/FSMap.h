@@ -205,8 +205,16 @@ public:
   void print(std::ostream& out) const;
 
   bool is_upgradeable() const {
-    return (mds_map.allows_standby_replay() && mds_map.get_num_in_mds() == 0)
-       || (!mds_map.allows_standby_replay() && mds_map.get_num_in_mds() <= 1);
+    bool asr = mds_map.allows_standby_replay();
+    auto in_mds = mds_map.get_num_in_mds();
+    auto up_mds = mds_map.get_num_up_mds();
+    return
+              /* fs was "down" */
+              (in_mds == 0)
+              /* max_mds was set to 1; asr must be disabled */
+           || (!asr && in_mds == 1)
+              /* max_mds any value and all MDS were failed; asr must be disabled */
+           || (!asr && up_mds == 0);
   }
 
   /**
