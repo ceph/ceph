@@ -300,6 +300,10 @@ void BlueFS::_init_logger()
 		    "auwb",
 		    PerfCountersBuilder::PRIO_CRITICAL,
 		    unit_t(UNIT_BYTES));
+  b.add_time_avg   (l_bluefs_read_random_lat, "read_random_lat",
+                    "Average bluefs read_random latency",
+                    "rdrt",
+                    PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64_counter(l_bluefs_read_random_count, "read_random_count",
 		    "random read requests processed",
 		    NULL,
@@ -338,6 +342,10 @@ void BlueFS::_init_logger()
 		    "Bytes read from prefetch buffer in random read mode",
 		    NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_time_avg   (l_bluefs_read_lat, "read_lat",
+                    "Average bluefs read latency",
+                    "rd_t",
+                    PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64_counter(l_bluefs_read_count, "read_count",
 		    "buffered read requests processed",
 		    NULL,
@@ -381,13 +389,29 @@ void BlueFS::_init_logger()
   b.add_u64_counter(l_bluefs_write_bytes, "write_bytes",
 		    "Bytes written", NULL,
 		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
- b.add_time_avg     (l_bluefs_compaction_lat, "compact_lat",
+  b.add_time_avg   (l_bluefs_compaction_lat, "compact_lat",
                     "Average bluefs log compaction latency",
                     "c__t",
                     PerfCountersBuilder::PRIO_INTERESTING);
- b.add_time_avg     (l_bluefs_compaction_lock_lat, "compact_lock_lat",
+  b.add_time_avg   (l_bluefs_compaction_lock_lat, "compact_lock_lat",
                     "Average lock duration while compacting bluefs log",
                     "c_lt",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg   (l_bluefs_fsync_lat, "fsync_lat",
+                    "Average bluefs fsync latency",
+                    "fs_t",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg   (l_bluefs_flush_lat, "flush_lat",
+                    "Average bluefs flush latency",
+                    "fl_t",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg   (l_bluefs_unlink_lat, "unlink_lat",
+                    "Average bluefs unlink latency",
+                    "unlt",
+                    PerfCountersBuilder::PRIO_INTERESTING);
+  b.add_time_avg   (l_bluefs_truncate_lat, "truncate_lat",
+                    "Average bluefs truncate latency",
+                    "trnt",
                     PerfCountersBuilder::PRIO_INTERESTING);
   b.add_u64_counter(l_bluefs_alloc_shared_dev_fallbacks, "alloc_slow_fallback",
 		    "Amount of allocations that required fallback to "
@@ -2086,6 +2110,7 @@ int64_t BlueFS::_read_random(
   uint64_t len,          ///< [in] this many bytes
   char *out)             ///< [out] copy it here
 {
+  auto t0 = mono_clock::now();
   auto* buf = &h->buf;
 
   int64_t ret = 0;
@@ -2171,6 +2196,7 @@ int64_t BlueFS::_read_random(
            << " got 0x" << ret
            << std::dec  << dendl;
   --h->file->num_reading;
+  logger->tinc(l_bluefs_read_random_lat, mono_clock::now() - t0);
   return ret;
 }
 
@@ -2181,6 +2207,7 @@ int64_t BlueFS::_read(
   bufferlist *outbl,     ///< [out] optional: reference the result here
   char *out)             ///< [out] optional: or copy it here
 {
+  auto t0 = mono_clock::now();
   FileReaderBuffer *buf = &(h->buf);
 
   bool prefetch = !outbl && !out;
@@ -2302,6 +2329,7 @@ int64_t BlueFS::_read(
            << std::dec  << dendl;
   ceph_assert(!outbl || (int)outbl->length() == ret);
   --h->file->num_reading;
+  logger->tinc(l_bluefs_read_lat, mono_clock::now() - t0);
   return ret;
 }
 
@@ -3369,6 +3397,7 @@ void BlueFS::flush_range(FileWriter *h, uint64_t offset, uint64_t length)/*_WF*/
 
 int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
 {
+  auto t0 = mono_clock::now();
   ceph_assert(ceph_mutex_is_locked(h->lock));
   ceph_assert(h->file->num_readers.load() == 0);
   ceph_assert(h->file->fnode.ino > 1);
@@ -3424,6 +3453,7 @@ int BlueFS::_flush_range_F(FileWriter *h, uint64_t offset, uint64_t length)
   dout(20) << __func__ << " file now, unflushed " << h->file->fnode << dendl;
   int res = _flush_data(h, offset, length, buffered);
   vselector->add_usage(h->file->vselector_hint, h->file->fnode);
+  logger->tinc(l_bluefs_flush_lat, mono_clock::now() - t0);
   return res;
 }
 
@@ -3645,6 +3675,7 @@ uint64_t BlueFS::_flush_special(FileWriter *h)
 
 int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
 {
+  auto t0 = mono_clock::now();
   std::lock_guard hl(h->lock);
   dout(10) << __func__ << " 0x" << std::hex << offset << std::dec
            << " file " << h->file->fnode << dendl;
@@ -3683,11 +3714,13 @@ int BlueFS::truncate(FileWriter *h, uint64_t offset)/*_WF_L*/
   h->file->is_dirty = true;
   vselector->add_usage(h->file->vselector_hint, h->file->fnode.size);
   log.t.op_file_update_inc(h->file->fnode);
+  logger->tinc(l_bluefs_truncate_lat, mono_clock::now() - t0);
   return 0;
 }
 
 int BlueFS::fsync(FileWriter *h)/*_WF_WD_WLD_WLNF_WNF*/
 {
+  auto t0 = mono_clock::now();
   _maybe_check_vselector_LNF();
   std::unique_lock hl(h->lock);
   uint64_t old_dirty_seq = 0;
@@ -3715,7 +3748,7 @@ int BlueFS::fsync(FileWriter *h)/*_WF_WD_WLD_WLNF_WNF*/
     _flush_and_sync_log_LD(old_dirty_seq);
   }
   _maybe_compact_log_LNF_NF_LD_D();
-
+  logger->tinc(l_bluefs_fsync_lat, mono_clock::now() - t0);
   return 0;
 }
 
@@ -4357,6 +4390,7 @@ int BlueFS::readdir(std::string_view dirname, vector<string> *ls)/*_N*/
 
 int BlueFS::unlink(std::string_view dirname, std::string_view filename)/*_LND*/
 {
+  auto t0 = mono_clock::now();
   std::lock_guard ll(log.lock);
   std::lock_guard nl(nodes.lock);
   dout(10) << __func__ << " " << dirname << "/" << filename << dendl;
@@ -4381,6 +4415,8 @@ int BlueFS::unlink(std::string_view dirname, std::string_view filename)/*_LND*/
   dir->file_map.erase(string{filename});
   log.t.op_dir_unlink(dirname, filename);
   _drop_link_D(file);
+  logger->tinc(l_bluefs_unlink_lat, mono_clock::now() - t0);
+
   return 0;
 }
 
