@@ -286,6 +286,7 @@ class TestCephAdm(object):
         for address, expected in tests:
             wrap_test(address, expected)
 
+    @mock.patch('cephadmlib.firewalld.Firewalld', mock_bad_firewalld)
     @mock.patch('cephadm.Firewalld', mock_bad_firewalld)
     @mock.patch('cephadm.logger')
     def test_skip_firewalld(self, _logger, cephadm_fs):
