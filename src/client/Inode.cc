@@ -120,6 +120,22 @@ void Inode::make_short_path(filepath& p)
 }
 
 /*
+ * make a filepath suitable for mds auth access check:
+ */
+bool Inode::make_path_string(std::string& s)
+{
+  if (client->_get_root_ino(false) == ino) {
+    return true;
+  } else if (!dentries.empty()) {
+    Dentry *dn = get_first_parent();
+    ceph_assert(dn->dir && dn->dir->parent_inode);
+    return dn->make_path_string(s);
+  }
+
+  return false;
+}
+
+/*
  * make a filepath suitable for an mds request:
  *  - if we are non-snapped/live, the ino is sufficient, e.g. #1234
  *  - if we are snapped, make filepath relative to first non-snapped parent.
