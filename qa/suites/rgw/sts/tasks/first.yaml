@@ -9,6 +9,13 @@ tasks:
       rgw_server: client.0
       extra_attrs: ['webidentity_test']
 overrides:
+  install:
+    ceph:
+      extra_system_packages:
+        rpm:
+        - java-17-openjdk-headless
+        deb:
+        - openjdk-17-jdk-headless
   ceph:
     conf:
       client:
