@@ -34,7 +34,6 @@ set(mds_srcs
   snap.cc
   SessionMap.cc
   MDSContext.cc
-  MDSAuthCaps.cc
   MDLog.cc
   MDSCacheObject.cc
   Mantle.cc

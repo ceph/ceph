@@ -32,6 +32,7 @@
 #include "include/unordered_set.h"
 #include "include/cephfs/metrics/Types.h"
 #include "mds/mdstypes.h"
+#include "mds/MDSAuthCaps.h"
 #include "include/cephfs/types.h"
 #include "msg/Dispatcher.h"
 #include "msg/MessageRef.h"
@@ -550,6 +551,9 @@ public:
              mode_t mode=0, const std::map<std::string, std::string> &metadata={});
   int rmsnap(const char *path, const char *name, const UserPerm& perm, bool check_perms=false);
 
+  // cephx mds auth caps checking
+  int mds_check_access(std::string& path, const UserPerm& perms, int mask);
+
   // Inode permission checking
   int inode_permission(Inode *in, const UserPerm& perms, unsigned want);
 
@@ -700,6 +704,7 @@ public:
 
   client_t get_nodeid() { return whoami; }
 
+  inodeno_t _get_root_ino(bool fake=true);
   inodeno_t get_root_ino();
   Inode *get_root();
 
@@ -1536,9 +1541,9 @@ private:
   };
 
   enum {
-    MAY_EXEC = 1,
-    MAY_WRITE = 2,
-    MAY_READ = 4,
+    CLIENT_MAY_EXEC = 1,
+    CLIENT_MAY_WRITE = 2,
+    CLIENT_MAY_READ = 4,
   };
 
   typedef std::function<void(dir_result_t*, MetaRequest*, InodeRef&, frag_t)> fill_readdir_args_cb_t;
@@ -1901,6 +1906,8 @@ private:
   uint64_t nr_metadata_request = 0;
   uint64_t nr_read_request = 0;
   uint64_t nr_write_request = 0;
+
+  std::vector<MDSCapAuth> cap_auths;
 };
 
 /**

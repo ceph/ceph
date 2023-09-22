@@ -74,13 +74,13 @@ int do_mon_command(string s, string *key)
   return r;
 }
 
-string get_unique_dir()
+string get_unique_dir(string name)
 {
-  return string("/ceph_test_libcephfs_access.") + stringify(rand());
+  return string("/ceph_test_libcephfs_access.") + name + string(".") + stringify(rand());
 }
 
 TEST(AccessTest, Foo) {
-  string dir = get_unique_dir();
+  string dir = get_unique_dir("foo");
   string user = "libcephfs_foo_test." + stringify(rand());
   // admin mount to set up test
   struct ceph_mount_info *admin;
@@ -113,8 +113,8 @@ TEST(AccessTest, Foo) {
 }
 
 TEST(AccessTest, Path) {
-  string good = get_unique_dir();
-  string bad = get_unique_dir();
+  string good = get_unique_dir("good");
+  string bad = get_unique_dir("bad");
   string user = "libcephfs_path_test." + stringify(rand());
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
@@ -199,8 +199,8 @@ TEST(AccessTest, Path) {
 }
 
 TEST(AccessTest, ReadOnly) {
-  string dir = get_unique_dir();
-  string dir2 = get_unique_dir();
+  string dir = get_unique_dir("dir");
+  string dir2 = get_unique_dir("dir2");
   string user = "libcephfs_readonly_test." + stringify(rand());
   struct ceph_mount_info *admin;
   ASSERT_EQ(0, ceph_create(&admin, NULL));
@@ -243,7 +243,7 @@ TEST(AccessTest, ReadOnly) {
 }
 
 TEST(AccessTest, User) {
-  string dir = get_unique_dir();
+  string dir = get_unique_dir("user");
   string user = "libcephfs_user_test." + stringify(rand());
 
   // admin mount to set up test
