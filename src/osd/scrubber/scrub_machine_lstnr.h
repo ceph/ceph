@@ -190,8 +190,11 @@ struct ScrubMachineListener {
    * and that PG is trying to acquire replica resources.
    * set_reserving_now()/clear_reserving_now() let's the OSD scrub-queue know
    * we are busy reserving.
+   *
+   * set_reserving_now() returns 'false' if there already is a PG in the
+   * reserving stage of the scrub session.
    */
-  virtual void set_reserving_now() = 0;
+  virtual bool set_reserving_now() = 0;
   virtual void clear_reserving_now() = 0;
 
   /**

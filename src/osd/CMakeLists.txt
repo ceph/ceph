@@ -22,9 +22,12 @@ set(osd_srcs
   PGBackend.cc
   OSDCap.cc
   scrubber/pg_scrubber.cc
+  scrubber/osd_scrub.cc
   scrubber/osd_scrub_sched.cc
   scrubber/PrimaryLogScrub.cc
+  scrubber/scrub_job.cc
   scrubber/scrub_machine.cc
+  scrubber/scrub_resources.cc
   scrubber/ScrubStore.cc
   scrubber/scrub_backend.cc
   Watch.cc
