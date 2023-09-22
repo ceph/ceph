@@ -3183,7 +3183,7 @@ void MDSRank::command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Format
   std::lock_guard l(mds_lock);
   CInode *in = mdcache->cache_traverse(filepath(root.c_str()));
   if (!in) {
-    ss << "root inode is not in cache";
+    ss << "inode for path '" << filepath(root.c_str()) << "' is not in cache";
     return;
   }
   f->open_array_section("inodes");
