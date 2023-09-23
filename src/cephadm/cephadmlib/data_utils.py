@@ -138,7 +138,11 @@ def try_convert_datetime(s):
     for f in fmts:
         try:
             # return timestamp normalized to UTC, rendered as DATEFMT.
-            return datetime.datetime.strptime(s, f).astimezone(tz=datetime.timezone.utc).strftime(DATEFMT)
+            return (
+                datetime.datetime.strptime(s, f)
+                .astimezone(tz=datetime.timezone.utc)
+                .strftime(DATEFMT)
+            )
         except ValueError:
             pass
     return None
@@ -188,6 +192,8 @@ def get_legacy_config_fsid(cluster, legacy_dir=None):
 
     if os.path.exists(config_file):
         config = read_config(config_file)
-        if config.has_section('global') and config.has_option('global', 'fsid'):
+        if config.has_section('global') and config.has_option(
+            'global', 'fsid'
+        ):
             return config.get('global', 'fsid')
     return None
