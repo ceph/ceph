@@ -46,7 +46,6 @@ int main(int argc, char *argv[])
 		ret = ceph_rename(cmount, "2", "1");
 		assert(ret >= 0);
 
-		ceph_unmount(cmount);
 		printf("child exits\n");
 	} else {
 		ret = ceph_mkdirs(cmount, "1/2", 0755);
@@ -78,8 +77,10 @@ int main(int argc, char *argv[])
 		ret = ceph_statx(cmount, ".", &stx, 0, 0);
 		assert(ret >= 0);
 
-		printf("waiting for crash\n");
-        sleep(60);
+		printf("waiting for 60 seconds to see whether will it crash\n");
+		sleep(60);
+		printf("parent exits\n");
 	}
+	ceph_unmount(cmount);
 	return 0;
 }
