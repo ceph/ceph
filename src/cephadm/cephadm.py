@@ -262,7 +262,7 @@ class OSD(Ceph):
 
 
 @register_daemon_form
-class SNMPGateway(DaemonForm):
+class SNMPGateway(ContainerDaemonForm):
     """Defines an SNMP gateway between Prometheus and SNMP monitoring Frameworks"""
     daemon_type = 'snmp-gateway'
     SUPPORTED_VERSIONS = ['V2c', 'V3']
@@ -413,6 +413,12 @@ class SNMPGateway(DaemonForm):
 
         if not self.destination:
             raise Error('config is missing destination attribute(<ip>:<port>) of the target SNMP listener')
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return self.uid, self.gid
 
 
 ##################################
@@ -5241,18 +5247,6 @@ def _dispatch_deploy(
             endpoints=daemon_endpoints,
         )
 
-    elif daemon_type == SNMPGateway.daemon_type:
-        sc = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
-        c = get_deployment_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            sc.uid,
-            sc.gid,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
-        )
     else:
         try:
             _deploy_daemon_container(
