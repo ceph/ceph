@@ -1396,7 +1396,7 @@ class Tracing(DaemonForm):
 
 
 @register_daemon_form
-class CustomContainer(DaemonForm):
+class CustomContainer(ContainerDaemonForm):
     """Defines a custom container"""
     daemon_type = 'container'
 
@@ -1518,6 +1518,39 @@ class CustomContainer(DaemonForm):
                     bind[index] = 'source={}'.format(os.path.join(
                         data_dir, match.group(1)))
         return binds
+
+    # Cache the container so we don't need to rebuild it again when calling
+    # into init_containers
+    _container: Optional[CephContainer] = None
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        if self._container is None:
+            self._container = get_deployment_container(
+                ctx,
+                self.identity,
+                privileged=self.privileged,
+                ptrace=ctx.allow_ptrace,
+            )
+        return self._container
+
+    def init_containers(self, ctx: CephadmContext) -> List[InitContainer]:
+        primary = self.container(ctx)
+        init_containers: List[Dict[str, Any]] = getattr(
+            ctx, 'init_containers', []
+        )
+        return [
+            InitContainer.from_primary_and_opts(ctx, primary, ic_opts)
+            for ic_opts in init_containers
+        ]
+
+    def customize_container_endpoints(
+        self, endpoints: List[EndPoint], deployment_type: DeploymentType
+    ) -> None:
+        if deployment_type == DeploymentType.DEFAULT:
+            endpoints.extend([EndPoint('0.0.0.0', p) for p in self.ports])
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return self.uid, self.gid
 
 
 ##################################
@@ -4972,17 +5005,6 @@ def get_deployment_container(
     return c
 
 
-def get_deployment_init_containers(
-    ctx: CephadmContext,
-    primary_container: 'CephContainer',
-) -> List['InitContainer']:
-    init_containers: List[Dict[str, Any]] = getattr(ctx, 'init_containers', [])
-    return [
-        InitContainer.from_primary_and_opts(ctx, primary_container, ic_opts)
-        for ic_opts in init_containers
-    ]
-
-
 def get_deployment_type(
     ctx: CephadmContext, ident: 'DaemonIdentity',
 ) -> DeploymentType:
@@ -5203,31 +5225,6 @@ def _dispatch_deploy(
             gid,
             deployment_type=deployment_type,
             endpoints=daemon_endpoints,
-        )
-
-    elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
-        # only check ports if this is a fresh deployment
-        if deployment_type == DeploymentType.DEFAULT:
-            daemon_endpoints.extend([EndPoint('0.0.0.0', p) for p in cc.ports])
-        c = get_deployment_container(
-            ctx, ident, privileged=cc.privileged, ptrace=ctx.allow_ptrace
-        )
-        ics = get_deployment_init_containers(
-            ctx,
-            c,
-        )
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid=cc.uid,
-            gid=cc.gid,
-            config=None,
-            keyring=None,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
-            init_containers=ics,
         )
 
     elif daemon_type == CephadmAgent.daemon_type:
