@@ -278,16 +278,16 @@ the client and the monitor share a secret key.
                 | transmit key  |
                 |               |
 
-To authenticate with the monitor, the client passes in the user name to the
-monitor, and the monitor generates a session key and encrypts it with the secret
-key associated to the user name. Then, the monitor transmits the encrypted
-ticket back to the client. The client then decrypts the payload with the shared
-secret key to retrieve the session key. The session key identifies the user for
-the current session. The client then requests a ticket on behalf of the user
-signed by the session key. The monitor generates a ticket, encrypts it with the
-user's secret key and transmits it back to the client. The client decrypts the
-ticket and uses it to sign requests to OSDs and metadata servers throughout the
-cluster.
+Here is how a client authenticates with a monitor. The client passes the user
+name to the monitor. The monitor generates a session key that is encrypted with
+the secret key associated with the ``username``. The monitor transmits the
+encrypted ticket to the client. The client uses the shared secret key to
+decrypt the payload. The session key identifies the user, and this act of
+identification will last for the duration of the session.  The client requests
+a ticket for the user, and the ticket is signed with the session key. The
+monitor generates a ticket and uses the user's secret key to encrypt it. The
+encrypted ticket is transmitted to the client. The client decrypts the ticket
+and uses it to sign requests to OSDs and to metadata servers in the cluster.
 
 .. ditaa::
 
