@@ -207,9 +207,13 @@ def get_ipv6_address(ifname):
         field = iface_setting.split()
         if field[-1] == ifname:
             ipv6_raw = field[0]
-            ipv6_fmtd = ':'.join(
-                [ipv6_raw[_p: _p + 4] for _p in range(0, len(field[0]), 4)]
-            )
+            ipv6_fmt_pieces = []
+            for p in range(0, len(field[0]), 4):
+                ipv6_fmt_piece = ''.join(
+                    [ipv6_raw[_p] for _p in range(p, p + 4)]
+                )
+                ipv6_fmt_pieces.append(ipv6_fmt_piece)
+            ipv6_fmtd = ':'.join(ipv6_fmt_pieces)
             # apply naming rules using ipaddress module
             ipv6 = ipaddress.ip_address(ipv6_fmtd)
             return '{}/{}'.format(str(ipv6), int('0x{}'.format(field[2]), 16))
@@ -248,13 +252,15 @@ def parse_mon_addrv(addrv_arg: str) -> List[EndPoint]:
     if addr_arg[0] != '[' or addr_arg[-1] != ']':
         raise Error(f'--mon-addrv value {addr_arg} must use square brackets')
 
-    for addr in addr_arg[1: -1].split(','):
+    for addr in addr_arg[1:-1].split(','):
         hasport = r.findall(addr)
         if not hasport:
-            raise Error(f'--mon-addrv value {addr_arg} must include port number')
+            raise Error(
+                f'--mon-addrv value {addr_arg} must include port number'
+            )
         port_str = hasport[0]
         addr = re.sub(r'^v\d+:', '', addr)  # strip off v1: or v2: prefix
-        base_ip = addr[0:-(len(port_str)) - 1]
+        base_ip = addr[: -(len(port_str)) - 1]
         addrv_args.append(EndPoint(base_ip, int(port_str)))
 
     return addrv_args
@@ -267,7 +273,7 @@ def parse_mon_ip(mon_ip: str) -> List[EndPoint]:
     hasport = r.findall(mon_ip)
     if hasport:
         port_str = hasport[0]
-        base_ip = mon_ip[0:-(len(port_str)) - 1]
+        base_ip = mon_ip[: -(len(port_str)) - 1]
         addrv_args.append(EndPoint(base_ip, int(port_str)))
     else:
         # No port provided: use fixed ports for ceph monitor
@@ -280,7 +286,9 @@ def parse_mon_ip(mon_ip: str) -> List[EndPoint]:
 def build_addrv_params(addrv: List[EndPoint]) -> str:
     """Convert mon end-points (ip:port) into the format: [v[1|2]:ip:port1]"""
     if len(addrv) > 2:
-        raise Error('Detected a local mon-addrv list with more than 2 entries.')
+        raise Error(
+            'Detected a local mon-addrv list with more than 2 entries.'
+        )
     port_to_ver: Dict[int, str] = {6789: 'v1', 3300: 'v2'}
     addr_arg_list: List[str] = []
     for ep in addrv:
