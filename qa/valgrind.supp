@@ -674,3 +674,15 @@
   fun:EVP_DecryptFinal_ex
   ...
 }
+{
+   tracker #62141 : valgrind: UninitCondition under __run_exit_handlers
+   Memcheck:Cond
+   fun:free
+   fun:free_res
+   fun:__libc_freeres
+   fun:_vgnU_freeres
+   fun:__run_exit_handlers
+   fun:exit
+   fun:(below main)
+}
+
