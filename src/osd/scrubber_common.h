@@ -383,11 +383,6 @@ struct ScrubPgIF {
   // --------------- reservations -----------------------------------
 
   /**
-   *  message all replicas with a request to "unreserve" scrub
-   */
-  virtual void unreserve_replicas() = 0;
-
-  /**
    *  "forget" all replica reservations. No messages are sent to the
    *  previously-reserved.
    *

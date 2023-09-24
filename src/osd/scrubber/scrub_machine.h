@@ -127,6 +127,11 @@ MEV(SchedReplica)
 /// that is in-flight to the local ObjectStore
 MEV(ReplicaPushesUpd)
 
+/// a new interval has dawned.
+/// For a Primary: Discards replica reservations, so that the FullReset that would
+/// follow it would not attempt to release them.
+MEV(IntervalChanged)
+
 /// guarantee that the FSM is in the quiescent state (i.e. NotActive)
 MEV(FullReset)
 
@@ -202,7 +207,7 @@ public:
    * from being delivered.  The intended usage is to invoke
    * schedule_timer_event_after in the constructor of the state machine state
    * intended to handle the event and assign the returned timer_event_token_t
-   * to a member of that state. That way, exiting the state will implicitely
+   * to a member of that state. That way, exiting the state will implicitly
    * cancel the event.  See RangedBlocked::m_timeout_token and
    * RangeBlockedAlarm for an example usage.
    */
@@ -338,12 +343,15 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
  *  reservations are released. This is because we know that the replicas are
  *  also resetting their reservations.
  */
-struct Session : sc::state<Session, ScrubMachine, ReservingReplicas>, NamedSimply {
+struct Session : sc::state<Session, ScrubMachine, ReservingReplicas>,
+                 NamedSimply {
   explicit Session(my_context ctx);
   ~Session();
 
-  using reactions = mpl::list<sc::transition<FullReset, NotActive>>;
-  /// \todo handle interval change
+  using reactions = mpl::list<sc::transition<FullReset, NotActive>,
+                              sc::custom_reaction<IntervalChanged>>;
+
+  sc::result react(const IntervalChanged&);
 };
 
 struct ReservingReplicas : sc::state<ReservingReplicas, Session>,

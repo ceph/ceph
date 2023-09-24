@@ -90,90 +90,119 @@ struct BuildMap;
 /**
  * Reserving/freeing scrub resources at the replicas.
  *
- * When constructed - sends reservation requests to the acting_set.
+ * When constructed - sends reservation requests to the acting_set OSDs, one
+ * by one.
+ * Once a replica's OSD replies with a 'grant'ed reservation, we send a
+ * reservation request to the next replica.
  * A rejection triggers a "couldn't acquire the replicas' scrub resources"
- * event. All previous requests, whether already granted or not, are explicitly
- * released.
+ * event. All granted reservations are released.
+ *
+ * Reserved replicas should be released at the end of the scrub session. The
+ * one exception is if the scrub terminates upon an interval change. In that
+ * scenario - the replicas discard their reservations on their own accord
+ * when noticing the change in interval, and there is no need (and no
+ * guaranteed way) to send them the release message.
  *
  * Timeouts:
  *
  *  Slow-Secondary Warning:
- *  Once at least half of the replicas have accepted the reservation, we start
- *  reporting any secondary that takes too long (more than <conf> milliseconds
- *  after the previous response received) to respond to the reservation request.
- *  (Why? because we have encountered real-life situations where a specific OSD
- *  was systematically very slow (e.g. 5 seconds) to respond to the reservation
- *  requests, slowing the scrub process to a crawl).
+ *  Warn if a replica takes more than <conf> milliseconds to reply to a
+ *  reservation request. Only one warning is issued per session.
  *
  *  Reservation Timeout:
  *  We limit the total time we wait for the replicas to respond to the
- *  reservation request. If we don't get all the responses (either Grant or
- *  Reject) within <conf> milliseconds, we give up and release all the
- *  reservations we have acquired so far.
+ *  reservation request. If the reservation back-and-forth does not complete
+ *  within <conf> milliseconds, we give up and release all the reservations
+ *  that have been acquired until that moment.
  *  (Why? because we have encountered instances where a reservation request was
  *  lost - either due to a bug or due to a network issue.)
- *
- * A note re performance: I've measured a few container alternatives for
- * m_reserved_peers, with its specific usage pattern. Std::set is extremely
- * slow, as expected. flat_set is only slightly better. Surprisingly -
- * std::vector (with no sorting) is better than boost::small_vec. And for
- * std::vector: no need to pre-reserve.
  */
 class ReplicaReservations {
-  using clock = std::chrono::system_clock;
-  using tpoint_t = std::chrono::time_point<clock>;
+  using clock = ceph::coarse_real_clock;
 
+  ScrubMachineListener& m_scrubber;
   PG* m_pg;
-  std::set<pg_shard_t> m_acting_set;
+
+  /// shorthand for m_scrubber.get_spgid().pgid
+  const pg_t m_pgid;
+
+  /// for dout && when queueing messages to the FSM
   OSDService* m_osds;
-  std::vector<pg_shard_t> m_waited_for_peers;
-  std::vector<pg_shard_t> m_reserved_peers;
-  bool m_had_rejections{false};
-  int m_pending{-1};
-  const pg_info_t& m_pg_info;
-  Scrub::ScrubJobRef m_scrub_job;	///< a ref to this PG's scrub job
-  const ConfigProxy& m_conf;
 
-  // detecting slow peers (see 'slow-secondary' above)
-  std::chrono::milliseconds m_timeout;
-  std::optional<tpoint_t> m_timeout_point;
+  /// the acting set (not including myself), sorted by pg_shard_t
+  std::vector<pg_shard_t> m_sorted_secondaries;
 
-  void release_replica(pg_shard_t peer, epoch_t epoch);
+  /// the next replica to which we will send a reservation request
+  std::vector<pg_shard_t>::const_iterator m_next_to_request;
 
-  void send_all_done();	 ///< all reservations are granted
+  /// for logs, and for detecting slow peers
+  clock::time_point m_last_request_sent_at;
 
-  /// notify the scrubber that we have failed to reserve replicas' resources
-  void send_reject();
-
-  std::optional<tpoint_t> update_latecomers(tpoint_t now_is);
+  /// used to prevent multiple "slow response" warnings
+  bool m_slow_response_warned{false};
 
  public:
-  std::string m_log_msg_prefix;
-
-  /**
-   *  quietly discard all knowledge about existing reservations. No messages
-   *  are sent to peers.
-   *  To be used upon interval change, as we know the the running scrub is no
-   *  longer relevant, and that the replicas had reset the reservations on
-   *  their side.
-   */
-  void discard_all();
-
-  ReplicaReservations(PG* pg,
-                      pg_shard_t whoami,
-                      Scrub::ScrubJobRef scrubjob,
-                      const ConfigProxy& conf); 
+  ReplicaReservations(ScrubMachineListener& scrubber);
 
   ~ReplicaReservations();
 
+  /**
+   * The OK received from the replica (after verifying that it is indeed
+   * the replica we are expecting a reply from) is noted, and triggers
+   * one of two: either sending a reservation request to the next replica,
+   * or notifying the scrubber that we have reserved them all.
+   */
   void handle_reserve_grant(OpRequestRef op, pg_shard_t from);
+
+  /**
+   * Verify that the sender of the received rejection is the replica we
+   * were expecting a reply from.
+   * If this is so - just mark the fact that the specific peer need not
+   * be released.
+   *
+   * Note - the actual handling of scrub session termination and of
+   * releasing the reserved replicas is done by the caller (the FSM).
+   */
+  void verify_rejections_source(OpRequestRef op, pg_shard_t from);
 
   void handle_reserve_reject(OpRequestRef op, pg_shard_t from);
 
-  // if timing out on receiving replies from our replicas:
-  void handle_no_reply_timeout();
+  /**
+   * Notifies implementation that it is no longer responsible for releasing
+   * tracked remote reservations.
+   *
+   * The intended usage is upon interval change.  In general, replicas are
+   * responsible for releasing their own resources upon interval change without
+   * coordination from the primary.
+   *
+   * Sends no messages.
+   */
+  void discard_remote_reservations();
 
-  std::ostream& gen_prefix(std::ostream& out) const;
+  // note: 'public', as accessed via the 'standard' dout_prefix() macro
+  std::ostream& gen_prefix(std::ostream& out, std::string fn) const;
+
+ private:
+  /// send 'release' messages to all replicas we have managed to reserve
+  void release_all();
+
+  /// send a reservation request to a replica's OSD
+  void send_request_to_replica(pg_shard_t peer, epoch_t epoch);
+
+  /// let the scrubber know that we have reserved all the replicas
+  void send_all_done();
+
+  /// the only replica we are expecting a reply from
+  std::optional<pg_shard_t> get_last_sent() const;
+
+  /// The number of requests that have been sent (and not rejected) so far.
+  size_t active_requests_cnt() const;
+
+  /**
+   * Either send a reservation request to the next replica, or notify the
+   * scrubber that we have reserved all the replicas.
+   */
+  void send_next_reservation_or_complete();
 };
 
 /**
@@ -348,9 +377,6 @@ class PgScrubber : public ScrubPgIF,
   void handle_scrub_reserve_release(OpRequestRef op) final;
   void discard_replica_reservations() final;
   void clear_scrub_reservations() final;  // PG::clear... fwds to here
-  void unreserve_replicas() final;
-  void on_replica_reservation_timeout() final;
-
 
   // managing scrub op registration
 
@@ -453,10 +479,14 @@ class PgScrubber : public ScrubPgIF,
   // the I/F used by the state-machine (i.e. the implementation of
   // ScrubMachineListener)
 
-  CephContext* get_cct() const final { return m_pg->cct; }
   LogChannelRef &get_clog() const final;
   int get_whoami() const final;
   spg_t get_spgid() const final { return m_pg->get_pgid(); }
+  PG* get_pg() const final { return m_pg; }
+
+  // temporary interface (to be discarded in a follow-up PR)
+  /// set the 'resources_failure' flag in the scrub-job object
+  void flag_reservations_failure();
 
   scrubber_callback_cancel_token_t schedule_callback_after(
     ceph::timespan duration, scrubber_callback_t &&cb);
@@ -870,14 +900,6 @@ class PgScrubber : public ScrubPgIF,
   bool select_range();
 
   std::list<Context*> m_callbacks;
-
-  /**
-   * send a replica (un)reservation request to the acting set
-   *
-   * @param opcode - one of MOSDScrubReserve::REQUEST
-   *                  or MOSDScrubReserve::RELEASE
-   */
-  void message_all_replicas(int32_t opcode, std::string_view op_text);
 
   hobject_t m_max_end;	///< Largest end that may have been sent to replicas
   ScrubMapBuilder m_primary_scrubmap_pos;
