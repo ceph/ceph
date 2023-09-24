@@ -155,6 +155,7 @@ def with_cephadm_ctx(
          mock.patch('cephadm.is_available', return_value=True), \
          mock.patch('cephadm.json_loads_retry', return_value={'epoch' : 1}), \
          mock.patch('cephadm.logger'), \
+         mock.patch('cephadm.FileLock'), \
          mock.patch('socket.gethostname', return_value=hostname):
         ctx: _cephadm.CephadmContext = _cephadm.cephadm_init_ctx(cmd)
         ctx.container_engine = mock_podman()
