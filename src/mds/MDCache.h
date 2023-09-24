@@ -143,7 +143,20 @@ static const int PREDIRTY_SHALLOW = 4; // only go to immediate parent (for easie
 
 using namespace std::literals::chrono_literals;
 
-class MDCache {
+struct MDCacheLogProxy {
+  virtual void oft_trim_destroyed_inos(uint64_t seq) = 0;
+  virtual bool oft_try_to_commit(MDSContext *c, uint64_t log_seq, int op_prio) = 0;
+  virtual uint64_t oft_get_committed_log_seq() = 0;
+  virtual void advance_stray() = 0;
+  virtual ESubtreeMap * create_subtree_map() = 0;
+  virtual void standby_trim_segment(LogSegment *ls) = 0;
+  virtual std::pair<bool, uint64_t> trim(uint64_t count=0) = 0;
+  virtual bool is_readonly() = 0;
+  virtual file_layout_t const * get_default_log_layout() = 0;
+  virtual ~MDCacheLogProxy() { }
+};
+
+class MDCache: public MDCacheLogProxy {
  public:
   typedef std::map<mds_rank_t, ref_t<MCacheExpire>> expiremap;
 
@@ -207,6 +220,35 @@ class MDCache {
 
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
+
+  void oft_trim_destroyed_inos(uint64_t seq)
+  {
+    open_file_table.trim_destroyed_inos(seq);
+  }
+
+  bool oft_try_to_commit(MDSContext *c, uint64_t log_seq, int op_prio)
+  {
+    if (open_file_table.is_any_committing())
+      return false;
+
+    // when there have dirty items, maybe there has no any new log event
+    if (open_file_table.is_any_dirty() || log_seq > open_file_table.get_committed_log_seq()) {
+      open_file_table.commit(c, log_seq, op_prio);
+      return true;
+    }
+
+    return false;
+  }
+
+  uint64_t oft_get_committed_log_seq()
+  {
+    return open_file_table.get_committed_log_seq();
+  }
+
+  file_layout_t const * get_default_log_layout() {
+    return &default_log_layout;
+  }
+  
 
   void insert_taken_inos(inodeno_t ino) {
     replay_taken_inos.insert(ino);

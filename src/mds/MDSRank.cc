@@ -599,6 +599,8 @@ MDSRank::~MDSRank()
   objecter = nullptr;
 }
 
+MDCacheLogProxy*  MDSRank::get_cache_log_proxy() const { return mdcache; }
+
 inline Journaler* MDSRank::make_journaler(const char* name, inodeno_t ino, const char* magic, PerfCounters* latency_logger, int latency_key) const {
   return new RadosJournaler(
     name,

@@ -192,7 +192,7 @@ void MDLog::create(MDSContext *c)
   ceph_assert(journaler->is_readonly());
   journaler->set_write_error_handler(new C_MDL_WriteError(this));
   journaler->set_writeable();
-  journaler->create(&mds->get_cache()->default_log_layout, g_conf()->mds_journal_format);
+  journaler->create(mds->get_cache_log_proxy()->get_default_log_layout(), g_conf()->mds_journal_format);
   journaler->write_head(gather.new_sub());
 
   // Async write JournalPointer to RADOS
@@ -289,7 +289,7 @@ const AutoSharedLogSegment& MDLog::_start_new_segment(SegmentBoundary* sb)
 
   // Adjust to next stray dir
   if (!mds->is_stopping()) {
-    mds->get_cache()->advance_stray();
+    mds->get_cache_log_proxy()->advance_stray();
   }
   return iter->second;;
 }
@@ -348,7 +348,7 @@ void MDLog::segment_upkeep()
   // start a new segment?
   if (events_since_last_major_segment > events_per_segment*major_segment_event_ratio) {
     dout(10) << __func__ << ": starting new major segment, current " << *ls << dendl;
-    auto sle = mds->get_cache()->create_subtree_map();
+    auto sle = mds->get_cache_log_proxy()->create_subtree_map();
     submit_entry(sle, NULL);
   } else if (ls->get_end()/period != ls->get_offset()/period || ls->num_events >= events_per_segment) {
     dout(10) << __func__ << ": starting new segment, current " << *ls << dendl;
@@ -359,7 +359,7 @@ void MDLog::segment_upkeep()
     // use a different event id so it doesn't get interpreted as a
     // LogSegment boundary on replay.
     dout(10) << __func__ << ": creating test subtree map" << dendl;
-    auto sle = mds->get_cache()->create_subtree_map();
+    auto sle = mds->get_cache_log_proxy()->create_subtree_map();
     sle->set_type(EVENT_SUBTREEMAP_TEST);
     submit_entry(sle, NULL);
   }
@@ -600,14 +600,13 @@ void MDLog::try_to_commit_open_file_table(uint64_t last_seq)
   if (mds_is_shutting_down) // shutting down the MDS
     return;
 
-  if (mds->get_cache()->open_file_table.is_any_committing())
-    return;
-
-  // when there have dirty items, maybe there has no any new log event
-  if (mds->get_cache()->open_file_table.is_any_dirty() ||
-      last_seq > mds->get_cache()->open_file_table.get_committed_log_seq()) {
-    mds->get_cache()->open_file_table.commit(new C_OFT_Committed(this, last_seq),
-                                         last_seq, CEPH_MSG_PRIO_HIGH);
+  auto c = new C_OFT_Committed(this, last_seq);
+  if (!mds->get_cache_log_proxy()->oft_try_to_commit(
+    c,
+    last_seq,
+    CEPH_MSG_PRIO_HIGH
+  )) {
+    delete c;
   }
 }
 
@@ -648,7 +647,7 @@ void MDLog::trim()
   ceph_assert(ceph_mutex_is_locked_by_me(mds->get_lock()));
   int max_ev = max_live_events;
 
-  if (mds->get_cache()->is_readonly()) {
+  if (mds->get_cache_log_proxy()->is_readonly()) {
     dout(10) << __func__ << ": ignoring read-only FS" << dendl;
     return;
   }
@@ -852,7 +851,7 @@ void MDLog::try_expire(const AutoSharedLogSegment& ls, int op_prio)
 
 void MDLog::_maybe_expired(const AutoSharedLogSegment& ls, int op_prio)
 {
-  if (mds->get_cache()->is_readonly()) {
+  if (mds->get_cache_log_proxy()->is_readonly()) {
     dout(10) << "_maybe_expired, ignoring read-only FS" <<  dendl;
     return;
   }
@@ -872,7 +871,7 @@ void MDLog::trim_expired_segments()
     return;
   }
 
-  uint64_t const oft_committed_seq = mds->get_cache()->open_file_table.get_committed_log_seq();
+  uint64_t const oft_committed_seq = mds->get_cache_log_proxy()->oft_get_committed_log_seq();
 
   // trim expired segments?
   bool trimmed = false;
@@ -1002,7 +1001,7 @@ void MDLog::replay(MDSContext *c)
   // empty?
   if (journaler->get_read_pos() == journaler->get_write_pos()) {
     dout(10) << "replay - journal empty, done." << dendl;
-    mds->get_cache()->trim();
+    mds->get_cache_log_proxy()->trim();
     if (mds->is_standby_replay())
       mds->update_mlogger();
     if (c) {
@@ -1570,7 +1569,7 @@ void MDLog::standby_cleanup_trimmed_segments()
   uint64_t expire_pos = journaler->get_expire_pos();
   dout(10) << __func__ << " expire_pos=" << expire_pos << dendl;
 
-  mds->get_cache()->open_file_table.trim_destroyed_inos(expire_pos);
+  mds->get_cache_log_proxy()->oft_trim_destroyed_inos(expire_pos);
 
   uint64_t removed_segments = 0;
   while (unexpired_segments.size()) {
@@ -1594,8 +1593,8 @@ void MDLog::standby_cleanup_trimmed_segments()
       break;
     }
 
-    dout(10) << __func__ << " removing " << *ls << dendl;
-    mds->get_cache()->standby_trim_segment(ls);
+    dout(10) << " removing segment" << dendl;
+    mds->get_cache_log_proxy()->standby_trim_segment(ls);
     unexpired_segments.erase(it);
     ++removed_segments;
   }
@@ -1603,7 +1602,7 @@ void MDLog::standby_cleanup_trimmed_segments()
   num_replayed_segments -= std::min(num_replayed_segments, removed_segments);
   if (removed_segments) {
     dout(20) << " calling mdcache->trim!" << dendl;
-    mds->get_cache()->trim();
+    mds->get_cache_log_proxy()->trim();
   } else {
     dout(20) << " removed no segments!" << dendl;
   }

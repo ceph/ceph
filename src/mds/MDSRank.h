@@ -163,6 +163,7 @@ struct MDSRankBase
   virtual MDSMap* get_mds_map() const = 0;
   virtual const LogChannelRef& get_clog_ref() const = 0;
   virtual MDCache* get_cache() const = 0;
+  virtual MDCacheLogProxy* get_cache_log_proxy() const = 0;
   virtual MDLog* get_log() const = 0;
   virtual Finisher* get_finisher() const = 0;
   virtual MDBalancer* get_balancer() const = 0;
@@ -333,6 +334,7 @@ class MDSRank : public MDSRankBase {
     inline ceph::fair_mutex& get_lock() const { return mds_lock; }
     inline const LogChannelRef& get_clog_ref() const { return clog; }
     inline MDCache* get_cache() const { return mdcache; }
+    MDCacheLogProxy* get_cache_log_proxy() const;
     inline MDLog* get_log() const { return mdlog; }
     inline Finisher* get_finisher() const { return finisher; }
     inline MDBalancer* get_balancer() const { return balancer; }
