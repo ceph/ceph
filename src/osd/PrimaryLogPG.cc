@@ -6400,6 +6400,23 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       }
       break;
 
+   case CEPH_OSD_OP_GETINTERNALXATTRS:
+      ++ctx->num_read;
+      {
+	tracepoint(osd, do_osd_op_pre_getinternalxattrs, soid.oid.name.c_str(), soid.snap.val);
+	map<string, bufferlist,less<>> out;
+	result = getattrs_maybe_cache(
+	  ctx->obc,
+	  &out, true);
+
+        bufferlist bl;
+        encode(out, bl);
+	ctx->delta_stats.num_rd_kb += shift_round_up(bl.length(), 10);
+        ctx->delta_stats.num_rd++;
+        osd_op.outdata.claim_append(bl);
+      }
+      break;
+
     case CEPH_OSD_OP_CMPXATTR:
       ++ctx->num_read;
       {
@@ -15795,7 +15812,8 @@ int PrimaryLogPG::getattr_maybe_cache(
 
 int PrimaryLogPG::getattrs_maybe_cache(
   ObjectContextRef obc,
-  map<string, bufferlist, less<>> *out)
+  map<string, bufferlist, less<>> *out,
+  bool only_internal_xattrs)
 {
   int r = 0;
   ceph_assert(out);
@@ -15806,8 +15824,14 @@ int PrimaryLogPG::getattrs_maybe_cache(
   }
   map<string, bufferlist, less<>> tmp;
   for (auto& [key, val]: *out) {
-    if (key.size() > 1 && key[0] == '_') {
-      tmp[key.substr(1, key.size())] = std::move(val);
+    if (likely(!only_internal_xattrs)) {
+      if (key.size() > 1 && key[0] == '_') {
+        tmp[key.substr(1, key.size())] = std::move(val);
+      }
+    } else {
+      if (key.size() == 1 || key[0] != '_') {
+        tmp[key] = std::move(val);
+      }
     }
   }
   tmp.swap(*out);

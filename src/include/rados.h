@@ -338,6 +338,7 @@ extern const char *ceph_osd_state_name(int s);
 	f(GETXATTR,	__CEPH_OSD_OP(RD, ATTR, 1),	"getxattr")	    \
 	f(GETXATTRS,	__CEPH_OSD_OP(RD, ATTR, 2),	"getxattrs")	    \
 	f(CMPXATTR,	__CEPH_OSD_OP(RD, ATTR, 3),	"cmpxattr")	    \
+	f(GETINTERNALXATTRS, __CEPH_OSD_OP(RD, ATTR, 4), "getinternalxattrs") \
 									    \
 	/* write */							    \
 	f(SETXATTR,	__CEPH_OSD_OP(WR, ATTR, 1),	"setxattr")	    \

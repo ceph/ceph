@@ -152,6 +152,7 @@ struct librados::IoCtxImpl {
   int getxattr(const object_t& oid, const char *name, bufferlist& bl);
   int setxattr(const object_t& oid, const char *name, bufferlist& bl);
   int getxattrs(const object_t& oid, std::map<std::string, bufferlist>& attrset);
+  int getinternalxattrs(const object_t& oid, std::map<std::string, bufferlist>& attrset);
   int rmxattr(const object_t& oid, const char *name);
 
   int operate(const object_t& oid, ::ObjectOperation *o, ceph::real_time *pmtime, int flags=0);

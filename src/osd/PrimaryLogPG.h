@@ -1921,7 +1921,8 @@ public:
     ceph::buffer::list *val);
   int getattrs_maybe_cache(
     ObjectContextRef obc,
-    std::map<std::string, ceph::buffer::list, std::less<>> *out);
+    std::map<std::string, ceph::buffer::list, std::less<>> *out,
+    bool only_internal_xattrs=false);
 
 public:
   void set_dynamic_perf_stats_queries(

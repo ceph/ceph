@@ -846,6 +846,14 @@ struct ObjectOperation {
     set_handler(CB_ObjectOperation_decodevals(0, pattrs, nullptr, nullptr, ec));
     out_ec.back() = ec;
   }
+  void getinternalxattrs(std::map<std::string,ceph::buffer::list> *pattrs, int *prval) {
+    add_op(CEPH_OSD_OP_GETINTERNALXATTRS);
+    if (pattrs || prval) {
+      set_handler(CB_ObjectOperation_decodevals(0, pattrs, nullptr, prval,
+						nullptr));
+      out_rval.back() = prval;
+    }
+  }
   void setxattr(const char *name, const ceph::buffer::list& bl) {
     add_xattr(CEPH_OSD_OP_SETXATTR, name, bl);
   }
@@ -3329,6 +3337,23 @@ public:
     osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_GETXATTRS;
+    C_GetAttrs *fin = new C_GetAttrs(attrset, onfinish);
+    Op *o = new Op(oid, oloc, std::move(ops), flags | global_op_flags |
+		   CEPH_OSD_FLAG_READ, fin, objver);
+    o->snapid = snap;
+    o->outbl = &fin->bl;
+    ceph_tid_t tid;
+    op_submit(o, &tid);
+    return tid;
+  }
+
+  ceph_tid_t getinternalxattrs(const object_t& oid, const object_locator_t& oloc,
+		       snapid_t snap, std::map<std::string,ceph::buffer::list>& attrset,
+		       int flags, Context *onfinish, version_t *objver = NULL,
+		       ObjectOperation *extra_ops = NULL) {
+    osdc_opvec ops;
+    int i = init_ops(ops, 1, extra_ops);
+    ops[i].op.op = CEPH_OSD_OP_GETINTERNALXATTRS;
     C_GetAttrs *fin = new C_GetAttrs(attrset, onfinish);
     Op *o = new Op(oid, oloc, std::move(ops), flags | global_op_flags |
 		   CEPH_OSD_FLAG_READ, fin, objver);

@@ -1561,6 +1561,27 @@ int librados::IoCtxImpl::getxattrs(const object_t& oid,
   return r;
 }
 
+int librados::IoCtxImpl::getinternalxattrs(const object_t& oid,
+				     map<std::string, bufferlist>& attrset)
+{
+  map<string, bufferlist> aset;
+
+  ::ObjectOperation rd;
+  prepare_assert_ops(&rd);
+  rd.getinternalxattrs(&aset, NULL);
+  int r = operate_read(oid, &rd, NULL);
+
+  attrset.clear();
+  if (r >= 0) {
+    for (map<string,bufferlist>::iterator p = aset.begin(); p != aset.end(); ++p) {
+      ldout(client->cct, 10) << "IoCtxImpl::getxattrs: xattr=" << p->first << dendl;
+      attrset[p->first.c_str()] = p->second;
+    }
+  }
+
+  return r;
+}
+
 void librados::IoCtxImpl::set_sync_op_version(version_t ver)
 {
   ANNOTATE_BENIGN_RACE_SIZED(&last_objver, sizeof(last_objver),
