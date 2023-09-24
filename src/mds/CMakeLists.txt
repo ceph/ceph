@@ -7,6 +7,8 @@ set(mds_srcs
   flock.cc
   locks.c
   journal.cc
+  events/serializers.cc
+  events/test_instances.cc
   Server.cc
   Mutation.cc
   MDCache.cc
