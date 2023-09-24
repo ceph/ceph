@@ -3,14 +3,18 @@
 #include "mds/JournalPointer.h"
 
 class MemoryJournalPointerStore: public JournalPointerStore {
-  JournalPointer *backup;
+  mutable JournalPointer store;
 public:
-  MemoryJournalPointerStore(JournalPointer *backup) : backup(backup) { }
-  virtual int load() { pointer = *backup; return 0; };
+  MemoryJournalPointerStore(JournalPointer const* backup = nullptr) { 
+    if (backup) {
+      store = *backup;
+    }
+  }
+  virtual int load() { pointer = store; return 0; };
   virtual int save() const { save(nullptr); return 0; };
   virtual void save(Context *completion) const
   {
-    *backup = pointer;;
+    store = pointer;
     if (completion) {
       completion->complete(0);
     }

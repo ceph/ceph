@@ -28,7 +28,7 @@ class MemoryJournaler: public Journaler {
   void complete(Context *c, int r = 0) {
     if (c) {
       if (finisher) {
-        finisher->queue(c);
+        finisher->queue(c, r);
       } else {
         c->complete(r);
       }
