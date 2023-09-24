@@ -16,7 +16,9 @@
 #define CEPH_MDS_ESESSION_H
 
 #include "common/config.h"
-#include "include/types.h"
+#include "include/fs_types.h"
+#include "include/interval_set.h"
+#include "mds/mdstypes.h"
 
 #include "../LogEvent.h"
 
