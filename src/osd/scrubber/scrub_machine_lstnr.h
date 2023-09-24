@@ -48,10 +48,11 @@ struct preemption_t {
 }  // namespace Scrub
 
 struct ScrubMachineListener {
-  virtual CephContext *get_cct() const = 0;
+  virtual CephContext *get_pg_cct() const = 0;
   virtual LogChannelRef &get_clog() const = 0;
   virtual int get_whoami() const = 0;
   virtual spg_t get_spgid() const = 0;
+  virtual PG* get_pg() const = 0;
 
   using scrubber_callback_t = std::function<void(void)>;
   using scrubber_callback_cancel_token_t = Context*;
@@ -72,9 +73,9 @@ struct ScrubMachineListener {
   /**
    * cancel_callback
    *
-   * Attempts to cancel the callback to whcih the passed token is associated.
+   * Attempts to cancel the callback to which the passed token is associated.
    * cancel_callback is best effort, the callback may still fire.
-   * cancel_callback guarrantees that exactly one of the two things will happen:
+   * cancel_callback guarantees that exactly one of the two things will happen:
    * - the callback is destroyed and will not be invoked
    * - the callback will be invoked
    */
@@ -177,9 +178,8 @@ struct ScrubMachineListener {
    */
   virtual void reserve_replicas() = 0;
 
-  virtual void unreserve_replicas() = 0;
-
-  virtual void on_replica_reservation_timeout() = 0;
+  /// discard replica reservations without sending a message (on interval)
+  virtual void discard_replica_reservations() = 0;
 
   virtual void set_scrub_begin_time() = 0;
 
@@ -238,4 +238,8 @@ struct ScrubMachineListener {
 
   /// sending cluster-log warnings
   virtual void log_cluster_warning(const std::string& msg) const = 0;
+
+  // temporary interface (to be discarded in a follow-up PR)
+  /// set the 'resources_failure' flag in the scrub-job object
+  virtual void flag_reservations_failure() = 0;
 };
