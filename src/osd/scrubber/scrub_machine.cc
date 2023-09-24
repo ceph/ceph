@@ -140,6 +140,16 @@ Session::~Session()
   scrbr->clear_pgscrub_state();
 }
 
+sc::result Session::react(const IntervalChanged&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "Session::react(const IntervalChanged&)" << dendl;
+
+  /// \todo (future commit): the reservations will be local to this state
+  scrbr->discard_replica_reservations();
+  return transit<NotActive>();
+}
+
 
 // ----------------------- ReservingReplicas ---------------------------------
 
@@ -152,7 +162,7 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
 
   scrbr->reserve_replicas();
 
-  auto timeout = scrbr->get_cct()->_conf.get_val<
+  auto timeout = scrbr->get_pg_cct()->_conf.get_val<
     std::chrono::milliseconds>("osd_scrub_reservation_timeout");
   if (timeout.count() > 0) {
     // Start a timer to handle case where the replicas take a long time to
@@ -180,8 +190,11 @@ sc::result ReservingReplicas::react(const ReservationTimeout&)
       scrbr->get_spgid(), entered_at);
   dout(5) << msg << dendl;
   scrbr->get_clog()->warn() << "osd." << scrbr->get_whoami() << " " << msg;
-  scrbr->on_replica_reservation_timeout();
-  return discard_event();
+
+  // cause the scrubber to stop the scrub session, marking 'reservation
+  // failure' as the cause (affecting future scheduling)
+  scrbr->flag_reservations_failure();
+  return transit<NotActive>();
 }
 
 sc::result ReservingReplicas::react(const ReservationFailure&)
