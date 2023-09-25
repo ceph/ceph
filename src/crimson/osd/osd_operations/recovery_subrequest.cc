@@ -49,4 +49,10 @@ ConnectionPipeline &RecoverySubRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).peering_request_conn_pipeline;
 }
 
+PerShardPipeline &RecoverySubRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_peering_request_pipeline();
+}
+
 }
