@@ -49,6 +49,12 @@ ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
 }
 
+PerShardPipeline &LogMissingRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_replicated_request_pipeline();
+}
+
 ClientRequest::PGPipeline &LogMissingRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;

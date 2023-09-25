@@ -7,6 +7,7 @@
 #include <seastar/core/shared_future.hh>
 #include <seastar/core/sharded.hh>
 
+#include "crimson/osd/osd_connection_priv.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/pg_map.h"
 
@@ -149,6 +150,31 @@ public:
   }
 
   template <typename T, typename F>
+  auto process_ordered_op_remotely(
+      crosscore_ordering_t::seq_t cc_seq,
+      ShardServices &target_shard_services,
+      typename T::IRef &&op,
+      F &&f) {
+    auto &crosscore_ordering = get_osd_priv(&op->get_connection()).crosscore_ordering;
+    if (crosscore_ordering.proceed_or_wait(cc_seq)) {
+      return std::invoke(
+        std::move(f),
+        target_shard_services,
+        std::move(op));
+    } else {
+      auto &logger = crimson::get_logger(ceph_subsys_osd);
+      logger.debug("{} got {} at the remote pg, wait at {}",
+                   *op, cc_seq, crosscore_ordering.get_in_seq());
+      return crosscore_ordering.wait(cc_seq
+      ).then([this, cc_seq, &target_shard_services,
+              op=std::move(op), f=std::move(f)]() mutable {
+        return this->template process_ordered_op_remotely<T>(
+            cc_seq, target_shard_services, std::move(op), std::move(f));
+      });
+    }
+  }
+
+  template <typename T, typename F>
   auto with_remote_shard_state_and_op(
       core_id_t core,
       typename T::IRef &&op,
@@ -161,21 +187,28 @@ public:
         target_shard_services,
         std::move(op));
     }
+    // Note: the ordering in only preserved until f is invoked.
     auto &opref = *op;
-    get_local_state().registry.remove_from_registry(opref);
-    return opref.prepare_remote_submission(
-    ).then([op=std::move(op), f=std::move(f), this, core
-           ](auto f_conn) mutable {
+    auto &crosscore_ordering = get_osd_priv(&opref.get_connection()).crosscore_ordering;
+    auto cc_seq = crosscore_ordering.prepare_submit(core);
+    auto &logger = crimson::get_logger(ceph_subsys_osd);
+    logger.debug("{}: send {} to the remote pg core {}",
+                 opref, cc_seq, core);
+    return opref.get_handle().complete(
+    ).then([&opref, this] {
+      get_local_state().registry.remove_from_registry(opref);
+      return opref.prepare_remote_submission();
+    }).then([op=std::move(op), f=std::move(f), this, core, cc_seq
+            ](auto f_conn) mutable {
       return shard_services.invoke_on(
         core,
-        [f=std::move(f), op=std::move(op), f_conn=std::move(f_conn)
+        [this, cc_seq,
+         f=std::move(f), op=std::move(op), f_conn=std::move(f_conn)
         ](auto &target_shard_services) mutable {
         op->finish_remote_submission(std::move(f_conn));
         target_shard_services.local_state.registry.add_to_registry(*op);
-        return std::invoke(
-          std::move(f),
-          target_shard_services,
-          std::move(op));
+        return this->template process_ordered_op_remotely<T>(
+            cc_seq, target_shard_services, std::move(op), std::move(f));
       });
     });
   }
@@ -335,9 +368,9 @@ public:
 	      &get_shard_services());
       });
     }).then([&logger, &opref](auto epoch) {
-      logger.debug("{}: got map {}, entering get_pg", opref, epoch);
+      logger.debug("{}: got map {}, entering get_pg_mapping", opref, epoch);
       return opref.template enter_stage<>(
-	opref.get_connection_pipeline().get_pg);
+	opref.get_connection_pipeline().get_pg_mapping);
     }).then([this, &opref] {
       return get_pg_to_shard_mapping().maybe_create_pg(opref.get_pgid());
     }).then_wrapped([this, &logger, op=std::move(op)](auto fut) mutable {
@@ -353,14 +386,21 @@ public:
       return this->template with_remote_shard_state_and_op<T>(
         core, std::move(op),
         [this](ShardServices &target_shard_services,
-           typename T::IRef op) {
-        if constexpr (T::can_create()) {
-          return this->template run_with_pg_maybe_create<T>(
-              std::move(op), target_shard_services);
-        } else {
-          return this->template run_with_pg_maybe_wait<T>(
-              std::move(op), target_shard_services);
-        }
+               typename T::IRef op) {
+        auto &opref = *op;
+        auto &logger = crimson::get_logger(ceph_subsys_osd);
+        logger.debug("{}: entering create_or_wait_pg", opref);
+        return opref.template enter_stage<>(
+          opref.get_pershard_pipeline(target_shard_services).create_or_wait_pg
+        ).then([this, &target_shard_services, op=std::move(op)]() mutable {
+          if constexpr (T::can_create()) {
+            return this->template run_with_pg_maybe_create<T>(
+                std::move(op), target_shard_services);
+          } else {
+            return this->template run_with_pg_maybe_wait<T>(
+                std::move(op), target_shard_services);
+          }
+        });
       });
     });
     return std::make_pair(id, std::move(fut));
