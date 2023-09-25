@@ -81,6 +81,12 @@ ConnectionPipeline &ClientRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).client_request_conn_pipeline;
 }
 
+PerShardPipeline &ClientRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_client_request_pipeline();
+}
+
 ClientRequest::PGPipeline &ClientRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
