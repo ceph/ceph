@@ -73,4 +73,10 @@ The jsonnet code located in this directory depends on some Jsonnet third party
 libraries. To update those libraries you can run `jb update` and then update
 the generated files using `tox -egrafonnet-fix`.
 
+### Building alerts from `prometheus_alerts.libsonnet`
+
+To rebuild the `prometheus_alerts.yml` file from the corresponding libsonnet,
+you can run `tox -ealerts-fix`.
+
+
 ##### Any upgrade or downgrade to different major versions of the recommended tools mentioned above is not supported.
