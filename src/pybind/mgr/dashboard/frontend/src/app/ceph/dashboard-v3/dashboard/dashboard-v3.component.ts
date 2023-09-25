@@ -3,7 +3,6 @@ import { Component, OnDestroy, OnInit } from '@angular/core';
 import _ from 'lodash';
 import { Observable, Subscription } from 'rxjs';
 import { take } from 'rxjs/operators';
-import moment from 'moment';
 
 import { HealthService } from '~/app/shared/api/health.service';
 import { OsdService } from '~/app/shared/api/osd.service';
@@ -68,13 +67,6 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   };
   telemetryEnabled: boolean;
   telemetryURL = 'https://telemetry-public.ceph.com/';
-  timerGetPrometheusDataSub: Subscription;
-  timerTime = 30000;
-  readonly lastHourDateObject = {
-    start: moment().unix() - 3600,
-    end: moment().unix(),
-    step: 14
-  };
   origin = window.location.origin;
 
   constructor(
@@ -100,7 +92,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       this.getHealth();
       this.getCapacityCardData();
     });
-    this.getPrometheusData(this.lastHourDateObject);
+    this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
     this.getTelemetryReport();
   }
@@ -114,9 +106,7 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   }
   ngOnDestroy() {
     this.interval.unsubscribe();
-    if (this.timerGetPrometheusDataSub) {
-      this.timerGetPrometheusDataSub.unsubscribe();
-    }
+    this.prometheusService.unsubscribe();
   }
 
   getHealth() {
