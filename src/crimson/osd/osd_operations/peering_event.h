@@ -120,14 +120,6 @@ protected:
   ) override;
 
 public:
-  class OSDPipeline {
-    struct AwaitActive : OrderedExclusivePhaseT<AwaitActive> {
-      static constexpr auto type_name =
-	"PeeringRequest::OSDPipeline::await_active";
-    } await_active;
-    friend class RemotePeeringEvent;
-  };
-
   template <typename... Args>
   RemotePeeringEvent(crimson::net::ConnectionRef conn, Args&&... args) :
     PeeringEvent(std::forward<Args>(args)...),
@@ -144,7 +136,6 @@ public:
     PGPeeringPipeline::AwaitMap::BlockingEvent,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGPeeringPipeline::Process::BlockingEvent,
-    OSDPipeline::AwaitActive::BlockingEvent,
     CompletionEvent
   > tracking_events;
 
