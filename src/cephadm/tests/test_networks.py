@@ -6,6 +6,8 @@ import pytest
 
 from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm
 
+from cephadmlib.host_facts import _parse_ipv4_route, _parse_ipv6_route
+
 _cephadm = import_cephadm()
 
 
@@ -69,7 +71,7 @@ class TestCommandListNetworks:
         ),
     ])
     def test_parse_ipv4_route(self, test_input, expected):
-        assert _cephadm._parse_ipv4_route(test_input) == expected
+        assert _parse_ipv4_route(test_input) == expected
 
     @pytest.mark.parametrize("test_routes, test_ips, expected", [
         (
@@ -222,10 +224,13 @@ class TestCommandListNetworks:
         ),
     ])
     def test_parse_ipv6_route(self, test_routes, test_ips, expected):
-        assert _cephadm._parse_ipv6_route(test_routes, test_ips) == expected
+        assert _parse_ipv6_route(test_routes, test_ips) == expected
 
-    @mock.patch.object(_cephadm, 'call_throws', return_value=('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', ''))
-    def test_command_list_networks(self, cephadm_fs, capsys):
+    @mock.patch('cephadmlib.host_facts.call_throws')
+    @mock.patch('cephadmlib.host_facts.find_executable')
+    def test_command_list_networks(self, _find_exe, _call_throws, cephadm_fs, capsys):
+        _call_throws.return_value = ('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', '')
+        _find_exe.return_value = 'ip'
         with with_cephadm_ctx([]) as ctx:
             _cephadm.command_list_networks(ctx)
             assert json.loads(capsys.readouterr().out) == {
