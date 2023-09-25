@@ -2071,7 +2071,7 @@ void BlueStore::OnodeSpace::dump(CephContext *cct)
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.sharedblob(" << this << ") "
 #undef dout_context
-#define dout_context coll->store->cct
+#define dout_context collection->store->cct
 
 void BlueStore::SharedBlob::dump(Formatter* f) const
 {
@@ -2096,7 +2096,7 @@ ostream& operator<<(ostream& out, const BlueStore::SharedBlob& sb)
 }
 
 BlueStore::SharedBlob::SharedBlob(uint64_t i, Collection *_coll)
-  : coll(_coll), sbid_unloaded(i)
+  : collection(_coll), sbid_unloaded(i)
 {
   ceph_assert(sbid_unloaded > 0);
 }
@@ -2115,10 +2115,10 @@ void BlueStore::SharedBlob::put()
 	     << " removing self from set " << get_parent()
 	     << dendl;
   again:
-    auto coll_snap = coll;
+    auto coll_snap = collection;
     if (coll_snap) {
       std::lock_guard l(coll_snap->cache->lock);
-      if (coll_snap != coll) {
+      if (coll_snap != collection) {
 	goto again;
       }
       if (!coll_snap->shared_blob_set.remove(this, true)) {
@@ -2886,7 +2886,7 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
 }
 
 #undef dout_context
-#define dout_context coll->store->cct
+#define dout_context collection->store->cct
 
 void BlueStore::Blob::finish_write(uint64_t seq)
 {
@@ -5174,7 +5174,7 @@ void BlueStore::Collection::split_cache(
 	cache->rm_blob();
 	dest->cache->add_blob();
 	SharedBlob* sb = b->shared_blob.get();
-	if (sb && sb->coll == dest && b->collection) {
+	if (sb && sb->collection == dest && b->collection) {
 	  ldout(store->cct, 20) << __func__ << "  already moved " << *sb
 				<< dendl;
 	  return;
@@ -5188,7 +5188,7 @@ void BlueStore::Collection::split_cache(
 	  dest->shared_blob_set.add(dest, sb);
 	}
         if (sb) {
-          sb->coll = dest;
+          sb->collection = dest;
         }
         b->collection = dest;
       };
