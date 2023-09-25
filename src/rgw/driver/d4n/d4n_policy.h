@@ -18,8 +18,8 @@ class CachePolicy {
       uint64_t offset;
       uint64_t len;
       std::string version;
-      Entry(std::string& key, uint64_t offset, uint64_t len, std:: string version) : key(key), offset(offset), 
-                                                                                       len(len), version(version) {}
+      Entry(std::string& key, uint64_t offset, uint64_t len, std::string version) : key(key), offset(offset), 
+                                                                                     len(len), version(version) {}
     };
     
     //The disposer object function

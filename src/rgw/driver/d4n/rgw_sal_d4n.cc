@@ -51,7 +51,6 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
   blockDir = new rgw::d4n::BlockDirectory(io_context);
   cacheBlock = new rgw::d4n::CacheBlock();
   policyDriver = new rgw::d4n::PolicyDriver(io_context, "lfuda");
-  lruPolicyDriver = new rgw::d4n::PolicyDriver(io_context, "lru");
 }
 
  D4NFilterDriver::~D4NFilterDriver()
@@ -61,7 +60,6 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
     delete blockDir; 
     delete cacheBlock;
     delete policyDriver;
-    delete lruPolicyDriver;
 }
 
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
@@ -76,9 +74,6 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   policyDriver->init(); 
   policyDriver->get_cache_policy()->init(cct, dpp);
 
-  lruPolicyDriver->init();
-  lruPolicyDriver->get_cache_policy()->init(cct, dpp);
-  
   return 0;
 }
 
@@ -289,12 +284,6 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 	} else if (it->first == "this_zone_short_id") {
 	  astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second.c_str()));
 	  attrs.erase(it->first);
-	} else if (it->first == "bucket_count") {
-	  this->get_bucket()->set_count(std::stoull(it->second.c_str()));
-	  attrs.erase(it->first);
-	} else if (it->first == "bucket_size") {
-	  this->get_bucket()->set_size(std::stoull(it->second.c_str()));
-	  attrs.erase(it->first);
 	} else if (it->first == "user_quota.max_size") {
 	  quota_info.max_size = std::stoull(it->second.c_str());
 	  attrs.erase(it->first);
@@ -303,6 +292,9 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 	  attrs.erase(it->first);
 	} else if (it->first == "max_buckets") {
 	  this->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second.c_str()));
+	  attrs.erase(it->first);
+	} else {
+	  ldpp_dout(dpp, 20) << "D4N Filter: Unexpected attribute; not locally set." << dendl;
 	  attrs.erase(it->first);
 	}
       }
@@ -455,6 +447,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
       } else if (it->first == "max_buckets") {
         user->set_max_buckets(std::stoull(it->second.c_str()));
 	attrs.erase(it->first);
+      } else {
+        ldpp_dout(dpp, 20) << "D4N Filter: Unexpected attribute; not locally set." << dendl;
+        attrs.erase(it->first);
       }
     }
     user->set_info(quota_info);
