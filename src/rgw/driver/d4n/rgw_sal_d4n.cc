@@ -36,8 +36,11 @@ static inline Object* nextObject(Object* t)
   return dynamic_cast<FilterObject*>(t)->get_next();
 }
 
-D4NFilterDriver::D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
+D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next) 
 {
+  //conn = new boost::redis::connection{boost::asio::make_strand(io_context)};
+  //cacheDriver = new rgw::cache::RedisDriver(*static_cast<boost::redis::connection*>(conn), partition_info); // change later -Sam
+
   rgw::cache::Partition partition_info;
   partition_info.location = g_conf()->rgw_d3n_l1_datacache_persistent_path;
   partition_info.name = "d4n";
@@ -966,8 +969,6 @@ int D4NFilterWriter::process(bufferlist&& data, uint64_t offset)
   int append_dataReturn = driver->get_cache_driver()->append_data(save_dpp, obj->get_key().get_oid(), 
   								    data, y);
 
-  int append_dataReturn = driver->get_cache_driver()->append_data(save_dpp, obj->get_key().get_oid(), data);
-
   if (append_dataReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache append data operation failed." << dendl;
   } else {
@@ -1076,16 +1077,18 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
   baseAttrs.insert(attrs.begin(), attrs.end());
 
+  // is the accounted_size equivalent to the length? -Sam
+  
+  //bufferlist bl_empty;
+  //int putReturn = driver->get_cache_driver()->
+  //	  put(save_dpp, obj->get_key().get_oid(), bl_empty, accounted_size, baseAttrs, y); /* Data already written during process call */
   /*
-  int set_attrsReturn = driver->get_cache_driver()->set_attrs(save_dpp, obj->get_key().get_oid(), baseAttrs, y);
-
-  if (set_attrsReturn < 0) {
-    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation failed." << dendl;
+  if (putReturn < 0) {
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache put operation failed." << dendl;
   } else {
-    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache set attributes operation succeeded." << dendl;
+    ldpp_dout(save_dpp, 20) << "D4N Filter: Cache put operation succeeded." << dendl;
   }
   */
-
   return ret;
 }
 
@@ -1093,9 +1096,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 
 extern "C" {
 
-rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next)
+rgw::sal::Driver* newD4NFilter(rgw::sal::Driver* next, void* io_context)
 {
-  rgw::sal::D4NFilterDriver* driver = new rgw::sal::D4NFilterDriver(next);
+  rgw::sal::D4NFilterDriver* driver = new rgw::sal::D4NFilterDriver(next, *static_cast<boost::asio::io_context*>(io_context));
 
   return driver;
 }

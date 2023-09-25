@@ -27,6 +27,11 @@
 #include "driver/d4n/d4n_policy.h"
 
 #include <boost/intrusive/list.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/redis/connection.hpp>
+
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
 
 namespace rgw { namespace sal {
 
@@ -40,7 +45,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::PolicyDriver* lruPolicyDriver;
 
   public:
-    D4NFilterDriver(Driver* _next);
+    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
 
     virtual ~D4NFilterDriver();
 
