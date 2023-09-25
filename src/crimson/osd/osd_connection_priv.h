@@ -17,7 +17,7 @@ struct OSDConnectionPriv : public crimson::net::Connection::user_private_t {
   ConnectionPipeline replicated_request_conn_pipeline;
 };
 
-static OSDConnectionPriv &get_osd_priv(crimson::net::Connection *conn) {
+static inline OSDConnectionPriv &get_osd_priv(crimson::net::Connection *conn) {
   if (!conn->has_user_private()) {
     conn->set_user_private(std::make_unique<OSDConnectionPriv>());
   }
