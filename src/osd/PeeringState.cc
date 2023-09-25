@@ -2749,8 +2749,9 @@ void PeeringState::activate(
 	 ++i) {
       if (*i == pg_whoami) continue;
       pg_shard_t peer = *i;
-      ceph_assert(peer_info.count(peer));
-      pg_info_t& pi = peer_info[peer];
+      auto pi_it = peer_info.find(peer);
+      ceph_assert(pi_it != peer_info.end());
+      pg_info_t& pi = pi_it->second;
 
       psdout(10) << "activate peer osd." << peer << " " << pi << dendl;
 
@@ -2759,8 +2760,9 @@ void PeeringState::activate(
       #else
       MRef<MOSDPGLog> m;
       #endif
-      ceph_assert(peer_missing.count(peer));
-      pg_missing_t& pm = peer_missing[peer];
+      auto pm_it = peer_missing.find(peer);
+      ceph_assert(pm_it != peer_missing.end());
+      pg_missing_t& pm = pm_it->second;
 
       bool needs_past_intervals = pi.dne();
 
@@ -2927,21 +2929,24 @@ void PeeringState::activate(
 	     ++i) {
 	  if (*i == pg_whoami) continue;
 	  psdout(10) << ": adding " << *i << " as a source" << dendl;
-	  ceph_assert(peer_missing.count(*i));
-	  ceph_assert(peer_info.count(*i));
+	  auto pi_it = peer_info.find(*i);
+	  ceph_assert(pi_it != peer_info.end());
+	  auto pm_it = peer_missing.find(*i);
+	  ceph_assert(pm_it != peer_missing.end());
 	  missing_loc.add_source_info(
 	    *i,
-	    peer_info[*i],
-	    peer_missing[*i],
+	    pi_it->second,
+	    pm_it->second,
             ctx.handle);
         }
       }
       for (auto i = peer_missing.begin(); i != peer_missing.end(); ++i) {
 	if (is_acting_recovery_backfill(i->first))
 	  continue;
-	ceph_assert(peer_info.count(i->first));
+	auto pi_it = peer_info.find(i->first);
+	ceph_assert(pi_it != peer_info.end());
 	search_for_missing(
-	  peer_info[i->first],
+	  pi_it->second,
 	  i->second,
 	  i->first,
 	  ctx);
@@ -3640,8 +3645,9 @@ void PeeringState::update_calc_stats()
       if (is_backfill_target(peer.first)) {
         missing = std::max((int64_t)0, num_objects - peer_num_objects);
       } else {
-        if (peer_missing.count(peer.first)) {
-          missing = peer_missing[peer.first].num_missing();
+	auto pm_it = peer_missing.find(peer.first);
+        if (pm_it != peer_missing.end()) {
+          missing = pm_it->second.num_missing();
         } else {
           psdout(20) << "no peer_missing found for "
 		     << peer.first << dendl;
@@ -4094,12 +4100,14 @@ void PeeringState::merge_new_log_entries(
        ++i) {
     pg_shard_t peer(*i);
     if (peer == pg_whoami) continue;
-    ceph_assert(peer_missing.count(peer));
-    ceph_assert(peer_info.count(peer));
-    pg_missing_t& pmissing(peer_missing[peer]);
+    auto pm_it = peer_missing.find(peer);
+    ceph_assert(pm_it != peer_missing.end());
+    auto pi_it = peer_info.find(peer);
+    ceph_assert(pi_it != peer_info.end());
+    pg_missing_t& pmissing(pm_it->second);
     psdout(20) << "peer_missing for " << peer
 	       << " = " << pmissing << dendl;
-    pg_info_t& pinfo(peer_info[peer]);
+    pg_info_t& pinfo = pi_it->second;
     bool invalidate_stats = PGLog::append_log_entries_update_missing(
       pinfo.last_backfill,
       entries,
@@ -6133,10 +6141,9 @@ boost::statechart::result PeeringState::Active::react(const MInfoRec& infoevt)
   // may be telling us they have activated (and committed) but we can't
   // share that until _everyone_ does the same.
   if (ps->is_acting_recovery_backfill(infoevt.from) &&
-      ps->peer_activated.count(infoevt.from) == 0) {
+      ps->peer_activated.insert(infoevt.from).second) {
     psdout(10) << " peer osd." << infoevt.from
 	       << " activated and committed" << dendl;
-    ps->peer_activated.insert(infoevt.from);
     ps->blocked_by.erase(infoevt.from.shard);
     pl->publish_stats_to_osd();
     if (ps->peer_activated.size() == ps->acting_recovery_backfill.size()) {
@@ -6220,8 +6227,8 @@ boost::statechart::result PeeringState::Active::react(
   const ActivateCommitted &evt)
 {
   DECLARE_LOCALS;
-  ceph_assert(!ps->peer_activated.count(ps->pg_whoami));
-  ps->peer_activated.insert(ps->pg_whoami);
+  auto p = ps->peer_activated.insert(ps->pg_whoami);
+  ceph_assert(p.second);
   psdout(10) << "_activate_committed " << evt.epoch
 	     << " peer_activated now " << ps->peer_activated
 	     << " last_interval_started "

@@ -2333,13 +2333,15 @@ public:
     if (peer == pg_whoami) {
       return pg_log.get_missing();
     } else {
-      assert(peer_missing.count(peer));
-      return peer_missing.find(peer)->second;
+      auto it = peer_missing.find(peer);
+      assert(it != peer_missing.end());
+      return it->second;
     }
   }
   const pg_info_t&get_peer_info(pg_shard_t peer) const {
-    assert(peer_info.count(peer));
-    return peer_info.find(peer)->second;
+    auto it = peer_info.find(peer);
+    assert(it != peer_info.end());
+    return it->second;
   }
   bool has_peer_info(pg_shard_t peer) const {
     return peer_info.count(peer);
