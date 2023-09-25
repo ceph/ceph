@@ -26,6 +26,42 @@ std::list<std::string> build_attrs(rgw::sal::Attrs* binary)
   return values;
 }
 
+// initiate a call to async_exec() on the connection's executor
+struct initiate_exec {
+  std::shared_ptr<boost::redis::connection> conn;
+  boost::redis::request req;
+
+  using executor_type = boost::redis::connection::executor_type;
+  executor_type get_executor() const noexcept { return conn->get_executor(); }
+  
+  template <typename Handler, typename Response>
+  void operator()(Handler handler, Response& resp)
+  {
+    conn->async_exec(req, resp, boost::asio::consign(std::move(handler), conn));
+  } 
+};
+
+template <typename Response, typename CompletionToken>
+auto async_exec(std::shared_ptr<connection> conn,
+                const boost::redis::request& req,
+                Response& resp, CompletionToken&& token)
+{
+  return boost::asio::async_initiate<CompletionToken,
+         void(boost::system::error_code, std::size_t)>(
+      initiate_exec{std::move(conn), req}, token, resp);
+}
+
+template <typename T>
+void redis_exec(std::shared_ptr<connection> conn, boost::system::error_code& ec, boost::redis::request& req, boost::redis::response<T>& resp, optional_yield y)
+{
+  if (y) {
+    auto yield = y.get_yield_context();
+    async_exec(std::move(conn), req, resp, yield[ec]);
+  } else {
+    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
+  }
+}
+
 int RedisDriver::add_partition_info(Partition& info)
 {
   std::string key = info.name + info.type;
@@ -38,16 +74,6 @@ int RedisDriver::remove_partition_info(Partition& info)
 {
   std::string key = info.name + info.type;
   return partitions.erase(key);
-}
-
-template <typename T>
-auto RedisDriver::redis_exec(boost::system::error_code ec, boost::redis::request req, boost::redis::response<T>& resp, optional_yield y) {
-  if (y) {
-    auto yield = y.get_yield_context();
-    return conn->async_exec(req, resp, yield[ec]);
-  } else {
-    return conn->async_exec(req, resp, ceph::async::use_blocked[ec]);
-  }
 }
 
 /*
@@ -166,7 +192,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
     request req;
     req.push_range("HMSET", entry, redisAttrs);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
@@ -189,7 +215,7 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
     request req;
     req.push("HGETALL", entry);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (ec)
       return -1;
@@ -221,7 +247,7 @@ int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, opti
     request req;
     req.push("DEL", entry);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (ec)
       return -1;
@@ -243,7 +269,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
     request req;
     req.push("HGET", entry, "data");
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (ec)
       return -1;
@@ -262,7 +288,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
     request req;
     req.push("HMSET", entry, "data", newVal);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
@@ -281,26 +307,14 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
   response<int> resp;
 
   try {
-    boost::redis::config cfg;
-    cfg.addr.host = "127.0.0.1";
-    cfg.addr.port = "6379";
-
-    boost::asio::io_context io;
-    boost::redis::connection connect{io};
-    connect.async_run(cfg, {}, net::detached);
-
+    boost::system::error_code ec;
     request req;
-
     req.push("HEXISTS", entry, "data");
 
-    connect.async_exec(req, resp, [&](auto ec, auto) {
-       if (!ec)
-	  dout(0) << "Sam: " << std::get<0>(resp).value() << dendl;
+    redis_exec(conn, ec, req, resp, y);
 
-       connect.cancel();
-    });
-
-    io.run();
+    if (ec)
+      return -1;
   } catch(std::exception &e) {
     return -1;
   }
@@ -313,14 +327,12 @@ int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& 
 
       redis_exec(conn, ec, req, value, y);
 
-      if (!std::get<0>(resp).value() || ec) {
+      if (!std::get<0>(value).value() || ec) {
 	return -1;
       }
     } catch(std::exception &e) {
       return -1;
     }
-  } else {
-    return 0; /* No delete was necessary */
   }
 
   return 0;
@@ -336,7 +348,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
     request req;
     req.push("HGETALL", entry);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (ec)
       return -1;
@@ -373,7 +385,7 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
     request req;
     req.push_range("HMSET", entry, redisAttrs);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
@@ -397,7 +409,7 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
     request req;
     req.push_range("HMSET", entry, redisAttrs);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
@@ -421,7 +433,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
     request req;
     req.push_range("HDEL", entry, redisAttrs);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (ec)
       return -1;
@@ -444,7 +456,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
     request req;
     req.push("HEXISTS", entry, attr_name);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (ec)
       return {};
@@ -463,7 +475,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
     request req;
     req.push("HGET", entry, attr_name);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, value, y);
 
     if (ec)
       return {};
@@ -485,7 +497,7 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
     request req;
     req.push("HSET", entry, attr_name, attr_val);
 
-    redis_exec(ec, req, resp, y);
+    redis_exec(conn, ec, req, resp, y);
 
     if (ec)
       return {};
@@ -496,7 +508,7 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   return std::get<0>(resp).value();
 }
 
-static Aio::OpFunc redis_read_op(optional_yield y, boost::redis::connection* conn,
+static Aio::OpFunc redis_read_op(optional_yield y, std::shared_ptr<connection> conn,
                                  off_t read_ofs, off_t read_len, const std::string& key)
 {
   return [y, conn, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
