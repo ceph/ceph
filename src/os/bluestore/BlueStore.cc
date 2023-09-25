@@ -2166,11 +2166,6 @@ void BlueStore::SharedBlobSet::dump(CephContext *cct)
 
 BlueStore::Blob::~Blob()
 {
-  SharedBlob* sb = shared_blob.get();
-  if (!sb) {
-    ceph_assert(bc.buffer_map.empty());
-    return;
-  }
  again:
   auto coll_cache = get_cache();
   if (coll_cache) {
@@ -2180,6 +2175,11 @@ BlueStore::Blob::~Blob()
     }
     bc._clear(coll_cache);
     coll_cache->rm_blob();
+  }
+  SharedBlob* sb = shared_blob.get();
+  if (!sb) {
+    ceph_assert(bc.buffer_map.empty());
+    return;
   }
 }
 
@@ -3231,7 +3231,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       } else {
         c->load_shared_blob(e.blob->shared_blob);
       }
-      cb = new Blob();
+      cb = c->new_blob();
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
       e.blob->dup(*cb);
@@ -3345,7 +3345,7 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
       ceph_assert(blob.is_shared());
       ceph_assert(e.blob->is_loaded());
       ceph_assert(!blob.has_unused());
-      cb = new Blob();
+      cb = c->new_blob();
       e.blob->last_encoded_id = n;
       id_to_blob[n] = cb;
       ceph_assert(ep->blob_start() < end);
@@ -4026,7 +4026,7 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_extent(
     if (blobid) {
       consume_blobid(le, false, blobid - 1);
     } else {
-      Blob *b = new Blob();
+      BlobRef b = c->new_blob();
       uint64_t sbid = 0;
       b->decode(p, struct_v, &sbid, false, c);
       consume_blob(le, extent_pos, sbid, b);
@@ -4074,7 +4074,7 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs(
   unsigned n;
   denc_varint(n, p);
   while (n--) {
-    BlueStore::BlobRef b(new Blob());
+    BlueStore::BlobRef b(c->new_blob());
     denc_varint(b->id, p);
     uint64_t sbid = 0;
     b->decode(p, struct_v, &sbid, true, c);
@@ -4985,7 +4985,6 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
   const bluestore_blob_t& blob = b->get_blob();
   if (!blob.is_shared()) {
     b->collection = this;
-    b->get_cache()->add_blob();
     return;
   }
 
