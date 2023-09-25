@@ -615,6 +615,7 @@ public:
       ceph_assert(!shared_blob);
       sbid_unloaded = sb->get_sbid();
       shared_blob = sb;
+      collection = sb->coll;
       ceph_assert(get_cache());
       get_cache()->add_blob();
     }
@@ -1628,6 +1629,7 @@ private:
     BlobRef new_blob() {
       BlobRef b = new Blob();
       b->collection = this;
+      b->get_cache()->add_blob();
       return b;
     }
 
