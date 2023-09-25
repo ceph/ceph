@@ -843,13 +843,13 @@ COMMAND("osd erasure-code-profile ls",
 COMMAND("osd set "
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|"
 	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|"
-	"notieragent|nosnaptrim|pglog_hardlimit "
+	"notieragent|nosnaptrim|pglog_hardlimit|noautoscale "
         "name=yes_i_really_mean_it,type=CephBool,req=false",
 	"set <key>", "osd", "rw")
 COMMAND("osd unset "
 	"name=key,type=CephChoices,strings=full|pause|noup|nodown|"\
 	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|"
-	"notieragent|nosnaptrim",
+	"notieragent|nosnaptrim|noautoscale",
 	"unset <key>", "osd", "rw")
 COMMAND("osd require-osd-release "\
 	"name=release,type=CephChoices,strings=octopus|pacific|quincy|reef "
