@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.16)
 project(ceph
   VERSION 18.0.0
   LANGUAGES CXX C ASM)
-
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 cmake_policy(SET CMP0028 NEW)
 cmake_policy(SET CMP0046 NEW)
 cmake_policy(SET CMP0048 NEW)
