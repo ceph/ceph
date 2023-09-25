@@ -525,6 +525,10 @@ rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optiona
   return aio->get(r_obj, redis_read_op(y, conn, ofs, len, entry), cost, id);
 }
 
+int RedisDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
+  return -1; // TODO: implement
+} 
+
 void RedisDriver::shutdown()
 {
   // call cancel() on the connection's executor
