@@ -4383,6 +4383,13 @@ void PrimaryLogPG::log_op_stats(const OpRequest& op,
   auto m = op.get_req<MOSDOp>();
   const utime_t now = ceph_clock_now();
 
+  if (now < m->get_recv_stamp() || now < op.get_dequeued_time()) {
+    dout(0) << __func__ <<"() perf time error: please check system time. now = " << now
+            << ", m->get_recv_stamp() =  " << m->get_recv_stamp()
+            << ", op.get_dequeued_time() =  " << op.get_dequeued_time()
+            << dendl;
+    return;
+  }
   const utime_t latency = now - m->get_recv_stamp();
   const utime_t process_latency = now - op.get_dequeued_time();
 
