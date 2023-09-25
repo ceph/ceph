@@ -450,11 +450,22 @@ class RgwBucketUi(RgwBucket):
         users_count = 0
         daemon_object = RgwDaemon()
         daemons = json.loads(daemon_object.list())
+        unique_realms = set()
         for daemon in daemons:
-            buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
-            users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
-            users_count += len(users)
-            buckets_count += len(buckets)
+            realm_name = daemon.get('realm_name', None)
+            if realm_name:
+                if realm_name not in unique_realms:
+                    unique_realms.add(realm_name)
+                    buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
+                    users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
+                    users_count += len(users)
+                    buckets_count += len(buckets)
+            else:
+                buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
+                users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
+                users_count = len(users)
+                buckets_count = len(buckets)
+
         return {
             'buckets_count': buckets_count,
             'users_count': users_count
