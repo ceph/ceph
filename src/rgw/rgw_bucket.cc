@@ -1423,6 +1423,8 @@ int RGWBucketAdminOp::check_index(rgw::sal::Store* store, RGWBucketAdminOpState&
 
   Formatter *formatter = flusher.get_formatter();
   flusher.start(0);
+  
+  formatter->open_object_section("bucket_check");
 
   ret = bucket.check_bad_index_multipart(op_state, flusher, dpp);
   if (ret < 0)
@@ -1439,6 +1441,8 @@ int RGWBucketAdminOp::check_index(rgw::sal::Store* store, RGWBucketAdminOpState&
     return ret;
 
   dump_index_check(existing_stats, calculated_stats, formatter);
+  
+  formatter->close_section();
   flusher.flush();
 
   return 0;
