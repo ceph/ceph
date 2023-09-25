@@ -28,6 +28,12 @@
 #include "driver/d4n/d4n_policy.h"
 
 #include <boost/intrusive/list.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/redis/connection.hpp>
+
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
 
 namespace rgw { namespace sal {
 
@@ -41,8 +47,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::PolicyDriver* lruPolicyDriver;
 
   public:
-    D4NFilterDriver(Driver* _next);
-
+    D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);
     virtual ~D4NFilterDriver();
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
@@ -116,10 +121,12 @@ class D4NFilterObject : public FilterObject {
 									  oid(_oid), 
 								    source(_source) {}
 
+	    optional_yield* save_y;
+
 	    int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
 	    void set_client_cb(RGWGetDataCB* client_cb, const DoutPrefixProvider* dpp) { this->client_cb = client_cb; this->dpp = dpp;}
 	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
-	    int flush_last_part();
+	    int flush_last_part(optional_yield y);
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};
 
@@ -201,16 +208,17 @@ class D4NFilterWriter : public FilterWriter {
     D4NFilterDriver* driver; 
     const DoutPrefixProvider* save_dpp;
     bool atomic;
+    optional_yield y;
 
   public:
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
-	const DoutPrefixProvider* _dpp) : FilterWriter(std::move(_next), _obj),
-					  driver(_driver),
-					  save_dpp(_dpp), atomic(false) {}
+	const DoutPrefixProvider* _dpp, optional_yield _y) : FilterWriter(std::move(_next), _obj),
+							     driver(_driver),
+							     save_dpp(_dpp), atomic(false), y(_y) {}
     D4NFilterWriter(std::unique_ptr<Writer> _next, D4NFilterDriver* _driver, Object* _obj, 
-	const DoutPrefixProvider* _dpp, bool _atomic) : FilterWriter(std::move(_next), _obj),
-							driver(_driver),
-							save_dpp(_dpp), atomic(_atomic) {}
+	const DoutPrefixProvider* _dpp, bool _atomic, optional_yield _y) : FilterWriter(std::move(_next), _obj),
+									   driver(_driver),
+									   save_dpp(_dpp), atomic(_atomic), y(_y) {}
     virtual ~D4NFilterWriter() = default;
 
     virtual int prepare(optional_yield y);

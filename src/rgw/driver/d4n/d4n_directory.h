@@ -1,17 +1,21 @@
 #pragma once
 
 #include "rgw_common.h"
-#include <cpp_redis/cpp_redis>
-#include <string>
-#include <iostream>
+
 #include <boost/lexical_cast.hpp>
+#include <boost/asio/detached.hpp>
+#include <boost/redis/connection.hpp>
+
+#define dout_subsys ceph_subsys_rgw
+#define dout_context g_ceph_context
 
 namespace rgw { namespace d4n {
 
-struct Address {
-  std::string host;
-  int port;
-};
+namespace net = boost::asio;
+using boost::redis::config;
+using boost::redis::connection;
+using boost::redis::request;
+using boost::redis::response;
 
 struct CacheObj {
   std::string objName; /* S3 object name */
@@ -23,75 +27,97 @@ struct CacheObj {
 
 struct CacheBlock {
   CacheObj cacheObj;
-  uint64_t blockId; /* block ID */
+  uint64_t blockID;
+  std::string version;
   uint64_t size; /* Block size in bytes */
-  int globalWeight = 0;
+  int globalWeight = 0; /* LFUDA policy variable */
   std::vector<std::string> hostsList; /* List of hostnames <ip:port> of block locations */
 };
 
 class Directory {
   public:
-    Directory() {}
     CephContext* cct;
+
+    Directory() {}
 };
 
 class ObjectDirectory: public Directory { // weave into write workflow -Sam
   public:
-    ObjectDirectory() {}
-    ObjectDirectory(std::string host, int port) {
-      addr.host = host;
-      addr.port = port;
+    ObjectDirectory(net::io_context& io_context) {
+      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
+    }
+    ~ObjectDirectory() {
+      shutdown();
     }
 
-    void init(CephContext* _cct) {
-      cct = _cct;
-      addr.host = cct->_conf->rgw_d4n_host;
-      addr.port = cct->_conf->rgw_d4n_port;
+    int init(CephContext* cct, const DoutPrefixProvider* dpp) {
+      this->cct = cct;
+
+      config cfg;
+      cfg.addr.host = cct->_conf->rgw_d4n_host; // same or different address from block directory? -Sam
+      cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
+
+      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
+	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Object directory endpoint was not configured correctly" << dendl;
+	return -EDESTADDRREQ;
+      }
+      
+      conn->async_run(cfg, {}, net::consign(net::detached, conn)); 
+
+      return 0;
     }
+    int exist_key(std::string key, optional_yield y);
+    void shutdown();
 
-    int find_client(cpp_redis::client* client);
-    int exist_key(std::string key);
-    Address get_addr() { return addr; }
-
-    int set_value(CacheObj* object);
-    int get_value(CacheObj* object);
-    int copy_value(CacheObj* object, CacheObj* copyObject);
-    int del_value(CacheObj* object);
+    int set(CacheObj* object, optional_yield y);
+    int get(CacheObj* object, optional_yield y);
+    int copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y);
+    int del(CacheObj* object, optional_yield y);
 
   private:
-    cpp_redis::client client;
-    Address addr;
+    std::shared_ptr<connection> conn;
+
     std::string build_index(CacheObj* object);
 };
 
 class BlockDirectory: public Directory {
   public:
-    BlockDirectory() {}
-    BlockDirectory(std::string host, int port) {
-      addr.host = host;
-      addr.port = port;
+    BlockDirectory(net::io_context& io_context) {
+      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
+    }
+    ~BlockDirectory() {
+      shutdown();
     }
     
-    void init(CephContext* _cct) {
-      cct = _cct;
-      addr.host = cct->_conf->rgw_d4n_host;
-      addr.port = cct->_conf->rgw_d4n_port;
+    int init(CephContext* cct, const DoutPrefixProvider* dpp) {
+      this->cct = cct;
+
+      config cfg;
+      cfg.addr.host = cct->_conf->rgw_d4n_host;
+      cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
+
+      if (!cfg.addr.host.length() || !cfg.addr.port.length()) { // add logs to other methods -Sam
+	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Block directory endpoint was not configured correctly" << dendl;
+	return -EDESTADDRREQ;
+      }
+
+      conn->async_run(cfg, {}, net::consign(net::detached, conn)); 
+
+      return 0;
     }
 	
-    int find_client(cpp_redis::client* client);
-    int exist_key(std::string key);
-    Address get_addr() { return addr; }
+    int exist_key(std::string key, optional_yield y);
+    void shutdown();
 
-    int set_value(CacheBlock* block);
-    int get_value(CacheBlock* block);
-    int copy_value(CacheBlock* block, CacheBlock* copyBlock);
-    int del_value(CacheBlock* block);
-
-    int update_field(CacheBlock* block, std::string field, std::string value);
+    int set(CacheBlock* block, optional_yield y);
+    int get(CacheBlock* block, optional_yield y);
+    int copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y);
+    int del(CacheBlock* block, optional_yield y);
+    int update_field(CacheBlock* block, std::string field, std::string value, optional_yield y);
 
   private:
-    cpp_redis::client client;
-    Address addr;
+    std::shared_ptr<connection> conn;
+
     std::string build_index(CacheBlock* block);
 };
 
