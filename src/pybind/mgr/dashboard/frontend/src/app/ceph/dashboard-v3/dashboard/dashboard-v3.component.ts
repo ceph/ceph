@@ -111,6 +111,10 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   getHealth() {
     this.healthService.getMinimalHealth().subscribe((data: any) => {
       this.healthData = data;
+      this.healthData.iscsi_daemons = {
+        ...this.healthData.iscsi_daemons,
+        total: this.healthData.iscsi_daemons.up + this.healthData.iscsi_daemons.down
+      };
     });
   }
 

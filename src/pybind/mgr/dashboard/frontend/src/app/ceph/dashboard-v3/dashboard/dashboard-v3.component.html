@@ -51,47 +51,26 @@
                i18n-title
                class="pt-4"
                aria-label="Inventory card">
-        <!-- Hosts -->
-        <cd-card-row [data]="healthData.hosts"
-                     link="/hosts"
-                     title="Host"
-                     summaryType="simplified"
-                     *ngIf="healthData.hosts != null"></cd-card-row>
+
         <!-- Monitors -->
-        <cd-card-row [data]="healthData.mon_status.monmap.mons.length"
+        <cd-card-row [data]="{total: healthData.mon_status.monmap.mons.length}"
                      link="/monitor"
                      title="Monitor"
-                     summaryType="simplified"
                      *ngIf="healthData.mon_status"></cd-card-row>
         <!-- Managers -->
         <cd-card-row [data]="healthData.mgr_map | mgrSummary"
                      title="Manager"
                      *ngIf="healthData.mgr_map"></cd-card-row>
-
         <!-- OSDs -->
         <cd-card-row [data]="healthData.osd_map | osdSummary"
                      link="/osd"
                      title="OSD"
-                     summaryType="osd"
                      *ngIf="healthData.osd_map"></cd-card-row>
 
-        <!-- Pools -->
-        <cd-card-row [data]="healthData.pools.length"
-                     link="/pool"
-                     title="Pool"
-                     summaryType="simplified"
-                     *ngIf="healthData.pools"></cd-card-row>
-
-        <!-- PG Info -->
-        <cd-card-row [data]="healthData.pg_info | pgSummary"
-                     title="PG"
-                     *ngIf="healthData.pg_info"></cd-card-row>
-
         <!-- Object gateways -->
-        <cd-card-row [data]="healthData.rgw"
+        <cd-card-row [data]="{total: healthData.rgw}"
                      link="/rgw/daemon"
                      title="Object Gateway"
-                     summaryType="simplified"
                      id="rgw-item"
                      *ngIf="enabledFeature.rgw && healthData.rgw || healthData.rgw === 0 "></cd-card-row>
 
@@ -100,13 +79,30 @@
                      title="Metadata Server"
                      id="mds-item"
                      *ngIf="enabledFeature.cephfs && healthData.fs_map"></cd-card-row>
+
         <!-- iSCSI Gateways -->
         <cd-card-row [data]="healthData.iscsi_daemons"
                      link="/iscsi/daemon"
                      title="iSCSI Gateway"
-                     summaryType="iscsi"
                      id="iscsi-item"
                      *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons"></cd-card-row>
+
+        <!-- Hosts -->
+        <cd-card-row [data]="{total: healthData.hosts}"
+                     link="/hosts"
+                     title="Host"
+                     *ngIf="healthData.hosts != null"></cd-card-row>
+
+        <!-- Pools -->
+        <cd-card-row [data]="{total: healthData.pools.length}"
+                     link="/pool"
+                     title="Pool"
+                     *ngIf="healthData.pools"></cd-card-row>
+
+        <!-- PG Info -->
+        <cd-card-row [data]="healthData.pg_info | pgSummary"
+                     title="PG"
+                     *ngIf="healthData.pg_info"></cd-card-row>
       </cd-card>
     </div>
 

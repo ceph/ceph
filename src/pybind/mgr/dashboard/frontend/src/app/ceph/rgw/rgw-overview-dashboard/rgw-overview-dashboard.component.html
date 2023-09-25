@@ -5,45 +5,38 @@
              class="col-sm-3 px-3 d-flex"
              aria-label="Inventory card">
 
-      <cd-card-row [data]="rgwDaemonCount"
+      <cd-card-row [data]="{'total': rgwDaemonCount}"
                    link="/rgw/daemon"
                    title="Gateway"
-                   summaryType="simplified"
                    *ngIf="rgwDaemonCount != null"></cd-card-row>
 
-      <cd-card-row [data]="rgwRealmCount"
+      <cd-card-row [data]="{'total': rgwRealmCount}"
                    link="/rgw/multisite"
                    title="Realm"
-                   summaryType="simplified"
                    *ngIf="rgwRealmCount != null"></cd-card-row>
 
-      <cd-card-row [data]="rgwZonegroupCount"
+      <cd-card-row [data]="{'total': rgwZonegroupCount}"
                    link="/rgw/multisite"
                    title="Zone Group"
-                   summaryType="simplified"
                    *ngIf="rgwZonegroupCount != null"></cd-card-row>
 
-      <cd-card-row [data]="rgwZoneCount"
+      <cd-card-row [data]="{'total': rgwZoneCount}"
                    link="/rgw/multisite"
                    title="Zone"
-                   summaryType="simplified"
                    *ngIf="rgwZoneCount != null"></cd-card-row>
 
-      <cd-card-row [data]="rgwBucketCount"
+      <cd-card-row [data]="{'total': rgwBucketCount}"
                    link="/rgw/bucket"
                    title="Bucket"
-                   summaryType="simplified"
                    *ngIf="rgwBucketCount != null"></cd-card-row>
 
-      <cd-card-row [data]="UserCount"
+      <cd-card-row [data]="{'total': UserCount}"
                    link="/rgw/user"
                    title="User"
-                   summaryType="simplified"
                    *ngIf="UserCount != null"></cd-card-row>
 
-      <cd-card-row [data]="objectCount"
+      <cd-card-row [data]="{'total': objectCount}"
                    title="Object"
-                   summaryType="simplified"
                    *ngIf="objectCount != null"></cd-card-row>
     </cd-card>
     <cd-card cardTitle="Performance Statistics"

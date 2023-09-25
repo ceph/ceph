@@ -19,8 +19,12 @@ export class PgSummaryPipe implements PipeTransform {
       categoryPgAmount[categoryType] += pgAmount;
       total += pgAmount;
     });
+
+    categoryPgAmount['total'] = total;
+
     return {
       categoryPgAmount,
+      statuses: value.statuses,
       total
     };
   }

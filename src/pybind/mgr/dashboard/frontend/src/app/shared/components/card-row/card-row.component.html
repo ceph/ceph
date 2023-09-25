@@ -3,175 +3,33 @@
   <div class="d-flex pl-1 pb-2 pt-2">
     <div class="ms-4 me-auto">
       <a [routerLink]="link"
-         *ngIf="link && total > 0; else noLinkTitle"
-         [ngPlural]="total"
-        i18n>
-          {{ total }}
+         *ngIf="link && data.total; else noLinkTitle"
+         [ngPlural]="data.total"
+         i18n> {{ data.total }}
         <ng-template ngPluralCase="=0">{{ title }}</ng-template>
         <ng-template ngPluralCase="=1">{{ title }}</ng-template>
         <ng-template ngPluralCase="other">{{ title }}s</ng-template>
       </a>
     </div>
     <span class="me-3">
-      <ng-container [ngSwitch]="summaryType">
-        <ng-container *ngSwitchCase="'iscsi'">
-          <ng-container *ngTemplateOutlet="iscsiSummary"></ng-container>
-        </ng-container>
-        <ng-container *ngSwitchCase="'osd'">
-          <ng-container *ngTemplateOutlet="osdSummary"></ng-container>
-        </ng-container>
-        <ng-container *ngSwitchCase="'simplified'">
-          <ng-container *ngTemplateOutlet="simplifiedSummary"></ng-container>
-        </ng-container>
-        <ng-container *ngSwitchDefault>
-          <ng-container *ngTemplateOutlet="defaultSummary"></ng-container>
-        </ng-container>
-      </ng-container>
+      <span *ngFor="let item of statusList">
+        <span ngbTooltip="{{item?.tooltip}}">
+          {{ item.value }}
+          <i [ngClass]="[item.class, item.icon]">
+          </i>
+          <span *ngIf="!item?.icon"
+                [ngClass]="[item.class, 'fw-bold']">
+                {{item?.tooltip}}
+          </span>
+        </span>
+      </span>
     </span>
   </div>
 </li>
-
-<ng-template #defaultSummary>
-  <span *ngIf="(data.success && data.success !== total)"
-        ngbTooltip="Success">
-    {{ data.success }}
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
-  </span>
-  <span *ngIf="(data.categoryPgAmount?.clean && data.categoryPgAmount?.clean !== total)"
-        ngbTooltip="Clean">
-    {{ data.categoryPgAmount?.clean }}
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
-  </span>
-  <span *ngIf="data.info"
-        class="ms-2"
-        ngbTooltip="Info">
-    {{ data.info }}
-    <i class="text-info"
-       [ngClass]="[icons.danger]">
-    </i>
-  </span>
-  <span *ngIf="data.warn || data.categoryPgAmount?.warning"
-        class="ms-2"
-        ngbTooltip="Warning">
-    <span *ngIf="data.warn">
-      {{ data.warn }}
-    </span>
-    <span *ngIf="data.categoryPgAmount?.warning">
-      {{ data.categoryPgAmount?.warning }}
-    </span>
-    <i class="text-warning"
-       [ngClass]="[icons.warning]">
-    </i>
-  </span>
-  <span *ngIf="data.error"
-        class="ms-2"
-        ngbTooltip="Error">
-    {{ data.error }}
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
-  </span>
-  <span *ngIf="data.categoryPgAmount?.unknown"
-        ngbTooltip="Unknown">
-    {{ data.categoryPgAmount?.unknown }}
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
-  </span>
-  <span *ngIf="data.categoryPgAmount?.working"
-        class="ms-2"
-        ngbTooltip="Working">
-    <span *ngIf="data.categoryPgAmount?.working">
-      {{ data.categoryPgAmount?.working }}
-    </span>
-    <i class="text-warning"
-       [ngClass]="[icons.spinner, icons.spin]">
-    </i>
-  </span>
-</ng-template>
-
-<ng-template #osdSummary>
-  <span *ngIf="data.up === data.in && total !== data.in"
-        ngbTooltip="Up">
-    {{ data.up }}
-    <i class="text-success"
-       [ngClass]="[icons.success]">
-    </i>
-  </span>
-  <span *ngIf="data.up !== data.in">
-    {{ data.up }}
-    <span class="fw-bold text-success"
-          ngbTooltip="Up">
-        up
-    </span>
-    {{ data.in }}
-    <span class="fw-bold text-success"
-          ngbTooltip="In">
-      in
-    </span>
-  </span>
-  <span *ngIf="data.down"
-        class="ms-2"
-        ngbTooltip="Down">
-    {{ data.down }}
-    <span class="fw-bold text-danger me-2">
-        down
-    </span>
-  </span>
-  <span *ngIf="data.out"
-        class="ms-2"
-        ngbTooltip="Out">
-    {{ data.out }}
-    <span class="fw-bold text-danger me-2">
-        out
-    </span>
-  </span>
-  <span *ngIf="data.nearfull"
-        class="ms-2"
-        ngbTooltip="Near Full">
-        {{ data.nearfull }}
-    <span class="fw-bold text-warning me-2">
-      nearfull</span></span>
-  <span *ngIf="data.full"
-        class="ms-2"
-        ngbTooltip="Full">
-        {{ data.full }}
-    <span class="fw-bold text-danger">
-      full
-    </span>
-  </span>
-</ng-template>
-
-<ng-template #iscsiSummary>
-  <span *ngIf="data.up !== total"
-        ngbTooltip="Up">
-    {{ data.up }}
-    <i class="text-success"
-       *ngIf="data.up"
-       [ngClass]="[icons.success]">
-    </i>
-  </span>
-  <span *ngIf="data.down"
-        class="ms-2"
-        ngbTooltip="Down">
-    {{ data.down }}
-    <i class="text-danger"
-       [ngClass]="[icons.danger]">
-    </i>
-  </span>
-</ng-template>
-
-<ng-template #simplifiedSummary>
-</ng-template>
-
 <ng-template #noLinkTitle>
-  <span *ngIf="total || total === 0"
-        [ngPlural]="total">
-    {{ total }}
+  <span *ngIf="data.total || data.total === 0"
+        [ngPlural]="data.total">
+    {{ data.total }}
     <ng-template ngPluralCase="=0">{{ title }}</ng-template>
     <ng-template ngPluralCase="=1">{{ title }}</ng-template>
     <ng-template ngPluralCase="other">{{ title }}s</ng-template>

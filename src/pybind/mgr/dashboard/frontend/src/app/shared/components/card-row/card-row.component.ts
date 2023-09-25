@@ -16,19 +16,97 @@ export class CardRowComponent implements OnChanges {
   @Input()
   data: any;
 
-  @Input()
-  summaryType = 'default';
-
   icons = Icons;
-  total: number;
+  statusList: {}[];
+  successKeys: string[] = ['success', 'in', 'up'];
+
+  ngOnInit(): void {
+    this.getStatus();
+  }
 
   ngOnChanges(): void {
-    if (this.data.total || this.data.total === 0) {
-      this.total = this.data.total;
-    } else if (this.summaryType === 'iscsi') {
-      this.total = this.data.up + this.data.down || 0;
-    } else {
-      this.total = this.data;
+    if (this.title === 'PG') {
+      this.data = this.data.categoryPgAmount;
     }
+    this.getStatus();
+  }
+
+  getStatus() {
+    this.statusList = [];
+    for (var key in this.data) {
+      if (key !== 'total' && this.data[key]) {
+        switch (key) {
+          case 'success':
+          case 'clean':
+          case 'up':
+          case 'in':
+            if (this.data[key] !== this.data['total']) {
+              this.statusList.push({
+                value: this.data[key],
+                class: 'text-success',
+                icon: this.icons.success,
+                tooltip: key
+              });
+            }
+            break;
+          case 'info':
+            this.statusList.push({
+              value: this.data[key],
+              class: 'text-info',
+              icon: this.icons.danger,
+              tooltip: key
+            });
+            break;
+          case 'warn':
+          case 'warning':
+            this.statusList.push({
+              value: this.data[key],
+              class: 'text-warning',
+              icon: this.icons.warning,
+              tooltip: key
+            });
+            break;
+          case 'nearFull':
+            this.statusList.push({
+              value: this.data[key],
+              class: 'text-warning',
+              icon: '',
+              tooltip: key
+            });
+            break;
+          case 'error':
+          case 'unknown':
+          case 'down':
+            this.statusList.push({
+              value: this.data[key],
+              class: 'text-danger',
+              icon: this.icons.danger,
+              tooltip: key
+            });
+            break;
+          case 'full':
+          case 'out':
+            this.statusList.push({
+              value: this.data[key],
+              class: 'text-danger',
+              icon: '',
+              tooltip: key
+            });
+            break;
+          case 'working':
+            this.statusList.push({
+              value: this.data[key],
+              class: 'text-warning',
+              icon: this.icons.spinner,
+              tooltip: key
+            });
+            break;
+          default:
+            this.statusList.push({ value: this.data[key], class: '', tooltip: key });
+            break;
+        }
+      }
+    }
+    this.statusList;
   }
 }
