@@ -317,10 +317,11 @@ and uses it to sign requests to OSDs and to metadata servers in the cluster.
                 |<----+         |              
 
 
-The ``cephx`` protocol authenticates ongoing communications between the client
-machine and the Ceph servers. Each message sent between a client and server,
-subsequent to the initial authentication, is signed using a ticket that the
-monitors, OSDs and metadata servers can verify with their shared secret.
+The ``cephx`` protocol authenticates ongoing communications between the clients
+and Ceph daemons. After initial authentication, each message sent between a
+client and a daemon is signed using a ticket that can be verified by monitors,
+OSDs, and metadata daemons. This ticket is verified by using the secret shared
+between the client and the daemon.
 
 .. ditaa::
 
@@ -356,11 +357,10 @@ monitors, OSDs and metadata servers can verify with their shared secret.
                 |<-------------------------------------------|
                                receive response
 
-The protection offered by this authentication is between the Ceph client and the
-Ceph server hosts. The authentication is not extended beyond the Ceph client. If
-the user accesses the Ceph client from a remote host, Ceph authentication is not
+This authentication protects only the connections between Ceph clients and Ceph
+daemons. The authentication is not extended beyond the Ceph client. If a user
+accesses the Ceph client from a remote host, cephx authentication will not be
 applied to the connection between the user's host and the client host.
-
 
 See `Cephx Config Guide`_ for more on configuration details. 
 
