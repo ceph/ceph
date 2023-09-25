@@ -38,8 +38,6 @@ static inline Object* nextObject(Object* t)
 
 D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next) 
 {
-  //conn = new boost::redis::connection{boost::asio::make_strand(io_context)};
-  //cacheDriver = new rgw::cache::RedisDriver(*static_cast<boost::redis::connection*>(conn), partition_info); // change later -Sam
 
   rgw::cache::Partition partition_info;
   partition_info.location = g_conf()->rgw_d3n_l1_datacache_persistent_path;
@@ -47,9 +45,10 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
   partition_info.type = "read-cache";
   partition_info.size = g_conf()->rgw_d3n_l1_datacache_size;
 
+  //cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info); // change later -Sam
   cacheDriver = new rgw::cache::SSDDriver(partition_info);
-  objDir = new rgw::d4n::ObjectDirectory();
-  blockDir = new rgw::d4n::BlockDirectory();
+  objDir = new rgw::d4n::ObjectDirectory(io_context);
+  blockDir = new rgw::d4n::BlockDirectory(io_context);
   cacheBlock = new rgw::d4n::CacheBlock();
   policyDriver = new rgw::d4n::PolicyDriver("lfuda");
   lruPolicyDriver = new rgw::d4n::PolicyDriver("lru");
@@ -71,8 +70,8 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 
   cacheDriver->initialize(cct, dpp);
 
-  objDir->init(cct);
-  blockDir->init(cct);
+  objDir->init(cct, dpp);
+  blockDir->init(cct, dpp);
 
   policyDriver->init(); 
   policyDriver->cachePolicy->init(cct);
@@ -154,24 +153,13 @@ int D4NFilterObject::copy_object(User* user,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
-  /* Build cache block copy */
-  rgw::d4n::CacheBlock* copyCacheBlock = new rgw::d4n::CacheBlock(); // How will this copy work in lfuda? -Sam
-
-  copyCacheBlock->hostsList.push_back(driver->get_cache_block()->hostsList[0]); 
-  copyCacheBlock->size = driver->get_cache_block()->size;
-  copyCacheBlock->size = driver->get_cache_block()->globalWeight; // Do we want to reset the global weight? -Sam
-  copyCacheBlock->cacheObj.bucketName = dest_bucket->get_name();
-  copyCacheBlock->cacheObj.objName = dest_object->get_key().get_oid();
-  
-  int copy_valueReturn = driver->get_block_dir()->set_value(copyCacheBlock);
+  int copy_valueReturn = driver->get_block_dir()->copy(driver->get_cache_block(), dest_object->get_name(), dest_bucket->get_name(), y);
 
   if (copy_valueReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Block directory copy operation failed." << dendl;
   } else {
     ldpp_dout(dpp, 20) << "D4N Filter: Block directory copy operation succeeded." << dendl;
   }
-
-  delete copyCacheBlock;
 
   /* Append additional metadata to attributes */
   rgw::sal::Attrs baseAttrs = this->get_attrs();
@@ -714,7 +702,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     cb->handle_data(bl, ofs, len);
   } else {
     / Block directory check /
-    int getDirReturn = source->driver->get_block_dir()->get_value(source->driver->get_cache_block()); 
+    int getDirReturn = source->driver->get_block_dir()->get(source->driver->get_cache_block()); 
 
     if (getDirReturn >= -1) {
       if (getDirReturn == -1) {
@@ -742,7 +730,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     } else {
       / Write tier retrieval /
       ldpp_dout(dpp, 20) << "D4N Filter: Block directory get operation failed." << dendl;
-      getDirReturn = source->driver->get_obj_dir()->get_value(&(source->driver->get_cache_block()->cacheObj));
+      getDirReturn = source->driver->get_obj_dir()->get(&(source->driver->get_cache_block()->cacheObj));
 
       if (getDirReturn >= -1) {
 	if (getDirReturn == -1) {
@@ -784,7 +772,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 	  source->driver->get_cache_block()->cacheObj.bucketName = source->get_bucket()->get_name();
 	  source->driver->get_cache_block()->cacheObj.objName = source->get_key().get_oid();
 
-	  int setDirReturn = tempBlockDir->set_value(source->driver->get_cache_block());
+	  int setDirReturn = tempBlockDir->set(source->driver->get_cache_block());
 
 	  if (setDirReturn < 0) {
 	    ldpp_dout(dpp, 20) << "D4N Filter: Block directory set operation failed." << dendl;
@@ -833,8 +821,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       ret = filter->get_cache_driver()->put_async(save_dpp, oid, bl, bl.length(), source->get_attrs());
       if (ret == 0) {
         block.size = bl.length();
-        block.blockId = oid;
-        block.hostsList.push_back(blockDir->get_addr().host + ":" + std::to_string(blockDir->get_addr().port)); //check if this is the correct way to get the local addr
+        block.version = oid;
+        block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
         block.size = source->get_obj_size();
         block.cacheObj.bucketName = source->get_bucket()->get_name();
         block.cacheObj.objName = source->get_key().get_oid();
@@ -842,8 +830,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
         }
         /* Store block in directory */
-        if (!blockDir->exist_key(oid)) {
-          int ret = blockDir->set_value(&block);
+        if (!blockDir->exist_key(oid, *save_y)) {
+          int ret = blockDir->set(&block, *save_y);
           if (ret < 0) {
             ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;
             return ret;
@@ -855,8 +843,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       ofs += bl_len;
-      block.blockId = oid;
-      block.hostsList.push_back(blockDir->get_addr().host + ":" + std::to_string(blockDir->get_addr().port)); //check if this is the correct way to get the local addr
+      block.version = oid;
+      block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
       block.size = source->get_obj_size();
       block.cacheObj.bucketName = source->get_bucket()->get_name();
       block.cacheObj.objName = source->get_key().get_oid();
@@ -867,8 +855,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
           filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl.length(), filter->get_cache_driver());
         }
         /* Store block in directory */
-        if (!blockDir->exist_key(oid)) {
-          int ret = blockDir->set_value(&block);
+        if (!blockDir->exist_key(oid, *save_y)) {
+          int ret = blockDir->set(&block, *save_y);
           if (ret < 0) {
             ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;
             return ret;
@@ -884,7 +872,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 
       bl.splice(0, len_to_copy, &bl_copy);
       bl_rem.claim_append(bl_copy);
-      block.hostsList.push_back(blockDir->get_addr().host + ":" + std::to_string(blockDir->get_addr().port));
+      block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
       block.size = source->get_obj_size();
       block.cacheObj.bucketName = source->get_bucket()->get_name();
       block.cacheObj.objName = source->get_key().get_oid();
@@ -899,8 +887,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
             filter->get_policy_driver()->cachePolicy->insert(save_dpp, oid, ofs, bl_rem.length(), filter->get_cache_driver());
           }
           /* Store block in directory */
-          if (!blockDir->exist_key(oid)) {
-            int ret = blockDir->set_value(&block);
+          if (!blockDir->exist_key(oid, *save_y)) {
+            int ret = blockDir->set(&block, *save_y);
             if (ret < 0) {
               ldpp_dout(save_dpp, 0) << "D4N Filter: Block directory set operation failed." << dendl;
               return ret;
@@ -922,7 +910,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y)
 {
-  int delDirReturn = source->driver->get_block_dir()->del_value(source->driver->get_cache_block());
+  int delDirReturn = source->driver->get_block_dir()->del(source->driver->get_cache_block(), y);
 
   if (delDirReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Block directory delete operation failed." << dendl;
@@ -989,13 +977,13 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 {
   rgw::d4n::BlockDirectory* tempBlockDir = driver->get_block_dir();
 
-  driver->get_cache_block()->hostsList.push_back(tempBlockDir->get_addr().host + ":" + 
-		  				   std::to_string(tempBlockDir->get_addr().port)); 
+  driver->get_cache_block()->hostsList.push_back(tempBlockDir->cct->_conf->rgw_d4n_host + ":" + 
+		  				   std::to_string(tempBlockDir->cct->_conf->rgw_d4n_port)); 
   driver->get_cache_block()->size = accounted_size;
   driver->get_cache_block()->cacheObj.bucketName = obj->get_bucket()->get_name();
   driver->get_cache_block()->cacheObj.objName = obj->get_key().get_oid();
 
-  int setDirReturn = tempBlockDir->set_value(driver->get_cache_block());
+  int setDirReturn = tempBlockDir->set(driver->get_cache_block(), y);
 
   if (setDirReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Block directory set operation failed." << dendl;
