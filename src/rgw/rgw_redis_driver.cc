@@ -1,46 +1,64 @@
 #include <boost/algorithm/string.hpp>
-#include "rgw_redis_driver.h"
-//#include "rgw_ssd_driver.h" // fix -Sam
-//#include <aedis/src.hpp>
+#include <boost/redis/src.hpp>
+#include <boost/asio/detached.hpp>
 
-#define dout_subsys ceph_subsys_rgw
-#define dout_context g_ceph_context
+#include "rgw_redis_driver.h"
+#include "common/async/blocked_completion.h"
 
 namespace rgw { namespace cache {
 
 std::unordered_map<std::string, Partition> RedisDriver::partitions;
 
-std::vector< std::pair<std::string, std::string> > build_attrs(rgw::sal::Attrs* binary) 
+std::list<std::string> build_attrs(rgw::sal::Attrs* binary) 
 {
-  std::vector< std::pair<std::string, std::string> > values;
+  std::list<std::string> values;
   rgw::sal::Attrs::iterator attrs;
 
   /* Convert to vector */
   if (binary != NULL) {
     for (attrs = binary->begin(); attrs != binary->end(); ++attrs) {
-      values.push_back(std::make_pair(attrs->first, attrs->second.to_str()));
+      values.push_back(attrs->first);
+      values.push_back(attrs->second.to_str());
     }
   }
 
   return values;
 }
 
-int RedisDriver::find_client(const DoutPrefixProvider* dpp) 
+// initiate a call to async_exec() on the connection's executor
+struct initiate_exec {
+  std::shared_ptr<boost::redis::connection> conn;
+  boost::redis::request req;
+
+  using executor_type = boost::redis::connection::executor_type;
+  executor_type get_executor() const noexcept { return conn->get_executor(); }
+  
+  template <typename Handler, typename Response>
+  void operator()(Handler handler, Response& resp)
+  {
+    conn->async_exec(req, resp, boost::asio::consign(std::move(handler), conn));
+  } 
+};
+
+template <typename Response, typename CompletionToken>
+auto async_exec(std::shared_ptr<connection> conn,
+                const boost::redis::request& req,
+                Response& resp, CompletionToken&& token)
 {
-  if (client.is_connected())
-    return 0;
+  return boost::asio::async_initiate<CompletionToken,
+         void(boost::system::error_code, std::size_t)>(
+      initiate_exec{std::move(conn), req}, token, resp);
+}
 
-  if (addr.host == "" || addr.port == 0) { 
-    ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
-    return EDESTADDRREQ;
+template <typename T>
+void redis_exec(std::shared_ptr<connection> conn, boost::system::error_code& ec, boost::redis::request& req, boost::redis::response<T>& resp, optional_yield y)
+{
+  if (y) {
+    auto yield = y.get_yield_context();
+    async_exec(std::move(conn), req, resp, yield[ec]);
+  } else {
+    async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
   }
-
-  client.connect(addr.host, addr.port, nullptr);
-
-  if (!client.is_connected())
-    return ECONNREFUSED;
-
-  return 0;
 }
 
 int RedisDriver::add_partition_info(Partition& info)
@@ -137,24 +155,20 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
 {
   this->cct = cct;
 
-  addr.host = cct->_conf->rgw_d4n_host; // change later -Sam
-  addr.port = cct->_conf->rgw_d4n_port;
-
   if (partition_info.location.back() != '/') {
     partition_info.location += "/";
   }
 
-  if (addr.host == "" || addr.port == 0) {
+  config cfg;
+  cfg.addr.host = cct->_conf->rgw_d4n_host; // TODO: Replace with cache address
+  cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
+
+  if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
     return -EDESTADDRREQ;
   }
 
-  client.connect("127.0.0.1", 6379, nullptr);
-
-  if (!client.is_connected()) {
-    ldpp_dout(dpp, 10) << "RGW Redis Cache: Could not connect to redis cache endpoint." << dendl;
-    return ECONNREFUSED;
-  }
+  conn->async_run(cfg, {}, net::consign(net::detached, conn));
 
   return 0;
 }
@@ -163,24 +177,23 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
   try {
-    std::string result; 
+    boost::system::error_code ec;
+    response<std::string> resp;
     auto redisAttrs = build_attrs(&attrs);
-    redisAttrs.push_back({"data", bl.to_str()});
 
-    client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-	result = reply.as_string();
-      }
-    });
+    if (bl.length()) {
+      redisAttrs.push_back("data");
+      redisAttrs.push_back(bl.to_str());
+    }
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    request req;
+    req.push_range("HMSET", entry, redisAttrs);
 
-    if (result != "OK") {
+    redis_exec(conn, ec, req, resp, y);
+
+    if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
     }
   } catch(std::exception &e) {
@@ -194,37 +207,54 @@ int RedisDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_
 {
   std::string entry = partition_info.location + key;
   
-  if (!client.is_connected()) 
-    find_client(dpp);
-    
-    /* Retrieve existing values from cache */
+  /* Retrieve existing values from cache */
   try {
-      client.hgetall(entry, [&bl, &attrs](cpp_redis::reply &reply) {
-	if (reply.is_array()) {
-	  auto arr = reply.as_array();
-    
-	  if (!arr[0].is_null()) {
-    	    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
-	      if (arr[i].as_string() == "data") {
-                bl.append(arr[i + 1].as_string());
-	      } else {
-	        buffer::list bl_value;
-		bl_value.append(arr[i + 1].as_string());
-                attrs.insert({arr[i].as_string(), bl_value});
-		bl_value.clear();
-	      }
-            }
-	  }
-	}
-      });
+    boost::system::error_code ec;
+    response< std::map<std::string, std::string> > resp;
+    request req;
+    req.push("HGETALL", entry);
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
       return -1;
-    }
 
+    for (auto const& it : std::get<0>(resp).value()) {
+      if (it.first == "data") {
+	bl.append(it.second);
+      } else {
+	buffer::list bl_value;
+	bl_value.append(it.second);
+	attrs.insert({it.first, bl_value});
+	bl_value.clear();
+      }
+    }
+  } catch(std::exception &e) {
+    return -1;
+  }
 
   return 0;
+}
+
+int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
+{
+  std::string entry = partition_info.location + key;
+
+  try {
+    boost::system::error_code ec;
+    response<int> resp;
+    request req;
+    req.push("DEL", entry);
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return -1;
+
+    return std::get<0>(resp).value() - 1; 
+  } catch(std::exception &e) {
+    return -1;
+  }
 }
 
 int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) 
@@ -232,37 +262,34 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
   std::string value;
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   try {
-    client.hget(entry, "data", [&value](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        value = reply.as_string();
-      }
-    });
+    boost::system::error_code ec;
+    response<std::string> resp;
+    request req;
+    req.push("HGET", entry, "data");
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return -1;
+
+    value = std::get<0>(resp).value();
   } catch(std::exception &e) {
     return -1;
   }
 
   try { // do we want key check here? -Sam
     /* Append to existing value or set as new value */
+    boost::system::error_code ec;
+    response<std::string> resp;
     std::string newVal = value + bl_data.to_str();
-    std::vector< std::pair<std::string, std::string> > field;
-    field.push_back({"data", newVal});
-    std::string result;
 
-    client.hmset(entry, field, [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        result = reply.as_string();
-      }
-    });
+    request req;
+    req.push("HMSET", entry, "data", newVal);
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, resp, y);
 
-    if (result != "OK") {
+    if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
     }
   } catch(std::exception &e) {
@@ -275,47 +302,38 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
 int RedisDriver::delete_data(const DoutPrefixProvider* dpp, const::std::string& key, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
-
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  int exists = -2;
+  response<int> value;
+  response<int> resp;
 
   try {
-      client.hexists(entry, "data", [&exists](cpp_redis::reply &reply) {
-	if (!reply.is_null()) {
-	  exists = reply.as_integer();
-	}
-      });
+    boost::system::error_code ec;
+    request req;
+    req.push("HEXISTS", entry, "data");
 
-      client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return -1;
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  if (std::get<0>(resp).value()) {
+    try {
+      boost::system::error_code ec;
+      request req;
+      req.push("HDEL", entry, "data");
+
+      redis_exec(conn, ec, req, value, y);
+
+      if (!std::get<0>(value).value() || ec) {
+	return -1;
+      }
     } catch(std::exception &e) {
       return -1;
     }
+  }
 
-    if (exists) {
-      try {
-	int result;
-	std::vector<std::string> deleteField;
-	deleteField.push_back("data");
-
-	client.hdel(entry, deleteField, [&result](cpp_redis::reply &reply) {
-	  if (reply.is_integer()) {
-	    result = reply.as_integer(); 
-	  }
-	});
-
-	client.sync_commit(std::chrono::milliseconds(1000));
-
-	if (!result) {
-	  return -1;
-	}
-      } catch(std::exception &e) {
-	return -1;
-      }
-    } else {
-      return 0; /* No delete was necessary */
-    }
   return 0;
 }
 
@@ -323,31 +341,28 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   try {
-      client.hgetall(entry, [&attrs](cpp_redis::reply &reply) {
-	if (reply.is_array()) { 
-	  auto arr = reply.as_array();
-    
-	  if (!arr[0].is_null()) {
-    	    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
-	      if (arr[i].as_string() != "data") {
-	        buffer::list bl_value;
-		bl_value.append(arr[i + 1].as_string());
-                attrs.insert({arr[i].as_string(), bl_value});
-		bl_value.clear();
-	      }
-            }
-	  }
-	}
-      });
+    boost::system::error_code ec;
+    response< std::map<std::string, std::string> > resp;
+    request req;
+    req.push("HGETALL", entry);
 
-      client.sync_commit(std::chrono::milliseconds(1000));
-    } catch(std::exception &e) {
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
       return -1;
+
+    for (auto const& it : std::get<0>(resp).value()) {
+      if (it.first != "data") {
+	buffer::list bl_value;
+	bl_value.append(it.second);
+	attrs.insert({it.first, bl_value});
+	bl_value.clear();
+      }
     }
+  } catch(std::exception &e) {
+    return -1;
+  }
 
   return 0;
 }
@@ -359,24 +374,20 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
       
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   /* Every attr set will be treated as new */
   try {
+    boost::system::error_code ec;
+    response<std::string> resp;
     std::string result;
-    auto redisAttrs = build_attrs(&attrs);
+    std::list<std::string> redisAttrs = build_attrs(&attrs);
 
-    client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        result = reply.as_string();
-      }
-    });
+    request req;
+    req.push_range("HMSET", entry, redisAttrs);
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, resp, y);
 
-    if (result != "OK") {
-return -1;
+    if (std::get<0>(resp).value() != "OK" || ec) {
+      return -1;
     }
   } catch(std::exception &e) {
     return -1;
@@ -389,22 +400,17 @@ int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
   try {
-    std::string result;
+    boost::system::error_code ec;
+    response<std::string> resp;
     auto redisAttrs = build_attrs(&attrs);
 
-    client.hmset(entry, redisAttrs, [&result](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        result = reply.as_string();
-      }
-    });
+    request req;
+    req.push_range("HMSET", entry, redisAttrs);
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, resp, y);
 
-    if (result != "OK") {
+    if (std::get<0>(resp).value() != "OK" || ec) {
       return -1;
     }
   } catch(std::exception &e) {
@@ -418,236 +424,126 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
 {
   std::string entry = partition_info.location + key;
 
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  std::vector<std::string> getFields;
-
   try {
-    client.hgetall(entry, [&getFields](cpp_redis::reply &reply) {
-if (reply.is_array()) {
-  auto arr = reply.as_array();
-  
-  if (!arr[0].is_null()) {
-    for (long unsigned int i = 0; i < arr.size() - 1; i += 2) {
-      getFields.push_back(arr[i].as_string());
-    }
-  }
-}
-    });
+    boost::system::error_code ec;
+    response<int> resp;
+    auto redisAttrs = build_attrs(&del_attrs);
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    request req;
+    req.push_range("HDEL", entry, redisAttrs);
+
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return -1;
+
+    return std::get<0>(resp).value(); 
   } catch(std::exception &e) {
     return -1;
   }
-
-  auto redisAttrs = build_attrs(&del_attrs);
-  std::vector<std::string> redisFields;
-
-  std::transform(begin(redisAttrs), end(redisAttrs), std::back_inserter(redisFields),
-    [](auto const& pair) { return pair.first; });
-
-  /* Only delete attributes that have been stored */
-  for (const auto& it : redisFields) {
-    if (std::find(getFields.begin(), getFields.end(), it) == getFields.end()) {
-      redisFields.erase(std::find(redisFields.begin(), redisFields.end(), it));
-    }
-  }
-
-  try {
-    int result = 0;
-
-    client.hdel(entry, redisFields, [&result](cpp_redis::reply &reply) {
-      if (reply.is_integer()) {
-        result = reply.as_integer();
-      }
-    });
-
-    client.sync_commit(std::chrono::milliseconds(1000));
-
-    return result - 1;
-  } catch(std::exception &e) {
-    return -1;
-  }
-
-  ldpp_dout(dpp, 20) << "RGW Redis Cache: Object is not in cache." << dendl;
-  return -2;
 }
 
 std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
-  std::string attrValue;
-
-  if (!client.is_connected()) 
-    find_client(dpp);
-
-  int exists = -2;
-  std::string getValue;
+  response<std::string> value;
+  response<int> resp;
 
   /* Ensure field was set */
   try {
-    client.hexists(entry, attr_name, [&exists](cpp_redis::reply& reply) {
-      if (!reply.is_null()) {
-        exists = reply.as_integer();
-      }
-    });
+    boost::system::error_code ec;
+    request req;
+    req.push("HEXISTS", entry, attr_name);
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return {};
   } catch(std::exception &e) {
     return {};
   }
   
-  if (!exists) {
+  if (!std::get<0>(resp).value()) {
     ldpp_dout(dpp, 20) << "RGW Redis Cache: Attribute was not set." << dendl;
     return {};
   }
 
   /* Retrieve existing value from cache */
   try {
-    client.hget(entry, attr_name, [&exists, &attrValue](cpp_redis::reply &reply) {
-      if (!reply.is_null()) {
-        attrValue = reply.as_string();
-      }
-    });
+    boost::system::error_code ec;
+    request req;
+    req.push("HGET", entry, attr_name);
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, value, y);
+
+    if (ec)
+      return {};
   } catch(std::exception &e) {
     return {};
   }
 
-  return attrValue;
+  return std::get<0>(value).value();
 }
 
-int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attrVal, optional_yield y) 
+int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
-  int result = 0;
-    
-  if (!client.is_connected()) 
-    find_client(dpp);
+  response<int> resp;
     
   /* Every attr set will be treated as new */
   try {
-    client.hset(entry, attr_name, attrVal, [&result](cpp_redis::reply& reply) {
-    if (!reply.is_null()) {
-        result = reply.as_integer();
-      }
-    });
+    boost::system::error_code ec;
+    request req;
+    req.push("HSET", entry, attr_name, attr_val);
 
-    client.sync_commit(std::chrono::milliseconds(1000));
+    redis_exec(conn, ec, req, resp, y);
+
+    if (ec)
+      return {};
   } catch(std::exception &e) {
     return -1;
   }
 
-  return result - 1;
+  return std::get<0>(resp).value();
 }
-#if 0
-std::unique_ptr<CacheAioRequest> RedisDriver::get_cache_aio_request_ptr(const DoutPrefixProvider* dpp) 
+
+static Aio::OpFunc redis_read_op(optional_yield y, std::shared_ptr<connection> conn,
+                                 off_t read_ofs, off_t read_len, const std::string& key)
 {
-  return std::make_unique<RedisCacheAioRequest>(this);  
+  return [y, conn, key] (Aio* aio, AioResult& r) mutable {
+    using namespace boost::asio;
+    spawn::yield_context yield = y.get_yield_context();
+    async_completion<spawn::yield_context, void()> init(yield);
+    auto ex = get_associated_executor(init.completion_handler);
+
+    boost::redis::request req;
+    req.push("HGET", key, "data");
+
+    // TODO: Make unique pointer once support is added
+    auto s = std::make_shared<RedisDriver::redis_response>();
+    auto& resp = s->resp;
+
+    conn->async_exec(req, resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, s}));
+  };
 }
-#endif
+
 rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) 
 {
+  std::string entry = partition_info.location + key;
   rgw_raw_obj r_obj;
   r_obj.oid = key;
 
-  return aio->get(r_obj, rgw::Aio::cache_read_op(dpp, y, this, ofs, len, key), cost, id);
+  return aio->get(r_obj, redis_read_op(y, conn, ofs, len, entry), cost, id);
 }
 
+#if 0
 int RedisDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg)
 {
-  ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): file_path=" << file_path << dendl;
-  aio_cb.reset(new struct aiocb);
-  memset(aio_cb.get(), 0, sizeof(struct aiocb));
-  aio_cb->aio_fildes = TEMP_FAILURE_RETRY(::open(file_path.c_str(), O_RDONLY|O_CLOEXEC|O_BINARY));
-
-  if (aio_cb->aio_fildes < 0) {
-      int err = errno;
-      ldpp_dout(dpp, 1) << "ERROR: RedisCache: " << __func__ << "(): can't open " << file_path << " : " << " error: " << err << dendl;
-      return -err;
-  }
-
-  if (cct->_conf->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL) {
-      posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
-  }
-
-  bufferptr bp(read_len);
-  aio_cb->aio_buf = bp.c_str();
-  result.append(std::move(bp));
-
-  aio_cb->aio_nbytes = read_len;
-  aio_cb->aio_offset = read_ofs;
-  aio_cb->aio_sigevent.sigev_notify = SIGEV_THREAD;
-  aio_cb->aio_sigevent.sigev_notify_function = libaio_cb_aio_dispatch;
-  aio_cb->aio_sigevent.sigev_notify_attributes = nullptr;
-  aio_cb->aio_sigevent.sigev_value.sival_ptr = arg;
-
-  return 0;
-}
-
-void RedisDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
-{
-  auto p = std::unique_ptr<Completion>{static_cast<Completion*>(sigval.sival_ptr)};
-  auto op = std::move(p->user_data);
-  const int ret = -aio_error(op.aio_cb.get());
-  boost::system::error_code ec;
-  if (ret < 0) {
-      ec.assign(-ret, boost::system::system_category());
-  }
-
-  ceph::async::dispatch(std::move(p), ec, std::move(op.result));
-}
-
-template <typename Executor1, typename CompletionHandler>
-auto RedisDriver::AsyncReadOp::create(const Executor1& ex1, CompletionHandler&& handler)
-{
-  auto p = Completion::create(ex1, std::move(handler));
-  return p;
-}
-
-template <typename ExecutionContext, typename CompletionToken>
-auto RedisDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
-                off_t read_ofs, off_t read_len, CompletionToken&& token)
-{
-  std::string location = partition_info.location + key;
-  ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): location=" << location << dendl;
-
-  using Op = AsyncReadOp;
-  using Signature = typename Op::Signature;
-  boost::asio::async_completion<CompletionToken, Signature> init(token);
-  auto p = Op::create(ctx.get_executor(), init.completion_handler);
-  auto& op = p->user_data;
-
-  int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
-  if (0 == ret) {
-    ret = ::aio_read(op.aio_cb.get());
-  }
-//  ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): ::aio_read(), ret=" << ret << dendl;
- /* if(ret < 0) {
-      auto ec = boost::system::error_code{-ret, boost::system::system_category()};
-      ceph::async::post(std::move(p), ec, bufferlist{});
-  } else {
-      (void)p.release();
-  }*/
-  //return init.result.get();
-}
-#if 0
-void RedisCacheAioRequest::cache_aio_read(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, off_t ofs, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
-{
-  using namespace boost::asio;
-  async_completion<yield_context, void()> init(y.get_yield_context());
-  auto ex = get_associated_executor(init.completion_handler);
-
-  ldpp_dout(dpp, 20) << "RedisCache: " << __func__ << "(): key=" << key << dendl;
-  cache_driver->get_async(dpp, y.get_io_context(), key, ofs, len, bind_executor(ex, RedisDriver::libaio_handler{aio, r}));
-}
-
-void RedisCacheAioRequest::cache_aio_write(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& bl, uint64_t len, rgw::Aio* aio, rgw::AioResult& r)
-{
+  // call cancel() on the connection's executor
+  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 }
 #endif
+
 int RedisDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs)
 {
   return 0;
