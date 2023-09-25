@@ -924,7 +924,8 @@ class OSDThrasher(Thrasher):
         self.ceph_manager.wait_for_clean(timeout=180)
         assert self.ceph_manager.is_clean(), \
             'not clean before minsize thrashing starts'
-        while not self.stopping:
+        start = time.time()
+        while time.time() - start < self.config.get("test_min_size_duration", 1800):
             # look up k and m from all the pools on each loop, in case it
             # changes as the cluster runs
             k = 0
