@@ -202,7 +202,6 @@ set(librgw_common_srcs
   driver/rados/topic.cc)
 
 list(APPEND librgw_common_srcs
-  driver/d4n/d4n_directory.cc
   driver/immutable_config/store.cc
   driver/json_config/store.cc
   driver/rados/config/impl.cc
@@ -228,10 +227,6 @@ if(WITH_RADOSGW_MOTR)
 endif()
 if(WITH_RADOSGW_DAOS)
   list(APPEND librgw_common_srcs driver/motr/rgw_sal_daos.cc)
-endif()
-if(WITH_RADOSGW_D4N)
-  list(APPEND librgw_common_srcs driver/d4n/d4n_directory.cc)
-  list(APPEND librgw_common_srcs driver/d4n/rgw_sal_d4n.cc)
 endif()
 if(WITH_RADOSGW_POSIX)
   #add_subdirectory(driver/posix)
@@ -297,11 +292,6 @@ target_include_directories(rgw_common
   PUBLIC "${LUA_INCLUDE_DIR}")
 
 if(WITH_RADOSGW_D4N)
-  add_dependencies(rgw_common cpp_redis) # remove later -Sam
-  target_link_libraries(rgw_common PRIVATE cpp_redis)
-  target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/includes")
-  target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/cpp_redis/tacopie/includes")
-
   target_include_directories(rgw_common SYSTEM PUBLIC "${CMAKE_SOURCE_DIR}/src/boost_redis/include")
 endif()
 
