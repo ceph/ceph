@@ -62,6 +62,7 @@ int main(int argc, char *argv[])
 { 
   int r{0};
 
+  bool null_vid = false;
   // dout() messages will be sent to stderr, but FCGX wants messages on stdout
   // Redirect stderr to stdout.
   TEMP_FAILURE_RETRY(close(STDERR_FILENO));
@@ -157,7 +158,7 @@ int main(int argc, char *argv[])
   main.init_opslog();
   main.init_tracepoints();
   main.init_lua();
-  main.init_frontends2(nullptr /* RGWLib */);
+  main.init_frontends2(null_vid, nullptr /* RGWLib */);
   main.init_notification_endpoints();
 
 #if defined(HAVE_SYS_PRCTL_H)

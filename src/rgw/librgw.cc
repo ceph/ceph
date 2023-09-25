@@ -47,6 +47,7 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
 {
   using namespace rgw;
 
+  bool null_vid = false;
   int rc = -EINVAL;
 
   g_rgwlib = &rgwlib;
@@ -65,7 +66,7 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
       for (const auto& elt : spl_args) {
 	args.push_back(elt.c_str());
       }
-      rc = rgwlib.init(args);
+      rc = rgwlib.init(args, null_vid);
     }
   }
 

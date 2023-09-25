@@ -96,7 +96,7 @@ void Background::pause() {
   cond.notify_all();
 }
 
-void Background::resume(rgw::sal::Driver* driver) {
+void Background::resume(rgw::sal::Driver* driver, bool null_vid) {
   lua_manager = driver->get_lua_manager();
   paused = false;
   cond.notify_all();

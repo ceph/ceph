@@ -53,7 +53,7 @@ class RGWRealmReloader::C_Reload : public Context {
   RGWRealmReloader* reloader;
  public:
   explicit C_Reload(RGWRealmReloader* reloader) : reloader(reloader) {}
-  void finish(int r) override { reloader->reload(); }
+  void finish(int r, bool null_vid) override { reloader->reload(null_vid); }
 };
 
 void RGWRealmReloader::handle_notify(RGWRealmNotify type,
@@ -82,7 +82,7 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
   ldout(cct, 4) << "Notification on realm, reconfiguration scheduled" << dendl;
 }
 
-void RGWRealmReloader::reload()
+void RGWRealmReloader::reload(bool null_vid)
 {
   CephContext *const cct = env.driver->ctx();
   const DoutPrefix dp(cct, dout_subsys, "rgw realm reloader: ");
@@ -187,5 +187,5 @@ void RGWRealmReloader::reload()
 
   ldpp_dout(&dp, 1) << "Resuming frontends with new realm configuration." << dendl;
 
-  frontends->resume(env.driver);
+  frontends->resume(env.driver, null_vid);
 }

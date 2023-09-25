@@ -353,7 +353,7 @@ class RGWSwiftWebsiteHandler {
   bool is_web_dir() const;
   bool is_index_present(const std::string& index) const;
 
-  int serve_errordoc(int http_ret, std::string error_doc, optional_yield y);
+  int serve_errordoc(int http_ret, std::string error_doc, optional_yield y, bool null_vid);
 
   RGWOp* get_ws_redirect_op();
   RGWOp* get_ws_index_op();

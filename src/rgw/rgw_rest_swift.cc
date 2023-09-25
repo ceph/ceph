@@ -2353,7 +2353,8 @@ RGWOp *RGWHandler_REST_Service_SWIFT::op_delete()
 
 int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
                                            const std::string error_doc,
-					   optional_yield y)
+					   optional_yield y,
+                                           bool null_vid)
 {
   /* Try to throw it all away. */
   s->formatter->reset();
@@ -2391,7 +2392,7 @@ int RGWSwiftWebsiteHandler::serve_errordoc(const int http_ret,
 
   RGWOp* newop = &get_errpage_op;
   RGWRequest req(0);
-  return rgw_process_authenticated(handler, newop, &req, s, y, driver, true);
+  return rgw_process_authenticated(handler, newop, &req, s, y, driver, null_vid, true);
 }
 
 int RGWSwiftWebsiteHandler::error_handler(const int err_no,
@@ -2407,7 +2408,7 @@ int RGWSwiftWebsiteHandler::error_handler(const int err_no,
 
   if (can_be_website_req() && ! ws_conf.error_doc.empty()) {
     set_req_state_err(s, err_no);
-    return serve_errordoc(s->err.http_ret, ws_conf.error_doc, y);
+    return serve_errordoc(s->err.http_ret, ws_conf.error_doc, y, null_vid);
   }
 
   /* Let's go to the default, no-op handler. */

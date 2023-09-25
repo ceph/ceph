@@ -15,11 +15,11 @@ public:
 		  rgw::dmclock::SchedulerCtx& sched_ctx);
   ~RGWAsioFrontend() override;
 
-  int init() override;
+  int init(bool null_vid) override;
   int run() override;
   void stop() override;
   void join() override;
 
   void pause_for_new_config() override;
-  void unpause_with_new_config() override;
+  void unpause_with_new_config(bool null_vid) override;
 };

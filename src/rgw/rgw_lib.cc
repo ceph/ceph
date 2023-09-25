@@ -447,7 +447,7 @@ namespace rgw {
     return ret;
   }
 
-  int RGWLibFrontend::init()
+  int RGWLibFrontend::init(bool null_vid)
   {
     std::string uri_prefix; // empty
     pprocess = new RGWLibProcess(g_ceph_context, env,
@@ -460,13 +460,13 @@ namespace rgw {
     this->fe = fe;
   }
 
-  int RGWLib::init()
+  int RGWLib::init(bool null_vid)
   {
     vector<const char*> args;
-    return init(args);
+    return init(args, null_vid);
   }
 
-  int RGWLib::init(vector<const char*>& args)
+  int RGWLib::init(vector<const char*>& args, bool null_vid)
   {
     /* alternative default for module */
     map<std::string,std::string> defaults = {
@@ -524,7 +524,7 @@ namespace rgw {
     register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
 
     main.init_tracepoints();
-    main.init_frontends2(this /* rgwlib */);
+    main.init_frontends2(null_vid, this /* rgwlib */);
     main.init_notification_endpoints();
     main.init_lua();
 

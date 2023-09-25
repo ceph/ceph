@@ -76,14 +76,14 @@ class RGWFrontend {
 public:
   virtual ~RGWFrontend() {}
 
-  virtual int init() = 0;
+  virtual int init(bool null_vid) = 0;
 
   virtual int run() = 0;
   virtual void stop() = 0;
   virtual void join() = 0;
 
   virtual void pause_for_new_config() = 0;
-  virtual void unpause_with_new_config() = 0;
+  virtual void unpause_with_new_config(bool null_vid) = 0;
 };
 
 
@@ -121,8 +121,8 @@ public:
     pprocess->pause();
   }
 
-  void unpause_with_new_config() override {
-    pprocess->unpause_with_new_config();
+  void unpause_with_new_config(bool null_vid) override {
+    pprocess->unpause_with_new_config(null_vid);
   }
 }; /* RGWProcessFrontend */
 
@@ -145,7 +145,7 @@ public:
     return out << "rgw loadgen frontend: ";
   }
 
-  int init() override {
+  int init(bool null_vid) override {
     int num_threads;
     conf->get_val("num_threads", g_conf()->rgw_thread_pool_size, &num_threads);
     std::string uri_prefix;
@@ -202,10 +202,10 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     if (pauser)
       pauser->pause();
   }
-  void resume(rgw::sal::Driver* driver) override {
+  void resume(rgw::sal::Driver* driver, bool null_vid) override {
     for (auto frontend : frontends)
-      frontend->unpause_with_new_config();
+      frontend->unpause_with_new_config(null_vid);
     if (pauser)
-      pauser->resume(driver);
+      pauser->resume(driver, null_vid);
   }
 };

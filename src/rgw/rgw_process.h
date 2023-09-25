@@ -100,7 +100,7 @@ public:
     m_tp.pause();
   }
 
-  void unpause_with_new_config() {
+  void unpause_with_new_config(bool null_vid) {
     m_tp.unpause();
   }
 
@@ -143,6 +143,7 @@ extern int process_request(const RGWProcessEnv& penv,
                            const std::string& frontend_prefix,
                            RGWRestfulIO* client_io,
                            optional_yield y,
+                           bool null_vid,
                            rgw::dmclock::Scheduler *scheduler,
                            std::string* user,
                            ceph::coarse_real_clock::duration* latency,
@@ -154,6 +155,7 @@ extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      req_state* s,
 				                             optional_yield y,
                                      rgw::sal::Driver* driver,
+                                     bool null_vid,
                                      bool skip_retarget = false);
 
 #undef dout_context

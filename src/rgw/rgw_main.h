@@ -42,8 +42,8 @@ public:
   void pause() override {
     std::for_each(pausers.begin(), pausers.end(), [](Pauser* p){p->pause();});
   }
-  void resume(rgw::sal::Driver* driver) override {
-    std::for_each(pausers.begin(), pausers.end(), [driver](Pauser* p){p->resume(driver);});
+  void resume(rgw::sal::Driver* driver, bool null_vid) override {
+    std::for_each(pausers.begin(), pausers.end(), [driver, null_vid](Pauser* p){p->resume(driver, null_vid);});
   }
 
 };
@@ -108,7 +108,7 @@ public:
   void cond_init_apis();
   void init_ldap();
   void init_opslog();
-  int init_frontends2(RGWLib* rgwlib = nullptr);
+  int init_frontends2(bool null_vid, RGWLib* rgwlib = nullptr);
   void init_tracepoints();
   void init_notification_endpoints();
   void init_lua();

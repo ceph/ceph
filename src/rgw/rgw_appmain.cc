@@ -395,7 +395,7 @@ void rgw::AppMain::init_opslog()
   olog = olog_manifold;
 } /* init_opslog */
 
-int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
+int rgw::AppMain::init_frontends2(bool null_vid, RGWLib* rgwlib)
 {
   int r{0};
   vector<string> frontends_def;
@@ -484,7 +484,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     }
 
     dout(0) << "starting handler: " << fiter->first << dendl;
-    int r = fe->init();
+    int r = fe->init(null_vid);
     if (r < 0) {
       derr << "ERROR: failed initializing frontend" << dendl;
       return -r;

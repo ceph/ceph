@@ -30,7 +30,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
     /// pause all frontends while realm reconfiguration is in progress
     virtual void pause() = 0;
     /// resume all frontends with the given RGWRados instance
-    virtual void resume(rgw::sal::Driver* driver) = 0;
+    virtual void resume(rgw::sal::Driver* driver, bool null_vid) = 0;
   };
 
   RGWRealmReloader(RGWProcessEnv& env,
@@ -44,7 +44,7 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
 
  private:
   /// pause frontends and replace the RGWRados instance
-  void reload();
+  void reload(bool null_vid);
 
   class C_Reload; //< Context that calls reload()
 

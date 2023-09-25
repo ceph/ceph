@@ -194,7 +194,8 @@ void handle_connection(boost::asio::io_context& context,
                        rgw::dmclock::Scheduler *scheduler,
                        const std::string& uri_prefix,
                        boost::system::error_code& ec,
-                       yield_context yield)
+                       yield_context yield,
+                       bool null_vid)
 {
   // don't impose a limit on the body, since we read it in pieces
   static constexpr size_t body_limit = std::numeric_limits<size_t>::max();
@@ -281,7 +282,7 @@ void handle_connection(boost::asio::io_context& context,
       string user = "-";
       const auto started = ceph::coarse_real_clock::now();
       ceph::coarse_real_clock::duration latency{};
-      process_request(env, &req, uri_prefix, &client, y,
+      process_request(env, &req, uri_prefix, &client, y, null_vid,
                       scheduler, &user, &latency, &http_ret);
 
       if (cct->_conf->subsys.should_gather(ceph_subsys_rgw_access, 1)) {
@@ -435,7 +436,7 @@ class AsioFrontend {
   CephContext* ctx() const { return env.driver->ctx(); }
   std::optional<dmc::ClientCounters> client_counters;
   std::unique_ptr<dmc::ClientConfig> client_config;
-  void accept(Listener& listener, boost::system::error_code ec);
+  void accept(Listener& listener, boost::system::error_code ec, bool null_vid);
 
  public:
   AsioFrontend(RGWProcessEnv& env, RGWFrontendConfig* conf,
@@ -461,12 +462,12 @@ class AsioFrontend {
     }
   }
 
-  int init();
+  int init(bool null_vid);
   int run();
   void stop();
   void join();
   void pause();
-  void unpause();
+  void unpause(bool null_vid);
 };
 
 unsigned short parse_port(const char *input, boost::system::error_code& ec)
@@ -553,7 +554,7 @@ static int drop_privileges(CephContext *ctx)
   return 0;
 }
 
-int AsioFrontend::init()
+int AsioFrontend::init(bool null_vid)
 {
   boost::system::error_code ec;
   auto& config = conf->get_config_map();
@@ -676,8 +677,8 @@ int AsioFrontend::init()
     }
     l.acceptor.listen(max_connection_backlog);
     l.acceptor.async_accept(l.socket,
-                            [this, &l] (boost::system::error_code ec) {
-                              accept(l, ec);
+                            [this, &l, null_vid] (boost::system::error_code ec) {
+                              accept(l, ec, null_vid);
                             });
 
     ldout(ctx(), 4) << "frontend listening on " << l.endpoint << dendl;
@@ -995,7 +996,7 @@ int AsioFrontend::init_ssl()
 }
 #endif // WITH_RADOSGW_BEAST_OPENSSL
 
-void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
+void AsioFrontend::accept(Listener& l, boost::system::error_code ec, bool null_vid)
 {
   if (!l.acceptor.is_open()) {
     return;
@@ -1008,15 +1009,15 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   auto stream = std::move(l.socket);
   stream.set_option(tcp::no_delay(l.use_nodelay), ec);
   l.acceptor.async_accept(l.socket,
-                          [this, &l] (boost::system::error_code ec) {
-                            accept(l, ec);
+                          [this, &l, null_vid] (boost::system::error_code ec) {
+                            accept(l, ec, null_vid);
                           });
   
   // spawn a coroutine to handle the connection
 #ifdef WITH_RADOSGW_BEAST_OPENSSL
   if (l.use_ssl) {
     spawn::spawn(context,
-      [this, s=std::move(stream)] (yield_context yield) mutable {
+      [this, s=std::move(stream), null_vid] (yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
         // wrap the tcp stream in an ssl stream
@@ -1035,7 +1036,7 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
         conn->buffer.consume(bytes);
         handle_connection(context, env, stream, timeout, header_limit,
                           conn->buffer, true, pause_mutex, scheduler.get(),
-                          uri_prefix, ec, yield);
+                          uri_prefix, ec, yield, null_vid);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
@@ -1047,14 +1048,14 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
   {
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     spawn::spawn(context,
-      [this, s=std::move(stream)] (yield_context yield) mutable {
+      [this, s=std::move(stream), null_vid] (yield_context yield) mutable {
         auto conn = boost::intrusive_ptr{new Connection(std::move(s))};
         auto c = connections.add(*conn);
         auto timeout = timeout_timer{context.get_executor(), request_timeout, conn};
         boost::system::error_code ec;
         handle_connection(context, env, conn->socket, timeout, header_limit,
                           conn->buffer, false, pause_mutex, scheduler.get(),
-                          uri_prefix, ec, yield);
+                          uri_prefix, ec, yield, null_vid);
         conn->socket.shutdown(tcp_socket::shutdown_both, ec);
       }, make_stack_allocator());
   }
@@ -1134,7 +1135,7 @@ void AsioFrontend::pause()
   }
 }
 
-void AsioFrontend::unpause()
+void AsioFrontend::unpause(bool null_vid)
 {
   // unpause to unblock connections
   pause_mutex.unlock();
@@ -1142,8 +1143,8 @@ void AsioFrontend::unpause()
   // start accepting connections again
   for (auto& l : listeners) {
     l.acceptor.async_accept(l.socket,
-                            [this, &l] (boost::system::error_code ec) {
-                              accept(l, ec);
+                            [this, &l, null_vid] (boost::system::error_code ec) {
+                              accept(l, ec, null_vid);
                             });
   }
 
@@ -1168,9 +1169,9 @@ RGWAsioFrontend::RGWAsioFrontend(RGWProcessEnv& env,
 
 RGWAsioFrontend::~RGWAsioFrontend() = default;
 
-int RGWAsioFrontend::init()
+int RGWAsioFrontend::init(bool null_vid)
 {
-  return impl->init();
+  return impl->init(null_vid);
 }
 
 int RGWAsioFrontend::run()
@@ -1193,7 +1194,7 @@ void RGWAsioFrontend::pause_for_new_config()
   impl->pause();
 }
 
-void RGWAsioFrontend::unpause_with_new_config()
+void RGWAsioFrontend::unpause_with_new_config(bool null_vid)
 {
-  impl->unpause();
+  impl->unpause(null_vid);
 }

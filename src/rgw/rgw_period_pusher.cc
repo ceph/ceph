@@ -300,7 +300,7 @@ void RGWPeriodPusher::pause()
   driver = nullptr;
 }
 
-void RGWPeriodPusher::resume(rgw::sal::Driver* driver)
+void RGWPeriodPusher::resume(rgw::sal::Driver* driver, bool null_vid)
 {
   std::lock_guard<std::mutex> lock(mutex);
   this->driver = driver;

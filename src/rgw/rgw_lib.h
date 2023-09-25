@@ -39,8 +39,8 @@ namespace rgw {
 
     void set_fe(RGWLibFrontend* fe);
 
-    int init();
-    int init(std::vector<const char *>& args);
+    int init(bool null_vid);
+    int init(std::vector<const char *>& args, bool null_vid);
     int stop();
   };
 

@@ -175,7 +175,7 @@ public:
     }
     
     void pause() override;
-    void resume(rgw::sal::Driver* _driver) override;
+    void resume(rgw::sal::Driver* _driver, bool null_vid) override;
 };
 
 } //namepsace rgw::lua

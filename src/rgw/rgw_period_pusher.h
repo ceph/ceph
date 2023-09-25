@@ -34,7 +34,7 @@ class RGWPeriodPusher final : public RGWRealmWatcher::Watcher,
   void pause() override;
 
   /// continue processing notifications with a new RGWRados instance
-  void resume(rgw::sal::Driver* driver) override;
+  void resume(rgw::sal::Driver* driver, bool null_vid) override;
 
  private:
   void handle_notify(RGWZonesNeedPeriod&& period);

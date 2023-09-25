@@ -272,7 +272,8 @@ int process_request(const RGWProcessEnv& penv,
 		    rgw::dmclock::Scheduler *scheduler,
                     string* user,
                     ceph::coarse_real_clock::duration* latency,
-                    int* http_ret)
+                    int* http_ret,
+                    bool null_vid)
 {
   int ret = client_io->init(g_ceph_context);
   dout(1) << "====== starting new request req=" << hex << req << dec
@@ -391,7 +392,7 @@ int process_request(const RGWProcessEnv& penv,
     s->trace->SetAttribute(tracing::rgw::OP, op->name());
     s->trace->SetAttribute(tracing::rgw::TYPE, tracing::rgw::REQUEST);
 
-    ret = rgw_process_authenticated(handler, op, req, s, yield, driver);
+    ret = rgw_process_authenticated(handler, op, req, s, yield, driver, null_vid);
     if (ret < 0) {
       abort_early(s, op, ret, handler, yield);
       goto done;
