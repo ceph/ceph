@@ -128,6 +128,12 @@ ConnectionPipeline &RemotePeeringEvent::get_connection_pipeline()
   return get_osd_priv(conn.get()).peering_request_conn_pipeline;
 }
 
+PerShardPipeline &RemotePeeringEvent::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_peering_request_pipeline();
+}
+
 void RemotePeeringEvent::on_pg_absent(ShardServices &shard_services)
 {
   if (auto& e = get_event().get_event();
