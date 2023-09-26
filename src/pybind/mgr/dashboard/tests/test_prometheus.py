@@ -12,7 +12,7 @@ from ..tests import ControllerTestCase
 
 class PrometheusControllerTest(ControllerTestCase):
     alert_host = 'http://alertmanager:9093/mock'
-    alert_host_api = alert_host + '/api/v1'
+    alert_host_api = alert_host + '/api/v2'
 
     prometheus_host = 'http://prometheus:9090/mock'
     prometheus_host_api = prometheus_host + '/api/v1'
