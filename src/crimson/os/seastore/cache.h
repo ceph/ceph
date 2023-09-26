@@ -1364,7 +1364,7 @@ private:
     }
 
     void add_to_lru(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
       
       if (!extent.primary_ref_list_hook.is_linked()) {
 	contents += extent.get_length();
@@ -1390,7 +1390,7 @@ private:
     }
 
     void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
@@ -1401,7 +1401,7 @@ private:
     }
 
     void move_to_top(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
