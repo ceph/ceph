@@ -693,12 +693,12 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     rgw::d4n::CacheBlock block;
     rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
     block.version = "";
-    block.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/); 
+    block.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); 
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_name();
     block.cacheObj.creationTime = 0;
     block.cacheObj.dirty = false;
-    block.cacheObj.hostsList.push_back("127.0.0.1:6379" /*current cache addr*/);
+    block.cacheObj.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); // Is the entire object getting stored in the local cache as well or only blocks? -Sam
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
@@ -872,13 +872,12 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                                    .bucketName = obj->get_bucket()->get_name(),
                                    .creationTime = 0, // TODO: get correct value
                                    .dirty = false,
-				   .hostsList = { "127.0.0.1:6379" /*current cache addr*/ } // TODO: fix
+				   .hostsList = { driver->get_block_dir()->cct->_conf->rgw_local_cache_address } 
                                  },
                                  .blockID = 0, // TODO: get correct version/blockID
                                  .version = "", 
                                  .size = accounted_size,
-                                 .hostsList = { driver->get_block_dir()->cct->_conf->rgw_d4n_host + ":" + 
-                                   		 std::to_string(driver->get_block_dir()->cct->_conf->rgw_d4n_port) }
+                                 .hostsList = { driver->get_block_dir()->cct->_conf->rgw_local_cache_address }
                                };
 
   int setDirReturn = driver->get_block_dir()->set(&block, y);

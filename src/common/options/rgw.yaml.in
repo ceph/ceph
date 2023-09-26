@@ -4072,3 +4072,13 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_local_cache_address
+  type: str
+  level: advanced
+  desc: Local CacheDriver address 
+  default: 127.0.0.1:6379
+  services: 
+  - rgw
+  flags:
+  - startup
+  with_legacy: true
