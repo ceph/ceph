@@ -467,7 +467,8 @@ public:
             ret->cast<T>());
         });
       } else {
-        touch_extent(*ret);
+	assert(!ret->is_mutable());
+	touch_extent(*ret);
         SUBDEBUGT(seastore_cache, "{} {}~{} is present on t without been \
           fully loaded, reading ... {}", t, T::TYPE, offset, length, *ret);
         auto bp = alloc_cache_buf(ret->get_length());
@@ -566,6 +567,7 @@ public:
     // user should not see RETIRED_PLACEHOLDER extents
     ceph_assert(p_extent->get_type() != extent_types_t::RETIRED_PLACEHOLDER);
     if (!p_extent->is_fully_loaded()) {
+      assert(!p_extent->is_mutable());
       touch_extent(*p_extent);
       LOG_PREFIX(Cache::get_extent_viewable_by_trans);
       SUBDEBUG(seastore_cache,
@@ -661,7 +663,8 @@ private:
 	  return seastar::make_ready_future<CachedExtentRef>(ret);
         });
       } else {
-        touch_extent(*ret);
+	assert(!ret->is_mutable());
+	touch_extent(*ret);
         SUBDEBUGT(seastore_cache, "{} {}~{} {} is present on t without been \
                   fully loaded, reading ...", t, type, offset, length, laddr);
         auto bp = alloc_cache_buf(ret->get_length());
@@ -1281,7 +1284,7 @@ public:
   {
     if (p_src && is_background_transaction(*p_src))
       return;
-    if (ext.is_clean() && !ext.is_placeholder()) {
+    if (ext.is_stable_clean() && !ext.is_placeholder()) {
       lru.move_to_top(ext);
     }
   }
@@ -1361,7 +1364,7 @@ private:
     }
 
     void add_to_lru(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
       
       if (!extent.primary_ref_list_hook.is_linked()) {
 	contents += extent.get_length();
@@ -1387,7 +1390,7 @@ private:
     }
 
     void remove_from_lru(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
@@ -1398,7 +1401,7 @@ private:
     }
 
     void move_to_top(CachedExtent &extent) {
-      assert(extent.is_clean() && !extent.is_placeholder());
+      assert(extent.is_stable_clean() && !extent.is_placeholder());
 
       if (extent.primary_ref_list_hook.is_linked()) {
 	lru.erase(lru.s_iterator_to(extent));
