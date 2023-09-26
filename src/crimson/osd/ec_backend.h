@@ -12,6 +12,7 @@
 #include "messages/MOSDECSubOpWriteReply.h"
 #include "messages/MOSDECSubOpRead.h"
 #include "messages/MOSDECSubOpReadReply.h"
+#include "osd/ECCommon.h"
 #include "osd/ECUtil.h"
 #include "osd/osd_types.h"
 #include "pg_backend.h"
@@ -20,7 +21,8 @@ namespace crimson::osd {
   class PG;
 }
 
-class ECBackend : public PGBackend
+class ECBackend : public PGBackend,
+		  public ECCommon
 {
   static ceph::ErasureCodeInterfaceRef create_ec_impl(
     const ec_profile_t& ec_profile);
@@ -33,7 +35,8 @@ public:
 	    uint64_t stripe_width,
 	    bool fast_read,
 	    bool allows_ecoverwrites,
-	    DoutPrefixProvider &dpp);
+	    DoutPrefixProvider &dpp,
+	    ECListener &eclistener);
   seastar::future<> stop() final {
     return seastar::now();
   }
@@ -63,7 +66,14 @@ private:
   write_iertr::future<> handle_sub_write(
     pg_shard_t from,
     ECSubWrite&& op,
-    crimson::osd::PG& pg);
+    ECListener& pg);
+
+  void handle_sub_write(
+    pg_shard_t from,
+    OpRequestRef msg,
+    ECSubWrite &op,
+    const ZTracer::Trace &trace,
+    ECListener& eclistener) override;
 
   bool is_single_chunk(const hobject_t& obj, const ECSubRead& op);
 
@@ -74,9 +84,18 @@ private:
     std::uint64_t size,
     std::uint32_t flags);
 
+  void objects_read_and_reconstruct(
+    const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
+    > &reads,
+    bool fast_read,
+    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func) override;
+
   ceph::ErasureCodeInterfaceRef ec_impl;
   const ECUtil::stripe_info_t sinfo;
 
   const bool fast_read;
   const bool allows_ecoverwrites;
+
+  ECCommon::ReadPipeline read_pipeline;
+  ECCommon::RMWPipeline rmw_pipeline;
 };

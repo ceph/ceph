@@ -286,7 +286,7 @@ ReplicatedRecoveryBackend::recover_delete(
 	for (const auto& shard : pg.get_acting_recovery_backfill()) {
 	  if (shard == pg.get_pg_whoami())
 	    continue;
-	  if (pg.get_shard_missing(shard)->is_missing(soid)) {
+	  if (pg.get_shard_missing(shard).is_missing(soid)) {
 	    logger().debug("recover_delete: soid {} needs to deleted from replca {}",
 			   soid, shard);
 	    object_missing = true;
