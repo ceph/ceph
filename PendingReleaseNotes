@@ -231,6 +231,11 @@
   also change read/write permissions in a capability that the entity already
   holds. If the capability passed by user is same as one of the capabilities
   that the entity already holds, idempotency is maintained.
+* `ceph config dump --format <json|xml>` output will display the localized
+  option names instead of its normalized version. For e.g.,
+  "mgr/prometheus/x/server_port" will be displayed instead of
+  "mgr/prometheus/server_port". This matches the output of the non pretty-print
+  formatted version of the command.
 
 >=17.2.1
 
