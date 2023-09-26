@@ -161,27 +161,6 @@ FuncT = TypeVar('FuncT', bound=Callable)
 
 logger = logging.getLogger()
 
-"""
-You can invoke cephadm in two ways:
-
-1. The normal way, at the command line.
-
-2. By piping the script to the python3 binary.  In this latter case, you should
-   prepend one or more lines to the beginning of the script.
-
-   For arguments,
-
-       injected_argv = [...]
-
-   e.g.,
-
-       injected_argv = ['ls']
-
-   For reading stdin from the '--config-json -' argument,
-
-       injected_stdin = '...'
-"""
-
 
 ##################################
 
