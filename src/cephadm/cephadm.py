@@ -5413,7 +5413,6 @@ def read_configuration_source(ctx: CephadmContext) -> Dict[str, Any]:
     else:
         with open(source, 'rb') as fh:
             config_data = json.load(fh)
-    logger.debug('Loaded deploy configuration: %r', config_data)
     return config_data
 
 
@@ -5455,6 +5454,7 @@ def command_deploy_from(ctx: CephadmContext) -> None:
     configuration parameters from an input JSON configuration file.
     """
     config_data = read_configuration_source(ctx)
+    logger.debug('Loaded deploy configuration: %r', config_data)
     apply_deploy_config_to_ctx(config_data, ctx)
     _common_deploy(ctx)
 
