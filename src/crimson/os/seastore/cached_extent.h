@@ -1206,7 +1206,7 @@ public:
 
   void maybe_set_intermediate_laddr(LBAMapping &mapping) {
     laddr = mapping.is_indirect()
-      ? mapping.get_intermediate_key()
+      ? mapping.get_intermediate_base()
       : mapping.get_key();
   }
 
@@ -1241,6 +1241,8 @@ protected:
   }
 
 private:
+  // the logical address of the extent, and if shared,
+  // it is the intermediate_base, see BtreeLBAMapping comments.
   laddr_t laddr = L_ADDR_NULL;
 };
 
