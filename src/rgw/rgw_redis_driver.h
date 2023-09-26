@@ -78,7 +78,6 @@ class RedisDriver : public CacheDriver {
     Partition partition_info;
     uint64_t free_space;
     uint64_t outstanding_write_size;
-    CephContext* cct;
 
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);

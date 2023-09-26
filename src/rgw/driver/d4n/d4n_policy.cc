@@ -150,7 +150,7 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
 
   if (!std::get<0>(resp).value()) {
     // Is int_max what we want here? -Sam
-    if (set_min_avg_weight(0, ""/* local cache location or keep empty? */, y)) { /* Initialize minimum average weight */
+    if (set_min_avg_weight(0, dir->cct->_conf->rgw_local_cache_address, y)) { /* Initialize minimum average weight */
       return 0;
     } else {
       return -1;
@@ -276,7 +276,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
     return 0;
   }
 
-  if (victim.hostsList.size() == 1 && victim.hostsList[0] == "127.0.0.1:6379" /* local cache address */) { /* Last copy */
+  if (victim.hostsList.size() == 1 && victim.hostsList[0] == dir->cct->_conf->rgw_local_cache_address) { /* Last copy */
     if (victim.globalWeight) {
       it->second->localWeight += victim.globalWeight;
       if (cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y) < 0) {
@@ -301,16 +301,16 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
 
   ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
 
-  if (cacheNode->del(dpp, victim.cacheObj.objName, y) < 0 && dir->remove_host(&victim, ""/* local cache address */, y) < 0) {
+  if (cacheNode->del(dpp, victim.cacheObj.objName, y) < 0 && dir->remove_host(&victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) {
     return 0;
   } else {
     uint64_t num_entries = entries_map.size();
 
     if (!avgWeight) {
-      if (set_min_avg_weight(0, ""/*local cache location*/, y) < 0) // Where else must this be set? -Sam 
+      if (set_min_avg_weight(0, dir->cct->_conf->rgw_local_cache_address, y) < 0) // Where else must this be set? -Sam 
 	return 0;
     } else {
-      if (set_min_avg_weight(avgWeight - (it->second->localWeight/num_entries), ""/*local cache location*/, y) < 0) { // Where else must this be set? -Sam 
+      if (set_min_avg_weight(avgWeight - (it->second->localWeight/num_entries), dir->cct->_conf->rgw_local_cache_address, y) < 0) { // Where else must this be set? -Sam 
 	return 0;
     } 
       int age = get_age(y);
