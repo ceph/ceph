@@ -84,8 +84,8 @@ from cephadmlib.context import CephadmContext
 from cephadmlib.context_getters import (
     fetch_configs,
     fetch_custom_config_files,
+    fetch_endpoints,
     fetch_meta,
-    fetch_tcp_ports,
     get_config_and_keyring,
     get_parm,
     read_configuration_source,
@@ -315,7 +315,7 @@ class SNMPGateway:
 
     @property
     def port(self) -> int:
-        endpoints = fetch_tcp_ports(self.ctx)
+        endpoints = fetch_endpoints(self.ctx)
         if not endpoints:
             return self.DEFAULT_PORT
         return endpoints[0].port
@@ -5310,7 +5310,7 @@ def _common_deploy(ctx: CephadmContext) -> None:
     migrate_sysctl_dir(ctx, ctx.fsid)
 
     # Get and check ports explicitly required to be opened
-    endpoints = fetch_tcp_ports(ctx)
+    endpoints = fetch_endpoints(ctx)
     _dispatch_deploy(ctx, ident, endpoints, deployment_type)
 
 
@@ -6593,7 +6593,7 @@ def command_rm_daemon(ctx):
     else:
         call_throws(ctx, ['rm', '-rf', data_dir])
 
-    endpoints = fetch_tcp_ports(ctx)
+    endpoints = fetch_endpoints(ctx)
     ports: List[int] = [e.port for e in endpoints]
     if ports:
         try:

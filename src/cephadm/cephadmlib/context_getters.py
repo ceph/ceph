@@ -111,7 +111,7 @@ def fetch_custom_config_files(ctx: CephadmContext) -> List[Dict[str, Any]]:
     return []
 
 
-def fetch_tcp_ports(ctx: CephadmContext) -> List[EndPoint]:
+def fetch_endpoints(ctx: CephadmContext) -> List[EndPoint]:
     """Return a list of Endpoints, which have a port and ip attribute
     """
     ports = getattr(ctx, 'tcp_ports', None)
