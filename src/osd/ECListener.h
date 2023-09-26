@@ -178,7 +178,7 @@ struct ECListener {
     const eversion_t &roll_forward_to,
     const eversion_t &pg_committed_to,
     bool transaction_applied,
-    ceph::os::Transaction &t,
+    ObjectStore::Transaction &t,
     bool async = false) = 0;
   virtual void op_applied(
     const eversion_t &applied_version) = 0;
