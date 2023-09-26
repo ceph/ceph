@@ -74,7 +74,8 @@ public:
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
 					   const ec_profile_t& ec_profile,
-					   DoutPrefixProvider &dpp);
+					   DoutPrefixProvider &dpp,
+					   struct ECListener &eclistener);
   using attrs_t =
     std::map<std::string, ceph::bufferptr, std::less<>>;
   using read_errorator = ll_read_errorator::extend<
