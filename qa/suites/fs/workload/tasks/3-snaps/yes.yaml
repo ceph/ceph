@@ -1,0 +1,30 @@
+overrides:
+  ceph:
+    conf:
+      mgr:
+        debug cephsqlite: 20
+  check-counter:
+    counters:
+      mds:
+        - mds.root_rsnaps
+        - mds_server.req_mksnap_latency.avgcount
+        - mds_server.req_rmsnap_latency.avgcount
+tasks:
+- exec:
+    mon.a:
+      - ceph mgr module enable snap_schedule
+      - ceph config set mgr mgr/snap_schedule/allow_m_granularity true
+      - ceph config set mgr mgr/snap_schedule/dump_on_update true
+      - ceph fs snap-schedule add --fs=cephfs --path=/ --snap_schedule=1m
+      - ceph fs snap-schedule retention add --fs=cephfs --path=/ --retention-spec-or-period=6m3h
+      - ceph fs snap-schedule status --fs=cephfs --path=/
+      - ceph fs snap-schedule list --fs=cephfs --path=/ --recursive=true
+      - date +%s > START_TIME
+- full_sequential_finally:
+  - exec:
+      mon.a:
+        # Ensure that we have some snaps which get deleted (so check-counters does not fail)
+        - date +%s > END_TIME
+        - START_TIME=$(cat START_TIME); END_TIME=$(cat END_TIME); DIFF_TIME=$((600-(END_TIME-START_TIME))); if [ "$DIFF_TIME" -gt 0 ]; then sleep "$DIFF_TIME"; fi
+        - ceph fs snap-schedule status --fs=cephfs --path=/
+        - ceph fs snap-schedule list --fs=cephfs --path=/ --recursive=true
