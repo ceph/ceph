@@ -10,6 +10,8 @@ import time
 import logging
 
 FORMAT = '%(name)8s::%(levelname)8s:: %(message)s'
+HISTORY_HOLD = 2
+HISTORY_SAFE_RATE = 1.5
 logging.basicConfig(format=FORMAT)
 logger = logging.getLogger('osd-op-scrapper')
 
@@ -120,14 +122,14 @@ def parse_osd_op(description_literal: str, initiated_at: datetime.datetime):
 
 class ProcessInfo:
     def __init__(self, process_time: int, command_time: int, processed_info: str, ops_count: int,
-                 new_ops: int, oldest_operation: Optional[OpDescription], 
+                 new_ops: int, oldest_operation_at: Optional[datetime.date],
                  capture_period_start: int, capture_period_end: int):
         self.process_time = process_time
         self.command_time = command_time
         self.processed_info = processed_info
         self.ops_count = ops_count
         self.new_ops = new_ops
-        self.oldest_operation = oldest_operation
+        self.oldest_operation_at = oldest_operation_at
         self.capture_period_start = capture_period_start
         self.capture_period_end = capture_period_end
 
@@ -150,33 +152,39 @@ def process_osd(osd_id) -> ProcessInfo:
     operations_str = 'initiated_at | who | op_type | offset/extent | name | pgid\n'
     operations_str += '-------------------------------------------------------\n'
     new_ops = 0 
-    oldest_operation = None
+    oldest_operation_at = None
     capture_period_start = _to_timestamp(Env.store()[osd_id]['last_op'])
     for op in historic['ops']:
+        if not oldest_operation_at:
+            #we twice parse initated_at, but code is simpler that way
+            initiated_at = datetime.datetime.fromisoformat(op['initiated_at'])
+            oldest_operation_at = initiated_at
+        description = op['description']
+        logger.debug(f'{description}')
+        if not description.startswith('osd_op('):
+            continue
         initiated_at = datetime.datetime.fromisoformat(op['initiated_at'])
         if initiated_at < Env.store()[osd_id]['last_op']:
             continue
-
+        new_ops += 1
         Env.store()[osd_id]['last_op'] = initiated_at
-        description = op['description']
-        logger.debug(f'{description}')
-        if description.startswith('osd_op('):
-            new_ops += 1
-            description_data = description[7:-1]
-            op = parse_osd_op(description_data, initiated_at)
-            if not oldest_operation:
-                oldest_operation = op
-            operations_str += f'{str(op)}\n'
+        description_data = description[7:-1]
+        op_data = parse_osd_op(description_data, initiated_at)
+        operations_str += f'{str(op_data)}\n'
     capture_period_end = time.time()
     processing_time = time.time() - osd_processing_start
     logger.info(f'osd.{osd_id} new_ops {new_ops}')
 
     return ProcessInfo(processing_time, command_time, operations_str, len(historic['ops']), 
-                       new_ops, oldest_operation, capture_period_start, capture_period_end)
+                       new_ops, oldest_operation_at, capture_period_start, capture_period_end)
 
 def _set_osd_history_size(name: str, history_size: int):
-    run_ceph_command(['config', 'set', f'osd.{name}', 'osd_op_history_size', 
+    run_ceph_command(['tell', f'osd.{name}', 'config', 'set', 'osd_op_history_size',
                       str(int(history_size))], no_out=True)
+
+def _set_osd_history_duration(name: str, duration: int):
+    run_ceph_command(['tell', f'osd.{name}', 'config', 'set', 'osd_op_history_duration',
+                      str(duration)], no_out=True)
 
 class OsdParameters:
     def __init__(self, name: str, ready_time: int, freq: int, history_size: int) -> None:
@@ -185,7 +193,6 @@ class OsdParameters:
         self.freq = freq
         self.history_size = history_size
         self.sum_ops = 0
-        self.periods = 0
 
 def main():
     parser = argparse.ArgumentParser(
@@ -224,19 +231,19 @@ def main():
 
     pref_freq = int(Env.args().freq)
     freq = int(Env.args().freq)
-
+    freq = 1.5
     sleep_time = 0
-    update_period = 10
     sum_time_elapsed = 0
     min_history_size = int(Env.args().min_history_size)
     max_history_size = int(Env.args().max_history_size)
-    history_size = max_history_size
+    history_size = min_history_size
     # -------------|-------------------|
     history_overlap = 1.10
     osds = Env.args().osds.split(',')
     osds_info = []
     for osd in osds:
-        _set_osd_history_size(osd, max_history_size)
+        _set_osd_history_size(osd, history_size)
+        _set_osd_history_duration(osd, HISTORY_HOLD) #fixed 2s duration to hold ops
         osds_info.append(OsdParameters(osd, 0, freq, history_size))
 
     logger.debug(f'start freq {freq}')
@@ -250,10 +257,18 @@ def main():
                 continue
             process_info = process_osd(osd.name)
 
+            #basically, we need to have so much history, that it will never be full
+            #full history means that we lost something, its that easy
+            if osd.history_size < process_info.ops_count * HISTORY_SAFE_RATE:
+                want_history_size = min(int(process_info.ops_count * HISTORY_SAFE_RATE), max_history_size)
+                logger.info(f'changing osd.{osd.name} history size from {osd.history_size} to {want_history_size}')
+                _set_osd_history_size(osd.name, want_history_size)
+                osd.history_size = want_history_size
+
             if not process_info.new_ops:
                 new_ops_period = 1
             else:
-                oldest_initiated_at = process_info.oldest_operation.initiated_at
+                oldest_initiated_at = process_info.oldest_operation_at
                 new_ops_period = process_info.capture_period_end - _to_timestamp(oldest_initiated_at)
             capture_period = process_info.capture_period_end - process_info.capture_period_start
 
@@ -272,29 +287,11 @@ def main():
             outfile.flush()
 
             sleep_time -= process_info.process_time + process_info.command_time
-            osd.ready_time = time.time() + (osd.freq - process_info.process_time + process_info.command_time)
+            now = time.time()
+            osd.ready_time = now + (osd.freq - process_info.process_time - process_info.command_time)
             sleep_time = max(0, sleep_time)
             logger.info(f'osd.{osd.name} parsing dump_historic_ops with {process_info.ops_count} ops took {process_info.process_time}')
             logger.info(f'osd.{osd.name} command dump_historic_ops with {process_info.ops_count} ops took {process_info.command_time}')
-
-            osd.periods += 1
-            if (osd.periods % update_period) == 0:
-                ops_per_period = (osd.sum_ops / osd.periods)
-                new_history_size = int(ops_per_period * history_overlap)
-                if new_history_size >= min_history_size and new_history_size <= max_history_size:
-                    _set_osd_history_size(osd.name, new_history_size)
-                    logger.info(f'changing osd.{osd.name} history size from {osd.history_size} to {new_history_size}')
-                    osd.history_size = new_history_size
-                elif new_history_size < min_history_size:
-                    _set_osd_history_size(osd.name, min_history_size)
-                    logger.info(f'changing osd.{osd.name} history size from {osd.history_size} to {min_history_size}')
-                    logger.info(f'changing osd.{osd.name} freq from {freq} to {pref_freq}')
-                    freq = pref_freq
-                    osd.history_size = min_history_size
-                elif new_history_size >= max_history_size:
-                    new_freq = (new_history_size * freq) / osd.history_size
-                    logger.info(f'increasing freq from {freq} to {new_freq}. new_history_size: {new_history_size} osd.history_size: {osd.history_size}')
-                    freq = new_freq
 
     close(outfile)
 
