@@ -141,7 +141,7 @@ export class RbdFormComponent extends CdForm implements OnInit {
         requires: null,
         allowEnable: false,
         allowDisable: false,
-        helperHtml: $localize`Feature can't be manipulated after the image is created`
+        helperHtml: $localize`Feature flag can't be manipulated after the image is created. Disabling this option will also disable the Protect and Clone actions on Snapshot`
       },
       'exclusive-lock': {
         desc: $localize`Exclusive lock`,

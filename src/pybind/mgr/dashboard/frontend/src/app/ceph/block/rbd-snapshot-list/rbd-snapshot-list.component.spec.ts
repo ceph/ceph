@@ -288,7 +288,7 @@ describe('RbdSnapshotListComponent', () => {
 
     it('should be disabled with version 1 and protected false', () => {
       const selection = new CdTableSelection([{ name: 'someName', is_protected: false }]);
-      const disableDesc = actions.getDisableDesc(selection, ['layering']);
+      const disableDesc = actions.getCloneDisableDesc(selection);
       expect(disableDesc).toBe('Snapshot must be protected in order to clone.');
     });
 
@@ -299,7 +299,7 @@ describe('RbdSnapshotListComponent', () => {
     ])('should be enabled with version %d and protected %s', (version, is_protected) => {
       actions.cloneFormatVersion = version;
       const selection = new CdTableSelection([{ name: 'someName', is_protected: is_protected }]);
-      const disableDesc = actions.getDisableDesc(selection, ['layering']);
+      const disableDesc = actions.getCloneDisableDesc(selection);
       expect(disableDesc).toBe(false);
     });
   });
@@ -316,7 +316,7 @@ describe('RbdSnapshotListComponent', () => {
 
     it('should be disabled if layering not supported', () => {
       const selection = new CdTableSelection([{ name: 'someName', is_protected: false }]);
-      const disableDesc = actions.getDisableDesc(selection, ['deep-flatten', 'fast-diff']);
+      const disableDesc = actions.getProtectDisableDesc(selection, ['deep-flatten', 'fast-diff']);
       expect(disableDesc).toBe('The layering feature needs to be enabled on parent image');
     });
   });
