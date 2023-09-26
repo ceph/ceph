@@ -35,12 +35,15 @@ ECBackend::ECBackend(pg_shard_t whoami,
                      uint64_t stripe_width,
                      bool fast_read,
                      bool allows_ecoverwrites,
-		     DoutPrefixProvider &dpp)
+		     DoutPrefixProvider &dpp,
+		     ECListener &eclistener)
   : PGBackend{whoami, coll, shard_services, dpp},
     ec_impl{create_ec_impl(ec_profile)},
     sinfo(ec_impl, stripe_width),
     fast_read{fast_read},
-    allows_ecoverwrites{allows_ecoverwrites}
+    allows_ecoverwrites{allows_ecoverwrites},
+    read_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener},
+    rmw_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this}
 {
 }
 
@@ -71,7 +74,7 @@ ECBackend::write_iertr::future<>
 ECBackend::handle_sub_write(
   pg_shard_t from,
   ECSubWrite &&op,
-  crimson::osd::PG& pg)
+  ECListener& pg)
 {
   LOG_PREFIX(ECBackend::handle_sub_write);
   logger().info("{} from {}", __func__, from);
@@ -122,6 +125,16 @@ ECBackend::handle_sub_write(
     DEBUG("transaction commited!");
     return write_iertr::now();
   });
+}
+
+void ECBackend::handle_sub_write(
+  pg_shard_t from,
+  OpRequestRef msg,
+  ECSubWrite &op,
+  const ZTracer::Trace &trace,
+  ECListener& eclistener)
+{
+  std::ignore = handle_sub_write(from, std::move(op), eclistener);
 }
 
 ECBackend::write_iertr::future<>
@@ -200,6 +213,14 @@ ECBackend::maybe_chunked_read(
       });
     });
   }
+}
+
+void ECBackend::objects_read_and_reconstruct(
+  const std::map<hobject_t, std::list<ec_align_t>> &reads,
+  bool fast_read,
+  GenContextURef<ec_extents_t &&> &&func)
+{
+  // TODO XXX FIXME
 }
 
 ECBackend::ll_read_ierrorator::future<>
