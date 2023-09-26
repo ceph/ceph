@@ -1904,7 +1904,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 
   ASSERT_EQ(testWriter->prepare(null_yield), 0);
   
-  ASSERT_EQ(testWriter->process(move(data), 0), 0);
+  ASSERT_EQ(testWriter->process(std::move(data), 0), 0);
 
   ASSERT_EQ(testWriter->complete(accounted_size, etag,
 		 &mtime, set_mtime,
@@ -1929,7 +1929,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 
   ASSERT_EQ(testWriter->prepare(null_yield), 0);
   
-  ASSERT_EQ(testWriter->process(move(dataNew), 0), 0);
+  ASSERT_EQ(testWriter->process(std::move(dataNew), 0), 0);
 
   ASSERT_EQ(testWriter->complete(accounted_size, etag,
 		 &mtime, set_mtime,
