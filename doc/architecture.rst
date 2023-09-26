@@ -375,22 +375,25 @@ tickets and session keys.
 
 Smart Daemons Enable Hyperscale
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+A feature of many storage clusters is a centralized interface that keeps track
+of the nodes that clients are permitted to access. Such centralized
+architectures provide services to clients by means of a double dispatch. At the
+petabyte-to-exabyte scale, such double dispatches are a significant
+bottleneck.
 
-In many clustered architectures, the primary purpose of cluster membership is 
-so that a centralized interface knows which nodes it can access. Then the
-centralized interface provides services to the client through a double
-dispatch--which is a **huge** bottleneck at the petabyte-to-exabyte scale.
+Ceph obviates this bottleneck: Ceph's OSD Daemons AND Ceph clients are
+cluster-aware. Like Ceph clients, each Ceph OSD Daemon is aware of other Ceph
+OSD Daemons in the cluster. This enables Ceph OSD Daemons to interact directly
+with other Ceph OSD Daemons and to interact directly with Ceph Monitors.  Being
+cluster-aware makes it possible for Ceph clients to interact directly with Ceph
+OSD Daemons.
 
-Ceph eliminates the bottleneck: Ceph's OSD Daemons AND Ceph Clients are cluster
-aware. Like Ceph clients, each Ceph OSD Daemon knows about other Ceph OSD
-Daemons in the cluster.  This enables Ceph OSD Daemons to interact directly with
-other Ceph OSD Daemons and Ceph Monitors. Additionally, it enables Ceph Clients
-to interact directly with Ceph OSD Daemons.
-
-The ability of Ceph Clients, Ceph Monitors and Ceph OSD Daemons to interact with
-each other means that Ceph OSD Daemons can utilize the CPU and RAM of the Ceph
-nodes to easily perform tasks that would bog down a centralized server. The
-ability to leverage this computing power leads to several major benefits:
+Because Ceph clients, Ceph monitors, and Ceph OSD daemons interact with one
+another directly, Ceph OSD daemons can make use of the aggregate CPU and RAM
+resources of the nodes in the Ceph cluster. This means that a Ceph cluster can
+easily perform tasks that a cluster with a centralized interface would struggle
+to perform.  The ability of Ceph nodes to make use of the computing power of
+the greater cluster provides several benefits:
 
 #. **OSDs Service Clients Directly:** Since any network device has a limit to 
    the number of concurrent connections it can support, a centralized system 
