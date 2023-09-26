@@ -190,6 +190,7 @@ private:
   std::unique_ptr<AdminSocketHook> version_hook;
   std::unique_ptr<AdminSocketHook> help_hook;
   std::unique_ptr<AdminSocketHook> getdescs_hook;
+  std::unique_ptr<AdminSocketHook> raise_hook;
 
   std::mutex tell_lock;
   std::list<ceph::cref_t<MCommand>> tell_queue;
