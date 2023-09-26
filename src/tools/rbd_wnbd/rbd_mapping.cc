@@ -76,13 +76,17 @@ int RbdMapping::init()
 
   initial_image_size = info.size;
 
+  CephContext* cct = reinterpret_cast<CephContext*>(io_ctx.cct());
+  ceph_assert(cct != nullptr);
+
   handler = new WnbdHandler(image, cfg.devpath,
                             info.size / RBD_WNBD_BLKSIZE,
                             RBD_WNBD_BLKSIZE,
                             !cfg.snapname.empty() || cfg.readonly,
                             g_conf().get_val<bool>("rbd_cache"),
                             cfg.io_req_workers,
-                            cfg.io_reply_workers);
+                            cfg.io_reply_workers,
+                            cct->get_admin_socket());
   return 0;
 }
 

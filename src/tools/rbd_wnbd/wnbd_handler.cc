@@ -65,11 +65,18 @@ int WnbdHandler::wait()
   return err;
 }
 
-WnbdAdminHook::WnbdAdminHook(WnbdHandler *handler) : m_handler(handler)
+WnbdAdminHook::WnbdAdminHook(WnbdHandler *handler, AdminSocket* admin_socket)
+  : m_handler(handler)
+  , m_admin_socket(admin_socket)
 {
-  g_ceph_context->get_admin_socket()->register_command(
-    std::string("wnbd stats ") + m_handler->instance_name,
-    this, "get WNBD stats");
+  if (m_admin_socket) {
+    m_admin_socket->register_command(
+      std::string("wnbd stats ") + m_handler->instance_name,
+      this, "get WNBD stats");
+  } else {
+    dout(0) << "no admin socket provided, skipped registering wnbd hooks"
+            << dendl;
+  }
 }
 
 int WnbdAdminHook::call (
