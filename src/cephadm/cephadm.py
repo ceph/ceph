@@ -107,7 +107,9 @@ from cephadmlib.data_utils import (
     with_units_to_int,
 )
 from cephadmlib.file_utils import (
+    get_file_timestamp,
     makedirs,
+    pathify,
     populate_files,
     read_file,
     recursive_chown,
@@ -1402,23 +1404,6 @@ def read_config(fn):
     if fn:
         cp.read(fn)
     return cp
-
-
-def pathify(p):
-    # type: (str) -> str
-    p = os.path.expanduser(p)
-    return os.path.abspath(p)
-
-
-def get_file_timestamp(fn):
-    # type: (str) -> Optional[str]
-    try:
-        mt = os.path.getmtime(fn)
-        return datetime.datetime.fromtimestamp(
-            mt, tz=datetime.timezone.utc
-        ).strftime(DATEFMT)
-    except Exception:
-        return None
 
 
 def try_convert_datetime(s):
