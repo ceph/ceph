@@ -1871,6 +1871,32 @@ class TestSubvolumeGroups(TestVolumesHelper):
         ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
         self.assertEqual(ret.strip('\n'), "no subvolumegroup exists")
 
+    def test_subvolume_group_rm_when_its_not_empty(self):
+        group = self._generate_random_group_name()
+        subvolume = self._generate_random_subvolume_name()
+
+        # create subvolumegroup
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+        # try, remove subvolume group
+        try:
+            self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOTEMPTY, "invalid error code on deleting "
+                             "subvolumegroup when it is not empty")
+        else:
+            self.fail("expected the 'fs subvolumegroup rm' command to fail")
+        
+        # delete subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+
+        # delete subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
 
 class TestSubvolumes(TestVolumesHelper):
     """Tests for FS subvolume operations, except snapshot and snapshot clone."""
