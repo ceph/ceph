@@ -673,6 +673,12 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   auto [t, secret_key, failure_reason] =
     get_access_token(dpp, access_key_id, string_to_sign, signature, signature_factory);
   if (! t) {
+    if (failure_reason == -ERR_SIGNATURE_NO_MATCH) {
+      // we looked up a secret but it didn't generate the same signature as
+      // the client. since we found this access key in keystone, we should
+      // reject the request instead of trying other engines
+      return result_t::reject(failure_reason);
+    }
     return result_t::deny(failure_reason);
   }
 
