@@ -65,6 +65,13 @@ int WnbdHandler::wait()
   return err;
 }
 
+WnbdAdminHook::WnbdAdminHook(WnbdHandler *handler) : m_handler(handler)
+{
+  g_ceph_context->get_admin_socket()->register_command(
+    std::string("wnbd stats ") + m_handler->instance_name,
+    this, "get WNBD stats");
+}
+
 int WnbdAdminHook::call (
   std::string_view command, const cmdmap_t& cmdmap,
   const bufferlist&,
@@ -72,7 +79,7 @@ int WnbdAdminHook::call (
   std::ostream& errss,
   bufferlist& out)
 {
-  if (command == "wnbd stats") {
+  if (command == "wnbd stats " + m_handler->instance_name) {
     return m_handler->dump_stats(f);
   }
   return -ENOSYS;
