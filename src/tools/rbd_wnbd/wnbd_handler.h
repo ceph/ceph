@@ -44,11 +44,7 @@ class WnbdAdminHook : public AdminSocketHook {
   WnbdHandler *m_handler;
 
 public:
-  explicit WnbdAdminHook(WnbdHandler *handler) :
-        m_handler(handler) {
-    g_ceph_context->get_admin_socket()->register_command(
-      "wnbd stats", this, "get WNBD stats");
-  }
+  explicit WnbdAdminHook(WnbdHandler *handler);
   ~WnbdAdminHook() override {
     g_ceph_context->get_admin_socket()->unregister_commands(this);
   }
@@ -140,6 +136,7 @@ private:
     void set_sense(uint8_t sense_key, uint8_t asc);
   };
 
+  friend WnbdAdminHook;
   friend std::ostream &operator<<(std::ostream &os, const IOContext &ctx);
 
   void send_io_response(IOContext *ctx);
