@@ -392,16 +392,16 @@ Because Ceph clients, Ceph monitors, and Ceph OSD daemons interact with one
 another directly, Ceph OSD daemons can make use of the aggregate CPU and RAM
 resources of the nodes in the Ceph cluster. This means that a Ceph cluster can
 easily perform tasks that a cluster with a centralized interface would struggle
-to perform.  The ability of Ceph nodes to make use of the computing power of
+to perform. The ability of Ceph nodes to make use of the computing power of
 the greater cluster provides several benefits:
 
-#. **OSDs Service Clients Directly:** Since any network device has a limit to 
-   the number of concurrent connections it can support, a centralized system 
-   has a low physical limit at high scales. By enabling Ceph Clients to contact 
-   Ceph OSD Daemons directly, Ceph increases both performance and total system 
-   capacity simultaneously, while removing a single point of failure. Ceph 
-   Clients can maintain a session when they need to, and with a particular Ceph 
-   OSD Daemon instead of a centralized server.
+#. **OSDs Service Clients Directly:** Network devices can support only a
+   limited number of concurrent connections. Because Ceph clients contact
+   Ceph OSD daemons directly without first connecting to a central interface,
+   Ceph enjoys improved perfomance and increased system capacity relative to
+   storage redundancy strategies that include a central interface. Ceph clients
+   maintain sessions only when needed, and maintain those sessions with only
+   particular Ceph OSD daemons, not with a centralized interface.
 
 #. **OSD Membership and Status**: Ceph OSD Daemons join a cluster and report 
    on their status. At the lowest level, the Ceph OSD Daemon status is ``up`` 
