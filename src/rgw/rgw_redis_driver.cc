@@ -98,15 +98,15 @@ std::vector<Partition> RedisDriver::list_partitions(const DoutPrefixProvider* dp
 
 int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) 
 {
-  this->cct = cct;
-
   if (partition_info.location.back() != '/') {
     partition_info.location += "/";
   }
 
+  std::string address = cct->_conf->rgw_local_cache_address;
+
   config cfg;
-  cfg.addr.host = cct->_conf->rgw_d4n_host; // TODO: Replace with cache address
-  cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
+  cfg.addr.host = address.substr(0, address.find(":"));
+  cfg.addr.port = address.substr(address.find(":") + 1, address.length());
 
   if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
     ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
