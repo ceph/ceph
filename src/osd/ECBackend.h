@@ -153,10 +153,11 @@ public:
     Context *on_complete,
     bool fast_read = false) override;
 
-  void kick_reads();
-
 private:
   friend struct ECRecoveryHandle;
+
+  void kick_reads();
+
   uint64_t get_recovery_chunk_size() const {
     return round_up_to(cct->_conf->osd_recovery_max_chunk,
 			sinfo.get_stripe_width());
