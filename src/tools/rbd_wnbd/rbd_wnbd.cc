@@ -1159,8 +1159,8 @@ static int do_stats(std::string search_devpath)
 
     AdminSocketClient client = AdminSocketClient(cfg.admin_sock_path);
     std::string output;
-    std::string result = client.do_request("{\"prefix\":\"wnbd stats\"}",
-                                           &output);
+    std::string cmd = "{\"prefix\":\"wnbd stats " + cfg.devpath + "\"}";
+    std::string result = client.do_request(cmd, &output);
     if (!result.empty()) {
       std::cerr << "Admin socket error: " << result << std::endl;
       return -EINVAL;
