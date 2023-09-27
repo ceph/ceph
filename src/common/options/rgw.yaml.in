@@ -3612,6 +3612,60 @@ options:
   see_also:
   - rgw_thread_pool_size
   with_legacy: true
+- name: rgw_d4n_l1_datacache_persistent_path
+  type: str
+  level: advanced
+  desc: path for the directory for storing the local cache objects data for d4n
+  default: /tmp/rgw_d4n_datacache/
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_l1_datacache_size
+  type: size
+  level: advanced
+  desc: datacache maximum size on disk in bytes
+  default: 1_G
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_l1_evict_cache_on_start
+  type: bool
+  level: advanced
+  desc: clear the content of the persistent data cache directory on start
+  default: true
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_l1_fadvise
+  type: int
+  level: advanced
+  desc: posix_fadvise() flag for access pattern of cache files
+  long_desc: for example to bypass the page-cache -
+    POSIX_FADV_DONTNEED=4
+  default: 4
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_d4n_libaio_aio_threads
+  type: int
+  level: advanced
+  desc: specifies the maximum number of worker threads that may be used by libaio
+  default: 20
+  services:
+  - rgw
+  see_also:
+  - rgw_thread_pool_size
+  with_legacy: true
+- name: rgw_d4n_libaio_aio_num
+  type: int
+  level: advanced
+  desc: specifies the maximum number of simultaneous I/O requests that libaio expects to enqueue
+  default: 64
+  services:
+  - rgw
+  see_also:
+  - rgw_thread_pool_size
+  with_legacy: true
 - name: rgw_backend_store
   type: str
   level: advanced
