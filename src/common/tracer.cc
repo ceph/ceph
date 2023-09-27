@@ -60,8 +60,7 @@ jspan Tracer::start_trace(opentelemetry::nostd::string_view trace_name, bool tra
 }
 
 jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan& parent_span) {
-  ceph_assert(cct);
-  if (is_enabled() && parent_span->IsRecording()) {
+  if (parent_span && parent_span->IsRecording()) {
     ceph_assert(tracer);
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_span->GetContext();
@@ -72,8 +71,7 @@ jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan&
 }
 
 jspan Tracer::add_span(opentelemetry::nostd::string_view span_name, const jspan_context& parent_ctx) {
-  ceph_assert(cct);
-  if (is_enabled() && parent_ctx.IsValid()) {
+  if (parent_ctx.IsValid()) {
     ceph_assert(tracer);
     opentelemetry::trace::StartSpanOptions span_opts;
     span_opts.parent = parent_ctx;
