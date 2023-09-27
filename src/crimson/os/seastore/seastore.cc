@@ -1529,10 +1529,10 @@ SeaStore::Shard::_write(
   LOG_PREFIX(SeaStore::_write);
   DEBUGT("onode={} {}~{}", *ctx.transaction, *onode, offset, len);
   {
-    auto &object_size = onode->get_mutable_layout(*ctx.transaction).size;
-    object_size = std::max<uint64_t>(
-      offset + len,
-      object_size);
+    const auto &object_size = onode->get_layout().size;
+    onode->update_onode_size(
+      *ctx.transaction,
+      std::max<uint64_t>(offset + len, object_size));
   }
   return seastar::do_with(
     std::move(_bl),
@@ -1563,8 +1563,7 @@ SeaStore::Shard::_clone(
     //TODO: currently, we only care about object data, leaving cloning
     //      of xattr/omap for future work
     auto &object_size = onode->get_layout().size;
-    auto &d_object_size = d_onode->get_mutable_layout(*ctx.transaction).size;
-    d_object_size = object_size;
+    d_onode->update_onode_size(*ctx.transaction, object_size);
     return objHandler.clone(
       ObjectDataHandler::context_t{
 	*transaction_manager,
@@ -1586,8 +1585,10 @@ SeaStore::Shard::_zero(
   if (offset + len >= max_object_size) {
     return crimson::ct_error::input_output_error::make();
   }
-  auto &object_size = onode->get_mutable_layout(*ctx.transaction).size;
-  object_size = std::max<uint64_t>(offset + len, object_size);
+  const auto &object_size = onode->get_layout().size;
+  onode->update_onode_size(
+    *ctx.transaction,
+    std::max<uint64_t>(offset + len, object_size));
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &objhandler) {
@@ -1607,7 +1608,6 @@ SeaStore::Shard::_omap_set_kvs(
   OnodeRef &onode,
   const omap_root_le_t& omap_root,
   Transaction& t,
-  omap_root_le_t& mutable_omap_root,
   std::map<std::string, ceph::bufferlist>&& kvs)
 {
   return seastar::do_with(
@@ -1627,10 +1627,6 @@ SeaStore::Shard::_omap_set_kvs(
           return omap_manager.omap_set_keys(root, t, std::move(keys));
       }).si_then([&] {
         return tm_iertr::make_ready_future<omap_root_t>(std::move(root));
-      }).si_then([&mutable_omap_root](auto root) {
-        if (root.must_update()) {
-          mutable_omap_root.update(root);
-        }
       });
     }
   );
@@ -1648,8 +1644,12 @@ SeaStore::Shard::_omap_set_values(
     onode,
     onode->get_layout().omap_root,
     *ctx.transaction,
-    onode->get_mutable_layout(*ctx.transaction).omap_root,
-    std::move(aset));
+    std::move(aset)
+  ).si_then([onode, &ctx](auto root) {
+    if (root.must_update()) {
+      onode->update_omap_root(*ctx.transaction, root);
+    }
+  });
 }
 
 SeaStore::Shard::tm_ret
@@ -1691,8 +1691,7 @@ SeaStore::Shard::_omap_clear(
           *ctx.transaction)
         .si_then([&] {
           if (omap_root.must_update()) {
-            onode->get_mutable_layout(*ctx.transaction
-            ).omap_root.update(omap_root);
+	    onode->update_omap_root(*ctx.transaction, omap_root);
           }
         });
       });
@@ -1733,8 +1732,7 @@ SeaStore::Shard::_omap_rmkeys(
             }
           ).si_then([&] {
             if (omap_root.must_update()) {
-              onode->get_mutable_layout(*ctx.transaction
-              ).omap_root.update(omap_root);
+	      onode->update_omap_root(*ctx.transaction, omap_root);
             }
           });
       }
@@ -1782,8 +1780,7 @@ SeaStore::Shard::_omap_rmkeyrange(
 	config
       ).si_then([&] {
         if (omap_root.must_update()) {
-          onode->get_mutable_layout(*ctx.transaction
-          ).omap_root.update(omap_root);
+	  onode->update_omap_root(*ctx.transaction, omap_root);
         }
       });
     });
@@ -1798,7 +1795,7 @@ SeaStore::Shard::_truncate(
 {
   LOG_PREFIX(SeaStore::_truncate);
   DEBUGT("onode={} size={}", *ctx.transaction, *onode, size);
-  onode->get_mutable_layout(*ctx.transaction).size = size;
+  onode->update_onode_size(*ctx.transaction, size);
   return seastar::do_with(
     ObjectDataHandler(max_object_size),
     [=, this, &ctx, &onode](auto &objhandler) {
@@ -1822,45 +1819,34 @@ SeaStore::Shard::_setattrs(
   DEBUGT("onode={}", *ctx.transaction, *onode);
 
   auto fut = tm_iertr::now();
-  auto& layout = onode->get_mutable_layout(*ctx.transaction);
+  auto& layout = onode->get_layout();
   if (auto it = aset.find(OI_ATTR); it != aset.end()) {
     auto& val = it->second;
     if (likely(val.length() <= onode_layout_t::MAX_OI_LENGTH)) {
-      maybe_inline_memcpy(
-	&layout.oi[0],
-	val.c_str(),
-	val.length(),
-	onode_layout_t::MAX_OI_LENGTH);
 
       if (!layout.oi_size) {
 	// if oi was not in the layout, it probably exists in the omap,
 	// need to remove it first
 	fut = _xattr_rmattr(ctx, onode, OI_ATTR);
       }
-      layout.oi_size = val.length();
+      onode->update_object_info(*ctx.transaction, val);
       aset.erase(it);
     } else {
-      layout.oi_size = 0;
+      onode->clear_object_info(*ctx.transaction);
     }
   }
 
   if (auto it = aset.find(SS_ATTR); it != aset.end()) {
     auto& val = it->second;
     if (likely(val.length() <= onode_layout_t::MAX_SS_LENGTH)) {
-      maybe_inline_memcpy(
-	&layout.ss[0],
-	val.c_str(),
-	val.length(),
-	onode_layout_t::MAX_SS_LENGTH);
 
       if (!layout.ss_size) {
 	fut = _xattr_rmattr(ctx, onode, SS_ATTR);
       }
-      layout.ss_size = val.length();
-
+      onode->update_snapset(*ctx.transaction, val);
       aset.erase(it);
     } else {
-      layout.ss_size = 0;
+      onode->clear_snapset(*ctx.transaction);
     }
   }
 
@@ -1869,14 +1855,17 @@ SeaStore::Shard::_setattrs(
   }
 
   return fut.si_then(
-    [this, onode, &ctx, &layout,
-    aset=std::move(aset)]() mutable {
+    [this, onode, &ctx, aset=std::move(aset)]() mutable {
     return _omap_set_kvs(
       onode,
       onode->get_layout().xattr_root,
       *ctx.transaction,
-      layout.xattr_root,
-      std::move(aset));
+      std::move(aset)
+    ).si_then([onode, &ctx](auto root) {
+      if (root.must_update()) {
+	onode->update_xattr_root(*ctx.transaction, root);
+      }
+    });
   });
 }
 
@@ -1888,14 +1877,12 @@ SeaStore::Shard::_rmattr(
 {
   LOG_PREFIX(SeaStore::_rmattr);
   DEBUGT("onode={}", *ctx.transaction, *onode);
-  auto& layout = onode->get_mutable_layout(*ctx.transaction);
+  auto& layout = onode->get_layout();
   if ((name == OI_ATTR) && (layout.oi_size > 0)) {
-    memset(&layout.oi[0], 0, layout.oi_size);
-    layout.oi_size = 0;
+    onode->clear_object_info(*ctx.transaction);
     return tm_iertr::now();
   } else if ((name == SS_ATTR) && (layout.ss_size > 0)) {
-    memset(&layout.ss[0], 0, layout.ss_size);
-    layout.ss_size = 0;
+    onode->clear_snapset(*ctx.transaction);
     return tm_iertr::now();
   } else {
     return _xattr_rmattr(
@@ -1927,8 +1914,7 @@ SeaStore::Shard::_xattr_rmattr(
         return omap_manager.omap_rm_key(xattr_root, *ctx.transaction, name)
           .si_then([&] {
           if (xattr_root.must_update()) {
-              onode->get_mutable_layout(*ctx.transaction
-              ).xattr_root.update(xattr_root);
+	    onode->update_xattr_root(*ctx.transaction, xattr_root);
           }
         });
     });
@@ -1942,11 +1928,8 @@ SeaStore::Shard::_rmattrs(
 {
   LOG_PREFIX(SeaStore::_rmattrs);
   DEBUGT("onode={}", *ctx.transaction, *onode);
-  auto& layout = onode->get_mutable_layout(*ctx.transaction);
-  memset(&layout.oi[0], 0, layout.oi_size);
-  layout.oi_size = 0;
-  memset(&layout.ss[0], 0, layout.ss_size);
-  layout.ss_size = 0;
+  onode->clear_object_info(*ctx.transaction);
+  onode->clear_snapset(*ctx.transaction);
   return _xattr_clear(ctx, onode);
 }
 
@@ -1970,8 +1953,7 @@ SeaStore::Shard::_xattr_clear(
         return omap_manager.omap_clear(xattr_root, *ctx.transaction)
 	  .si_then([&] {
 	  if (xattr_root.must_update()) {
-              onode->get_mutable_layout(*ctx.transaction
-              ).xattr_root.update(xattr_root);
+	    onode->update_xattr_root(*ctx.transaction, xattr_root);
           }
         });
     });
