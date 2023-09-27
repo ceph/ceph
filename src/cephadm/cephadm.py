@@ -422,7 +422,7 @@ class SNMPGateway(ContainerDaemonForm):
 
 ##################################
 @register_daemon_form
-class Monitoring(DaemonForm):
+class Monitoring(ContainerDaemonForm):
     """Define the configs for the monitoring containers"""
 
     port_map = {
@@ -573,6 +573,42 @@ class Monitoring(DaemonForm):
     @property
     def identity(self) -> DaemonIdentity:
         return self._identity
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        self._prevalidate(ctx)
+        return get_deployment_container(ctx, self.identity)
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return self.extract_uid_gid(ctx, self.identity.daemon_type)
+
+    def _prevalidate(self, ctx: CephadmContext) -> None:
+        # before being refactored into a ContainerDaemonForm these checks were
+        # done inside the deploy function. This was the only "family" of daemons
+        # that performed these checks in that location
+        daemon_type = self.identity.daemon_type
+        config = fetch_configs(ctx)  # type: ignore
+        required_files = self.components[daemon_type].get(
+            'config-json-files', list()
+        )
+        required_args = self.components[daemon_type].get(
+            'config-json-args', list()
+        )
+        if required_files:
+            if not config or not all(c in config.get('files', {}).keys() for c in required_files):  # type: ignore
+                raise Error(
+                    '{} deployment requires config-json which must '
+                    'contain file content for {}'.format(
+                        daemon_type.capitalize(), ', '.join(required_files)
+                    )
+                )
+        if required_args:
+            if not config or not all(c in config.keys() for c in required_args):  # type: ignore
+                raise Error(
+                    '{} deployment requires config-json which must '
+                    'contain arg for {}'.format(
+                        daemon_type.capitalize(), ', '.join(required_args)
+                    )
+                )
 
 ##################################
 
@@ -5188,34 +5224,6 @@ def _dispatch_deploy(
             osd_fsid=ctx.osd_fsid,
             deployment_type=deployment_type,
             endpoints=daemon_endpoints,
-        )
-
-    elif daemon_type in Monitoring.components:
-        # monitoring daemon - prometheus, grafana, alertmanager, node-exporter
-        # Default Checks
-        # make sure provided config-json is sufficient
-        config = fetch_configs(ctx)  # type: ignore
-        required_files = Monitoring.components[daemon_type].get('config-json-files', list())
-        required_args = Monitoring.components[daemon_type].get('config-json-args', list())
-        if required_files:
-            if not config or not all(c in config.get('files', {}).keys() for c in required_files):  # type: ignore
-                raise Error('{} deployment requires config-json which must '
-                            'contain file content for {}'.format(daemon_type.capitalize(), ', '.join(required_files)))
-        if required_args:
-            if not config or not all(c in config.keys() for c in required_args):  # type: ignore
-                raise Error('{} deployment requires config-json which must '
-                            'contain arg for {}'.format(daemon_type.capitalize(), ', '.join(required_args)))
-
-        uid, gid = Monitoring.extract_uid_gid(ctx, daemon_type)
-        c = get_deployment_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints
         )
 
     elif daemon_type == CephadmAgent.daemon_type:
