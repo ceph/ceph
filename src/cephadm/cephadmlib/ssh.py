@@ -88,7 +88,9 @@ def revoke_ssh_key(key: str, ssh_user: str) -> None:
         _, filename = tempfile.mkstemp()
         with open(filename, 'w') as f:
             os.fchown(f.fileno(), ssh_uid, ssh_gid)
-            os.fchmod(f.fileno(), DEFAULT_MODE)  # secure access to the keys file
+            os.fchmod(
+                f.fileno(), DEFAULT_MODE
+            )  # secure access to the keys file
             for line in lines:
                 if line.strip() == key.strip():
                     deleted = True
@@ -102,7 +104,6 @@ def revoke_ssh_key(key: str, ssh_user: str) -> None:
 
 
 def check_ssh_connectivity(ctx: CephadmContext) -> None:
-
     def cmd_is_available(cmd: str) -> bool:
         if shutil.which(cmd) is None:
             logger.warning(f'Command not found: {cmd}')
@@ -128,34 +129,71 @@ def check_ssh_connectivity(ctx: CephadmContext) -> None:
         # no custom keys, let's generate some random keys just for this check
         ssh_priv_key_path = f'/tmp/ssh_key_{uuid.uuid1()}'
         ssh_pub_key_path = f'{ssh_priv_key_path}.pub'
-        ssh_key_gen_cmd = ['ssh-keygen', '-q', '-t', 'rsa', '-N', '', '-C', '', '-f', ssh_priv_key_path]
+        ssh_key_gen_cmd = [
+            'ssh-keygen',
+            '-q',
+            '-t',
+            'rsa',
+            '-N',
+            '',
+            '-C',
+            '',
+            '-f',
+            ssh_priv_key_path,
+        ]
         _, _, code = call(ctx, ssh_key_gen_cmd)
         if code != 0:
             logger.warning('Cannot generate keys to check ssh connectivity.')
             return
 
     if ssh_signed_cert_path:
-        logger.info('Verification for CA signed keys authentication not implemented. Skipping ...')
+        logger.info(
+            'Verification for CA signed keys authentication not implemented. Skipping ...'
+        )
     elif ssh_pub_key_path:
-        logger.info('Verifying ssh connectivity using standard pubkey authentication ...')
+        logger.info(
+            'Verifying ssh connectivity using standard pubkey authentication ...'
+        )
         with open(ssh_pub_key_path, 'r') as f:
             key = f.read().strip()
         new_key = authorize_ssh_key(key, ctx.ssh_user)
-        ssh_cfg_file_arg = ['-F', pathify(ctx.ssh_config.name)] if ctx.ssh_config else []
-        _, _, code = call(ctx, ['ssh', '-o StrictHostKeyChecking=no',
-                                *ssh_cfg_file_arg, '-i', ssh_priv_key_path,
-                                '-o PasswordAuthentication=no',
-                                f'{ctx.ssh_user}@{get_hostname()}',
-                                'sudo echo'])
+        ssh_cfg_file_arg = (
+            ['-F', pathify(ctx.ssh_config.name)] if ctx.ssh_config else []
+        )
+        _, _, code = call(
+            ctx,
+            [
+                'ssh',
+                '-o StrictHostKeyChecking=no',
+                *ssh_cfg_file_arg,
+                '-i',
+                ssh_priv_key_path,
+                '-o PasswordAuthentication=no',
+                f'{ctx.ssh_user}@{get_hostname()}',
+                'sudo echo',
+            ],
+        )
 
         # we only remove the key if it's a new one. In case the user has provided
         # some already existing key then we don't alter authorized_keys file
         if new_key:
             revoke_ssh_key(key, ctx.ssh_user)
 
-        pub_key_msg = '- The public key file configured by --ssh-public-key is valid\n' if ctx.ssh_public_key else ''
-        prv_key_msg = '- The private key file configured by --ssh-private-key is valid\n' if ctx.ssh_private_key else ''
-        ssh_cfg_msg = '- The ssh configuration file configured by --ssh-config is valid\n' if ctx.ssh_config else ''
+        pub_key_msg = (
+            '- The public key file configured by --ssh-public-key is valid\n'
+            if ctx.ssh_public_key
+            else ''
+        )
+        prv_key_msg = (
+            '- The private key file configured by --ssh-private-key is valid\n'
+            if ctx.ssh_private_key
+            else ''
+        )
+        ssh_cfg_msg = (
+            '- The ssh configuration file configured by --ssh-config is valid\n'
+            if ctx.ssh_config
+            else ''
+        )
         err_msg = f"""
 ** Please verify your user's ssh configuration and make sure:
 - User {ctx.ssh_user} must have passwordless sudo access
