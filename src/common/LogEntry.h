@@ -199,7 +199,9 @@ inline std::ostream& operator<<(std::ostream& out, const LogEntry& e)
 
 namespace fmt {
 
+#if FMT_VERSION >= 90000
 template <> struct formatter<clog_type> : ostream_formatter {};
+#endif
 
 template <> struct formatter<EntityName> : formatter<std::string_view> {
   template <typename FormatContext>

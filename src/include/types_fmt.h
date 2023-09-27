@@ -14,5 +14,7 @@
 
 namespace fmt {
 
+#if FMT_VERSION >= 90000
 template <> struct formatter<shard_id_t> : ostream_formatter {};
+#endif
 } // namespace fmt
