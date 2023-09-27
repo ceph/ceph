@@ -928,7 +928,7 @@ done
 
 
 @register_daemon_form
-class CephNvmeof(DaemonForm):
+class CephNvmeof(ContainerDaemonForm):
     """Defines a Ceph-Nvmeof container"""
 
     daemon_type = 'nvmeof'
@@ -1060,6 +1060,17 @@ class CephNvmeof(DaemonForm):
         return [
             'vm.nr_hugepages = 4096',
         ]
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return 167, 167  # TODO: need to get properly the uid/gid
+
+    def config_and_keyring(
+        self, ctx: CephadmContext
+    ) -> Tuple[Optional[str], Optional[str]]:
+        return get_config_and_keyring(ctx)
 
 
 ##################################
@@ -5208,21 +5219,6 @@ def _dispatch_deploy(
             keyring=keyring,
             deployment_type=deployment_type,
             endpoints=daemon_endpoints
-        )
-    elif daemon_type == CephNvmeof.daemon_type:
-        config, keyring = get_config_and_keyring(ctx)
-        uid, gid = 167, 167  # TODO: need to get properly the uid/gid
-        c = get_deployment_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
-            config=config,
-            keyring=keyring,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
         )
 
     elif daemon_type == CephadmAgent.daemon_type:
