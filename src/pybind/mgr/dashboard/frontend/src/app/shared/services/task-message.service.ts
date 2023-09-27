@@ -356,6 +356,9 @@ export class TaskMessageService {
     'cephfs/create': this.newTaskMessage(this.commonOperations.create, (metadata) =>
       this.volume(metadata)
     ),
+    'cephfs/edit': this.newTaskMessage(this.commonOperations.update, (metadata) =>
+      this.volume(metadata)
+    ),
     'cephfs/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.volume(metadata)
     ),
