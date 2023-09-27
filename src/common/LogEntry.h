@@ -190,8 +190,6 @@ inline std::ostream& operator<<(std::ostream& out, const clog_type t)
   }
 }
 
-template <> struct fmt::formatter<clog_type> : fmt::ostream_formatter {};
-
 inline std::ostream& operator<<(std::ostream& out, const LogEntry& e)
 {
   return out << e.stamp << " " << e.name << " (" << e.rank << ") "
@@ -199,19 +197,24 @@ inline std::ostream& operator<<(std::ostream& out, const LogEntry& e)
              << e.channel << " " << e.prio << " " << e.msg;
 }
 
-template <> struct fmt::formatter<EntityName> : fmt::formatter<std::string_view> {
+namespace fmt {
+
+template <> struct formatter<clog_type> : ostream_formatter {};
+
+template <> struct formatter<EntityName> : formatter<std::string_view> {
   template <typename FormatContext>
   auto format(const EntityName& e, FormatContext& ctx) const {
     return fmt::formatter<std::string_view>::format(e.to_str(), ctx);
   }
 };
 
-template <> struct fmt::formatter<LogEntry> : fmt::formatter<std::string_view> {
+template <> struct formatter<LogEntry> : formatter<std::string_view> {
   template <typename FormatContext>
   auto format(const LogEntry& e, FormatContext& ctx) const {
     return fmt::format_to(ctx.out(), "{} {} ({}) {} : {} {} {}",
 			  e.stamp, e.name, e.rank, e.seq, e.channel, e.prio, e.msg);
   }
 };
+} // namespace fmt
 
 #endif
