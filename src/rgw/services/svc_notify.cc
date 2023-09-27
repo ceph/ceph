@@ -253,7 +253,8 @@ void RGWSI_Notify::finalize_watch()
 {
   for (int i = 0; i < num_watchers; i++) {
     RGWWatcher *watcher = watchers[i];
-    watcher->unregister_watch();
+    if (watchers_set.find(i) != watchers_set.end())
+      watcher->unregister_watch();
     delete watcher;
   }
 
