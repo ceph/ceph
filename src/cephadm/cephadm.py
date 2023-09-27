@@ -541,6 +541,28 @@ class Monitoring(DaemonForm):
                 version = out.split(' ')[2]
         return version
 
+    @staticmethod
+    def extract_uid_gid(
+        ctx: CephadmContext, daemon_type: str
+    ) -> Tuple[int, int]:
+        if daemon_type == 'prometheus':
+            uid, gid = extract_uid_gid(ctx, file_path='/etc/prometheus')
+        elif daemon_type == 'node-exporter':
+            uid, gid = 65534, 65534
+        elif daemon_type == 'grafana':
+            uid, gid = extract_uid_gid(ctx, file_path='/var/lib/grafana')
+        elif daemon_type == 'loki':
+            uid, gid = extract_uid_gid(ctx, file_path='/etc/loki')
+        elif daemon_type == 'promtail':
+            uid, gid = extract_uid_gid(ctx, file_path='/etc/promtail')
+        elif daemon_type == 'alertmanager':
+            uid, gid = extract_uid_gid(
+                ctx, file_path=['/etc/alertmanager', '/etc/prometheus']
+            )
+        else:
+            raise Error('{} not implemented yet'.format(daemon_type))
+        return uid, gid
+
     def __init__(self, ident: DaemonIdentity) -> None:
         self._identity = ident
 
@@ -2654,7 +2676,7 @@ def get_container(
         container_args.extend(cc.get_container_args())
 
     if daemon_type in Monitoring.components:
-        uid, gid = extract_uid_gid_monitoring(ctx, daemon_type)
+        uid, gid = Monitoring.extract_uid_gid(ctx, daemon_type)
         monitoring_args = [
             '--user',
             str(uid),
@@ -5013,26 +5035,6 @@ def command_registry_login(ctx: CephadmContext) -> int:
 ##################################
 
 
-def extract_uid_gid_monitoring(ctx, daemon_type):
-    # type: (CephadmContext, str) -> Tuple[int, int]
-
-    if daemon_type == 'prometheus':
-        uid, gid = extract_uid_gid(ctx, file_path='/etc/prometheus')
-    elif daemon_type == 'node-exporter':
-        uid, gid = 65534, 65534
-    elif daemon_type == 'grafana':
-        uid, gid = extract_uid_gid(ctx, file_path='/var/lib/grafana')
-    elif daemon_type == 'loki':
-        uid, gid = extract_uid_gid(ctx, file_path='/etc/loki')
-    elif daemon_type == 'promtail':
-        uid, gid = extract_uid_gid(ctx, file_path='/etc/promtail')
-    elif daemon_type == 'alertmanager':
-        uid, gid = extract_uid_gid(ctx, file_path=['/etc/alertmanager', '/etc/prometheus'])
-    else:
-        raise Error('{} not implemented yet'.format(daemon_type))
-    return uid, gid
-
-
 def get_deployment_container(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -5204,7 +5206,7 @@ def _dispatch_deploy(
                 raise Error('{} deployment requires config-json which must '
                             'contain arg for {}'.format(daemon_type.capitalize(), ', '.join(required_args)))
 
-        uid, gid = extract_uid_gid_monitoring(ctx, daemon_type)
+        uid, gid = Monitoring.extract_uid_gid(ctx, daemon_type)
         c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
@@ -6094,7 +6096,7 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
 def command_adopt_prometheus(ctx, daemon_id, fsid):
     # type: (CephadmContext, str, str) -> None
     daemon_type = 'prometheus'
-    (uid, gid) = extract_uid_gid_monitoring(ctx, daemon_type)
+    (uid, gid) = Monitoring.extract_uid_gid(ctx, daemon_type)
     # should try to set the ports we know cephadm defaults
     # to for these services in the firewall.
     ports = Monitoring.port_map['prometheus']
@@ -6141,7 +6143,7 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
     # type: (CephadmContext, str, str) -> None
 
     daemon_type = 'grafana'
-    (uid, gid) = extract_uid_gid_monitoring(ctx, daemon_type)
+    (uid, gid) = Monitoring.extract_uid_gid(ctx, daemon_type)
     # should try to set the ports we know cephadm defaults
     # to for these services in the firewall.
     ports = Monitoring.port_map['grafana']
@@ -6212,7 +6214,7 @@ def command_adopt_alertmanager(ctx, daemon_id, fsid):
     # type: (CephadmContext, str, str) -> None
 
     daemon_type = 'alertmanager'
-    (uid, gid) = extract_uid_gid_monitoring(ctx, daemon_type)
+    (uid, gid) = Monitoring.extract_uid_gid(ctx, daemon_type)
     # should try to set the ports we know cephadm defaults
     # to for these services in the firewall.
     ports = Monitoring.port_map['alertmanager']
