@@ -130,7 +130,7 @@ struct ECListener {
     const eversion_t &roll_forward_to,
     const eversion_t &min_last_complete_ondisk,
     bool transaction_applied,
-    ObjectStore::Transaction &t,
+    ceph::os::Transaction &t,
     bool async = false) = 0;
   virtual void op_applied(
     const eversion_t &applied_version) = 0;
@@ -582,4 +582,15 @@ struct ECCommon {
     }
   };
 };
+
+std::ostream &operator<<(std::ostream &lhs,
+			 const ECCommon::RMWPipeline::pipeline_state_t &rhs);
+std::ostream &operator<<(std::ostream &lhs,
+			 const ECCommon::read_request_t &rhs);
+std::ostream &operator<<(std::ostream &lhs,
+			 const ECCommon::read_result_t &rhs);
+std::ostream &operator<<(std::ostream &lhs,
+			 const ECCommon::ReadOp &rhs);
+std::ostream &operator<<(std::ostream &lhs,
+			 const ECCommon::RMWPipeline::Op &rhs);
 
