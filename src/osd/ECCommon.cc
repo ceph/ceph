@@ -111,6 +111,95 @@ void ECCommon::ReadPipeline::complete_read_op(ReadOp &&rop) {
   tid_to_read_map.erase(rop.tid);
 }
 
+template <class F, class G>
+void ECCommon::ReadPipeline::check_recovery_sources(
+    const OSDMapRef &osdmap,
+    F &&on_erase,
+    G &&on_schedule_recovery
+  ) {
+  std::set<ceph_tid_t> tids_to_filter;
+  for (std::map<pg_shard_t, std::set<ceph_tid_t>>::iterator
+       i = shard_to_read_map.begin();
+       i != shard_to_read_map.end();) {
+    if (osdmap->is_down(i->first.osd)) {
+      tids_to_filter.insert(i->second.begin(), i->second.end());
+      shard_to_read_map.erase(i++);
+    } else {
+      ++i;
+    }
+  }
+  for (std::set<ceph_tid_t>::iterator i = tids_to_filter.begin();
+       i != tids_to_filter.end();
+       ++i) {
+    std::map<ceph_tid_t, ReadOp>::iterator j = tid_to_read_map.find(*i);
+    ceph_assert(j != tid_to_read_map.end());
+    filter_read_op(osdmap, j->second, on_erase, on_schedule_recovery);
+  }
+}
+
+template <class F, class G>
+void ECCommon::ReadPipeline::filter_read_op(
+    const OSDMapRef &osdmap,
+    ReadOp &op,
+    F &&on_erase,
+    G &&on_schedule_recovery
+  ) {
+  std::set<hobject_t> to_cancel;
+  for (auto &&[pg_shard, hoid_set] : op.source_to_obj) {
+    if (osdmap->is_down(pg_shard.osd)) {
+      to_cancel.insert(hoid_set.begin(), hoid_set.end());
+      op.in_progress.erase(pg_shard);
+    }
+  }
+
+  if (to_cancel.empty())
+    return;
+
+  for (auto iter = op.source_to_obj.begin();
+       iter != op.source_to_obj.end();) {
+    auto &[pg_shard, hoid_set] = *iter;
+    for (auto &hoid : hoid_set) {
+      if (to_cancel.contains(hoid)) {
+        hoid_set.erase(hoid);
+      }
+    }
+    if (hoid_set.empty()) {
+      op.source_to_obj.erase(iter++);
+    } else {
+      ceph_assert(!osdmap->is_down(pg_shard.osd));
+      ++iter;
+    }
+  }
+
+  for (auto hoid : to_cancel) {
+    get_parent()->cancel_pull(hoid);
+
+    ceph_assert(op.to_read.contains(hoid));
+    op.to_read.erase(hoid);
+    op.complete.erase(hoid);
+    on_erase(hoid);
+  }
+
+  if (op.in_progress.empty()) {
+    /* This case is odd.  filter_read_op gets called while processing
+     * an OSDMap.  Normal, non-recovery reads only happen from acting
+     * set osds.  For this op to have had a read source go down and
+     * there not be an interval change, it must be part of a pull during
+     * log-based recovery.
+     *
+     * This callback delays calling complete_read_op until later to avoid
+     * dealing with recovery while handling an OSDMap.  We assign a
+     * cost here of 1 because:
+     * 1) This should be very rare, and the operation itself was already
+     *    throttled.
+     * 2) It shouldn't result in IO, rather it should result in restarting
+     *    the pull on the affected objects and pushes from in-memory buffers
+     *    on any now complete unaffected objects.
+     */
+    on_schedule_recovery(op);
+  }
+}
+
 void ECCommon::ReadPipeline::on_change() {
   for (auto &rop: std::views::keys(tid_to_read_map)) {
     dout(10) << __func__ << ": cancelling " << rop << dendl;
