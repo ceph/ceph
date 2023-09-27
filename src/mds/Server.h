@@ -186,7 +186,8 @@ public:
   CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    const file_layout_t *layout=nullptr);
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
-  void apply_allocated_inos(MDRequestRef& mdr, Session *session);
+  void try_delegate_inos(MDRequestRef& mdr, bool saving);
+  void apply_allocated_inos_and_delegate_inos(MDRequestRef& mdr);
 
   void _try_open_ino(MDRequestRef& mdr, int r, inodeno_t ino);
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,

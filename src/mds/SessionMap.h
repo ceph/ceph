@@ -413,6 +413,19 @@ public:
     last_cap_renew = clock::zero();
   }
 
+  void inc_prealloc_dirty() {
+    ++prealloc_dirty;
+  }
+
+  void dec_prealloc_dirty() {
+    ceph_assert(prealloc_dirty > 0);
+    --prealloc_dirty;
+  }
+
+  bool is_prealloc_dirty() const {
+    return prealloc_dirty > 0;
+  }
+
   Session *reclaiming_from = nullptr;
   session_info_t info;                         ///< durable bits
   MDSAuthCaps auth_caps;
@@ -457,6 +470,8 @@ private:
   // Versions in this session was projected: used to verify
   // that appropriate mark_dirty calls follow.
   std::deque<version_t> projected;
+
+  uint64_t prealloc_dirty = 0;
 
   // request load average for this session
   DecayCounter load_avg;

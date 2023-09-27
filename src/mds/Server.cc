@@ -2197,6 +2197,11 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
     return;
   }
 
+  if (!mdr->prealloc_inos.empty()) {
+    dout(10) << "early_reply - prealloc inos, not allowed" << dendl;
+    return;
+  }
+
   const cref_t<MClientRequest> &req = mdr->client_request;
   entity_inst_t client_inst = req->get_source_inst();
   if (client_inst.name.is_mds())
@@ -2231,6 +2236,7 @@ void Server::early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn)
     set_trace_dist(reply, tracei, tracedn, mdr);
   }
 
+  try_delegate_inos(mdr, mdr->session->is_prealloc_dirty());
   reply->set_extra_bl(mdr->reply_extra_bl);
   mds->send_message_client(reply, mdr->session);
 
@@ -2285,7 +2291,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
   }
 
   // give any preallocated inos to the session
-  apply_allocated_inos(mdr, session);
+  apply_allocated_inos_and_delegate_inos(mdr);
 
   // get tracei/tracedn from mdr?
   CInode *tracei = mdr->tracei;
@@ -3405,6 +3411,9 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 
   inodeno_t _useino = useino;
 
+  dout(20) << __func__ << ": mdr->client_request=" << mdr->client_request
+	   << ", sent ino=" << _useino << dendl;
+
   // assign ino
   do {
     if (allow_prealloc_inos && (mdr->used_prealloc_ino = _inode->ino = mdr->session->take_ino(_useino))) {
@@ -3445,6 +3454,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   if (allow_prealloc_inos &&
       mdr->session->get_num_projected_prealloc_inos() < g_conf()->mds_client_prealloc_inos / 2) {
     int need = g_conf()->mds_client_prealloc_inos - mdr->session->get_num_projected_prealloc_inos();
+    dout(20) << __func__ << ": refilling with " << need << " inodes" << dendl;
     mds->inotable->project_alloc_ids(mdr->prealloc_inos, need);
     ceph_assert(mdr->prealloc_inos.size());  // or else fix projected increment semantics
     mdr->session->pending_prealloc_inos.insert(mdr->prealloc_inos);
@@ -3534,10 +3544,57 @@ void Server::journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob)
 		      mds->inotable->get_projected_version());
 }
 
-void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
+void Server::try_delegate_inos(MDRequestRef& mdr, bool dirty) {
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
+  if (req->get_op() == CEPH_MDS_OP_CREATE && mdr->tracei) {
+    if (mdr->did_early_reply) {
+      dout(20) << __func__ << ": inos probably delegated during early reply" << dendl;
+      return;
+    }
+
+    auto inode = mdr->tracei;
+    auto session = mdr->session;
+    dout(20) << __func__ << ": session=" << session << ", dirty=" << dirty
+	     << dendl;
+
+    // delay handing out preallocated inode range to client if the session
+    // needs to be persisted reflecting info.prealloc_inos to be saved
+    // before the client can start using them.
+    if (session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
+      if (!dirty) {
+	openc_response_t ocresp;
+	dout(10) << __func__ << ": adding created_ino and delegated_inos" << dendl;
+	ocresp.created_ino = inode->_get_inode()->ino;
+
+	if (delegate_inos_pct && !req->is_queued_for_replay()) {
+	  // Try to delegate some prealloc_inos to the client, if it's down to half the max
+	  unsigned frac = 100 / delegate_inos_pct;
+	  if (session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2) {
+	    session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
+	    dout(20) << __func__ << ": sending " << ocresp.delegated_inos.size()
+		     << " preallocated inodes" << dendl;
+	  }
+	}
+
+	encode(ocresp, mdr->reply_extra_bl);
+      } else {
+	dout(20) << __func__ << ": persisting sessionmap - not handing over preallocated inodes"
+		 << dendl;
+      }
+    } else if (req->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
+      dout(10) <<  __func__ << ": adding ino to reply to indicate inode was created" << dendl;
+      // add the file created flag onto the reply if create_flags features is supported
+      encode(inode->ino(), mdr->reply_extra_bl);
+    }
+  }
+}
+
+void Server::apply_allocated_inos_and_delegate_inos(MDRequestRef& mdr)
 {
-  dout(10) << "apply_allocated_inos " << mdr->alloc_ino
-	   << " / " << mdr->prealloc_inos
+  auto session = mdr->session;
+  dout(10) << __func__ << ": session=" << session << ": "
+	   << mdr->alloc_ino << " / " << mdr->prealloc_inos
 	   << " / " << mdr->used_prealloc_ino << dendl;
 
   if (mdr->alloc_ino) {
@@ -3548,14 +3605,42 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
     session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
     session->free_prealloc_inos.insert(mdr->prealloc_inos);
     session->info.prealloc_inos.insert(mdr->prealloc_inos);
-    mds->sessionmap.mark_dirty(session, !mdr->used_prealloc_ino);
+    mds->sessionmap.mark_dirty(session, false);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
+    session->inc_prealloc_dirty();
   }
+
   if (mdr->used_prealloc_ino) {
     ceph_assert(session);
     session->info.prealloc_inos.erase(mdr->used_prealloc_ino);
     mds->sessionmap.mark_dirty(session);
   }
+
+  // preempt saving sessionmap with _this_ version - the sessionmap version
+  // marked dirty when mdr->used_prealloc_ino is used is supposed to get
+  // persisted when expiring the log segment. This particular case is handle
+  // when replaying the log segment, c.f.:
+  //
+  // EMetaBlob::replay() {
+  //    ...
+  //    ...
+  //    if (sessionmapv) {  <- this part
+  //        ...
+  //        ...
+  //    }
+  // }
+
+  bool dirty = session->is_prealloc_dirty();
+  if (dirty) {
+    dout(10) << __func__ << ": saving sessionmap with version=" << mds->sessionmap.get_version()
+	     << dendl;
+    auto ctx = new LambdaContext([session](int r) {
+      session->dec_prealloc_dirty();
+    });
+    mds->sessionmap.save(new MDSInternalContextWrapper(mds, ctx));
+  }
+
+  try_delegate_inos(mdr, dirty);
 }
 
 struct C_MDS_TryOpenInode : public ServerContext {
@@ -4726,26 +4811,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   le->metablob.add_opened_ino(newi->ino());
 
   C_MDS_openc_finish *fin = new C_MDS_openc_finish(this, mdr, dn, newi);
-
-  if (mdr->session->info.has_feature(CEPHFS_FEATURE_DELEG_INO)) {
-    openc_response_t	ocresp;
-
-    dout(10) << "adding created_ino and delegated_inos" << dendl;
-    ocresp.created_ino = _inode->ino;
-
-    if (delegate_inos_pct && !req->is_queued_for_replay()) {
-      // Try to delegate some prealloc_inos to the client, if it's down to half the max
-      unsigned frac = 100 / delegate_inos_pct;
-      if (mdr->session->delegated_inos.size() < (unsigned)g_conf()->mds_client_prealloc_inos / frac / 2)
-	mdr->session->delegate_inos(g_conf()->mds_client_prealloc_inos / frac, ocresp.delegated_inos);
-    }
-
-    encode(ocresp, mdr->reply_extra_bl);
-  } else if (mdr->client_request->get_connection()->has_feature(CEPH_FEATURE_REPLY_CREATE_INODE)) {
-    dout(10) << "adding ino to reply to indicate inode was created" << dendl;
-    // add the file created flag onto the reply if create_flags features is supported
-    encode(newi->ino(), mdr->reply_extra_bl);
-  }
 
   journal_and_reply(mdr, newi, dn, le, fin);
 
