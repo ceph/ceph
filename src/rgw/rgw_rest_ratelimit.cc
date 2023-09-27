@@ -6,11 +6,11 @@ int check_caps(const RGWUserCaps& caps) override {
   return caps.check_cap("ratelimit", RGW_CAP_READ);
 }
   
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_verid) override;
 
   const char* name() const override { return "get_ratelimit_info"; }
 };
-void RGWOp_Ratelimit_Info::execute(optional_yield y)
+void RGWOp_Ratelimit_Info::execute(optional_yield y, bool null_verid)
 {
   ldpp_dout(this, 20) << "" << dendl;
   std::string uid_str;
@@ -123,7 +123,7 @@ class RGWOp_Ratelimit_Set : public RGWRESTOp {
     return caps.check_cap("ratelimit", RGW_CAP_WRITE);
   }
 
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_verid) override;
 
   const char* name() const override { return "put_ratelimit_info"; }
 
@@ -174,7 +174,7 @@ class RGWOp_Ratelimit_Set : public RGWRESTOp {
   }
 
 
-void RGWOp_Ratelimit_Set::execute(optional_yield y)
+void RGWOp_Ratelimit_Set::execute(optional_yield y, bool null_verid)
 {
   std::string uid_str;
   std::string ratelimit_scope;

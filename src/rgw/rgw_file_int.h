@@ -650,7 +650,7 @@ namespace rgw {
     bool creating() const { return flags & FLAG_CREATING; }
     bool deleted() const { return flags & FLAG_DELETED; }
     bool stateless_open() const { return flags & FLAG_STATELESS_OPEN; }
-    bool has_children() const;
+    bool has_children(bool null_verid) const;
 
     int open(uint32_t gsh_flags) {
       lock_guard guard(mtx);
@@ -667,7 +667,7 @@ namespace rgw {
     typedef boost::variant<uint64_t*, const char*> readdir_offset;
 
     int readdir(rgw_readdir_cb rcb, void *cb_arg, readdir_offset offset,
-		bool *eof, uint32_t flags);
+		bool *eof, uint32_t flags, bool null_verid);
 
     int write(uint64_t off, size_t len, size_t *nbytes, void *buffer);
 
@@ -1198,21 +1198,21 @@ namespace rgw {
     int getattr(RGWFileHandle* rgw_fh, struct stat* st);
 
     int setattr(RGWFileHandle* rgw_fh, struct stat* st, uint32_t mask,
-		uint32_t flags);
+		uint32_t flags, bool null_verid);
 
     int getxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs,
-		  rgw_getxattr_cb cb, void *cb_arg, uint32_t flags);
+		  rgw_getxattr_cb cb, void *cb_arg, uint32_t flags, bool null_verid);
 
     int lsxattrs(RGWFileHandle* rgw_fh, rgw_xattrstr *filter_prefix,
-		 rgw_getxattr_cb cb, void *cb_arg, uint32_t flags);
+		 rgw_getxattr_cb cb, void *cb_arg, uint32_t flags, bool null_verid);
 
-    int setxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs, uint32_t flags);
+    int setxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs, uint32_t flags, bool null_verid);
 
-    int rmxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs, uint32_t flags);
+    int rmxattrs(RGWFileHandle* rgw_fh, rgw_xattrlist* attrs, uint32_t flags, bool null_verid);
 
-    void update_fh(RGWFileHandle *rgw_fh);
+    void update_fh(RGWFileHandle *rgw_fh, bool null_verid);
 
-    LookupFHResult stat_bucket(RGWFileHandle* parent, const char *path,
+    LookupFHResult stat_bucket(RGWFileHandle* parent, const char *path, bool null_verid,
 			       RGWLibFS::BucketStats& bs,
 			       uint32_t flags);
 
@@ -1221,29 +1221,29 @@ namespace rgw {
 			     struct stat *st = nullptr, uint32_t mask = 0,
 			     uint32_t flags = RGWFileHandle::FLAG_NONE);
 
-    LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path,
+    LookupFHResult stat_leaf(RGWFileHandle* parent, const char *path, bool null_verid,
 			     enum rgw_fh_type type = RGW_FS_TYPE_NIL,
 			     uint32_t flags = RGWFileHandle::FLAG_NONE);
 
     int read(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
-	     size_t* bytes_read, void* buffer, uint32_t flags);
+	     size_t* bytes_read, void* buffer, uint32_t flags, bool null_verid);
 
     int readlink(RGWFileHandle* rgw_fh, uint64_t offset, size_t length,
-	     size_t* bytes_read, void* buffer, uint32_t flags);
+	     size_t* bytes_read, void* buffer, uint32_t flags, bool null_verid);
 
     int rename(RGWFileHandle* old_fh, RGWFileHandle* new_fh,
-	       const char *old_name, const char *new_name);
+	       const char *old_name, const char *new_name, bool null_verid);
 
     MkObjResult create(RGWFileHandle* parent, const char *name, struct stat *st,
-		      uint32_t mask, uint32_t flags);
+		      uint32_t mask, uint32_t flags, bool null_verid);
 
     MkObjResult symlink(RGWFileHandle* parent, const char *name,
-               const char *link_path, struct stat *st, uint32_t mask, uint32_t flags);
+               const char *link_path, struct stat *st, uint32_t mask, uint32_t flags, bool null_verid);
 
     MkObjResult mkdir(RGWFileHandle* parent, const char *name, struct stat *st,
-		      uint32_t mask, uint32_t flags);
+		      uint32_t mask, uint32_t flags, bool null_verid);
 
-    int unlink(RGWFileHandle* rgw_fh, const char *name,
+    int unlink(RGWFileHandle* rgw_fh, const char *name, bool null_verid,
 	       uint32_t flags = FLAG_NONE);
 
     /* find existing RGWFileHandle */
@@ -2288,8 +2288,8 @@ public:
     return 0;
   }
 
-  void execute(optional_yield y) override {
-    RGWGetObj::execute(y);
+  void execute(optional_yield y, bool null_verid) override {
+    RGWGetObj::execute(y, null_verid);
     _size = get_state()->obj_size;
   }
 

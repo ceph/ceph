@@ -111,7 +111,7 @@ namespace rgw {
     }
   }
 
-  void RGWLibProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r)
+  void RGWLibProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* ri, bool null_verid)
   {
     /*
      * invariant: valid requests are derived from RGWLibRequst
@@ -126,7 +126,7 @@ namespace rgw {
 
     RGWLibIO io_ctx;
 
-    int ret = process_request(req, &io_ctx);
+    int ret = process_request(req, &io_ctx, null_verid);
     if (ret < 0) {
       /* we don't really care about return code */
       dout(20) << "process_request() returned " << ret << dendl;
@@ -135,7 +135,7 @@ namespace rgw {
     delete req;
   } /* handle_request */
 
-  int RGWLibProcess::process_request(RGWLibRequest* req)
+  int RGWLibProcess::process_request(RGWLibRequest* reqi, bool null_verid)
   {
     // XXX move RGWLibIO and timing setup into process_request
 
@@ -145,7 +145,7 @@ namespace rgw {
 
     RGWLibIO io_ctx;
 
-    int ret = process_request(req, &io_ctx);
+    int ret = process_request(req, &io_ctx, null_verid);
     if (ret < 0) {
       /* we don't really care about return code */
       dout(20) << "process_request() returned " << ret << dendl;
@@ -165,7 +165,7 @@ namespace rgw {
     perfcounter->inc(l_rgw_failed_req);
   } /* abort_req */
 
-  int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io)
+  int RGWLibProcess::process_request(RGWLibRequest* req, RGWLibIO* io, bool null_verid)
   {
     int ret = 0;
     bool should_log = true; // XXX
@@ -291,7 +291,7 @@ namespace rgw {
 
       ldpp_dout(s, 2) << "executing" << dendl;
       op->pre_exec();
-      op->execute(null_yield);
+      op->execute(null_yield, null_verid);
       op->complete();
 
     } catch (const ceph::crypto::DigestException& e) {

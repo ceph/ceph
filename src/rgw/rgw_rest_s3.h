@@ -366,7 +366,7 @@ protected:
 public:
   RGWGetLC_ObjStore_S3() {}
   ~RGWGetLC_ObjStore_S3() override {}
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_verid) override;
 
  void send_response() override;
 };

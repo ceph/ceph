@@ -114,7 +114,7 @@ void RGWLoadGenProcess::gen_request(const string& method,
   req_wq.queue(req);
 } /* RGWLoadGenProcess::gen_request */
 
-void RGWLoadGenProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r)
+void RGWLoadGenProcess::handle_request(const DoutPrefixProvider *dpp, RGWRequest* r, bool null_verid)
 {
   RGWLoadGenRequest* req = static_cast<RGWLoadGenRequest*>(r);
 

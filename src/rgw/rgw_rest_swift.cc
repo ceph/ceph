@@ -554,9 +554,9 @@ static void dump_container_metadata(req_state *s,
   dump_last_modified(s, s->bucket_mtime);
 }
 
-void RGWStatAccount_ObjStore_SWIFT::execute(optional_yield y)
+void RGWStatAccount_ObjStore_SWIFT::execute(optional_yield y, bool null_verid)
 {
-  RGWStatAccount_ObjStore::execute(y);
+  RGWStatAccount_ObjStore::execute(y, null_verid);
   op_ret = s->user->read_attrs(s, s->yield);
   attrs = s->user->get_attrs();
 }
@@ -1832,7 +1832,7 @@ const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT:
     {"tempauth", {false, RGWInfo_ObjStore_SWIFT::list_tempauth_data}},
 };
 
-void RGWInfo_ObjStore_SWIFT::execute(optional_yield y)
+void RGWInfo_ObjStore_SWIFT::execute(optional_yield y, bool null_verid)
 {
   bool is_admin_info_enabled = false;
 
@@ -2457,7 +2457,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_redirect_op()
       return 0;
     }
 
-    void execute(optional_yield) override {
+    void execute(optional_yield, bool null_verid) override {
       op_ret = -ERR_PERMANENT_REDIRECT;
       return;
     }

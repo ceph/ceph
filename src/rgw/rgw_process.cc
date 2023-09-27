@@ -85,9 +85,9 @@ RGWRequest* RGWProcess::RGWWQ::_dequeue() {
   return req;
 }
 
-void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &) {
+void RGWProcess::RGWWQ::_process(RGWRequest *req, ThreadPool::TPHandle &, bool null_verid) {
   perfcounter->inc(l_rgw_qactive);
-  process->handle_request(this, req);
+  process->handle_request(this, req, null_verid);
   process->req_throttle.put(1);
   perfcounter->inc(l_rgw_qactive, -1);
 }
@@ -168,6 +168,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               req_state * const s,
 			                        optional_yield y,
                               rgw::sal::Driver* driver,
+                              bool null_verid,
                               const bool skip_retarget)
 {
   ldpp_dout(op, 2) << "init permissions" << dendl;
@@ -252,7 +253,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   {
     auto span = tracing::rgw::tracer.add_span("execute", s->trace);
     std::swap(span, s->trace);
-    op->execute(y);
+    op->execute(y, null_verid);
     std::swap(span, s->trace);
   }
 

@@ -20,7 +20,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_READ);
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_verid) override;
 
   const char* name() const override { return "get_usage"; }
 };
@@ -71,7 +71,7 @@ public:
   int check_caps(const RGWUserCaps& caps) override {
     return caps.check_cap("usage", RGW_CAP_WRITE);
   }
-  void execute(optional_yield y) override;
+  void execute(optional_yield y, bool null_verid) override;
 
   const char* name() const override { return "trim_usage"; }
 };
