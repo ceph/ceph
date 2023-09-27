@@ -89,16 +89,22 @@ def _parse_podman_version(version_str):
     return tuple(map(to_int, version_str.split('.')))
 
 
-def registry_login(ctx: CephadmContext, url: Optional[str], username: Optional[str], password: Optional[str]) -> None:
+def registry_login(
+    ctx: CephadmContext,
+    url: Optional[str],
+    username: Optional[str],
+    password: Optional[str],
+) -> None:
     try:
         engine = ctx.container_engine
-        cmd = [engine.path, 'login',
-               '-u', username, '-p', password,
-               url]
+        cmd = [engine.path, 'login', '-u', username, '-p', password, url]
         if isinstance(engine, Podman):
             cmd.append('--authfile=/etc/ceph/podman-auth.json')
         out, _, _ = call_throws(ctx, cmd)
         if isinstance(engine, Podman):
             os.chmod('/etc/ceph/podman-auth.json', DEFAULT_MODE)
     except Exception:
-        raise Error('Failed to login to custom registry @ %s as %s with given password' % (ctx.registry_url, ctx.registry_username))
+        raise Error(
+            'Failed to login to custom registry @ %s as %s with given password'
+            % (ctx.registry_url, ctx.registry_username)
+        )
