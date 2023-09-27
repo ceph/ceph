@@ -1574,23 +1574,21 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
       DoutPrefixProvider *dpp,
       const ceph_release_t require_osd_release) final
   {
-    // there is the special case of t-empty op generated in try_finish_rmw()
-    if (t) {
-      ECTransaction::generate_transactions(
-        t.get(),
-        plan,
-        ecimpl,
-        pgid,
-        sinfo,
-        remote_read_result,
-        log_entries,
-        written,
-        transactions,
-        &temp_added,
-        &temp_cleared,
-        dpp,
-        require_osd_release);
-    }
+    assert(t);
+    ECTransaction::generate_transactions(
+      t.get(),
+      plan,
+      ecimpl,
+      pgid,
+      sinfo,
+      remote_read_result,
+      log_entries,
+      written,
+      transactions,
+      &temp_added,
+      &temp_cleared,
+      dpp,
+      require_osd_release);
   }
 
   template <typename F>
@@ -2227,6 +2225,21 @@ bool ECCommon::RMWPipeline::try_reads_to_commit()
   return true;
 }
 
+struct ECDummyOp : ECCommon::RMWPipeline::Op {
+  void generate_transactions(
+      ceph::ErasureCodeInterfaceRef &ecimpl,
+      pg_t pgid,
+      const ECUtil::stripe_info_t &sinfo,
+      std::map<hobject_t,extent_map> *written,
+      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+      DoutPrefixProvider *dpp,
+      const ceph_release_t require_osd_release) final
+  {
+    // NOP, as -- in constrast to ECClassicalOp -- there is no
+    // transaction involved
+  }
+};
+
 bool ECCommon::RMWPipeline::try_finish_rmw()
 {
   if (waiting_commit.empty())
@@ -2250,7 +2263,7 @@ bool ECCommon::RMWPipeline::try_finish_rmw()
 	waiting_commit.empty()) {
       // submit a dummy, transaction-empty op to kick the rollforward
       auto tid = get_parent()->get_tid();
-      auto nop = std::make_unique<ECClassicalOp>();
+      auto nop = std::make_unique<ECDummyOp>();
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
       nop->roll_forward_to = op->version;
