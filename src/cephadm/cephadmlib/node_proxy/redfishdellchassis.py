@@ -35,7 +35,7 @@ class RedfishDellChassis(BaseRedfishSystem):
                 "Status"
             ]
         }
-        self.log.logger.info("Updating powersupplies")
+        self.log.logger.debug("Updating powersupplies")
         self._system['power'] = self.build_chassis_data(fields, 'Power')
 
     def _update_fans(self) -> None:
@@ -46,7 +46,7 @@ class RedfishDellChassis(BaseRedfishSystem):
                 "Status"
             ],
         }
-        self.log.logger.info("Updating fans")
+        self.log.logger.debug("Updating fans")
         self._system['fans'] = self.build_chassis_data(fields, 'Thermal')
 
     def build_chassis_data(self,
