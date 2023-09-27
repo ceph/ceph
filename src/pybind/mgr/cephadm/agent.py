@@ -147,7 +147,10 @@ class NodeProxy:
             # Force a fake error for testing purpose
             if component == 'storage':
                 _status = 'critical'
-                state = "Fake error"
+                state = "[Fake error] device is faulty."
+            elif component == 'power':
+                _status = 'critical'
+                state = "[Fake error] power supply unplugged."
             else:
                 _status = data[component][member]['status']['health'].lower()
             if _status.lower() != 'ok':
@@ -167,6 +170,8 @@ class NodeProxy:
             'memory': 'NODE_PROXY_MEMORY',
             'processors': 'NODE_PROXY_PROCESSORS',
             'network': 'NODE_PROXY_NETWORK',
+            'power': 'NODE_PROXY_POWER',
+            'fans': 'NODE_PROXY_FANS'
         }
 
         for component in data['data'].keys():
