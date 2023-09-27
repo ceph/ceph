@@ -41,10 +41,10 @@ static inline Object* nextObject(Object* t)
 D4NFilterDriver::D4NFilterDriver(Driver* _next) : FilterDriver(_next) 
 {
   rgw::cache::Partition partition_info;
-  partition_info.location = g_conf()->rgw_d3n_l1_datacache_persistent_path;
+  partition_info.location = g_conf()->rgw_d4n_l1_datacache_persistent_path;
   partition_info.name = "d4n";
   partition_info.type = "read-cache";
-  partition_info.size = g_conf()->rgw_d3n_l1_datacache_size;
+  partition_info.size = g_conf()->rgw_d4n_l1_datacache_size;
 
   cacheDriver = new rgw::cache::SSDDriver(partition_info);
   objDir = new rgw::d4n::ObjectDirectory();
