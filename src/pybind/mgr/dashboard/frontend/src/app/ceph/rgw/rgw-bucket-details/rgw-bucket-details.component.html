@@ -18,11 +18,6 @@
       </tr>
       <tr>
         <td i18n
-            class="bold">Index type</td>
-        <td>{{ selection.index_type }}</td>
-      </tr>
-      <tr>
-        <td i18n
             class="bold">Placement rule</td>
         <td>{{ selection.placement_rule }}</td>
       </tr>
@@ -34,6 +29,109 @@
     </tbody>
   </table>
 
+  <!-- Connection details -->
+  <legend i18n>Connection Details</legend>
+  <table class="table table-striped table-bordered">
+    <tbody>
+      <ng-container *ngFor="let key of keys; let i = index">
+        <tr>
+          <td i18n
+              class="bold w-25">Access Key {{ i ? i: ''}}</td>
+            <td class="w-75">
+            <div class="cd-col-form-input">
+              <div class="input-group">
+                <input
+                  id="key.ref.access_key"
+                  class="form-control"
+                  type="text"
+                  value="{{key.ref.access_key}}"
+                  disabled>
+                <cd-copy-2-clipboard-button source="key.ref.access_key">
+                </cd-copy-2-clipboard-button>
+              </div>
+            </div>
+          </td>
+        </tr>
+        <tr>
+          <td class="bold"
+              i18n>Secret key {{ i ? i: ''}}
+          </td>
+          <td>
+            <div class="cd-col-form-input">
+              <div class="input-group">
+                <input
+                  id="key.ref.secret_key"
+                  class="form-control"
+                  type="password"
+                  value="{{key.ref.secret_key}}"
+                  disabled>
+                <button type="button"
+                        class="btn btn-light"
+                        cdPasswordButton="key.ref.secret_key">
+                </button>
+                <cd-copy-2-clipboard-button source="key.ref.secret_key">
+                </cd-copy-2-clipboard-button>
+              </div>
+            </div>
+          </td>
+        </tr>
+      </ng-container>
+      <tr>
+        <td i18n
+            class="bold">Region</td>
+        <td>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input
+                id="zonegroupName"
+                class="form-control"
+                type="text"
+                value="{{zonegroupName}}"
+                disabled>
+              <cd-copy-2-clipboard-button source="zonegroupName">
+              </cd-copy-2-clipboard-button>
+            </div>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td i18n
+            class="bold">S3 Endpoint</td>
+        <td>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input
+                id="endpoint"
+                class="form-control"
+                type="text"
+                value="{{endpoint}}"
+                disabled>
+              <cd-copy-2-clipboard-button source="endpoint">
+              </cd-copy-2-clipboard-button>
+            </div>
+          </div>
+        </td>
+      </tr>
+      <tr>
+        <td i18n
+            class="bold">Bucket Name</td>
+        <td>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input
+                id="this.selection.bucket"
+                class="form-control"
+                type="text"
+                value="{{this.selection.bucket}}"
+                disabled>
+              <cd-copy-2-clipboard-button source="this.selection.bucket">
+              </cd-copy-2-clipboard-button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    </tbody>
+  </table>
   <!-- Bucket quota -->
   <div>
     <legend i18n>Bucket quota</legend>
