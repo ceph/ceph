@@ -212,10 +212,6 @@ public:
     Transaction &trans,
     const std::vector<ghobject_t> &hoids) final;
 
-  write_dirty_ret write_dirty(
-    Transaction &trans,
-    const std::vector<OnodeRef> &onodes) final;
-
   erase_onode_ret erase_onode(
     Transaction &trans,
     OnodeRef &onode) final;

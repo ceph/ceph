@@ -87,34 +87,6 @@ FLTreeOnodeManager::get_or_create_onodes(
     });
 }
 
-FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
-  Transaction &trans,
-  const std::vector<OnodeRef> &onodes)
-{
-  return trans_intr::do_for_each(
-    onodes,
-    [&trans](auto &onode) -> eagain_ifuture<> {
-      if (!onode) {
-	return eagain_iertr::make_ready_future<>();
-      }
-      auto &flonode = static_cast<FLTreeOnode&>(*onode);
-      if (!flonode.is_alive()) {
-	return eagain_iertr::make_ready_future<>();
-      }
-      switch (flonode.status) {
-      case FLTreeOnode::status_t::MUTATED: {
-        flonode.populate_recorder(trans);
-        return eagain_iertr::make_ready_future<>();
-      }
-      case FLTreeOnode::status_t::STABLE: {
-        return eagain_iertr::make_ready_future<>();
-      }
-      default:
-        __builtin_unreachable();
-      }
-    });
-}
-
 FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
   Transaction &trans,
   OnodeRef &onode)

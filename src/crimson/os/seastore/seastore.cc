@@ -1226,8 +1226,6 @@ seastar::future<> SeaStore::Shard::do_transaction_no_callbacks(
                 return seastar::make_ready_future<seastar::stop_iteration>(
                   seastar::stop_iteration::yes);
               };
-            }).si_then([this, &ctx, &d_onodes] {
-              return onode_manager->write_dirty(*ctx.transaction, d_onodes);
             });
         }).si_then([this, &ctx] {
           return transaction_manager->submit_transaction(*ctx.transaction);
