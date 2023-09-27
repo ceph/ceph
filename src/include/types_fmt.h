@@ -12,4 +12,7 @@
 
 #include <include/types.h>
 
-template <> struct fmt::formatter<shard_id_t> : fmt::ostream_formatter {};
+namespace fmt {
+
+template <> struct formatter<shard_id_t> : ostream_formatter {};
+} // namespace fmt

@@ -12,4 +12,7 @@
 
 #include <include/neorados/RADOS.hpp>
 
-template <> struct fmt::formatter<neorados::Object> : fmt::ostream_formatter {};
+namespace fmt {
+
+template <> struct formatter<neorados::Object> : ostream_formatter {};
+} // namespace fmt
