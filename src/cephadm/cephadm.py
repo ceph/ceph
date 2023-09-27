@@ -1356,7 +1356,7 @@ class Keepalived(ContainerDaemonForm):
 
 
 @register_daemon_form
-class Tracing(DaemonForm):
+class Tracing(ContainerDaemonForm):
     """Define the configs for the jaeger tracing containers"""
 
     components: Dict[str, Dict[str, Any]] = {
@@ -1403,6 +1403,14 @@ class Tracing(DaemonForm):
     @property
     def identity(self) -> DaemonIdentity:
         return self._identity
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        # TODO(jjm) this looks to be the only container for deployment
+        # not using get_deployment_container. Previous oversight?
+        return get_container(ctx, self.identity)
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return 65534, 65534
 
 ##################################
 
@@ -5213,18 +5221,6 @@ def _dispatch_deploy(
             gid,
             config=config,
             keyring=keyring,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
-        )
-    elif daemon_type in Tracing.components:
-        uid, gid = 65534, 65534
-        c = get_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
             deployment_type=deployment_type,
             endpoints=daemon_endpoints,
         )
