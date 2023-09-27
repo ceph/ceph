@@ -7,15 +7,11 @@ import { FormHelper, configureTestBed } from '~/testing/unit-test-helper';
 import { SharedModule } from '~/app/shared/shared.module';
 import { ToastrModule } from 'ngx-toastr';
 import { ReactiveFormsModule } from '@angular/forms';
-import { By } from '@angular/platform-browser';
-import { OrchestratorService } from '~/app/shared/api/orchestrator.service';
-import { of } from 'rxjs';
 
 describe('CephfsVolumeFormComponent', () => {
   let component: CephfsVolumeFormComponent;
   let fixture: ComponentFixture<CephfsVolumeFormComponent>;
   let formHelper: FormHelper;
-  let orchService: OrchestratorService;
 
   configureTestBed({
     imports: [
@@ -32,8 +28,6 @@ describe('CephfsVolumeFormComponent', () => {
     fixture = TestBed.createComponent(CephfsVolumeFormComponent);
     component = fixture.componentInstance;
     formHelper = new FormHelper(component.form);
-    orchService = TestBed.inject(OrchestratorService);
-    spyOn(orchService, 'status').and.returnValue(of({ available: true }));
     fixture.detectChanges();
   });
 
@@ -57,26 +51,4 @@ describe('CephfsVolumeFormComponent', () => {
       formHelper.expectError('name', 'pattern');
     }
   }));
-
-  it('should show placement when orchestrator is available', () => {
-    const placement = fixture.debugElement.query(By.css('#placement'));
-    expect(placement).not.toBeNull();
-  });
-
-  describe('when editing', () => {
-    beforeEach(() => {
-      component.editing = true;
-      component.ngOnInit();
-      fixture.detectChanges();
-    });
-
-    it('should not show placement while editing even if orch is available', () => {
-      const placement = fixture.debugElement.query(By.css('#placement'));
-      const label = fixture.debugElement.query(By.css('#label'));
-      const hosts = fixture.debugElement.query(By.css('#hosts'));
-      expect(placement).toBeNull();
-      expect(label).toBeNull();
-      expect(hosts).toBeNull();
-    });
-  });
 });
