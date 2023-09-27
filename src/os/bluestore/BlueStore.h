@@ -611,8 +611,8 @@ public:
     void set_shared_blob(SharedBlobRef sb) {
       ceph_assert((bool)sb);
       ceph_assert(!shared_blob);
+      ceph_assert(sb->collection = collection);
       shared_blob = sb;
-      collection = sb->collection;
       ceph_assert(get_cache());
     }
     BufferSpace bc;
@@ -727,13 +727,13 @@ public:
       return shared_blob && shared_blob->is_loaded();
     }
     inline BufferCacheShard* get_cache() {
-      return shared_blob ? shared_blob->get_cache() : collection->cache;
+      return collection->cache;
     }
     uint64_t get_sbid() const {
       return shared_blob ? shared_blob->get_sbid() : 0;
     }
     CollectionRef get_collection() const {
-      return shared_blob ? shared_blob->collection : collection;
+      return collection;
     }
 
     ~Blob();
