@@ -728,7 +728,7 @@ class NFSGanesha(ContainerDaemonForm):
 
 
 @register_daemon_form
-class CephIscsi(DaemonForm):
+class CephIscsi(ContainerDaemonForm):
     """Defines a Ceph-Iscsi container"""
 
     daemon_type = 'iscsi'
@@ -922,6 +922,17 @@ done
         tcmu_container.entrypoint = '/usr/local/scripts/tcmu-runner-entrypoint.sh'
         tcmu_container.cname = self.get_container_name(desc='tcmu')
         return tcmu_container
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
+
+    def config_and_keyring(
+        self, ctx: CephadmContext
+    ) -> Tuple[Optional[str], Optional[str]]:
+        return get_config_and_keyring(ctx)
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return extract_uid_gid(ctx)
 
 
 ##################################
@@ -5201,22 +5212,6 @@ def _dispatch_deploy(
             c,
             uid,
             gid,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints
-        )
-
-    elif daemon_type == CephIscsi.daemon_type:
-        config, keyring = get_config_and_keyring(ctx)
-        uid, gid = extract_uid_gid(ctx)
-        c = get_deployment_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
-            config=config,
-            keyring=keyring,
             deployment_type=deployment_type,
             endpoints=daemon_endpoints
         )
