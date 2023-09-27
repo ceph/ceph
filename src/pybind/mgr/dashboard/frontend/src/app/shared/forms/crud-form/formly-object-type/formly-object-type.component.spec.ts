@@ -4,6 +4,7 @@ import { FormlyObjectTypeComponent } from './formly-object-type.component';
 import { FormlyFieldConfig, FormlyModule } from '@ngx-formly/core';
 import { Component } from '@angular/core';
 import { FormGroup } from '@angular/forms';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 @Component({
   template: ` <form [formGroup]="form">
@@ -24,15 +25,13 @@ describe('FormlyObjectTypeComponent', () => {
   let fixture: ComponentFixture<MockFormComponent>;
   let mockComponent: MockFormComponent;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [FormlyObjectTypeComponent],
-      imports: [
-        FormlyModule.forRoot({
-          types: [{ name: 'object', component: FormlyObjectTypeComponent }]
-        })
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [FormlyObjectTypeComponent],
+    imports: [
+      FormlyModule.forRoot({
+        types: [{ name: 'object', component: FormlyObjectTypeComponent }]
+      })
+    ]
   });
 
   beforeEach(() => {

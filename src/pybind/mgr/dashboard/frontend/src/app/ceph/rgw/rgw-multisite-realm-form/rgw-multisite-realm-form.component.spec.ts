@@ -13,24 +13,23 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwMultisiteRealmFormComponent', () => {
   let component: RgwMultisiteRealmFormComponent;
   let fixture: ComponentFixture<RgwMultisiteRealmFormComponent>;
   let rgwRealmService: RgwRealmService;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        ToastrModule.forRoot()
-      ],
-      providers: [NgbActiveModal],
-      declarations: [RgwMultisiteRealmFormComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      HttpClientTestingModule,
+      ToastrModule.forRoot()
+    ],
+    providers: [NgbActiveModal],
+    declarations: [RgwMultisiteRealmFormComponent]
   });
 
   beforeEach(() => {

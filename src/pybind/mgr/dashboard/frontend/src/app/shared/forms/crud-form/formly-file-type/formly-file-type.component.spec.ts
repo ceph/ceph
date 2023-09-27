@@ -3,16 +3,15 @@ import { FormControl } from '@angular/forms';
 import { FormlyModule } from '@ngx-formly/core';
 
 import { FormlyFileTypeComponent } from './formly-file-type.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('FormlyFileTypeComponent', () => {
   let component: FormlyFileTypeComponent;
   let fixture: ComponentFixture<FormlyFileTypeComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [FormlyModule.forRoot()],
-      declarations: [FormlyFileTypeComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [FormlyModule.forRoot()],
+    declarations: [FormlyFileTypeComponent]
   });
 
   beforeEach(() => {

@@ -7,23 +7,22 @@ import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { CreateRgwServiceEntitiesComponent } from './create-rgw-service-entities.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CreateRgwServiceEntitiesComponent', () => {
   let component: CreateRgwServiceEntitiesComponent;
   let fixture: ComponentFixture<CreateRgwServiceEntitiesComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        ToastrModule.forRoot()
-      ],
-      providers: [NgbActiveModal],
-      declarations: [CreateRgwServiceEntitiesComponent]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      HttpClientTestingModule,
+      ToastrModule.forRoot()
+    ],
+    providers: [NgbActiveModal],
+    declarations: [CreateRgwServiceEntitiesComponent]
   });
 
   beforeEach(() => {

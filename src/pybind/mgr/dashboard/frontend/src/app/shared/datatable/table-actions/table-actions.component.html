@@ -19,7 +19,7 @@
        *ngIf="dropDownActions.length > 1"
        aria-label="Button group with nested dropdown">
     <button aria-label="dropdown-menu-toggle"
-            class="btn btn-{{btnColor}} dropdown-toggle-split"
+            class="btn btn-{{btnColor}} dropdown-toggle"
             ngbDropdownToggle>
       <ng-container *ngIf="dropDownOnly">{{ dropDownOnly }} </ng-container>
       <span *ngIf="!dropDownOnly"

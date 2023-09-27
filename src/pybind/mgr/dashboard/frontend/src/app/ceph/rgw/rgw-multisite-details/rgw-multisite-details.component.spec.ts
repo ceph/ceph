@@ -7,23 +7,22 @@ import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteDetailsComponent } from './rgw-multisite-details.component';
 import { RouterTestingModule } from '@angular/router/testing';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwMultisiteDetailsComponent', () => {
   let component: RgwMultisiteDetailsComponent;
   let fixture: ComponentFixture<RgwMultisiteDetailsComponent>;
   let debugElement: DebugElement;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwMultisiteDetailsComponent],
-      imports: [
-        HttpClientTestingModule,
-        TreeModule,
-        SharedModule,
-        ToastrModule.forRoot(),
-        RouterTestingModule
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RgwMultisiteDetailsComponent],
+    imports: [
+      HttpClientTestingModule,
+      TreeModule,
+      SharedModule,
+      ToastrModule.forRoot(),
+      RouterTestingModule
+    ]
   });
 
   beforeEach(() => {
