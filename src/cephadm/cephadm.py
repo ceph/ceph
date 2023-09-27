@@ -5272,6 +5272,7 @@ def command_bootstrap(ctx):
 
 
 def command_registry_login(ctx: CephadmContext) -> int:
+    logger.info('Logging into custom registry.')
     if ctx.registry_json:
         logger.info('Pulling custom registry login info from %s.' % ctx.registry_json)
         d = get_parm(ctx.registry_json)
@@ -5298,7 +5299,6 @@ def command_registry_login(ctx: CephadmContext) -> int:
 
 
 def registry_login(ctx: CephadmContext, url: Optional[str], username: Optional[str], password: Optional[str]) -> None:
-    logger.info('Logging into custom registry.')
     try:
         engine = ctx.container_engine
         cmd = [engine.path, 'login',
