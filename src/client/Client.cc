@@ -1439,7 +1439,7 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
       }
 
       Inode *in = add_update_inode(&ist, request->sent_stamp, session,
-				   request->perms);
+                                   request->perms);
       auto *effective_dir = dir;
       auto *effective_diri = diri;
 
@@ -1451,37 +1451,37 @@ void Client::insert_readdir_results(MetaRequest *request, MetaSession *session,
       }
       Dentry *dn;
       if (effective_dir->dentries.count(dname)) {
-	Dentry *olddn = effective_dir->dentries[dname];
-	if (olddn->inode != in) {
-	  // replace incorrect dentry
-	  unlink(olddn, true, true);  // keep dir, dentry
-	  dn = link(effective_dir, dname, enc_name, in, olddn);
-	  ceph_assert(dn == olddn);
-	} else {
-	  // keep existing dn
-	  dn = olddn;
-	  touch_dn(dn);
-	}
+        Dentry *olddn = effective_dir->dentries[dname];
+        if (olddn->inode != in) {
+          // replace incorrect dentry
+          unlink(olddn, true, true);  // keep dir, dentry
+          dn = link(effective_dir, dname, enc_name, in, olddn);
+          ceph_assert(dn == olddn);
+        } else {
+          // keep existing dn
+          dn = olddn;
+          touch_dn(dn);
+        }
       } else {
-	// new dn
-	dn = link(effective_dir, dname, enc_name, in, NULL);
+        // new dn
+        dn = link(effective_dir, dname, enc_name, in, NULL);
       }
       dn->alternate_name = std::move(dlease.alternate_name);
 
       update_dentry_lease(dn, &dlease, request->sent_stamp, session);
       if (hash_order) {
-	unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(orig_dname));
-	if (hash != last_hash)
-	  readdir_offset = 2;
-	last_hash = hash;
-	dn->offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
+        unsigned hash = ceph_frag_value(effective_diri->hash_dentry_name(orig_dname));
+        if (hash != last_hash)
+          readdir_offset = 2;
+        last_hash = hash;
+        dn->offset = dir_result_t::make_fpos(hash, readdir_offset++, true);
       } else {
-	dn->offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
+        dn->offset = dir_result_t::make_fpos(fg, readdir_offset++, false);
       }
       // add to readdir cache
       if (!snapdiff_req &&
           dirp->release_count == effective_diri->dir_release_count &&
-	  dirp->ordered_count == effective_diri->dir_ordered_count &&
+          dirp->ordered_count == effective_diri->dir_ordered_count &&
 	  dirp->start_shared_gen == effective_diri->shared_gen) {
 	if (dirp->cache_index == effective_dir->readdir_cache.size()) {
 	  if (i == 0) {
