@@ -7,23 +7,22 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwSystemUserComponent', () => {
   let component: RgwSystemUserComponent;
   let fixture: ComponentFixture<RgwSystemUserComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        ToastrModule.forRoot()
-      ],
-      declarations: [RgwSystemUserComponent],
-      providers: [NgbActiveModal]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      HttpClientTestingModule,
+      ToastrModule.forRoot()
+    ],
+    declarations: [RgwSystemUserComponent],
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

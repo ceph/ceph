@@ -21,10 +21,10 @@ export class IscsiSettingComponent implements OnInit {
   ngOnInit() {
     const validators: ValidatorFn[] = [];
     if ('min' in this.limits) {
-      validators.push(Validators.min(this.limits['min']));
+      validators.push(Validators.min(Number(this.limits['min'])));
     }
     if ('max' in this.limits) {
-      validators.push(Validators.max(this.limits['max']));
+      validators.push(Validators.max(Number(this.limits['max'])));
     }
     this.settingsForm.get(this.setting).setValidators(validators);
   }

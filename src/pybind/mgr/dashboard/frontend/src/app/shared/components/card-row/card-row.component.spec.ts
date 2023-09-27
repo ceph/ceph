@@ -1,15 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { CardRowComponent } from './card-row.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CardRowComponent', () => {
   let component: CardRowComponent;
   let fixture: ComponentFixture<CardRowComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [CardRowComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [CardRowComponent]
   });
 
   beforeEach(() => {

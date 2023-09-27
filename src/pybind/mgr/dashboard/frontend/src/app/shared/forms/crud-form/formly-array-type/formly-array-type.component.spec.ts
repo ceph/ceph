@@ -4,6 +4,7 @@ import { FormGroup } from '@angular/forms';
 import { FormlyFieldConfig, FormlyModule } from '@ngx-formly/core';
 
 import { FormlyArrayTypeComponent } from './formly-array-type.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 @Component({
   template: ` <form [formGroup]="form">
@@ -23,15 +24,13 @@ describe('FormlyArrayTypeComponent', () => {
   let component: MockFormComponent;
   let fixture: ComponentFixture<MockFormComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [FormlyArrayTypeComponent],
-      imports: [
-        FormlyModule.forRoot({
-          types: [{ name: 'array', component: FormlyArrayTypeComponent }]
-        })
-      ]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [FormlyArrayTypeComponent],
+    imports: [
+      FormlyModule.forRoot({
+        types: [{ name: 'array', component: FormlyArrayTypeComponent }]
+      })
+    ]
   });
 
   beforeEach(() => {

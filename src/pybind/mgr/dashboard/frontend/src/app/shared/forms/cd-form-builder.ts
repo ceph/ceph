@@ -4,7 +4,7 @@ import { AbstractControlOptions, UntypedFormBuilder } from '@angular/forms';
 import { CdFormGroup } from './cd-form-group';
 
 /**
- * CdFormBuilder extends FormBuilder to create an CdFormGroup based form.
+ * CdFormBuilder extends FormBuilder to create a CdFormGroup based form.
  */
 @Injectable({
   providedIn: 'root'
