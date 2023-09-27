@@ -70,7 +70,7 @@ int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     }
     try {
         if (efs::exists(partition_info.location)) {
-            if (cct->_conf->rgw_d3n_l1_evict_cache_on_start) {
+            if (cct->_conf->rgw_d4n_l1_evict_cache_on_start) {
                 ldpp_dout(dpp, 5) << "initialize: evicting the persistent storage directory on start" << dendl;
                 for (auto& p : efs::directory_iterator(partition_info.location)) {
                     efs::remove_all(p.path());
@@ -89,8 +89,8 @@ int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     #if defined(HAVE_LIBAIO) && defined(__GLIBC__)
     // libaio setup
     struct aioinit ainit{0};
-    ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_threads");
-    ainit.aio_num = cct->_conf.get_val<int64_t>("rgw_d3n_libaio_aio_num");
+    ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d4n_libaio_aio_threads");
+    ainit.aio_num = cct->_conf.get_val<int64_t>("rgw_d4n_libaio_aio_num");
     ainit.aio_idle_time = 120;
     aio_init(&ainit);
     #endif
@@ -328,8 +328,8 @@ int SSDDriver::AsyncWriteRequest::prepare_libaio_write_op(const DoutPrefixProvid
         ldpp_dout(dpp, 0) << "ERROR: AsyncWriteRequest::prepare_libaio_write_op: open file failed, errno=" << errno << ", location='" << location.c_str() << "'" << dendl;
         return r;
     }
-    if (dpp->get_cct()->_conf->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL)
-        posix_fadvise(fd, 0, 0, dpp->get_cct()->_conf->rgw_d3n_l1_fadvise);
+    if (dpp->get_cct()->_conf->rgw_d4n_l1_fadvise != POSIX_FADV_NORMAL)
+        posix_fadvise(fd, 0, 0, dpp->get_cct()->_conf->rgw_d4n_l1_fadvise);
     cb->aio_fildes = fd;
 
     data = malloc(len);
@@ -361,8 +361,8 @@ int SSDDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct
         ldpp_dout(dpp, 1) << "ERROR: SSDCache: " << __func__ << "(): can't open " << file_path << " : " << " error: " << err << dendl;
         return -err;
     }
-    if (cct->_conf->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL) {
-        posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
+    if (cct->_conf->rgw_d4n_l1_fadvise != POSIX_FADV_NORMAL) {
+        posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d4n_l1_fadvise);
     }
 
     bufferptr bp(read_len);
