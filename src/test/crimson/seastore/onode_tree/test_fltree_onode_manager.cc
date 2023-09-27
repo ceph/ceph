@@ -121,13 +121,6 @@ struct fltree_onode_manager_test_t
         return manager->get_or_create_onode(t, p_kv->key);
       }).unsafe_get0();
       std::invoke(f, t, *onode, p_kv->value);
-      with_trans_intr(t, [&](auto &t) {
-	if (onode->is_alive()) {
-	  return manager->write_dirty(t, {onode});
-	} else {
-	  return OnodeManager::write_dirty_iertr::now();
-	}
-      }).unsafe_get0();
     });
   }
 
@@ -182,9 +175,6 @@ struct fltree_onode_manager_test_t
         boost::tie(onode, p_item) = tup;
         std::invoke(f, t, *onode, *p_item);
       }
-      with_trans_intr(t, [&](auto &t) {
-        return manager->write_dirty(t, onodes);
-      }).unsafe_get0();
     });
   }
 
