@@ -166,12 +166,12 @@ class NodeProxy:
 
     def raise_alert(self, data: Dict[str, Any]) -> None:
         mapping: Dict[str, str] = {
-            'storage': 'NODE_PROXY_STORAGE',
-            'memory': 'NODE_PROXY_MEMORY',
-            'processors': 'NODE_PROXY_PROCESSORS',
-            'network': 'NODE_PROXY_NETWORK',
-            'power': 'NODE_PROXY_POWER',
-            'fans': 'NODE_PROXY_FANS'
+            'storage': 'HARDWARE_STORAGE',
+            'memory': 'HARDWARE_MEMORY',
+            'processors': 'HARDWARE_PROCESSORS',
+            'network': 'HARDWARE_NETWORK',
+            'power': 'HARDWARE_POWER',
+            'fans': 'HARDWARE_FANS'
         }
 
         for component in data['data'].keys():
