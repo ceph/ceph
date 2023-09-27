@@ -51,17 +51,17 @@ FLTreeOnodeManager::get_or_create_onode(
   ).si_then([this, &trans, &hoid, FNAME](auto p)
               -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
-    auto val = OnodeRef(new FLTreeOnode(
+    auto onode = new FLTreeOnode(
 	default_data_reservation,
 	default_metadata_range,
-	cursor.value()));
+	cursor.value());
     if (created) {
       DEBUGT("created onode for entry for {}", trans, hoid);
-      val->get_mutable_layout(trans) = onode_layout_t{};
+      onode->with_mutable_layout(trans, [](onode_layout_t &mlayout) {
+	mlayout = onode_layout_t{};
+      });
     }
-    return get_or_create_onode_iertr::make_ready_future<OnodeRef>(
-      val
-    );
+    return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
   });
 }
 

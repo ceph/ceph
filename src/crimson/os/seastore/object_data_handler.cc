@@ -888,7 +888,7 @@ auto with_object_data(
       return std::invoke(f, object_data
       ).si_then([ctx, &object_data] {
 	if (object_data.must_update()) {
-	  ctx.onode.get_mutable_layout(ctx.t).object_data.update(object_data);
+	  ctx.onode.update_object_data(ctx.t, object_data);
 	}
 	return seastar::now();
       });
@@ -909,11 +909,10 @@ auto with_objects_data(
       return std::invoke(f, object_data, d_object_data
       ).si_then([ctx, &object_data, &d_object_data] {
 	if (object_data.must_update()) {
-	  ctx.onode.get_mutable_layout(ctx.t).object_data.update(object_data);
+	  ctx.onode.update_object_data(ctx.t, object_data);
 	}
 	if (d_object_data.must_update()) {
-	  ctx.d_onode->get_mutable_layout(
-	    ctx.t).object_data.update(d_object_data);
+	  ctx.d_onode->update_object_data(ctx.t, d_object_data);
 	}
 	return seastar::now();
       });
