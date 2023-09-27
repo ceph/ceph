@@ -1240,7 +1240,7 @@ class HAproxy(DaemonForm):
 
 
 @register_daemon_form
-class Keepalived(DaemonForm):
+class Keepalived(ContainerDaemonForm):
     """Defines an Keepalived container"""
     daemon_type = 'keepalived'
     required_files = ['keepalived.conf']
@@ -1335,7 +1335,7 @@ class Keepalived(DaemonForm):
             'net.ipv4.ip_nonlocal_bind = 1',
         ]
 
-    def extract_uid_gid_keepalived(self) -> Tuple[int, int]:
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         # better directory for this?
         return extract_uid_gid(self.ctx, file_path='/var/lib')
 
@@ -1344,6 +1344,10 @@ class Keepalived(DaemonForm):
         mounts = dict()
         mounts[os.path.join(data_dir, 'keepalived.conf')] = '/etc/keepalived/keepalived.conf'
         return mounts
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
+
 
 ##################################
 
@@ -5224,20 +5228,6 @@ def _dispatch_deploy(
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
         uid, gid = haproxy.extract_uid_gid_haproxy()
-        c = get_deployment_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
-        )
-
-    elif daemon_type == Keepalived.daemon_type:
-        keepalived = Keepalived.init(ctx, ident.fsid, ident.daemon_id)
-        uid, gid = keepalived.extract_uid_gid_keepalived()
         c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
