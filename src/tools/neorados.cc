@@ -36,6 +36,7 @@
 #include "include/buffer.h" // :(
 
 #include "include/neorados/RADOS.hpp"
+#include "include/neorados/RADOS_fmt.hpp"
 
 using namespace std::literals;
 

@@ -53,3 +53,8 @@ inline ceph_les16 init_les16(__s16 x) {
   v = x;
   return v;
 }
+
+template <typename T>
+auto format_as(ceph_le<T> c) {
+  return static_cast<T>(c);
+}

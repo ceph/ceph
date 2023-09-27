@@ -36,6 +36,7 @@
 #include "msg/msg_types.h"
 #include "include/compat.h"
 #include "include/types.h"
+#include "include/types_fmt.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
 #include "common/ceph_context.h"
