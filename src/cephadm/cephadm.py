@@ -1139,7 +1139,7 @@ class CephExporter(DaemonForm):
 
 
 @register_daemon_form
-class HAproxy(DaemonForm):
+class HAproxy(ContainerDaemonForm):
     """Defines an HAproxy container"""
     daemon_type = 'haproxy'
     required_files = ['haproxy.cfg']
@@ -1218,7 +1218,7 @@ class HAproxy(DaemonForm):
             cname = '%s-%s' % (cname, desc)
         return cname
 
-    def extract_uid_gid_haproxy(self) -> Tuple[int, int]:
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         # better directory for this?
         return extract_uid_gid(self.ctx, file_path='/var/lib')
 
@@ -1235,6 +1235,9 @@ class HAproxy(DaemonForm):
             'net.ipv4.ip_forward = 1',
             'net.ipv4.ip_nonlocal_bind = 1',
         ]
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
 
 ##################################
 
@@ -5216,19 +5219,6 @@ def _dispatch_deploy(
     elif daemon_type in Tracing.components:
         uid, gid = 65534, 65534
         c = get_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
-        )
-    elif daemon_type == HAproxy.daemon_type:
-        haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
-        uid, gid = haproxy.extract_uid_gid_haproxy()
-        c = get_deployment_container(ctx, ident)
         deploy_daemon(
             ctx,
             ident,

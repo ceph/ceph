@@ -168,7 +168,7 @@ def test_haproxy_extract_uid_gid_haproxy():
         )
         with mock.patch("cephadm.CephContainer") as cc:
             cc.return_value.run.return_value = "500 500"
-            uid, gid = hap.extract_uid_gid_haproxy()
+            uid, gid = hap.uid_gid(ctx)
             cc.return_value.run.assert_called()
         assert uid == 500
         assert gid == 500
