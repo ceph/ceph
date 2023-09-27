@@ -48,7 +48,7 @@ class RedfishDellSystem(BaseRedfishSystem):
 
     def _update_network(self) -> None:
         fields = ['Description', 'Name', 'SpeedMbps', 'Status']
-        self.log.logger.info("Updating network")
+        self.log.logger.debug('Updating network')
         self._system['network'] = self.build_system_data(fields, 'EthernetInterfaces')
 
     def _update_processors(self) -> None:
@@ -59,7 +59,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                   'Model',
                   'Status',
                   'Manufacturer']
-        self.log.logger.info("Updating processors")
+        self.log.logger.debug('Updating processors')
         self._system['processors'] = self.build_system_data(fields, 'Processors')
 
     def _update_storage(self) -> None:
@@ -69,7 +69,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                   'SerialNumber', 'Status',
                   'PhysicalLocation']
         entities = self.get_members('Storage')
-        self.log.logger.info("Updating storage")
+        self.log.logger.debug('Updating storage')
         result: Dict[str, Dict[str, Dict]] = dict()
         for entity in entities:
             for drive in entity['Drives']:
@@ -83,7 +83,7 @@ class RedfishDellSystem(BaseRedfishSystem):
         self._system['storage'] = normalize_dict(result)
 
     def _update_metadata(self) -> None:
-        self.log.logger.info("Updating metadata")
+        self.log.logger.debug('Updating metadata')
         pass
 
     def _update_memory(self) -> None:
@@ -91,5 +91,5 @@ class RedfishDellSystem(BaseRedfishSystem):
                   'MemoryDeviceType',
                   'CapacityMiB',
                   'Status']
-        self.log.logger.info("Updating memory")
+        self.log.logger.debug('Updating memory')
         self._system['memory'] = self.build_system_data(fields, 'Memory')
