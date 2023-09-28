@@ -1,0 +1,4 @@
+pool: default
+workers: 2
+extra_ctlplane_disks: [10, 10]
+extra_worker_disks: [10, 10]
