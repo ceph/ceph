@@ -16,6 +16,7 @@
 
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
+#include <fmt/format.h>
 
 #include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
@@ -689,3 +690,8 @@ std::ostream &operator<<(std::ostream &lhs,
 std::ostream &operator<<(std::ostream &lhs,
 			 const ECCommon::RMWPipeline::Op &rhs);
 
+template <> struct fmt::formatter<ECCommon::RMWPipeline::pipeline_state_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommon::read_request_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};
+template <> struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
