@@ -133,7 +133,7 @@ from cephadmlib.logging import (
     LogDestination,
 )
 from cephadmlib.systemd import check_unit, check_units
-from cephadmlib.systemd_unit import get_unit_file, install_base_units
+from cephadmlib import systemd_unit
 from cephadmlib.container_types import (
     CephContainer,
     InitContainer,
@@ -1254,11 +1254,7 @@ def deploy_daemon_units(
     install_sysctl(ctx, fsid, daemon_form_create(ctx, ident))
 
     # systemd
-    install_base_units(ctx, fsid)
-    unit = get_unit_file(ctx, fsid)
-    unit_file = 'ceph-%s@.service' % (fsid)
-    with write_new(ctx.unit_dir + '/' + unit_file, perms=None) as f:
-        f.write(unit)
+    systemd_unit.update_files(ctx, ident)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(fsid, daemon_type, daemon_id)
@@ -3431,21 +3427,16 @@ def command_ceph_volume(ctx):
 ##################################
 
 
+@infer_fsid
 def command_unit_install(ctx):
     # type: (CephadmContext) -> int
-    if not ctx.fsid:
+    if not getattr(ctx, 'fsid', None):
         raise Error('must pass --fsid to specify cluster')
-
-    fsid = ctx.fsid
-    install_base_units(ctx, fsid)
-    unit = get_unit_file(ctx, fsid)
-    unit_file = 'ceph-%s@.service' % (fsid)
-    with open(ctx.unit_dir + '/' + unit_file + '.new', 'w') as f:
-        f.write(unit)
-        os.rename(ctx.unit_dir + '/' + unit_file + '.new',
-                  ctx.unit_dir + '/' + unit_file)
+    if not getattr(ctx, 'name', None):
+        raise Error('daemon name required')
+    ident = DaemonIdentity.from_context(ctx)
+    systemd_unit.update_files(ctx, ident)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
-
     return 0
 
 
@@ -5191,6 +5182,13 @@ def _get_parser():
     parser_unit_install = subparsers.add_parser(
         'unit-install', help="Install the daemon's systemd unit")
     parser_unit_install.set_defaults(func=command_unit_install)
+    parser_unit_install.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_unit_install.add_argument(
+        '--name', '-n',
+        required=True,
+        help='daemon name (type.id)')
 
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
