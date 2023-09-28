@@ -1806,8 +1806,8 @@ class TestPermErrMsg(CephFSTestCase):
     FS1_NAME, FS2_NAME, FS3_NAME = 'abcd', 'efgh', 'ijkl'
 
     EXPECTED_ERRNO = 22
-    EXPECTED_ERRMSG = ("Permission flags in MDS caps must start with 'r' or "
-                       "'rw' or be '*' or 'all'")
+    EXPECTED_ERRMSG = ("Permission flags in MDS capability string must be '*' "
+                       "or 'all' or must start with 'r'")
 
     MONCAP = f'allow r fsname={FS1_NAME}'
     OSDCAP = f'allow rw tag cephfs data={FS1_NAME}'
