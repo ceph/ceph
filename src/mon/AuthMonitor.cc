@@ -1984,6 +1984,14 @@ int AuthMonitor::_update_or_create_entity(const EntityName& entity,
   KeyServerData::Incremental auth_inc;
   auth_inc.name = entity;
 
+  // if entity to be created is already present.
+  if (create_entity &&
+      mon.key_server.get_auth(auth_inc.name, auth_inc.auth)) {
+    ss << "entity already exists" << auth_inc.name;
+    return -EEXIST;
+  }
+
+  // if entity to be updated is absent.
   if (!create_entity &&
       !mon.key_server.get_auth(auth_inc.name, auth_inc.auth)) {
     ss << "couldn't find entry " << auth_inc.name;
