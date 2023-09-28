@@ -420,15 +420,15 @@ the greater cluster provides several benefits:
    lightweight processes. See `Monitoring OSDs`_ and `Heartbeats`_ for
    additional details.
 
-#. **Data Scrubbing:** As part of maintaining data consistency and cleanliness, 
-   Ceph OSD Daemons can scrub objects. That is, Ceph OSD Daemons can compare
-   their local objects metadata with its replicas stored on other OSDs. Scrubbing
-   happens on a per-Placement Group base. Scrubbing (usually performed daily)
-   catches mismatches in size and other metadata. Ceph OSD Daemons also perform deeper
-   scrubbing by comparing data in objects bit-for-bit with their checksums.
-   Deep scrubbing (usually performed weekly) finds bad sectors on a drive that
-   weren't apparent in a light scrub. See `Data Scrubbing`_ for details on
-   configuring scrubbing.
+#. **Data Scrubbing:** To maintain data consistency, Ceph OSD Daemons scrub
+   RADOS objects. Ceph OSD Daemons compare the metadata of their own local
+   objects against the metadata of the replicas of those objects, which are
+   stored on other OSDs. Scrubbing occurs on a per-Placement-Group basis, finds
+   mismatches in object size and finds metadata mismatches, and is usually
+   performed daily. Ceph OSD Daemons perform deeper scrubbing by comparing the
+   data in objects, bit-for-bit, against their checksums. Deep scrubbing finds
+   bad sectors on drives that are not detectable with light scrubs. See `Data
+   Scrubbing`_ for details on configuring scrubbing.
 
 #. **Replication:** Like Ceph Clients, Ceph OSD Daemons use the CRUSH 
    algorithm, but the Ceph OSD Daemon uses it to compute where replicas of 
