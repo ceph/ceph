@@ -1972,9 +1972,11 @@ int AuthMonitor::_check_and_encode_caps(const map<string, string>& caps,
   return 0;
 }
 
-/* Pass both, rdata as well as fmtr, to enable printing of the key after
- * update and set create to True to allow authorizing a new entity instead
- * of updating its caps. */
+// Update or create an entity, depending on the value of parameter
+// create_entity.
+//
+// Pass both, rdata as well as fmtr, to enable printing of the key after
+// update
 int AuthMonitor::_update_or_create_entity(const EntityName& entity,
   const map<string, string>& caps, MonOpRequestRef op, stringstream& ss,
   stringstream& ds, bufferlist* rdata, Formatter* fmtr, bool create_entity)
