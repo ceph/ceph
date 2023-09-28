@@ -6102,7 +6102,8 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                                                            'haproxy', '-v'],
                                                           verbosity=CallVerbosity.QUIET)
                                     if not code and \
-                                       out.startswith('HA-Proxy version '):
+                                       out.startswith('HA-Proxy version ') or \
+                                       out.startswith('HAProxy version '):
                                         version = out.split(' ')[2]
                                         seen_versions[image_id] = version
                                 elif daemon_type == 'keepalived':
