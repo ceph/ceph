@@ -9,12 +9,14 @@ kcli_run_cmd() {
     local ssh_command="$2"
 
     # Run the SSH command and capture its exit status
-    output=$(kcli ssh -u root -- "$remote_host" "$ssh_command" 2>&1)
+    output=$(kcli ssh -u root -- "$remote_host" "$ssh_command")
     ssh_exit_status=$?
 
     # Check if the SSH command was successful
     if [ "$ssh_exit_status" -ne 0 ]; then
-        exit $?
+        exit $ssh_exit_status
+    else
+	echo $output
     fi
 }
 
@@ -66,8 +68,8 @@ build_ceph_image() {
     cp ../*.py tmpBuild/rook
     docker build --tag ${REPOTAG} .
     docker push ${REPOTAG}
-    sed "s#testimage#${REPOTAG}#g" rook_cluster_basic.yaml > tmpBuild/testcluster.yaml
-    kcli scp -u root tmpBuild/testcluster.yaml cephkube-ctlplane-0:/root
+    sed "s#testimage#${REPOTAG}#g" rook_cluster_basic.yaml > tmpBuild/rook_cluster_basic.yaml
+    kcli scp -u root tmpBuild/rook_cluster_basic.yaml cephkube-ctlplane-0:/root
     rm -rf tmpBuild
     cd ${CEPH_DEV_FOLDER}
 }
@@ -136,7 +138,7 @@ build_ceph_image
 wait_for_rook_operator
 
 # Deploy ceph cluster and Install rook ceph krew plugin
-kcli_run_cmd cephkube-ctlplane-0 'kubectl create -f /root/testcluster.yaml'
+kcli_run_cmd cephkube-ctlplane-0 'kubectl create -f /root/rook_cluster_basic.yaml'
 kcli_run_cmd cephkube-ctlplane-0 'kubectl krew install rook-ceph'
 
 # Wait for ceph cluster ready
@@ -148,5 +150,6 @@ done
 echo "Ceph cluster installed and running"
 
 # Set rook orchestrator as backend
+kcli_run_cmd cephkube-ctlplane-0 'kubectl rook-ceph ceph mgr module enable rook'
 kcli_run_cmd cephkube-ctlplane-0 'kubectl rook-ceph ceph orch set backend rook'
 kcli_run_cmd cephkube-ctlplane-0 'kubectl rook-ceph ceph orch status'
