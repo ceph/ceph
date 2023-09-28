@@ -301,8 +301,7 @@ ECBackend::handle_rep_read_reply(Ref<MOSDECSubOpReadReply> m)
 {
   const auto& from = m->op.from;
   auto& mop = m->op;
-  //logger().debug("{}: reply {}", __func__, mop);
-  logger().debug("{}: reply {} from {}", __func__, "", from);
+  logger().debug("{}: reply {} from {}", __func__, mop, from);
   if (!read_pipeline.tid_to_read_map.contains(mop.tid)) {
     //canceled
     logger().debug("{}: canceled", __func__);
@@ -427,10 +426,10 @@ ECBackend::handle_rep_read_reply(Ref<MOSDECSubOpReadReply> m)
     read_pipeline.do_read_op(rop);
   } else if (rop.in_progress.empty() ||
              is_complete == rop.complete.size()) {
-    //logger().debug("{}: complete {}", __func__, rop);
+    logger().debug("{}: complete {}", __func__, rop);
     read_pipeline.complete_read_op(rop);
   } else {
-    //logger().info("{}: readop not completed: {}", __func__, rop);
+    logger().info("{}: readop not completed: {}", __func__, rop);
   }
   return ll_read_ierrorator::now();
 }
