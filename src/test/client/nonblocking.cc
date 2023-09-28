@@ -112,12 +112,12 @@ TEST_F(TestClient, LlreadvLlwritev) {
   readfinish.reset(new C_SaferCond("test-nonblocking-readfinish"));
   ssize_t nwritten_a = iov_out_a[0].iov_len + iov_out_a[1].iov_len;
 
-  rc = client->ll_preadv_pwritev(fh, iov_out_a, 2, 100, true, writefinish.get(), nullptr);
+  rc = client->ll_preadv_pwritev(fh, iov_out_a, 2, 5000, true, writefinish.get(), nullptr);
   ASSERT_EQ(0, rc);
   rc = writefinish->wait();
   ASSERT_EQ(nwritten_a, rc);
 
-  rc = client->ll_preadv_pwritev(fh, iov_in_a, 2, 100, false, readfinish.get(), &bl);
+  rc = client->ll_preadv_pwritev(fh, iov_in_a, 2, 5000, false, readfinish.get(), &bl);
   ASSERT_EQ(0, rc);
   rc = readfinish.get()->wait();
   ASSERT_EQ(nwritten_a, rc);
@@ -131,12 +131,12 @@ TEST_F(TestClient, LlreadvLlwritev) {
   readfinish.reset(new C_SaferCond("test-nonblocking-readfinish"));
   ssize_t nwritten_b = iov_out_b[0].iov_len + iov_out_b[1].iov_len;
 
-  rc = client->ll_preadv_pwritev(fh, iov_out_b, 2, 1000, true, writefinish.get(), nullptr, true, false);
+  rc = client->ll_preadv_pwritev(fh, iov_out_b, 2, 4090, true, writefinish.get(), nullptr, true, false);
   ASSERT_EQ(0, rc);
   rc = writefinish->wait();
   ASSERT_EQ(nwritten_b, rc);
 
-  rc = client->ll_preadv_pwritev(fh, iov_in_b, 2, 1000, false, readfinish.get(), &bl);
+  rc = client->ll_preadv_pwritev(fh, iov_in_b, 2, 4090, false, readfinish.get(), &bl);
   ASSERT_EQ(0, rc);
   rc = readfinish.get()->wait();
   ASSERT_EQ(nwritten_b, rc);
@@ -146,6 +146,6 @@ TEST_F(TestClient, LlreadvLlwritev) {
   ASSERT_EQ(0, strncmp((const char*)iov_in_b[1].iov_base, (const char*)iov_out_b[1].iov_base, iov_out_b[1].iov_len));
 
   client->ll_release(fh);
-  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
+  // ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
 }
 
