@@ -15,12 +15,11 @@
 #ifndef ECTRANSACTION_H
 #define ECTRANSACTION_H
 
-#include "OSD.h"
-#include "PGBackend.h"
 #include "ECUtil.h"
-#include "erasure-code/ErasureCodeInterface.h"
-#include "PGTransaction.h"
 #include "ExtentCache.h"
+#include "erasure-code/ErasureCodeInterface.h"
+#include "os/Transaction.h"
+#include "PGTransaction.h"
 
 namespace ECTransaction {
   struct WritePlan {
@@ -186,7 +185,7 @@ namespace ECTransaction {
     const std::map<hobject_t,extent_map> &partial_extents,
     std::vector<pg_log_entry_t> &entries,
     std::map<hobject_t,extent_map> *written,
-    std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+    std::map<shard_id_t, ceph::os::Transaction> *transactions,
     std::set<hobject_t> *temp_added,
     std::set<hobject_t> *temp_removed,
     DoutPrefixProvider *dpp,
