@@ -17,15 +17,17 @@ def import_cephadm():
 
 
 def mock_docker():
-    _cephadm = import_cephadm()
-    docker = mock.Mock(_cephadm.Docker)
+    from cephadmlib.container_engines import Docker
+
+    docker = mock.Mock(Docker)
     docker.path = '/usr/bin/docker'
     return docker
 
 
 def mock_podman():
-    _cephadm = import_cephadm()
-    podman = mock.Mock(_cephadm.Podman)
+    from cephadmlib.container_engines import Podman
+
+    podman = mock.Mock(Podman)
     podman.path = '/usr/bin/podman'
     podman.version = (2, 1, 0)
     return podman
