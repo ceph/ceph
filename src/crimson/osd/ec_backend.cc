@@ -143,8 +143,33 @@ ECBackend::handle_rep_write_op(
 }
 
 ECBackend::write_iertr::future<>
-ECBackend::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>)
+ECBackend::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply> m)
 {
+  const auto& op = m->op;
+  assert(rmw_pipeline.tid_to_op_map.contains(op.tid));
+  const auto& from = op.from;
+  auto& wop = *rmw_pipeline.tid_to_op_map.at(op.tid);
+  if (op.committed) {
+    // TODO: trace.event("sub write committed");
+    ceph_assert(wop.pending_commit.count(from));
+    wop.pending_commit.erase(from);
+  }
+  if (op.applied) {
+    // TODO: trace.event("sub write applied");
+    ceph_assert(wop.pending_apply.count(from));
+    wop.pending_apply.erase(from);
+  }
+
+  if (wop.pending_commit.empty() &&
+      wop.on_all_commit &&
+      // also wait for apply, to preserve ordering with luminous peers.
+      wop.pending_apply.empty()) {
+    logger().info("{}: calling on_all_commit on {}", __func__, wop);
+    wop.on_all_commit->complete(0);
+    wop.on_all_commit = 0;
+    // TODO: wop.trace.event("ec write all committed");
+  }
+  rmw_pipeline.check_ops();
   return write_iertr::now();
 }
 

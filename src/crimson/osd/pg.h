@@ -624,6 +624,7 @@ public:
     ceph_tid_t rep_tid);
 
   interruptible_future<> handle_rep_write_op(Ref<MOSDECSubOpWrite>);
+  interruptible_future<> handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>);
   interruptible_future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
 
 private:

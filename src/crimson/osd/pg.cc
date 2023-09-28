@@ -1429,6 +1429,21 @@ PG::interruptible_future<> PG::handle_rep_write_op(Ref<MOSDECSubOpWrite> m)
   }).handle_error_interruptible(crimson::ct_error::assert_all{});
 }
 
+PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply> m)
+{
+  if (const auto& op = m->op; op.committed) {
+    // TODO: trace.event("sub write committed");
+    if (op.from != pg_whoami) {
+      peering_state.update_peer_last_complete_ondisk(op.from, op.last_complete);
+    }
+  }
+  auto* ec_backend=dynamic_cast<::ECBackend*>(&get_backend());
+  assert(ec_backend);
+  return ec_backend->handle_rep_write_reply(
+    std::move(m)
+  ).handle_error_interruptible(crimson::ct_error::assert_all{});
+}
+
 PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
 {
   auto* ec_backend=dynamic_cast<::ECBackend*>(&get_backend());
