@@ -308,33 +308,6 @@ void ECCommon::ReadPipeline::on_change()
   in_progress_client_reads.clear();
 }
 
-void ECCommon::RMWPipeline::on_change()
-{
-  dout(10) << __func__ << dendl;
-
-  completed_to = eversion_t();
-  committed_to = eversion_t();
-  pipeline_state.clear();
-  waiting_reads.clear();
-  waiting_state.clear();
-  waiting_commit.clear();
-  for (auto &&op: tid_to_op_map) {
-    cache.release_write_pin(op.second->pin);
-  }
-  tid_to_op_map.clear();
-}
-
-void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
-  if (!waiting_state.empty()) {
-    waiting_state.back().on_write.emplace_back(std::move(cb));
-  } else if (!waiting_reads.empty()) {
-    waiting_reads.back().on_write.emplace_back(std::move(cb));
-  } else {
-    // Nothing earlier in the pipeline, just call it
-    cb();
-  }
-}
-
 void ECCommon::ReadPipeline::get_all_avail_shards(
   const hobject_t &hoid,
   const set<pg_shard_t> &error_shards,
@@ -904,4 +877,31 @@ void ECCommon::RMWPipeline::check_ops()
   while (try_state_to_reads() ||
 	 try_reads_to_commit() ||
 	 try_finish_rmw());
+}
+
+void ECCommon::RMWPipeline::on_change()
+{
+  dout(10) << __func__ << dendl;
+
+  completed_to = eversion_t();
+  committed_to = eversion_t();
+  pipeline_state.clear();
+  waiting_reads.clear();
+  waiting_state.clear();
+  waiting_commit.clear();
+  for (auto &&op: tid_to_op_map) {
+    cache.release_write_pin(op.second->pin);
+  }
+  tid_to_op_map.clear();
+}
+
+void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
+  if (!waiting_state.empty()) {
+    waiting_state.back().on_write.emplace_back(std::move(cb));
+  } else if (!waiting_reads.empty()) {
+    waiting_reads.back().on_write.emplace_back(std::move(cb));
+  } else {
+    // Nothing earlier in the pipeline, just call it
+    cb();
+  }
 }
