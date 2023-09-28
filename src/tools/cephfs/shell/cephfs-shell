@@ -16,13 +16,14 @@ import shlex
 import stat
 import errno
 
-from packaging import version
+from pkg_resources import packaging  # type: ignore
 
 from cmd2 import Cmd
 from cmd2 import __version__ as cmd2_version
 # XXX: In cmd2 versions < 1.0.1, we'll get SystemExit(2) instead of
 # Cmd2ArgparseError
-if version.parse(cmd2_version) >= version.parse("1.0.1"):
+Version = packaging.version.Version
+if Version(cmd2_version) >= Version("1.0.1"):
     from cmd2.exceptions import Cmd2ArgparseError
 else:
     # HACK: so that we don't have check for version everywhere
