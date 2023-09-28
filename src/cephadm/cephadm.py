@@ -1863,13 +1863,6 @@ def get_unit_name(
     return DaemonIdentity(fsid, daemon_type, daemon_id).unit_name
 
 
-def get_unit_name_by_instance(fsid: str, instance: str) -> str:
-    """Return the name of the systemd unit given an fsid and the name
-    of the instance (the stuff after the @-sign and before the file extension).
-    """
-    return 'ceph-%s@%s' % (fsid, instance)
-
-
 def get_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
     daemon = get_daemon_description(ctx, fsid, name)
     try:
@@ -6863,7 +6856,7 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
             continue
         if d['style'] != 'cephadm:v1':
             continue
-        disable_systemd_service(get_unit_name_by_instance(ctx.fsid, d['name']))
+        disable_systemd_service('ceph-%s@%s' % (ctx.fsid, d['name']))
 
     # cluster units
     for unit_name in ['ceph-%s.target' % ctx.fsid]:
