@@ -75,10 +75,8 @@ seastar::future<> ECRepRequest::with_pg(
       [pg] (Ref<MOSDECSubOpWrite> concrete_req) {
         return pg->handle_rep_write_op(std::move(concrete_req));
       },
-      [ec_backend] (Ref<MOSDECSubOpWriteReply> concrete_req) {
-        return ec_backend->handle_rep_write_reply(
-	  std::move(concrete_req)
-	).handle_error_interruptible(crimson::ct_error::assert_all{});
+      [pg] (Ref<MOSDECSubOpWriteReply> concrete_req) {
+        return pg->handle_rep_write_reply(std::move(concrete_req));
       },
       [pg] (Ref<MOSDECSubOpRead> concrete_req) {
         return pg->handle_rep_read_op(std::move(concrete_req));
