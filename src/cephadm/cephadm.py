@@ -208,7 +208,7 @@ class ContainerInfo:
 
 
 @register_daemon_form
-class Ceph(DaemonForm):
+class Ceph(ContainerDaemonForm):
     daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror', 'ceph-exporter')
 
@@ -235,6 +235,37 @@ class Ceph(DaemonForm):
             return 'ceph'
         return ''
 
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        # previous to being a ContainerDaemonForm, this make_var_run
+        # call was hard coded in the deploy path. Eventually, it would be
+        # good to move this somwhere cleaner and avoid needing to know the
+        # uid/gid here.
+        uid, gid = self.uid_gid(ctx)
+        make_var_run(ctx, ctx.fsid, uid, gid)
+
+        ctr = get_deployment_container(ctx, self.identity)
+        config_json = fetch_configs(ctx)
+        if self.identity.daemon_type == 'mon' and config_json is not None:
+            if 'crush_location' in config_json:
+                c_loc = config_json['crush_location']
+                # was originally "c.args.extend(['--set-crush-location', c_loc])"
+                # but that doesn't seem to persist in the object after it's passed
+                # in further function calls
+                ctr.args = ctr.args + ['--set-crush-location', c_loc]
+        return ctr
+
+    _uid_gid: Optional[Tuple[int, int]] = None
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        if self._uid_gid is None:
+            self._uid_gid = extract_uid_gid(ctx)
+        return self._uid_gid
+
+    def config_and_keyring(
+        self, ctx: CephadmContext
+    ) -> Tuple[Optional[str], Optional[str]]:
+        return get_config_and_keyring(ctx)
+
 ##################################
 
 
@@ -244,6 +275,21 @@ class OSD(Ceph):
     def for_daemon_type(cls, daemon_type: str) -> bool:
         # TODO: figure out a way to un-special-case osd
         return daemon_type == 'osd'
+
+    def __init__(
+        self, ident: DaemonIdentity, osd_fsid: Optional[str] = None
+    ) -> None:
+        super().__init__(ident)
+        self._osd_fsid = osd_fsid
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'OSD':
+        osd_fsid = getattr(ctx, 'osd_fsid', None)
+        if osd_fsid is None:
+            logger.info(
+                'Creating an OSD daemon form without an OSD FSID value'
+            )
+        return cls(ident, osd_fsid)
 
     @staticmethod
     def get_sysctl_settings() -> List[str]:
@@ -255,6 +301,10 @@ class OSD(Ceph):
 
     def firewall_service_name(self) -> str:
         return 'ceph'
+
+    @property
+    def osd_fsid(self) -> Optional[str]:
+        return self._osd_fsid
 
 
 ##################################
@@ -5196,37 +5246,8 @@ def _dispatch_deploy(
     deployment_type: DeploymentType,
 ) -> None:
     daemon_type = ident.daemon_type
-    if daemon_type in Ceph.daemons:
-        config, keyring = get_config_and_keyring(ctx)
-        uid, gid = extract_uid_gid(ctx)
-        make_var_run(ctx, ctx.fsid, uid, gid)
 
-        config_json = fetch_configs(ctx)
-
-        c = get_deployment_container(ctx, ident, ptrace=ctx.allow_ptrace)
-
-        if daemon_type == 'mon' and config_json is not None:
-            if 'crush_location' in config_json:
-                c_loc = config_json['crush_location']
-                # was originally "c.args.extend(['--set-crush-location', c_loc])"
-                # but that doesn't seem to persist in the object after it's passed
-                # in further function calls
-                c.args = c.args + ['--set-crush-location', c_loc]
-
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
-            config=config,
-            keyring=keyring,
-            osd_fsid=ctx.osd_fsid,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
-        )
-
-    elif daemon_type == CephadmAgent.daemon_type:
+    if daemon_type == CephadmAgent.daemon_type:
         # get current user gid and uid
         uid = os.getuid()
         gid = os.getgid()
