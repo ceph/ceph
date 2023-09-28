@@ -44,6 +44,8 @@ using ceph::make_message;
 using ceph::mono_clock;
 using ceph::mono_time;
 
+static const auto& APP_NAME_CEPHFS = pg_pool_t::APPLICATION_NAME_CEPHFS;
+
 class FlagSetHandler : public FileSystemCommandHandler
 {
   public:
@@ -266,11 +268,9 @@ class FsNewHandler : public FileSystemCommandHandler
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
       return -EAGAIN;
     }
-    mon->osdmon()->do_application_enable(data,
-					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "data", fs_name, true);
-    mon->osdmon()->do_application_enable(metadata,
-					 pg_pool_t::APPLICATION_NAME_CEPHFS,
+    mon->osdmon()->do_application_enable(data, APP_NAME_CEPHFS, "data",
+					 fs_name, true);
+    mon->osdmon()->do_application_enable(metadata, APP_NAME_CEPHFS,
 					 "metadata", fs_name, true);
     mon->osdmon()->do_set_pool_opt(metadata,
 				   pool_opts_t::RECOVERY_PRIORITY,
@@ -913,9 +913,8 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
       return -EAGAIN;
     }
-    mon->osdmon()->do_application_enable(poolid,
-					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "data", fs_name, true);
+    mon->osdmon()->do_application_enable(poolid, APP_NAME_CEPHFS, "data",
+					 fs_name, true);
     mon->osdmon()->propose_pending();
 
     fsmap.modify_filesystem(
@@ -1144,14 +1143,13 @@ class RenameFilesystemHandler : public FileSystemCommandHandler
       return -EAGAIN;
     }
     for (const auto p : fs->mds_map.get_data_pools()) {
-      mon->osdmon()->do_application_enable(p,
-					   pg_pool_t::APPLICATION_NAME_CEPHFS,
-					   "data", new_fs_name, true);
+      mon->osdmon()->do_application_enable(p, APP_NAME_CEPHFS, "data",
+					   new_fs_name, true);
     }
 
-    mon->osdmon()->do_application_enable(fs->mds_map.get_metadata_pool(),
-					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "metadata", new_fs_name, true);
+    mon->osdmon()->do_application_enable(
+      fs->mds_map.get_metadata_pool(), APP_NAME_CEPHFS, "metadata",
+      new_fs_name, true);
     mon->osdmon()->propose_pending();
 
     auto f = [new_fs_name](auto fs) {
@@ -1326,22 +1324,20 @@ class SwapFilesystemHandler : public FileSystemCommandHandler
     // Finally, the swap begins.
     // Swap CephFS names on OSD pool application tag
     for (const auto p : fs1p->get_mds_map().get_data_pools()) {
-      mon->osdmon()->do_application_enable(p,
-					   pg_pool_t::APPLICATION_NAME_CEPHFS,
-					   "data", fs2_name, true);
+      mon->osdmon()->do_application_enable(p, APP_NAME_CEPHFS, "data",
+					   fs2_name, true);
     }
-    mon->osdmon()->do_application_enable(fs1p->get_mds_map().get_metadata_pool(),
-					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "metadata", fs2_name, true);
+    mon->osdmon()->do_application_enable(
+      fs1p->get_mds_map().get_metadata_pool(), APP_NAME_CEPHFS, "metadata",
+      fs2_name, true);
 
     for (const auto p : fs2p->get_mds_map().get_data_pools()) {
-      mon->osdmon()->do_application_enable(p,
-					   pg_pool_t::APPLICATION_NAME_CEPHFS,
-					   "data", fs1_name, true);
+      mon->osdmon()->do_application_enable(p, APP_NAME_CEPHFS, "data",
+					   fs1_name, true);
     }
-    mon->osdmon()->do_application_enable(fs2p->get_mds_map().get_metadata_pool(),
-					 pg_pool_t::APPLICATION_NAME_CEPHFS,
-					 "metadata", fs1_name, true);
+    mon->osdmon()->do_application_enable(
+      fs2p->get_mds_map().get_metadata_pool(), APP_NAME_CEPHFS, "metadata",
+      fs1_name, true);
     mon->osdmon()->propose_pending();
 
     // Now swap CephFS names and, optionally, FSCIDs.
@@ -1767,8 +1763,7 @@ int FileSystemCommandHandler::_check_pool(
   }
 
   if (!force && !pool->application_metadata.empty() &&
-      pool->application_metadata.count(
-        pg_pool_t::APPLICATION_NAME_CEPHFS) == 0) {
+      pool->application_metadata.count(APP_NAME_CEPHFS) == 0) {
     *ss << " pool '" << pool_name << "' (id '" << pool_id
         << "') has a non-CephFS application enabled.";
     return -EINVAL;
