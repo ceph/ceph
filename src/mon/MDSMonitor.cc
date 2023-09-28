@@ -41,28 +41,20 @@
 
 using namespace TOPNSPC::common;
 
-using std::dec;
-using std::hex;
 using std::list;
 using std::map;
-using std::make_pair;
 using std::ostream;
 using std::ostringstream;
-using std::pair;
 using std::set;
 using std::string;
 using std::string_view;
 using std::stringstream;
-using std::to_string;
 using std::vector;
 
 using ceph::bufferlist;
 using ceph::decode;
 using ceph::encode;
-using ceph::ErasureCodeInterfaceRef;
-using ceph::ErasureCodeProfile;
 using ceph::Formatter;
-using ceph::JSONFormatter;
 using ceph::make_message;
 using ceph::mono_clock;
 using ceph::mono_time;
@@ -119,7 +111,7 @@ void MDSMonitor::create_initial()
   dout(10) << "create_initial" << dendl;
 }
 
-void MDSMonitor::get_store_prefixes(std::set<string>& s) const
+void MDSMonitor::get_store_prefixes(set<string>& s) const
 {
   s.insert(service_name);
   s.insert(MDS_METADATA_PREFIX);
