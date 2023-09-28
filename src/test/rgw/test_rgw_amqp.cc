@@ -13,6 +13,7 @@ using namespace rgw;
 
 const std::chrono::milliseconds wait_time(10);
 const std::chrono::milliseconds long_wait_time = wait_time*50;
+const std::chrono::seconds idle_time(35);
 
 
 class CctCleaner {
@@ -455,5 +456,19 @@ TEST_F(TestAMQP, RetryFailWrite)
   EXPECT_TRUE(callback_invoked);
   callback_invoked = false;
   amqp_mock::set_valid_host("localhost");
+}
+
+TEST_F(TestAMQP, IdleConnection)
+{
+  // this test is skipped since it takes 30seconds
+  GTEST_SKIP();
+  const auto connection_number = amqp::get_connection_count();
+  auto conn = amqp::connect("amqp://localhost", "ex1", false, false, boost::none);
+  EXPECT_EQ(amqp::get_connection_count(), connection_number + 1);
+  std::this_thread::sleep_for(idle_time);
+  EXPECT_EQ(amqp::get_connection_count(), connection_number);
+  auto rc = amqp::publish_with_confirm(conn, "topic", "message", my_callback_expect_nack);
+  EXPECT_EQ(rc, 0);
+  wait_until_drained();
 }
 
