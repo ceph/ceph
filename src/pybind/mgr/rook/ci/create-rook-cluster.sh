@@ -2,6 +2,8 @@
 
 set -eEx
 
+export CEPH_DEV_FOLDER=/home/redo/workspaces/ceph
+
 cleanup() {
     set +x
     if [[ -n "$JENKINS_HOME" ]]; then
@@ -86,11 +88,12 @@ kcli ssh -u root -- cephkube-ctlplane-0 'git clone --single-branch --branch mast
 kcli ssh -u root -- cephkube-ctlplane-0 'kubectl create -f /root/rook/deploy/examples/crds.yaml'
 kcli ssh -u root -- cephkube-ctlplane-0 'kubectl create -f /root/rook/deploy/examples/common.yaml'
 kcli ssh -u root -- cephkube-ctlplane-0 'kubectl create -f /root/rook/deploy/examples/operator.yaml'
-sleep ${k8NODESREADY_CHECK_INTERVAL}
+# wait some time for the operator to start running
+sleep 20
 kcli ssh -u root -- cephkube-ctlplane-0 'kubectl -n rook-ceph get pods'
 
 # Meanwhile the operator is installed, build the ceph image to test and copy it to the vm cluster
-: ${REPOTAG:='quay.io/jmolmo/ceph:rookorch'}
+: ${REPOTAG:='rkachach/ceph:redo-rook'}
 cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci
 mkdir -p tmpBuild/rook
 mkdir -p tmpBuild/orchestrator
