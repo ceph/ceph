@@ -130,6 +130,12 @@ def task(ctx, config):
     assert isinstance(config, dict), \
         "please list clients to run on"
 
+    log.info("config is {config}".format(config=str(config)))
+    overrides = ctx.config.get('overrides', {})
+    log.info("overrides is {overrides}".format(overrides=str(overrides)))
+    teuthology.deep_merge(config, overrides.get('rados', {}))
+    log.info("config is {config}".format(config=str(config)))
+
     object_size = int(config.get('object_size', 4000000))
     op_weights = config.get('op_weights', {})
     testdir = teuthology.get_testdir(ctx)
