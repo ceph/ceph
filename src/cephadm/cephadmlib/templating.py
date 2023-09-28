@@ -3,6 +3,7 @@
 import enum
 import os
 import posixpath
+import shlex
 import zipimport
 
 from typing import Any, Optional, IO, Tuple, Callable, cast
@@ -113,6 +114,7 @@ class Templater:
     def _env(self) -> jinja2.Environment:
         if self._jinja2_env is None:
             self._jinja2_env = jinja2.Environment(loader=self._loader)
+            self._jinja2_env.filters['shellquote'] = shlex.quote
         return self._jinja2_env
 
     @property
