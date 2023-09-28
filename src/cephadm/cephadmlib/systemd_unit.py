@@ -6,11 +6,12 @@ from . import templating
 from .call_wrappers import call_throws
 from .container_engines import Docker, Podman
 from .context import CephadmContext
+from .daemon_identity import DaemonIdentity
 from .file_utils import write_new
 from .logging import write_cluster_logrotate_config
 
 
-def get_unit_file(ctx: CephadmContext, fsid: str) -> str:
+def _get_unit_file(ctx: CephadmContext, fsid: str) -> str:
     has_docker_engine = isinstance(ctx.container_engine, Docker)
     has_podman_engine = isinstance(ctx.container_engine, Podman)
     has_podman_split_version = (
@@ -26,8 +27,7 @@ def get_unit_file(ctx: CephadmContext, fsid: str) -> str:
     )
 
 
-def install_base_units(ctx, fsid):
-    # type: (CephadmContext, str) -> None
+def _install_base_units(ctx: CephadmContext, fsid: str) -> None:
     """
     Set up ceph.target and ceph-$fsid.target units.
     """
@@ -71,3 +71,11 @@ def install_base_units(ctx, fsid):
         return
 
     write_cluster_logrotate_config(ctx, fsid)
+
+
+def update_files(ctx: CephadmContext, ident: DaemonIdentity) -> None:
+    _install_base_units(ctx, ident.fsid)
+    unit = _get_unit_file(ctx, ident.fsid)
+    unit_file = 'ceph-%s@.service' % (ident.fsid)
+    with write_new(ctx.unit_dir + '/' + unit_file, perms=None) as f:
+        f.write(unit)

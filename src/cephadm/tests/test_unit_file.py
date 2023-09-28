@@ -24,7 +24,7 @@ _cephadm = import_cephadm()
 
 
 def _get_unit_file(ctx, fsid):
-    return str(systemd_unit.get_unit_file(ctx, fsid))
+    return str(systemd_unit._get_unit_file(ctx, fsid))
 
 
 def test_docker_engine_requires_docker():
