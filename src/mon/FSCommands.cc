@@ -22,27 +22,14 @@
 
 using TOPNSPC::common::cmd_getval;
 
-using std::dec;
-using std::hex;
 using std::list;
-using std::map;
 using std::make_pair;
 using std::pair;
 using std::set;
 using std::string;
-using std::to_string;
+using std::string_view;
 using std::vector;
 
-using ceph::bufferlist;
-using ceph::decode;
-using ceph::encode;
-using ceph::ErasureCodeInterfaceRef;
-using ceph::ErasureCodeProfile;
-using ceph::Formatter;
-using ceph::JSONFormatter;
-using ceph::make_message;
-using ceph::mono_clock;
-using ceph::mono_time;
 
 class FlagSetHandler : public FileSystemCommandHandler
 {
