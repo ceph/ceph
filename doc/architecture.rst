@@ -403,20 +403,22 @@ the greater cluster provides several benefits:
    maintain sessions only when needed, and maintain those sessions with only
    particular Ceph OSD daemons, not with a centralized interface.
 
-#. **OSD Membership and Status**: Ceph OSD Daemons join a cluster and report 
-   on their status. At the lowest level, the Ceph OSD Daemon status is ``up`` 
-   or ``down`` reflecting whether or not it is running and able to service 
-   Ceph Client requests. If a Ceph OSD Daemon is ``down`` and ``in`` the Ceph 
-   Storage Cluster, this status may indicate the failure of the Ceph OSD 
-   Daemon. If a Ceph OSD Daemon is not running (e.g., it crashes), the Ceph OSD 
-   Daemon cannot notify the Ceph Monitor that it is ``down``. The OSDs
-   periodically send messages to the Ceph Monitor (``MPGStats`` pre-luminous,
-   and a new ``MOSDBeacon`` in luminous).  If the Ceph Monitor doesn't see that
-   message after a configurable period of time then it marks the OSD down.
-   This mechanism is a failsafe, however. Normally, Ceph OSD Daemons will
-   determine if a neighboring OSD is down and report it to the Ceph Monitors.
-   This assures that Ceph Monitors are lightweight processes.  See `Monitoring
-   OSDs`_ and `Heartbeats`_ for additional details.
+#. **OSD Membership and Status**: When Ceph OSD Daemons join a cluster, they
+   report their status. At the lowest level, the Ceph OSD Daemon status is
+   ``up`` or ``down``: this reflects whether the Ceph OSD daemon is running and
+   able to service Ceph Client requests. If a Ceph OSD Daemon is ``down`` and
+   ``in`` the Ceph Storage Cluster, this status may indicate the failure of the
+   Ceph OSD Daemon. If a Ceph OSD Daemon is not running because it has crashed,
+   the Ceph OSD Daemon cannot notify the Ceph Monitor that it is ``down``. The
+   OSDs periodically send messages to the Ceph Monitor (in releases prior to
+   Luminous, this was done by means of ``MPGStats``, and beginning with the
+   Luminous release, this has been done with ``MOSDBeacon``). If the Ceph
+   Monitors receive no such message after a configurable period of time,
+   then they mark the OSD ``down``. This mechanism is a failsafe, however.
+   Normally, Ceph OSD Daemons determine if a neighboring OSD is ``down`` and
+   report it to the Ceph Monitors. This contributes to making Ceph Monitors 
+   lightweight processes. See `Monitoring OSDs`_ and `Heartbeats`_ for
+   additional details.
 
 #. **Data Scrubbing:** As part of maintaining data consistency and cleanliness, 
    Ceph OSD Daemons can scrub objects. That is, Ceph OSD Daemons can compare
