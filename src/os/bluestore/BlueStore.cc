@@ -7448,6 +7448,11 @@ int BlueStore::mkfs()
     bluestore_bdev_label_t label;
     _read_bdev_label(cct, p, &label);
     _replicate_bdev_label(p, label);
+    r = write_meta("replicated_label", "yes");
+    if (r < 0) {
+      derr << __func__ << " error writing replicated_label: " << cpp_strerror(r) << dendl;
+      goto out_close_fm;
+    }
   }
 
  out_close_fm:
@@ -9347,10 +9352,14 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     }
   }
   if (repair) {
-    int r = _replicate_bdev_label(p, label, false);
-    if (r < 0) {
-      derr << __func__ << "repaired all block device labels" << dendl;
-      return r;
+    string value;
+    int r = read_meta("replicated_label", &value);
+    if (r == 0 && value == "yes") {
+      int r = _replicate_bdev_label(p, label, false);
+      if (r < 0) {
+        derr << __func__ << "repaired all block device labels" << dendl;
+        return r;
+      }
     }
   }
 
