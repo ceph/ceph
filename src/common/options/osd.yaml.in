@@ -841,7 +841,7 @@ options:
 - name: osd_op_num_threads_per_shard_hdd
   type: int
   level: advanced
-  default: 1
+  default: 5
   see_also:
   - osd_op_num_threads_per_shard
   flags:
@@ -850,7 +850,7 @@ options:
 - name: osd_op_num_threads_per_shard_ssd
   type: int
   level: advanced
-  default: 2
+  default: 16
   see_also:
   - osd_op_num_threads_per_shard
   flags:
@@ -870,7 +870,7 @@ options:
   type: int
   level: advanced
   fmt_desc: the number of shards allocated for a given OSD (for rotational media).
-  default: 5
+  default: 1
   see_also:
   - osd_op_num_shards
   flags:
@@ -880,7 +880,7 @@ options:
   type: int
   level: advanced
   fmt_desc: the number of shards allocated for a given OSD (for solid state media).
-  default: 8
+  default: 1
   see_also:
   - osd_op_num_shards
   flags:
