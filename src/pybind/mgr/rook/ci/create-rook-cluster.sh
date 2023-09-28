@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -eEx
+set -e
 
 export CEPH_DEV_FOLDER=/home/redo/workspaces/ceph
 
@@ -93,6 +93,15 @@ wait_for_rook_operator() {
     echo "Rook operator running"
 }
 
+wait_for_ceph_cluster() {
+    : ${WAIT_CEPH_CLUSTER_RUNNING:=20}
+    until [[ $(kcli_run_cmd cephkube-ctlplane-0 'kubectl rook-ceph ceph status') =~ .*'health: HEALTH_OK'.* ]]; do
+	echo "Waiting for Ceph cluster installed"
+	sleep ${WAIT_CEPH_CLUSTER_RUNNING}
+    done
+    echo "Ceph cluster installed and running"
+}
+
 install_krew() {
     kcli scp -u root ${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci/install_krew.sh cephkube-ctlplane-0:/root
     kcli_run_cmd cephkube-ctlplane-0 'chmod +x /root/install_krew.sh'
@@ -131,25 +140,23 @@ trap 'on_error $? $LINENO' ERR
 trap 'cleanup $? $LINENO' EXIT
 
 : ${CEPH_DEV_FOLDER:=${PWD}}
+
+# Prepare the kcli cluster and install the operator
 prepare_kcli
 install_krew
 install_rook_operator
 build_ceph_image
 wait_for_rook_operator
 
-# Deploy ceph cluster and Install rook ceph krew plugin
+# Deploy ceph cluster and install krew plugin
 kcli_run_cmd cephkube-ctlplane-0 'kubectl create -f /root/rook_cluster_basic.yaml'
 kcli_run_cmd cephkube-ctlplane-0 'kubectl krew install rook-ceph'
-
-# Wait for ceph cluster ready
-: ${WAIT_CEPH_CLUSTER_RUNNING:=20}
-until [[ $(kcli_run_cmd cephkube-ctlplane-0 'kubectl rook-ceph ceph status') =~ .*'health: HEALTH_OK'.* ]]; do
-      echo "Waiting for Ceph cluster installed"
-      sleep ${WAIT_CEPH_CLUSTER_RUNNING}
-done
-echo "Ceph cluster installed and running"
+wait_for_ceph_cluster
 
 # Set rook orchestrator as backend
 kcli_run_cmd cephkube-ctlplane-0 'kubectl rook-ceph ceph mgr module enable rook'
 kcli_run_cmd cephkube-ctlplane-0 'kubectl rook-ceph ceph orch set backend rook'
 kcli_run_cmd cephkube-ctlplane-0 'kubectl rook-ceph ceph orch status'
+
+####################################################################
+####################################################################
