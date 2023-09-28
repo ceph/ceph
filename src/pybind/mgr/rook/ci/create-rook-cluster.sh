@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eEx
 
 export CEPH_DEV_FOLDER=/home/redo/workspaces/ceph
 
