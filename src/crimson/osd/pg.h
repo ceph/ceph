@@ -774,6 +774,7 @@ public:
   seastar::future<> clear_temp_objects();
 
   interruptible_future<> handle_rep_write_op(Ref<MOSDECSubOpWrite>);
+  interruptible_future<> handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>);
   interruptible_future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
 
 private:
