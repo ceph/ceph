@@ -430,19 +430,20 @@ the greater cluster provides several benefits:
    weren't apparent in a light scrub. See `Data Scrubbing`_ for details on
    configuring scrubbing.
 
-#. **Replication:** Like Ceph Clients, Ceph OSD Daemons use the CRUSH 
-   algorithm, but the Ceph OSD Daemon uses it to compute where replicas of 
-   objects should be stored (and for rebalancing). In a typical write scenario, 
-   a client uses the CRUSH algorithm to compute where to store an object, maps 
-   the object to a pool and placement group, then looks at the CRUSH map to 
-   identify the primary OSD for the placement group.
-   
-   The client writes the object to the identified placement group in the 
-   primary OSD. Then, the primary OSD with its own copy of the CRUSH map 
-   identifies the secondary and tertiary OSDs for replication purposes, and 
-   replicates the object to the appropriate placement groups in the secondary 
-   and tertiary OSDs (as many OSDs as additional replicas), and responds to the
-   client once it has confirmed the object was stored successfully.
+#. **Replication:** Data replication involves a collaboration between Ceph
+   Clients and Ceph OSD Daemons. Ceph OSD Daemons use the CRUSH algorithm to
+   determine the storage location of object replicas. Ceph clients use the
+   CRUSH algorithm to determine the storage location of an object, then the
+   object is mapped to a pool and to a placement group, and then the client
+   consults the CRUSH map to identify the placement group's primary OSD.
+
+   After identifying the target placement group, the client writes the object
+   to the identified placement group's primary OSD. The primary OSD then
+   consults its own copy of the CRUSH map to identify secondary and tertiary
+   OSDS, replicates the object to the placement groups in those secondary and
+   tertiary OSDs, confirms that the object was stored successfully in the
+   secondary and tertiary OSDs, and reports to the client that the object
+   was stored successfully.
 
 .. ditaa::
 
@@ -469,9 +470,8 @@ the greater cluster provides several benefits:
  |               |   |               |
  +---------------+   +---------------+
 
-With the ability to perform data replication, Ceph OSD Daemons relieve Ceph
-clients from that duty, while ensuring high data availability and data safety.
-
+By performing this act of data replication, Ceph OSD Daemons relieve Ceph
+clients of the burden of replicating data.
 
 Dynamic Cluster Management
 --------------------------
