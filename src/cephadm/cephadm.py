@@ -5236,18 +5236,8 @@ def _common_deploy(ctx: CephadmContext) -> None:
 
     # Get and check ports explicitly required to be opened
     endpoints = fetch_endpoints(ctx)
-    _dispatch_deploy(ctx, ident, endpoints, deployment_type)
 
-
-def _dispatch_deploy(
-    ctx: CephadmContext,
-    ident: 'DaemonIdentity',
-    daemon_endpoints: List[EndPoint],
-    deployment_type: DeploymentType,
-) -> None:
-    daemon_type = ident.daemon_type
-
-    if daemon_type == CephadmAgent.daemon_type:
+    if ident.daemon_type == CephadmAgent.daemon_type:
         # get current user gid and uid
         uid = os.getuid()
         gid = os.getgid()
@@ -5258,17 +5248,15 @@ def _dispatch_deploy(
             uid,
             gid,
             deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
+            endpoints=endpoints,
         )
 
     else:
         try:
-            _deploy_daemon_container(
-                ctx, ident, daemon_endpoints, deployment_type
-            )
+            _deploy_daemon_container(ctx, ident, endpoints, deployment_type)
         except UnexpectedDaemonTypeError:
             raise Error('daemon type {} not implemented in command_deploy function'
-                        .format(daemon_type))
+                        .format(ident.daemon_type))
 
 
 def _deploy_daemon_container(
