@@ -262,7 +262,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     this->get_obj_state(dpp, &astate, y);
 
     for (auto it = attrs.begin(); it != attrs.end(); ++it) {
-      if (it->second.length() > 0) { // or return? -Sam
+      if (it->second.length() > 0) {
 	if (it->first == "mtime") {
 	  parse_time(it->second.c_str(), &astate->mtime);
 	  attrs.erase(it->first);
