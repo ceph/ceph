@@ -284,7 +284,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         return ''
 
     @handle_orch_error
-    def remove_host(self, host, force: bool, offline: bool):
+    def remove_host(self, host, force: bool, offline: bool, rm_crush_entry: bool):
         assert isinstance(host, str)
         return 'done'
 

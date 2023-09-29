@@ -444,9 +444,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return self._apply_misc([s], False, Format.plain)
 
     @_cli_write_command('orch host rm')
-    def _remove_host(self, hostname: str, force: bool = False, offline: bool = False) -> HandleCommandResult:
+    def _remove_host(self, hostname: str, force: bool = False, offline: bool = False, rm_crush_entry: bool = False) -> HandleCommandResult:
         """Remove a host"""
-        completion = self.remove_host(hostname, force, offline)
+        completion = self.remove_host(hostname, force, offline, rm_crush_entry)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
