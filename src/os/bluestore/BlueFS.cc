@@ -3120,12 +3120,13 @@ void BlueFS::_extend_log(uint64_t amount) {
   _pad_bl(bl, super.block_size);
   log.writer->append(bl);
   ceph_assert(allocated_before_extension >= log.writer->get_effective_write_pos());
-  log.t.seq = log.seq_live;
 
   // before sync_core we advance the seq
   {
     std::unique_lock<ceph::mutex> l(dirty.lock);
-    _log_advance_seq();
+    dirty.seq_live++;
+    log.seq_live++;
+    log.t.seq++;
   }
 }
 
