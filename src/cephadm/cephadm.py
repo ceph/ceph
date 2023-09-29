@@ -2820,28 +2820,12 @@ def get_container(
 def _update_container_args_for_podman(
     ctx: CephadmContext, ident: DaemonIdentity, container_args: List[str]
 ) -> None:
-    # if using podman, set -d, --conmon-pidfile & --cidfile flags
-    # so service can have Type=Forking
-    if isinstance(ctx.container_engine, Podman):
-        runtime_dir = '/run'
-        service_name = f'{ident.unit_name}.service'
-        container_args.extend([
-            '-d', '--log-driver', 'journald',
-            '--conmon-pidfile',
-            f'{runtime_dir}/{service_name}-pid',
-            '--cidfile',
-            f'{runtime_dir}/{service_name}-cid',
-        ])
-        if ctx.container_engine.supports_split_cgroups and not ctx.no_cgroups_split:
-            container_args.append('--cgroups=split')
-        # if /etc/hosts doesn't exist, we can be confident
-        # users aren't using it for host name resolution
-        # and adding --no-hosts avoids bugs created in certain daemons
-        # by modifications podman makes to /etc/hosts
-        # https://tracker.ceph.com/issues/58532
-        # https://tracker.ceph.com/issues/57018
-        if not os.path.exists('/etc/hosts'):
-            container_args.extend(['--no-hosts'])
+    if not isinstance(ctx.container_engine, Podman):
+        return
+    service_name = f'{ident.unit_name}.service'
+    container_args.extend(
+        ctx.container_engine.service_args(ctx, service_name)
+    )
 
 
 def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):

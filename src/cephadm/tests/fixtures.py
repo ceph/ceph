@@ -36,6 +36,7 @@ def mock_podman():
     # supports_split_cgroups attribute:
     # https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock
     type(podman).supports_split_cgroups = Podman.supports_split_cgroups
+    type(podman).service_args = Podman.service_args
     return podman
 
 
