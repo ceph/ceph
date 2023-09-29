@@ -1,5 +1,6 @@
 # deamon_identity.py - classes for identifying daemons & services
 
+import enum
 import os
 import pathlib
 import re
@@ -7,6 +8,14 @@ import re
 from typing import Union
 
 from .context import CephadmContext
+
+
+class Categories(str, enum.Enum):
+    SIDECAR = 'sidecar'
+    INIT = 'init'
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class DaemonIdentity:
@@ -48,9 +57,35 @@ class DaemonIdentity:
         name = f'ceph-{self.fsid}-{self.daemon_type}-{self.daemon_id}'
         return name.replace('.', '-')
 
+    def _systemd_name(
+        self,
+        *,
+        framework: str = 'ceph',
+        category: str = '',
+        suffix: str = '',
+        extension: str = '',
+    ) -> str:
+        if category:
+            # validate the category value
+            category = Categories(category)
+        template_terms = [framework, self.fsid, category]
+        instance_terms = [self.daemon_type]
+        instance_terms.append(
+            f'{self.daemon_id}:{suffix}' if suffix else self.daemon_id
+        )
+        instance_terms.append(extension)
+        # use a comprehension to filter out terms that are blank
+        base = '-'.join(v for v in template_terms if v)
+        svc = '.'.join(v for v in instance_terms if v)
+        return f'{base}@{svc}'
+
     @property
     def unit_name(self) -> str:
-        return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}'
+        return self._systemd_name()
+
+    @property
+    def service_name(self) -> str:
+        return self._systemd_name(extension='service')
 
     def data_dir(self, base_data_dir: Union[str, os.PathLike]) -> str:
         return str(pathlib.Path(base_data_dir) / self.fsid / self.daemon_name)
@@ -99,7 +134,13 @@ class DaemonSubIdentity(DaemonIdentity):
         # of the same unit as the primary. However, to fix a bug with iscsi
         # this is a quick and dirty workaround for distinguishing the two types
         # when generating --cidfile and --conmon-pidfile values.
-        return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}.{self.subcomponent}'
+        return self._systemd_name(suffix=self.subcomponent)
+
+    @property
+    def service_name(self) -> str:
+        return self._systemd_name(
+            suffix=self.subcomponent, extension='service'
+        )
 
     @property
     def legacy_container_name(self) -> str:
