@@ -1,0 +1,63 @@
+teuthology:
+  premerge: |
+            local branch = yaml.teuthology.branch
+            local upgrade_branch = ""
+            local osd_release = ""
+            if tostring(branch) == "nautilus" then
+              upgrade_branch = "pacific"
+              osd_release = "ceph osd require-osd-release pacific"
+            elseif tostring(branch) == "pacific" then
+              upgrade_branch = "reef"
+              osd_release = "ceph osd require-osd-release reef"
+            else
+              error("invalid source branch")
+            end
+            yaml_fragment['tasks'][2]['install.upgrade']['mon.a']['branch'] = upgrade_branch
+            py_attrgetter(yaml_fragment['tasks'][9]['exec']['mon.a']).append(osd_release)
+overrides:
+  ceph:
+    log-ignorelist:
+    - scrub mismatch
+    - ScrubResult
+    - wrongly marked
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(SLOW_OPS\)
+    - overall HEALTH_
+    - \(MON_MSGR2_NOT_ENABLED\)
+    - slow request
+    conf:
+      global:
+        bluestore warn on legacy statfs: false
+        bluestore warn on no per pool omap: false
+      mon:
+        mon warn on osd down out interval zero: false
+
+tasks:
+- mds_pre_upgrade:
+- print: "**** done mds pre-upgrade sequence"
+- install.upgrade:
+    # upgrade the single cluster node, which is running all the mon/mds/osd/mgr daemons
+    mon.a:
+      branch: []
+- print: "**** done install.upgrade the host"
+- ceph.restart:
+    daemons: [mon.*, mgr.*]
+    mon-health-to-clog: false
+    wait-for-healthy: false
+- ceph.healthy:
+- ceph.restart:
+    daemons: [osd.*]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- ceph.stop: [mds.*]
+- ceph.restart:
+    daemons: [mds.*]
+    wait-for-healthy: false
+    wait-for-osds-up: true
+- exec:
+    mon.a:
+    - ceph osd dump -f json-pretty
+    - ceph versions
+    - for f in `ceph osd pool ls` ; do ceph osd pool set $f pg_autoscale_mode off ; done
+- ceph.healthy:
+- print: "**** done ceph.restart"
