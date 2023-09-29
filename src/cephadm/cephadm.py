@@ -2801,6 +2801,25 @@ def get_container(
             f'--env-file={sg.conf_file_path}'
         )
 
+    _update_container_args_for_podman(ctx, ident, container_args)
+    return CephContainer.for_daemon(
+        ctx,
+        ident=ident,
+        entrypoint=entrypoint,
+        args=ceph_args + get_daemon_args(ctx, ident),
+        container_args=container_args,
+        volume_mounts=get_container_mounts(ctx, ident),
+        bind_mounts=get_container_binds(ctx, ident),
+        envs=envs,
+        privileged=privileged,
+        ptrace=ptrace,
+        host_network=host_network,
+    )
+
+
+def _update_container_args_for_podman(
+    ctx: CephadmContext, ident: DaemonIdentity, container_args: List[str]
+) -> None:
     # if using podman, set -d, --conmon-pidfile & --cidfile flags
     # so service can have Type=Forking
     if isinstance(ctx.container_engine, Podman):
@@ -2823,20 +2842,6 @@ def get_container(
         # https://tracker.ceph.com/issues/57018
         if not os.path.exists('/etc/hosts'):
             container_args.extend(['--no-hosts'])
-
-    return CephContainer.for_daemon(
-        ctx,
-        ident=ident,
-        entrypoint=entrypoint,
-        args=ceph_args + get_daemon_args(ctx, ident),
-        container_args=container_args,
-        volume_mounts=get_container_mounts(ctx, ident),
-        bind_mounts=get_container_binds(ctx, ident),
-        envs=envs,
-        privileged=privileged,
-        ptrace=ptrace,
-        host_network=host_network,
-    )
 
 
 def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
