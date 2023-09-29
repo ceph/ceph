@@ -182,6 +182,11 @@
     https://docs.ceph.com/en/reef/rados/configuration/mclock-config-ref/
 * CEPHFS: After recovering a Ceph File System post following the disaster recovery
   procedure, the recovered files under `lost+found` directory can now be deleted.
+    https://docs.ceph.com/en/latest/rados/configuration/mclock-config-ref/
+* mgr/snap_schedule: The snap-schedule mgr module now retains one less snapshot
+  than the number mentioned against the config tunable `mds_max_snaps_per_dir`
+  so that a new snapshot can be created and retained during the next schedule
+  run.
 
 >=17.2.1
 
