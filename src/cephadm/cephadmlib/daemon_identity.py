@@ -87,6 +87,11 @@ class DaemonIdentity:
     def service_name(self) -> str:
         return self._systemd_name(extension='service')
 
+    @property
+    def init_service_name(self) -> str:
+        # all init contaienrs are run as a single systemd service
+        return self._systemd_name(category='init', extension='service')
+
     def data_dir(self, base_data_dir: Union[str, os.PathLike]) -> str:
         return str(pathlib.Path(base_data_dir) / self.fsid / self.daemon_name)
 
@@ -140,6 +145,12 @@ class DaemonSubIdentity(DaemonIdentity):
     def service_name(self) -> str:
         return self._systemd_name(
             suffix=self.subcomponent, extension='service'
+        )
+
+    @property
+    def sidecar_service_name(self) -> str:
+        return self._systemd_name(
+            category='sidecar', suffix=self.subcomponent, extension='service'
         )
 
     @property
