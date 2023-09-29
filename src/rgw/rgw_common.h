@@ -145,6 +145,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"
 #define RGW_ATTR_CRYPT_CONTEXT  RGW_ATTR_CRYPT_PREFIX "context"
 #define RGW_ATTR_CRYPT_DATAKEY  RGW_ATTR_CRYPT_PREFIX "datakey"
+#define RGW_ATTR_CRYPT_PARTS    RGW_ATTR_CRYPT_PREFIX "part-lengths"
 
 /* SSE-S3 Encryption Attributes */
 #define RGW_ATTR_BUCKET_ENCRYPTION_PREFIX RGW_ATTR_PREFIX "sse-s3."

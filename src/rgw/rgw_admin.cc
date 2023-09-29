@@ -642,6 +642,7 @@ enum class OPT {
   BUCKET_RESHARD,
   BUCKET_CHOWN,
   BUCKET_RADOS_LIST,
+  BUCKET_RESYNC_ENCRYPTED_MULTIPART,
   POLICY,
   POOL_ADD,
   POOL_RM,
@@ -857,6 +858,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket chown", OPT::BUCKET_CHOWN },
   { "bucket radoslist", OPT::BUCKET_RADOS_LIST },
   { "bucket rados list", OPT::BUCKET_RADOS_LIST },
+  { "bucket resync encrypted multipart", OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART },
   { "policy", OPT::POLICY },
   { "pool add", OPT::POOL_ADD },
   { "pool rm", OPT::POOL_RM },
@@ -6795,6 +6797,47 @@ int main(int argc, const char **argv)
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
       return -r;
     }
+  }
+
+  if (opt_cmd == OPT::BUCKET_RESYNC_ENCRYPTED_MULTIPART) {
+    // repair logic for replication of encrypted multipart uploads:
+    // https://tracker.ceph.com/issues/46062
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+
+    auto rados_driver = dynamic_cast<rgw::sal::RadosStore*>(store);
+    if (!rados_driver) {
+      cerr << "ERROR: this command can only work when the cluster "
+          "has a RADOS backing store." << std::endl;
+      return EPERM;
+    }
+
+    // fail if recovery wouldn't generate replication log entries
+    if (!rados_driver->svc()->zone->need_to_log_data() && !yes_i_really_mean_it) {
+      cerr << "This command is only necessary for replicated buckets." << std::endl;
+      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
+      return EPERM;
+    }
+
+    formatter->open_object_section("modified");
+    encode_json("bucket", bucket->get_name(), formatter.get());
+    encode_json("bucket_id", bucket->get_bucket_id(), formatter.get());
+
+    ret = rados_driver->getRados()->bucket_resync_encrypted_multipart(
+        dpp(), null_yield, rados_driver, bucket->get_info(),
+        marker, stream_flusher);
+    if (ret < 0) {
+      return -ret;
+    }
+    formatter->close_section();
+    formatter->flush(cout);
+    return 0;
   }
 
   if (opt_cmd == OPT::BUCKET_CHOWN) {
