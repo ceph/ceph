@@ -7,7 +7,11 @@ from typing import Tuple, List, Optional
 from .call_wrappers import call_throws, CallVerbosity
 from .context import CephadmContext
 from .container_engine_base import ContainerEngine
-from .constants import DEFAULT_MODE, MIN_PODMAN_VERSION
+from .constants import (
+    CGROUPS_SPLIT_PODMAN_VERSION,
+    DEFAULT_MODE,
+    MIN_PODMAN_VERSION,
+)
 from .exceptions import Error
 
 
@@ -35,6 +39,11 @@ class Podman(ContainerEngine):
     def __str__(self) -> str:
         version = '.'.join(map(str, self.version))
         return f'{self.EXE} ({self.path}) version {version}'
+
+    @property
+    def supports_split_cgroups(self) -> bool:
+        """Return true if this version of podman supports split cgroups."""
+        return self.version >= CGROUPS_SPLIT_PODMAN_VERSION
 
 
 class Docker(ContainerEngine):
