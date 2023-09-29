@@ -5558,10 +5558,8 @@ float OSDMap::get_osds_weight(
   float osds_weight_total = 0;
   for (auto [oid, oweight] : pmap) {
     auto adjusted_weight = tmp_osd_map.get_weightf(oid) * oweight;
-    if (adjusted_weight != 0) {
-      osds_weight[oid] += adjusted_weight;
-      osds_weight_total += adjusted_weight;
-    }
+    osds_weight[oid] += adjusted_weight;
+    osds_weight_total += adjusted_weight;
   }
   return osds_weight_total;
 }
