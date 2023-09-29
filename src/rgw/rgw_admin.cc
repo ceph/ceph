@@ -2478,7 +2478,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   out << indented{width, "source zone"} << source.id << " (" << source.name << ")" << std::endl;
 
   // syncing from this zone?
-  if (!zone.syncs_from(source.name)) {
+  if (!store->svc()->zone->zone_syncs_from(zone, source)) {
     out << indented{width} << "does not sync from zone\n";
     return 0;
   }

@@ -129,6 +129,12 @@ using ceph::crypto::MD5;
 
 #define RGW_ATTR_APPEND_PART_NUM    RGW_ATTR_PREFIX "append_part_num"
 
+/* Attrs to store cloudtier config information. These are used internally
+ * for the replication of cloudtiered objects but not stored as xattrs in
+ * the head object. */
+#define RGW_ATTR_CLOUD_TIER_TYPE    RGW_ATTR_PREFIX "cloud_tier_type"
+#define RGW_ATTR_CLOUD_TIER_CONFIG    RGW_ATTR_PREFIX "cloud_tier_config"
+
 /* IAM Policy */
 #define RGW_ATTR_IAM_POLICY	RGW_ATTR_PREFIX "iam-policy"
 #define RGW_ATTR_USER_POLICY    RGW_ATTR_PREFIX "user-policy"

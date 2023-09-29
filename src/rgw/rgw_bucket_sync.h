@@ -31,7 +31,7 @@ struct rgw_sync_group_pipe_map {
   rgw_zone_id zone;
   std::optional<rgw_bucket> bucket;
 
-  rgw_sync_policy_group::Status status{rgw_sync_policy_group::Status::FORBIDDEN};
+  rgw_sync_policy_group::Status status{rgw_sync_policy_group::Status::UNKNOWN};
 
   using zb_pipe_map_t = std::multimap<rgw_sync_bucket_entity, rgw_sync_bucket_pipe>;
 
@@ -209,6 +209,7 @@ public:
   struct pipe_set {
     std::map<endpoints_pair, pipe_rules_ref> rules;
     std::multimap<std::string, rgw_sync_bucket_pipe> pipe_map;
+    std::multimap<std::string, rgw_sync_bucket_pipe> disabled_pipe_map;
 
     std::set<pipe_handler> handlers;
 
@@ -217,10 +218,13 @@ public:
     void clear() {
       rules.clear();
       pipe_map.clear();
+      disabled_pipe_map.clear();
       handlers.clear();
     }
 
     void insert(const rgw_sync_bucket_pipe& pipe);
+    void remove_all();
+    void disable(const rgw_sync_bucket_pipe& pipe);
 
     iterator begin() const {
       return handlers.begin();
