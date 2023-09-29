@@ -1,5 +1,6 @@
 # container_types.py - container instance wrapper types
 
+import copy
 import os
 
 from typing import Dict, List, Optional, Any, Union, Tuple
@@ -178,6 +179,33 @@ class BasicContainer:
             cmd.extend(('-t', str(timeout)))
         cmd.append(cname or self.cname)
         return cmd
+
+    @classmethod
+    def from_container(
+        cls,
+        other: 'BasicContainer',
+        *,
+        ident: Optional[DaemonIdentity] = None
+    ) -> 'BasicContainer':
+        return cls(
+            other.ctx,
+            image=other.image,
+            entrypoint=other.entrypoint,
+            identity=(ident or other.identity),
+            args=other.args,
+            container_args=copy.copy(other.container_args),
+            envs=copy.copy(other.envs),
+            volume_mounts=copy.copy(other.volume_mounts),
+            bind_mounts=copy.copy(other.bind_mounts),
+            network=other.network,
+            ipc=other.ipc,
+            init=other.init,
+            ptrace=other.ptrace,
+            privileged=other.privileged,
+            remove=other.remove,
+            memory_request=other.memory_request,
+            memory_limit=other.memory_limit,
+        )
 
 
 class CephContainer(BasicContainer):
