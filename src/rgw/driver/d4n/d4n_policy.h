@@ -76,8 +76,8 @@ class LFUDAPolicy : public CachePolicy {
       dir = new BlockDirectory{io};
     }
     ~LFUDAPolicy() {
-      //delete dir;
       shutdown();
+      delete dir;
     } 
 
     virtual int init(CephContext *cct, const DoutPrefixProvider* dpp) {
@@ -86,6 +86,7 @@ class LFUDAPolicy : public CachePolicy {
       config cfg;
       cfg.addr.host = address.substr(0, address.find(":"));
       cfg.addr.port = address.substr(address.find(":") + 1, address.length());
+      cfg.clientname = "D4N.Policy";
 
       if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
 	ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
