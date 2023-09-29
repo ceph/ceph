@@ -111,6 +111,12 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, bl.length(), attrs, optional_yield{io, yield}));
+
+    rgw::d4n::CacheBlock temp;
+    temp.blockID = 0;
+    temp.cacheObj.objName = "testName";
+    temp.cacheObj.bucketName = "testBucket";
+    std::string key = dir->build_index(&temp);
     policyDriver->get_cache_policy()->insert(env->dpp, key, 0, bl.length(), "", cacheDriver, optional_yield{io, yield});
 
     /* Change cache age for testing purposes */
@@ -177,7 +183,8 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 
     ASSERT_EQ(0, dir->set(&victim, optional_yield{io, yield}));
     ASSERT_EQ(0, cacheDriver->put(env->dpp, victim.cacheObj.objName, bl, bl.length(), attrs, optional_yield{io, yield}));
-    policyDriver->get_cache_policy()->insert(env->dpp, victim.cacheObj.objName, 0, bl.length(), "", cacheDriver, optional_yield{io, yield});
+    std::string key = dir->build_index(&victim);
+    policyDriver->get_cache_policy()->insert(env->dpp, key, 0, bl.length(), "", cacheDriver, optional_yield{io, yield});
 
     /* Remote block */
     block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
