@@ -263,7 +263,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     this->get_obj_state(dpp, &astate, y);
 
     for (auto it = attrs.begin(); it != attrs.end(); ++it) {
-      if (it->second.length() > 0) { // or return? -Sam
+      if (it->second.length() > 0) {
 	if (it->first == "mtime") {
 	  parse_time(it->second.c_str(), &astate->mtime);
 	  attrs.erase(it->first);
@@ -574,6 +574,12 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << 
     " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
 
+    /* Build base block for inserting in LFUDA */
+    rgw::d4n::CacheBlock block;
+    block.blockID = ofs;
+    block.cacheObj.objName = source->get_key().get_oid();
+    block.cacheObj.bucketName = source->get_bucket()->get_name();
+
     if (source->driver->get_policy_driver()->get_cache_policy()->exist_key(oid_in_cache, y)) { 
       // Read From Cache
       auto completed = source->driver->get_cache_driver()->get_async(dpp, y, aio.get(), oid_in_cache, read_ofs, len_to_read, cost, id); 
@@ -697,7 +703,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_name();
     block.cacheObj.creationTime = 0;
-    block.cacheObj.dirty = false;
+    block.cacheObj.dirty = false;// update hostsList since may overwrite existing hosts -Sam
     block.cacheObj.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); // Is the entire object getting stored in the local cache as well or only blocks? -Sam
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
