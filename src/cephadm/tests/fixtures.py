@@ -30,6 +30,12 @@ def mock_podman():
     podman = mock.Mock(Podman)
     podman.path = '/usr/bin/podman'
     podman.version = (2, 1, 0)
+    # This next little bit of black magic was adapated from the mock docs for
+    # PropertyMock. We don't use a PropertyMock but the suggestion to call
+    # type(...) from the doc allows us to "borrow" the real
+    # supports_split_cgroups attribute:
+    # https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock
+    type(podman).supports_split_cgroups = Podman.supports_split_cgroups
     return podman
 
 
