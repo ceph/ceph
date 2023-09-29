@@ -149,7 +149,6 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
   }
 
   if (!std::get<0>(resp).value()) {
-    // Is int_max what we want here? -Sam
     if (set_min_avg_weight(0, dir->cct->_conf->rgw_local_cache_address, y)) { /* Initialize minimum average weight */
       return 0;
     } else {
@@ -182,10 +181,13 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
 			      [](const auto& l, const auto& r) { return l.second->localWeight < r.second->localWeight; });
 
   /* Get victim cache block */
+  std::string key = it->second->key;
   CacheBlock victim;
-  victim.cacheObj.objName = it->second->key;
-  victim.cacheObj.bucketName = cacheNode->get_attr(dpp, victim.cacheObj.objName, "bucket_name", y); // generalize for other cache backends -Sam
-  victim.blockID = 0; // find way to get ID -Sam 
+
+  victim.cacheObj.bucketName = key.substr(0, key.find('_')); 
+  key.erase(0, key.find('_') + 1);
+  victim.cacheObj.objName = key.substr(0, key.find('_'));
+  victim.blockID = boost::lexical_cast<uint64_t>(key.substr(key.find('_') + 1, key.length()));
 
   if (dir->get(&victim, y) < 0) {
     return {};
@@ -213,8 +215,8 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
   response<std::string> resp;
   int age = get_age(y);
 
-  if (exist_key(block->cacheObj.objName, y)) { /* Local copy */
-    auto it = entries_map.find(block->cacheObj.objName); // change to block name eventually -Sam
+  if (exist_key(dir->build_index(block), y)) { /* Local copy */
+    auto it = entries_map.find(dir->build_index(block));
     it->second->localWeight += age;
     return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y);
   } else {
@@ -266,7 +268,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
     return 0; /* Return zero for failure */
   }
 
-  auto it = entries_map.find(victim.cacheObj.objName); // change to block name eventually -Sam
+  auto it = entries_map.find(dir->build_index(&victim));
   if (it == entries_map.end()) {
     return 0;
   }

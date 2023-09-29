@@ -139,6 +139,7 @@ class PolicyDriver {
 
     int init();
     CachePolicy* get_cache_policy() { return cachePolicy; }
+    std::string get_policy_name() { return policyName; }
 };
 
 } } // namespace rgw::d4n
