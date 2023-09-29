@@ -56,6 +56,7 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
       config cfg;
       cfg.addr.host = cct->_conf->rgw_d4n_host; // same or different address from block directory? -Sam
       cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
+      cfg.clientname = "D4N.ObjectDir";
 
       if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
 	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Object directory endpoint was not configured correctly" << dendl;
@@ -95,6 +96,7 @@ class BlockDirectory: public Directory {
       config cfg;
       cfg.addr.host = cct->_conf->rgw_d4n_host;
       cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
+      cfg.clientname = "D4N.BlockDir";
 
       if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
 	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Block directory endpoint was not configured correctly" << dendl;
