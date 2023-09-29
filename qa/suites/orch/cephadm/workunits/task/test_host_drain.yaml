@@ -36,11 +36,27 @@ tasks:
           sleep 15
           HOST_C_DAEMONS=$(ceph orch ps --hostname $HOST_C)
         done
+        # we want to check the ability to remove the host from
+        # the CRUSH map, so we should first verify the host is in
+        # the CRUSH map.
+        ceph osd getcrushmap -o compiled-crushmap
+        crushtool -d compiled-crushmap -o crushmap.txt
+        CRUSH_MAP=$(cat crushmap.txt)
+        if ! grep -q "$HOST_C" <<< "$CRUSH_MAP"; then
+          printf "Expected to see $HOST_C in CRUSH map. Saw:\n\n$CRUSH_MAP"
+          exit 1
+        fi
         # If the drain was successful, we should be able to remove the
         # host without force with no issues. If there are still daemons
         # we will get a response telling us to drain the host and a
         # non-zero return code
-        ceph orch host rm $HOST_C
-        
-        
-        
+        ceph orch host rm $HOST_C --rm-crush-entry
+        # verify we've successfully removed the host from the CRUSH map
+        sleep 30
+        ceph osd getcrushmap -o compiled-crushmap
+        crushtool -d compiled-crushmap -o crushmap.txt
+        CRUSH_MAP=$(cat crushmap.txt)
+        if grep -q "$HOST_C" <<< "$CRUSH_MAP"; then
+          printf "Saw $HOST_C in CRUSH map after it should have been removed.\n\n$CRUSH_MAP"
+          exit 1
+        fi
