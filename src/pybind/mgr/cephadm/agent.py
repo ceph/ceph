@@ -117,24 +117,26 @@ class NodeProxy:
             idrac_details = self.mgr.get_store('node_proxy/idrac')
             idrac_details_json = json.loads(idrac_details)
             results['result'] = idrac_details_json[data["host"]]
+        else:
+            results['result'] = self.validate_msg
 
         return results
 
     def validate_node_proxy_data(self, data: Dict[str, Any]) -> bool:
+        self.validate_msg = 'valid node-proxy data received.'
+        cherrypy.response.status = 200
         if 'host' not in data:
             cherrypy.response.status = 400
-            self.mgr.log.warning('The field \'host\' must be provided.')
+            self.validate_msg = 'The field \'host\' must be provided.'
         elif 'keyring' not in data:
             cherrypy.response.status = 400
-            self.mgr.log.warning(f'The agent keyring must be provided.')
+            self.validate_msg = 'The agent keyring must be provided.'
         elif not self.mgr.agent_cache.agent_keys.get(data['host']):
             cherrypy.response.status = 400
-            self.mgr.log.warning(f'Make sure the agent is running on {data["host"]}')
+            self.validate_msg = f'Make sure the agent is running on {data["host"]}'
         elif data['keyring'] != self.mgr.agent_cache.agent_keys[data['host']]:
             cherrypy.response.status = 403
-            self.mgr.log.warning(f'Got wrong keyring from agent on host {data["host"]}.')
-        else:
-            cherrypy.response.status = 200
+            self.validate_msg = f'Got wrong keyring from agent on host {data["host"]}.'
 
         return cherrypy.response.status == 200
 
@@ -199,7 +201,7 @@ class NodeProxy:
             self.mgr.set_store(f'node_proxy/data/{data["host"]}', json.dumps(data['data']))
             self.raise_alert(data)
 
-            results['result'] = data
+        results["result"] = self.validate_msg
 
         return results
 
