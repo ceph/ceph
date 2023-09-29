@@ -130,7 +130,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._load_drive_groups()
         self._shutdown = threading.Event()
-        
+
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
@@ -147,7 +147,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         assert isinstance(self.drive_group_interval, float)
 
         if self._rook_cluster:
-            self._rook_cluster.storage_class = self.storage_class
+            self._rook_cluster.storage_class_name = self.storage_class
 
     def shutdown(self) -> None:
         self._shutdown.set()
