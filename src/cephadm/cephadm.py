@@ -108,6 +108,7 @@ from cephadmlib.container_engines import (
     Podman,
     check_container_engine,
     find_container_engine,
+    registry_login,
 )
 from cephadmlib.data_utils import (
     dict_get,
@@ -4991,6 +4992,7 @@ def command_bootstrap(ctx):
 
 
 def command_registry_login(ctx: CephadmContext) -> int:
+    logger.info('Logging into custom registry.')
     if ctx.registry_json:
         logger.info('Pulling custom registry login info from %s.' % ctx.registry_json)
         d = get_parm(ctx.registry_json)
@@ -5015,21 +5017,6 @@ def command_registry_login(ctx: CephadmContext) -> int:
                     'options or --registry-json option')
     return 0
 
-
-def registry_login(ctx: CephadmContext, url: Optional[str], username: Optional[str], password: Optional[str]) -> None:
-    logger.info('Logging into custom registry.')
-    try:
-        engine = ctx.container_engine
-        cmd = [engine.path, 'login',
-               '-u', username, '-p', password,
-               url]
-        if isinstance(engine, Podman):
-            cmd.append('--authfile=/etc/ceph/podman-auth.json')
-        out, _, _ = call_throws(ctx, cmd)
-        if isinstance(engine, Podman):
-            os.chmod('/etc/ceph/podman-auth.json', DEFAULT_MODE)
-    except Exception:
-        raise Error('Failed to login to custom registry @ %s as %s with given password' % (ctx.registry_url, ctx.registry_username))
 
 ##################################
 
