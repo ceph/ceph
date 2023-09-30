@@ -458,7 +458,7 @@ class TestCephAdm(object):
         with pytest.raises(FileNotFoundError):
             open(os.path.join(_cephadm.DATA_DIR, 'fsid', 'custom_config_files', 'mon.host1', 'no-content.conf'), 'r')
 
-    @mock.patch('cephadm.call_throws')
+    @mock.patch('cephadmlib.container_engines.call_throws')
     @mock.patch('cephadm.get_parm')
     @mock.patch('cephadm.logger')
     def test_registry_login(self, _logger, _get_parm, _call_throws):
