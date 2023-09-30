@@ -1,8 +1,15 @@
 # data_utils.py - assorted data management functions
 
+import datetime
+import os
+import re
+import uuid
 
-from typing import Dict, Any
+from configparser import ConfigParser
 
+from typing import Dict, Any, Optional
+
+from .constants import DATEFMT, DEFAULT_REGISTRY
 from .exceptions import Error
 
 
@@ -86,3 +93,107 @@ def with_units_to_int(v: str) -> int:
         mult = 1024 * 1024 * 1024 * 1024
         v = v[:-1]
     return int(float(v) * mult)
+
+
+def read_config(fn):
+    # type: (Optional[str]) -> ConfigParser
+    cp = ConfigParser()
+    if fn:
+        cp.read(fn)
+    return cp
+
+
+def try_convert_datetime(s):
+    # type: (str) -> Optional[str]
+    # This is super irritating because
+    #  1) podman and docker use different formats
+    #  2) python's strptime can't parse either one
+    #
+    # I've seen:
+    #  docker 18.09.7:  2020-03-03T09:21:43.636153304Z
+    #  podman 1.7.0:    2020-03-03T15:52:30.136257504-06:00
+    #                   2020-03-03 15:52:30.136257504 -0600 CST
+    # (In the podman case, there is a different string format for
+    # 'inspect' and 'inspect --format {{.Created}}'!!)
+
+    # In *all* cases, the 9 digit second precision is too much for
+    # python's strptime.  Shorten it to 6 digits.
+    p = re.compile(r'(\.[\d]{6})[\d]*')
+    s = p.sub(r'\1', s)
+
+    # replace trailing Z with -0000, since (on python 3.6.8) it won't parse
+    if s and s[-1] == 'Z':
+        s = s[:-1] + '-0000'
+
+    # cut off the redundant 'CST' part that strptime can't parse, if
+    # present.
+    v = s.split(' ')
+    s = ' '.join(v[0:3])
+
+    # try parsing with several format strings
+    fmts = [
+        '%Y-%m-%dT%H:%M:%S.%f%z',
+        '%Y-%m-%d %H:%M:%S.%f %z',
+    ]
+    for f in fmts:
+        try:
+            # return timestamp normalized to UTC, rendered as DATEFMT.
+            return (
+                datetime.datetime.strptime(s, f)
+                .astimezone(tz=datetime.timezone.utc)
+                .strftime(DATEFMT)
+            )
+        except ValueError:
+            pass
+    return None
+
+
+def is_fsid(s):
+    # type: (str) -> bool
+    try:
+        uuid.UUID(s)
+    except ValueError:
+        return False
+    return True
+
+
+def normalize_image_digest(digest: str) -> str:
+    """
+    Normal case:
+    >>> normalize_image_digest('ceph/ceph', 'docker.io')
+    'docker.io/ceph/ceph'
+
+    No change:
+    >>> normalize_image_digest('quay.ceph.io/ceph/ceph', 'docker.io')
+    'quay.ceph.io/ceph/ceph'
+
+    >>> normalize_image_digest('docker.io/ubuntu', 'docker.io')
+    'docker.io/ubuntu'
+
+    >>> normalize_image_digest('localhost/ceph', 'docker.io')
+    'localhost/ceph'
+    """
+    known_shortnames = [
+        'ceph/ceph',
+        'ceph/daemon',
+        'ceph/daemon-base',
+    ]
+    for image in known_shortnames:
+        if digest.startswith(image):
+            return f'{DEFAULT_REGISTRY}/{digest}'
+    return digest
+
+
+def get_legacy_config_fsid(cluster, legacy_dir=None):
+    # type: (str, Optional[str]) -> Optional[str]
+    config_file = '/etc/ceph/%s.conf' % cluster
+    if legacy_dir is not None:
+        config_file = os.path.abspath(legacy_dir + config_file)
+
+    if os.path.exists(config_file):
+        config = read_config(config_file)
+        if config.has_section('global') and config.has_option(
+            'global', 'fsid'
+        ):
+            return config.get('global', 'fsid')
+    return None
