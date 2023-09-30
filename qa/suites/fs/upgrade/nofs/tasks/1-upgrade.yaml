@@ -23,6 +23,7 @@ tasks:
     - ceph fs dump
 - install.upgrade:
     mon.a:
+      branch: reef
 - print: "**** done install.upgrade"
 - ceph.restart:
     daemons: [mon.*, mgr.*]
