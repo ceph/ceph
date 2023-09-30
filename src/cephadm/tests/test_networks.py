@@ -7,6 +7,7 @@ import pytest
 from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm
 
 from cephadmlib.host_facts import _parse_ipv4_route, _parse_ipv6_route
+from cephadmlib.net_utils import get_ipv6_address
 
 _cephadm = import_cephadm()
 
@@ -225,6 +226,19 @@ class TestCommandListNetworks:
     ])
     def test_parse_ipv6_route(self, test_routes, test_ips, expected):
         assert _parse_ipv6_route(test_routes, test_ips) == expected
+
+    @mock.patch('cephadmlib.net_utils.read_file')
+    def test_get_ipv6_addr(self, _read_file):
+        proc_net_if_net6 = """fe80000000000000505400fffe347999 02 40 20 80     eth0
+fe80000000000000505400fffe04c154 03 40 20 80     eth1
+00000000000000000000000000000001 01 80 10 80       lo"""
+        _read_file.return_value = proc_net_if_net6
+
+        ipv6_addr = get_ipv6_address('eth0')
+        assert ipv6_addr == 'fe80::5054:ff:fe34:7999/64'
+
+        ipv6_addr = get_ipv6_address('eth1')
+        assert ipv6_addr == 'fe80::5054:ff:fe04:c154/64'
 
     @mock.patch('cephadmlib.host_facts.call_throws')
     @mock.patch('cephadmlib.host_facts.find_executable')
