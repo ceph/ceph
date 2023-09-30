@@ -234,7 +234,7 @@ class MDSRank {
     }
 
     void handle_write_error(int err);
-    void handle_write_error_with_lock(int err);
+    void handle_write_error_unlocked(int err);
 
     void update_mlogger();
 

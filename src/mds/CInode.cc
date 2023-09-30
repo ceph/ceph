@@ -1368,7 +1368,7 @@ void CInode::_commit_ops(int r, C_GatherBuilder &gather_bld,
   dout(10) << __func__ << dendl;
 
   if (r < 0) {
-    mdcache->mds->handle_write_error_with_lock(r);
+    mdcache->mds->handle_write_error_unlocked(r);
     return;
   }
 

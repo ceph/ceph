@@ -2409,7 +2409,7 @@ void CDir::_omap_commit_ops(int r, int op_prio, int64_t metapool, version_t vers
   dout(10) << __func__ << dendl;
 
   if (r < 0) {
-    mdcache->mds->handle_write_error_with_lock(r);
+    mdcache->mds->handle_write_error_unlocked(r);
     return;
   }
 

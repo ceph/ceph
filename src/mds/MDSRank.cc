@@ -995,7 +995,7 @@ void MDSRank::handle_write_error(int err)
   }
 }
 
-void MDSRank::handle_write_error_with_lock(int err)
+void MDSRank::handle_write_error_unlocked(int err)
 {
   std::scoped_lock l(mds_lock);
   handle_write_error(err);
