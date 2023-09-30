@@ -367,19 +367,21 @@ class TestCephAdm(object):
     @mock.patch('cephadm.logger')
     @mock.patch('cephadm.FileLock')
     @mock.patch('cephadm.deploy_daemon')
-    @mock.patch('cephadm.fetch_configs')
     @mock.patch('cephadm.make_var_run')
     @mock.patch('cephadm.migrate_sysctl_dir')
     @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
     @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
     @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: (0, 0))
     @mock.patch('cephadm.get_deployment_container')
-    @mock.patch('cephadm.read_configuration_source', lambda c: {})
     @mock.patch('cephadm.apply_deploy_config_to_ctx', lambda d, c: None)
-    def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _fetch_configs, _deploy_daemon, _file_lock, _logger):
+    def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _deploy_daemon, _file_lock, _logger, monkeypatch):
         """
         test that crush location for mon is set if it is included in config_json
         """
+        _fetch_configs = mock.MagicMock()
+        monkeypatch.setattr('cephadmlib.context_getters.fetch_configs', _fetch_configs)
+        monkeypatch.setattr('cephadm.fetch_configs', _fetch_configs)
+        monkeypatch.setattr('cephadm.read_configuration_source', lambda c: {})
 
         ctx = _cephadm.CephadmContext()
         ctx.name = 'mon.test'
