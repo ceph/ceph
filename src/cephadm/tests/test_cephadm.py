@@ -21,6 +21,8 @@ from .fixtures import (
 from pyfakefs import fake_filesystem
 from pyfakefs import fake_filesystem_unittest
 
+from cephadmlib.constants import DEFAULT_REGISTRY
+
 _cephadm = import_cephadm()
 
 
@@ -785,7 +787,7 @@ class TestCephAdm(object):
         assert _cephadm.normalize_image_digest(s) == s
 
         s = 'ceph/ceph:latest'
-        assert _cephadm.normalize_image_digest(s) == f'{_cephadm.DEFAULT_REGISTRY}/{s}'
+        assert _cephadm.normalize_image_digest(s) == f'{DEFAULT_REGISTRY}/{s}'
 
     @pytest.mark.parametrize('fsid, ceph_conf, list_daemons, result, err, ',
         [
