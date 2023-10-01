@@ -477,11 +477,11 @@ Dynamic Cluster Management
 --------------------------
 
 In the `Scalability and High Availability`_ section, we explained how Ceph uses
-CRUSH, cluster awareness and intelligent daemons to scale and maintain high
+CRUSH, cluster topology, and intelligent daemons to scale and maintain high
 availability. Key to Ceph's design is the autonomous, self-healing, and
 intelligent Ceph OSD Daemon. Let's take a deeper look at how CRUSH works to
-enable modern cloud storage infrastructures to place data, rebalance the cluster
-and recover from faults dynamically.
+enable modern cloud storage infrastructures to place data, rebalance the
+cluster, and adaptively place and balance data and recover from faults.
 
 .. index:: architecture; pools
 
@@ -490,10 +490,11 @@ About Pools
 
 The Ceph storage system supports the notion of 'Pools', which are logical
 partitions for storing objects.
-
-Ceph Clients retrieve a `Cluster Map`_ from a Ceph Monitor, and write objects to
-pools. The pool's ``size`` or number of replicas, the CRUSH rule and the
-number of placement groups determine how Ceph will place the data.
+   
+Ceph Clients retrieve a `Cluster Map`_ from a Ceph Monitor, and write RADOS
+objects to pools. The way that Ceph places the data in the pools is determined
+by the pool's ``size`` or number of replicas, the CRUSH rule, and the number of
+placement groups in the pool.
 
 .. ditaa::
 
@@ -526,20 +527,23 @@ See `Set Pool Values`_ for details.
 Mapping PGs to OSDs
 ~~~~~~~~~~~~~~~~~~~
 
-Each pool has a number of placement groups. CRUSH maps PGs to OSDs dynamically.
-When a Ceph Client stores objects, CRUSH will map each object to a placement
-group.
+Each pool has a number of placement groups (PGs) within it. CRUSH dynamically
+maps PGs to OSDs. When a Ceph Client stores objects, CRUSH maps each RADOS
+object to a PG. 
 
-Mapping objects to placement groups creates a layer of indirection between the
-Ceph OSD Daemon and the Ceph Client. The Ceph Storage Cluster must be able to
-grow (or shrink) and rebalance where it stores objects dynamically. If the Ceph
-Client "knew" which Ceph OSD Daemon had which object, that would create a tight
-coupling between the Ceph Client and the Ceph OSD Daemon. Instead, the CRUSH
-algorithm maps each object to a placement group and then maps each placement
-group to one or more Ceph OSD Daemons. This layer of indirection allows Ceph to
-rebalance dynamically when new Ceph OSD Daemons and the underlying OSD devices
-come online. The following diagram depicts how CRUSH maps objects to placement
-groups, and placement groups to OSDs.
+This mapping of RADOS objects to PGs implements an abstraction and indirection
+layer between Ceph OSD Daemons and Ceph Clients. The Ceph Storage Cluster must
+be able to grow (or shrink) and redistribute data adaptively when the internal
+topology changes. 
+
+If the Ceph Client "knew" which Ceph OSD Daemons were storing which objects, a
+tight coupling would exist between the Ceph Client and the Ceph OSD Daemon.
+But Ceph avoids any such tight coupling. Instead, the CRUSH algorithm maps each
+RADOS object to a placement group and then maps each placement group to one or
+more Ceph OSD Daemons. This "layer of indirection" allows Ceph to rebalance
+dynamically when new Ceph OSD Daemons and their underlying OSD devices come
+online. The following diagram shows how the CRUSH algorithm maps objects to
+placement groups, and how it maps placement groups to OSDs.
 
 .. ditaa::
 
@@ -565,8 +569,8 @@ groups, and placement groups to OSDs.
    |          |  |          |  |          |  |          |
    \----------/  \----------/  \----------/  \----------/  
 
-With a copy of the cluster map and the CRUSH algorithm, the client can compute
-exactly which OSD to use when reading or writing a particular object.
+The client uses its copy of the cluster map and the CRUSH algorithm to compute
+precisely which OSD it will use when reading or writing a particular object.
 
 .. index:: architecture; calculating PG IDs
 
