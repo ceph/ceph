@@ -577,36 +577,37 @@ precisely which OSD it will use when reading or writing a particular object.
 Calculating PG IDs
 ~~~~~~~~~~~~~~~~~~
 
-When a Ceph Client binds to a Ceph Monitor, it retrieves the latest copy of the
-`Cluster Map`_. With the cluster map, the client knows about all of the monitors,
-OSDs, and metadata servers in the cluster. **However, it doesn't know anything
-about object locations.** 
+When a Ceph Client binds to a Ceph Monitor, it retrieves the latest version of
+the `Cluster Map`_. When a client has been equipped with a copy of the cluster
+map, it is aware of all the monitors, OSDs, and metadata servers in the
+cluster. **However, even equipped with a copy of the latest version of the
+cluster map, the client doesn't know anything about object locations.** 
 
-.. epigraph:: 
+**Object locations must be computed.**
 
-	Object locations get computed.
+The client requies only the object ID and the name of the pool in order to
+compute the object location.
 
+Ceph stores data in named pools (for example,  "liverpool"). When a client
+stores a named object (for example, "john", "paul", "george", or "ringo") it
+calculates a placement group by using the object name, a hash code, the number
+of PGs in the pool, and the pool name. Ceph clients use the following steps to
+compute PG IDs.
 
-The only input required by the client is the object ID and the pool.
-It's simple: Ceph stores data in named pools (e.g., "liverpool"). When a client
-wants to store a named object (e.g., "john," "paul," "george," "ringo", etc.)
-it calculates a placement group using the object name, a hash code, the
-number of PGs in the pool and the pool name. Ceph clients use the following
-steps to compute PG IDs.
+#. The client inputs the pool name and the object ID. (for example: pool =
+   "liverpool" and object-id = "john")
+#. Ceph hashes the object ID.
+#. Ceph calculates the hash, modulo the number of PGs (for example: ``58``), to
+   get a PG ID.
+#. Ceph uses the pool name to retrieve the pool ID: (for example: "liverpool" =
+   ``4``)
+#. Ceph prepends the pool ID to the PG ID (for example: ``4.58``).
 
-#. The client inputs the pool name and the object ID. (e.g., pool = "liverpool" 
-   and object-id = "john")
-#. Ceph takes the object ID and hashes it.
-#. Ceph calculates the hash modulo the number of PGs. (e.g., ``58``) to get 
-   a PG ID.
-#. Ceph gets the pool ID given the pool name (e.g., "liverpool" = ``4``)
-#. Ceph prepends the pool ID to the PG ID (e.g., ``4.58``).
-
-Computing object locations is much faster than performing object location query
-over a chatty session. The :abbr:`CRUSH (Controlled Replication Under Scalable
-Hashing)` algorithm allows a client to compute where objects *should* be stored,
-and enables the client to contact the primary OSD to store or retrieve the
-objects.
+It is much faster to compute object locations than to perform object location
+query over a chatty session. The :abbr:`CRUSH (Controlled Replication Under
+Scalable Hashing)` algorithm allows a client to compute where objects are
+expected to be stored, and enables the client to contact the primary OSD to
+store or retrieve the objects.
 
 .. index:: architecture; PG Peering
 
