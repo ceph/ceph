@@ -5,7 +5,7 @@ import os
 import pathlib
 import re
 
-from typing import Union
+from typing import Union, Optional
 
 from .context import CephadmContext
 
@@ -169,3 +169,12 @@ class DaemonSubIdentity(DaemonIdentity):
             parent.daemon_id,
             subcomponent,
         )
+
+    @classmethod
+    def must(cls, value: Optional[DaemonIdentity]) -> 'DaemonSubIdentity':
+        """Helper to assert value is of the correct type.  Mostly to make mypy
+        happy.
+        """
+        if not isinstance(value, cls):
+            raise TypeError(f'{value!r} is not a {cls}')
+        return value
