@@ -11,19 +11,21 @@ vrrp_script check_backend {
 vrrp_instance VI_{{ x }} {
   state {{ states[x] }}
   priority {{ priorities[x] }}
-  interface {{ interface }}
-  virtual_router_id {{ 50 + x }}
+  interface {{ vrrp_interface }}
+  virtual_router_id {{ first_virtual_router_id + x }}
   advert_int 1
   authentication {
       auth_type PASS
       auth_pass {{ password }}
   }
+{% if not spec.use_keepalived_multicast %}
   unicast_src_ip {{ host_ip }}
   unicast_peer {
     {% for ip in other_ips %}
     {{ ip }}
     {% endfor %}
   }
+{% endif %}
   virtual_ipaddress {
     {{ virtual_ips[x] }} dev {{ interface }}
   }
