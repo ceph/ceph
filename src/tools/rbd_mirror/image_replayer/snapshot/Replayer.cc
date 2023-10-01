@@ -532,6 +532,11 @@ void Replayer<I>::scan_local_mirror_snapshots(
     if (m_local_mirror_snap_ns.is_non_primary() &&
         m_local_mirror_snap_ns.primary_mirror_uuid !=
           m_state_builder->remote_mirror_uuid) {
+      if (m_local_mirror_snap_ns.is_orphan()) {
+        dout(5) << "local image being force promoted" << dendl;
+        handle_replay_complete(locker, 0, "orphan (force promoting)");
+        return;
+      }
       // TODO support multiple peers
       derr << "local image linked to unknown peer: "
            << m_local_mirror_snap_ns.primary_mirror_uuid << dendl;
