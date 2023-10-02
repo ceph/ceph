@@ -19,6 +19,7 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - mons down, quorum
       - \(CEPHADM_STRAY_DAEMON\)
       - \(POOL_APP_NOT_ENABLED\)
       - \(PG_AVAILABILITY\)

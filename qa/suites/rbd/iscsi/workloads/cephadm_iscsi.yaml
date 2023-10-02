@@ -24,3 +24,4 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - mons down, quorum

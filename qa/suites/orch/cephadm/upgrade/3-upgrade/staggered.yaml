@@ -135,5 +135,6 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
+      - mons down, quorum
       - \(CEPHADM_FAILED_DAEMON\)
       - \(PG_AVAILABILITY\)

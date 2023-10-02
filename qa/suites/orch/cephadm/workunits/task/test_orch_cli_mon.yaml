@@ -48,4 +48,5 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(MON_DOWN\)
-      - \(POOL_APP_NOT_ENABLED\)
+      - mons down, quorum
+      - \(POOL_APP_NOT_ENABLED\)      

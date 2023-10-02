@@ -12,3 +12,4 @@ overrides:
       - \(MON_DOWN\)
       - \(CEPHADM_STRAY_DAEMON\)
       - \(POOL_APP_NOT_ENABLED\)
+      - mons down, quorum
