@@ -479,18 +479,30 @@ int ScrubQueue::get_blocked_pgs_count() const
 // ////////////////////////////////////////////////////////////////////////// //
 // ScrubQueue - maintaining the 'some PG is reserving' flag
 
-bool ScrubQueue::set_reserving_now()
+bool ScrubQueue::set_reserving_now(spg_t reserving_id, utime_t now_is)
 {
-  auto was_set = a_pg_is_reserving.exchange(true);
-  return !was_set;
+  std::unique_lock l{reserving_lock};
+
+  if (!reserving_pg.has_value()) {
+    reserving_pg = reserving_id;
+    reserving_since = now_is;
+    return true;
+  }
+  ceph_assert(reserving_id != *reserving_pg);
+  return false;
 }
 
-void ScrubQueue::clear_reserving_now()
+void ScrubQueue::clear_reserving_now(spg_t was_reserving_id)
 {
-  a_pg_is_reserving = false;
+  std::unique_lock l{reserving_lock};
+  if (reserving_pg && (*reserving_pg == was_reserving_id)) {
+    reserving_pg.reset();
+  }
+  // otherwise - ignore silently
 }
 
 bool ScrubQueue::is_reserving_now() const
 {
-  return a_pg_is_reserving;
+  // no lock needed, as set_reserving_now() will recheck
+  return reserving_pg.has_value();
 }
