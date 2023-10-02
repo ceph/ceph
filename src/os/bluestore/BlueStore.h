@@ -1101,7 +1101,8 @@ public:
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
-      KeyValueDB::Transaction t);
+      KeyValueDB::Transaction t,
+      uint32_t segment_size);
 
     /// initialize Shards from the onode
     void init_shards(bool loaded, bool dirty);
@@ -2521,6 +2522,7 @@ private:
   std::atomic<uint64_t> comp_max_blob_size = {0};
 
   std::atomic<uint64_t> max_blob_size = {0};  ///< maximum blob size
+  std::atomic<uint32_t> segment_size = {0};  ///< snapshot of conf value "bluestore_onode_segment_size"
 
   uint64_t kv_ios = 0;
   uint64_t kv_throttle_costs = 0;
