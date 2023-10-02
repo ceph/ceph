@@ -1,0 +1,213 @@
+<div cdsCol
+     [columnNumbers]="{ md: 4 }">
+  <ng-container *cdFormLoading="loading">
+    <form name="smbShareForm"
+          #formDir="ngForm"
+          [formGroup]="smbShareForm"
+          novalidate>
+      <div i18n="form title"
+           class="form-header">
+        {{ action | titlecase }} {{ resource | upperFirst }}
+      </div>
+
+      <!-- Share Id -->
+      <div class="form-item">
+        <cds-text-label
+          labelInputID="share_id"
+          i18n
+          helperText="Unique share identifier"
+          i18n-helperText
+          cdRequiredField="Share Name"
+          [invalid]="smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty"
+          [invalidText]="shareError"
+          >Share Name
+          <input
+            cdsText
+            type="text"
+            id="share_id"
+            formControlName="share_id"
+            [invalid]="smbShareForm.controls.share_id.invalid && smbShareForm.controls.share_id.dirty"
+          />
+        </cds-text-label>
+        <ng-template #shareError>
+          <span
+            class="invalid-feedback"
+            *ngIf="smbShareForm.showError('share_id', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+
+      <!-- Volume -->
+      <div class="form-item">
+        <cds-select
+          formControlName="volume"
+          label="Volume"
+          cdRequiredField="Volume"
+          id="volume"
+          (change)="volumeChangeHandler()"
+          [invalid]="smbShareForm.controls.volume.invalid && smbShareForm.controls.volume.dirty"
+          [invalidText]="volumeError"
+          i18n-label>
+          <option *ngIf="allFsNames?.length === 0"
+                  value=""
+                  i18n>
+            -- No filesystem available --
+          </option>
+          <option *ngIf="allFsNames !== null && allFsNames?.length > 0"
+                  value=""
+                  i18n>
+            -- Select the filesystem --
+          </option>
+          <option *ngFor="let filesystem of allFsNames"
+                  [value]="filesystem.name"
+                  i18n>
+            {{ filesystem.name }}
+          </option>
+        </cds-select>
+        <ng-template #volumeError>
+          <span
+            class="invalid-feedback"
+            *ngIf="smbShareForm.showError('volume', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+
+      <div class="form-item"
+           *ngIf="smbShareForm.getValue('volume')">
+        <cds-select
+          formControlName="subvolume_group"
+          label="Subvolume Group"
+          id="subvolume_group"
+          (change)="getSubVol()"
+          [skeleton]="allsubvolgrps === null"
+          i18n-label>
+          <option *ngIf="allsubvolgrps === null"
+                  value=""
+                  i18n>Loading...</option>
+          <option *ngIf="allsubvolgrps !== null && allsubvolgrps.length >= 0"
+                  value=""
+                  i18n>
+            -- Select the CephFS subvolume group --
+          </option>
+          <option
+            *ngFor="let subvol_grp of allsubvolgrps"
+            [value]="subvol_grp.name"
+            [selected]="subvol_grp.name === smbShareForm.get('subvolume_group').value"
+            i18n
+          >
+            {{ subvol_grp.name }}
+          </option>
+        </cds-select>
+      </div>
+
+      <div class="form-group row"
+           *ngIf="smbShareForm.getValue('volume')">
+        <cds-select
+          formControlName="subvolume"
+          label="Subvolume"
+          id="subvolume"
+          (change)="setSubVolPath()"
+          [skeleton]="allsubvols === null"
+        >
+          <option *ngIf="allsubvols === null"
+                  value=""
+                  i18n>Loading...</option>
+          <option *ngIf="allsubvols !== null && allsubvols.length === 0"
+                  value=""
+                  i18n>
+            -- No SMB subvolume available --
+          </option>
+          <option *ngIf="allsubvols !== null && allsubvols.length > 0"
+                  value=""
+                  i18n>
+            -- Select the SMB subvolume --
+          </option>
+          <option
+            *ngFor="let subvolume of allsubvols"
+            [value]="subvolume.name"
+            [selected]="subvolume.name === smbShareForm.get('subvolume').value"
+            i18n
+          >
+            {{ subvolume.name }}
+          </option>
+        </cds-select>
+      </div>
+
+    <!-- Path -->
+    <div class="form-item form-item-append"
+         cdsRow>
+      <div cdsCol>
+        <cds-text-label labelInputID="prefixedPath"
+                        i18n
+                        helperText="A path is a relative path.">Prefixed Path
+          <input cdsText
+                 type="text"
+                 id="prefixedPath"
+                 formControlName="prefixedPath" />
+        </cds-text-label>
+      </div>
+      <div cdsCol>
+        <cds-text-label
+          labelInputID="inputPath"
+          i18n
+          [invalid]="
+            smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
+          "
+          [invalidText]="pathError"
+          helperText="A relative path in a cephFS file system."
+          cdRequiredField="Path"
+          >Input Path
+          <input
+            cdsText
+            type="text"
+            id="inputPath"
+            formControlName="inputPath"
+            [invalid]="
+              smbShareForm.controls.inputPath.invalid && smbShareForm.controls.inputPath.dirty
+            "
+          />
+        </cds-text-label>
+        <ng-template #pathError>
+          <span
+            class="invalid-feedback"
+            *ngIf="smbShareForm.showError('inputPath', formDir, 'required')"
+            i18n
+            >This field is required.</span
+          >
+        </ng-template>
+      </div>
+    </div>
+
+      <!-- Browseable -->
+      <div class="form-item">
+        <cds-checkbox id="browseable"
+                      formControlName="browseable"
+                      i18n>Browseable
+          <cd-help-text
+            >If selected the share will be included in share listings visible to
+            clients.</cd-help-text
+          >
+        </cds-checkbox>
+      </div>
+
+      <!-- Readonly -->
+      <div class="form-item">
+        <cds-checkbox id="readonly"
+                      formControlName="readonly"
+                      i18n>Readonly
+          <cd-help-text>If selected no clients are permitted to write to the share.</cd-help-text>
+        </cds-checkbox>
+      </div>
+      <cd-form-button-panel
+        (submitActionEvent)="submitAction()"
+        [form]="smbShareForm"
+        [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"
+        wrappingClass="text-right"
+      ></cd-form-button-panel>
+    </form>
+  </ng-container>
+</div>

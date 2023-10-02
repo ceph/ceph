@@ -1,0 +1,14 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(CACHE_POOL_NO_HIT_SET\)
+      - is full \(reached quota
+      - \(POOL_FULL\)
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rbd/test_librbd.sh
+    env:
+      RBD_FEATURES: "125"

@@ -1,0 +1,21 @@
+<ng-container *ngIf="smbShares$ | async as smbShares">
+  <cd-table
+    [data]="smbShares"
+    columnMode="flex"
+    [columns]="columns"
+    selectionType="single"
+    [hasDetails]="false"
+    (fetchData)="loadSMBShares()"
+    (updateSelection)="updateSelection($event)"
+  >
+    <div class="table-actions">
+      <cd-table-actions
+        class="btn-group"
+        [permission]="permission"
+        [selection]="selection"
+        [tableActions]="tableActions"
+      >
+      </cd-table-actions>
+    </div>
+  </cd-table>
+</ng-container>

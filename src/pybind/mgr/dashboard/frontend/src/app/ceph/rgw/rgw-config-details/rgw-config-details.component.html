@@ -1,0 +1,17 @@
+<ng-container *ngIf="selection">
+  <nav ngbNav
+       #nav="ngbNav"
+       id="tabset-config-details"
+       class="nav-tabs"
+       cdStatefulTab="config-details">
+    <ng-container ngbNavItem="details">
+      <a ngbNavLink
+         i18n>Details</a>
+      <ng-template ngbNavContent>
+        <cd-table-key-value [data]="transformedData">
+        </cd-table-key-value>
+      </ng-template>
+    </ng-container>
+  </nav>
+  <div [ngbNavOutlet]="nav"></div>
+</ng-container>

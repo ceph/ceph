@@ -1,0 +1,21 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        # crimson's osd objectstore option
+        crimson osd objectstore: seastore
+        seastore main device type: RANDOM_BLOCK_SSD
+        debug seastore: 20
+        debug seastore onode: 20
+        debug seastore odata: 20
+        debug seastore omap: 20
+        debug seastore tm: 20
+        debug seastore t: 20
+        debug seastore cleaner: 20
+        debug seastore epm: 20
+        debug seastore lba: 20
+        debug seastore fixedkv tree: 20
+        debug seastore cache: 20
+        debug seastore journal: 20
+        debug seastore device: 20
+        debug seastore backref: 20
