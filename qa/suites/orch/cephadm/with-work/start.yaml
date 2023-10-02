@@ -11,3 +11,4 @@ overrides:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(CEPHADM_STRAY_DAEMON\)
+      - \(POOL_APP_NOT_ENABLED\)

@@ -19,6 +19,8 @@ openstack:
     size: 10 # GB
 overrides:
   ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         osd shutdown pgref assert: true

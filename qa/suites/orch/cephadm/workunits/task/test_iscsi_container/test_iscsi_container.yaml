@@ -24,3 +24,4 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(CEPHADM_STRAY_DAEMON\)
+      - \(POOL_APP_NOT_ENABLED\)

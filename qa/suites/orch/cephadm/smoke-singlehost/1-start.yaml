@@ -25,6 +25,7 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(OSD_DOWN\)
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         osd shutdown pgref assert: true
