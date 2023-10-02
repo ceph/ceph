@@ -6372,6 +6372,15 @@ options:
   desc: How long cleaner should sleep before re-checking utilization
   default: 5
   with_legacy: true
+- name: bluestore_segment_data_size
+  type: uint
+  level: advanced
+  desc: When objects size grows too large BlueStore splits allocation metadata into
+    smaller RocksDB keys (shards). Sometimes when multiple blobs overlap each other
+    some of them must belongs to more then one shards. Its inefficient.
+    Segmentation of data causes blobs to never cross specific lines.
+  default: 0
+  with_legacy: true
 - name: jaeger_tracing_enable
   type: bool
   level: advanced

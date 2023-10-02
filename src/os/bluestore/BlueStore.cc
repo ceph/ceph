@@ -3580,6 +3580,7 @@ void BlueStore::ExtentMap::reshard(
     dout(20) << __func__ << "   spanning blob " << p.first << " " << *p.second
 	     << dendl;
   }
+  uint64_t data_reshard_end;
   // determine shard index range
   unsigned si_begin = 0, si_end = 0;
   if (!shards.empty()) {
@@ -3609,7 +3610,11 @@ void BlueStore::ExtentMap::reshard(
   }
 
   fault_range(db, needs_reshard_begin, (needs_reshard_end - needs_reshard_begin));
-
+  if (needs_reshard_end == OBJECT_MAX_SIZE) {
+    data_reshard_end = extent_map.empty() ? needs_reshard_end : extent_map.rbegin()->blob_end();
+  } else {
+    data_reshard_end = needs_reshard_end;
+  }
   // we may need to fault in a larger interval later must have all
   // referring extents for spanning blobs loaded in order to have
   // accurate use_tracker values.
@@ -3646,6 +3651,12 @@ void BlueStore::ExtentMap::reshard(
   dout(20) << __func__ << "  extent_avg " << extent_avg << ", target " << target
 	   << ", slop " << slop << dendl;
 
+  uint32_t data_segment_size = cct->_conf->bluestore_segment_data_size;
+  uint32_t next_boundary = data_segment_size;
+  uint32_t encoded_segment_estimate = /* bytes / ((needs_reshard_end - needs_reshard_begin) / data_segment_size) */
+    bytes * data_segment_size / (data_reshard_end - needs_reshard_begin);
+
+  bool onode_data_has_boundaries = (data_segment_size != 0);
   // reshard
   unsigned estimate = 0;
   unsigned offset = needs_reshard_begin;
@@ -3660,10 +3671,25 @@ void BlueStore::ExtentMap::reshard(
     }
     dout(30) << " extent " << *e << dendl;
 
-    // disfavor shard boundaries that span a blob
-    bool would_span = (e->logical_offset < max_blob_end) || e->blob_offset;
-    if (estimate &&
-	estimate + extent_avg > target + (would_span ? slop : 0)) {
+    bool make_shard_here = false;
+    if (onode_data_has_boundaries) {
+      if (e->blob_start() >= next_boundary) {
+	// this it the place we want to have shard boundary
+	if ((estimate >= target /*we have enough already*/) ||
+	    (estimate + encoded_segment_estimate >= target * 3 / 2)
+	    /*we will be too large if we wait for next segment*/) {
+	  make_shard_here = true;
+	}
+	next_boundary = p2align(e->blob_end() + data_segment_size, data_segment_size);
+      }
+    } else {
+      // disfavor shard boundaries that span a blob
+      bool would_span = (e->logical_offset < max_blob_end) || (e->blob_offset != 0);
+      if (estimate && estimate + extent_avg > target + (would_span ? slop : 0)) {
+	make_shard_here = true;
+      }
+    }
+    if (make_shard_here) {
       // new shard
       if (offset == needs_reshard_begin) {
 	new_shard_info.emplace_back(bluestore_onode_t::shard_info());
@@ -16395,8 +16421,20 @@ void BlueStore::_do_write_data(
     if (head_length) {
       _do_write_small(txc, c, o, head_offset, head_length, p, wctx);
     }
-
-    _do_write_big(txc, c, o, middle_offset, middle_length, p, wctx);
+    uint32_t segment_size = cct->_conf->bluestore_segment_data_size;
+    if (segment_size) {
+      // split data to chunks
+      uint64_t write_offset = middle_offset;
+      while (write_offset < middle_offset + middle_length) {
+	uint64_t segment_end = std::min(
+	  p2roundup<uint64_t>(write_offset + segment_size, segment_size),
+	  middle_offset + middle_length);
+	_do_write_big(txc, c, o, write_offset, segment_end - write_offset, p, wctx);
+	write_offset = segment_end;
+      }
+    } else {
+      _do_write_big(txc, c, o, middle_offset, middle_length, p, wctx);
+    }
 
     if (tail_length) {
       _do_write_small(txc, c, o, tail_offset, tail_length, p, wctx);
