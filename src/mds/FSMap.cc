@@ -15,7 +15,7 @@
 #include <ostream>
 
 #include "FSMap.h"
-
+#include "common/debug.h"
 #include "common/StackStringStream.h"
 
 #ifdef WITH_SEASTAR
@@ -25,6 +25,11 @@
 #endif
 #include "global/global_context.h"
 #include "mon/health_check.h"
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "FSMap "
 
 using std::list;
 using std::pair;
