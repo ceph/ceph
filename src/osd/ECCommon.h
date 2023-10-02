@@ -28,18 +28,10 @@
 #include "osd/OSDMap.h"
 #include "osd/osd_op_util.h"
 
-struct ECTransaction {
-  struct WritePlan {
-    bool invalidates_cache = false; // Yes, both are possible
-    std::map<hobject_t,extent_set> to_read;
-    std::map<hobject_t,extent_set> will_write; // superset of to_read
-
-    std::map<hobject_t,ECUtil::HashInfoRef> hash_infos;
-  };
-};
 
 typedef void* OpRequestRef;
 typedef crimson::osd::ObjectContextRef ObjectContextRef;
+#include "ECTransaction.h"
 #else
 #include "common/WorkQueue.h"
 #endif
