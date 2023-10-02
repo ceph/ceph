@@ -39,20 +39,21 @@ namespace ECTransaction {
     WritePlan plan;
     t.safe_create_traverse(
       [&](std::pair<const hobject_t, PGTransaction::ObjectOperation> &i) {
-	ECUtil::HashInfoRef hinfo = get_hinfo(i.first);
-	plan.hash_infos[i.first] = hinfo;
+        const auto& [obj, op] = i;
+	ECUtil::HashInfoRef hinfo = get_hinfo(obj);
+	plan.hash_infos[obj] = hinfo;
 
 	uint64_t projected_size =
 	  hinfo->get_projected_total_logical_size(sinfo);
 
-	if (i.second.deletes_first()) {
+	if (op.deletes_first()) {
 	  ldpp_dout(dpp, 20) << __func__ << ": delete, setting projected size"
 			     << " to 0" << dendl;
 	  projected_size = 0;
 	}
 
 	hobject_t source;
-	if (i.second.has_source(&source)) {
+	if (op.has_source(&source)) {
 	  // typically clone or mv
 	  plan.invalidates_cache = true;
 
@@ -61,27 +62,27 @@ namespace ECTransaction {
 	  plan.hash_infos[source] = shinfo;
 	}
 
-	auto &will_write = plan.will_write[i.first];
-	if (i.second.truncate &&
-	    i.second.truncate->first < projected_size) {
+	auto &will_write = plan.will_write[obj];
+	if (op.truncate &&
+	    op.truncate->first < projected_size) {
 	  if (!(sinfo.logical_offset_is_stripe_aligned(
-		  i.second.truncate->first))) {
-	    plan.to_read[i.first].union_insert(
-	      sinfo.logical_to_prev_stripe_offset(i.second.truncate->first),
+		  op.truncate->first))) {
+	    plan.to_read[obj].union_insert(
+	      sinfo.logical_to_prev_stripe_offset(op.truncate->first),
 	      sinfo.get_stripe_width());
 
 	    ldpp_dout(dpp, 20) << __func__ << ": unaligned truncate" << dendl;
 
 	    will_write.union_insert(
-	      sinfo.logical_to_prev_stripe_offset(i.second.truncate->first),
+	      sinfo.logical_to_prev_stripe_offset(op.truncate->first),
 	      sinfo.get_stripe_width());
 	  }
 	  projected_size = sinfo.logical_to_next_stripe_offset(
-	    i.second.truncate->first);
+	    op.truncate->first);
 	}
 
 	extent_set raw_write_set;
-	for (auto &&extent: i.second.buffer_updates) {
+	for (auto &&extent: op.buffer_updates) {
 	  using BufferUpdate = PGTransaction::ObjectOperation::BufferUpdate;
 	  if (boost::get<BufferUpdate::CloneRange>(&(extent.get_val()))) {
 	    ceph_assert(
@@ -109,7 +110,7 @@ namespace ECTransaction {
 	    ldpp_dout(dpp, 20) << __func__ << ": reading partial head stripe "
 			       << head_start << "~" << sinfo.get_stripe_width()
 			       << dendl;
-	    plan.to_read[i.first].union_insert(
+	    plan.to_read[obj].union_insert(
 	      head_start, sinfo.get_stripe_width());
 	  }
 
@@ -127,7 +128,7 @@ namespace ECTransaction {
 	    ldpp_dout(dpp, 20) << __func__ << ": reading partial tail stripe "
 			       << tail_start << "~" << sinfo.get_stripe_width()
 			       << dendl;
-	    plan.to_read[i.first].union_insert(
+	    plan.to_read[obj].union_insert(
 	      tail_start, sinfo.get_stripe_width());
 	  }
 
@@ -145,10 +146,9 @@ namespace ECTransaction {
 	  }
 	}
 
-	if (i.second.truncate &&
-	    i.second.truncate->second > projected_size) {
+	if (op.truncate && op.truncate->second > projected_size) {
 	  uint64_t truncating_to =
-	    sinfo.logical_to_next_stripe_offset(i.second.truncate->second);
+	    sinfo.logical_to_next_stripe_offset(op.truncate->second);
 	  ldpp_dout(dpp, 20) << __func__ << ": truncating out to "
 			     <<  truncating_to
 			     << dendl;
@@ -157,7 +157,7 @@ namespace ECTransaction {
 	  projected_size = truncating_to;
 	}
 
-	ldpp_dout(dpp, 20) << __func__ << ": " << i.first
+	ldpp_dout(dpp, 20) << __func__ << ": " << obj
 			   << " projected size "
 			   << projected_size
 			   << dendl;
@@ -166,11 +166,11 @@ namespace ECTransaction {
 	  projected_size);
 
 	/* validate post conditions:
-	 * to_read should have an entry for i.first iff it isn't empty
-	 * and if we are reading from i.first, we can't be renaming or
+	 * to_read should have an entry for `obj` if it isn't empty
+	 * and if we are reading from `obj`, we can't be renaming or
 	 * cloning it */
-	ceph_assert(plan.to_read.count(i.first) == 0 ||
-	       (!plan.to_read.at(i.first).empty() &&
+	ceph_assert(plan.to_read.count(obj) == 0 ||
+	       (!plan.to_read.at(obj).empty() &&
 		!i.second.has_source()));
       });
     return plan;
