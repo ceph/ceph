@@ -109,25 +109,47 @@ sc::result NotActive::react(const AfterRepairScrub&)
   return transit<ReservingReplicas>();
 }
 
+// ----------------------- Session -----------------------------------------
+
+Session::Session(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session")
+{
+  dout(10) << "-- state -->> Session" << dendl;
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+
+  // while we've checked the 'someone is reserving' flag before queueing
+  // the start-scrub event, it's possible that the flag was set in the meantime.
+  // Handling this case here requires adding a new sub-state, and the
+  // complication of reporting a failure to the caller in a new failure
+  // path. On the other hand - ignoring an ongoing reservation on rare
+  // occasions will cause no harm.
+  // We choose ignorance.
+  std::ignore = scrbr->set_reserving_now();
+}
+
+Session::~Session()
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+
+  // note the interaction between clearing the 'queued' flag and two
+  // other states: the snap-mapper and the scrubber internal state.
+  // All of these must be cleared in the correct order, and the snap mapper
+  // (re-triggered by resetting the 'queued' flag) must not resume before
+  // the scrubber is reset.
+  scrbr->clear_pgscrub_state();
+}
+
+
 // ----------------------- ReservingReplicas ---------------------------------
 
 ReservingReplicas::ReservingReplicas(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReservingReplicas")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/ReservingReplicas")
 {
   dout(10) << "-- state -->> ReservingReplicas" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
-  // prevent the OSD from starting another scrub while we are trying to secure
-  // replicas resources
-  if (!scrbr->set_reserving_now()) {
-    dout(1) << "ReservingReplicas::ReservingReplicas() some other PG is "
-		"already reserving replicas resources"
-	     << dendl;
-    post_event(ReservationFailure{});
-    return;
-  }
-  m_holding_isreserving_flag = true;
   scrbr->reserve_replicas();
 
   auto timeout = scrbr->get_cct()->_conf.get_val<
@@ -143,9 +165,9 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
 ReservingReplicas::~ReservingReplicas()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  if (m_holding_isreserving_flag) {
-    scrbr->clear_reserving_now();
-  }
+  // it's OK to try and clear the flag even if we don't hold it
+  // (the flag remembers the actual holder)
+  scrbr->clear_reserving_now();
 }
 
 sc::result ReservingReplicas::react(const ReservationTimeout&)
@@ -166,18 +188,6 @@ sc::result ReservingReplicas::react(const ReservationFailure&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "ReservingReplicas::react(const ReservationFailure&)" << dendl;
-
-  // the Scrubber must release all resources and abort the scrubbing
-  scrbr->clear_pgscrub_state();
-  return transit<NotActive>();
-}
-
-/**
- * note: the event poster is handling the scrubber reset
- */
-sc::result ReservingReplicas::react(const FullReset&)
-{
-  dout(10) << "ReservingReplicas::react(const FullReset&)" << dendl;
   return transit<NotActive>();
 }
 
@@ -185,7 +195,7 @@ sc::result ReservingReplicas::react(const FullReset&)
 
 ActiveScrubbing::ActiveScrubbing(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "ActiveScrubbing")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/ActiveScrubbing")
 {
   dout(10) << "-- state -->> ActiveScrubbing" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -199,8 +209,6 @@ ActiveScrubbing::~ActiveScrubbing()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(15) << __func__ << dendl;
-  scrbr->unreserve_replicas();
-  scrbr->clear_queued_or_active();
 }
 
 /*
@@ -212,14 +220,6 @@ sc::result ActiveScrubbing::react(const InternalError&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << __func__ << dendl;
-  scrbr->clear_pgscrub_state();
-  return transit<NotActive>();
-}
-
-sc::result ActiveScrubbing::react(const FullReset&)
-{
-  dout(10) << "ActiveScrubbing::react(const FullReset&)" << dendl;
-  // caller takes care of clearing the scrubber & FSM states
   return transit<NotActive>();
 }
 
@@ -237,9 +237,9 @@ sc::result ActiveScrubbing::react(const FullReset&)
  */
 RangeBlocked::RangeBlocked(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/RangeBlocked")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/RangeBlocked")
 {
-  dout(10) << "-- state -->> Act/RangeBlocked" << dendl;
+  dout(10) << "-- state -->> Session/Act/RangeBlocked" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   auto grace = scrbr->get_range_blocked_grace();
@@ -287,9 +287,9 @@ sc::result RangeBlocked::react(const RangeBlockedAlarm&)
  */
 PendingTimer::PendingTimer(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/PendingTimer")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/PendingTimer")
 {
-  dout(10) << "-- state -->> Act/PendingTimer" << dendl;
+  dout(10) << "-- state -->> Session/Act/PendingTimer" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   auto sleep_time = scrbr->get_scrub_sleep_time();
@@ -328,9 +328,9 @@ sc::result PendingTimer::react(const SleepComplete&)
  */
 NewChunk::NewChunk(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/NewChunk")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/NewChunk")
 {
-  dout(10) << "-- state -->> Act/NewChunk" << dendl;
+  dout(10) << "-- state -->> Session/Act/NewChunk" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   scrbr->get_preemptor().adjust_parameters();
@@ -355,9 +355,9 @@ sc::result NewChunk::react(const SelectedChunkFree&)
 
 WaitPushes::WaitPushes(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/WaitPushes")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/WaitPushes")
 {
-  dout(10) << " -- state -->> Act/WaitPushes" << dendl;
+  dout(10) << " -- state -->> Session/Act/WaitPushes" << dendl;
   post_event(ActivePushesUpd{});
 }
 
@@ -383,9 +383,9 @@ sc::result WaitPushes::react(const ActivePushesUpd&)
 
 WaitLastUpdate::WaitLastUpdate(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/WaitLastUpdate")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/WaitLastUpdate")
 {
-  dout(10) << " -- state -->> Act/WaitLastUpdate" << dendl;
+  dout(10) << " -- state -->> Session/Act/WaitLastUpdate" << dendl;
   post_event(UpdatesApplied{});
 }
 
@@ -427,9 +427,9 @@ sc::result WaitLastUpdate::react(const InternalAllUpdates&)
 
 BuildMap::BuildMap(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/BuildMap")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/BuildMap")
 {
-  dout(10) << " -- state -->> Act/BuildMap" << dendl;
+  dout(10) << " -- state -->> Session/Act/BuildMap" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   // no need to check for an epoch change, as all possible flows that brought
@@ -477,9 +477,9 @@ sc::result BuildMap::react(const IntLocalMapDone&)
 
 DrainReplMaps::DrainReplMaps(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/DrainReplMaps")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/DrainReplMaps")
 {
-  dout(10) << "-- state -->> Act/DrainReplMaps" << dendl;
+  dout(10) << "-- state -->> Session/Act/DrainReplMaps" << dendl;
   // we may have got all maps already. Send the event that will make us check.
   post_event(GotReplicas{});
 }
@@ -504,9 +504,9 @@ sc::result DrainReplMaps::react(const GotReplicas&)
 
 WaitReplicas::WaitReplicas(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/WaitReplicas")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/WaitReplicas")
 {
-  dout(10) << "-- state -->> Act/WaitReplicas" << dendl;
+  dout(10) << "-- state -->> Session/Act/WaitReplicas" << dendl;
   post_event(GotReplicas{});
 }
 
@@ -564,10 +564,10 @@ sc::result WaitReplicas::react(const DigestUpdate&)
 
 WaitDigestUpdate::WaitDigestUpdate(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Act/WaitDigestUpdate")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/Act/WaitDigestUpdate")
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "-- state -->> Act/WaitDigestUpdate" << dendl;
+  dout(10) << "-- state -->> Session/Act/WaitDigestUpdate" << dendl;
 
   // perform an initial check: maybe we already
   // have all the updates we need:
