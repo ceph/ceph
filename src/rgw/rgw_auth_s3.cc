@@ -1141,7 +1141,7 @@ bool AWSv4ComplMulti::is_signature_mismatched()
   }
 }
 
-size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
+size_t AWSv4ComplMulti::recv_chunk(char* const buf, const size_t buf_max, bool& eof)
 {
   /* Buffer stores only parsed stream. Raw values reflect the stream
    * we're getting from a client. */
@@ -1166,6 +1166,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
                                                    to_extract);
       parsing_buf.resize(parsing_buf.size() - (to_extract - received));
       if (received == 0) {
+        eof = true;
         break;
       }
 
@@ -1215,6 +1216,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
     dout(30) << "AWSv4ComplMulti: to_extract=" << to_extract << ", received=" << received << dendl;
 
     if (received == 0) {
+      eof = true;
       break;
     }
 
@@ -1227,6 +1229,19 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
 
   dout(20) << "AWSv4ComplMulti: filled=" << buf_pos << dendl;
   return buf_pos;
+}
+
+size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
+{
+  bool eof = false;
+  size_t total = 0;
+
+  while (total < buf_max && !eof) {
+    const size_t received = recv_chunk(buf + total, buf_max - total, eof);
+    total += received;
+  }
+  dout(20) << "AWSv4ComplMulti: received=" << total << dendl;
+  return total;
 }
 
 void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)
