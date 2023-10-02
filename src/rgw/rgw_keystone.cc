@@ -137,9 +137,9 @@ std::string CephCtxConfig::get_admin_password() const noexcept  {
 }
 
 int Service::get_admin_token(const DoutPrefixProvider *dpp,
-                             CephContext* const cct,
                              TokenCache& token_cache,
                              const Config& config,
+                             optional_yield y,
                              std::string& token)
 {
   /* Let's check whether someone uses the deprecated "admin token" feauture
@@ -160,7 +160,7 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
   }
 
   /* Call Keystone now. */
-  const auto ret = issue_admin_token_request(dpp, cct, config, t);
+  const auto ret = issue_admin_token_request(dpp, config, y, t);
   if (! ret) {
     token_cache.add_admin(t);
     token = t.token.id;
@@ -170,8 +170,8 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
 }
 
 int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
-                                       CephContext* const cct,
                                        const Config& config,
+                                       optional_yield y,
                                        TokenEnvelope& t)
 {
   std::string token_url = config.get_endpoint_url();
@@ -180,7 +180,7 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
   }
 
   bufferlist token_bl;
-  RGWGetKeystoneAdminToken token_req(cct, "POST", "", &token_bl);
+  RGWGetKeystoneAdminToken token_req(dpp->get_cct(), "POST", "", &token_bl);
   token_req.append_header("Content-Type", "application/json");
   JSONFormatter jf;
 
@@ -210,7 +210,7 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
 
   token_req.set_url(token_url);
 
-  const int ret = token_req.process(null_yield);
+  const int ret = token_req.process(y);
   if (ret < 0) {
     return ret;
   }
@@ -221,7 +221,7 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
     return -EACCES;
   }
 
-  if (t.parse(dpp, cct, token_req.get_subject_token(), token_bl,
+  if (t.parse(dpp, token_req.get_subject_token(), token_bl,
               keystone_version) != 0) {
     return -EINVAL;
   }
@@ -230,12 +230,13 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
 }
 
 int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
-                                         CephContext * const cct,
+                                         optional_yield y,
                                          std::string& token)
 {
   using keystone_config_t = rgw::keystone::CephCtxConfig;
   using keystone_cache_t = rgw::keystone::TokenCache;
 
+  CephContext* cct = dpp->get_cct();
   auto& config = keystone_config_t::get_instance();
   auto& token_cache = keystone_cache_t::get_instance<keystone_config_t>();
 
@@ -285,7 +286,7 @@ int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
   token_req.set_url(token_url);
 
   ldpp_dout(dpp, 20) << "Requesting secret from barbican url=" << token_url << dendl;
-  const int ret = token_req.process(null_yield);
+  const int ret = token_req.process(y);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;
@@ -297,7 +298,7 @@ int Service::get_keystone_barbican_token(const DoutPrefixProvider *dpp,
     return -EACCES;
   }
 
-  if (t.parse(dpp, cct, token_req.get_subject_token(), token_bl,
+  if (t.parse(dpp, token_req.get_subject_token(), token_bl,
               keystone_version) != 0) {
     return -EINVAL;
   }
@@ -320,7 +321,6 @@ bool TokenEnvelope::has_role(const std::string& r) const
 }
 
 int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
-                         CephContext* const cct,
                          const std::string& token_str,
                          ceph::bufferlist& bl,
                          const ApiVersion version)

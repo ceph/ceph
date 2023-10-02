@@ -3570,7 +3570,7 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_remove_sse_s3_bucket_key(s);
+  op_ret = rgw_remove_sse_s3_bucket_key(s, y);
   if (op_ret != 0) {
       // do nothing; it will already have been logged
   }
