@@ -1097,7 +1097,8 @@ public:
     decltype(BlueStore::Blob::id) allocate_spanning_blob_id();
     void reshard(
       KeyValueDB *db,
-      KeyValueDB::Transaction t);
+      KeyValueDB::Transaction t,
+      uint32_t segment_size);
 
     /// initialize Shards from the onode
     void init_shards(bool loaded, bool dirty);
@@ -1681,6 +1682,7 @@ public:
 
     //pool options
     pool_opts_t pool_opts;
+    uint32_t segment_size;
     ContextQueue *commit_queue;
 
     OnodeCacheShard* get_onode_cache() const {
