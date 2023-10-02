@@ -5,6 +5,9 @@
 #include "crimson/osd/shard_services.h"
 #include "ec_backend.h"
 
+#include "osd/PGTransaction.h"
+#include "osd/ECTransaction.h"
+
 namespace {
   seastar::logger& logger() {
     return crimson::get_logger(ceph_subsys_osd);
@@ -55,6 +58,186 @@ ECBackend::_read(const hobject_t& hoid,
   return seastar::make_ready_future<bufferlist>();
 }
 
+struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
+  PGTransactionUPtr t;
+
+  static PGTransactionUPtr transate_transaction(
+    ceph::os::Transaction&& t,
+    crimson::osd::ObjectContextRef &&obc)
+  {
+    auto t_pg = std::make_unique<PGTransaction>();
+    t_pg->add_obc(std::move(obc));
+    auto i = std::begin(t);
+    while (i.have_op()) {
+      auto* op = i.decode_op();
+      logger().debug("ECBackend::{} decoded op={} oid={} dest_oid={}",
+		     __func__,
+		     op->op,
+		     i.get_oid(op->oid),
+		     i.get_oid(op->dest_oid));
+      switch (op->op) {
+      case ceph::os::Transaction::OP_NOP:
+	// please notice PG::Transaction nop() takes hoid but
+	// the os::Transaction::nop() is parameterless.
+	continue;
+      case ceph::os::Transaction::OP_CREATE:
+	t_pg->create(i.get_oid(op->oid).hobj);
+	break;
+      case ceph::os::Transaction::OP_TOUCH:
+	t_pg->create(i.get_oid(op->oid).hobj);
+	break;
+      case ceph::os::Transaction::OP_REMOVE:
+	t_pg->remove(i.get_oid(op->oid).hobj);
+	break;
+      case ceph::os::Transaction::OP_SETATTR:
+	{
+	auto name = i.decode_string();
+	ceph::bufferlist bl;
+        i.decode_bl(bl);
+	t_pg->setattr(i.get_oid(op->oid).hobj,
+		      name,
+		      bl);
+	}
+	break;
+      case ceph::os::Transaction::OP_SETATTRS:
+	{
+	std::map<std::string, ceph::bufferlist, std::less<>> aset;
+        i.decode_attrset(aset);
+	t_pg->setattrs(i.get_oid(op->oid).hobj, aset);
+	}
+	break;
+      case ceph::os::Transaction::OP_RMATTR:
+	t_pg->rmattr(i.get_oid(op->oid).hobj, i.decode_string());
+	break;
+      case ceph::os::Transaction::OP_RMATTRS:
+	ceph_abort_msg("Not present in PGTransaction");
+	break;
+      case ceph::os::Transaction::OP_OMAP_CLEAR:
+	t_pg->omap_clear(i.get_oid(op->oid).hobj);
+      case ceph::os::Transaction::OP_OMAP_SETKEYS:
+	{
+	std::map<std::string, ceph::bufferlist> aset;
+	i.decode_attrset(aset);
+	t_pg->omap_setkeys(i.get_oid(op->oid).hobj, aset);
+	}
+	break;
+      case ceph::os::Transaction::OP_OMAP_RMKEYS:
+	{
+	bufferlist keys_bl;
+        i.decode_keyset_bl(&keys_bl);
+	t_pg->omap_rmkeys(i.get_oid(op->oid).hobj, keys_bl);
+	}
+	break;
+      case ceph::os::Transaction::OP_OMAP_RMKEYRANGE:
+      case ceph::os::Transaction::OP_OMAP_SETHEADER:
+	{
+	ceph::bufferlist bl;
+	i.decode_bl(bl);
+	t_pg->omap_setheader(i.get_oid(op->oid).hobj, bl);
+	}
+	break;
+      case ceph::os::Transaction::OP_WRITE:
+	{
+	ceph::bufferlist bl;
+	i.decode_bl(bl);
+	t_pg->write(i.get_oid(op->oid).hobj,
+		    op->off,
+		    op->len,
+		    bl,
+		    i.get_fadvise_flags());
+	}
+	break;
+      case ceph::os::Transaction::OP_ZERO:
+	t_pg->zero(i.get_oid(op->oid).hobj, op->off, op->len);
+	break;
+      case ceph::os::Transaction::OP_TRUNCATE:
+	t_pg->truncate(i.get_oid(op->oid).hobj, op->off);
+	break;
+      case ceph::os::Transaction::OP_SETALLOCHINT:
+	t_pg->set_alloc_hint(i.get_oid(op->oid).hobj,
+			     op->expected_object_size,
+			     op->expected_write_size,
+			     op->hint);
+        break;
+      case ceph::os::Transaction::OP_CLONERANGE2:
+	t_pg->clone_range(i.get_oid(op->oid).hobj,
+			  i.get_oid(op->dest_oid).hobj,
+			  op->off,
+			  op->len,
+			  op->dest_off);
+      case ceph::os::Transaction::OP_CLONE:
+	t_pg->clone(i.get_oid(op->dest_oid).hobj, i.get_oid(op->oid).hobj);
+        break;
+      case ceph::os::Transaction::OP_MKCOLL:
+      case ceph::os::Transaction::OP_RMCOLL:
+      case ceph::os::Transaction::OP_COLL_REMOVE:
+      case ceph::os::Transaction::OP_COLL_SETATTR:
+      case ceph::os::Transaction::OP_COLL_RMATTR:
+      case ceph::os::Transaction::OP_COLL_SETATTRS:
+      case ceph::os::Transaction::OP_COLL_HINT:
+      case ceph::os::Transaction::OP_COLL_SET_BITS:
+      case ceph::os::Transaction::OP_COLL_ADD:
+      case ceph::os::Transaction::OP_COLL_MOVE_RENAME:
+      case ceph::os::Transaction::OP_TRY_RENAME:
+      case ceph::os::Transaction::OP_SPLIT_COLLECTION2:
+      case ceph::os::Transaction::OP_MERGE_COLLECTION:
+        ceph_abort_msg("Coll-related ops shouldn't be associated with PGTransaction");
+      default:
+        ceph_abort_msg("Unknown OP");
+      }
+    }
+    return t_pg;
+  }
+
+  ECCrimsonOp(ceph::os::Transaction&& t,
+              crimson::osd::ObjectContextRef &&obc)
+    : t(transate_transaction(std::move(t), std::move(obc))) {
+  }
+
+  void generate_transactions(
+      ceph::ErasureCodeInterfaceRef &ecimpl,
+      pg_t pgid,
+      const ECUtil::stripe_info_t &sinfo,
+      std::map<hobject_t,extent_map> *written,
+      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+      DoutPrefixProvider *dpp,
+      const ceph_release_t require_osd_release) final
+  {
+    assert(t);
+#if 1
+    ECTransaction::generate_transactions(
+      t.get(),
+      plan,
+      ecimpl,
+      pgid,
+      sinfo,
+      remote_read_result,
+      log_entries,
+      written,
+      transactions,
+      &temp_added,
+      &temp_cleared,
+      dpp,
+      require_osd_release);
+#endif
+  }
+
+  template <typename F>
+  static ECTransaction::WritePlan get_write_plan(
+    const ECUtil::stripe_info_t &sinfo,
+    PGTransaction& t,
+    F &&get_hinfo,
+    DoutPrefixProvider *dpp)
+  {
+#if 1
+    return ECTransaction::get_write_plan(
+      sinfo,
+      t,
+      std::forward<F>(get_hinfo),
+      dpp);
+#endif
+  }
+};
 ECBackend::rep_op_fut_t
 ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                const hobject_t& hoid,
