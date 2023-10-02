@@ -1687,14 +1687,14 @@ void PgScrubber::on_replica_reservation_timeout()
   }
 }
 
-bool PgScrubber::set_reserving_now()
-{
-  return m_osds->get_scrub_services().set_reserving_now();
+bool PgScrubber::set_reserving_now() {
+  return m_osds->get_scrub_services().set_reserving_now(m_pg_id,
+                                                        ceph_clock_now());
 }
 
 void PgScrubber::clear_reserving_now()
 {
-  m_osds->get_scrub_services().clear_reserving_now();
+  m_osds->get_scrub_services().clear_reserving_now(m_pg_id);
 }
 
 void PgScrubber::set_queued_or_active()
