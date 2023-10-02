@@ -141,9 +141,9 @@ class OsdScrub {
    * and that PG is trying to acquire replica resources.
    * \retval false if the flag was already set (due to a race)
    */
-  bool set_reserving_now();
+  bool set_reserving_now(spg_t reserving_id, utime_t now_is);
 
-  void clear_reserving_now();
+  void clear_reserving_now(spg_t reserving_id);
 
   /**
    * \returns true if the current time is within the scrub time window
