@@ -1,10 +1,10 @@
 import errno
 import json
 import logging
-import time
 import uuid
 from io import StringIO
 from os.path import join as os_path_join
+from time import sleep
 
 from teuthology.exceptions import CommandFailedError
 
@@ -509,7 +509,7 @@ class TestDump(CephFSTestCase):
             self.fs.set_joinable(b)
             b = not b
 
-        time.sleep(10) # for tick/compaction
+        sleep(10) # for tick/compaction
 
         try:
             self.fs.status(epoch=epoch)
@@ -533,7 +533,7 @@ class TestDump(CephFSTestCase):
 
         # force a new fsmap
         self.fs.set_joinable(False)
-        time.sleep(10) # for tick/compaction
+        sleep(10) # for tick/compaction
 
         status = self.fs.status()
         log.debug(f"new epoch is {status['epoch']}")
