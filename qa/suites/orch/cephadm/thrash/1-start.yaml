@@ -10,3 +10,4 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(OSDMAP_FLAGS\)
+      - \(PG_AVAILABILITY\)

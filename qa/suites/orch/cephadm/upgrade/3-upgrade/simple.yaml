@@ -25,3 +25,4 @@ overrides:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(CEPHADM_FAILED_DAEMON\)
+      - \(PG_AVAILABILITY\)
