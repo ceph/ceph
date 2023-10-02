@@ -1601,6 +1601,11 @@ void EMetaBlob::replay(MDSRank *mds, LogSegment *logseg, int type, MDPeerUpdate 
     }
   }
   if (sessionmapv) {
+    // NB: this value reflects the lag between the sessionmap version and
+    // the version recored in the blob, since, sessionmap.mark_projected()
+    // is called either once when (A): a new preallocated inode list is
+    // started or twice when (B): an inode is chosen from the preallocated
+    // list + (A) - therfore the diffrence being either 1 or 2.
     unsigned diff = (used_preallocated_ino && !preallocated_inos.empty()) ? 2 : 1;
     if (mds->sessionmap.get_version() >= sessionmapv ||
 	unlikely(type == EVENT_UPDATE && skip_replaying_inotable)) {
