@@ -147,13 +147,13 @@ public:
 }; /* RGWPutObj_BlockEncrypt */
 
 
-int rgw_s3_prepare_encrypt(req_state* s,
+int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
                                     std::string>& crypt_http_responses);
 
-int rgw_s3_prepare_decrypt(req_state* s,
+int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string,
@@ -168,7 +168,7 @@ static inline void set_attr(std::map<std::string, bufferlist>& attrs,
   attrs[key] = std::move(bl);
 }
 
-static inline std::string get_str_attribute(std::map<std::string, bufferlist>& attrs,
+static inline std::string get_str_attribute(const std::map<std::string, bufferlist>& attrs,
                                             const char *name)
 {
   auto iter = attrs.find(name);
@@ -178,4 +178,4 @@ static inline std::string get_str_attribute(std::map<std::string, bufferlist>& a
   return iter->second.to_str();
 }
 
-int rgw_remove_sse_s3_bucket_key(req_state *s);
+int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y);
