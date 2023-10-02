@@ -20,6 +20,7 @@ overrides:
       - overall HEALTH_
       - \(MON_DOWN\)
       - mons down, quorum
+      - \(OSD_DOWN\)
       - \(CEPHADM_STRAY_DAEMON\)
       - \(POOL_APP_NOT_ENABLED\)
       - \(PG_AVAILABILITY\)

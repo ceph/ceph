@@ -9,5 +9,6 @@ overrides:
   ceph:
     log-ignorelist:
       - overall HEALTH_
+      - \(OSD_DOWN\)
       - \(OSDMAP_FLAGS\)
       - \(PG_AVAILABILITY\)

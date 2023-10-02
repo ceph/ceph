@@ -19,5 +19,6 @@ overrides:
   ceph:
     log-ignorelist:
       - overall HEALTH_
+      - \(OSD_DOWN\)
       - \(CEPHADM_STRAY_DAEMON\)
       - \(POOL_APP_NOT_ENABLED\)
