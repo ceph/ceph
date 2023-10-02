@@ -12,12 +12,12 @@ fi
 printf "\n-----------Directory Test Executed-----------\n"
 
 redis-cli FLUSHALL
-../../../build/bin/ceph_test_rgw_redis_driver
-printf "\n-----------Redis Driver Test Executed-----------\n"
+../../../build/bin/ceph_test_rgw_d4n_policy
+printf "\n-----------Policy Test Executed-----------\n"
 
-#../../../build/bin/ceph_test_rgw_d4n_filter
-#printf "\n-----------Filter Test Executed-----------\n"
-#redis-cli FLUSHALL
+redis-cli FLUSHALL
+../../../build/bin/ceph_test_rgw_redis_driver
+printf "\n-----------RedisDriver Test Executed-----------\n"
 
 REDIS_PID=$(lsof -i4TCP:6379 -sTCP:LISTEN -t)
 kill $REDIS_PID
