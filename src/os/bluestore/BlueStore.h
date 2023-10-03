@@ -348,6 +348,10 @@ public:
       f->dump_unsigned("length", length);
       f->dump_unsigned("data_length", data.length());
     }
+
+    friend bool operator==(const Buffer &a, const Buffer &b) {
+      return a.poffset == b.poffset && a.length == b.length && a.seq == b.seq;
+    }
   };
 
   struct BufferCacheShard;
@@ -451,17 +455,17 @@ public:
     void _clear(Blob& blob);
 
     // return value is the highest cache_private of a trimmed buffer, or 0.
-    int discard(Blob& blob, uint32_t offset, uint32_t length) {
-      BufferCacheShard* cache = blob.shared_blob->get_cache();
+    int discard(Blob *blob, uint32_t offset, uint32_t length) {
+      BufferCacheShard* cache = blob->shared_blob->get_cache();
       std::lock_guard l(cache->lock);
-      uint64_t poffset = blob.get_blob().calc_offset(offset, nullptr);
+      uint64_t poffset = blob->get_blob().calc_offset(offset, nullptr);
       int ret = _discard(cache, poffset, length);
       cache->_trim();
       return ret;
     }
     int _discard(BufferCacheShard* cache, uint32_t offset, uint32_t length);
 
-    void write(BufferCacheShard* cache, uint64_t seq, uint32_t poffset, ceph::buffer::list& bl,
+    Buffer* write(BufferCacheShard* cache, uint64_t seq, uint32_t poffset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, poffset, bl,
@@ -469,8 +473,9 @@ public:
       b->cache_private = _discard(cache, poffset, bl.length());
       _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
       cache->_trim();
+      return b;
     }
-    void _finish_write(Blob& blob, uint64_t seq);
+    void _finish_write(Blob& blob, Buffer* buffer, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
@@ -484,8 +489,8 @@ public:
 	      interval_set<uint32_t>& res_intervals,
 	      int flags = 0);
 
-    void truncate(BufferCacheShard* cache, uint32_t offset) {
-      discard(cache, offset, (uint32_t)-1 - offset);
+    void truncate(Blob *blob, uint32_t offset) {
+       discard(blob, offset, (uint32_t)-1 - offset);
     }
 
     bool _dup_writing(BufferCacheShard* cache, BufferSpace* to);
@@ -728,10 +733,9 @@ public:
     bool put_ref(Collection *coll, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
     // update caches to reflect content up to seq
-    void finish_write(uint64_t seq);
+    void finish_write(Buffer* buffer, uint64_t seq);
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
-    void finish_write(uint64_t seq);
 
     void get() {
       ++nref;
@@ -740,7 +744,6 @@ public:
       if (--nref == 0)
 	delete this;
     }
-    ~Blob();
 
 #ifdef CACHE_BLOB_BL
     void _encode() const {
@@ -1877,7 +1880,8 @@ private:
 #endif
     
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    std::set<BlobRef> blobs_written; ///< update these on io completion
+    std::set<std::pair<BlobRef, Buffer*>> buffers_written; ///< update these on io completion
+
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions
     std::list<CollectionRef> removed_collections; ///< colls we removed
@@ -2912,9 +2916,9 @@ private:
     ceph::buffer::list& bl,
     unsigned flags) {
     offset = b->get_blob().calc_offset(offset, nullptr);
-    b->dirty_bc().write(b->shared_blob->get_cache(), txc->seq, offset, bl,
+    Buffer* buffer = b->dirty_bc().write(b->shared_blob->get_cache(), txc->seq, offset, bl,
 			     flags);
-    txc->blobs_written.insert(b);
+    txc->buffers_written.insert({b, buffer});
   }
 
   int _collection_list(

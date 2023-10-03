@@ -526,9 +526,9 @@ static void generate_extent_shard_key_and_apply(
 {
   if (key->empty()) { // make full key
     ceph_assert(!onode_key.empty());
-    get_extent_shard_key(onode_key, offset, key);
+    get_extent_shard_key(onode_key, poffset, key);
   } else {
-    rewrite_extent_shard_key(offset, key);
+    rewrite_extent_shard_key(poffset, key);
   }
   apply(*key);
 }
@@ -1726,7 +1726,7 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
       cache_private = b->cache_private;
     }
     if (b->poffset < offset) {
-      int64_t front = poffset - b->poffset;
+      int64_t front = offset - b->poffset;
       if (b->end() > end) {
 	// drop middle (split)
 	uint32_t tail = b->end() - end;
@@ -2904,7 +2904,7 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
 #undef dout_context
 #define dout_context coll->store->cct
 
-void BlueStore::Blob::finish_write(uint64_t seq)
+void BlueStore::Blob::finish_write(Buffer* buffer, uint64_t seq)
 {
   while (true) {
     auto coll = shared_blob->coll;
@@ -2917,7 +2917,7 @@ void BlueStore::Blob::finish_write(uint64_t seq)
 	       << dendl;
       continue;
     }
-    bc._finish_write(*this, seq);
+    bc._finish_write(*this, buffer, seq);
     break;
   }
 }
@@ -14073,8 +14073,8 @@ void BlueStore::_txc_finish(TransContext *txc)
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
 
-  for (auto& sb : txc->blobs_written) {
-    sb->finish_write(txc->seq);
+  for (auto& [b, buffer] : txc->buffers_written) {
+    b->finish_write(buffer, txc->seq);
   }
   txc->blobs_written.clear();
   while (!txc->removed_collections.empty()) {
