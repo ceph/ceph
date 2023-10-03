@@ -50,8 +50,6 @@ public:
     { return next->get_name(); }
   virtual int equals(const std::string& other_zonegroup) const override
     { return next->equals(other_zonegroup); }
-  virtual const std::string& get_endpoint() const override
-    { return next->get_endpoint(); }
   virtual bool placement_target_exists(std::string& target) const override
     { return next->placement_target_exists(target); }
   virtual bool is_master_zonegroup() const override

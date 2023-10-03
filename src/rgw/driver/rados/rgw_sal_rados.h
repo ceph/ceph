@@ -55,8 +55,6 @@ public:
   virtual int equals(const std::string& other_zonegroup) const override {
     return group.equals(other_zonegroup);
   };
-  /** Get the endpoint from zonegroup, or from master zone if not set */
-  virtual const std::string& get_endpoint() const override;
   virtual bool placement_target_exists(std::string& target) const override;
   virtual bool is_master_zonegroup() const override {
     return group.is_master_zonegroup();
