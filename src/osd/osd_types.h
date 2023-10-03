@@ -1231,6 +1231,7 @@ struct pg_pool_t {
     FLAG_CREATING = 1<<15,          // initial pool PGs are being created
     FLAG_EIO = 1<<16,               // return EIO for all client ops
     FLAG_BULK = 1<<17, //pool is large
+    FLAG_TRACK_AVAILABILITY = 1<<18, // enable tracking of availability in this pool
   };
 
   static const char *get_flag_name(uint64_t f) {
@@ -1253,6 +1254,7 @@ struct pg_pool_t {
     case FLAG_CREATING: return "creating";
     case FLAG_EIO: return "eio";
     case FLAG_BULK: return "bulk";
+    case FLAG_TRACK_AVAILABILITY: return "track_availability";
     default: return "???";
     }
   }
@@ -1307,6 +1309,8 @@ struct pg_pool_t {
       return FLAG_EIO;
     if (name == "bulk")
       return FLAG_BULK;
+    if (name == "track_availability")
+      return FLAG_TRACK_AVAILABILITY;
     return 0;
   }
 

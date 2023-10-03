@@ -488,6 +488,17 @@ You may set values for the following keys:
    :Type: Integer
    :Valid Range: 1 sets flag, 0 unsets flag
 
+.. _track_availability:
+
+.. describe:: track_availability
+
+   Set/Unset TRACK_AVAILABILITY flag on a given pool.
+
+   Enable Ceph to track availability on a given pool.
+
+   :Type: Boolean
+   :Valid Range: true/1 sets flag, false/0 unsets flag
+
 .. _hit_set_type:
 
 .. describe:: hit_set_type

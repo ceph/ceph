@@ -531,6 +531,7 @@ private:
                        FastReadType fast_read,
 		       const std::string& pg_autoscale_mode,
 		       bool bulk,
+           bool track_availability,
 		       std::ostream *ss);
   int prepare_new_pool(MonOpRequestRef op);
 

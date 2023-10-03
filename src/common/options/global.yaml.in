@@ -2606,6 +2606,15 @@ options:
   services:
   - mon
   with_legacy: true
+- name: osd_pool_default_flag_track_availability
+  type: bool
+  level: advanced
+  desc: set track_availability flag on new pools
+  fmt_desc: Set the ``track_availability`` flag on new pools. Allowing Ceph to track the availability of the pool.
+  default: false
+  services:
+  - mon
+  with_legacy: true
 - name: osd_pool_default_hit_set_bloom_fpp
   type: float
   level: advanced

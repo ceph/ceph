@@ -5411,7 +5411,7 @@ namespace {
     CSUM_TYPE, CSUM_MAX_BLOCK, CSUM_MIN_BLOCK, FINGERPRINT_ALGORITHM,
     PG_AUTOSCALE_MODE, PG_NUM_MIN, TARGET_SIZE_BYTES, TARGET_SIZE_RATIO,
     PG_AUTOSCALE_BIAS, DEDUP_TIER, DEDUP_CHUNK_ALGORITHM, 
-    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX };
+    DEDUP_CDC_CHUNK_SIZE, POOL_EIO, BULK, PG_NUM_MAX, TRACK_AVAILABILITY};
 
   std::set<osd_pool_get_choices>
     subtract_second_from_first(const std::set<osd_pool_get_choices>& first,
@@ -6171,7 +6171,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
       {"dedup_tier", DEDUP_TIER},
       {"dedup_chunk_algorithm", DEDUP_CHUNK_ALGORITHM},
       {"dedup_cdc_chunk_size", DEDUP_CDC_CHUNK_SIZE},
-      {"bulk", BULK}
+      {"bulk", BULK},
+      {"track_availability", TRACK_AVAILABILITY}
     };
 
     typedef std::set<osd_pool_get_choices> choices_set_t;
@@ -6290,6 +6291,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case POOL_EIO:
 	  case NODELETE:
 	  case BULK:
+    case TRACK_AVAILABILITY:
 	  case NOPGCHANGE:
 	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
@@ -6520,6 +6522,7 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	  case POOL_EIO:
 	  case NODELETE:
 	  case BULK:
+    case TRACK_AVAILABILITY:
 	  case NOPGCHANGE:
 	  case NOSIZECHANGE:
 	  case WRITE_FADVISE_DONTNEED:
@@ -7349,12 +7352,13 @@ int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
   stringstream ss;
   string rule_name;
   bool bulk = false;
+  bool track_availability = false;
   int ret = 0;
   ret = prepare_new_pool(m->name, m->crush_rule, rule_name,
 			 0, 0, 0, 0, 0, 0, 0.0,
 			 erasure_code_profile,
 			 pg_pool_t::TYPE_REPLICATED, 0, FAST_READ_OFF, {}, bulk,
-			 &ss);
+       track_availability, &ss);
 
   if (ret < 0) {
     dout(10) << __func__ << " got " << ret << " " << ss.str() << dendl;
@@ -7978,6 +7982,7 @@ int OSDMonitor::prepare_new_pool(string& name,
                                  FastReadType fast_read,
 				 const string& pg_autoscale_mode,
 				 bool bulk,
+         bool track_availability,
 				 ostream *ss)
 {
   if (name.length() == 0)
@@ -8102,6 +8107,11 @@ int OSDMonitor::prepare_new_pool(string& name,
     pi->set_flag(pg_pool_t::FLAG_BULK);
   } else if (g_conf()->osd_pool_default_flag_bulk) {
       pi->set_flag(pg_pool_t::FLAG_BULK);
+  }
+  if (track_availability) {
+    pi->set_flag(pg_pool_t::FLAG_TRACK_AVAILABILITY);
+  } else if (g_conf()->osd_pool_default_flag_track_availability) {
+      pi->set_flag(pg_pool_t::FLAG_TRACK_AVAILABILITY);
   }
   if (g_conf()->osd_pool_default_flag_hashpspool)
     pi->set_flag(pg_pool_t::FLAG_HASHPSPOOL);
@@ -8553,7 +8563,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
     p.crush_rule = id;
   } else if (var == "nodelete" || var == "nopgchange" ||
 	     var == "nosizechange" || var == "write_fadvise_dontneed" ||
-	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk") {
+	     var == "noscrub" || var == "nodeep-scrub" || var == "bulk" ||
+       var == "track_availability") {
     uint64_t flag = pg_pool_t::get_flag_by_name(var);
     // make sure we only compare against 'n' if we didn't receive a string
     if (val == "true" || (interr.empty() && n == 1)) {
@@ -13085,6 +13096,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     cmd_getval(cmdmap, "autoscale_mode", pg_autoscale_mode);
 
     bool bulk = cmd_getval_or<bool>(cmdmap, "bulk", 0);
+    bool track_availability = cmd_getval_or<bool>(cmdmap, "track_availability", 0);
     err = prepare_new_pool(poolstr,
 			   -1, // default crush rule
 			   rule_name,
@@ -13095,6 +13107,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
                            fast_read,
 			   pg_autoscale_mode,
 			   bulk,
+         track_availability,
 			   &ss);
     if (err < 0) {
       switch(err) {
