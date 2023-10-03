@@ -634,6 +634,15 @@ rgw::sal::Object* get_object_with_atttributes(
   return src_obj;
 }
 
+static inline void filter_amz_meta(meta_map_t& dest, const meta_map_t& src) {
+  std::copy_if(src.cbegin(), src.cend(),
+               std::inserter(dest, dest.end()),
+               [](const auto& m) {
+                 return (boost::algorithm::starts_with(m.first, RGW_AMZ_META_PREFIX));
+               });
+}
+
+
 static inline void metadata_from_attributes(
   reservation_t& res, rgw::sal::Object* obj) {
   auto& metadata = res.x_meta_map;
@@ -739,7 +748,7 @@ static inline bool notification_match(reservation_t& res,
   if (!filter.s3_filter.metadata_filter.kv.empty()) {
     // metadata filter exists
     if (res.s) {
-      res.x_meta_map = res.s->info.x_meta_map;
+      filter_amz_meta(res.x_meta_map, res.s->info.x_meta_map);
     }
     metadata_from_attributes(res, obj);
     if (!match(filter.s3_filter.metadata_filter, res.x_meta_map)) {
@@ -976,13 +985,14 @@ reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
   object(_object), src_object(_src_object), bucket(_s->bucket.get()),
   object_name(_object_name),
   tagset(_s->tagset),
-  x_meta_map(_s->info.x_meta_map),
   metadata_fetched_from_attributes(false),
   user_id(_s->user->get_id().id),
   user_tenant(_s->user->get_id().tenant),
   req_id(_s->req_id),
   yield(y)
-{}
+{
+  filter_amz_meta(x_meta_map, _s->info.x_meta_map);
+}
 
 reservation_t::reservation_t(const DoutPrefixProvider* _dpp,
 			     rgw::sal::RadosStore* _store,
