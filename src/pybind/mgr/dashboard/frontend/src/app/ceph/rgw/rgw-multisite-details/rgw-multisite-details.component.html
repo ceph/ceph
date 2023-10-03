@@ -9,6 +9,14 @@
            (click)="enableRgwModule()">
            Enable RGW Module</a>
       </cd-alert-panel>
+      <cd-alert-panel   *ngIf="restartGatewayMessage"
+                        type="warning"
+                        spacingClass="mb-3"
+                        i18n>Please restart all Ceph Object Gateway instances in all zones to ensure consistent multisite configuration updates.
+        <a class="text-decoration-underline"
+           routerLink="/services">
+           Cluster->Services</a>
+      </cd-alert-panel>
       <cd-table-actions class="btn-group mb-4 me-2"
                         [permission]="permission"
                         [selection]="selection"
