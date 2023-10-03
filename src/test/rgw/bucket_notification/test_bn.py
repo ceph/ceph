@@ -693,6 +693,84 @@ def test_ps_s3_topic_admin_on_master():
     assert_equal(len(parsed_result['topics']), 0)
 
 
+@attr('basic_test')
+def test_ps_s3_notification_configuration_admin_on_master():
+    """ test s3 notification list/get/delete on master """
+    conn = connection()
+    zonegroup = 'default'
+    bucket_name = gen_bucket_name()
+    bucket = conn.create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topics
+    endpoint_address = 'amqp://127.0.0.1:7001/vhost_1'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
+    # clean all topics
+    try:
+        result = topic_conf.get_list()[0]['ListTopicsResponse']['ListTopicsResult']['Topics']
+        topics = []
+        if result is not None:
+            topics = result['member']
+        for topic in topics:
+            topic_conf.del_config(topic_arn=topic['TopicArn'])
+    except Exception as err:
+        print('failed to do topic cleanup: ' + str(err))
+
+    topic_arn = topic_conf.set_config()
+    assert_equal(topic_arn,
+                 'arn:aws:sns:' + zonegroup + '::' + topic_name + '_1')
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*']
+                        },
+                       {'Id': notification_name+'_2',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectRemoved:*']
+                        },
+                       {'Id': notification_name+'_3',
+                        'TopicArn': topic_arn,
+                        'Events': []
+                        }]
+    s3_notification_conf = PSNotificationS3(conn, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # list notification
+    result = admin(['notification', 'list', '--bucket', bucket_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(len(parsed_result['notifications']), 3)
+    assert_equal(result[1], 0)
+
+    # get notification 1
+    result = admin(['notification', 'get', '--bucket', bucket_name, '--notification-id', notification_name+'_1'])
+    parsed_result = json.loads(result[0])
+    assert_equal(parsed_result['Id'], notification_name+'_1')
+    assert_equal(result[1], 0)
+
+    # remove notification 3
+    _, result = admin(['notification', 'rm', '--bucket', bucket_name, '--notification-id', notification_name+'_3'])
+    assert_equal(result, 0)
+
+    # list notification
+    result = admin(['notification', 'list', '--bucket', bucket_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(len(parsed_result['notifications']), 2)
+    assert_equal(result[1], 0)
+
+    # delete notifications
+    _, result = admin(['notification', 'rm', '--bucket', bucket_name])
+    assert_equal(result, 0)
+
+    # list notification, make sure it is empty
+    result = admin(['notification', 'list', '--bucket', bucket_name])
+    parsed_result = json.loads(result[0])
+    assert_equal(len(parsed_result['notifications']), 0)
+    assert_equal(result[1], 0)
+
+
 @attr('modification_required')
 def test_ps_s3_topic_with_secret_on_master():
     """ test s3 topics with secret set/get/delete on master """
