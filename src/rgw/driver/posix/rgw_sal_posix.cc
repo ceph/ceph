@@ -405,16 +405,6 @@ std::unique_ptr<Bucket> POSIXDriver::get_bucket(User* u, const RGWBucketInfo& i)
   return std::make_unique<POSIXBucket>(this, root_fd, i, u);
 }
 
-int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
-{
-  rgw_bucket b;
-
-  b.tenant = tenant;
-  b.name = name;
-
-  return load_bucket(dpp, u, b, bucket, y);
-}
-
 std::string POSIXDriver::zone_unique_trans_id(const uint64_t unique_num)
 {
   char buf[41]; /* 2 + 21 + 1 + 16 (timestamp can consume up to 16) + 1 */

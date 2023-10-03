@@ -174,16 +174,6 @@ int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_
   return ret;
 }
 
-int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, User* u,
-                              const std::string& tenant, const std::string& name,
-                              std::unique_ptr<Bucket>* bucket, optional_yield y)
-{
-  std::unique_ptr<Bucket> nb;
-  const int ret = next->load_bucket(dpp, nextUser(u), tenant, name, &nb, y);
-  *bucket = std::make_unique<FilterBucket>(std::move(nb), u);
-  return ret;
-}
-
 bool FilterDriver::is_meta_master()
 {
   return next->is_meta_master();
