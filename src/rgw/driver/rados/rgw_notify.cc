@@ -699,7 +699,8 @@ static inline void populate_event(reservation_t& res,
   event.x_amz_id_2 = res.store->getRados()->host_id; // RGW on which the change was made
   // configurationId is filled from notification configuration
   event.bucket_name = res.bucket->get_name();
-  event.bucket_ownerIdentity = res.bucket->get_owner() ? res.bucket->get_owner()->get_id().id : "";
+  event.bucket_ownerIdentity = res.bucket->get_owner() ?
+    res.bucket->get_owner()->get_id().id : res.bucket->get_info().owner.id;
   const auto region = res.store->get_zone()->get_zonegroup().get_api_name();
   rgw::ARN bucket_arn(res.bucket->get_key());
   bucket_arn.region = region; 
