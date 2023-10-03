@@ -211,7 +211,6 @@ class ContainerInfo:
 class Ceph(DaemonForm):
     daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror', 'ceph-exporter')
-    gateways = ('iscsi', 'nfs', 'nvmeof')
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
@@ -2553,7 +2552,11 @@ def get_container(
         envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
     if container_args is None:
         container_args = []
-    if daemon_type in Ceph.daemons or daemon_type in Ceph.gateways:
+    unlimited_daemons = set(Ceph.daemons)
+    unlimited_daemons.add(CephIscsi.daemon_type)
+    unlimited_daemons.add(CephNvmeof.daemon_type)
+    unlimited_daemons.add(NFSGanesha.daemon_type)
+    if daemon_type in unlimited_daemons:
         set_pids_limit_unlimited(ctx, container_args)
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
