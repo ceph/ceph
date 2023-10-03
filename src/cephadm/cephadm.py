@@ -209,13 +209,13 @@ class ContainerInfo:
 
 @register_daemon_form
 class Ceph(ContainerDaemonForm):
-    daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
-               'crash', 'cephfs-mirror', 'ceph-exporter')
+    _daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
+                'crash', 'cephfs-mirror', 'ceph-exporter')
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
         # TODO: figure out a way to un-special-case osd
-        return daemon_type in cls.daemons and daemon_type != 'osd'
+        return daemon_type in cls._daemons and daemon_type != 'osd'
 
     def __init__(self, ident: DaemonIdentity) -> None:
         self._identity = ident
@@ -1708,7 +1708,7 @@ class CustomContainer(ContainerDaemonForm):
 
 def get_supported_daemons():
     # type: () -> List[str]
-    supported_daemons = list(Ceph.daemons)
+    supported_daemons = ceph_daemons()
     supported_daemons.extend(Monitoring.components)
     supported_daemons.append(NFSGanesha.daemon_type)
     supported_daemons.append(CephIscsi.daemon_type)
@@ -1721,6 +1721,10 @@ def get_supported_daemons():
     supported_daemons.extend(Tracing.components)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
+
+
+def ceph_daemons() -> List[str]:
+    return list(Ceph._daemons)
 
 ##################################
 
@@ -2014,7 +2018,7 @@ def infer_local_ceph_image(ctx: CephadmContext, container_path: str) -> Optional
 
     container_info = None
     daemon_name = ctx.name if ('name' in ctx and ctx.name and '.' in ctx.name) else None
-    daemons_ls = [daemon_name] if daemon_name is not None else Ceph.daemons  # daemon types: 'mon', 'mgr', etc
+    daemons_ls = [daemon_name] if daemon_name is not None else ceph_daemons()  # daemon types: 'mon', 'mgr', etc
     for daemon in daemons_ls:
         container_info = get_container_info(ctx, daemon, daemon_name is not None)
         if container_info is not None:
@@ -2190,7 +2194,7 @@ def get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     r = list()  # type: List[str]
 
     daemon_type = ident.daemon_type
-    if daemon_type in Ceph.daemons and daemon_type not in ['crash', 'ceph-exporter']:
+    if daemon_type in ceph_daemons() and daemon_type not in ['crash', 'ceph-exporter']:
         r += [
             '--setuser', 'ceph',
             '--setgroup', 'ceph',
@@ -2309,7 +2313,7 @@ def create_daemon_dirs(
     fsid, daemon_type = ident.fsid, ident.daemon_type
     data_dir = make_data_dir(ctx, ident, uid=uid, gid=gid)
 
-    if daemon_type in Ceph.daemons:
+    if daemon_type in ceph_daemons():
         make_log_dir(ctx, fsid, uid=uid, gid=gid)
 
     if config:
@@ -2479,7 +2483,7 @@ def _get_container_mounts_for_type(
     """
     mounts = dict()
 
-    if daemon_type in Ceph.daemons:
+    if daemon_type in ceph_daemons():
         if fsid:
             run_path = os.path.join('/var/run/ceph', fsid)
             if os.path.exists(run_path):
@@ -2548,7 +2552,7 @@ def get_container_mounts(
 
     assert ident.fsid
     assert ident.daemon_id
-    if daemon_type in Ceph.daemons:
+    if daemon_type in ceph_daemons():
         data_dir = ident.data_dir(ctx.data_dir)
         if daemon_type == 'rgw':
             cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (ident.daemon_id)
@@ -2693,11 +2697,11 @@ def get_container(
     host_network: bool = True
 
     daemon_type = ident.daemon_type
-    if daemon_type in Ceph.daemons:
+    if daemon_type in ceph_daemons():
         envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
     if container_args is None:
         container_args = []
-    unlimited_daemons = set(Ceph.daemons)
+    unlimited_daemons = set(ceph_daemons())
     unlimited_daemons.add(CephIscsi.daemon_type)
     unlimited_daemons.add(CephNvmeof.daemon_type)
     unlimited_daemons.add(NFSGanesha.daemon_type)
@@ -2777,7 +2781,7 @@ def get_container(
             container_args.extend(['--security-opt', 'label=disable'])
     elif daemon_type == 'crash':
         ceph_args = ['-n', name]
-    elif daemon_type in Ceph.daemons:
+    elif daemon_type in ceph_daemons():
         ceph_args = ['-n', name, '-f']
     elif daemon_type == SNMPGateway.daemon_type:
         sg = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
@@ -2966,7 +2970,7 @@ def deploy_daemon(
 
     # If this was a reconfig and the daemon is not a Ceph daemon, restart it
     # so it can pick up potential changes to its configuration files
-    if deployment_type == DeploymentType.RECONFIG and daemon_type not in Ceph.daemons:
+    if deployment_type == DeploymentType.RECONFIG and daemon_type not in ceph_daemons():
         # ceph daemons do not need a restart; others (presumably) do to pick
         # up the new config
         call_throws(ctx, ['systemctl', 'reset-failed', ident.unit_name])
@@ -3115,7 +3119,7 @@ def deploy_daemon_units(
 
         f.write('set -e\n')
 
-        if daemon_type in Ceph.daemons:
+        if daemon_type in ceph_daemons():
             install_path = find_program('install')
             f.write('{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}\n'.format(install_path=install_path, fsid=fsid, uid=uid, gid=gid))
 
@@ -5320,7 +5324,7 @@ def command_shell(ctx):
         daemon_type = 'osd'  # get the most mounts
         daemon_id = None
 
-    if ctx.fsid and daemon_type in Ceph.daemons:
+    if ctx.fsid and daemon_type in ceph_daemons():
         make_log_dir(ctx, ctx.fsid)
 
     if daemon_id and not ctx.fsid:
@@ -5667,7 +5671,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
                             if daemon_type == CephNvmeof.daemon_type:
                                 version = CephNvmeof.get_version(ctx, container_id)
                             elif not version:
-                                if daemon_type in Ceph.daemons:
+                                if daemon_type in ceph_daemons():
                                     out, err, code = call(ctx,
                                                           [container_path, 'exec', container_id,
                                                            'ceph', '-v'],
@@ -5856,7 +5860,7 @@ def command_adopt(ctx):
     lock.acquire()
 
     # call correct adoption
-    if daemon_type in Ceph.daemons:
+    if daemon_type in ceph_daemons():
         command_adopt_ceph(ctx, daemon_type, daemon_id, fsid)
     elif daemon_type == 'prometheus':
         command_adopt_prometheus(ctx, daemon_id, fsid)
