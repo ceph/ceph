@@ -100,7 +100,9 @@ int RGWGetUserInfoCR::Request::_send_request(const DoutPrefixProvider *dpp)
 template<>
 int RGWGetBucketInfoCR::Request::_send_request(const DoutPrefixProvider *dpp)
 {
-  return store->load_bucket(dpp, nullptr, params.tenant, params.bucket_name, &result->bucket, null_yield);
+  return store->load_bucket(dpp, nullptr,
+                            rgw_bucket(params.tenant, params.bucket_name),
+                            &result->bucket, null_yield);
 }
 
 template<>
