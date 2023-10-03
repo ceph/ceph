@@ -615,6 +615,7 @@ public:
       shared_blob = sb;
       ceph_assert(get_cache());
     }
+    Blob(CollectionRef collection) : collection(collection) {}
     BufferSpace bc;
   private:
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
@@ -723,7 +724,7 @@ public:
       if (--nref == 0)
 	delete this;
     }
-    bool is_loaded() const {
+    bool is_shared_loaded() const {
       return shared_blob && shared_blob->is_loaded();
     }
     inline BufferCacheShard* get_cache() {
@@ -1623,8 +1624,7 @@ private:
     uint64_t make_blob_unshared(SharedBlob *sb);
 
     BlobRef new_blob() {
-      BlobRef b = new Blob();
-      b->collection = this;
+      BlobRef b = new Blob(this);
       b->get_cache()->add_blob();
       return b;
     }

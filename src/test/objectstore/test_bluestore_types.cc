@@ -433,8 +433,7 @@ TEST(Blob, put_ref)
       g_ceph_context, "lru", NULL);
 
     auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
-    BlueStore::Blob b;
-    b.collection = coll;
+    BlueStore::Blob b(coll.get());
     b.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     b.dirty_blob().allocated_test(bluestore_pextent_t(0x40715000, 0x2000));
     b.dirty_blob().allocated_test(
@@ -467,8 +466,7 @@ TEST(Blob, put_ref)
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
 
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -489,8 +487,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas*2, b.get_extents()[0].length);
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -514,8 +511,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas*2, b.get_extents()[0].length);
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -553,8 +549,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(3u, b.get_extents().size());
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -595,8 +590,7 @@ TEST(Blob, put_ref)
     ASSERT_TRUE(b.get_extents()[4].is_valid());
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll);
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -628,8 +622,7 @@ TEST(Blob, put_ref)
     ASSERT_TRUE(b.get_extents()[2].is_valid());
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll);
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -667,8 +660,7 @@ TEST(Blob, put_ref)
     ASSERT_TRUE(b.get_extents()[2].is_valid());
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll);
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -723,8 +715,7 @@ TEST(Blob, put_ref)
     ASSERT_FALSE(b.get_extents()[0].is_valid());
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll);
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -779,8 +770,7 @@ TEST(Blob, put_ref)
     ASSERT_FALSE(b.get_extents()[0].is_valid());
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -823,8 +813,7 @@ TEST(Blob, put_ref)
   }
   // verify csum chunk size if factored in properly
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     PExtentVector r;
@@ -842,8 +831,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(mas*4, b.get_extents()[0].length);
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(0x40101000, 0x4000));
@@ -865,8 +853,7 @@ TEST(Blob, put_ref)
     cout << "r " << r << std::endl;
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(1, 0x5000));
@@ -884,8 +871,7 @@ TEST(Blob, put_ref)
     ASSERT_EQ(0x2000u, r[0].length);
   }
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(1, 0x7000));
@@ -914,8 +900,7 @@ TEST(Blob, put_ref)
       g_ceph_context, "lru", NULL);
 
     auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     bluestore_blob_t& b = B.dirty_blob();
     b.allocated_test(bluestore_pextent_t(1, 0x5000));
@@ -1004,9 +989,8 @@ TEST(Blob, split)
       g_ceph_context, "lru", NULL);
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   {
-    BlueStore::Blob L, R;
-    L.collection = coll;
-    R.collection = coll;
+    BlueStore::Blob L(coll.get());
+    BlueStore::Blob R(coll.get());
     L.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     R.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     L.dirty_blob().allocated_test(bluestore_pextent_t(0x2000, 0x2000));
@@ -1027,9 +1011,8 @@ TEST(Blob, split)
     ASSERT_EQ(0x1000u, R.get_referenced_bytes());
   }
   {
-    BlueStore::Blob L, R;
-    L.collection = coll;
-    R.collection = coll;
+    BlueStore::Blob L(coll.get());
+    BlueStore::Blob R(coll.get());
     L.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     R.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     L.dirty_blob().allocated_test(bluestore_pextent_t(0x2000, 0x1000));
@@ -1063,8 +1046,7 @@ TEST(Blob, legacy_decode)
   auto coll = ceph::make_ref<BlueStore::Collection>(&store, oc, bc, coll_t());
   bufferlist bl, bl2;
   {
-    BlueStore::Blob B;
-    B.collection = coll;
+    BlueStore::Blob B(coll.get());
 
     B.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     B.dirty_blob().allocated_test(bluestore_pextent_t(0x1, 0x2000));
@@ -1110,9 +1092,8 @@ TEST(Blob, legacy_decode)
 
     auto p = bl.front().begin_deep();
     auto p2 = bl2.front().begin_deep();
-    BlueStore::Blob Bres, Bres2;
-    Bres.collection = coll;
-    Bres2.collection = coll;
+    BlueStore::Blob Bres(coll.get());
+    BlueStore::Blob Bres2(coll.get());
     Bres.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
     Bres2.set_shared_blob(new BlueStore::SharedBlob(coll.get()));
 
@@ -1440,7 +1421,6 @@ public:
     ) {
       uint32_t blob_length = (empty_aus + num_aus) * au_size;
       BlueStore::BlobRef b(coll->new_blob());
-      b->collection = coll;
       bluestore_blob_t& bb = b->dirty_blob();
       bb.init_csum(Checksummer::CSUM_CRC32C, csum_order, blob_length);
       for(size_t i = 0; i < num_aus; ++i) {
@@ -1705,8 +1685,7 @@ TEST(ExtentMap, dup_extent_map)
   size_t ext1_offs = 0x0;
   size_t ext1_len = 0x2000;
   size_t ext1_boffs = 0x0;
-  BlueStore::BlobRef b1(coll->new_blob());
-  b1->collection = coll;
+  BlueStore::BlobRef b1 = coll->new_blob();
   auto &_b1 = b1->dirty_blob();
   _b1.init_csum(Checksummer::CSUM_CRC32C, csum_order, ext1_len);
   for(size_t i = 0; i < _b1.get_csum_count(); i++) {
