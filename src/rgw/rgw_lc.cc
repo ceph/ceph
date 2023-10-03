@@ -1615,7 +1615,9 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return 0;
   }
 
-  int ret = driver->load_bucket(this, nullptr, bucket_tenant, bucket_name, &bucket, null_yield);
+  int ret = driver->load_bucket(this, nullptr,
+                                rgw_bucket(bucket_tenant, bucket_name),
+                                &bucket, null_yield);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket for " << bucket_name
 		       << " failed" << dendl;

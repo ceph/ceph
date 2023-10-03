@@ -109,7 +109,9 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
 
     for (const auto& ent : listing.buckets) {
       std::unique_ptr<rgw::sal::Bucket> bucket;
-      int r = driver->load_bucket(dpp, &user, user.get_tenant(), ent.bucket.name, &bucket, y);
+      int r = driver->load_bucket(dpp, &user,
+                                  rgw_bucket(user.get_tenant(), ent.bucket.name),
+                                  &bucket, y);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << dendl;
         continue;
@@ -181,7 +183,8 @@ int RGWBucket::init(rgw::sal::Driver* _driver, RGWBucketAdminOpState& op_state,
     bucket_name = bucket_name.substr(pos + 1);
   }
 
-  int r = driver->load_bucket(dpp, user.get(), tenant, bucket_name, &bucket, y);
+  int r = driver->load_bucket(dpp, user.get(), rgw_bucket(tenant, bucket_name),
+                              &bucket, y);
   if (r < 0) {
       set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket_name);
       return r;
@@ -1242,8 +1245,10 @@ int RGWBucketAdminOp::remove_bucket(rgw::sal::Driver* driver, RGWBucketAdminOpSt
   std::unique_ptr<rgw::sal::Bucket> bucket;
   std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
 
-  int ret = driver->load_bucket(dpp, user.get(), user->get_tenant(),
-                                op_state.get_bucket_name(), &bucket, y);
+  int ret = driver->load_bucket(dpp, user.get(),
+                                rgw_bucket(user->get_tenant(),
+                                           op_state.get_bucket_name()),
+                                &bucket, y);
   if (ret < 0)
     return ret;
 
@@ -1284,7 +1289,9 @@ static int bucket_stats(rgw::sal::Driver* driver,
   std::unique_ptr<rgw::sal::Bucket> bucket;
   map<RGWObjCategory, RGWStorageStats> stats;
 
-  int ret = driver->load_bucket(dpp, nullptr, tenant_name, bucket_name, &bucket, y);
+  int ret = driver->load_bucket(dpp, nullptr,
+                                rgw_bucket(tenant_name, bucket_name),
+                                &bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -1611,7 +1618,8 @@ void get_stale_instances(rgw::sal::Driver* driver, const std::string& bucket_nam
   auto [tenant, bname] = split_tenant(bucket_name);
   RGWBucketInfo cur_bucket_info;
   std::unique_ptr<rgw::sal::Bucket> cur_bucket;
-  int r = driver->load_bucket(dpp, nullptr, tenant, bname, &cur_bucket, y);
+  int r = driver->load_bucket(dpp, nullptr, rgw_bucket(tenant, bname),
+                              &cur_bucket, y);
   if (r < 0) {
     if (r == -ENOENT) {
       // bucket doesn't exist, everything is stale then
@@ -1767,7 +1775,9 @@ static int fix_single_bucket_lc(rgw::sal::Driver* driver,
                                 const DoutPrefixProvider *dpp, optional_yield y)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = driver->load_bucket(dpp, nullptr, tenant_name, bucket_name, &bucket, y);
+  int ret = driver->load_bucket(dpp, nullptr,
+                                rgw_bucket(tenant_name, bucket_name),
+                                &bucket, y);
   if (ret < 0) {
     // TODO: Should we handle the case where the bucket could've been removed between
     // listing and fetching?

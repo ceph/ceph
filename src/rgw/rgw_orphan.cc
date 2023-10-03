@@ -1388,7 +1388,8 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
     bucket_process_map.erase(front);
 
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    ret = store->load_bucket(dpp, nullptr, tenant_name, bucket_name, &bucket, null_yield);
+    ret = store->load_bucket(dpp, nullptr, rgw_bucket(tenant_name, bucket_name),
+                             &bucket, null_yield);
     if (ret == -ENOENT) {
       std::cerr << "WARNING: bucket " << bucket_name <<
 	" does not exist; could it have been deleted very recently?" <<
@@ -1459,7 +1460,9 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
   // initial bucket
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->load_bucket(dpp, nullptr, tenant_name, start_bucket_name, &bucket, null_yield);
+  ret = store->load_bucket(dpp, nullptr,
+                           rgw_bucket(tenant_name, start_bucket_name),
+                           &bucket, null_yield);
   if (ret == -ENOENT) {
     // bucket deletion race?
     return 0;

@@ -40,7 +40,9 @@ void RGWOp_Usage_Get::execute(optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (!bucket_name.empty()) {
-    op_ret = driver->load_bucket(nullptr, user.get(), std::string(), bucket_name, &bucket, null_yield);
+    op_ret = driver->load_bucket(nullptr, user.get(),
+                                 rgw_bucket(std::string(), bucket_name),
+                                 &bucket, null_yield);
     if (op_ret < 0) {
       return;
     }
@@ -90,7 +92,9 @@ void RGWOp_Usage_Delete::execute(optional_yield y) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (!bucket_name.empty()) {
-    op_ret = driver->load_bucket(nullptr, user.get(), std::string(), bucket_name, &bucket, null_yield);
+    op_ret = driver->load_bucket(nullptr, user.get(),
+                                 rgw_bucket(std::string(), bucket_name),
+                                 &bucket, null_yield);
     if (op_ret < 0) {
       return;
     }
