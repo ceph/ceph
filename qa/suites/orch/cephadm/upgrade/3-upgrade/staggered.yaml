@@ -136,6 +136,7 @@ overrides:
       - overall HEALTH_
       - \(MON_DOWN\)
       - mons down, quorum
+      - is down (out of quorum)
       - \(CEPHADM_FAILED_DAEMON\)
       - \(PG_AVAILABILITY\)
       - failed to encode map

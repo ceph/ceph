@@ -14,3 +14,4 @@ overrides:
       - \(POOL_APP_NOT_ENABLED\)
       - do not have an application enabled
       - mons down, quorum
+      - is down (out of quorum)
