@@ -445,6 +445,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_csv(const char* query, const char*
   } else {
     m_aws_response_handler.send_continuation_response();
   }
+  ldpp_dout(this, 10) << "s3-select: complete chunk processing : chunk length = " << input_length << dendl;
   if (enable_progress == true) {
     fp_chunked_transfer_encoding();
     m_aws_response_handler.init_progress_response();
@@ -458,7 +459,7 @@ int RGWSelectObj_ObjStore_S3::run_s3select_on_parquet(const char* query)
   int status = 0;
 #ifdef _ARROW_EXIST
   if (!m_s3_parquet_object.is_set()) {
-    //parsing the SQL statement
+    //parsing the SQL statement.
     s3select_syntax.parse_query(m_sql_query.c_str());
     //m_s3_parquet_object.set_external_debug_system(fp_debug_mesg);
     try {
