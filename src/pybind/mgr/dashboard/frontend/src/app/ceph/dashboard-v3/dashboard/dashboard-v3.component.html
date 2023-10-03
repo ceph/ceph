@@ -51,89 +51,62 @@
                i18n-title
                class="pt-4"
                aria-label="Inventory card">
-        <hr>
         <!-- Hosts -->
-        <li class="list-group-item">
-          <cd-card-row [data]="healthData.hosts"
-                       link="/hosts"
-                       title="Host"
-                       summaryType="simplified"
-                       *ngIf="healthData.hosts != null"></cd-card-row>
-        </li>
-        <hr>
+        <cd-card-row [data]="healthData.hosts"
+                     link="/hosts"
+                     title="Host"
+                     summaryType="simplified"
+                     *ngIf="healthData.hosts != null"></cd-card-row>
         <!-- Monitors -->
-        <li class="list-group-item">
-          <cd-card-row [data]="healthData.mon_status.monmap.mons.length"
-                       link="/monitor"
-                       title="Monitor"
-                       summaryType="simplified"
-                       *ngIf="healthData.mon_status"></cd-card-row>
-        </li>
-        <hr>
+        <cd-card-row [data]="healthData.mon_status.monmap.mons.length"
+                     link="/monitor"
+                     title="Monitor"
+                     summaryType="simplified"
+                     *ngIf="healthData.mon_status"></cd-card-row>
         <!-- Managers -->
-        <li *ngIf="healthData.mgr_map"
-            class="list-group-item">
-          <cd-card-row [data]="healthData.mgr_map | mgrSummary"
-                       title="Manager"
-                       *ngIf="healthData.mgr_map"></cd-card-row>
-        </li>
-        <hr>
+        <cd-card-row [data]="healthData.mgr_map | mgrSummary"
+                     title="Manager"
+                     *ngIf="healthData.mgr_map"></cd-card-row>
+
         <!-- OSDs -->
-        <li class="list-group-item">
-          <cd-card-row [data]="healthData.osd_map | osdSummary"
-                       link="/osd"
-                       title="OSD"
-                       summaryType="osd"
-                       *ngIf="healthData.osd_map"></cd-card-row>
-        </li>
-        <hr>
+        <cd-card-row [data]="healthData.osd_map | osdSummary"
+                     link="/osd"
+                     title="OSD"
+                     summaryType="osd"
+                     *ngIf="healthData.osd_map"></cd-card-row>
+
         <!-- Pools -->
-        <li *ngIf="healthData.pools"
-            class="list-group-item">
-          <cd-card-row [data]="healthData.pools.length"
-                       link="/pool"
-                       title="Pool"
-                       summaryType="simplified"
-                       *ngIf="healthData.pools"></cd-card-row>
-        </li>
-        <hr>
+        <cd-card-row [data]="healthData.pools.length"
+                     link="/pool"
+                     title="Pool"
+                     summaryType="simplified"
+                     *ngIf="healthData.pools"></cd-card-row>
+
         <!-- PG Info -->
-        <li class="list-group-item">
-          <cd-card-row [data]="healthData.pg_info | pgSummary"
-                       title="PG"
-                       *ngIf="healthData.pg_info"></cd-card-row>
-        </li>
-        <hr>
+        <cd-card-row [data]="healthData.pg_info | pgSummary"
+                     title="PG"
+                     *ngIf="healthData.pg_info"></cd-card-row>
+
         <!-- Object gateways -->
-        <li *ngIf="enabledFeature.rgw && healthData.rgw != null"
-            class="list-group-item"
-            id="rgw-item">
-          <cd-card-row [data]="healthData.rgw"
-                       link="/rgw/daemon"
-                       title="Object Gateway"
-                       summaryType="simplified"
-                       *ngIf="healthData.rgw || healthData.rgw === 0 "></cd-card-row>
-        </li>
-        <hr>
+        <cd-card-row [data]="healthData.rgw"
+                     link="/rgw/daemon"
+                     title="Object Gateway"
+                     summaryType="simplified"
+                     id="rgw-item"
+                     *ngIf="enabledFeature.rgw && healthData.rgw || healthData.rgw === 0 "></cd-card-row>
+
         <!-- Metadata Servers -->
-        <li *ngIf="enabledFeature.cephfs && healthData.fs_map"
-            class="list-group-item"
-            id="mds-item">
-          <cd-card-row [data]="healthData.fs_map | mdsSummary"
-                       title="Metadata Server"
-                       *ngIf="healthData.fs_map"></cd-card-row>
-        </li>
-        <hr>
+        <cd-card-row [data]="healthData.fs_map | mdsSummary"
+                     title="Metadata Server"
+                     id="mds-item"
+                     *ngIf="enabledFeature.cephfs && healthData.fs_map"></cd-card-row>
         <!-- iSCSI Gateways -->
-        <li *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons != null"
-            class="list-group-item"
-            id="iscsi-item">
-          <cd-card-row [data]="healthData.iscsi_daemons"
-                       link="/iscsi/daemon"
-                       title="iSCSI Gateway"
-                       summaryType="iscsi"
-                       *ngIf="healthData.iscsi_daemons"></cd-card-row>
-        </li>
+        <cd-card-row [data]="healthData.iscsi_daemons"
+                     link="/iscsi/daemon"
+                     title="iSCSI Gateway"
+                     summaryType="iscsi"
+                     id="iscsi-item"
+                     *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons"></cd-card-row>
       </cd-card>
     </div>
 
