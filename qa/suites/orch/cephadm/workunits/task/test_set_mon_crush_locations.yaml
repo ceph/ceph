@@ -60,3 +60,9 @@ tasks:
         while read monid <&3 && read crushloc <&4; do
           ceph mon dump --format json | jq --arg monid "$monid" --arg crushloc "$crushloc" -e '.mons | .[] | select(.name == $monid) | .crush_location == $crushloc'
         done 3<mon_ids 4<crush_locs
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - mons down, quorum

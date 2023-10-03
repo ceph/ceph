@@ -12,3 +12,4 @@ overrides:
       - \(OSD_DOWN\)
       - \(OSDMAP_FLAGS\)
       - \(PG_AVAILABILITY\)
+      - mons down, quorum

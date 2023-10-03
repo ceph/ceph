@@ -38,3 +38,9 @@ tasks:
         echo $TOKEN_JSON | jq --exit-status '.realm_id | test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")'
         echo $TOKEN_JSON | jq --exit-status '.access_key'
         echo $TOKEN_JSON | jq --exit-status '.secret'
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - mons down, quorum
