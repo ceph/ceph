@@ -1068,18 +1068,6 @@ int RadosStore::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bu
   return (*bucket)->load_bucket(dpp, y);
 }
 
-int RadosStore::load_bucket(const DoutPrefixProvider* dpp, User* u,
-                            const std::string& tenant, const std::string& name,
-                            std::unique_ptr<Bucket>* bucket, optional_yield y)
-{
-  rgw_bucket b;
-
-  b.tenant = tenant;
-  b.name = name;
-
-  return load_bucket(dpp, u, b, bucket, y);
-}
-
 bool RadosStore::is_meta_master()
 {
   return svc()->zone->is_meta_master();

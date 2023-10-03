@@ -2263,18 +2263,6 @@ int DaosStore::load_bucket(const DoutPrefixProvider* dpp, User* u,
   return (*bucket)->load_bucket(dpp, y);
 }
 
-int DaosStore::load_bucket(const DoutPrefixProvider* dpp, User* u,
-                           const std::string& tenant, const std::string& name,
-                           std::unique_ptr<Bucket>* bucket, optional_yield y) {
-  ldpp_dout(dpp, 20) << "get_bucket" << dendl;
-  rgw_bucket b;
-
-  b.tenant = tenant;
-  b.name = name;
-
-  return load_bucket(dpp, u, b, bucket, y);
-}
-
 bool DaosStore::is_meta_master() { return true; }
 
 int DaosStore::forward_request_to_master(const DoutPrefixProvider* dpp,
