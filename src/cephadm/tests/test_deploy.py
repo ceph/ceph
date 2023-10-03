@@ -223,3 +223,42 @@ def test_deploy_iscsi_container(cephadm_fs, monkeypatch):
         assert f.read() == 'portal'
         si = os.fstat(f.fileno())
         assert (si.st_uid, si.st_gid) == (8765, 8765)
+
+
+def test_deploy_nvmeof_container(cephadm_fs, monkeypatch):
+    mocks = _common_mp(monkeypatch)
+    _firewalld = mocks['Firewalld']
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'nvmeof.andu'
+        ctx.image = 'quay.io/ownf/nmve:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+            'files': {
+                'ceph-nvmeof.conf': 'icantbeliveitsnotiscsi',
+            },
+        }
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/nvmeof.andu')
+    assert basedir.is_dir()
+    with open(basedir / 'unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    assert 'podman' in runfile_lines[-1]
+    assert runfile_lines[-1].endswith('quay.io/ownf/nmve:latest')
+    _firewalld().open_ports.assert_not_called()
+    with open(basedir / 'config') as f:
+        assert f.read() == 'XXXXXXX'
+    with open(basedir / 'keyring') as f:
+        assert f.read() == 'YYYYYY'
+    assert (basedir / 'configfs').is_dir()
+    si = (basedir / 'configfs').stat()
+    assert (si.st_uid, si.st_gid) == (167, 167)
+    with open(basedir / 'ceph-nvmeof.conf') as f:
+        assert f.read() == 'icantbeliveitsnotiscsi'
+        si = os.fstat(f.fileno())
+        assert (si.st_uid, si.st_gid) == (167, 167)
