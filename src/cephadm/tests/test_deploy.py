@@ -300,3 +300,33 @@ def test_deploy_a_monitoring_container(cephadm_fs, monkeypatch):
         assert f.read() == 'bettercallherc'
         si = os.fstat(f.fileno())
         assert (si.st_uid, si.st_gid) == (8765, 8765)
+
+
+def test_deploy_a_tracing_container(cephadm_fs, monkeypatch):
+    mocks = _common_mp(monkeypatch)
+    _firewalld = mocks['Firewalld']
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'elasticsearch.band'
+        ctx.image = 'quay.io/rubber/elasticsearch:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+            'files': {
+                'prometheus.yml': 'bettercallherc',
+            },
+        }
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/elasticsearch.band')
+    assert basedir.is_dir()
+    with open(basedir / 'unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    assert 'podman' in runfile_lines[-1]
+    assert runfile_lines[-1].endswith('quay.io/rubber/elasticsearch:latest')
+    _firewalld().open_ports.assert_not_called()
+    assert not (basedir / 'config').exists()
+    assert not (basedir / 'keyring').exists()
