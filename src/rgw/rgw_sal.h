@@ -295,10 +295,6 @@ class Driver {
      * bucket must still be allocated to support bucket->create(). */
     virtual int load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b,
                             std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
-    /** Load a Bucket by name.  Queries driver for bucket info. */
-    virtual int load_bucket(const DoutPrefixProvider* dpp, User* u,
-                            const std::string& tenant, const std::string& name,
-                            std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
     /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;
     /** For multisite, forward an OP to the zone's master */

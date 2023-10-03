@@ -160,12 +160,9 @@ public:
 				std::unique_ptr<User>* user) override;
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   std::unique_ptr<Bucket> get_bucket(User* u, const RGWBucketInfo& i) override;
-  int load_bucket(const DoutPrefixProvider* dpp, User* u, const
-                  rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
+  int load_bucket(const DoutPrefixProvider* dpp, User* u,
+                  const rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
                   optional_yield y) override;
-  int load_bucket(const DoutPrefixProvider* dpp, User* u, const
-                  std::string& tenant, const std::string& name,
-                  std::unique_ptr<Bucket>* bucket, optional_yield y) override;
   virtual bool is_meta_master() override;
   virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user,
 					obj_version* objv, bufferlist& in_data,

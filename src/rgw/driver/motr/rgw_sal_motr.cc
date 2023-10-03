@@ -3255,16 +3255,6 @@ int MotrStore::load_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_buc
   return (*bucket)->load_bucket(dpp, y);
 }
 
-int MotrStore::load_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
-{
-  rgw_bucket b;
-
-  b.tenant = tenant;
-  b.name = name;
-
-  return load_bucket(dpp, u, b, bucket, y);
-}
-
 bool MotrStore::is_meta_master()
 {
   return true;

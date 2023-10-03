@@ -56,9 +56,6 @@ public:
   virtual int load_bucket(const DoutPrefixProvider* dpp, User* u, const
 			  rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
 			  optional_yield y) override;
-  virtual int load_bucket(const DoutPrefixProvider* dpp, User* u, const
-			  std::string& tenant, const std::string& name,
-			  std::unique_ptr<Bucket>* bucket, optional_yield y) override;
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
 
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
