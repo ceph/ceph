@@ -1268,6 +1268,19 @@ int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
   return 0;
 }
 
+std::string get_zonegroup_endpoint(const RGWZoneGroup& info)
+{
+  if (!info.endpoints.empty()) {
+    return info.endpoints.front();
+  }
+  // use zonegroup's master zone endpoints
+  auto z = info.zones.find(info.master_zone);
+  if (z != info.zones.end() && !z->second.endpoints.empty()) {
+    return z->second.endpoints.front();
+  }
+  return "";
+}
+
 int add_zone_to_group(const DoutPrefixProvider* dpp, RGWZoneGroup& zonegroup,
                       const RGWZoneParams& zone_params,
                       const bool *pis_master, const bool *pread_only,

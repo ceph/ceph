@@ -881,6 +881,9 @@ int set_default_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
                           sal::ConfigStore* cfgstore, const RGWZoneGroup& info,
                           bool exclusive = false);
 
+/// Return an endpoint from the zonegroup or its master zone.
+std::string get_zonegroup_endpoint(const RGWZoneGroup& info);
+
 /// Add a zone to the zonegroup, or update an existing zone entry.
 int add_zone_to_group(const DoutPrefixProvider* dpp,
                       RGWZoneGroup& zonegroup,
