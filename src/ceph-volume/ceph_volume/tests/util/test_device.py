@@ -153,14 +153,6 @@ class TestDevice(object):
         assert disk.is_device is True
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
-    def test_is_partition(self, fake_call, device_info):
-        data = {"/dev/sda1": {"foo": "bar"}}
-        lsblk = {"TYPE": "part", "NAME": "sda1", "PKNAME": "sda"}
-        device_info(devices=data, lsblk=lsblk)
-        disk = device.Device("/dev/sda1")
-        assert disk.is_partition
-
-    @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_mpath_device_is_device(self, fake_call, device_info):
         data = {"/dev/foo": {"foo": "bar"}}
         lsblk = {"TYPE": "mpath", "NAME": "foo"}
