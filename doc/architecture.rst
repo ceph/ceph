@@ -615,46 +615,51 @@ Peering and Sets
 ~~~~~~~~~~~~~~~~
 
 In previous sections, we noted that Ceph OSD Daemons check each other's
-heartbeats and report back to the Ceph Monitor. Another thing Ceph OSD daemons
-do is called 'peering', which is the process of bringing all of the OSDs that
-store a Placement Group (PG) into agreement about the state of all of the
-objects (and their metadata) in that PG. In fact, Ceph OSD Daemons `Report
-Peering Failure`_ to the Ceph Monitors. Peering issues  usually resolve
-themselves; however, if the problem persists, you may need to refer to the
-`Troubleshooting Peering Failure`_ section.
+heartbeats and report back to Ceph Monitors. Ceph OSD daemons also 'peer',
+which is the process of bringing all of the OSDs that store a Placement Group
+(PG) into agreement about the state of all of the RADOS objects (and their
+metadata) in that PG. Ceph OSD Daemons `Report Peering Failure`_ to the Ceph
+Monitors. Peering issues usually resolve themselves; however, if the problem
+persists, you may need to refer to the `Troubleshooting Peering Failure`_
+section.
 
-.. Note:: Agreeing on the state does not mean that the PGs have the latest contents.
+.. Note:: PGs that agree on the state of the cluster do not necessarily have
+   the current data yet. 
 
 The Ceph Storage Cluster was designed to store at least two copies of an object
-(i.e., ``size = 2``), which is the minimum requirement for data safety. For high
-availability, a Ceph Storage Cluster should store more than two copies of an object
-(e.g., ``size = 3`` and ``min size = 2``) so that it can continue to run in a 
-``degraded`` state while maintaining data safety.
+(that is, ``size = 2``), which is the minimum requirement for data safety. For
+high availability, a Ceph Storage Cluster should store more than two copies of
+an object (that is, ``size = 3`` and ``min size = 2``) so that it can continue
+to run in a ``degraded`` state while maintaining data safety.
 
-Referring back to the diagram in `Smart Daemons Enable Hyperscale`_, we do not 
-name the Ceph OSD Daemons specifically (e.g., ``osd.0``, ``osd.1``, etc.), but 
-rather refer to them as *Primary*, *Secondary*, and so forth. By convention, 
-the *Primary* is the first OSD in the *Acting Set*, and is responsible for 
-coordinating the peering process for each placement group where it acts as 
-the *Primary*, and is the **ONLY** OSD that will accept client-initiated 
-writes to objects for a given placement group where it acts as the *Primary*.
+.. warning:: Although we say here that R2 (replication with two copies) is the
+   minimum requirement for data safety, R3 (replication with three copies) is
+   recommended. On a long enough timeline, data stored with an R2 strategy will
+   be lost.
 
-When a series of OSDs are responsible for a placement group, that series of
-OSDs, we refer to them as an *Acting Set*. An *Acting Set* may refer to the Ceph
-OSD Daemons that are currently responsible for the placement group, or the Ceph
-OSD Daemons that were responsible  for a particular placement group as of some
+As explained in the diagram in `Smart Daemons Enable Hyperscale`_, we do not
+name the Ceph OSD Daemons specifically (for example, ``osd.0``, ``osd.1``,
+etc.), but rather refer to them as *Primary*, *Secondary*, and so forth. By
+convention, the *Primary* is the first OSD in the *Acting Set*, and is
+responsible for orchestrating the peering process for each placement group
+where it acts as the *Primary*. The *Primary* is the **ONLY** OSD in a given
+placement group that accepts client-initiated writes to objects.
+
+The set of OSDs that is responsible for a placement group is called the
+*Acting Set*. The term "*Acting Set*" can refer either to the Ceph OSD Daemons
+that are currently responsible for the placement group, or to the Ceph OSD
+Daemons that were responsible for a particular placement group as of some
 epoch.
 
-The Ceph OSD daemons that are part of an *Acting Set* may not always be  ``up``.
-When an OSD in the *Acting Set* is ``up``, it is part of the  *Up Set*. The *Up
-Set* is an important distinction, because Ceph can remap PGs to other Ceph OSD
-Daemons when an OSD fails. 
+The Ceph OSD daemons that are part of an *Acting Set* might not always be
+``up``. When an OSD in the *Acting Set* is ``up``, it is part of the *Up Set*.
+The *Up Set* is an important distinction, because Ceph can remap PGs to other
+Ceph OSD Daemons when an OSD fails. 
 
-.. note:: In an *Acting Set* for a PG containing ``osd.25``, ``osd.32`` and 
-   ``osd.61``, the first OSD, ``osd.25``, is the *Primary*. If that OSD fails,
-   the Secondary, ``osd.32``, becomes the *Primary*, and ``osd.25`` will be 
-   removed from the *Up Set*.
-
+.. note:: Consider a hypothetical *Acting Set* for a PG that contains
+   ``osd.25``, ``osd.32`` and ``osd.61``. The first OSD (``osd.25``), is the
+   *Primary*. If that OSD fails, the Secondary (``osd.32``), becomes the
+   *Primary*, and ``osd.25`` is removed from the *Up Set*.
 
 .. index:: architecture; Rebalancing
 
