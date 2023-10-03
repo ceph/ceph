@@ -23,6 +23,7 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(OSD_DOWN\)
+      - \(PG_DEGRADED\)
     conf:
       osd:
         osd shutdown pgref assert: true

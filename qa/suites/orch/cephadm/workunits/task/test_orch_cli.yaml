@@ -20,5 +20,6 @@ overrides:
     log-ignorelist:
       - overall HEALTH_
       - \(OSD_DOWN\)
+      - \(PG_DEGRADED\)
       - \(CEPHADM_STRAY_DAEMON\)
       - \(POOL_APP_NOT_ENABLED\)
