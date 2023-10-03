@@ -46,7 +46,7 @@ export class RbdSnapshotActionsModel {
       name: actionLabels.PROTECT,
       disable: (selection: CdTableSelection) =>
         this.disableForMirrorSnapshot(selection) ||
-        this.getDisableDesc(selection, this.featuresName)
+        this.getProtectDisableDesc(selection, this.featuresName)
     };
     this.unprotect = {
       permission: 'update',
@@ -60,8 +60,7 @@ export class RbdSnapshotActionsModel {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        this.getDisableDesc(selection, this.featuresName) ||
-        this.disableForMirrorSnapshot(selection),
+        this.getCloneDisableDesc(selection) || this.disableForMirrorSnapshot(selection),
       icon: Icons.clone,
       name: actionLabels.CLONE
     };
@@ -109,19 +108,23 @@ export class RbdSnapshotActionsModel {
     ];
   }
 
-  getDisableDesc(selection: CdTableSelection, featuresName: string[]): boolean | string {
+  getProtectDisableDesc(selection: CdTableSelection, featuresName: string[]): boolean | string {
     if (selection.hasSingleSelection && !selection.first().cdExecuting) {
       if (!featuresName?.includes('layering')) {
         return $localize`The layering feature needs to be enabled on parent image`;
       }
+      return false;
+    }
+    return true;
+  }
 
+  getCloneDisableDesc(selection: CdTableSelection): boolean | string {
+    if (selection.hasSingleSelection && !selection.first().cdExecuting) {
       if (this.cloneFormatVersion === 1 && !selection.first().is_protected) {
         return $localize`Snapshot must be protected in order to clone.`;
       }
-
       return false;
     }
-
     return true;
   }
 
