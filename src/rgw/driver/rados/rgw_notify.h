@@ -38,6 +38,9 @@ int add_persistent_topic(const std::string& topic_name, optional_yield y);
 // this operation also remove the topic name from the common (to all RGWs) list of all topics
 int remove_persistent_topic(const std::string& topic_name, optional_yield y);
 
+// same as the above, expect you need to provide the IoCtx, the above uses rgw::notify::Manager::rados_ioctx
+int remove_persistent_topic(const DoutPrefixProvider* dpp, librados::IoCtx& rados_ioctx, const std::string& topic_name, optional_yield y);
+
 // struct holding reservation information
 // populated in the publish_reserve call
 // then used to commit or abort the reservation
