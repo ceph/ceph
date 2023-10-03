@@ -330,3 +330,41 @@ def test_deploy_a_tracing_container(cephadm_fs, monkeypatch):
     _firewalld().open_ports.assert_not_called()
     assert not (basedir / 'config').exists()
     assert not (basedir / 'keyring').exists()
+
+
+def test_deploy_ceph_mgr_container(cephadm_fs, monkeypatch):
+    mocks = _common_mp(monkeypatch)
+    _firewalld = mocks['Firewalld']
+    _make_var_run = mock.MagicMock()
+    monkeypatch.setattr('cephadm.make_var_run', _make_var_run)
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'mgr.foo'
+        ctx.image = 'quay.io/ceph/ceph:latest'
+        ctx.reconfig = False
+        ctx.allow_ptrace = False
+        ctx.osd_fsid = '00000000-0000-0000-0000-000000000000'
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+        }
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/mgr.foo')
+    assert basedir.is_dir()
+    with open(basedir / 'unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    assert 'podman' in runfile_lines[-1]
+    assert runfile_lines[-1].endswith(
+        'quay.io/ceph/ceph:latest -n mgr.foo -f --setuser ceph --setgroup ceph --default-log-to-file=false --default-log-to-journald=true --default-log-to-stderr=false'
+    )
+    _firewalld().open_ports.assert_not_called()
+    with open(basedir / 'config') as f:
+        assert f.read() == 'XXXXXXX'
+    with open(basedir / 'keyring') as f:
+        assert f.read() == 'YYYYYY'
+    assert _make_var_run.call_count == 1
+    assert _make_var_run.call_args[0][2] == 8765
+    assert _make_var_run.call_args[0][3] == 8765
