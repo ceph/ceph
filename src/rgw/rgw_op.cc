@@ -491,8 +491,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   if (!s->src_bucket_name.empty()) {
     std::unique_ptr<rgw::sal::Bucket> src_bucket;
     ret = driver->load_bucket(dpp, nullptr,
-                              rgw_bucket_key(s->src_tenant_name,
-                                             s->src_bucket_name),
+                              rgw_bucket(s->src_tenant_name, s->src_bucket_name),
                               &src_bucket, y);
     if (ret == 0) {
       string& zonegroup = src_bucket->get_info().zonegroup;
@@ -1939,8 +1938,9 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
     map<string, bufferlist> bucket_attrs;
-    r = driver->load_bucket(this, s->user.get(), s->user->get_tenant(),
-                            bucket_name, &ubucket, y);
+    r = driver->load_bucket(this, s->user.get(),
+                            rgw_bucket(s->user->get_tenant(), bucket_name),
+                            &ubucket, y);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 		       << bucket_name << dendl;
@@ -2070,8 +2070,9 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 	RGWAccessControlPolicy& _bucket_acl = allocated_acls.back();
 
 	std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
-	int r = driver->load_bucket(this, s->user.get(), s->user->get_tenant(),
-                                    bucket_name, &tmp_bucket, y);
+	int r = driver->load_bucket(this, s->user.get(),
+                                    rgw_bucket(s->user->get_tenant(), bucket_name),
+                                    &tmp_bucket, y);
         if (r < 0) {
           ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			   << bucket_name << dendl;
@@ -3373,8 +3374,9 @@ void RGWCreateBucket::execute(optional_yield y)
    * specific request */
   {
     std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
-    op_ret = driver->load_bucket(this, s->user.get(), s->bucket_tenant,
-                                 s->bucket_name, &tmp_bucket, y);
+    op_ret = driver->load_bucket(this, s->user.get(),
+                                 rgw_bucket(s->bucket_tenant, s->bucket_name),
+                                 &tmp_bucket, y);
     if (op_ret < 0 && op_ret != -ENOENT)
       return;
     s->bucket_exists = (op_ret != -ENOENT);
@@ -3673,8 +3675,10 @@ int RGWPutObj::init_processing(optional_yield y) {
       }
     }
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    ret = driver->load_bucket(this, s->user.get(), copy_source_tenant_name,
-                              copy_source_bucket_name, &bucket, y);
+    ret = driver->load_bucket(this, s->user.get(),
+                              rgw_bucket(copy_source_tenant_name,
+                                         copy_source_bucket_name),
+                              &bucket, y);
     if (ret < 0) {
       ldpp_dout(this, 5) << __func__ << "(): get_bucket() returned ret=" << ret << dendl;
       if (ret == -ENOENT) {
@@ -5357,8 +5361,8 @@ int RGWCopyObj::init_processing(optional_yield y)
   }
 
   op_ret = driver->load_bucket(this, s->user.get(),
-                               rgw_bucket_key(s->src_tenant_name,
-                                              s->src_bucket_name),
+                               rgw_bucket(s->src_tenant_name,
+                                          s->src_bucket_name),
                                &src_bucket, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
@@ -7315,8 +7319,10 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
   ACLOwner bowner;
   RGWObjVersionTracker ot;
 
-  int ret = driver->load_bucket(dpp, s->user.get(), s->user->get_tenant(),
-                                path.bucket_name, &bucket, y);
+  int ret = driver->load_bucket(dpp, s->user.get(),
+                                rgw_bucket(s->user->get_tenant(),
+                                           path.bucket_name),
+                                &bucket, y);
   if (ret < 0) {
     goto binfo_fail;
   }
@@ -7689,8 +7695,9 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   std::unique_ptr<rgw::sal::Bucket> bucket;
   ACLOwner bowner;
 
-  op_ret = driver->load_bucket(this, s->user.get(), s->user->get_tenant(),
-                               bucket_name, &bucket, y);
+  op_ret = driver->load_bucket(this, s->user.get(),
+                               rgw_bucket(s->user->get_tenant(), bucket_name),
+                               &bucket, y);
   if (op_ret < 0) {
     if (op_ret == -ENOENT) {
       ldpp_dout(this, 20) << "non existent directory=" << bucket_name << dendl;

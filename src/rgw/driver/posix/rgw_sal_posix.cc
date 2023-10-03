@@ -705,7 +705,8 @@ int POSIXDriver::mint_listing_entry(const std::string &bname,
     POSIXObject *pobj;
     int ret;
 
-    ret = load_bucket(nullptr, nullptr, std::string(), bname, &b, null_yield);
+    ret = load_bucket(nullptr, nullptr, rgw_bucket(std::string(), bname),
+                      &b, null_yield);
     if (ret < 0)
       return ret;
 

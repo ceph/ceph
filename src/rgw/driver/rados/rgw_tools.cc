@@ -285,7 +285,7 @@ int RGWDataAccess::Bucket::finish_init()
 int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = sd->driver->load_bucket(dpp, nullptr, tenant, name, &bucket, y);
+  int ret = sd->driver->load_bucket(dpp, nullptr, rgw_bucket(tenant, name), &bucket, y);
   if (ret < 0) {
     return ret;
   }
