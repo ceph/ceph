@@ -3,6 +3,11 @@ import pytest
 from ceph_volume.util import disk
 from mock.mock import patch
 
+    @patch('ceph_volume.util.disk.os.path.exists', MagicMock(return_value=True))
+    @patch('ceph_volume.util.disk.get_partitions', MagicMock(return_value={"sda1": "sda"}))
+    def test_is_partition(self):
+        assert disk.is_partition('sda1')
+
 
 class TestLsblkParser(object):
 
