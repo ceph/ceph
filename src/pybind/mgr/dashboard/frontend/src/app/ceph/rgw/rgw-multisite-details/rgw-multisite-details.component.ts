@@ -97,6 +97,7 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
   deleteTitle: string = 'Delete';
   disableExport = true;
   rgwModuleStatus: boolean;
+  restartGatewayMessage = false;
   rgwModuleData: string | any[] = [];
 
   constructor(
@@ -386,6 +387,17 @@ export class RgwMultisiteDetailsComponent implements OnDestroy, OnInit {
     this.realmIds = [];
     this.zoneIds = [];
     this.getDisableMigrate();
+    this.rgwDaemonService.list().subscribe((data: any) => {
+      const realmName = data.map((item: { [x: string]: any }) => item['realm_name']);
+      if (
+        this.defaultRealmId != '' &&
+        this.defaultZonegroupId != '' &&
+        this.defaultZoneId != '' &&
+        realmName.includes('')
+      ) {
+        this.restartGatewayMessage = true;
+      }
+    });
     return allNodes;
   }
 
