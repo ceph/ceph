@@ -210,7 +210,7 @@ class ContainerInfo:
 @register_daemon_form
 class Ceph(ContainerDaemonForm):
     _daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
-                'crash', 'cephfs-mirror', 'ceph-exporter')
+                'crash', 'cephfs-mirror')
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
@@ -1196,7 +1196,7 @@ class CephNvmeof(ContainerDaemonForm):
 
 
 @register_daemon_form
-class CephExporter(DaemonForm):
+class CephExporter(ContainerDaemonForm):
     """Defines a Ceph exporter container"""
 
     daemon_type = 'ceph-exporter'
@@ -1263,6 +1263,17 @@ class CephExporter(DaemonForm):
     def validate(self) -> None:
         if not os.path.isdir(self.sock_dir):
             raise Error(f'Directory does not exist. Got: {self.sock_dir}')
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return extract_uid_gid(ctx)
+
+    def config_and_keyring(
+        self, ctx: CephadmContext
+    ) -> Tuple[Optional[str], Optional[str]]:
+        return get_config_and_keyring(ctx)
 
 
 ##################################
@@ -1724,7 +1735,9 @@ def get_supported_daemons():
 
 
 def ceph_daemons() -> List[str]:
-    return list(Ceph._daemons)
+    cds = list(Ceph._daemons)
+    cds.append(CephExporter.daemon_type)
+    return cds
 
 ##################################
 
