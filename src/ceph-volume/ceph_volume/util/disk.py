@@ -802,7 +802,7 @@ def get_partitions(_sys_dev_block_path ='/sys/dev/block'):
     result = dict()
     for device in devices:
         device_path = os.path.join(_sys_dev_block_path, device)
-        is_partition = get_file_contents(os.path.join(device_path, 'partition')) == "1"
+        is_partition = int(get_file_contents(os.path.join(device_path, 'partition'), '0')) > 0
         if not is_partition:
             continue
 
