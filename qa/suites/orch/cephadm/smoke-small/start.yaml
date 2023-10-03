@@ -21,3 +21,5 @@ overrides:
       - \(MON_DOWN\)
       - mons down, quorum
       - \(CEPHADM_STRAY_DAEMON\)
+      - \(POOL_APP_NOT_ENABLED\)
+      - do not have an application enabled
