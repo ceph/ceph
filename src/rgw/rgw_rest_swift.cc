@@ -1898,14 +1898,13 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
 
   std::set<std::string> targets;
-  if (zonegroup.get_placement_target_names(targets)) {
-    for (const auto& placement_targets : targets) {
-      formatter.open_object_section("policy");
-      if (placement_targets.compare(zonegroup.get_default_placement_name()) == 0)
-	formatter.dump_bool("default", true);
-      formatter.dump_string("name", placement_targets.c_str());
-      formatter.close_section();
-    }
+  zonegroup.get_placement_target_names(targets);
+  for (const auto& placement_targets : targets) {
+    formatter.open_object_section("policy");
+    if (placement_targets.compare(zonegroup.get_default_placement_name()) == 0)
+      formatter.dump_bool("default", true);
+    formatter.dump_string("name", placement_targets.c_str());
+    formatter.close_section();
   }
   formatter.close_section();
 

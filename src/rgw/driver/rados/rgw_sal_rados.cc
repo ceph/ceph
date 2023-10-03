@@ -3191,13 +3191,11 @@ bool RadosZoneGroup::placement_target_exists(std::string& target) const
   return !!group.placement_targets.count(target);
 }
 
-int RadosZoneGroup::get_placement_target_names(std::set<std::string>& names) const
+void RadosZoneGroup::get_placement_target_names(std::set<std::string>& names) const
 {
   for (const auto& target : group.placement_targets) {
     names.emplace(target.second.name);
   }
-
-  return 0;
 }
 
 int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,

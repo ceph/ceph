@@ -531,12 +531,10 @@ namespace rgw::sal {
     return !!group->placement_targets.count(target);
   }
 
-  int DBZoneGroup::get_placement_target_names(std::set<std::string>& names) const {
+  void DBZoneGroup::get_placement_target_names(std::set<std::string>& names) const {
     for (const auto& target : group->placement_targets) {
       names.emplace(target.second.name);
     }
-
-    return 0;
   }
 
   ZoneGroup& DBZone::get_zonegroup()

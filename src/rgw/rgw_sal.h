@@ -1483,7 +1483,7 @@ public:
   /** Get the API name of this zonegroup */
   virtual const std::string& get_api_name() const = 0;
   /** Get the list of placement target names for this zone */
-  virtual int get_placement_target_names(std::set<std::string>& names) const = 0;
+  virtual void get_placement_target_names(std::set<std::string>& names) const = 0;
   /** Get the name of the default placement target for this zone */
   virtual const std::string& get_default_placement_name() const = 0;
   /** Get the list of hostnames from this zone */
