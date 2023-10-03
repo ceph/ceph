@@ -243,9 +243,9 @@ private:
       EntityName& cephx_entity,
       EntityName& lockbox_entity,
       std::stringstream& ss);
-  int do_osd_destroy(
-      const EntityName& cephx_entity,
-      const EntityName& lockbox_entity);
+  void do_osd_destroy(
+       const EntityName& cephx_entity,
+       const EntityName& lockbox_entity);
 
   int do_osd_new(
       const auth_entity_t& cephx_entity,

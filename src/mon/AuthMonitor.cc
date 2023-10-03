@@ -1123,11 +1123,12 @@ int AuthMonitor::validate_osd_destroy(
   return 0;
 }
 
-int AuthMonitor::do_osd_destroy(
-    const EntityName& cephx_entity,
-    const EntityName& lockbox_entity)
+void AuthMonitor::do_osd_destroy(
+     const EntityName& cephx_entity,
+     const EntityName& lockbox_entity)
 {
   ceph_assert(paxos.is_plugged());
+  ceph_assert(is_writeable());
 
   dout(10) << __func__ << " cephx " << cephx_entity
                        << " lockbox " << lockbox_entity << dendl;
@@ -1150,14 +1151,13 @@ int AuthMonitor::do_osd_destroy(
 
   if (!removed) {
     dout(10) << __func__ << " entities do not exist -- no-op." << dendl;
-    return 0;
+    return;
   }
 
   // given we have paxos plugged, this will not result in a proposal
   // being triggered, but it will still be needed so that we get our
   // pending state encoded into the paxos' pending transaction.
   propose_pending();
-  return 0;
 }
 
 int _create_auth(
