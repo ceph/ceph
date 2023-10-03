@@ -184,6 +184,7 @@
     topic list                 list bucket notifications topics
     topic get                  get a bucket notifications topic
     topic rm                   remove a bucket notifications topic
+    topic stats                get a bucket notifications persistent topic stats (i.e. reservations, entries & size)
     script put                 upload a lua script to a context
     script get                 get the lua script of a context
     script rm                  remove the lua scripts of a context
