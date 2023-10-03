@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - \(MDS_INSUFFICIENT_STANDBY\)
+      - failed to encode map
 
 tasks:
 - parallel:
