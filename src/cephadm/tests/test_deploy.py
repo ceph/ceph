@@ -184,3 +184,42 @@ def test_deploy_haproxy_container(cephadm_fs, monkeypatch):
         assert (si.st_uid, si.st_gid) == (8765, 8765)
     assert _install_sysctl.call_count == 1
     assert len(_install_sysctl.call_args[0][-1].get_sysctl_settings()) > 1
+
+
+def test_deploy_iscsi_container(cephadm_fs, monkeypatch):
+    mocks = _common_mp(monkeypatch)
+    _firewalld = mocks['Firewalld']
+    fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
+    with with_cephadm_ctx([]) as ctx:
+        ctx.container_engine = mock_podman()
+        ctx.fsid = fsid
+        ctx.name = 'iscsi.wuzzy'
+        ctx.image = 'quay.io/ayeaye/iscsi:latest'
+        ctx.reconfig = False
+        ctx.config_blobs = {
+            'config': 'XXXXXXX',
+            'keyring': 'YYYYYY',
+            'files': {
+                'iscsi-gateway.cfg': 'portal',
+            },
+        }
+        _cephadm._common_deploy(ctx)
+
+    basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/iscsi.wuzzy')
+    assert basedir.is_dir()
+    with open(basedir / 'unit.run') as f:
+        runfile_lines = f.read().splitlines()
+    assert 'podman' in runfile_lines[-1]
+    assert runfile_lines[-1].endswith('quay.io/ayeaye/iscsi:latest')
+    _firewalld().open_ports.assert_not_called()
+    with open(basedir / 'config') as f:
+        assert f.read() == 'XXXXXXX'
+    with open(basedir / 'keyring') as f:
+        assert f.read() == 'YYYYYY'
+    assert (basedir / 'configfs').is_dir()
+    si = (basedir / 'configfs').stat()
+    assert (si.st_uid, si.st_gid) == (8765, 8765)
+    with open(basedir / 'iscsi-gateway.cfg') as f:
+        assert f.read() == 'portal'
+        si = os.fstat(f.fileno())
+        assert (si.st_uid, si.st_gid) == (8765, 8765)
