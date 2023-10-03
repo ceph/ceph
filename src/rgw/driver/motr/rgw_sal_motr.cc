@@ -1047,20 +1047,6 @@ void MotrStore::finalize(void)
   m0_client_fini(this->instance, true);
 }
 
-const std::string& MotrZoneGroup::get_endpoint() const
-{
-  if (!group.endpoints.empty()) {
-      return group.endpoints.front();
-  } else {
-    // use zonegroup's master zone endpoints
-    auto z = group.zones.find(group.master_zone);
-    if (z != group.zones.end() && !z->second.endpoints.empty()) {
-      return z->second.endpoints.front();
-    }
-  }
-  return empty;
-}
-
 bool MotrZoneGroup::placement_target_exists(std::string& target) const
 {
   return !!group.placement_targets.count(target);

@@ -2980,20 +2980,6 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
 			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx);
 }
 
-const std::string& RadosZoneGroup::get_endpoint() const
-{
-  if (!group.endpoints.empty()) {
-      return group.endpoints.front();
-  } else {
-    // use zonegroup's master zone endpoints
-    auto z = group.zones.find(group.master_zone);
-    if (z != group.zones.end() && !z->second.endpoints.empty()) {
-      return z->second.endpoints.front();
-    }
-  }
-  return empty;
-}
-
 bool RadosZoneGroup::placement_target_exists(std::string& target) const
 {
   return !!group.placement_targets.count(target);

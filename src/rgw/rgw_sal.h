@@ -1431,8 +1431,6 @@ public:
   virtual const std::string& get_name() const = 0;
   /** Determine if two zonegroups are the same */
   virtual int equals(const std::string& other_zonegroup) const = 0;
-  /** Get the endpoint from zonegroup, or from master zone if not set */
-  virtual const std::string& get_endpoint() const = 0;
   /** Check if a placement target (by name) exists in this zonegroup */
   virtual bool placement_target_exists(std::string& target) const = 0;
   /** Check if this is the master zonegroup */
