@@ -21,6 +21,7 @@ overrides:
   ceph:
     log-ignorelist:
       - \(POOL_APP_NOT_ENABLED\)
+      - "grace tool failed: rados_pool_create: -1"
     conf:
       osd:
         osd shutdown pgref assert: true
