@@ -5017,17 +5017,16 @@ int OSDMap::balance_primaries(
   map<uint64_t,set<pg_t>> acting_prims_by_osd;
   pgs_by_osd = tmp_osd_map.get_pgs_by_osd(cct, pid, &prim_pgs_by_osd, &acting_prims_by_osd);
 
-  // Transfer pgs into a map, `pgs_to_check`. This will tell us the total num_changes after all
-  //     calculations have been finalized.
-  // Transfer osds into a set, `osds_to_check`.
-  // This is to avoid poor runtime when we loop through the pgs and to set up
-  // our call to calc_desired_primary_distribution.
+  // Construct information about the pgs and osds we will consider in new primary mappings,
+  // as well as a map of all pgs and their original primary osds.
   map<pg_t,bool> prim_pgs_to_check;
   vector<uint64_t> osds_to_check;
+  map<pg_t, uint64_t> orig_prims;
   for (const auto & [osd, pgs] : prim_pgs_by_osd) {
     osds_to_check.push_back(osd);
     for (const auto & pg : pgs) {
       prim_pgs_to_check.insert({pg, false});
+      orig_prims.insert({pg, osd});
     }
   }
 
@@ -5101,9 +5100,14 @@ int OSDMap::balance_primaries(
 	prim_dist_scores[up_primary] -= 1;
 
 	// Update the mappings
-	pending_inc->new_pg_upmap_primary[pg] = curr_best_osd;
 	tmp_osd_map.pg_upmap_primaries[pg] = curr_best_osd;
-	prim_pgs_to_check[pg] = true; // mark that this pg changed mappings
+	if (curr_best_osd == orig_prims[pg]) {
+          pending_inc->new_pg_upmap_primary.erase(pg);
+          prim_pgs_to_check[pg] = false;
+	} else {
+	  pending_inc->new_pg_upmap_primary[pg] = curr_best_osd;
+          prim_pgs_to_check[pg] = true; // mark that this pg changed mappings
+	}
 
 	curr_num_changes++;
       }
