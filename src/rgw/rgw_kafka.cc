@@ -100,10 +100,12 @@ struct connection_t {
     // fire all remaining callbacks (if not fired by rd_kafka_flush)
     std::for_each(callbacks.begin(), callbacks.end(), [this](auto& cb_tag) {
         cb_tag.cb(status);
-        ldout(cct, 20) << "Kafka destroy: invoking callback with tag=" << cb_tag.tag << dendl;
+        ldout(cct, 20) << "Kafka destroy: invoking callback with tag=" << cb_tag.tag << 
+          " for: " << broker << dendl;
       });
     callbacks.clear();
     delivery_tag = 1;
+    ldout(cct, 20) << "Kafka destroy: complete for: " << broker << dendl;
   }
 
   bool is_ok() const {
