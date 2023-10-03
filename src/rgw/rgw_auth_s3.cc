@@ -434,9 +434,13 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
   /* grab date */
 
   const char *d = info.env->get("HTTP_X_AMZ_DATE");
+
   struct tm t;
-  if (!parse_iso8601(d, &t, NULL, false)) {
-    ldpp_dout(dpp, 10) << "error reading date via http_x_amz_date" << dendl;
+  if (unlikely(d == NULL)) {
+    d = info.env->get("HTTP_DATE");
+  }
+  if (!d || !parse_iso8601(d, &t, NULL, false)) {
+    ldpp_dout(dpp, 10) << "error reading date via http_x_amz_date and http_date" << dendl;
     return -EACCES;
   }
   date = d;
@@ -445,8 +449,9 @@ static inline int parse_v4_auth_header(const req_info& info,               /* in
     return -ERR_REQUEST_TIME_SKEWED;
   }
 
-  if (info.env->exists("HTTP_X_AMZ_SECURITY_TOKEN")) {
-    sessiontoken = info.env->get("HTTP_X_AMZ_SECURITY_TOKEN");
+  auto token = info.env->get_optional("HTTP_X_AMZ_SECURITY_TOKEN");
+  if (token) {
+    sessiontoken = *token;
   }
 
   return 0;

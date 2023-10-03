@@ -42,7 +42,10 @@ int rgw_opa_authorize(RGWOp *& op,
   JSONFormatter jf;
   jf.open_object_section("");
   jf.open_object_section("input");
-  jf.dump_string("method", s->info.env->get("REQUEST_METHOD"));
+  const char *request_method = s->info.env->get("REQUEST_METHOD");
+  if (request_method) {
+    jf.dump_string("method", request_method);
+  }
   jf.dump_string("relative_uri", s->relative_uri.c_str());
   jf.dump_string("decoded_uri", s->decoded_uri.c_str());
   jf.dump_string("params", s->info.request_params.c_str());

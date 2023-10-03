@@ -667,14 +667,16 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
 
   if (swift_url.size() == 0) {
     bool add_port = false;
-    const char *server_port = s->info.env->get("SERVER_PORT_SECURE");
+    auto server_port = s->info.env->get_optional("SERVER_PORT_SECURE");
     const char *protocol;
     if (server_port) {
-      add_port = (strcmp(server_port, "443") != 0);
+      add_port = (*server_port != "443");
       protocol = "https";
     } else {
-      server_port = s->info.env->get("SERVER_PORT");
-      add_port = (strcmp(server_port, "80") != 0);
+      server_port = s->info.env->get_optional("SERVER_PORT");
+      if (server_port) {
+        add_port = (*server_port != "80");
+      }
       protocol = "http";
     }
     const char *host = s->info.env->get("HTTP_HOST");
@@ -688,7 +690,7 @@ void RGW_SWIFT_Auth_Get::execute(optional_yield y)
     swift_url.append(host);
     if (add_port && !strchr(host, ':')) {
       swift_url.append(":");
-      swift_url.append(server_port);
+      swift_url.append(*server_port);
     }
   }
 
