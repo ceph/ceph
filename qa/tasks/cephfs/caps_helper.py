@@ -148,7 +148,7 @@ def get_fsnames_from_moncap(moncap):
 
 
 def assert_equal(first, second):
-    msg = f'Variables are not equal.\nfirst = {first}\nsecond = {second}'
+    msg = f'Variables are not equal.\nfirst -\n{first}\nsecond -\n{second}'
     assert first == second, msg
 
 
