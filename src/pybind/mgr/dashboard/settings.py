@@ -119,6 +119,8 @@ class Options(object):
                                                   'gateway', 'logs', 'crush', 'maps']),
                                         [str])
 
+    UNSAFE_TLS_v1_2 = Setting(False, [bool])
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
