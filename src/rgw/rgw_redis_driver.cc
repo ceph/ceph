@@ -66,7 +66,7 @@ uint64_t RedisDriver::calculate_free_space(const DoutPrefixProvider* dpp, option
     boost::system::error_code ec;
     response< std::vector<std::string> > resp;
     request req;
-    req.push("INFO"); // how to change to a specific petition of redis? -Sam
+    req.push("INFO"); // how to change to a specific partition of redis? -Sam
 
     redis_exec(conn, ec, req, resp, y);
 
@@ -336,7 +336,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (ec)
+    if (std::get<0>(resp).value().empty() || ec)
       return -1;
 
     for (auto const& it : std::get<0>(resp).value()) {
@@ -511,10 +511,11 @@ static Aio::OpFunc redis_read_op(optional_yield y, std::shared_ptr<connection> c
     req.push("HGET", key, "data");
 
     // TODO: Make unique pointer once support is added
-    auto s = std::make_shared<RedisDriver::redis_response>();
-    auto& resp = s->resp;
+    //auto s = std::make_shared<RedisDriver::redis_response>();
+    //auto& resp = s->resp;
+    boost::redis::response<std::string> resp;
 
-    conn->async_exec(req, resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, s}));
+    conn->async_exec(req, resp, net::consign(bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, resp}), resp));
   };
 }
 
@@ -528,7 +529,12 @@ rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optiona
 }
 
 int RedisDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
-  return -1; // TODO: implement
+/*  if ((r = ::aio_write(cb)) != 0) {
+    ldpp_dout(dpp, 0) << "ERROR: SSDCache: " << __func__ << "() aio_write r=" << r << dendl;
+    delete wr;
+    return r;
+  }*/
+  return 0;
 } 
 
 void RedisDriver::shutdown()

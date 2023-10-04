@@ -52,23 +52,36 @@ class RedisDriver : public CacheDriver {
     virtual int delete_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& del_attrs, optional_yield y) override;
     virtual int set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) override;
     virtual std::string get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) override;
+    void shutdown();
 
     struct redis_response {
       boost::redis::response<std::string> resp;
+      ~redis_response() { // remove later -Sam
+        std::cout << "redis_response destroyed!" << std::endl;
+      }
     };
-    void shutdown();
 
     struct redis_aio_handler { 
       rgw::Aio* throttle = nullptr;
       rgw::AioResult& r;
-      std::shared_ptr<redis_response> s;
+      boost::redis::response<std::string> resp;
+      //std::shared_ptr<redis_response> s;
 
       /* Read Callback */
-      void operator()(boost::system::error_code ec, long unsigned int size) const {
+      void operator()(boost::system::error_code ec, auto) const {
 	r.result = -ec.value();
-	r.data.append(std::get<0>(s->resp).value().c_str());
+	r.data.append(std::get<0>(resp).value().c_str());
+	//r.data.append(std::get<0>(s->resp).value().c_str());
 	throttle->put(r);
       }
+
+#if 0
+      /* Write Callback */
+      void operator()(boost::system::error_code ec) const {
+	r.result = -ec.value();
+	throttle->put(r);
+      }
+#endif
     };
 
   protected:
