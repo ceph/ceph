@@ -246,11 +246,65 @@ ECBackend::submit_transaction(const std::set<pg_shard_t> &pg_shards,
 			      crimson::osd::ObjectContextRef&& new_clone,
                               ceph::os::Transaction&& txn,
                               osd_op_params_t&& osd_op_p,
-                              epoch_t min_epoch, epoch_t max_epoch,
+                              epoch_t min_epoch,
+                              epoch_t max_epoch,
 			      std::vector<pg_log_entry_t>&& log_entries)
 {
   // todo
   return make_ready_future<rep_op_ret_t>(seastar::now(), seastar::now());
+}
+
+ECBackend::load_hashinfo_iertr::future<ECUtil::HashInfoRef>
+ECBackend::get_hash_info(
+  const hobject_t &hoid,
+  bool create,
+  const std::map<std::string, ceph::buffer::ptr, std::less<>> *attr)
+{
+  logger().debug("{}: getting hashinfo attr on {}", __func__, hoid);
+  if (auto ref = unstable_hashinfo_registry.lookup(hoid); ref) {
+    return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>(
+      std::move(ref));
+  }
+  logger().info("{}: not in cache {}", __func__, hoid);
+
+  using get_attr_ertr = crimson::os::FuturizedStore::Shard::get_attr_errorator;
+  return store->get_attr(
+    coll,
+    ghobject_t{hoid, ghobject_t::NO_GEN, get_shard()},
+    ECUtil::get_hinfo_key()
+  ).safe_then([create, hoid, this] (auto&& valbl) {
+    logger().debug("{}: found obj+attr on disk {}", "get_hash_info", hoid);
+    if (!valbl.length()) {
+      // If empty object and no hinfo, create it
+      return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>();
+    }
+    ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
+    auto bp = valbl.cbegin();
+    try {
+      decode(hinfo, bp);
+    } catch(...) {
+      ceph_abort_msg("can't decode hinfo");
+    }
+    return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>(
+      unstable_hashinfo_registry.lookup_or_create(hoid, hinfo));
+  }, crimson::ct_error::enoent::handle([create, hoid, this] {
+    // no object
+    logger().error("{}: the object {} doesn't exist. {}",
+		   "get_hash_info", hoid, create ? "creating" : "");
+    if (create) {
+      ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
+      return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>(
+        unstable_hashinfo_registry.lookup_or_create(hoid, hinfo)
+      );
+    } else {
+      return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>();
+    }
+  }), crimson::ct_error::enodata::handle([hoid] {
+    // object exists but attr doesn't
+    logger().error("{}: object {} exists but it lacks the attribute",
+		   "get_hash_info", hoid);
+    return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>();
+  }));
 }
 
 ECBackend::write_iertr::future<>
