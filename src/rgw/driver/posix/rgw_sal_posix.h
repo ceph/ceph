@@ -175,12 +175,12 @@ public:
 		   ListResults&, optional_yield y) override;
   virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				    Attrs& new_attrs, optional_yield y) override;
-  virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children,
-			    optional_yield y) override;
-  virtual int remove_bucket_bypass_gc(int concurrent_max,
-				      bool keep_index_consistent,
-				      optional_yield y,
-				      const DoutPrefixProvider *dpp) override;
+  virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		     optional_yield y) override;
+  virtual int remove_bypass_gc(int concurrent_max,
+			       bool keep_index_consistent,
+			       optional_yield y,
+			       const DoutPrefixProvider *dpp) override;
   virtual int create(const DoutPrefixProvider* dpp,
 		     const CreateParams& params,
 		     optional_yield y) override;

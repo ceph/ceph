@@ -3730,7 +3730,7 @@ void RGWDeleteBucket::execute(optional_yield y)
       // do nothing; it will already have been logged
   }
 
-  op_ret = s->bucket->remove_bucket(this, false, y);
+  op_ret = s->bucket->remove(this, false, y);
   if (op_ret < 0 && op_ret == -ECANCELED) {
       // lost a race, either with mdlog sync or another delete bucket operation.
       // in either case, we've already called ctl.bucket->unlink_bucket()
@@ -7478,7 +7478,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
         goto delop_fail;
       }
     }
-    ret = bucket->remove_bucket(dpp, false, s->yield);
+    ret = bucket->remove(dpp, false, s->yield);
     if (ret < 0) {
       goto delop_fail;
     }

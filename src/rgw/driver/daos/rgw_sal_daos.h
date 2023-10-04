@@ -289,12 +289,12 @@ class DaosBucket : public StoreBucket {
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
   virtual int list(const DoutPrefixProvider* dpp, ListParams&, int,
                    ListResults&, optional_yield y) override;
-  virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children,
-                            optional_yield y) override;
-  virtual int remove_bucket_bypass_gc(int concurrent_max,
-                                      bool keep_index_consistent,
-                                      optional_yield y,
-                                      const DoutPrefixProvider* dpp) override;
+  virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+                     optional_yield y) override;
+  virtual int remove_bypass_gc(int concurrent_max,
+                               bool keep_index_consistent,
+                               optional_yield y,
+                               const DoutPrefixProvider* dpp) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
   virtual int set_acl(const DoutPrefixProvider* dpp,
                       RGWAccessControlPolicy& acl, optional_yield y) override;

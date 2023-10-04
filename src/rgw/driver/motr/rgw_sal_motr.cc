@@ -539,7 +539,7 @@ int MotrUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutP
   return 0;
 }
 
-int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
+int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
 {
   int ret;
 
@@ -669,7 +669,7 @@ int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_childre
   return ret;
 }
 
-int MotrBucket::remove_bucket_bypass_gc(int concurrent_max, bool
+int MotrBucket::remove_bypass_gc(int concurrent_max, bool
         keep_index_consistent,
         optional_yield y, const
         DoutPrefixProvider *dpp) {

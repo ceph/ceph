@@ -566,19 +566,19 @@ int FilterBucket::list(const DoutPrefixProvider* dpp, ListParams& params, int ma
   return next->list(dpp, params, max, results, y);
 }
 
-int FilterBucket::remove_bucket(const DoutPrefixProvider* dpp,
-				bool delete_children,
-				optional_yield y)
+int FilterBucket::remove(const DoutPrefixProvider* dpp,
+			 bool delete_children,
+			 optional_yield y)
 {
-  return next->remove_bucket(dpp, delete_children, y);
+  return next->remove(dpp, delete_children, y);
 }
 
-int FilterBucket::remove_bucket_bypass_gc(int concurrent_max,
-					  bool keep_index_consistent,
-					  optional_yield y,
-					  const DoutPrefixProvider *dpp)
+int FilterBucket::remove_bypass_gc(int concurrent_max,
+				   bool keep_index_consistent,
+				   optional_yield y,
+				   const DoutPrefixProvider *dpp)
 {
-  return next->remove_bucket_bypass_gc(concurrent_max, keep_index_consistent, y, dpp);
+  return next->remove_bypass_gc(concurrent_max, keep_index_consistent, y, dpp);
 }
 
 int FilterBucket::set_acl(const DoutPrefixProvider* dpp,

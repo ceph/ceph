@@ -271,9 +271,9 @@ int RadosUser::verify_mfa(const std::string& mfa_str, bool* verified,
 
 RadosBucket::~RadosBucket() {}
 
-int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
-			       bool delete_children,
-			       optional_yield y)
+int RadosBucket::remove(const DoutPrefixProvider* dpp,
+			bool delete_children,
+			optional_yield y)
 {
   int ret;
 
@@ -358,10 +358,10 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
   return ret;
 }
 
-int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
-					 keep_index_consistent,
-					 optional_yield y, const
-					 DoutPrefixProvider *dpp)
+int RadosBucket::remove_bypass_gc(int concurrent_max, bool
+				  keep_index_consistent,
+				  optional_yield y, const
+				  DoutPrefixProvider *dpp)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -485,7 +485,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   // this function can only be run if caller wanted children to be
   // deleted, so we can ignore the check for children as any that
   // remain are detritus from a prior bug
-  ret = remove_bucket(dpp, true, y);
+  ret = remove(dpp, true, y);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << this << dendl;
     return ret;

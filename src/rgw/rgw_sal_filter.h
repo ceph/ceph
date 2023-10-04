@@ -379,12 +379,12 @@ public:
 		   ListResults&, optional_yield y) override;
   virtual Attrs& get_attrs(void) override { return next->get_attrs(); }
   virtual int set_attrs(Attrs a) override { return next->set_attrs(a); }
-  virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children,
-			    optional_yield y) override;
-  virtual int remove_bucket_bypass_gc(int concurrent_max, bool
-				      keep_index_consistent,
-				      optional_yield y, const
-				      DoutPrefixProvider *dpp) override;
+  virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		     optional_yield y) override;
+  virtual int remove_bypass_gc(int concurrent_max, bool
+			       keep_index_consistent,
+			       optional_yield y, const
+			       DoutPrefixProvider *dpp) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return next->get_acl(); }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
 		      optional_yield y) override;

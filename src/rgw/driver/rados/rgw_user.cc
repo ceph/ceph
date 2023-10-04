@@ -1791,7 +1791,7 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         return ret;
       }
 
-      ret = bucket->remove_bucket(dpp, true, y);
+      ret = bucket->remove(dpp, true, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;

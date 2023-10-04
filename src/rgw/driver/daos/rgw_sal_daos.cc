@@ -404,8 +404,8 @@ std::unique_ptr<struct ds3_bucket_info> DaosBucket::get_encoded_info(
   return bucket_info;
 }
 
-int DaosBucket::remove_bucket(const DoutPrefixProvider* dpp,
-                              bool delete_children, optional_yield y) {
+int DaosBucket::remove(const DoutPrefixProvider* dpp,
+                       bool delete_children, optional_yield y) {
   ldpp_dout(dpp, 20) << "DEBUG: remove_bucket, delete_children="
                      << delete_children << dendl;
 
@@ -413,10 +413,10 @@ int DaosBucket::remove_bucket(const DoutPrefixProvider* dpp,
                             nullptr);
 }
 
-int DaosBucket::remove_bucket_bypass_gc(int concurrent_max,
-                                        bool keep_index_consistent,
-                                        optional_yield y,
-                                        const DoutPrefixProvider* dpp) {
+int DaosBucket::remove_bypass_gc(int concurrent_max,
+                                 bool keep_index_consistent,
+                                 optional_yield y,
+                                 const DoutPrefixProvider* dpp) {
   ldpp_dout(dpp, 20) << "DEBUG: remove_bucket_bypass_gc, concurrent_max="
                     
                      << concurrent_max
