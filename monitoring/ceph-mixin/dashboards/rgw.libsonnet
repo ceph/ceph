@@ -24,7 +24,7 @@ local u = import 'utils.libsonnet';
             '{{source_zone}}'
           ),
         ]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
+      ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
       'RGW Sync Overview',
@@ -158,7 +158,7 @@ local u = import 'utils.libsonnet';
       )
       .addTargets(
         [$.addTargetSchema(expr1, legendFormat1)]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
+      ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
       'RGW Overview',
@@ -669,7 +669,7 @@ local u = import 'utils.libsonnet';
                          '$datasource')
       .addTargets(
         [$.addTargetSchema(expr1, legendFormat1), $.addTargetSchema(expr2, legendFormat2)]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
+      ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
       'RGW Instance Detail',
