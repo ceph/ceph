@@ -133,7 +133,7 @@ local u = import 'utils.libsonnet';
       $.graphPanelSchema({},
                          title,
                          '',
-                         'null',
+                         'null as zero',
                          false,
                          formatY1,
                          'short',
