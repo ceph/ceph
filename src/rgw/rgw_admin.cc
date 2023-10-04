@@ -8978,12 +8978,15 @@ next:
       return -EINVAL;
     }
     if (!start_marker.empty()) {
-      std::cerr << "end-date not allowed." << std::endl;
+      std::cerr << "start-marker not allowed." << std::endl;
       return -EINVAL;
     }
     if (!end_marker.empty()) {
-      std::cerr << "end-date not allowed." << std::endl;
+      std::cerr << "end_marker not allowed." << std::endl;
       return -EINVAL;
+    }
+    if (marker.empty()) {
+      marker = "9"; // trims everything
     }
 
     if (shard_id < 0) {
