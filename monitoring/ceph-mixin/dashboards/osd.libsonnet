@@ -257,7 +257,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                        nullPointMode='null')
       .addTarget($.addTargetSchema(
         'ceph_osd_numpg{%(matchers)s}' % $.matchers(), 'PGs per OSD', 'time_series', 1, true
-      )) + { gridPos: { x: 12, y: 8, w: 8, h: 8 } },
+      )) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: 'short', custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: 12, y: 8, w: 8, h: 8 } },
       $.gaugeSingleStatPanel(
         'percentunit',
         'OSD onode Hits Ratio',
@@ -357,7 +357,7 @@ local g = import 'grafonnet/grafana.libsonnet';
                             legendFormat1),
           $.addTargetSchema(expr2, legendFormat2),
         ]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
+      ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
       'OSD device details',
@@ -613,6 +613,6 @@ local g = import 'grafonnet/grafana.libsonnet';
           )
         ||| % $.matchers(),
         '{{device}} on {{instance}}'
-      )) + { gridPos: { x: 18, y: 11, w: 6, h: 9 } },
+      )) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: 'percentunit', custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: 18, y: 11, w: 6, h: 9 } },
     ]),
 }
