@@ -2075,3 +2075,147 @@ tests:
            description: "Detected a heavy increase in bandwidth for rbd replications (over 80%) in the last 30 min. This might not be a problem, but it is good to review the number of images being replicated simultaneously"
            summary: "The replication network usage has been increased over 80% in the last 30 minutes. Review the number of images being replicated. This alert will be cleaned automatically after 30 minutes"
 
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="HARDWARE_STORAGE"}'
+      values: '1+0x40'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="HARDWARE_STORAGE"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="HARDWARE_STORAGE"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: HardwareStorageError
+    - eval_time: 5m
+      alertname: HardwareStorageError
+      exp_alerts:
+      - exp_labels:
+          name: HARDWARE_STORAGE
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.1
+        exp_annotations:
+          summary: Storage devices error(s) detected
+          description: "Some storage devices are in error. Check `ceph health detail`."
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="HARDWARE_MEMORY"}'
+      values: '1+0x40'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="HARDWARE_MEMORY"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="HARDWARE_MEMORY"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: HardwareMemoryError
+    - eval_time: 5m
+      alertname: HardwareMemoryError
+      exp_alerts:
+      - exp_labels:
+          name: HARDWARE_MEMORY
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.2
+        exp_annotations:
+          summary: DIMM error(s) detected
+          description: "DIMM error(s) detected. Check `ceph health detail`."
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="HARDWARE_PROCESSOR"}'
+      values: '1+0x40'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="HARDWARE_PROCESSOR"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="HARDWARE_PROCESSOR"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: HardwareProcessorError
+    - eval_time: 5m
+      alertname: HardwareProcessorError
+      exp_alerts:
+      - exp_labels:
+          name: HARDWARE_PROCESSOR
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.3
+        exp_annotations:
+          summary: Processor error(s) detected
+          description: "Processor error(s) detected. Check `ceph health detail`."
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="HARDWARE_NETWORK"}'
+      values: '1+0x40'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="HARDWARE_NETWORK"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="HARDWARE_NETWORK"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: HardwareNetworkError
+    - eval_time: 5m
+      alertname: HardwareNetworkError
+      exp_alerts:
+      - exp_labels:
+          name: HARDWARE_NETWORK
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.4
+        exp_annotations:
+          summary: Network error(s) detected
+          description: "Network error(s) detected. Check `ceph health detail`."
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="HARDWARE_POWER"}'
+      values: '1+0x40'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="HARDWARE_POWER"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="HARDWARE_POWER"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: HardwarePowerError
+    - eval_time: 5m
+      alertname: HardwarePowerError
+      exp_alerts:
+      - exp_labels:
+          name: HARDWARE_POWER
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.5
+        exp_annotations:
+          summary: Power supply error(s) detected
+          description: "Power supply error(s) detected. Check `ceph health detail`."
+ - interval: 30s
+   input_series:
+    - series: 'ceph_health_detail{name="HARDWARE_FANS"}'
+      values: '1+0x40'
+   promql_expr_test:
+     - expr: ceph_health_detail{name="HARDWARE_FANS"} > 0
+       eval_time: 2m
+       exp_samples:
+         - labels: '{__name__="ceph_health_detail", name="HARDWARE_FANS"}'
+           value: 1
+   alert_rule_test:
+    - eval_time: 1m
+      alertname: HardwareFanError
+    - eval_time: 5m
+      alertname: HardwareFanError
+      exp_alerts:
+      - exp_labels:
+          name: HARDWARE_FANS
+          severity: critical
+          type: ceph_default
+          oid: 1.3.6.1.4.1.50495.1.2.1.13.6
+        exp_annotations:
+          summary: Fan error(s) detected
+          description: "Fan error(s) detected. Check `ceph health detail`."
