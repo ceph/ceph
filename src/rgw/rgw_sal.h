@@ -636,12 +636,12 @@ class Bucket {
     /** Set the cached attributes on this bucket */
     virtual int set_attrs(Attrs a) = 0;
     /** Remove this bucket from the backing store */
-    virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
     /** Remove this bucket, bypassing garbage collection.  May be removed */
-    virtual int remove_bucket_bypass_gc(int concurrent_max, bool
-					keep_index_consistent,
-					optional_yield y, const
-					DoutPrefixProvider *dpp) = 0;
+    virtual int remove_bypass_gc(int concurrent_max, bool
+				 keep_index_consistent,
+				 optional_yield y, const
+				 DoutPrefixProvider *dpp) = 0;
     /** Get then ACL for this bucket */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     /** Set the ACL for this bucket */
