@@ -1,8 +1,10 @@
 from io import BytesIO
-import logging
+from logging import getLogger
+
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 
-logger = logging.getLogger(__name__)
+
+log = getLogger(__name__)
 
 
 # TODO: add code to run non-ACL tests too.
@@ -88,11 +90,12 @@ class XFSTestsDev(CephFSTestCase):
         distro = distro.lower()
         major_ver_num = int(version.split('.')[0]) # only keep major release
                                                    # number
+        log.info(f'distro and version detected is "{distro}" and "{version}".')
 
         # we keep fedora here so that right deps are installed when this test
         # is run locally by a dev.
         if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora',
-                      'centos', 'centosstream'):
+                      'centos', 'centosstream', 'rhel'):
             deps = """acl attr automake bc dbench dump e2fsprogs fio \
             gawk gcc indent libtool lvm2 make psmisc quota sed \
             xfsdump xfsprogs \
