@@ -550,28 +550,35 @@ bool MDSMonitor::prepare_update(MonOpRequestRef op)
   auto m = op->get_req<PaxosServiceMessage>();
   dout(7) << "prepare_update " << *m << dendl;
 
+  bool r = false;
+
+  /* batch any changes to pending with any changes to osdmap */
+  paxos.plug();
+
   switch (m->get_type()) {
-    
-  case MSG_MDS_BEACON:
-    return prepare_beacon(op);
-
-  case MSG_MON_COMMAND:
-    try {
-      return prepare_command(op);
-    } catch (const bad_cmd_get& e) {
-      bufferlist bl;
-      mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
-      return false; /* nothing to propose */
-    }
-
-  case MSG_MDS_OFFLOAD_TARGETS:
-    return prepare_offload_targets(op);
-  
-  default:
-    ceph_abort();
+    case MSG_MDS_BEACON:
+      r = prepare_beacon(op);
+      break;
+    case MSG_MON_COMMAND:
+      try {
+        r = prepare_command(op);
+      } catch (const bad_cmd_get& e) {
+        bufferlist bl;
+        mon.reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+        r = false;
+      }
+      break;
+    case MSG_MDS_OFFLOAD_TARGETS:
+      r = prepare_offload_targets(op);
+      break;
+    default:
+      ceph_abort();
+      break;
   }
 
-  return false; /* nothing to propose! */
+  paxos.unplug();
+
+  return r;
 }
 
 bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
@@ -804,6 +811,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
         last_beacon.erase(followergid);
       }
       request_proposal(mon.osdmon());
+      force_immediate_propose();
       pending.damaged(rankgid, blocklist_epoch);
       last_beacon.erase(rankgid);
 
@@ -1277,6 +1285,8 @@ bool MDSMonitor::fail_mds_gid(FSMap &fsmap, mds_gid_t gid)
     utime_t until = ceph_clock_now();
     until += g_conf().get_val<double>("mon_mds_blocklist_interval");
     blocklist_epoch = mon.osdmon()->blocklist(info.addrs, until);
+    /* do not delay when we are evicting an MDS */
+    force_immediate_propose();
   }
 
   fsmap.erase(gid, blocklist_epoch);
@@ -1386,7 +1396,6 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
 
   auto &pending = get_pending_fsmap_writeable();
 
-  bool batched_propose = false;
   for (const auto &h : handlers) {
     r = h->can_handle(prefix, op, pending, cmdmap, ss);
     if (r == 1) {
@@ -1397,14 +1406,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
       goto out;
     }
 
-    batched_propose = h->batched_propose();
-    if (batched_propose) {
-      paxos.plug();
-    }
     r = h->handle(&mon, pending, op, cmdmap, ss);
-    if (batched_propose) {
-      paxos.unplug();
-    }
 
     if (r == -EAGAIN) {
       // message has been enqueued for retry; return.
@@ -1444,9 +1446,6 @@ out:
     // success.. delay reply
     wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
-    if (batched_propose) {
-      force_immediate_propose();
-    }
     return true;
   } else {
     // reply immediately
@@ -2318,6 +2317,9 @@ void MDSMonitor::tick()
 
   auto &pending = get_pending_fsmap_writeable();
 
+  /* batch any changes to pending with any changes to osdmap */
+  paxos.plug();
+
   bool do_propose = false;
   bool propose_osdmap = false;
 
@@ -2372,6 +2374,9 @@ void MDSMonitor::tick()
   if (propose_osdmap) {
     request_proposal(mon.osdmon());
   }
+
+  /* allow MDSMonitor::propose_pending() to push the proposal through */
+  paxos.unplug();
 
   if (do_propose) {
     propose_pending();
