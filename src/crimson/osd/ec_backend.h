@@ -5,6 +5,8 @@
 
 #include <boost/intrusive_ptr.hpp>
 #include <seastar/core/future.hh>
+
+#include "common/sharedptr_registry.hpp"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "erasure-code/ErasureCodePlugin.h"
 #include "include/buffer_fwd.h"
@@ -95,6 +97,19 @@ private:
 
   const bool fast_read;
   const bool allows_ecoverwrites;
+
+  using load_hashinfo_ertr = crimson::errorator<
+    crimson::ct_error::enoent,
+    crimson::ct_error::object_corrupted>;
+  using load_hashinfo_iertr =
+    ::crimson::interruptible::interruptible_errorator<
+      ::crimson::osd::IOInterruptCondition,
+      load_hashinfo_ertr>;
+  load_hashinfo_iertr::future<ECUtil::HashInfoRef> get_hash_info(
+    const hobject_t &hoid,
+    bool create = false,
+    const std::map<std::string, ceph::buffer::ptr, std::less<>> *attr = nullptr);
+  SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
 
   ECCommon::ReadPipeline read_pipeline;
   ECCommon::RMWPipeline rmw_pipeline;
