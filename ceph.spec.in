@@ -2485,6 +2485,7 @@ fi
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph-debugpack
 %{_bindir}/ceph-dedup-tool
+%{_bindir}/ceph-dedup-daemon
 %if 0%{with seastar}
 %{_bindir}/crimson-store-nbd
 %endif
