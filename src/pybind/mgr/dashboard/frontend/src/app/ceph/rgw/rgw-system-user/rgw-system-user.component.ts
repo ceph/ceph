@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Output } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -30,7 +30,7 @@ export class RgwSystemUserComponent {
 
   createForm() {
     this.multisiteSystemUserForm = new CdFormGroup({
-      userName: new FormControl(null, {
+      userName: new UntypedFormControl(null, {
         validators: [Validators.required]
       })
     });

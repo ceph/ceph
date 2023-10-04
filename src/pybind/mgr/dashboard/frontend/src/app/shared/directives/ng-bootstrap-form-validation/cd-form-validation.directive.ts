@@ -26,7 +26,12 @@
  */
 
 import { Directive, EventEmitter, HostListener, Input, Output } from '@angular/core';
-import { AbstractControl, FormArray, FormControl, FormGroup } from '@angular/forms';
+import {
+  AbstractControl,
+  UntypedFormArray,
+  UntypedFormControl,
+  UntypedFormGroup
+} from '@angular/forms';
 
 @Directive({
   // eslint-disable-next-line
@@ -34,7 +39,7 @@ import { AbstractControl, FormArray, FormControl, FormGroup } from '@angular/for
 })
 export class CdFormValidationDirective {
   @Input()
-  formGroup: FormGroup;
+  formGroup: UntypedFormGroup;
   @Output()
   validSubmit = new EventEmitter<any>();
 
@@ -47,13 +52,13 @@ export class CdFormValidationDirective {
   }
 
   markAsTouchedAndDirty(control: AbstractControl) {
-    if (control instanceof FormGroup) {
+    if (control instanceof UntypedFormGroup) {
       Object.keys(control.controls).forEach((key) =>
         this.markAsTouchedAndDirty(control.controls[key])
       );
-    } else if (control instanceof FormArray) {
+    } else if (control instanceof UntypedFormArray) {
       control.controls.forEach((c) => this.markAsTouchedAndDirty(c));
-    } else if (control instanceof FormControl && control.enabled) {
+    } else if (control instanceof UntypedFormControl && control.enabled) {
       control.markAsDirty();
       control.markAsTouched();
       control.updateValueAndValidity();

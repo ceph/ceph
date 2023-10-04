@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { AbstractControl, FormControl, Validators } from '@angular/forms';
+import { AbstractControl, UntypedFormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 
@@ -39,16 +39,16 @@ export class PoolEditPeerModalComponent implements OnInit {
 
   createForm() {
     this.editPeerForm = new CdFormGroup({
-      clusterName: new FormControl('', {
+      clusterName: new UntypedFormControl('', {
         validators: [Validators.required, this.validateClusterName]
       }),
-      clientID: new FormControl('', {
+      clientID: new UntypedFormControl('', {
         validators: [Validators.required, this.validateClientID]
       }),
-      monAddr: new FormControl('', {
+      monAddr: new UntypedFormControl('', {
         validators: [this.validateMonAddr]
       }),
-      key: new FormControl('', {
+      key: new UntypedFormControl('', {
         validators: [this.validateKey]
       })
     });

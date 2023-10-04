@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, FormGroup, ValidatorFn } from '@angular/forms';
+import { UntypedFormControl, UntypedFormGroup, ValidatorFn } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
@@ -43,17 +43,17 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
 
   createForm() {
     const formControls = {
-      name: new FormControl({ value: null }),
-      desc: new FormControl({ value: null }),
-      long_desc: new FormControl({ value: null }),
-      values: new FormGroup({}),
-      default: new FormControl({ value: null }),
-      daemon_default: new FormControl({ value: null }),
-      services: new FormControl([])
+      name: new UntypedFormControl({ value: null }),
+      desc: new UntypedFormControl({ value: null }),
+      long_desc: new UntypedFormControl({ value: null }),
+      values: new UntypedFormGroup({}),
+      default: new UntypedFormControl({ value: null }),
+      daemon_default: new UntypedFormControl({ value: null }),
+      services: new UntypedFormControl([])
     };
 
     this.availSections.forEach((section) => {
-      formControls.values.addControl(section, new FormControl(null));
+      formControls.values.addControl(section, new UntypedFormControl(null));
     });
 
     this.configForm = new CdFormGroup(formControls);

@@ -40,6 +40,7 @@ function(add_npm_options)
       npm config set ${key} ${value} --userconfig ${NC_NODEENV_DIR}/.npmrc &&
       deactivate)
   endforeach()
+  set(npm_config_python ${MGR_PYTHON_EXECUTABLE})
   add_custom_target(${NC_TARGET}
     ${commands}
     DEPENDS ${NC_NODEENV_DIR}/bin/npm
@@ -63,7 +64,7 @@ else(WITH_SYSTEM_NPM)
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv --verbose ${node_mirror_opt} -p --node=14.15.1
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv --verbose ${node_mirror_opt} -p --node=18.17.0
     COMMAND mkdir ${mgr-dashboard-nodeenv-dir}/.npm
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed")
@@ -73,7 +74,6 @@ else(WITH_SYSTEM_NPM)
   add_npm_options(
     NODEENV_DIR ${mgr-dashboard-nodeenv-dir}
     TARGET mgr-dashboard-nodeenv
-    OPTION python=${MGR_PYTHON_EXECUTABLE}
     OPTION cache=${mgr-dashboard-nodeenv-dir}/.npm
     ${npm_registry_opts})
   add_custom_target(mgr-dashboard-frontend-deps
