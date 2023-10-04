@@ -1438,8 +1438,7 @@ bool MDSMonitor::prepare_command(MonOpRequestRef op)
 out:
   dout(4) << __func__ << " done, r=" << r << dendl;
   /* Compose response */
-  string rs;
-  getline(ss, rs);
+  string rs = ss.str();
 
   if (r >= 0) {
     // success.. delay reply
