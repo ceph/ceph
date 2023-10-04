@@ -851,20 +851,20 @@ int POSIXBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
   return write_attrs(dpp, y);
 }
 
-int POSIXBucket::remove_bucket(const DoutPrefixProvider* dpp,
-				bool delete_children,
-				optional_yield y)
+int POSIXBucket::remove(const DoutPrefixProvider* dpp,
+			bool delete_children,
+			optional_yield y)
 {
   return delete_directory(parent_fd, get_fname().c_str(),
 			  delete_children, dpp);
 }
 
-int POSIXBucket::remove_bucket_bypass_gc(int concurrent_max,
-					 bool keep_index_consistent,
-					 optional_yield y,
-					 const DoutPrefixProvider *dpp)
+int POSIXBucket::remove_bypass_gc(int concurrent_max,
+				  bool keep_index_consistent,
+				  optional_yield y,
+				  const DoutPrefixProvider *dpp)
 {
-  return remove_bucket(dpp, true, y);
+  return remove(dpp, true, y);
 }
 
 int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
@@ -1448,7 +1448,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 
   if (!b->versioned()) {
     if (shadow) {
-      ret = shadow->remove_bucket(dpp, true, y);
+      ret = shadow->remove(dpp, true, y);
       if (ret < 0) {
 	return ret;
       }
@@ -2587,7 +2587,7 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     return ret;
   }
 
-  shadow->remove_bucket(dpp, true, y);
+  shadow->remove(dpp, true, y);
 
   return 0;
 }

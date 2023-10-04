@@ -155,7 +155,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
+  int DBBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
   {
     int ret;
 
@@ -196,10 +196,10 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBBucket::remove_bucket_bypass_gc(int concurrent_max, bool
-					keep_index_consistent,
-					optional_yield y, const
-					DoutPrefixProvider *dpp) {
+  int DBBucket::remove_bypass_gc(int concurrent_max, bool
+				 keep_index_consistent,
+				 optional_yield y, const
+				 DoutPrefixProvider *dpp) {
     return 0;
   }
 
