@@ -1782,6 +1782,10 @@ static int bucket_stats(rgw::sal::RGWRadosStore *store,
   formatter->dump_string("id", bucket.bucket_id);
   formatter->dump_string("marker", bucket.marker);
   formatter->dump_stream("index_type") << bucket_info.layout.current_index.layout.type;
+  formatter->dump_bool("versioned", bucket_info.versioned());
+  formatter->dump_bool("versioning_enabled", bucket_info.versioning_enabled());
+  formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
+  formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   ::encode_json("owner", bucket_info.owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
