@@ -82,7 +82,7 @@ bool AuthMonitor::check_rotate()
 }
 
 void AuthMonitor::process_used_pending_keys(
-  const std::map<EntityName,CryptoKey>& used_pending_keys)
+  const map<EntityName,CryptoKey>& used_pending_keys)
 {
   for (auto& [name, used_key] : used_pending_keys) {
     dout(10) << __func__ << " used pending_key for " << name << dendl;
@@ -1703,7 +1703,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
 	err = -EINVAL;
 	goto done;
       } else {
-	mon_cap_string += " fsname=" + std::string(fs->get_mds_map().get_fs_name());
+	mon_cap_string += " fsname=" + string(fs->get_mds_map().get_fs_name());
       }
     }
 
@@ -1745,7 +1745,7 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       mds_cap_string += "allow " + cap;
 
       if (filesystem != "*" && filesystem != "all" && fs != nullptr) {
-	mds_cap_string += " fsname=" + std::string(fs->get_mds_map().get_fs_name());
+	mds_cap_string += " fsname=" + string(fs->get_mds_map().get_fs_name());
       }
 
       if (path != "/") {
@@ -2068,7 +2068,7 @@ bool AuthMonitor::_upgrade_format_to_dumpling()
     // set daemon profiles
     if ((p->first.is_osd() || p->first.is_mds()) &&
         mon_caps == "allow rwx") {
-      new_caps = string("allow profile ") + std::string(p->first.get_type_name());
+      new_caps = string("allow profile ") + string(p->first.get_type_name());
     }
 
     // update bootstrap keys
