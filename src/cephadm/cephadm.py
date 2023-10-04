@@ -3356,7 +3356,8 @@ class MgrListener(Thread):
             self.agent.wakeup()
 
 
-class CephadmAgent():
+@register_daemon_form
+class CephadmAgent(DaemonForm):
 
     daemon_type = 'agent'
     default_port = 8498
@@ -3370,6 +3371,18 @@ class CephadmAgent():
         'listener.crt',
         'listener.key',
     ]
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephadmAgent':
+        return cls(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def __init__(self, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str] = ''):
         self.ctx = ctx
