@@ -1302,6 +1302,8 @@ static int bucket_stats(rgw::sal::Driver* driver,
     return ret;
   }
 
+  const RGWBucketInfo& bucket_info = bucket->get_info();
+
   const auto& index = bucket->get_info().get_current_index();
   if (is_layout_indexless(index)) {
     cerr << "error, indexless buckets do not maintain stats; bucket=" <<
@@ -1331,6 +1333,10 @@ static int bucket_stats(rgw::sal::Driver* driver,
   formatter->dump_string("id", bucket->get_bucket_id());
   formatter->dump_string("marker", bucket->get_marker());
   formatter->dump_stream("index_type") << bucket->get_info().layout.current_index.layout.type;
+  formatter->dump_bool("versioned", bucket_info.versioned());
+  formatter->dump_bool("versioning_enabled", bucket_info.versioning_enabled());
+  formatter->dump_bool("object_lock_enabled", bucket_info.obj_lock_enabled());
+  formatter->dump_bool("mfa_enabled", bucket_info.mfa_enabled());
   ::encode_json("owner", bucket->get_info().owner, formatter);
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
