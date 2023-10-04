@@ -230,7 +230,10 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
           m.get(), completed->err, pg->get_osdmap_epoch(),
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
 	reply->set_reply_versions(completed->version, completed->user_version);
-        return conn->send(std::move(reply));
+        return ihref.handle.complete(
+        ).then([this, reply = std::move(reply)]() mutable {
+          return conn->send(std::move(reply));
+        });
       } else {
         return ihref.enter_stage<interruptor>(client_pp(*pg).get_obc, *this
 	).then_interruptible(
@@ -334,10 +337,13 @@ ClientRequest::do_process(
 	    [this, pg, &ihref](MURef<MOSDOpReply> reply) {
 	      return ihref.enter_stage<interruptor>(client_pp(*pg).send_reply, *this
 	      ).then_interruptible(
-		[this, reply=std::move(reply)]() mutable {
+		[this, &ihref,  reply=std::move(reply)]() mutable {
+                return ihref.handle.complete(
+                ).then([this, reply=std::move(reply)]() mutable {
 		  logger().debug("{}: sending response", *this);
 		  return conn->send(std::move(reply));
 		});
+              });
 	    }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
 	      return process_op(ihref, pg);
 	    }));
