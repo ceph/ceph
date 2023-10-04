@@ -9612,7 +9612,7 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   // primary+remote link merge?
   bool linkmerge = (srcdnl->get_inode() == oldin);
   if (linkmerge)
-    ceph_assert(srcdnl->is_primary() || destdnl->is_remote());
+    ceph_assert(srcdnl->is_primary() && destdnl->is_remote());
 
   bool new_in_snaprealm = false;
   bool new_oldin_snaprealm = false;
