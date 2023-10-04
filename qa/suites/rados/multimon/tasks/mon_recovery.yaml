@@ -7,4 +7,5 @@ tasks:
       - \(PG_AVAILABILITY\)
       - \(SLOW_OPS\)
       - slow request
+      - \(POOL_APP_NOT_ENABLED\)
 - mon_recovery:

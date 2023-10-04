@@ -2,6 +2,7 @@ overrides:
   ceph:
     log-ignorelist:
       - must scrub before tier agent can activate
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         # override short_pg_log_entries.yaml (which sets these under [global])

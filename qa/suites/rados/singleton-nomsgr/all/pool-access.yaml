@@ -9,6 +9,8 @@ tasks:
 - ceph:
     pre-mgr-commands:
       - sudo ceph config set mgr mgr_pool false --force
+    log-ignorelist:
+    - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all:

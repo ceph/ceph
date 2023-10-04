@@ -35,6 +35,7 @@ tasks:
     - \(OBJECT_
     - \(TOO_FEW_PGS\)
     - slow request
+    - \(POOL_APP_NOT_ENABLED\)
 - thrashosds:
     op_delay: 30
     clean_interval: 120
