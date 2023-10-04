@@ -117,7 +117,7 @@ public:
   }
   void _forward(mds_rank_t t) override {
     MDCache* mdcache = server->mdcache;
-    mdcache->mds->forward_message_mds(mdr->release_client_request(), t);
+    mdcache->mds->forward_message_mds(mdr, t);
     mdr->set_mds_stamp(ceph_clock_now());
     for (auto& m : batch_reqs) {
       if (!m->killed)
