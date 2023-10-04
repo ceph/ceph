@@ -61,17 +61,7 @@ void D3NFilterObject::D3NFilterReadOp::cancel() {
 }
 
 int D3NFilterObject::D3NFilterReadOp::drain(const DoutPrefixProvider* dpp) {
-  auto c = aio->wait();
-  while (!c.empty()) {
-    int r = flush(dpp, std::move(c));
-    if (r < 0) {
-      cancel();
-      return r;
-    }
-    c = aio->wait();
-  }
-
-  c = aio->drain();
+  auto c = aio->drain();
   int r = flush(dpp, std::move(c));
   if (r < 0) {
     cancel();
@@ -125,16 +115,18 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   uint64_t start_part_num = 0;
   uint64_t part_num = ofs/obj_max_req_size; //part num of ofs wrt start of the object
   uint64_t adjusted_start_ofs = part_num*obj_max_req_size; //in case of ranged request, adjust the start offset to the beginning of a chunk/ part
-  uint64_t diff_ofs = ofs - adjusted_start_ofs; //difference between actual offset and adjusted offset
+  uint64_t diff_ofs = ofs - adjusted_start_ofs; //difference between actual offset and adjusted offset for the first chunk/part
   off_t len = (end - adjusted_start_ofs) + 1;
   uint64_t num_parts = (len%obj_max_req_size) == 0 ? len/obj_max_req_size : (len/obj_max_req_size) + 1; //calculate num parts based on adjusted offset
   //len_to_read is the actual length read from a part/ chunk in cache, while part_len is the length of the chunk/ part in cache 
   uint64_t cost = 0, len_to_read = 0, part_len = 0;
 
   ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << "obj_max_req_size " << obj_max_req_size << " num_parts " << num_parts << " adjusted_start_offset: " << adjusted_start_ofs << " len: " << len << dendl;
+  ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << "diff_ofs " << diff_ofs << dendl;
+
   this->offset = ofs;
   do {
-    uint64_t id = adjusted_start_ofs;
+    uint64_t id = adjusted_start_ofs, read_ofs = 0; //read_ofs is the actual offset to start reading from the current part/ chunk
     if (start_part_num == (num_parts - 1)) {
       len_to_read = len;
       part_len = len;
@@ -147,8 +139,8 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     if (start_part_num == 0) {
       len_to_read -= diff_ofs;
       id += diff_ofs;
+      read_ofs = diff_ofs;
     }
-    uint64_t read_ofs = diff_ofs; //read_ofs is the actual offset to start reading from the current part/ chunk
     std::string oid_in_cache = source->get_bucket()->get_marker() + "_" + oid + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(part_len);
     rgw_raw_obj r_obj;
     r_obj.oid = oid_in_cache;
@@ -160,6 +152,7 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       auto r = flush(dpp, std::move(completed));
       if (r < 0) {
         ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << __func__ << "(): Error: failed to flush, r= " << r << dendl;
+        drain(dpp);
         return r;
       }
     } else {
@@ -174,6 +167,7 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
         auto r = flush(dpp, std::move(completed));
         if (r < 0) {
           ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << __func__ << "(): Error: failed to flush, r= " << r << dendl;
+          drain(dpp);
           return r;
         }
       } else {
