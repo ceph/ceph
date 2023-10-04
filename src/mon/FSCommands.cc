@@ -29,6 +29,7 @@ using std::set;
 using std::string;
 using std::string_view;
 using std::vector;
+using std::ostream;
 
 
 class FlagSetHandler : public FileSystemCommandHandler
@@ -44,7 +45,7 @@ class FlagSetHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     string flag_name;
     cmd_getval(cmdmap, "flag_name", flag_name);
@@ -85,7 +86,7 @@ class FailHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream& ss) override
+      ostream& ss) override
   {
     if (!mon->osdmon()->is_writeable()) {
       // not allowed to write yet, so retry when we can
@@ -142,7 +143,7 @@ class FsNewHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     ceph_assert(m_paxos->is_plugged());
 
@@ -312,7 +313,7 @@ public:
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
@@ -764,7 +765,7 @@ class CompatSetHandler : public FileSystemCommandHandler
 	FSMap &fsmap,
 	MonOpRequestRef op,
 	const cmdmap_t& cmdmap,
-	std::ostream &ss) override
+	ostream &ss) override
     {
       static const set<string> subops = {"rm_incompat", "rm_compat", "add_incompat", "add_compat"};
 
@@ -869,7 +870,7 @@ class RequiredClientFeaturesHandler : public FileSystemCommandHandler
 	FSMap &fsmap,
 	MonOpRequestRef op,
 	const cmdmap_t& cmdmap,
-	std::ostream &ss) override
+	ostream &ss) override
     {
       string fs_name;
       if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
@@ -957,7 +958,7 @@ class AddDataPoolHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     ceph_assert(m_paxos->is_plugged());
 
@@ -1036,7 +1037,7 @@ class SetDefaultHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);
@@ -1063,7 +1064,7 @@ class RemoveFilesystemHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     /* We may need to blocklist ranks. */
     if (!mon->osdmon()->is_writeable()) {
@@ -1137,7 +1138,7 @@ class ResetFilesystemHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);
@@ -1183,7 +1184,7 @@ class RenameFilesystemHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     ceph_assert(m_paxos->is_plugged());
 
@@ -1272,7 +1273,7 @@ class RemoveDataPoolHandler : public FileSystemCommandHandler
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     string poolname;
     cmd_getval(cmdmap, "pool", poolname);
@@ -1352,7 +1353,7 @@ class AliasHandler : public T
       FSMap& fsmap,
       MonOpRequestRef op,
       const cmdmap_t& cmdmap,
-      std::ostream &ss) override
+      ostream &ss) override
   {
     return T::handle(mon, fsmap, op, cmdmap, ss);
   }
@@ -1367,7 +1368,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::ostream &ss) override {
+             const cmdmap_t& cmdmap, ostream &ss) override {
     string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1402,7 +1403,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::ostream &ss) override {
+             const cmdmap_t& cmdmap, ostream &ss) override {
     string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1449,7 +1450,7 @@ public:
   }
 
   bool peer_add(FSMap &fsmap, const Filesystem& fs,
-                const cmdmap_t &cmdmap, std::ostream &ss) {
+                const cmdmap_t &cmdmap, ostream &ss) {
     string peer_uuid;
     string remote_spec;
     string remote_fs_name;
@@ -1484,7 +1485,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::ostream &ss) override {
+             const cmdmap_t& cmdmap, ostream &ss) override {
     string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1519,7 +1520,7 @@ public:
   {}
 
   bool peer_remove(FSMap &fsmap, const Filesystem& fs,
-                   const cmdmap_t &cmdmap, std::ostream &ss) {
+                   const cmdmap_t &cmdmap, ostream &ss) {
     string peer_uuid;
     cmd_getval(cmdmap, "uuid", peer_uuid);
 
@@ -1537,7 +1538,7 @@ public:
 
   int handle(Monitor *mon,
              FSMap &fsmap, MonOpRequestRef op,
-             const cmdmap_t& cmdmap, std::ostream &ss) override {
+             const cmdmap_t& cmdmap, ostream &ss) override {
     string fs_name;
     if (!cmd_getval(cmdmap, "fs_name", fs_name) || fs_name.empty()) {
       ss << "Missing filesystem name";
@@ -1597,7 +1598,7 @@ int FileSystemCommandHandler::_check_pool(
     const int64_t pool_id,
     int type,
     bool force,
-    std::ostream *ss,
+    ostream *ss,
     bool allow_overlay) const
 {
   ceph_assert(ss != NULL);
@@ -1705,7 +1706,7 @@ int FileSystemCommandHandler::_check_pool(
 
 int FileSystemCommandHandler::is_op_allowed(
     const MonOpRequestRef& op, const FSMap& fsmap, const cmdmap_t& cmdmap,
-    std::ostream &ss) const
+    ostream &ss) const
 {
     string fs_name;
     cmd_getval(cmdmap, "fs_name", fs_name);
