@@ -10429,6 +10429,8 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedTest) {
     return;
   }
 
+  SetVal(g_conf(), "bluestore_block_wal_create", "true");
+  SetVal(g_conf(), "bluestore_block_wal_size", stringify(1400ull*1024*1024).c_str());
   SetVal(g_conf(), "bluestore_block_db_create", "true");
   SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
   SetVal(g_conf(), "bluestore_volume_selection_policy", "use_some_extra");
@@ -10457,12 +10459,12 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
     return;
   }
 
+  SetVal(g_conf(), "bluestore_block_wal_create", "true");
+  SetVal(g_conf(), "bluestore_block_wal_size", stringify(1200ull*1024*1024).c_str());
   SetVal(g_conf(), "bluestore_block_db_create", "true");
-  SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(3200ull*1024*1024).c_str());
   SetVal(g_conf(), "bluestore_volume_selection_policy", "use_some_extra");
-  //default 2.0 factor results in too high threshold, using less value
-  // that results in less but still present spillover.
-  SetVal(g_conf(), "bluestore_volume_selection_reserved_factor", "0.5");
+  SetVal(g_conf(), "bluestore_volume_selection_reserved", stringify(2900ull*1024*1024).c_str());
 
   g_conf().apply_changes(nullptr);
 
