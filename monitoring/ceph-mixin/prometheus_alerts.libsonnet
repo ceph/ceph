@@ -690,6 +690,71 @@
       ],
     },
     {
+      name: 'hardware',
+      rules: [
+        {
+          alert: 'HardwareStorageError',
+          'for': '30s',
+          expr: 'ceph_health_detail{name="HARDWARE_STORAGE"} > 0',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.1' },
+          annotations: {
+            summary: 'Storage devices error(s) detected%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Some storage devices are in error. Check `ceph health detail`.',
+          },
+        },
+        {
+          alert: 'HardwareMemoryError',
+          'for': '30s',
+          expr: 'ceph_health_detail{name="HARDWARE_MEMORY"} > 0',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.2' },
+          annotations: {
+            summary: 'DIMM error(s) detected%(cluster)s' % $.MultiClusterSummary(),
+            description: 'DIMM error(s) detected. Check `ceph health detail`.',
+          },
+        },
+        {
+          alert: 'HardwareProcessorError',
+          'for': '30s',
+          expr: 'ceph_health_detail{name="HARDWARE_PROCESSOR"} > 0',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.3' },
+          annotations: {
+            summary: 'Processor error(s) detected%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Processor error(s) detected. Check `ceph health detail`.',
+          },
+        },
+        {
+          alert: 'HardwareNetworkError',
+          'for': '30s',
+          expr: 'ceph_health_detail{name="HARDWARE_NETWORK"} > 0',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.4' },
+          annotations: {
+            summary: 'Network error(s) detected%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Network error(s) detected. Check `ceph health detail`.',
+          },
+        },
+        {
+          alert: 'HardwarePowerError',
+          'for': '30s',
+          expr: 'ceph_health_detail{name="HARDWARE_POWER"} > 0',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.5' },
+          annotations: {
+            summary: 'Power supply error(s) detected%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Power supply error(s) detected. Check `ceph health detail`.',
+          },
+        },
+        {
+          alert: 'HardwareFanError',
+          'for': '30s',
+          expr: 'ceph_health_detail{name="HARDWARE_FANS"} > 0',
+          labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.13.6' },
+          annotations: {
+            summary: 'Fan error(s) detected%(cluster)s' % $.MultiClusterSummary(),
+            description: 'Fan error(s) detected. Check `ceph health detail`.',
+          },
+        },
+      ],
+    },
+    {
       name: 'PrometheusServer',
       rules: [
         {
