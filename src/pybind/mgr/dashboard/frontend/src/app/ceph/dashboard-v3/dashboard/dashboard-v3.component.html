@@ -299,7 +299,9 @@
 <ng-template #alertsCard>
   <ng-container *ngFor="let alert of prometheusAlertService.alerts; let i = index;  trackBy: trackByFn">
     <div [ngClass]="['border-'+alertClass[alert.labels.severity]]"
-         *ngIf="alert.labels.severity === alertType || !alertType">
+         *ngIf="alert.status.state === 'active' &&
+         alert.labels.severity === alertType ||
+         !alertType">
       <div class="card tc_alerts border-0 pt-3">
         <div class="row no-gutters ps-2">
           <div class="col-sm-1 text-center">
