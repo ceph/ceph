@@ -23,4 +23,6 @@ export class CardComponent {
   fullHeight = false;
   @Input()
   alignItemsCenter = false;
+  @Input()
+  justifyContentCenter = false;
 }
