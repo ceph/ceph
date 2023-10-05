@@ -1,5 +1,6 @@
 # templating.py - functions to wrap string/file templating libs
 
+import enum
 
 from typing import Any, Optional, IO
 
@@ -9,6 +10,19 @@ from .context import CephadmContext
 
 _PKG = __name__.rsplit('.', 1)[0]
 _DIR = 'templates'
+
+
+class Templates(str, enum.Enum):
+    """Known template files."""
+
+    ceph_service = 'ceph.service.j2'
+    agent_service = 'agent.service.j2'
+
+    def __str__(self) -> str:
+        return self.value
+
+    def __repr__(self) -> str:
+        return repr(self.value)
 
 
 class Templater:
@@ -39,12 +53,12 @@ class Templater:
         return self._env.from_string(template).render(ctx=ctx, **kwargs)
 
     def render(self, ctx: CephadmContext, name: str, **kwargs: Any) -> str:
-        return self._env.get_template(name).render(ctx=ctx, **kwargs)
+        return self._env.get_template(str(name)).render(ctx=ctx, **kwargs)
 
     def render_to_file(
         self, fp: IO, ctx: CephadmContext, name: str, **kwargs: Any
     ) -> None:
-        self._env.get_template(name).stream(ctx=ctx, **kwargs).dump(fp)
+        self._env.get_template(str(name)).stream(ctx=ctx, **kwargs).dump(fp)
 
 
 # create a defaultTemplater instace from the Templater class that will
