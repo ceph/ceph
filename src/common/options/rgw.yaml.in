@@ -3850,3 +3850,18 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: mandatory_topic_permissions
+  type: bool
+  level: basic
+  desc: Whether to validate user permissions to access notification topics.
+  long_desc: If true, all users (other then the owner of the topic) will need
+    to have a policy to access topics.
+    The topic policy can be set by owner via CreateTopic() or SetTopicAttribute().
+    Following permissions can be granted "sns:Publish", "sns:GetTopicAttributes",
+    "sns:SetTopicAttributes" and "sns:DeleteTopic" via Policy.
+    NOTE that even if set to "false" topics will still follow the policies if set on them.
+  default: false
+  services:
+  - rgw
+  with_legacy: true
+

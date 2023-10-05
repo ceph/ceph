@@ -157,6 +157,10 @@ static const actpair actpairs[] =
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
  { "sts:TagSession", stsTagSession},
+ { "sns:GetTopicAttributes", snsGetTopicAttributes},
+ { "sns:DeleteTopic", snsDeleteTopic},
+ { "sns:Publish", snsPublish},
+ { "sns:SetTopicAttributes", snsSetTopicAttributes},
 };
 
 struct PolicyParser;
@@ -599,6 +603,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         }
         if ((t->notaction & stsAllValue) == stsAllValue) {
           t->notaction[stsAll] = 1;
+        }
+        if ((t->action & snsAllValue) == snsAllValue) {
+          t->action[snsAll] = 1;
+        }
+        if ((t->notaction & snsAllValue) == snsAllValue) {
+          t->notaction[snsAll] = 1;
         }
       }
     }
@@ -1452,6 +1462,18 @@ const char* action_bit_string(uint64_t action) {
 
   case stsTagSession:
     return "sts:TagSession";
+
+  case snsSetTopicAttributes:
+    return "sns:SetTopicAttributes";
+
+  case snsGetTopicAttributes:
+    return "sns:GetTopicAttributes";
+
+  case snsDeleteTopic:
+    return "sns:DeleteTopic";
+
+  case snsPublish:
+    return "sns:Publish";
   }
   return "s3Invalid";
 }
