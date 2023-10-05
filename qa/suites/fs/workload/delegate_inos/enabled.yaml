@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      mds:
+        mds_client_delegate_inos_pct: 50
