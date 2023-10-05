@@ -8,6 +8,9 @@
   For multi-site deployments that make any use of Server-Side Encryption, we
   recommended running this command against every bucket in every zone after all
   zones have upgraded.
+CephFS: Disallow delegating preallocated inode ranges to clients. Config
+  `mds_client_delegate_inos_pct` defaults to 0 which disables async dirops
+  in the kclient.
 
 >=18.0.0
 
