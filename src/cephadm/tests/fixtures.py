@@ -78,6 +78,13 @@ def cephadm_fs(
     """
     from cephadmlib import constants
 
+    # the following is a workaround for the fakefs interfering with jinja2's
+    # package loader when run in the pytest suite when this fixture is used.
+    # it effectively maps what is `src/cephadm` as a real fs into the fake fs.`
+    # See: https://pytest-pyfakefs.readthedocs.io/en/stable/usage.html#access-to-files-in-the-real-file-system
+    srcdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    fs.add_real_directory(srcdir)
+
     uid = os.getuid()
     gid = os.getgid()
 
