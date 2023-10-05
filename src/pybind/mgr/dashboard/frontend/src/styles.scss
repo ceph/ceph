@@ -239,3 +239,8 @@ formly-form {
     }
   }
 }
+
+// Overriding legend css due to change in bootstrap v5 and setting it to none;
+legend {
+  float: none;
+}

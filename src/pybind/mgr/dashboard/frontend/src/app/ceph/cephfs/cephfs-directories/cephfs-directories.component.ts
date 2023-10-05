@@ -17,6 +17,7 @@ import { ConfirmationModalComponent } from '~/app/shared/components/confirmation
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdValidators } from '~/app/shared/forms/cd-validators';
@@ -200,19 +201,14 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         {
           prop: 'path',
           name: $localize`Path`,
-          isHidden: true,
-          flexGrow: 2
+          flexGrow: 1.5,
+          cellTransformation: CellTemplate.path
         },
         {
           prop: 'created',
           name: $localize`Created`,
           flexGrow: 1,
           pipe: this.cdDatePipe
-        },
-        {
-          prop: 'created',
-          name: $localize`Capacity`,
-          flexGrow: 1
         }
       ],
       selection: new CdTableSelection(),
