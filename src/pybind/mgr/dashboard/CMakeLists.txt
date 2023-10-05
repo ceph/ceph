@@ -15,9 +15,11 @@ if(WITH_MGR_DASHBOARD_FRONTEND)
     add_tox_test(mgr-dashboard-openapi TOX_ENVS openapi-check)
   endif()
 else()
-  # prebuilt
-  install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/frontend/dist
-    DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
-  install(FILES frontend/package.json
-    DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
+  if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/frontend/dist)
+    # prebuilt
+    install(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}/frontend/dist
+      DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
+    install(FILES frontend/package.json
+      DESTINATION ${CEPH_INSTALL_DATADIR}/mgr/dashboard/frontend)
+  endif()
 endif()
