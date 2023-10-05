@@ -5,4 +5,3 @@ tasks:
         - tasks.cephfs.test_volumes.TestVolumes
         - tasks.cephfs.test_volumes.TestSubvolumeGroups
         - tasks.cephfs.test_volumes.TestSubvolumes
-        - tasks.cephfs.test_subvolume.TestSubvolume
