@@ -573,8 +573,8 @@ static int remove_expired_obj(
 				 obj_state->attrset[RGW_ATTR_ETAG].to_str(),
 				 version_id);
     if (ret < 0) {
-      ldpp_dout(dpp, 1) <<
-	"ERROR: notify publish_commit failed, with error: " << ret << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: notify publish_commit failed, with error: "
+												<< ret << dendl;
     }
   }
 
@@ -844,12 +844,12 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 	  lc_req_id, null_yield);
 
       ret = notify->publish_reserve(this, nullptr);
-      if (ret != 0) {
-	ldpp_dout(wk->get_lc(), 0)
-	  << "ERROR: reserving persistent notification for abort_multipart_upload, ret=" << ret
-	  << ", thread:" << wq->thr_name()
-	  << ", meta:" << obj.key
-	  << dendl;
+      if (ret < 0) {
+				ldpp_dout(wk->get_lc(), 0)
+					<< "ERROR: reserving persistent notification for abort_multipart_upload, ret=" << ret
+					<< ", thread:" << wq->thr_name()
+					<< ", meta:" << obj.key
+					<< dendl;
       }
 
       ret = mpu->abort(this, cct, null_yield);
@@ -1296,16 +1296,25 @@ public:
     /* If bucket is versioned, create delete_marker for current version
      */
     if (! oc.bucket->versioned()) {
-	ret = remove_expired_obj(oc.dpp, oc, false, rgw::notify::ObjectTransition);
-	ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not versioned flags: " << oc.o.flags << dendl;
+      ret = remove_expired_obj(oc.dpp, oc, true, rgw::notify::ObjectTransition);
+      ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
+                            << ") not versioned flags: " << oc.o.flags << dendl;
     } else {
       /* versioned */
       if (oc.o.is_current() && !oc.o.is_delete_marker()) {
-	ret = remove_expired_obj(oc.dpp, oc, false, rgw::notify::ObjectTransitionCurrent);
-	ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") current & not delete_marker" << " versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+        ret = remove_expired_obj(oc.dpp, oc, false,
+                                 rgw::notify::ObjectTransitionCurrent);
+        ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key
+                              << ") current & not delete_marker"
+                              << " versioned_epoch:  " << oc.o.versioned_epoch
+                              << "flags: " << oc.o.flags << dendl;
       } else {
-	ret = remove_expired_obj(oc.dpp, oc, true, rgw::notify::ObjectTransitionNoncurrent);
-	ldpp_dout(oc.dpp, 20) << "delete_tier_obj Object(key:" << oc.o.key << ") not current " << "versioned_epoch:  " << oc.o.versioned_epoch << "flags: " << oc.o.flags << dendl;
+        ret = remove_expired_obj(oc.dpp, oc, true,
+                                 rgw::notify::ObjectTransitionNoncurrent);
+        ldpp_dout(oc.dpp, 20)
+            << "delete_tier_obj Object(key:" << oc.o.key << ") not current "
+            << "versioned_epoch:  " << oc.o.versioned_epoch
+            << "flags: " << oc.o.flags << dendl;
       }
     }
 
