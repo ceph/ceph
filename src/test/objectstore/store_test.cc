@@ -832,6 +832,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
   zp.zero();
   bufferlist z;
   z.append(zp);
+  std::cout << "pere write a 0x0000~0x1000" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0, 0x1000, a);
@@ -844,6 +845,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(a);
     ASSERT_TRUE(bl_eq(exp, in));
   }
+  std::cout << "pere write b 0x1000~0x1000" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0x1000, 0x1000, b);
@@ -857,6 +859,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(b);
     ASSERT_TRUE(bl_eq(exp, in));
   }
+  std::cout << "pere write c 0x3000~0x1000 hole" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0x3000, 0x1000, c);
@@ -872,6 +875,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(c);
     ASSERT_TRUE(bl_eq(exp, in));
   }
+  std::cout << "pere write a 0x2000~0x1000" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0x2000, 0x1000, a);
@@ -887,6 +891,7 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(c);
     ASSERT_TRUE(bl_eq(exp, in));
   }
+  std::cout << "pere write c 0x0000~0x1000" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0, 0x1000, c);

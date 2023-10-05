@@ -15,6 +15,7 @@
 #ifndef CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 #define CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 
+#include <algorithm>
 #include <bit>
 #include <ostream>
 #include <type_traits>
@@ -616,16 +617,33 @@ public:
   uint32_t get_compressed_payload_length() const {
     return is_compressed() ? compressed_length : 0;
   }
+
+  int sort_extents(const bluestore_pextent_t& l, const bluestore_pextent_t& r) {
+    return l.offset < r.offset;
+  }
+
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
-    auto p = extents.begin();
-    ceph_assert(p != extents.end());
+    uint64_t _x_off = x_off;
+    PExtentVector sorted_extents = extents;
+    std::sort(sorted_extents.begin(), sorted_extents.end(), [](const bluestore_pextent_t& l, const bluestore_pextent_t& r) {
+      return l.offset < r.offset;
+    });
+    std::cout << std::flush;
+    for (auto ex : sorted_extents) {
+      std::cout << __func__ << " pere extent offset=" << ex.offset
+                << " extent length=" << ex.length << std::endl;
+    }
+    auto p = sorted_extents.begin();
+    ceph_assert(p != sorted_extents.end());
     while (x_off >= p->length) {
       x_off -= p->length;
       ++p;
-      ceph_assert(p != extents.end());
+      ceph_assert(p != sorted_extents.end());
     }
     if (plen)
       *plen = p->length - x_off;
+    std::cout << std::flush;
+    std::cout << __func__ << " pere offset=" << _x_off << " poffset=" << p->offset + x_off << std::endl;
     return p->offset + x_off;
   }
 

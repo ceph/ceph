@@ -1795,17 +1795,25 @@ void BlueStore::BufferSpace::read(
   BufferCacheShard* cache = blob->shared_blob->get_cache();
   res.clear();
   res_intervals.clear();
+  uint32_t poffset = blob->get_blob().calc_offset(offset, nullptr);
+
+  auto it = blob->shared_blob->bc->buffer_map.begin();
+  while (it != blob->shared_blob->bc->buffer_map.end()) {
+    std::cout << __func__ << " pere buffer offset= " << it->first
+              << " first value=" << it->second->data.c_str()[0] << std::endl;
+    it++;
+  }
+
   uint32_t want_bytes = length;
-  offset = blob->get_blob().calc_offset(offset, nullptr);
-  uint32_t end = offset + length;
+  uint32_t end = poffset + length;
 
   {
     std::lock_guard l(cache->lock);
-    for (auto i = _data_lower_bound(offset);
-         i != buffer_map.end() && offset < end && i->first < end;
+    for (auto i = _data_lower_bound(poffset);
+         i != buffer_map.end() && poffset < end && i->first < end;
          ++i) {
       Buffer *b = i->second.get();
-      ceph_assert(b->end() > offset);
+      ceph_assert(b->end() > poffset);
 
       bool val = false;
       if (flags & BYPASS_CLEAN_CACHE)
@@ -1813,8 +1821,8 @@ void BlueStore::BufferSpace::read(
       else
         val = b->is_writing() || b->is_clean();
       if (val) {
-        if (b->poffset < offset) {
-	  uint32_t skip = offset - b->poffset;
+        if (b->poffset < poffset) {
+	  uint32_t skip = poffset - b->poffset;
 	  uint32_t l = min(length, b->length - skip);
 	  res[offset].substr_of(b->data, skip, l);
 	  res_intervals.insert(offset, l);
@@ -1859,33 +1867,36 @@ void BlueStore::BufferSpace::read(
   cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
-void BlueStore::BufferSpace::_finish_write(Blob &blob, uint64_t seq)
+void BlueStore::BufferSpace::_finish_write(Blob &blob, uint64_t offset, uint64_t seq)
 {
-  auto i = writing.begin();
-  while (i != writing.end()) {
-    if (i->seq > seq) {
-      break;
-    }
-    if (i->seq < seq) {
-      ++i;
-      continue;
-    }
+  BufferCacheShard* cache = blob.shared_blob->get_cache();
 
-    Buffer *b = &*i;
-    ceph_assert(b->is_writing());
+  auto buffer_map_it = buffer_map.find(offset);
+  auto &buffer = buffer_map_it->second;
+  if (buffer_map_it == buffer_map.end()) {
+    return;
+  }
+  if (buffer->seq > seq) {
+    return;
+  }
 
-    if (b->flags & Buffer::FLAG_NOCACHE) {
-      writing.erase(i++);
-      ldout(cache->cct, 20) << __func__ << " discard " << *b << dendl;
-      buffer_map.erase(b->poffset);
-    } else {
-      b->state = Buffer::STATE_CLEAN;
-      writing.erase(i++);
-      b->maybe_rebuild();
-      b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-      cache->_add(b, 1, nullptr);
-      ldout(cache->cct, 20) << __func__ << " added " << *b << dendl;
-    }
+  std::cout << "Finishing pere " << buffer << std::endl;
+  ceph_assert(buffer->is_writing());
+  auto writing_buffer_it = std::find_if(writing.begin(), writing.end(), [offset, seq](Buffer& buffer) {
+    return buffer.poffset == offset && seq == buffer.seq;
+  });
+
+  if (buffer->flags & Buffer::FLAG_NOCACHE) {
+    writing.erase(writing_buffer_it);
+    ldout(cache->cct, 20) << __func__ << " discard " << *buffer << dendl;
+    buffer_map.erase(offset);
+  } else {
+    buffer->state = Buffer::STATE_CLEAN;
+    writing.erase(writing_buffer_it);
+    buffer->maybe_rebuild();
+    buffer->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+    cache->_add(buffer.get(), 1, nullptr);
+    ldout(cache->cct, 20) << __func__ << " added " << *buffer << dendl;
   }
   cache->_trim();
   cache->_audit("finish_write end");
@@ -14073,8 +14084,8 @@ void BlueStore::_txc_finish(TransContext *txc)
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
 
-  for (auto& [b, buffer] : txc->buffers_written) {
-    b->finish_write(buffer, txc->seq);
+  for (auto& [blob_ref, poffset] : txc->buffers_written) {
+    blob_ref->finish_write(poffset, txc->seq);
   }
   txc->blobs_written.clear();
   while (!txc->removed_collections.empty()) {

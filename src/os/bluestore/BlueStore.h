@@ -301,6 +301,9 @@ public:
 
     boost::intrusive::list_member_hook<> lru_item;
     boost::intrusive::list_member_hook<> state_item;
+    ~Buffer() {
+      std::cout << "Deleting pere " << this << std::endl; 
+    }
 
     Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, uint32_t l,
 	   unsigned f = 0)
@@ -459,13 +462,23 @@ public:
       BufferCacheShard* cache = blob->shared_blob->get_cache();
       std::lock_guard l(cache->lock);
       uint64_t poffset = blob->get_blob().calc_offset(offset, nullptr);
+
+      std::cout << std::flush;
+      auto it = blob->shared_blob->bc->buffer_map.begin();
+      while (it != blob->shared_blob->bc->buffer_map.end()) {
+        std::cout << __func__ << " pere buffer offset= " << it->first
+                  << " first value=" << it->second->data.c_str()[0]
+                  << std::endl;
+        it++;
+      }
+
       int ret = _discard(cache, poffset, length);
       cache->_trim();
       return ret;
     }
     int _discard(BufferCacheShard* cache, uint32_t offset, uint32_t length);
 
-    Buffer* write(BufferCacheShard* cache, uint64_t seq, uint32_t poffset, ceph::buffer::list& bl,
+    void write(BufferCacheShard* cache, uint64_t seq, uint32_t poffset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, poffset, bl,
@@ -473,9 +486,8 @@ public:
       b->cache_private = _discard(cache, poffset, bl.length());
       _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
       cache->_trim();
-      return b;
     }
-    void _finish_write(Blob& blob, Buffer* buffer, uint64_t seq);
+    void _finish_write(Blob& blob, uint64_t poffset, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
@@ -736,6 +748,7 @@ public:
     void finish_write(Buffer* buffer, uint64_t seq);
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
+    void finish_write(uint64_t poffset, uint64_t seq);
 
     void get() {
       ++nref;
@@ -1880,7 +1893,7 @@ private:
 #endif
     
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    std::set<std::pair<BlobRef, Buffer*>> buffers_written; ///< update these on io completion
+    std::set<std::pair<BlobRef, uint64_t>> buffers_written; ///< update these on io completion
 
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions
@@ -2915,10 +2928,17 @@ private:
     uint64_t offset,
     ceph::buffer::list& bl,
     unsigned flags) {
-    offset = b->get_blob().calc_offset(offset, nullptr);
-    Buffer* buffer = b->dirty_bc().write(b->shared_blob->get_cache(), txc->seq, offset, bl,
-			     flags);
-    txc->buffers_written.insert({b, buffer});
+    uint64_t poffset = b->get_blob().calc_offset(offset, nullptr);
+    auto it = b->dirty_bc().buffer_map.begin();
+    std::cout << std::flush;
+    while (it != b->dirty_bc().buffer_map.end()) {
+      std::cout << __func__ << " pere buffer offset= " << it->first << " first value=" << it->second->data.c_str()[0] << std::endl;
+      it++;
+    }
+    std::cout << __func__ << " pere offset=" << offset << " poffset=" << poffset << std::endl;
+    b->dirty_bc().write(b->shared_blob->get_cache(), txc->seq, poffset,
+                              bl, flags);
+    txc->buffers_written.insert({b, poffset});
   }
 
   int _collection_list(
