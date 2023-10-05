@@ -55,7 +55,7 @@ using `vstart_runner.py`_. To do that, you'd need `teuthology`_ installed::
     $ virtualenv --python=python3 venv
     $ source venv/bin/activate
     $ pip install 'setuptools >= 12'
-    $ pip install git+https://github.com/ceph/teuthology#egg=teuthology[test]
+    $ pip install teuthology[test]@git+https://github.com/ceph/teuthology
     $ deactivate
 
 The above steps installs teuthology in a virtual environment. Before running
