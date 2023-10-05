@@ -90,7 +90,7 @@ void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
   meta.accounted_size = meta.size;
-  cls_rgw_bucket_complete_op(op, index_op, tag, ver, key, meta, nullptr, log_op, bi_flags, nullptr);
+  cls_rgw_bucket_complete_op(op, index_op, tag, ver, key, meta, nullptr, log_op, false, bi_flags, nullptr);
   ASSERT_EQ(0, ioctx.operate(oid, &op));
   if (!key.instance.empty()) {
     bufferlist olh_tag;

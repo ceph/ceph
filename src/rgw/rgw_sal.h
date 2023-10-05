@@ -880,6 +880,7 @@ class Object {
         bool high_precision_time{false};
         rgw_zone_set* zones_trace{nullptr};
 	bool abortmp{false};
+        bool null_verid{false};
 	uint64_t parts_accounted_size{0};
       } params;
 

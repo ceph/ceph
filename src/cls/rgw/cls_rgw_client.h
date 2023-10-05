@@ -357,7 +357,7 @@ void cls_rgw_bucket_complete_op(librados::ObjectWriteOperation& o, RGWModifyOp o
                                 const cls_rgw_obj_key& key,
                                 const rgw_bucket_dir_entry_meta& dir_meta,
 				const std::list<cls_rgw_obj_key> *remove_objs, bool log_op,
-                                uint16_t bilog_op, const rgw_zone_set *zones_trace,
+                                uint16_t bilog_op, bool null_verid, const rgw_zone_set *zones_trace,
 				const std::string& obj_locator = ""); // ignored if it's the empty string
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, std::list<std::string>& keep_attr_prefixes);
