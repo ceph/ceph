@@ -1647,7 +1647,7 @@ class TestIngressService:
         )
         if enable_haproxy_protocol:
             haproxy_txt += '    default-server send-proxy-v2\n'
-        haproxy_txt += '    server nfs.foo.0 192.168.122.111:12049\n'
+        haproxy_txt += '    server nfs.foo.0 192.168.122.111:12049 check\n'
         haproxy_expected_conf = {
             'files': {'haproxy.cfg': haproxy_txt}
         }
@@ -2425,7 +2425,7 @@ class TestIngressService:
             '    balance     source\n'
             '    hash-type   consistent\n'
             '    default-server send-proxy-v2\n'
-            '    server nfs.foo.0 192.168.122.111:12049\n'
+            '    server nfs.foo.0 192.168.122.111:12049 check\n'
         )
         haproxy_expected_conf = {
             'files': {'haproxy.cfg': haproxy_txt}
