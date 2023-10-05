@@ -14,6 +14,7 @@ std::vector<Option> get_osd_options();
 std::vector<Option> get_rgw_options();
 std::vector<Option> get_rbd_options();
 std::vector<Option> get_rbd_mirror_options();
+std::vector<Option> get_dedup_options();
 std::vector<Option> get_immutable_object_cache_options();
 std::vector<Option> get_mds_options();
 std::vector<Option> get_mds_client_options();
@@ -43,6 +44,7 @@ std::vector<Option> build_options()
   ingest(get_rgw_options(), "rgw");
   ingest(get_rbd_options(), "rbd");
   ingest(get_rbd_mirror_options(), "rbd-mirror");
+  ingest(get_dedup_options(), "dedup");
   ingest(get_immutable_object_cache_options(), "immutable-object-cache");
   ingest(get_mds_options(), "mds");
   ingest(get_mds_client_options(), "mds_client");

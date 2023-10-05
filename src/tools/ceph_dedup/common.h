@@ -51,12 +51,16 @@ constexpr unsigned default_max_thread = 2;
 constexpr int32_t default_report_period = 10;
 
 string get_opts_pool_name(const po::variables_map &opts);
-string get_opts_chunk_algo(const po::variables_map &opts);
-string get_opts_fp_algo(const po::variables_map &opts);
+string get_opts_chunk_algo(const po::variables_map &opts,
+    CephContext* _cct = nullptr);
+string get_opts_fp_algo(const po::variables_map &opts,
+    CephContext* _cct = nullptr);
 string get_opts_op_name(const po::variables_map &opts);
 string get_opts_chunk_pool(const po::variables_map &opts);
 string get_opts_object_name(const po::variables_map &opts);
-int get_opts_max_thread(const po::variables_map &opts);
-int get_opts_report_period(const po::variables_map &opts);
+int get_opts_max_thread(const po::variables_map &opts,
+    CephContext* _cct = nullptr);
+int get_opts_report_period(const po::variables_map &opts,
+    CephContext* _cct = nullptr);
 string make_pool_str(string pool, string var, string val);
 string make_pool_str(string pool, string var, int val);

@@ -1,0 +1,66 @@
+# -*- mode: YAML -*-
+---
+options:
+- name: sampling_ratio
+  type: int
+  level: advanced
+  desc: set the sampling ratio (percentile)
+  default: 100
+  services:
+  - ceph-dedup
+- name: chunk_dedup_threshold
+  type: int
+  level: advanced
+  desc: set the threshold for chunk dedup (number of duplication)
+  default: 4
+  services:
+  - ceph-dedup
+- name: chunk_size
+  type: int
+  level: advanced
+  desc: chunk size (byte)
+  default: 32768
+  services:
+  - ceph-dedup
+- name: max_thread
+  type: int
+  level: advanced
+  desc: the number of threads
+  default: 2
+  services:
+  - ceph-dedup
+- name: wakeup_period
+  type: int
+  level: advanced
+  desc: set the wakeup period of crawler thread (sec)
+  default: 5
+  services:
+  - ceph-dedup
+- name: fingerprint_algorithm
+  type: str
+  level: advanced
+  desc: set fingerprint-algorithm, <sha1|sha256|sha512>
+  default: sha1
+  services:
+  - ceph-dedup
+- name: chunk_algorithm
+  type: str
+  level: advanced
+  desc: set chunk-algorithm, <fixed|fastcdc>
+  default: fastcdc 
+  services:
+  - ceph-dedup
+- name: report_period
+  type: int
+  level: advanced
+  desc: set the report period of crawler thread (sec)
+  default: 10
+  services:
+  - ceph-dedup
+- name: fpstore_threshold 
+  type: int
+  level: advanced
+  desc: set memory limit to store fingerprint (bytes)
+  default: 100_M
+  services:
+  - ceph-dedup

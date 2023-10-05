@@ -589,32 +589,37 @@ int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk, snap_t snap)
 
 int make_crawling_daemon(const po::variables_map &opts)
 {
+  CephContext* _cct = g_ceph_context;
   string base_pool_name = get_opts_pool_name(opts);
   string chunk_pool_name = get_opts_chunk_pool(opts);
-  unsigned max_thread = get_opts_max_thread(opts);
-  uint32_t report_period = get_opts_report_period(opts);
+  unsigned max_thread = get_opts_max_thread(opts, _cct);
+  uint32_t report_period = get_opts_report_period(opts, _cct);
 
-  int sampling_ratio = -1;
+  int sampling_ratio = 0;
   if (opts.count("sampling-ratio")) {
     sampling_ratio = opts["sampling-ratio"].as<int>();
+  } else {
+    sampling_ratio = _cct->_conf.get_val<int64_t>("sampling_ratio");
   }
   size_t chunk_size = 8192;
   if (opts.count("chunk-size")) {
     chunk_size = opts["chunk-size"].as<int>();
   } else {
-    cout << "8192 is set as chunk size by default" << std::endl;
+    chunk_size = _cct->_conf.get_val<int64_t>("chunk_size");
   }
   bool snap = false;
   if (opts.count("snap")) {
     snap = true;
   }
 
-  uint32_t chunk_dedup_threshold = -1;
+  int chunk_dedup_threshold = 0;
   if (opts.count("chunk-dedup-threshold")) {
-    chunk_dedup_threshold = opts["chunk-dedup-threshold"].as<size_t>();
+    chunk_dedup_threshold = opts["chunk-dedup-threshold"].as<int>();
+  } else {
+    chunk_dedup_threshold = _cct->_conf.get_val<int64_t>("chunk_dedup_threshold");
   }
 
-  std::string chunk_algo = get_opts_chunk_algo(opts);
+  std::string chunk_algo = get_opts_chunk_algo(opts, _cct);
 
   Rados rados;
   int ret = rados.init_with_context(g_ceph_context);
@@ -631,12 +636,17 @@ int make_crawling_daemon(const po::variables_map &opts)
   if (opts.count("wakeup-period")) {
     wakeup_period = opts["wakeup-period"].as<int>();
   } else {
-    cout << "100 second is set as wakeup period by default" << std::endl;
+    wakeup_period= _cct->_conf.get_val<uint64_t>("wakeup_period");
   }
 
-  const size_t fp_threshold = opts["fpstore-threshold"].as<size_t>();
+  size_t fp_threshold;
+  if (opts.count("fpstore-threshold")) {
+    fp_threshold = opts["fpstore-threshold"].as<size_t>();
+  } else {
+    fp_threshold = _cct->_conf.get_val<uint64_t>("fpstore_threshold");
+  }
 
-  std::string fp_algo = get_opts_fp_algo(opts);
+  std::string fp_algo = get_opts_fp_algo(opts, _cct);
 
   list<string> pool_names;
   IoCtx io_ctx, chunk_io_ctx;
@@ -689,6 +699,13 @@ int make_crawling_daemon(const po::variables_map &opts)
   cout << "SampleRatio : " << sampling_ratio << std::endl
     << "Chunk Dedup Threshold : " << chunk_dedup_threshold << std::endl
     << "Chunk Size : " << chunk_size << std::endl
+    << "Max Thread : " << max_thread << std::endl
+    << "Sample Ratio : " << sampling_ratio << " % " << std::endl
+    << "Base Pool : " << base_pool_name << std::endl
+    << "Chunk Pool : " << chunk_pool_name << std::endl
+    << "Chunk Algorithm : " << chunk_algo << std::endl
+    << "Fingerprint Algorithm : " << fp_algo << std::endl
+    << "Wakeup Period : " << wakeup_period<< std::endl
     << std::endl;
 
   while (!all_stop) {

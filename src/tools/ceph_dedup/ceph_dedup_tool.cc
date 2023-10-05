@@ -120,8 +120,8 @@ po::options_description make_usage() {
     ("chunk-algorithm", po::value<std::string>(), ": <fixed|fastcdc>, set chunk-algorithm")
     ("fingerprint-algorithm", po::value<std::string>(), ": <sha1|sha256|sha512>, set fingerprint-algorithm")
     ("chunk-pool", po::value<std::string>(), ": set chunk pool name")
-    ("max-thread", po::value<int>()->default_value(2), ": set max thread")
-    ("report-period", po::value<int>()->default_value(10), ": set report-period")
+    ("max-thread", po::value<int>(), ": set max thread")
+    ("report-period", po::value<int>(), ": set report-period")
     ("max-seconds", po::value<int>(), ": set max runtime")
     ("max-read-size", po::value<int>(), ": set max read size")
     ("pool", po::value<std::string>(), ": set pool name")
@@ -527,8 +527,8 @@ int estimate_dedup_ratio(const po::variables_map &opts)
   uint64_t chunk_size = 8192;
   uint64_t min_chunk_size = 8192;
   uint64_t max_chunk_size = 4*1024*1024;
-  unsigned max_thread = get_opts_max_thread(opts);
-  uint32_t report_period = get_opts_report_period(opts);
+  unsigned max_thread = get_opts_max_thread(opts, g_ceph_context);
+  uint32_t report_period = get_opts_report_period(opts, g_ceph_context);
   uint64_t max_read_size = default_op_size;
   uint64_t max_seconds = 0;
   int ret;
@@ -551,7 +551,7 @@ int estimate_dedup_ratio(const po::variables_map &opts)
     cerr << "must specify chunk-algorithm" << std::endl;
     exit(1);
   }
-  fp_algo = get_opts_fp_algo(opts);
+  fp_algo = get_opts_fp_algo(opts, g_ceph_context);
   if (opts.count("chunk-size")) {
     chunk_size = opts["chunk-size"].as<int>();
   } else {
@@ -684,9 +684,9 @@ int chunk_scrub_common(const po::variables_map &opts)
   std::string object_name, target_object_name;
   string chunk_pool_name, op_name;
   int ret;
-  unsigned max_thread = get_opts_max_thread(opts);
+  unsigned max_thread = get_opts_max_thread(opts, g_ceph_context);
   std::map<std::string, std::string>::const_iterator i;
-  uint32_t report_period = get_opts_report_period(opts);
+  uint32_t report_period = get_opts_report_period(opts, g_ceph_context);
   ObjectCursor begin;
   ObjectCursor end;
   librados::pool_stat_t s; 
@@ -914,7 +914,7 @@ int make_dedup_object(const po::variables_map &opts)
 	 << cpp_strerror(ret) << std::endl;
     goto out;
   }
-  fp_algo = get_opts_fp_algo(opts);
+  fp_algo = get_opts_fp_algo(opts, g_ceph_context);
 
   if (op_name == "chunk-dedup") {
     uint64_t offset, length;
