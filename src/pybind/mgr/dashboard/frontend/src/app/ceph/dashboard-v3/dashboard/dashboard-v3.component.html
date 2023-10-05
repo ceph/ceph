@@ -131,16 +131,9 @@
             </div>
             <div class="d-flex flex-column ms-4 me-4 mt-4 mb-4">
               <ng-template #healthChecks>
-                <ng-container *ngTemplateOutlet="logsLink"></ng-container>
-                <ul>
-                  <li *ngFor="let check of healthData.health.checks">
-                    <span [ngStyle]="check.severity | healthColor"
-                          [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
-                    {{ check.type }}</span>: {{ check.summary.message }}
-                  </li>
-                </ul>
+                <cd-health-checks *ngIf="healthData?.health?.checks"
+                                  [healthData]="healthData.health.checks"></cd-health-checks>
               </ng-template>
-
               <div class="d-flex flex-row">
                 <i *ngIf="healthData.health?.status"
                    [ngClass]="[healthData.health.status | healthIcon, icons.large2x]"

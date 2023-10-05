@@ -47,13 +47,7 @@
              id="clusterStatus">
       <div class="d-flex flex-column justify-content-center align-items-center">
         <ng-template #healthChecks>
-          <ul>
-            <li *ngFor="let check of healthData.health.checks">
-              <span [ngStyle]="check.severity | healthColor"
-                    [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
-              {{ check.type }}</span>: {{ check.summary.message }}
-            </li>
-          </ul>
+          <cd-health-checks [healthData]="healthData.health.checks"></cd-health-checks>
         </ng-template>
         <ng-template #healthWarningAndError>
         <div class="info-card-content-clickable mt-1"
