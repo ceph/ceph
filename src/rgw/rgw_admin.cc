@@ -315,6 +315,7 @@ void usage()
   cout << "  topic list                 list bucket notifications topics\n";
   cout << "  topic get                  get a bucket notifications topic\n";
   cout << "  topic rm                   remove a bucket notifications topic\n";
+  cout << "  topic stats                get a bucket notifications persistent topic stats (i.e. reservations, entries & size)\n";
   cout << "  script put                 upload a lua script to a context\n";
   cout << "  script get                 get the lua script of a context\n";
   cout << "  script rm                  remove the lua scripts of a context\n";
