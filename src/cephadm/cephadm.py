@@ -18,7 +18,6 @@ import tempfile
 import time
 import errno
 import ssl
-from enum import Enum
 from typing import Dict, List, Tuple, Optional, Union, Any, Callable, IO, Sequence, TypeVar, cast, Iterable, TextIO
 
 import re
@@ -163,6 +162,17 @@ from cephadmlib.decorators import (
 )
 from cephadmlib.host_facts import HostFacts, list_networks
 from cephadmlib.ssh import authorize_ssh_key, check_ssh_connectivity
+from cephadmlib.daemon_form import (
+    DaemonForm,
+    UnexpectedDaemonTypeError,
+    create as daemon_form_create,
+    register as register_daemon_form,
+)
+from cephadmlib.deploy import DeploymentType
+from cephadmlib.container_daemon_form import ContainerDaemonForm
+from cephadmlib.sysctl import install_sysctl, migrate_sysctl_dir
+from cephadmlib.firewalld import Firewalld, update_firewalld
+
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -194,29 +204,48 @@ class ContainerInfo:
                 and self.start == other.start
                 and self.version == other.version)
 
-
-class DeploymentType(Enum):
-    # Fresh deployment of a daemon.
-    DEFAULT = 'Deploy'
-    # Redeploying a daemon. Works the same as fresh
-    # deployment minus port checking.
-    REDEPLOY = 'Redeploy'
-    # Reconfiguring a daemon. Rewrites config
-    # files and potentially restarts daemon.
-    RECONFIG = 'Reconfig'
-
 ##################################
 
 
-class Ceph(object):
+@register_daemon_form
+class Ceph(DaemonForm):
     daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
                'crash', 'cephfs-mirror', 'ceph-exporter')
     gateways = ('iscsi', 'nfs', 'nvmeof')
 
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        # TODO: figure out a way to un-special-case osd
+        return daemon_type in cls.daemons and daemon_type != 'osd'
+
+    def __init__(self, ident: DaemonIdentity) -> None:
+        self._identity = ident
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
+        return cls(ident)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return self._identity
+
+    def firewall_service_name(self) -> str:
+        if self.identity.daemon_type == 'mon':
+            return 'ceph-mon'
+        elif self.identity.daemon_type in ['mgr', 'mds']:
+            return 'ceph'
+        return ''
+
 ##################################
 
 
-class OSD(object):
+@register_daemon_form
+class OSD(Ceph):
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        # TODO: figure out a way to un-special-case osd
+        return daemon_type == 'osd'
+
     @staticmethod
     def get_sysctl_settings() -> List[str]:
         return [
@@ -225,17 +254,25 @@ class OSD(object):
             'kernel.pid_max = 4194304',
         ]
 
+    def firewall_service_name(self) -> str:
+        return 'ceph'
+
 
 ##################################
 
 
-class SNMPGateway:
+@register_daemon_form
+class SNMPGateway(ContainerDaemonForm):
     """Defines an SNMP gateway between Prometheus and SNMP monitoring Frameworks"""
     daemon_type = 'snmp-gateway'
     SUPPORTED_VERSIONS = ['V2c', 'V3']
     default_image = DEFAULT_SNMP_GATEWAY_IMAGE
     DEFAULT_PORT = 9464
     env_filename = 'snmp-gateway.conf'
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -270,6 +307,14 @@ class SNMPGateway:
         cfgs = fetch_configs(ctx)
         assert cfgs  # assert some config data was found
         return cls(ctx, fsid, daemon_id, cfgs, ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'SNMPGateway':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
     def get_version(ctx: CephadmContext, fsid: str, daemon_id: str) -> Optional[str]:
@@ -369,9 +414,16 @@ class SNMPGateway:
         if not self.destination:
             raise Error('config is missing destination attribute(<ip>:<port>) of the target SNMP listener')
 
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return self.uid, self.gid
+
 
 ##################################
-class Monitoring(object):
+@register_daemon_form
+class Monitoring(DaemonForm):
     """Define the configs for the monitoring containers"""
 
     port_map = {
@@ -454,6 +506,10 @@ class Monitoring(object):
         },
     }  # type: ignore
 
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return daemon_type in cls.components
+
     @staticmethod
     def get_version(ctx, container_id, daemon_type):
         # type: (CephadmContext, str, str) -> str
@@ -486,10 +542,22 @@ class Monitoring(object):
                 version = out.split(' ')[2]
         return version
 
+    def __init__(self, ident: DaemonIdentity) -> None:
+        self._identity = ident
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Monitoring':
+        return cls(ident)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return self._identity
+
 ##################################
 
 
-class NFSGanesha(object):
+@register_daemon_form
+class NFSGanesha(ContainerDaemonForm):
     """Defines a NFS-Ganesha container"""
 
     daemon_type = 'nfs'
@@ -501,6 +569,10 @@ class NFSGanesha(object):
     port_map = {
         'nfs': 2049,
     }
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx,
@@ -529,6 +601,14 @@ class NFSGanesha(object):
     def init(cls, ctx, fsid, daemon_id):
         # type: (CephadmContext, str, Union[int, str]) -> NFSGanesha
         return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'NFSGanesha':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def get_container_mounts(self, data_dir):
         # type: (str) -> Dict[str, str]
@@ -623,16 +703,43 @@ class NFSGanesha(object):
             with write_new(keyring_path, owner=(uid, gid)) as f:
                 f.write(self.rgw.get('keyring', ''))
 
+    def firewall_service_name(self) -> str:
+        return 'nfs'
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        return get_deployment_container(ctx, self.identity)
+
+    def customize_container_endpoints(
+        self, endpoints: List[EndPoint], deployment_type: DeploymentType
+    ) -> None:
+        if deployment_type == DeploymentType.DEFAULT and not endpoints:
+            nfs_ports = list(NFSGanesha.port_map.values())
+            endpoints.extend([EndPoint('0.0.0.0', p) for p in nfs_ports])
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        # TODO: extract ganesha uid/gid (997, 994) ?
+        return extract_uid_gid(ctx)
+
+    def config_and_keyring(
+        self, ctx: CephadmContext
+    ) -> Tuple[Optional[str], Optional[str]]:
+        return get_config_and_keyring(ctx)
+
 ##################################
 
 
-class CephIscsi(object):
+@register_daemon_form
+class CephIscsi(DaemonForm):
     """Defines a Ceph-Iscsi container"""
 
     daemon_type = 'iscsi'
     entrypoint = '/usr/bin/rbd-target-api'
 
     required_files = ['iscsi-gateway.cfg']
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx,
@@ -657,6 +764,14 @@ class CephIscsi(object):
         # type: (CephadmContext, str, Union[int, str]) -> CephIscsi
         return cls(ctx, fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephIscsi':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
     def get_container_mounts(data_dir, log_dir):
@@ -813,12 +928,17 @@ done
 ##################################
 
 
-class CephNvmeof(object):
+@register_daemon_form
+class CephNvmeof(DaemonForm):
     """Defines a Ceph-Nvmeof container"""
 
     daemon_type = 'nvmeof'
     required_files = ['ceph-nvmeof.conf']
     default_image = DEFAULT_NVMEOF_IMAGE
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx,
@@ -843,6 +963,14 @@ class CephNvmeof(object):
         # type: (CephadmContext, str, Union[int, str]) -> CephNvmeof
         return cls(ctx, fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephNvmeof':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
     def get_container_mounts(data_dir: str) -> Dict[str, str]:
@@ -938,7 +1066,8 @@ class CephNvmeof(object):
 ##################################
 
 
-class CephExporter(object):
+@register_daemon_form
+class CephExporter(DaemonForm):
     """Defines a Ceph exporter container"""
 
     daemon_type = 'ceph-exporter'
@@ -947,6 +1076,10 @@ class CephExporter(object):
     port_map = {
         'ceph-exporter': DEFAULT_PORT,
     }
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -974,6 +1107,14 @@ class CephExporter(object):
         return cls(ctx, fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
 
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephExporter':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
+
     @staticmethod
     def get_container_mounts() -> Dict[str, str]:
         mounts = dict()
@@ -998,11 +1139,16 @@ class CephExporter(object):
 ##################################
 
 
-class HAproxy(object):
+@register_daemon_form
+class HAproxy(DaemonForm):
     """Defines an HAproxy container"""
     daemon_type = 'haproxy'
     required_files = ['haproxy.cfg']
     default_image = DEFAULT_HAPROXY_IMAGE
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -1023,6 +1169,14 @@ class HAproxy(object):
              fsid: str, daemon_id: Union[int, str]) -> 'HAproxy':
         return cls(ctx, fsid, daemon_id, fetch_configs(ctx),
                    ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'HAproxy':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """Create files under the container data dir"""
@@ -1086,11 +1240,16 @@ class HAproxy(object):
 ##################################
 
 
-class Keepalived(object):
+@register_daemon_form
+class Keepalived(DaemonForm):
     """Defines an Keepalived container"""
     daemon_type = 'keepalived'
     required_files = ['keepalived.conf']
     default_image = DEFAULT_KEEPALIVED_IMAGE
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  ctx: CephadmContext,
@@ -1111,6 +1270,14 @@ class Keepalived(object):
              daemon_id: Union[int, str]) -> 'Keepalived':
         return cls(ctx, fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Keepalived':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """Create files under the container data dir"""
@@ -1182,7 +1349,8 @@ class Keepalived(object):
 ##################################
 
 
-class Tracing(object):
+@register_daemon_form
+class Tracing(DaemonForm):
     """Define the configs for the jaeger tracing containers"""
 
     components: Dict[str, Dict[str, Any]] = {
@@ -1201,6 +1369,10 @@ class Tracing(object):
         },
     }  # type: ignore
 
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return daemon_type in cls.components
+
     @staticmethod
     def set_configuration(config: Dict[str, str], daemon_type: str) -> None:
         if daemon_type in ['jaeger-collector', 'jaeger-query']:
@@ -1215,12 +1387,28 @@ class Tracing(object):
                 '--processor.jaeger-compact.server-host-port=6799'
             ]
 
+    def __init__(self, ident: DaemonIdentity) -> None:
+        self._identity = ident
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Tracing':
+        return cls(ident)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return self._identity
+
 ##################################
 
 
-class CustomContainer(object):
+@register_daemon_form
+class CustomContainer(ContainerDaemonForm):
     """Defines a custom container"""
     daemon_type = 'container'
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
 
     def __init__(self,
                  fsid: str, daemon_id: Union[int, str],
@@ -1247,6 +1435,14 @@ class CustomContainer(object):
              fsid: str, daemon_id: Union[int, str]) -> 'CustomContainer':
         return cls(fsid, daemon_id,
                    fetch_configs(ctx), ctx.image)
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CustomContainer':
+        return cls.init(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def create_daemon_dirs(self, data_dir: str, uid: int, gid: int) -> None:
         """
@@ -1328,6 +1524,39 @@ class CustomContainer(object):
                     bind[index] = 'source={}'.format(os.path.join(
                         data_dir, match.group(1)))
         return binds
+
+    # Cache the container so we don't need to rebuild it again when calling
+    # into init_containers
+    _container: Optional[CephContainer] = None
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        if self._container is None:
+            self._container = get_deployment_container(
+                ctx,
+                self.identity,
+                privileged=self.privileged,
+                ptrace=ctx.allow_ptrace,
+            )
+        return self._container
+
+    def init_containers(self, ctx: CephadmContext) -> List[InitContainer]:
+        primary = self.container(ctx)
+        init_containers: List[Dict[str, Any]] = getattr(
+            ctx, 'init_containers', []
+        )
+        return [
+            InitContainer.from_primary_and_opts(ctx, primary, ic_opts)
+            for ic_opts in init_containers
+        ]
+
+    def customize_container_endpoints(
+        self, endpoints: List[EndPoint], deployment_type: DeploymentType
+    ) -> None:
+        if deployment_type == DeploymentType.DEFAULT:
+            endpoints.extend([EndPoint('0.0.0.0', p) for p in self.ports])
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return self.uid, self.gid
 
 
 ##################################
@@ -2579,7 +2808,7 @@ def deploy_daemon(
     with write_new(data_dir + '/unit.configured', owner=(uid, gid)) as f:
         f.write('mtime is time we were last configured\n')
 
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
     # Open ports explicitly required for the daemon
     if endpoints:
@@ -2792,7 +3021,7 @@ def deploy_daemon_units(
             f.write(container.image + '\n')
 
     # sysctl
-    install_sysctl(ctx, fsid, daemon_type)
+    install_sysctl(ctx, fsid, daemon_form_create(ctx, ident))
 
     # systemd
     install_base_units(ctx, fsid)
@@ -2920,236 +3149,6 @@ def _write_iscsi_unit_poststop_commands(
     f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
     f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
     f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
-
-
-class Firewalld(object):
-
-    # for specifying ports we should always open when opening
-    # ports for a daemon of that type. Main use case is for ports
-    # that we should open when deploying the daemon type but that
-    # the daemon itself may not necessarily need to bind to the port.
-    # This needs to be handed differently as we don't want to fail
-    # deployment if the port cannot be bound to but we still want to
-    # open the port in the firewall.
-    external_ports: Dict[str, List[int]] = {
-        'iscsi': [3260]  # 3260 is the well known iSCSI port
-    }
-
-    def __init__(self, ctx):
-        # type: (CephadmContext) -> None
-        self.ctx = ctx
-        self.available = self.check()
-
-    def check(self):
-        # type: () -> bool
-        self.cmd = find_executable('firewall-cmd')
-        if not self.cmd:
-            logger.debug('firewalld does not appear to be present')
-            return False
-        (enabled, state, _) = check_unit(self.ctx, 'firewalld.service')
-        if not enabled:
-            logger.debug('firewalld.service is not enabled')
-            return False
-        if state != 'running':
-            logger.debug('firewalld.service is not running')
-            return False
-
-        logger.info('firewalld ready')
-        return True
-
-    def enable_service_for(self, daemon_type):
-        # type: (str) -> None
-        if not self.available:
-            logger.debug('Not possible to enable service <%s>. firewalld.service is not available' % daemon_type)
-            return
-
-        if daemon_type == 'mon':
-            svc = 'ceph-mon'
-        elif daemon_type in ['mgr', 'mds', 'osd']:
-            svc = 'ceph'
-        elif daemon_type == NFSGanesha.daemon_type:
-            svc = 'nfs'
-        else:
-            return
-
-        if not self.cmd:
-            raise RuntimeError('command not defined')
-
-        out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--query-service', svc], verbosity=CallVerbosity.DEBUG)
-        if ret:
-            logger.info('Enabling firewalld service %s in current zone...' % svc)
-            out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--add-service', svc])
-            if ret:
-                raise RuntimeError(
-                    'unable to add service %s to current zone: %s' % (svc, err))
-        else:
-            logger.debug('firewalld service %s is enabled in current zone' % svc)
-
-    def open_ports(self, fw_ports):
-        # type: (List[int]) -> None
-        if not self.available:
-            logger.debug('Not possible to open ports <%s>. firewalld.service is not available' % fw_ports)
-            return
-
-        if not self.cmd:
-            raise RuntimeError('command not defined')
-
-        for port in fw_ports:
-            tcp_port = str(port) + '/tcp'
-            out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--query-port', tcp_port], verbosity=CallVerbosity.DEBUG)
-            if ret:
-                logger.info('Enabling firewalld port %s in current zone...' % tcp_port)
-                out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--add-port', tcp_port])
-                if ret:
-                    raise RuntimeError('unable to add port %s to current zone: %s' %
-                                       (tcp_port, err))
-            else:
-                logger.debug('firewalld port %s is enabled in current zone' % tcp_port)
-
-    def close_ports(self, fw_ports):
-        # type: (List[int]) -> None
-        if not self.available:
-            logger.debug('Not possible to close ports <%s>. firewalld.service is not available' % fw_ports)
-            return
-
-        if not self.cmd:
-            raise RuntimeError('command not defined')
-
-        for port in fw_ports:
-            tcp_port = str(port) + '/tcp'
-            out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--query-port', tcp_port], verbosity=CallVerbosity.DEBUG)
-            if not ret:
-                logger.info('Disabling port %s in current zone...' % tcp_port)
-                out, err, ret = call(self.ctx, [self.cmd, '--permanent', '--remove-port', tcp_port])
-                if ret:
-                    raise RuntimeError('unable to remove port %s from current zone: %s' %
-                                       (tcp_port, err))
-                else:
-                    logger.info(f'Port {tcp_port} disabled')
-            else:
-                logger.info(f'firewalld port {tcp_port} already closed')
-
-    def apply_rules(self):
-        # type: () -> None
-        if not self.available:
-            return
-
-        if not self.cmd:
-            raise RuntimeError('command not defined')
-
-        call_throws(self.ctx, [self.cmd, '--reload'])
-
-
-def update_firewalld(ctx, daemon_type):
-    # type: (CephadmContext, str) -> None
-    if not ('skip_firewalld' in ctx and ctx.skip_firewalld):
-        firewall = Firewalld(ctx)
-        firewall.enable_service_for(daemon_type)
-        firewall.apply_rules()
-
-
-def install_sysctl(ctx: CephadmContext, fsid: str, daemon_type: str) -> None:
-    """
-    Set up sysctl settings
-    """
-    def _write(conf: Path, lines: List[str]) -> None:
-        lines = [
-            '# created by cephadm',
-            '',
-            *lines,
-            '',
-        ]
-        with write_new(conf, owner=None, perms=None) as f:
-            f.write('\n'.join(lines))
-
-    conf = Path(ctx.sysctl_dir).joinpath(f'90-ceph-{fsid}-{daemon_type}.conf')
-    lines: List = []
-
-    if daemon_type == 'osd':
-        lines = OSD.get_sysctl_settings()
-    elif daemon_type == 'haproxy':
-        lines = HAproxy.get_sysctl_settings()
-    elif daemon_type == 'keepalived':
-        lines = Keepalived.get_sysctl_settings()
-    elif daemon_type == CephNvmeof.daemon_type:
-        lines = CephNvmeof.get_sysctl_settings()
-    lines = filter_sysctl_settings(ctx, lines)
-
-    # apply the sysctl settings
-    if lines:
-        Path(ctx.sysctl_dir).mkdir(mode=0o755, exist_ok=True)
-        _write(conf, lines)
-        call_throws(ctx, ['sysctl', '--system'])
-
-
-def sysctl_get(ctx: CephadmContext, variable: str) -> Union[str, None]:
-    """
-    Read a sysctl setting by executing 'sysctl -b {variable}'
-    """
-    out, err, code = call(ctx, ['sysctl', '-b', variable])
-    return out or None
-
-
-def filter_sysctl_settings(ctx: CephadmContext, lines: List[str]) -> List[str]:
-    """
-    Given a list of sysctl settings, examine the system's current configuration
-    and return those which are not currently set as described.
-    """
-    def test_setting(desired_line: str) -> bool:
-        # Remove any comments
-        comment_start = desired_line.find('#')
-        if comment_start != -1:
-            desired_line = desired_line[:comment_start]
-        desired_line = desired_line.strip()
-        if not desired_line or desired_line.isspace():
-            return False
-        setting, desired_value = map(lambda s: s.strip(), desired_line.split('='))
-        if not setting or not desired_value:
-            return False
-        actual_value = sysctl_get(ctx, setting)
-        return desired_value != actual_value
-    return list(filter(test_setting, lines))
-
-
-def migrate_sysctl_dir(ctx: CephadmContext, fsid: str) -> None:
-    """
-    Cephadm once used '/usr/lib/sysctl.d' for storing sysctl configuration.
-    This moves it to '/etc/sysctl.d'.
-    """
-    deprecated_location: str = '/usr/lib/sysctl.d'
-    deprecated_confs: List[str] = glob(f'{deprecated_location}/90-ceph-{fsid}-*.conf')
-    if not deprecated_confs:
-        return
-
-    file_count: int = len(deprecated_confs)
-    logger.info(f'Found sysctl {file_count} files in deprecated location {deprecated_location}. Starting Migration.')
-    for conf in deprecated_confs:
-        try:
-            shutil.move(conf, ctx.sysctl_dir)
-            file_count -= 1
-        except shutil.Error as err:
-            if str(err).endswith('already exists'):
-                logger.warning(f'Destination file already exists. Deleting {conf}.')
-                try:
-                    os.unlink(conf)
-                    file_count -= 1
-                except OSError as del_err:
-                    logger.warning(f'Could not remove {conf}: {del_err}.')
-            else:
-                logger.warning(f'Could not move {conf} from {deprecated_location} to {ctx.sysctl_dir}: {err}')
-
-    # Log successful migration
-    if file_count == 0:
-        logger.info(f'Successfully migrated sysctl config to {ctx.sysctl_dir}.')
-        return
-
-    # Log partially successful / unsuccessful migration
-    files_processed: int = len(deprecated_confs)
-    if file_count < files_processed:
-        status: str = f'partially successful (failed {file_count}/{files_processed})'
-    elif file_count == files_processed:
-        status = 'unsuccessful'
-    logger.warning(f'Migration of sysctl configuration {status}. You may want to perform a migration manually.')
 
 
 def install_base_units(ctx, fsid):
@@ -3357,7 +3356,8 @@ class MgrListener(Thread):
             self.agent.wakeup()
 
 
-class CephadmAgent():
+@register_daemon_form
+class CephadmAgent(DaemonForm):
 
     daemon_type = 'agent'
     default_port = 8498
@@ -3371,6 +3371,18 @@ class CephadmAgent():
         'listener.crt',
         'listener.key',
     ]
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
+
+    @classmethod
+    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephadmAgent':
+        return cls(ctx, ident.fsid, ident.daemon_id)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     def __init__(self, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str] = ''):
         self.ctx = ctx
@@ -5012,17 +5024,6 @@ def get_deployment_container(
     return c
 
 
-def get_deployment_init_containers(
-    ctx: CephadmContext,
-    primary_container: 'CephContainer',
-) -> List['InitContainer']:
-    init_containers: List[Dict[str, Any]] = getattr(ctx, 'init_containers', [])
-    return [
-        InitContainer.from_primary_and_opts(ctx, primary_container, ic_opts)
-        for ic_opts in init_containers
-    ]
-
-
 def get_deployment_type(
     ctx: CephadmContext, ident: 'DaemonIdentity',
 ) -> DeploymentType:
@@ -5175,28 +5176,6 @@ def _dispatch_deploy(
             endpoints=daemon_endpoints
         )
 
-    elif daemon_type == NFSGanesha.daemon_type:
-        # only check ports if this is a fresh deployment
-        if deployment_type == DeploymentType.DEFAULT and not daemon_endpoints:
-            nfs_ports = list(NFSGanesha.port_map.values())
-            daemon_endpoints = [EndPoint('0.0.0.0', p) for p in nfs_ports]
-
-        config, keyring = get_config_and_keyring(ctx)
-        # TODO: extract ganesha uid/gid (997, 994) ?
-        uid, gid = extract_uid_gid(ctx)
-        c = get_deployment_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid,
-            gid,
-            config=config,
-            keyring=keyring,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints
-        )
-
     elif daemon_type == CephIscsi.daemon_type:
         config, keyring = get_config_and_keyring(ctx)
         uid, gid = extract_uid_gid(ctx)
@@ -5267,31 +5246,6 @@ def _dispatch_deploy(
             endpoints=daemon_endpoints,
         )
 
-    elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
-        # only check ports if this is a fresh deployment
-        if deployment_type == DeploymentType.DEFAULT:
-            daemon_endpoints.extend([EndPoint('0.0.0.0', p) for p in cc.ports])
-        c = get_deployment_container(
-            ctx, ident, privileged=cc.privileged, ptrace=ctx.allow_ptrace
-        )
-        ics = get_deployment_init_containers(
-            ctx,
-            c,
-        )
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            uid=cc.uid,
-            gid=cc.gid,
-            config=None,
-            keyring=None,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
-            init_containers=ics,
-        )
-
     elif daemon_type == CephadmAgent.daemon_type:
         # get current user gid and uid
         uid = os.getuid()
@@ -5306,22 +5260,42 @@ def _dispatch_deploy(
             endpoints=daemon_endpoints,
         )
 
-    elif daemon_type == SNMPGateway.daemon_type:
-        sc = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
-        c = get_deployment_container(ctx, ident)
-        deploy_daemon(
-            ctx,
-            ident,
-            c,
-            sc.uid,
-            sc.gid,
-            deployment_type=deployment_type,
-            endpoints=daemon_endpoints,
-        )
-
     else:
-        raise Error('daemon type {} not implemented in command_deploy function'
-                    .format(daemon_type))
+        try:
+            _deploy_daemon_container(
+                ctx, ident, daemon_endpoints, deployment_type
+            )
+        except UnexpectedDaemonTypeError:
+            raise Error('daemon type {} not implemented in command_deploy function'
+                        .format(daemon_type))
+
+
+def _deploy_daemon_container(
+    ctx: CephadmContext,
+    ident: 'DaemonIdentity',
+    daemon_endpoints: List[EndPoint],
+    deployment_type: DeploymentType,
+) -> None:
+    daemon = daemon_form_create(ctx, ident)
+    assert isinstance(daemon, ContainerDaemonForm)
+    daemon.customize_container_endpoints(daemon_endpoints, deployment_type)
+    ctr = daemon.container(ctx)
+    ics = daemon.init_containers(ctx)
+    config, keyring = daemon.config_and_keyring(ctx)
+    uid, gid = daemon.uid_gid(ctx)
+    deploy_daemon(
+        ctx,
+        ident,
+        ctr,
+        uid,
+        gid,
+        config=config,
+        keyring=keyring,
+        deployment_type=deployment_type,
+        endpoints=daemon_endpoints,
+        osd_fsid=daemon.osd_fsid,
+        init_containers=ics,
+    )
 
 ##################################
 
@@ -6144,7 +6118,7 @@ def command_adopt_ceph(ctx, daemon_type, daemon_id, fsid):
         start=(state == 'running' or ctx.force_start),
         osd_fsid=osd_fsid,
     )
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
 
 def command_adopt_prometheus(ctx, daemon_id, fsid):
@@ -6190,7 +6164,7 @@ def command_adopt_prometheus(ctx, daemon_id, fsid):
         deployment_type=DeploymentType.REDEPLOY,
         endpoints=endpoints,
     )
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
 
 def command_adopt_grafana(ctx, daemon_id, fsid):
@@ -6261,7 +6235,7 @@ def command_adopt_grafana(ctx, daemon_id, fsid):
         deployment_type=DeploymentType.REDEPLOY,
         endpoints=endpoints,
     )
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
 
 def command_adopt_alertmanager(ctx, daemon_id, fsid):
@@ -6308,7 +6282,7 @@ def command_adopt_alertmanager(ctx, daemon_id, fsid):
         deployment_type=DeploymentType.REDEPLOY,
         endpoints=endpoints,
     )
-    update_firewalld(ctx, daemon_type)
+    update_firewalld(ctx, daemon_form_create(ctx, ident))
 
 
 def _adjust_grafana_ini(filename):
