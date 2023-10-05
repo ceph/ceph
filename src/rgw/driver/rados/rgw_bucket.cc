@@ -142,9 +142,6 @@ bool rgw_bucket_object_check_filter(const std::string& oid)
 
 int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::Bucket* bucket, rgw_obj_key& key, optional_yield y)
 {
-  if (key.instance.empty()) {
-    key.instance = "null";
-  }
 
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 

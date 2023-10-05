@@ -847,10 +847,11 @@ public:
         ceph::real_time mtime; /* for setting delete marker mtime */
         bool high_precision_time;
         rgw_zone_set *zones_trace;
+        bool null_verid;
 	bool abortmp;
 	uint64_t parts_accounted_size;
 
-        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr), abortmp(false), parts_accounted_size(0) {}
+        DeleteParams() : versioning_status(0), olh_epoch(0), bilog_flags(0), remove_objs(NULL), high_precision_time(false), zones_trace(nullptr), null_verid(false), abortmp(false), parts_accounted_size(0) {}
       } params;
 
       struct DeleteResult {
@@ -923,6 +924,7 @@ public:
       bool bs_initialized{false};
       bool blind;
       bool prepared{false};
+      bool null_verid{false};
       rgw_zone_set *zones_trace{nullptr};
 
       int init_bs(const DoutPrefixProvider *dpp, optional_yield y) {
@@ -968,6 +970,10 @@ public:
         zones_trace = _zones_trace;
       }
 
+      void set_null_verid(bool null_version_id) {
+        null_verid = null_version_id;
+      }
+
       int prepare(const DoutPrefixProvider *dpp, RGWModifyOp, const std::string *write_tag, optional_yield y, bool log_op = true);
       int complete(const DoutPrefixProvider *dpp, int64_t poolid, uint64_t epoch, uint64_t size,
                    uint64_t accounted_size, const ceph::real_time& ut,
@@ -983,7 +989,7 @@ public:
                        int64_t poolid, uint64_t epoch,
                        ceph::real_time& removed_mtime, /* mtime of removed object */
                        std::list<rgw_obj_index_key> *remove_objs,
-                       optional_yield y,
+                       optional_yield y, bool null_verid,
                        bool log_op = true);
       int cancel(const DoutPrefixProvider *dpp,
                  std::list<rgw_obj_index_key> *remove_objs,
@@ -1251,7 +1257,8 @@ public:
 		 const RGWBucketInfo& bucket_info,
 		 const rgw_obj& obj,
 		 int versioning_status, optional_yield y,  // versioning flags defined in enum RGWBucketFlags
-		 uint16_t bilog_flags = 0,
+		 bool null_verid,
+                 uint16_t bilog_flags = 0,
 		 const ceph::real_time& expiration_time = ceph::real_time(),
 		 rgw_zone_set *zones_trace = nullptr,
                  bool log_op = true);
@@ -1381,7 +1388,7 @@ public:
   int repair_olh(const DoutPrefixProvider *dpp, RGWObjState* state, const RGWBucketInfo& bucket_info,
                  const rgw_obj& obj, optional_yield y);
   int unlink_obj_instance(const DoutPrefixProvider *dpp, RGWObjectCtx& obj_ctx, RGWBucketInfo& bucket_info, const rgw_obj& target_obj,
-                          uint64_t olh_epoch, optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+                          uint64_t olh_epoch, optional_yield y, bool null_verid, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
 
   void check_pending_olh_entries(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& pending_entries, std::map<std::string, bufferlist> *rm_pending_entries);
   int remove_olh_pending_entries(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, std::map<std::string, bufferlist>& pending_attrs, optional_yield y);
@@ -1443,13 +1450,13 @@ public:
                          uint16_t bilog_flags, optional_yield y, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, std::string& tag, int64_t pool, uint64_t epoch,
                           rgw_bucket_dir_entry& ent, RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs,
-                          uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+                          uint16_t bilog_flags, bool null_verid, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_add(BucketShard& bs, const rgw_obj& obj, std::string& tag, int64_t pool, uint64_t epoch, rgw_bucket_dir_entry& ent,
                            RGWObjCategory category, std::list<rgw_obj_index_key> *remove_objs, uint16_t bilog_flags,
                            rgw_zone_set *zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_del(BucketShard& bs, std::string& tag, int64_t pool, uint64_t epoch, rgw_obj& obj,
                            ceph::real_time& removed_mtime, std::list<rgw_obj_index_key> *remove_objs,
-                           uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
+                           uint16_t bilog_flags, bool null_verid, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
   int cls_obj_complete_cancel(BucketShard& bs, std::string& tag, rgw_obj& obj,
                               std::list<rgw_obj_index_key> *remove_objs,
                               uint16_t bilog_flags, rgw_zone_set *zones_trace = nullptr, bool log_op = true);
