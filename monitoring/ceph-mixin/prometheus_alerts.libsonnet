@@ -112,6 +112,7 @@
       rules: [
         {
           alert: 'CephOSDDownHigh',
+          'for': '5m',
           expr: 'count(ceph_osd_up == 0) / count(ceph_osd_up) * 100 >= 10',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.4.1' },
           annotations: {
@@ -252,6 +253,7 @@
         },
         {
           alert: 'CephOSDFlapping',
+          'for': '1m',
           expr: '(rate(ceph_osd_up[5m]) * on(%(cluster)sceph_daemon) group_left(hostname) ceph_osd_metadata) * 60 > 1' % $.MultiClusterQuery(),
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.4.4' },
           annotations: {
@@ -513,6 +515,7 @@
         },
         {
           alert: 'CephNodeNetworkPacketDrops',
+          'for': '1m',
           expr: |||
             (
               rate(node_network_receive_drop_total{device!="lo"}[1m]) +
@@ -533,6 +536,7 @@
         },
         {
           alert: 'CephNodeNetworkPacketErrors',
+          'for': '1m',
           expr: |||
             (
               rate(node_network_receive_errs_total{device!="lo"}[1m]) +
@@ -553,6 +557,7 @@
         },
         {
           alert: 'CephNodeNetworkBondDegraded',
+          'for': '1m',
           expr: |||
             node_bonding_slaves - node_bonding_active != 0
           |||,
@@ -564,6 +569,7 @@
         },
         {
           alert: 'CephNodeDiskspaceWarning',
+          'for': '1m',
           expr: 'predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) *on(instance) group_left(nodename) node_uname_info < 0',
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.4' },
           annotations: {
@@ -573,6 +579,7 @@
         },
         {
           alert: 'CephNodeInconsistentMTU',
+          'for': '1m',
           expr: 'node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==  scalar(    max by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=      quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))  )or node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==  scalar(    min by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=      quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))  )',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
@@ -587,7 +594,8 @@
       rules: [
         {
           alert: 'CephPoolGrowthWarning',
-          expr: '(predict_linear(ceph_pool_percent_used[2d], 3600 * 24 * 5) * on(%(cluster)spool_id, instance) group_right() ceph_pool_metadata) >= 95' % $.MultiClusterQuery(),
+          'for': '1m',
+          expr: '(predict_linear(ceph_pool_percent_used[2d], 3600 * 24 * 5) * on(%(cluster)spool_id)    group_right ceph_pool_metadata) >= 95' % $.MultiClusterQuery(),
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.9.2' },
           annotations: {
             summary: 'Pool growth rate may soon exceed capacity%(cluster)s' % $.MultiClusterSummary(),
@@ -596,6 +604,7 @@
         },
         {
           alert: 'CephPoolBackfillFull',
+          'for': '1m',
           expr: 'ceph_health_detail{name="POOL_BACKFILLFULL"} > 0',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
