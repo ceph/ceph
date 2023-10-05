@@ -1,6 +1,9 @@
 #include "common.h"
 
 ceph::mutex glock = ceph::make_mutex("glock");
+class SampleDedupWorkerThread;
+std::list<SampleDedupWorkerThread> threads;
+bool all_stop = false;
 
 po::options_description make_usage() {
   po::options_description desc("Usage");
@@ -277,6 +280,20 @@ public:
     return total_object_size;
   }
 
+  void signal(int signum) {
+    std::lock_guard l{m_lock};
+
+    switch (signum) {
+    case SIGINT:
+    case SIGTERM:
+      stop = true;
+      break;
+
+    default:
+      ceph_abort_msgf("unexpected signal %d", signum);
+    }
+  }
+
 protected:
   void* entry() override {
     crawl();
@@ -313,6 +330,8 @@ private:
   ObjectCursor begin;
   ObjectCursor end;
   bool snap;
+  bool stop = false;
+  ceph::mutex m_lock = ceph::make_mutex("SampleDedupWorkerThread");
 };
 
 void SampleDedupWorkerThread::crawl()
@@ -320,7 +339,7 @@ void SampleDedupWorkerThread::crawl()
   cout << "new iteration" << std::endl;
 
   ObjectCursor current_object = begin;
-  while (current_object < end) {
+  while (!stop && current_object < end) {
     std::vector<ObjectItem> objects;
     // Get the list of object IDs to deduplicate
     std::tie(objects, current_object) = get_objects(current_object, end, 100);
@@ -347,6 +366,11 @@ void SampleDedupWorkerThread::crawl()
 	}
       } else {
 	try_dedup_and_accumulate_result(target);
+      }
+      std::unique_lock l{m_lock};
+      if (stop) {
+	oid_for_evict.clear();
+	break;
       }
     }
   }
@@ -603,7 +627,7 @@ int make_crawling_daemon(const po::variables_map &opts)
     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
     return -EINVAL;
   }
-  int wakeup_period = 100;
+  int wakeup_period = 5;
   if (opts.count("wakeup-period")) {
     wakeup_period = opts["wakeup-period"].as<int>();
   } else {
@@ -667,40 +691,40 @@ int make_crawling_daemon(const po::variables_map &opts)
     << "Chunk Size : " << chunk_size << std::endl
     << std::endl;
 
-  while (true) {
-    lock_guard lock(glock);
+  while (!all_stop) {
     ObjectCursor begin = io_ctx.object_list_begin();
     ObjectCursor end = io_ctx.object_list_end();
 
     SampleDedupWorkerThread::SampleDedupGlobal sample_dedup_global(
       chunk_dedup_threshold, sampling_ratio, report_period, fp_threshold);
-
-    std::list<SampleDedupWorkerThread> threads;
     size_t total_size = 0;
     size_t total_duplicate_size = 0;
-    for (unsigned i = 0; i < max_thread; i++) {
-      cout << " add thread.. " << std::endl;
-      ObjectCursor shard_start;
-      ObjectCursor shard_end;
-      io_ctx.object_list_slice(
-        begin,
-        end,
-        i,
-        max_thread,
-        &shard_start,
-        &shard_end);
+    {
+      lock_guard lock(glock);
+      for (unsigned i = 0; i < max_thread; i++) {
+	cout << " add thread.. " << std::endl;
+	ObjectCursor shard_start;
+	ObjectCursor shard_end;
+	io_ctx.object_list_slice(
+	  begin,
+	  end,
+	  i,
+	  max_thread,
+	  &shard_start,
+	  &shard_end);
 
-      threads.emplace_back(
-	io_ctx,
-	chunk_io_ctx,
-	shard_start,
-	shard_end,
-	chunk_size,
-	fp_algo,
-	chunk_algo,
-	sample_dedup_global,
-	snap);
-      threads.back().create("sample_dedup");
+	threads.emplace_back(
+	  io_ctx,
+	  chunk_io_ctx,
+	  shard_start,
+	  shard_end,
+	  chunk_size,
+	  fp_algo,
+	  chunk_algo,
+	  sample_dedup_global,
+	  snap);
+	threads.back().create("sample_dedup");
+      }
     }
 
     for (auto &p : threads) {
@@ -714,6 +738,10 @@ int make_crawling_daemon(const po::variables_map &opts)
 	 << total_duplicate_size << " bytes)."
 	 << std::endl;
 
+    {
+      lock_guard lock(glock);
+      threads.clear();
+    }
     sleep(wakeup_period);
 
     map<string, librados::pool_stat_t> stats;
@@ -733,6 +761,11 @@ int make_crawling_daemon(const po::variables_map &opts)
 
 static void handle_signal(int signum) 
 {
+  std::lock_guard l{glock};
+  all_stop = true;
+  for (auto &p : threads) {
+    p.signal(signum);
+  }
 }
 
 int main(int argc, const char **argv)
