@@ -445,7 +445,7 @@ options:
   type: uint
   level: advanced
   desc: percentage of preallocated inos to delegate to client
-  default: 50
+  default: 0
   services:
   - mds
   flags:
