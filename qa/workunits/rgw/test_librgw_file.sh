@@ -1,5 +1,11 @@
 #!/bin/sh -e
-
+#
+# To run this test script with a cluster created via vstart.sh:
+# $PATH needs to be set for radosgw-admin and ceph_test_librgw executables.
+# $KEYRING need to be set as the path for a vstart clusters Ceph keyring.
+#
+# Example when ceph source is cloned into $HOME and a vstart cluster is already running with a radosgw:
+# $ PATH=~/ceph/build/bin/:$PATH KEYRING=~/ceph/build/keyring ~/ceph/qa/workunits/rgw/test_librgw_file.sh
 
 if [ -z ${AWS_ACCESS_KEY_ID} ]
 then
@@ -13,7 +19,10 @@ then
        --email librgw@example.com || echo "librgw user exists"
 
     # keyring override for teuthology env
-    KEYRING="/etc/ceph/ceph.keyring"
+    if [ -z ${KEYRING} ]
+    then
+      KEYRING="/etc/ceph/ceph.keyring"
+    fi
     K="-k ${KEYRING}"
 fi
 
