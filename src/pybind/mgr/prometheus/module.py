@@ -1320,7 +1320,10 @@ class Module(MgrModule):
         # stats are collected for every namespace in the pool. The wildcard
         # '*' can be used to indicate all pools or namespaces
         pools_string = cast(str, self.get_localized_module_option('rbd_stats_pools'))
-        pool_keys = []
+        pool_keys = set()
+        osd_map = self.get('osd_map')
+        rbd_pools = [pool['pool_name'] for pool in osd_map['pools']
+                     if 'rbd' in pool.get('application_metadata', {})]
         for x in re.split(r'[\s,]+', pools_string):
             if not x:
                 continue
@@ -1333,13 +1336,11 @@ class Module(MgrModule):
 
             if pool_name == "*":
                 # collect for all pools
-                osd_map = self.get('osd_map')
-                for pool in osd_map['pools']:
-                    if 'rbd' not in pool.get('application_metadata', {}):
-                        continue
-                    pool_keys.append((pool['pool_name'], namespace_name))
+                for pool in rbd_pools:
+                    pool_keys.add((pool, namespace_name))
             else:
-                pool_keys.append((pool_name, namespace_name))
+                if pool_name in rbd_pools:
+                    pool_keys.add((pool_name, namespace_name))  # avoids adding deleted pool
 
         pools = {}  # type: Dict[str, Set[str]]
         for pool_key in pool_keys:
