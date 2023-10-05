@@ -1250,3 +1250,20 @@ Description: prometheus alerts for the ceph dashboard
  .
  This package contains alerts used for prometheus to interact with the
  Ceph Dashboard.
+
+Package: ceph-dedup
+Architecture: linux-any
+Depends: ceph-common (= ${binary:Version}),
+         librados2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: Ceph daemon for selective deduplication, targeting a Ceph pool.
+
+Package: ceph-dedup-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-dedup (= ${binary:Version}),
+         ${misc:Depends},
+Description: debugging symbols for ceph-dedup
+ This package contains the debugging symbols for rbd-mirror.

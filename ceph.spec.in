@@ -791,6 +791,16 @@ Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Daemon for mirroring RBD images between Ceph clusters, streaming
 changes asynchronously.
 
+%package -n ceph-dedup
+Summary:	Ceph daemon and tool for deduplication
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
+Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+%description -n ceph-dedup
+Daemon for selective deduplication, targeting a Ceph pool.
+
 %package immutable-object-cache
 Summary:	Ceph daemon for immutable object cache
 %if 0%{?suse_version}
@@ -2097,6 +2107,10 @@ if [ $1 -ge 1 ] ; then
   fi
 fi
 
+%files -n ceph-dedup
+%{_bindir}/ceph-dedup-daemon
+%{_bindir}/ceph-dedup-tool
+
 %files immutable-object-cache
 %{_bindir}/ceph-immutable-object-cache
 %{_mandir}/man8/ceph-immutable-object-cache.8*
@@ -2484,8 +2498,6 @@ fi
 %{_bindir}/ceph_test_*
 %{_bindir}/ceph-coverage
 %{_bindir}/ceph-debugpack
-%{_bindir}/ceph-dedup-tool
-%{_bindir}/ceph-dedup-daemon
 %if 0%{with seastar}
 %{_bindir}/crimson-store-nbd
 %endif
