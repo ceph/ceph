@@ -12,7 +12,8 @@
         <cd-alert-panel type="info"
                         class="m-3"
                         spacingClass="mt-3"
-                        i18n>Orchestrator is not configured. Deploy MDS daemons manually after creating the volume.</cd-alert-panel>
+                        i18n
+                        *ngIf="!editing">Orchestrator is not configured. Deploy MDS daemons manually after creating the volume.</cd-alert-panel>
       </ng-container>
       <div class="card-body">
         <!-- Name -->
@@ -40,7 +41,8 @@
 
         <ng-container *ngIf="orchStatus.available">
           <!-- Placement -->
-          <div class="form-group row">
+          <div class="form-group row"
+               *ngIf="!editing">
             <label class="cd-col-form-label"
                    for="placement"
                    i18n>Placement</label>
