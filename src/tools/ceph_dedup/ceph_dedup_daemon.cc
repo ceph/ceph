@@ -1,6 +1,8 @@
 #include "common.h"
 
-ceph::mutex glock = ceph::make_mutex("glock");
+ceph::shared_mutex glock = ceph::make_shared_mutex("glock");
+class SampleDedupWorkerThread;
+bool all_stop = false; // Accessed in the main thread and in other worker threads under glock
 
 po::options_description make_usage() {
   po::options_description desc("Usage");
@@ -320,7 +322,9 @@ void SampleDedupWorkerThread::crawl()
   cout << "new iteration" << std::endl;
 
   ObjectCursor current_object = begin;
-  while (current_object < end) {
+  std::shared_lock l{glock};
+  while (!all_stop && current_object < end) {
+    l.unlock();
     std::vector<ObjectItem> objects;
     // Get the list of object IDs to deduplicate
     std::tie(objects, current_object) = get_objects(current_object, end, 100);
@@ -348,8 +352,16 @@ void SampleDedupWorkerThread::crawl()
       } else {
 	try_dedup_and_accumulate_result(target);
       }
+      l.lock();
+      if (all_stop) {
+	oid_for_evict.clear();
+	break;
+      }
+      l.unlock();
     }
+    l.lock();
   }
+  l.unlock();
 
   vector<AioCompRef> evict_completions(oid_for_evict.size());
   int i = 0;
@@ -603,7 +615,7 @@ int make_crawling_daemon(const po::variables_map &opts)
     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
     return -EINVAL;
   }
-  int wakeup_period = 100;
+  int wakeup_period = 5;
   if (opts.count("wakeup-period")) {
     wakeup_period = opts["wakeup-period"].as<int>();
   } else {
@@ -667,8 +679,10 @@ int make_crawling_daemon(const po::variables_map &opts)
     << "Chunk Size : " << chunk_size << std::endl
     << std::endl;
 
-  while (true) {
-    lock_guard lock(glock);
+  std::shared_lock l(glock);
+
+  while (!all_stop) {
+    l.unlock();
     ObjectCursor begin = io_ctx.object_list_begin();
     ObjectCursor end = io_ctx.object_list_end();
 
@@ -683,12 +697,12 @@ int make_crawling_daemon(const po::variables_map &opts)
       ObjectCursor shard_start;
       ObjectCursor shard_end;
       io_ctx.object_list_slice(
-        begin,
-        end,
-        i,
-        max_thread,
-        &shard_start,
-        &shard_end);
+	begin,
+	end,
+	i,
+	max_thread,
+	&shard_start,
+	&shard_end);
 
       threads.emplace_back(
 	io_ctx,
@@ -726,13 +740,26 @@ int make_crawling_daemon(const po::variables_map &opts)
       cerr << "stats can not find pool name: " << base_pool_name << std::endl;
       return -EINVAL;
     }
+
+    l.lock();
   }
+  l.unlock();
 
   return 0;
 }
 
 static void handle_signal(int signum) 
 {
+  std::unique_lock l{glock};
+  switch (signum) {
+    case SIGINT:
+    case SIGTERM:
+      all_stop = true;
+      break;
+
+    default:
+      ceph_abort_msgf("unexpected signal %d", signum);
+  }
 }
 
 int main(int argc, const char **argv)
