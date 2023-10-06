@@ -154,6 +154,7 @@ using crimson::common::local_conf;
       } else {
         obc->set_clone_state(std::move(md->os));
       }
+      obc->attr_cache = std::move(md->attr_cache);
       DEBUGDPP("returning obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
       return load_obc_ertr::make_ready_future<ObjectContextRef>(obc);
     });
@@ -203,6 +204,7 @@ using crimson::common::local_conf;
         return crimson::ct_error::object_corrupted::make();
       }
       obc.set_head_state(std::move(md->os), std::move(md->ssc));
+      obc.attr_cache = std::move(md->attr_cache);
       return load_obc_ertr::now();
     });
   }

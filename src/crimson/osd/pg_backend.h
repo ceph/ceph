@@ -18,6 +18,7 @@
 #include "messages/MOSDOpReply.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
+#include "crimson/os/futurized_store.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/osdop_params.h"
@@ -406,6 +407,7 @@ public:
   struct loaded_object_md_t {
     ObjectState os;
     crimson::osd::SnapSetContextRef ssc;
+    crimson::os::FuturizedStore::Shard::attrs_t attr_cache;
     using ref = std::unique_ptr<loaded_object_md_t>;
   };
   load_metadata_iertr::future<loaded_object_md_t::ref>

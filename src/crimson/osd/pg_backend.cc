@@ -141,7 +141,7 @@ PGBackend::load_metadata(const hobject_t& oid)
             return crimson::ct_error::object_corrupted::make();
           }
         }
-
+        ret->attr_cache = std::move(attrs);
         return load_metadata_ertr::make_ready_future<loaded_object_md_t::ref>(
           std::move(ret));
       }, crimson::ct_error::enoent::handle([oid] {
