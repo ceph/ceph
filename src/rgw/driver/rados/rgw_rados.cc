@@ -1038,6 +1038,8 @@ void RGWRados::finalize()
     }
   }
   if (run_sync_thread) {
+    // https://github.com/ceph/ceph/commit/9106e8ad3121a503bf49a7334367849756bd1291
+    // coverity[missing_lock:SUPPRESS]
     delete meta_sync_processor_thread;
     meta_sync_processor_thread = NULL;
     std::lock_guard dl{data_sync_thread_lock};
