@@ -48,6 +48,7 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/ClassHandler.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECCommon.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECTransaction.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ExtentCache.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_op_util.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDCap.cc
