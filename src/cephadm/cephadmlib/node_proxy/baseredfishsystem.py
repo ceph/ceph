@@ -27,9 +27,8 @@ class BaseRedfishSystem(BaseSystem):
         self.start_client()
 
     def start_client(self) -> None:
-        if not self.client:
-            self.client = RedFishClient(host=self.host, username=self.username, password=self.password)
         self.client.login()
+        self.start_update_loop()
 
     def start_update_loop(self) -> None:
         self.run = True
@@ -43,31 +42,29 @@ class BaseRedfishSystem(BaseSystem):
     def update(self) -> None:
         #  this loop can have:
         #  - caching logic
-        try:
-            while self.run:
-                self.log.logger.debug("waiting for a lock.")
-                self.lock.acquire()
-                self.log.logger.debug("lock acquired.")
-                try:
-                    self._update_system()
-                    # following calls in theory can be done in parallel
-                    self._update_metadata()
-                    self._update_memory()
-                    self._update_power()
-                    self._update_fans()
-                    self._update_network()
-                    self._update_processors()
-                    self._update_storage()
-                    self.data_ready = True
-                    sleep(5)
-                finally:
-                    self.lock.release()
-                    self.log.logger.debug("lock released.")
-        # Catching 'Exception' is probably not a good idea (devel only)
-        except Exception as e:
-            self.log.logger.error(f"Error detected, logging out from redfish api.\n{e}")
-            self.client.logout()
-            raise
+        while self.run:
+            self.log.logger.debug("waiting for a lock.")
+            self.lock.acquire()
+            self.log.logger.debug("lock acquired.")
+            try:
+                self._update_system()
+                # following calls in theory can be done in parallel
+                self._update_metadata()
+                self._update_memory()
+                self._update_power()
+                self._update_fans()
+                self._update_network()
+                self._update_processors()
+                self._update_storage()
+                self.data_ready = True
+                sleep(5)
+            except RuntimeError as e:
+                self.run = False
+                self.log.logger.error(f"Error detected, trying to gracefully log out from redfish api.\n{e}")
+                self.client.logout()
+            finally:
+                self.lock.release()
+                self.log.logger.debug("lock released.")
 
     def flush(self) -> None:
         self.log.logger.info("Acquiring lock to flush data.")
@@ -83,7 +80,10 @@ class BaseRedfishSystem(BaseSystem):
 
     @retry(retries=10, delay=2)
     def _get_path(self, path: str) -> Dict:
-        result = self.client.get_path(path)
+        try:
+            result = self.client.get_path(path)
+        except RuntimeError:
+            raise
         if result is None:
             self.log.logger.error(f"The client reported an error when getting path: {path}")
             raise RuntimeError(f"Could not get path: {path}")

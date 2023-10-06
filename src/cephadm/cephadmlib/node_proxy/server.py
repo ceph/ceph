@@ -122,7 +122,7 @@ class Start:
 
     def POST(self) -> str:
         self.backend.start_client()
-        self.backend.start_update_loop()
+        # self.backend.start_update_loop()
         self.reporter.run()
         return 'node-proxy daemon started'
 
@@ -218,11 +218,15 @@ def main(host: str = '',
 
     # create the redfish system and the obsever
     log.logger.info("Server initialization...")
-    system = RedfishDell(host=host,
-                         username=username,
-                         password=password,
-                         system_endpoint='/Systems/System.Embedded.1',
-                         config=config)
+    try:
+        system = RedfishDell(host=host,
+                            username=username,
+                            password=password,
+                            system_endpoint='/Systems/System.Embedded.1',
+                            config=config)
+    except RuntimeError:
+        log.logger.error(f"Can't initialize the redfish system.")
+
     reporter_agent = Reporter(system, data, f"https://{mgr_target_ip}:{mgr_target_port}/node-proxy/data")
     cherrypy.config.update({
         'node_proxy': config,

@@ -10,7 +10,7 @@ class BaseClient:
         self.username = username
         self.password = password
 
-    def login(self) -> Dict[str, Any]:
+    def login(self) -> None:
         raise NotImplementedError()
 
     def logout(self) -> Dict[str, Any]:

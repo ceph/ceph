@@ -23,7 +23,9 @@ class Logger:
         handler.setLevel(self.level)
         fmt = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
         handler.setFormatter(fmt)
+        logger.handlers.clear()
         logger.addHandler(handler)
+        logger.propagate = False
 
         return logger
 
