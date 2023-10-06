@@ -169,6 +169,7 @@ ObjectContextLoader::load_obc(ObjectContextRef obc)
 	  // See set_clone_ssc
 	  obc->set_clone_state(std::move(md->os));
 	}
+	obc->attr_cache = std::move(md->attr_cache);
 	DEBUGDPP("loaded obc {} for {}", dpp, obc->obs.oi, obc->obs.oi.soid);
 	return seastar::now();
       });
