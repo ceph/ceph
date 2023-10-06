@@ -259,7 +259,8 @@
                    class="form-control"
                    name="pseudo"
                    id="pseudo"
-                   formControlName="pseudo">
+                   formControlName="pseudo"
+                   minlength="2">
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'required')"
                   i18n>This field is required.</span>
@@ -269,6 +270,9 @@
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('pseudo', formDir, 'pattern')"
                   i18n>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &, ( or ).</span>
+            <span class="invalid-feedback"
+                  *ngIf="nfsForm.showError('pseudo', formDir, 'minlength') && nfsForm.getValue('pseudo') === '/'"
+                  i18n>Pseudo path should be an absolute path and it cannot be just '/'</span>
           </div>
         </div>
 
