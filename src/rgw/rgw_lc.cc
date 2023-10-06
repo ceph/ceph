@@ -827,7 +827,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
   std::string version_id;
 
-  auto pf = [&](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
+  auto pf = [&](RGWLC::LCWorker *wk, WorkQ *wq, WorkItem &wi) {
     int ret{0};
     auto wt = boost::get<std::tuple<lc_op, rgw_bucket_dir_entry>>(wi);
     auto& [rule, obj] = wt;
@@ -845,44 +845,41 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
       ret = notify->publish_reserve(this, nullptr);
       if (ret < 0) {
-				ldpp_dout(wk->get_lc(), 0)
-					<< "ERROR: reserving persistent notification for abort_multipart_upload, ret=" << ret
-					<< ", thread:" << wq->thr_name()
-					<< ", meta:" << obj.key
-					<< dendl;
+        ldpp_dout(wk->get_lc(), 0)
+            << "ERROR: reserving persistent notification for "
+               "abort_multipart_upload, ret="
+            << ret << ", thread:" << wq->thr_name()
+            << ", deferring mpu cleanup for meta:" << obj.key << dendl;
+        return ret;
       }
 
       ret = mpu->abort(this, cct, null_yield);
       if (ret == 0) {
-
         ret = notify->publish_commit(
-	  this, sal_obj->get_obj_size(),
-	  ceph::real_clock::now(),
-	  sal_obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
-	  version_id);
-	if (ret < 0) {
-	  ldpp_dout(wk->get_lc(), 1) <<
-	    "ERROR: notify publish_commit failed, with error: " << ret << dendl;
-	}
-	if (perfcounter) {
+            this, sal_obj->get_obj_size(), ceph::real_clock::now(),
+            sal_obj->get_attrs()[RGW_ATTR_ETAG].to_str(), version_id);
+        if (ret < 0) {
+          ldpp_dout(wk->get_lc(), 1)
+              << "ERROR: notify publish_commit failed, with error: " << ret
+              << dendl;
+        }
+        if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
         }
       } else {
-	if (ret == -ERR_NO_SUCH_UPLOAD) {
-	  ldpp_dout(wk->get_lc(), 5)
-	    << "ERROR: abort_multipart_upload failed, ret=" << ret
-	    << ", thread:" << wq->thr_name()
-	    << ", meta:" << obj.key
-	    << dendl;
-	} else {
-	  ldpp_dout(wk->get_lc(), 0)
-	    << "ERROR: abort_multipart_upload failed, ret=" << ret
-	    << ", thread:" << wq->thr_name()
-	    << ", meta:" << obj.key
-	    << dendl;
-	}
+        if (ret == -ERR_NO_SUCH_UPLOAD) {
+          ldpp_dout(wk->get_lc(), 5) << "ERROR: abort_multipart_upload "
+                                        "failed, ret="
+                                     << ret << ", thread:" << wq->thr_name()
+                                     << ", meta:" << obj.key << dendl;
+        } else {
+          ldpp_dout(wk->get_lc(), 0) << "ERROR: abort_multipart_upload "
+                                        "failed, ret="
+                                     << ret << ", thread:" << wq->thr_name()
+                                     << ", meta:" << obj.key << dendl;
+        }
       } /* abort failed */
-    } /* expired */
+    }   /* expired */
   };
 
   worker->workpool->setf(pf);
