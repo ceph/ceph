@@ -34,7 +34,7 @@ class CachePolicy {
     virtual ~CachePolicy() = default; 
 
     virtual int init(CephContext *cct, const DoutPrefixProvider* dpp) { return 0; } 
-    virtual int exist_key(std::string key, optional_yield y) = 0;
+    virtual int exist_key(std::string key) = 0;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y) = 0;
@@ -68,7 +68,7 @@ class LFUDAPolicy : public CachePolicy {
     int get_age(optional_yield y);
     int set_min_avg_weight(size_t weight, std::string cacheLocation, optional_yield y);
     int get_min_avg_weight(optional_yield y);
-    CacheBlock find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y);
+    CacheBlock find_victim(const DoutPrefixProvider* dpp, optional_yield y);
 
   public:
     LFUDAPolicy(net::io_context& io_context) : CachePolicy(), io(io_context) {
@@ -98,7 +98,7 @@ class LFUDAPolicy : public CachePolicy {
 
       return 0;
     }
-    virtual int exist_key(std::string key, optional_yield y) override;
+    virtual int exist_key(std::string key) override;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
@@ -117,7 +117,7 @@ class LRUPolicy : public CachePolicy {
   public:
     LRUPolicy() = default;
 
-    virtual int exist_key(std::string key, optional_yield y) override;
+    virtual int exist_key(std::string key) override;
     virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual uint64_t eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
