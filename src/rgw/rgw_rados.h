@@ -385,11 +385,6 @@ class RGWRados
 
   librados::IoCtx root_pool_ctx;      // .rgw
 
-  double inject_notify_timeout_probability = 0;
-  unsigned max_notify_retries = 0;
-
-  friend class RGWWatcher;
-
   ceph::mutex bucket_id_lock = ceph::make_mutex("rados_bucket_id");
 
   // This field represents the number of bucket index object shards

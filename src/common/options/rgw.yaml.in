@@ -3081,7 +3081,7 @@ options:
     is very heavily loaded. Beware that increasing this value may cause some operations
     to take longer in exceptional cases and thus may, rarely, cause clients to time
     out.
-  default: 3
+  default: 10
   tags:
   - error recovery
   services:
