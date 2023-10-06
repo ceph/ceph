@@ -198,85 +198,36 @@ class NodeProxy:
 
         data: Dict[str, Any] = cherrypy.request.json
         if self.validate_node_proxy_data(data):
-            self.mgr.set_store(f'node_proxy/data/{data["host"]}', json.dumps(data['data']))
+            host = data['host']
+            self.mgr.node_proxy.save(host, data['data'])
             self.raise_alert(data)
 
         results["result"] = self.validate_msg
 
         return results
 
-    def get_full_report(self) -> Dict[str, Any]:
-        results: Dict[str, Any] = {}
-
-        for k, v in self.mgr.get_store_prefix('node_proxy/data').items():
-            host = k.split('/')[-1:][0]
-            results[host] = json.loads(v)
-        return results
-
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
-    @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
-        results: Dict[str, Any] = {}
-        results = self.get_full_report()
-        hostname = kw.get('hostname',)
-
-        if hostname not in results.keys():
-            return results
-        else:
-            return results[hostname]
+        return self.mgr.node_proxy.fullreport(**kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
-    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def criticals(self, **kw: Any) -> Dict[str, Any]:
+        return self.mgr.node_proxy.criticals()
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def summary(self, **kw: Any) -> Dict[str, Any]:
-        results: Dict[str, Any] = {}
-        status: List[str] = []
-        hostname = kw.get('hostname',)
+        return self.mgr.node_proxy.summary(**kw)
 
-        results = self.get_full_report()
-
-        mapper: Dict[bool, str] = {
-            True: 'error',
-            False: 'ok'
-        }
-
-        _result = {}
-
-        for host, data in results.items():
-            _result[host] = {}
-            for component, details in data.items():
-                res = any([member['status']['health'].lower() != 'ok' for member in data[component].values()])
-                _result[host][component] = mapper[res]
-
-        if hostname and hostname in results.keys():
-            return _result[hostname]
-        else:
-            return _result
-
-    @cherrypy.tools.json_in()
+    @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def common(self, **kw) -> Dict[str, Any]:
-        results: Dict[str, Any] = {}
-        status: List[str] = []
-        hostname = kw.get('hostname',)
-        cmd = kw.get('cmd',)
-        results = self.get_full_report()
-
-        _result = {}
-
-        for host, data in results.items():
-            try:
-                _result[host] = data[cmd]
-            except KeyError:
-                raise RuntimeError(f'invalid endpoint {cmd}')
-
-        if hostname and hostname in results.keys():
-            return _result[hostname]
-        else:
-            return _result
+        return self.mgr.node_proxy.common(**kw)
 
     def dispatch(self, hostname='', cmd=''):
         kw = dict(hostname=hostname, cmd=cmd)

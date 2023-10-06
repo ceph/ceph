@@ -29,6 +29,7 @@ logger = logging.getLogger(__name__)
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
+NODE_PROXY_CACHE_PREFIX = 'node_proxy/data'
 
 
 class HostCacheStatus(enum.Enum):
@@ -1403,6 +1404,85 @@ class HostCache():
         assert not daemon.startswith('ha-rgw.')
 
         return self.scheduled_daemon_actions.get(host, {}).get(daemon)
+
+
+class NodeProxyCache:
+    def __init__(self, mgr: "CephadmOrchestrator") -> None:
+        self.mgr = mgr
+        self.data: Dict[str, Any] = {}
+        self.idrac = {}
+
+    def load(self) -> None:
+        _idrac = self.mgr.get_store('node_proxy/idrac', "{}")
+        self.idrac = json.loads(_idrac)
+
+        for k, v in self.mgr.get_store_prefix(NODE_PROXY_CACHE_PREFIX).items():
+            host = k.split('/')[-1:][0]
+
+            if host not in self.mgr.inventory.keys():
+                # remove entry for host that no longer exists
+                self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/{host}", None)
+                try:
+                    self.idrac.pop(host)
+                    self.data.pop(host)
+                except KeyError:
+                    pass
+                continue
+
+            self.data[host] = json.loads(v)
+
+    def save(self,
+             host: str = '',
+             data: Dict[str, Any] = {}) -> None:
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/{host}", json.dumps(data))
+
+    def fullreport(self, **kw: Any) -> Dict[str, Any]:
+        hostname = kw.get('hostname')
+        if hostname not in self.data.keys():
+            return self.data
+        else:
+            return self.data[hostname]
+
+    def summary(self, **kw: Any) -> Dict[str, Any]:
+        hostname = kw.get('hostname')
+        results = self.data
+
+        mapper: Dict[bool, str] = {
+            True: 'error',
+            False: 'ok'
+        }
+
+        _result: Dict[str, Any] = {}
+
+        for host, data in results.items():
+            _result[host] = {}
+            for component, details in data.items():
+                res = any([member['status']['health'].lower() != 'ok' for member in data[component].values()])
+                _result[host][component] = mapper[res]
+
+        if hostname and hostname in results.keys():
+            return _result[hostname]
+        else:
+            return _result
+
+    def common(self, **kw):
+        hostname = kw.get('hostname',)
+        cmd = kw.get('cmd',)
+        _result = {}
+
+        for host, data in self.data.items():
+            try:
+                _result[host] = data[cmd]
+            except KeyError:
+                raise RuntimeError(f'Invalid node-proxy category {cmd}')
+
+        if hostname and hostname in self.data.keys():
+            return _result[hostname]
+        else:
+            return _result
+
+    def criticals(self, **kw):
+        return {}
 
 
 class AgentCache():

@@ -116,6 +116,9 @@ class CephadmServe:
                     if self.mgr.upgrade.continue_upgrade():
                         continue
 
+                    # refresh node-proxy cache
+                    self.mgr.node_proxy.load()
+
             except OrchestratorError as e:
                 if e.event_subject:
                     self.mgr.events.from_orch_error(e)

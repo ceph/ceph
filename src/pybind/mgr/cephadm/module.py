@@ -74,7 +74,7 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
 from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
-    ClientKeyringStore, ClientKeyringSpec, TunedProfileStore
+    ClientKeyringStore, ClientKeyringSpec, TunedProfileStore, NodeProxyCache
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
@@ -599,6 +599,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.cache = HostCache(self)
         self.cache.load()
+
+        self.node_proxy = NodeProxyCache(self)
+        self.node_proxy.load()
 
         self.agent_cache = AgentCache(self)
         self.agent_cache.load()
