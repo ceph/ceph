@@ -73,6 +73,9 @@ public:
   using watch_key_t = std::pair<uint64_t, entity_name_t>;
   std::map<watch_key_t, seastar::shared_ptr<crimson::osd::Watch>> watchers;
 
+  // attr cache. ECTransaction is the initial user
+  std::map<std::string, ceph::buffer::list, std::less<>> attr_cache;
+
   ObjectContext(hobject_t hoid) : lock(hoid),
                                   obs(std::move(hoid)) {}
 
