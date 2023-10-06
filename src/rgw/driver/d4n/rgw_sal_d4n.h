@@ -112,19 +112,21 @@ class D4NFilterObject : public FilterObject {
 	    bool last_part{false};
 	    std::mutex d4n_get_data_lock;
 	    bool write_to_cache{true};
-      const DoutPrefixProvider* dpp;
+	    const DoutPrefixProvider* dpp;
+	    optional_yield* y;
 
 	  public:
 	    D4NFilterGetCB(D4NFilterDriver* _filter, std::string& _oid, D4NFilterObject* _source) : filter(_filter), 
-									  oid(_oid), 
-								    source(_source) {}
-
-	    optional_yield* save_y;
+												    oid(_oid), source(_source) {}
 
 	    int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
-	    void set_client_cb(RGWGetDataCB* client_cb, const DoutPrefixProvider* dpp) { this->client_cb = client_cb; this->dpp = dpp;}
+	    void set_client_cb(RGWGetDataCB* client_cb, const DoutPrefixProvider* dpp, optional_yield* y) { 
+              this->client_cb = client_cb; 
+              this->dpp = dpp;
+              this->y = y;
+            }
 	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
-	    int flush_last_part(optional_yield y);
+	    int flush_last_part();
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};
 

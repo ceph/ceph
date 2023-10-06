@@ -279,7 +279,7 @@ TEST_F(BlockDirectoryFixture, SetYield)
 
     boost::system::error_code ec;
     request req;
-    req.push_range("HMGET", "testBucket_testName_0", fields);
+    req.push_range("HMGET", "testBucket_testName_0_0", fields);
     req.push("FLUSHALL");
 
     response< std::vector<std::string>,
@@ -303,7 +303,7 @@ TEST_F(BlockDirectoryFixture, GetYield)
     {
       boost::system::error_code ec;
       request req;
-      req.push("HSET", "testBucket_testName_0", "objName", "newoid");
+      req.push("HSET", "testBucket_testName_0_0", "objName", "newoid");
       response<int> resp;
 
       conn->async_exec(req, resp, yield[ec]);
@@ -340,8 +340,8 @@ TEST_F(BlockDirectoryFixture, CopyYield)
 
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", "copyBucketName_copyTestName_0");
-    req.push_range("HMGET", "copyBucketName_copyTestName_0", fields);
+    req.push("EXISTS", "copyBucketName_copyTestName_0_0");
+    req.push_range("HMGET", "copyBucketName_copyTestName_0_0", fields);
     req.push("FLUSHALL");
 
     response<int, std::vector<std::string>, 
@@ -371,7 +371,7 @@ TEST_F(BlockDirectoryFixture, DelYield)
     {
       boost::system::error_code ec;
       request req;
-      req.push("EXISTS", "testBucket_testName_0");
+      req.push("EXISTS", "testBucket_testName_0_0");
       response<int> resp;
 
       conn->async_exec(req, resp, yield[ec]);
@@ -412,7 +412,7 @@ TEST_F(BlockDirectoryFixture, UpdateFieldYield)
 
     boost::system::error_code ec;
     request req;
-    req.push("HMGET", "testBucket_testName_0", "objName", "blockHosts");
+    req.push("HMGET", "testBucket_testName_0_0", "objName", "blockHosts");
     req.push("FLUSHALL");
     response< std::vector<std::string>, 
 	      boost::redis::ignore_t> resp;
@@ -439,8 +439,8 @@ TEST_F(BlockDirectoryFixture, RemoveHostYield)
     {
       boost::system::error_code ec;
       request req;
-      req.push("HEXISTS", "testBucket_testName_0", "blockHosts");
-      req.push("HGET", "testBucket_testName_0", "blockHosts");
+      req.push("HEXISTS", "testBucket_testName_0_0", "blockHosts");
+      req.push("HGET", "testBucket_testName_0_0", "blockHosts");
       response<int, std::string> resp;
 
       conn->async_exec(req, resp, yield[ec]);
