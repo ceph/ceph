@@ -6103,7 +6103,7 @@ def rollback(func: FuncT) -> FuncT:
                 logger.info('\n\n'
                             '\t***************\n'
                             '\tCephadm hit an issue during cluster installation. Current cluster files will be deleted automatically,\n'
-                            '\tto disable this behaviour you can pass the --no-cleanup-on-failure flag. In case of any previous\n'
+                            '\tto disable this behaviour do not pass the --cleanup-on-failure flag. In case of any previous\n'
                             '\tbroken installation user must use the following command to completely delete the broken cluster:\n\n'
                             '\t> cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
                             '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
@@ -10307,23 +10307,11 @@ def _get_parser():
         '--allow-overwrite',
         action='store_true',
         help='allow overwrite of existing --output-* config/keyring/ssh files')
-    # following logic to have both '--cleanup-on-failure' and '--no-cleanup-on-failure'
-    # has been included in argparse of python v3.9, however since we have to support
-    # older python versions the following is more generic. Once python v3.9 becomes
-    # the minium supported version we can implement the same by using the new option
-    # argparse.BooleanOptionalAction
-    group = parser_bootstrap.add_mutually_exclusive_group()
-    group.add_argument(
+    parser_bootstrap.add_argument(
         '--cleanup-on-failure',
         action='store_true',
-        default=True,
+        default=False,
         help='Delete cluster files in case of a failed installation')
-    group.add_argument(
-        '--no-cleanup-on-failure',
-        action='store_const',
-        const=False,
-        dest='cleanup_on_failure',
-        help='Do not delete cluster files in case of a failed installation')
     parser_bootstrap.add_argument(
         '--allow-fqdn-hostname',
         action='store_true',
