@@ -17,6 +17,7 @@
 
 #include "ECUtil.h"
 #include "ExtentCache.h"
+#include "common/ceph_releases.h"
 #include "erasure-code/ErasureCodeInterface.h"
 #include "os/Transaction.h"
 #include "PGTransaction.h"
