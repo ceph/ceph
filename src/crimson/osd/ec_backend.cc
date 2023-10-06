@@ -238,6 +238,21 @@ struct ECCrimsonOp : ECCommon::RMWPipeline::Op {
 #endif
   }
 };
+
+class C_AllSubWritesCommited : public Context {
+  seastar::promise<> on_complete;
+public:
+  C_AllSubWritesCommited() = default;
+
+  void finish(int) override {
+    on_complete.set_value();
+  }
+
+  PGBackend::interruptible_future<> get_future() {
+    return on_complete.get_future();
+  }
+};
+
 ECBackend::rep_op_fut_t
 ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
                                crimson::osd::ObjectContextRef &&obc,
@@ -247,9 +262,55 @@ ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 			       epoch_t max_epoch,
 			       std::vector<pg_log_entry_t>&& log_entries)
 {
-  // todo
-  return {seastar::now(),
-	  seastar::make_ready_future<crimson::osd::acked_peers_t>()};
+  const hobject_t& hoid = obc->obs.oi.soid;
+  logger().debug("ECBackend::{} hoid={}", __func__, hoid);
+  return {
+  seastar::now(),
+  PGBackend::interruptor::async([=, this,
+				 txn=std::move(txn),
+				 osd_op_p=std::move(osd_op_p)]() mutable {
+    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+    auto op = std::make_unique<ECCrimsonOp>(std::move(txn), std::move(obc));
+    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+    op->hoid = hoid;
+    //op->delta_stats = delta_stats;
+    op->version = osd_op_p.at_version;
+    op->trim_to = osd_op_p.pg_trim_to;
+    op->roll_forward_to =
+      std::max(osd_op_p.min_last_complete_ondisk, rmw_pipeline.committed_to);
+    op->log_entries = std::move(log_entries);
+    //std::swap(op->updated_hit_set_history, hset_history);
+    // TODO: promsie future here
+    auto on_all_commit = new C_AllSubWritesCommited;
+    op->on_all_commit = on_all_commit;
+    op->tid = shard_services.get_tid();
+    op->reqid = osd_op_p.req_id;
+    op->client_op = nullptr; //client_op;
+    //if (client_op) {
+    //  op->trace = client_op->pg_trace;
+    //}
+    op->plan = op->get_write_plan(
+      sinfo,
+      *(op->t),
+      [this](const hobject_t &i) {
+        ECUtil::HashInfoRef ref =
+          get_hash_info(i, true).handle_error_interruptible(
+	  crimson::ct_error::assert_all{}
+	).get();
+    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+        ceph_assert_always(ref);
+        return ref;
+      },
+      &dpp);
+    logger().info("{}: op {} starting", "_submit_transaction", ""); //*op);
+    rmw_pipeline.start_rmw(std::move(op));
+    logger().debug("ECBackend::{} started ec op", "_submit_transaction");
+    on_all_commit->get_future().get();
+    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+  }).then_interruptible([] {
+    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+    return seastar::make_ready_future<crimson::osd::acked_peers_t>();
+  })};
 }
 
 ECBackend::load_hashinfo_iertr::future<ECUtil::HashInfoRef>
