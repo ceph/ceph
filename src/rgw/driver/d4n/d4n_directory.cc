@@ -224,7 +224,7 @@ int ObjectDirectory::del(CacheObj* object, optional_yield y) {
 }
 
 std::string BlockDirectory::build_index(CacheBlock* block) {
-  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID);
+  return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
 }
 
 int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) {
@@ -277,7 +277,7 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   }
 
   endpoint.pop_back();
-  redisValues.push_back(endpoint); // Set in filter -Sam
+  redisValues.push_back(endpoint);
 
   redisValues.push_back("objName");
   redisValues.push_back(block->cacheObj.objName);
@@ -298,7 +298,7 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   }
 
   endpoint.pop_back();
-  redisValues.push_back(endpoint); // Set in filter -Sam
+  redisValues.push_back(endpoint);
 
   try {
     boost::system::error_code ec;
