@@ -51,6 +51,7 @@ add_executable(crimson-osd
   ${PROJECT_SOURCE_DIR}/src/osd/ECExtentCache.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtilL.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECTransaction.cc
   ${PROJECT_SOURCE_DIR}/src/osd/osd_op_util.cc
   ${PROJECT_SOURCE_DIR}/src/osd/OSDCap.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
