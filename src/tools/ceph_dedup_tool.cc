@@ -180,7 +180,7 @@ po::options_description make_usage() {
     ("snap", ": deduplciate snapshotted object")
     ("debug", ": enable debug")
     ("pgid", ": set pgid")
-    ("chunk-dedup-threshold", po::value<uint32_t>(), ": set the threshold for chunk dedup (number of duplication) ")
+    ("chunk-dedup-threshold", po::value<size_t>(), ": set the threshold for chunk dedup (number of duplication) ")
     ("sampling-ratio", po::value<int>(), ": set the sampling ratio (percentile)")
     ("daemon", ": execute sample dedup in daemon mode")
     ("loop", ": execute sample dedup in a loop until terminated. Sleeps 'wakeup-period' seconds between iterations")
@@ -686,12 +686,12 @@ public:
       under_threshold_fp_map.clear();
     }
 
-    FpMap(ssize_t dedup_threshold) : dedup_threshold(dedup_threshold) {}
+    FpMap(size_t dedup_threshold) : dedup_threshold(dedup_threshold) {}
     FpMap() = delete;
   private:
     map_t under_threshold_fp_map;
     map_t over_threshold_fp_map;
-    const ssize_t dedup_threshold;
+    const size_t dedup_threshold;
   };
 
   class FpStore {
@@ -757,7 +757,7 @@ public:
     FpStore fp_store;
     const double sampling_ratio = -1;
     SampleDedupGlobal(
-      int chunk_threshold,
+      size_t chunk_threshold,
       int sampling_ratio,
       uint32_t report_period,
       size_t fpstore_threshold) :
@@ -1756,7 +1756,7 @@ int make_crawling_daemon(const po::variables_map &opts)
 
   uint32_t chunk_dedup_threshold = -1;
   if (opts.count("chunk-dedup-threshold")) {
-    chunk_dedup_threshold = opts["chunk-dedup-threshold"].as<uint32_t>();
+    chunk_dedup_threshold = opts["chunk-dedup-threshold"].as<size_t>();
   }
 
   std::string chunk_algo = get_opts_chunk_algo(opts);
