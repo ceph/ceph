@@ -387,7 +387,7 @@
         {
           alert: 'CephMgrPrometheusModuleInactive',
           'for': '1m',
-          expr: 'up{job="ceph"} == 0',
+          expr: 'up{job=".*ceph.*"} == 0',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.6.2' },
           annotations: {
             summary: 'The mgr/prometheus module is not available%(cluster)s' % $.MultiClusterSummary(),
@@ -695,7 +695,7 @@
         {
           alert: 'PrometheusJobMissing',
           'for': '30s',
-          expr: 'absent(up{job="ceph"})',
+          expr: 'absent(up{job=".*ceph.*"})',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.12.1' },
           annotations: {
             summary: 'The scrape job for Ceph is missing from Prometheus%(cluster)s' % $.MultiClusterSummary(),
