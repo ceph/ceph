@@ -1,0 +1,12 @@
+overrides:
+  ceph:
+    log-ignorelist:
+      - overall HEALTH_
+      - \(MON_DOWN\)
+      - mons down, quorum
+      - is down (out of quorum)
+      - \(POOL_APP_NOT_ENABLED\)
+      - do not have an application enabled
+      - \(OSD_DOWN\)
+      - \(OSDMAP_FLAGS\)
+      - \(PG_AVAILABILITY\)
