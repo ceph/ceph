@@ -104,19 +104,13 @@ class LFUDAPolicyFixture: public ::testing::Test {
 
     bufferlist bl;
     rgw::sal::Attrs attrs;
-    std::string key = "testName";
 };
 
 TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
+    std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
     ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, bl.length(), attrs, optional_yield{io, yield}));
-
-    rgw::d4n::CacheBlock temp;
-    temp.blockID = 0;
-    temp.cacheObj.objName = "testName";
-    temp.cacheObj.bucketName = "testBucket";
-    std::string key = dir->build_index(&temp);
     policyDriver->get_cache_policy()->insert(env->dpp, key, 0, bl.length(), "", cacheDriver, optional_yield{io, yield});
 
     /* Change cache age for testing purposes */
@@ -182,9 +176,9 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     attrs.insert({"bucket_name", attrVal});
 
     ASSERT_EQ(0, dir->set(&victim, optional_yield{io, yield}));
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, victim.cacheObj.objName, bl, bl.length(), attrs, optional_yield{io, yield}));
-    std::string key = dir->build_index(&victim);
-    policyDriver->get_cache_policy()->insert(env->dpp, key, 0, bl.length(), "", cacheDriver, optional_yield{io, yield});
+    std::string victimKey = victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, victimKey, bl, bl.length(), attrs, optional_yield{io, yield}));
+    policyDriver->get_cache_policy()->insert(env->dpp, victimKey, 0, bl.length(), "", cacheDriver, optional_yield{io, yield});
 
     /* Remote block */
     block->size = cacheDriver->get_free_space(env->dpp) + 1; /* To trigger eviction */
@@ -201,11 +195,12 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     cacheDriver->shutdown();
     policyDriver->get_cache_policy()->shutdown();
 
+    std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
     boost::system::error_code ec;
     request req;
-    req.push("EXISTS", "RedisCache/victimName");
-    req.push("HGET", "testBucket_victimName_0", "globalWeight");
-    req.push("HGET", "testBucket_testName_0", "globalWeight");
+    req.push("EXISTS", "RedisCache/" + victimKey);
+    req.push("HGET", victimKey, "globalWeight");
+    req.push("HGET", key, "globalWeight");
     req.push("FLUSHALL");
 
     response<int, std::string, std::string,
@@ -237,13 +232,9 @@ TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
     req.push("FLUSHALL");
 
     response<boost::redis::ignore_t> resp;
-    //response< std::vector<std::string>,
-    //          boost::redis::ignore_t > resp;
 
     conn->async_exec(req, resp, yield[ec]);
 
-    //ASSERT_EQ((bool)ec, false);
-    //EXPECT_EQ(std::get<0>(resp).value(), vals);
     conn->cancel();
   });
 

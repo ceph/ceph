@@ -116,10 +116,11 @@ class BlockDirectory: public Directory {
     int del(CacheBlock* block, optional_yield y);
     int update_field(CacheBlock* block, std::string field, std::string value, optional_yield y);
     int remove_host(CacheBlock* block, std::string value, optional_yield y);
-    std::string build_index(CacheBlock* block);
 
   private:
     std::shared_ptr<connection> conn;
+
+    std::string build_index(CacheBlock* block);
 };
 
 } } // namespace rgw::d4n

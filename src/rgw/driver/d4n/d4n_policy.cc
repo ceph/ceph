@@ -6,6 +6,10 @@
 
 namespace rgw { namespace d4n {
 
+std::string build_index(std::string bucketName, std::string oid, uint64_t offset, uint64_t size) {
+  return bucketName + "_" + oid + "_" + std::to_string(offset) + "_" + std::to_string(size); 
+}
+
 // initiate a call to async_exec() on the connection's executor
 struct initiate_exec {
   std::shared_ptr<boost::redis::connection> conn;
@@ -173,7 +177,7 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
   }
 }
 
-CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
+CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, optional_yield y) {
   if (entries_map.empty())
     return {};
 
@@ -187,7 +191,8 @@ CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, rgw::cache::C
   victim.cacheObj.bucketName = key.substr(0, key.find('_')); 
   key.erase(0, key.find('_') + 1);
   victim.cacheObj.objName = key.substr(0, key.find('_'));
-  victim.blockID = boost::lexical_cast<uint64_t>(key.substr(key.find('_') + 1, key.length()));
+  victim.blockID = it->second->offset;
+  victim.size = it->second->len;
 
   if (dir->get(&victim, y) < 0) {
     return {};
@@ -203,7 +208,7 @@ void LFUDAPolicy::shutdown() {
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 }
 
-int LFUDAPolicy::exist_key(std::string key, optional_yield y) {
+int LFUDAPolicy::exist_key(std::string key) {
   if (entries_map.count(key) != 0) {
     return true;
   }
@@ -215,8 +220,8 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
   response<std::string> resp;
   int age = get_age(y);
 
-  if (exist_key(dir->build_index(block), y)) { /* Local copy */
-    auto it = entries_map.find(dir->build_index(block));
+  if (exist_key(build_index(block->cacheObj.bucketName, block->cacheObj.objName, block->blockID, block->size))) { /* Local copy */
+    auto it = entries_map.find(build_index(block->cacheObj.bucketName, block->cacheObj.objName, block->blockID, block->size));
     it->second->localWeight += age;
     return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y);
   } else {
@@ -261,14 +266,15 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 }
 
 uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
-  CacheBlock victim = find_victim(dpp, cacheNode, y);
+  CacheBlock victim = find_victim(dpp, y);
 
   if (victim.cacheObj.objName.empty()) {
     ldpp_dout(dpp, 10) << "RGW D4N Policy: Could not find victim block" << dendl;
     return 0; /* Return zero for failure */
   }
 
-  auto it = entries_map.find(dir->build_index(&victim));
+  std::string key = build_index(victim.cacheObj.bucketName, victim.cacheObj.objName, victim.blockID, victim.size);
+  auto it = entries_map.find(key);
   if (it == entries_map.end()) {
     return 0;
   }
@@ -303,7 +309,7 @@ uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheD
 
   ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
 
-  if (cacheNode->del(dpp, victim.cacheObj.objName, y) < 0 && dir->remove_host(&victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) {
+  if (cacheNode->del(dpp, key, y) < 0 && dir->remove_host(&victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) {
     return 0;
   } else {
     uint64_t num_entries = entries_map.size();
@@ -349,7 +355,7 @@ bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key)
   return true;
 }
 
-int LRUPolicy::exist_key(std::string key, optional_yield y)
+int LRUPolicy::exist_key(std::string key)
 {
   const std::lock_guard l(lru_lock);
   if (entries_map.count(key) != 0) {
