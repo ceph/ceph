@@ -3295,8 +3295,11 @@ options:
   type: uint
   level: advanced
   desc: Session token max duration
-  long_desc: Max duration in seconds for which the session token is valid.
+  long_desc: This option can be used to configure the upper limit of the
+    durationSeconds of temporary credentials returned by 'GetSessionToken'.
   default: 43200
+  see_also:
+  - rgw_sts_min_session_duration
   services:
   - rgw
   with_legacy: true
@@ -3304,10 +3307,14 @@ options:
   type: uint
   level: advanced
   desc: Minimum allowed duration of a session
+  long_desc: This option can be used to configure the lower limit of
+    durationSeconds of temporary credentials returned by 'AssumeRole*' calls.
   default: 900
   services:
   - rgw
   with_legacy: true
+  see_also:
+  - rgw_sts_max_session_duration
 - name: rgw_max_listing_results
   type: uint
   level: advanced
