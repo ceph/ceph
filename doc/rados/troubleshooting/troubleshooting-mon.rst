@@ -347,93 +347,97 @@ Inject a monmap into the monitor
      so will overwrite the latest existing ``monmap`` stored on the monitor. Be
      careful!
 
-
 Clock Skews
-------------
+-----------
 
-Monitor operation can be severely affected by clock skew among the quorum's
-mons, as the PAXOS consensus algorithm requires tight time alignment.
-Skew can result in weird behavior with no obvious
-cause. To avoid such issues, you must run a clock synchronization tool
-on your monitor nodes:  ``Chrony`` or the legacy ``ntpd``.  Be sure to
-configure the mon nodes with the `iburst` option and multiple peers:
+The Paxos consensus algorithm requires tight time alignment. For this reason,
+clock skew among the monitors in the quorum can have a serious effect on
+monitor operation. The resulting behavior can be very puzzling. To avoid
+this kind of issue, run a clock synchronization tool on your monitor nodes:
+for example, ``Chrony`` or the legacy ``ntpd`` utility. Be sure to configure
+the monitor nodes with the `iburst` option and multiple peers:
 
 * Each other
 * Internal ``NTP`` servers
 * Multiple external, public pool servers
 
-For good measure, *all* nodes in your cluster should also sync against
-internal and external servers, and perhaps even your mons.  ``NTP`` servers
-should run on bare metal; VM virtualized clocks are not suitable for steady
-timekeeping.  Visit `https://www.ntp.org <https://www.ntp.org>`_ for more info.  Your
-organization may already have quality internal ``NTP`` servers you can use.  
-Sources for ``NTP`` server appliances include:
+.. note:: The ``iburst`` option sends a burst of eight packets instead of the
+   usual single packet, and is used during the process of getting two peers
+   into initial synchronization.
+
+Furthermore, it is advisable to synchronize *all* nodes in your cluster against
+internal and external servers, and perhaps even against your monitors. ``NTP``
+servers should run on bare metal; VM virtualized clocks are not suitable for
+steady timekeeping. For more information, visit `https://www.ntp.org
+<https://www.ntp.org>`_.  Your organization might already have quality internal
+``NTP`` servers available.  Sources for ``NTP`` server appliances include the
+following:
 
 * Microsemi (formerly Symmetricom) `https://microsemi.com <https://www.microsemi.com/product-directory/3425-timing-synchronization>`_
 * EndRun `https://endruntechnologies.com <https://endruntechnologies.com/products/ntp-time-servers>`_
 * Netburner `https://www.netburner.com <https://www.netburner.com/products/network-time-server/pk70-ex-ntp-network-time-server>`_
 
-
 What's the maximum tolerated clock skew?
 
-  By default the monitors will allow clocks to drift up to 0.05 seconds (50 ms).
-
+  By default, monitors allow clocks to drift up to a maximum of 0.05 seconds
+  (50 milliseconds).
 
 Can I increase the maximum tolerated clock skew?
 
-  The maximum tolerated clock skew is configurable via the
-  ``mon-clock-drift-allowed`` option, and
-  although you *CAN* you almost certainly *SHOULDN'T*. The clock skew mechanism
-  is in place because clock-skewed monitors are likely to misbehave. We, as
-  developers and QA aficionados, are comfortable with the current default
-  value, as it will alert the user before the monitors get out hand. Changing
-  this value may cause unforeseen effects on the
-  stability of the monitors and overall cluster health.
+  Yes, but we strongly recommend against doing so. The maximum tolerated clock
+  skew is configurable via the ``mon-clock-drift-allowed`` option, but it is
+  almost certainly a bad idea to make changes to this option. The clock skew
+  maximum is in place because clock-skewed monitors cannot be relied upon. The
+  current default value has proven its worth at alerting the user before the
+  monitors encounter serious problems. Changing this value might cause
+  unforeseen effects on the stability of the monitors and overall cluster
+  health.
 
-How do I know there's a clock skew?
+How do I know whether there is a clock skew?
 
-  The monitors will warn you via the cluster status ``HEALTH_WARN``. ``ceph
-  health detail`` or ``ceph status`` should show something like::
+  The monitors will warn you via the cluster status ``HEALTH_WARN``. When clock
+  skew is present, the ``ceph health detail`` and ``ceph status`` commands
+  return an output resembling the following::
 
       mon.c addr 10.10.0.1:6789/0 clock skew 0.08235s > max 0.05s (latency 0.0045s)
 
-  That means that ``mon.c`` has been flagged as suffering from a clock skew.
+  In this example, the monitor ``mon.c`` has been flagged as suffering from 
+  clock skew.
 
-  On releases beginning with Luminous you can issue the ``ceph
-  time-sync-status`` command to check status.  Note that the lead mon is
-  typically the one with the numerically lowest IP address.  It will always
-  show ``0``: the reported offsets of other mons are relative to the lead mon,
-  not to any external reference source.
+  In Luminous and later releases, it is possible to check for a clock skew by
+  running the ``ceph time-sync-status`` command. Note that the lead monitor
+  typically has the numerically lowest IP address. It will always show ``0``:
+  the reported offsets of other monitors are relative to the lead monitor, not
+  to any external reference source.
 
+What should I do if there is a clock skew?
 
-What should I do if there's a clock skew?
-
-  Synchronize your clocks. Running an NTP client may help. If you are already
-  using one and you hit this sort of issues, check if you are using some NTP
-  server remote to your network and consider hosting your own NTP server on
-  your network.  This last option tends to reduce the amount of issues with
-  monitor clock skews.
+  Synchronize your clocks. Using an NTP client might help. However, if you
+  are already using an NTP client and you still encounter clock skew problems,
+  determine whether the NTP server that you are using is remote to your network
+  or instead hosted on your network. Hosting your own NTP servers tends to
+  mitigate clock skew problems.
 
 
 Client Can't Connect or Mount
-------------------------------
+-----------------------------
 
-Check your IP tables. Some OS install utilities add a ``REJECT`` rule to
-``iptables``. The rule rejects all clients trying to connect to the host except
-for ``ssh``. If your monitor host's IP tables have such a ``REJECT`` rule in
-place, clients connecting from a separate node will fail to mount with a timeout
-error. You need to address ``iptables`` rules that reject clients trying to
-connect to Ceph daemons.  For example, you would need to address rules that look
-like this appropriately::
+Check your IP tables. Some operating-system install utilities add a ``REJECT``
+rule to ``iptables``. ``iptables`` rules will reject all clients other than
+``ssh`` that try to connect to the host. If your monitor host's IP tables have
+a ``REJECT`` rule in place, clients that are connecting from a separate node
+will fail and will raise a timeout error. Any ``iptables`` rules that reject
+clients trying to connect to Ceph daemons must be addressed. For example::
 
-	REJECT all -- anywhere anywhere reject-with icmp-host-prohibited
+    REJECT all -- anywhere anywhere reject-with icmp-host-prohibited
 
-You may also need to add rules to IP tables on your Ceph hosts to ensure
-that clients can access the ports associated with your Ceph monitors (i.e., port
-6789 by default) and Ceph OSDs (i.e., 6800 through 7300 by default). For
+It might also be necessary to add rules to iptables on your Ceph hosts to
+ensure that clients are able to access the TCP ports associated with your Ceph
+monitors (default: port 6789) and Ceph OSDs (default: 6800 through 7300). For
 example::
 
-	iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7300 -j ACCEPT
+    iptables -A INPUT -m multiport -p tcp -s {ip-address}/{netmask} --dports 6789,6800:7300 -j ACCEPT
+
 
 Monitor Store Failures
 ======================
@@ -441,9 +445,9 @@ Monitor Store Failures
 Symptoms of store corruption
 ----------------------------
 
-Ceph monitor stores the :term:`Cluster Map` in a key/value store such as LevelDB. If
-a monitor fails due to the key/value store corruption, following error messages
-might be found in the monitor log::
+Ceph monitors store the :term:`Cluster Map` in a key-value store.  If key-value
+store corruption causes a monitor to fail, then the monitor log might contain
+one of the following error messages::
 
   Corruption: error in middle of record
 
@@ -454,9 +458,10 @@ or::
 Recovery using healthy monitor(s)
 ---------------------------------
 
-If there are any survivors, we can always :ref:`replace <adding-and-removing-monitors>` the corrupted one with a
-new one. After booting up, the new joiner will sync up with a healthy
-peer, and once it is fully sync'ed, it will be able to serve the clients.
+If there are surviving monitors, we can always :ref:`replace
+<adding-and-removing-monitors>` the corrupted monitor with a new one. After the
+new monitor boots, it will synchronize with a healthy peer. After the new
+monitor is fully synchronized, it will be able to serve clients.
 
 .. _mon-store-recovery-using-osds:
 
