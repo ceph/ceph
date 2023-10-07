@@ -6922,11 +6922,11 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
+      role->update_max_session_duration(max_session_duration);
       if (!role->validate_max_session_duration(dpp())) {
         ret = -EINVAL;
         return ret;
       }
-      role->update_max_session_duration(max_session_duration);
       ret = role->update(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
