@@ -9,6 +9,125 @@ SET_SUBSYS(seastore_onode);
 
 namespace crimson::os::seastore::onode {
 
+void FLTreeOnode::Recorder::apply_value_delta(
+  ceph::bufferlist::const_iterator &bliter,
+  NodeExtentMutable &value,
+  laddr_t value_addr)
+{
+  LOG_PREFIX(FLTreeOnode::Recorder::apply_value_delta);
+  delta_op_t op;
+  try {
+    ceph::decode(op, bliter);
+    auto &mlayout = *reinterpret_cast<onode_layout_t*>(value.get_write());
+    switch (op) {
+    case delta_op_t::UPDATE_ONODE_SIZE:
+      DEBUG("update onode size");
+      bliter.copy(sizeof(mlayout.size), (char *)&mlayout.size);
+      break;
+    case delta_op_t::UPDATE_OMAP_ROOT:
+      DEBUG("update omap root");
+      bliter.copy(sizeof(mlayout.omap_root), (char *)&mlayout.omap_root);
+      break;
+    case delta_op_t::UPDATE_XATTR_ROOT:
+      DEBUG("update xattr root");
+      bliter.copy(sizeof(mlayout.xattr_root), (char *)&mlayout.xattr_root);
+      break;
+    case delta_op_t::UPDATE_OBJECT_DATA:
+      DEBUG("update object data");
+      bliter.copy(sizeof(mlayout.object_data), (char *)&mlayout.object_data);
+      break;
+    case delta_op_t::UPDATE_OBJECT_INFO:
+      DEBUG("update object info");
+      bliter.copy(onode_layout_t::MAX_OI_LENGTH, (char *)&mlayout.oi[0]);
+      ceph::decode(mlayout.oi_size, bliter);
+      break;
+    case delta_op_t::UPDATE_SNAPSET:
+      DEBUG("update snapset");
+      bliter.copy(onode_layout_t::MAX_SS_LENGTH, (char *)&mlayout.ss[0]);
+      ceph::decode(mlayout.ss_size, bliter);
+      break;
+    case delta_op_t::CLEAR_OBJECT_INFO:
+      DEBUG("clear object info");
+      memset(&mlayout.oi[0], 0, mlayout.oi_size);
+      mlayout.oi_size = 0;
+      break;
+    case delta_op_t::CLEAR_SNAPSET:
+      DEBUG("clear snapset");
+      memset(&mlayout.ss[0], 0, mlayout.ss_size);
+      mlayout.ss_size = 0;
+      break;
+    case delta_op_t::CREATE_DEFAULT:
+      mlayout = onode_layout_t{};
+      break;
+    default:
+      ceph_abort();
+    }
+  } catch (buffer::error& e) {
+    ceph_abort();
+  }
+}
+
+void FLTreeOnode::Recorder::encode_update(
+  NodeExtentMutable &payload_mut, delta_op_t op)
+{
+  LOG_PREFIX(FLTreeOnode::Recorder::encode_update);
+  auto &layout = *reinterpret_cast<const onode_layout_t*>(
+    payload_mut.get_read());
+  auto &encoded = get_encoded(payload_mut);
+  ceph::encode(op, encoded);
+  switch(op) {
+  case delta_op_t::UPDATE_ONODE_SIZE:
+    DEBUG("update onode size");
+    encoded.append(
+      (const char *)&layout.size,
+      sizeof(layout.size));
+    break;
+  case delta_op_t::UPDATE_OMAP_ROOT:
+    DEBUG("update omap root");
+    encoded.append(
+      (const char *)&layout.omap_root,
+      sizeof(layout.omap_root));
+    break;
+  case delta_op_t::UPDATE_XATTR_ROOT:
+    DEBUG("update xattr root");
+    encoded.append(
+      (const char *)&layout.xattr_root,
+      sizeof(layout.xattr_root));
+    break;
+  case delta_op_t::UPDATE_OBJECT_DATA:
+    DEBUG("update object data");
+    encoded.append(
+      (const char *)&layout.object_data,
+      sizeof(layout.object_data));
+    break;
+  case delta_op_t::UPDATE_OBJECT_INFO:
+    DEBUG("update object info");
+    encoded.append(
+      (const char *)&layout.oi[0],
+      onode_layout_t::MAX_OI_LENGTH);
+    ceph::encode(layout.oi_size, encoded);
+    break;
+  case delta_op_t::UPDATE_SNAPSET:
+    DEBUG("update snapset");
+    encoded.append(
+      (const char *)&layout.ss[0],
+      onode_layout_t::MAX_SS_LENGTH);
+    ceph::encode(layout.ss_size, encoded);
+    break;
+  case delta_op_t::CREATE_DEFAULT:
+    DEBUG("create default layout");
+    [[fallthrough]];
+  case delta_op_t::CLEAR_OBJECT_INFO:
+    DEBUG("clear object info");
+    [[fallthrough]];
+  case delta_op_t::CLEAR_SNAPSET:
+    DEBUG("clear snapset");
+    break;
+  default:
+    ceph_abort();
+  }
+}
+
 FLTreeOnodeManager::contains_onode_ret FLTreeOnodeManager::contains_onode(
   Transaction &trans,
   const ghobject_t &hoid)
@@ -57,9 +176,7 @@ FLTreeOnodeManager::get_or_create_onode(
 	cursor.value());
     if (created) {
       DEBUGT("created onode for entry for {}", trans, hoid);
-      onode->with_mutable_layout(trans, [](onode_layout_t &mlayout) {
-	mlayout = onode_layout_t{};
-      });
+      onode->create_default_layout(trans);
     }
     return get_or_create_onode_iertr::make_ready_future<OnodeRef>(onode);
   });
@@ -93,9 +210,6 @@ FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
 {
   auto &flonode = static_cast<FLTreeOnode&>(*onode);
   assert(flonode.is_alive());
-  if (flonode.status == FLTreeOnode::status_t::MUTATED) {
-    flonode.populate_recorder(trans);
-  }
   flonode.mark_delete();
   return tree.erase(trans, flonode);
 }

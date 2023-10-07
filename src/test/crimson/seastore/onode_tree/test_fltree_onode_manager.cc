@@ -31,11 +31,10 @@ struct onode_item_t {
 
   void initialize(Transaction& t, Onode& value) const {
     auto &ftvalue = static_cast<FLTreeOnode&>(value);
-    ftvalue.with_mutable_layout(t, [this, &value](auto &mlayout) {
-      mlayout.size = size;
-      mlayout.omap_root.update(omap_root_t(id, cnt_modify,
-	value.get_metadata_hint(block_size)));
-    });
+    ftvalue.update_onode_size(t, size);
+    auto oroot = omap_root_t(id, cnt_modify,
+      value.get_metadata_hint(block_size));
+    ftvalue.update_omap_root(t, oroot);
     validate(value);
   }
 
