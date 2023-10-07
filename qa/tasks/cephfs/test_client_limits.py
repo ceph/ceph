@@ -270,15 +270,14 @@ class TestClientLimits(CephFSTestCase):
         # Wait for the health warnings. Assume mds can handle 10 request per second at least
         self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests // 10, check_in_detail=str(self.mount_a.client_id))
 
-        # why a multiplier of 20, you may ask - I arrieved at this from some debugs
-        # that I put when testing the fix in a vstart cluster where its a ratio of
-        # encoded session information to the number of completed requests.
-        self.config_set('mds', 'mds_session_metadata_threshold', max_requests*20);
+        # set the threshold low so that it has a high probability of
+        # hitting.
+        self.config_set('mds', 'mds_session_metadata_threshold', 5000);
 
-        # Create a few more files synchronously. This would hit the session metadata threshold
+        # Create lot many files synchronously. This would hit the session metadata threshold
         # causing the client to get blocklisted.
         with self.assertRaises(CommandFailedError):
-            self.mount_a.create_n_files("testdir/file2", 20, True)
+            self.mount_a.create_n_files("testdir/file2", 100000, True)
 
         self.mds_cluster.is_addr_blocklisted(self.mount_a.get_global_addr())
         # the mds should bump up the relevant perf counter
