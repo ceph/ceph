@@ -136,6 +136,7 @@ void MDSMonitor::update_from_paxos(bool *need_bootstrap)
 	   << ", my e " << get_fsmap().epoch << dendl;
   ceph_assert(version > get_fsmap().epoch);
 
+  load_metadata(pending_metadata);
   load_health();
 
   // read and decode
