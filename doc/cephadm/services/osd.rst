@@ -1,7 +1,6 @@
 ***********
 OSD Service
 ***********
-.. _device management: ../rados/operations/devices
 .. _libstoragemgmt: https://github.com/libstorage/libstoragemgmt
 
 List Devices
@@ -80,7 +79,7 @@ like this:
 
 In this example, libstoragemgmt has confirmed the health of the drives and the ability to
 interact with the Identification and Fault LEDs on the drive enclosures. For further
-information about interacting with these LEDs, refer to `device management`_.
+information about interacting with these LEDs, refer to :ref:`device management<device>`_.
 
 .. note::
     The current release of `libstoragemgmt`_ (1.8.8) supports SCSI, SAS, and SATA based
