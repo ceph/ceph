@@ -1504,11 +1504,11 @@ Ceph Clients
 
 Ceph Clients include a number of service interfaces. These include:
 
-- **Block Devices:** The :term:`Ceph Block Device` (a.k.a., RBD) service 
-  provides resizable, thin-provisioned block devices with snapshotting and
-  cloning. Ceph stripes a block device across the cluster for high
-  performance. Ceph supports both kernel objects (KO) and a QEMU hypervisor 
-  that uses ``librbd`` directly--avoiding the kernel object overhead for 
+- **Block Devices:** The :term:`Ceph Block Device` (a.k.a., RBD) service
+  provides resizable, thin-provisioned block devices that can be snapshotted
+  and cloned. Ceph stripes a block device across the cluster for high
+  performance. Ceph supports both kernel objects (KO) and a QEMU hypervisor
+  that uses ``librbd`` directly--avoiding the kernel object overhead for
   virtualized systems.
 
 - **Object Storage:** The :term:`Ceph Object Storage` (a.k.a., RGW) service 
