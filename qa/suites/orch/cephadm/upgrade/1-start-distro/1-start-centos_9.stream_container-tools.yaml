@@ -1,5 +1,5 @@
 os_type: centos
-os_version: "8.stream"
+os_version: "9.stream"
 
 tasks:
 - pexec:
