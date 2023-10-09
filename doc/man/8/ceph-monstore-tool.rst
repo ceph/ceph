@@ -18,13 +18,13 @@ Description
 :program:`ceph-monstore-tool` is used to manipulate MonitorDBStore's data
 (monmap, osdmap, etc.) offline. It is similar to `ceph-kvstore-tool`.
 
-The default RocksDB debug level is `0`. This can be changed using `--debug`.
-
 Note:
     Ceph-specific options take the format `--option-name=VAL`
     DO NOT FORGET THE EQUALS SIGN. ('=')
+    for example, `dump-keys --debug-rocksdb=0`
+
     Command-specific options must be passed after a `--`
-    for example, `get monmap --debug -- --version 10 --out /tmp/foo`
+    for example, `get monmap -- --version 10 --out /tmp/foo`
 
 Commands
 ========
@@ -49,8 +49,11 @@ Commands
 :command:`get crushmap [-- options]`
     Get crushmap (version VER if specified) (default: last committed).
 
-:command:`get osd_snap <key> [-- options]`
-    Get osd_snap key (`purged_snap` or `purged_epoch`).
+:command:`get-key <prefix> <key> [-- options]`
+    Get key to FILE (default: stdout).
+
+:command:`remove-key <prefix> <key> [-- options]`
+    Remove key.
 
 :command:`dump-keys`
     Dump store keys to FILE (default: stdout).
@@ -72,9 +75,6 @@ Commands
 
 :command:`rebuild`
     Rebuild store.
-
-:command:`rm <prefix> <key>`
-    Remove specified key from the store.
 
 Availability
 ============
