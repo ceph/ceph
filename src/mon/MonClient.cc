@@ -1601,7 +1601,7 @@ int MonClient::handle_auth_request(
     // for some channels prior to nautilus (osd heartbeat), we
     // tolerate the lack of an authorizer.
     if (!con->get_messenger()->require_authorizer) {
-      handle_authentication_dispatcher->ms_handle_authentication(con);
+      handle_authentication_dispatcher->ms_handle_fast_authentication(con);
       return 1;
     }
     return -EACCES;
@@ -1639,7 +1639,7 @@ int MonClient::handle_auth_request(
     &auth_meta->connection_secret,
     ac);
   if (isvalid) {
-    handle_authentication_dispatcher->ms_handle_authentication(con);
+    handle_authentication_dispatcher->ms_handle_fast_authentication(con);
     return 1;
   }
   if (!more && !was_challenge && auth_meta->authorizer_challenge) {
