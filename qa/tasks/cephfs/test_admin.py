@@ -1806,8 +1806,8 @@ class TestPermErrMsg(CephFSTestCase):
     FS1_NAME, FS2_NAME, FS3_NAME = 'abcd', 'efgh', 'ijkl'
 
     EXPECTED_ERRNO = 22
-    EXPECTED_ERRMSG = ("Permission flags in MDS caps must start with 'r' or "
-                       "'rw' or be '*' or 'all'")
+    EXPECTED_ERRMSG = ("Permission flags in MDS capability string must be '*' "
+                       "or 'all' or must start with 'r'")
 
     MONCAP = f'allow r fsname={FS1_NAME}'
     OSDCAP = f'allow rw tag cephfs data={FS1_NAME}'
@@ -1848,6 +1848,16 @@ class TestPermErrMsg(CephFSTestCase):
     def test_auth_add(self):
         for mdscap in self.MDSCAPS:
             self._negtestcmd('auth add', mdscap)
+
+    def test_auth_caps(self):
+        for mdscap in self.MDSCAPS:
+            self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth add {self.CLIENT_NAME}')
+
+            self._negtestcmd('auth caps', mdscap)
+
+            self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth rm {self.CLIENT_NAME}')
 
     def test_auth_get_or_create(self):
         for mdscap in self.MDSCAPS:
