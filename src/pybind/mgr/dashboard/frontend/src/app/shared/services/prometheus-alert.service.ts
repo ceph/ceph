@@ -80,9 +80,9 @@ export class PrometheusAlertService {
         alert.status.state === 'active' && alert.labels.severity === 'warning' ? ++result : result,
       0
     );
-    this.alerts = alerts.reverse().sort((a, b) => {
-      return a.labels.severity.localeCompare(b.labels.severity);
-    });
+    this.alerts = alerts
+      .reverse()
+      .sort((a, b) => a.labels.severity.localeCompare(b.labels.severity));
     this.canAlertsBeNotified = true;
   }
 
