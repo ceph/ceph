@@ -232,6 +232,7 @@ void usage(const char *n, po::options_description &d)
     << "\nPlease Note:\n"
     << "* Ceph-specific options should be in the format --option-name=VAL\n"
     << "  (specifically, do not forget the '='!!)\n"
+    << "  e.g., 'dump-keys --debug-rocksdb=0'\n"
     << "* Command-specific options need to be passed after a '--'\n"
     << "  e.g., 'get monmap -- --version 10 --out /tmp/foo'"
     << std::endl;
