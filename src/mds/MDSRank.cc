@@ -3780,6 +3780,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_symlink_recovery",
     "mds_inject_rename_corrupt_dentry_first",
     "mds_inject_journal_corrupt_dentry_first",
+    "mds_session_metadata_threshold",
     NULL
   };
   return KEYS;
