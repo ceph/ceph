@@ -530,7 +530,8 @@ void ECBackend::objects_read_and_reconstruct(
   bool fast_read,
   GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func)
 {
-  // TODO XXX FIXME
+  return read_pipeline.objects_read_and_reconstruct(
+    reads, fast_read, std::move(func));
 }
 
 ECBackend::ll_read_ierrorator::future<>
