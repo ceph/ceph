@@ -1264,7 +1264,7 @@ int KernelDevice::read(uint64_t off, uint64_t len, bufferlist *pbl,
 	 << "s" << dendl;
   }
   if (r < 0) {
-    if (ioc->allow_eio && is_expected_ioerr(r)) {
+    if (ioc->allow_eio && is_expected_ioerr(-errno)) {
       r = -EIO;
     } else {
       r = -errno;
