@@ -909,7 +909,6 @@ def test_snapdiff(testdir):
     # remove directory
     purge_dir(b"/snapdiff_test");
 
-@with_setup(setup_test)
 def test_single_target_command():
     command = {'prefix': u'session ls', 'format': 'json'}
     mds_spec  = "a"
@@ -920,7 +919,6 @@ def test_single_target_command():
     # Standby MDSs will return -38
     assert(ret == 0 or ret == -38)
 
-@with_setup(setup_test)
 def test_multi_target_command():
     mds_get_command = {'prefix': 'status', 'format': 'json'}
     inbuf = b''
