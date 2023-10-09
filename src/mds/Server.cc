@@ -5099,7 +5099,10 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
     if ((dnl->is_remote() || dnl->is_referent()) && !in) {
       in = mdcache->get_inode(dnl->get_remote_ino());
       if (in) {
-	dn->link_remote(dnl, in);
+        if (dnl->is_remote())
+          dn->link_remote(dnl, in);
+        else if (dnl->is_referent())
+	  dn->link_remote(dnl, in, dnl->get_ref_inode());
       } else if (dn->state_test(CDentry::STATE_BADREMOTEINO)) {
 	dout(10) << "skipping bad remote ino on " << *dn << dendl;
 	continue;
