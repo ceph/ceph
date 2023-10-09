@@ -168,8 +168,8 @@ class FSTopBase(object):
                 return False
         return True
 
-    def __build_clients(self, fs):
-        fs_meta = self.dump_json.setdefault(fs, {})
+    def __build_clients(self, fs, clients_json):
+        fs_meta = clients_json.setdefault(fs, {})
         fs_key = self.stats_json[GLOBAL_METRICS_KEY].get(fs, {})
         clients = fs_key.keys()
         for client_id in clients:
@@ -249,13 +249,32 @@ class FSTopBase(object):
             self.stats_json = self.perf_stats_query()
             if fs_name:  # --dumpfs
                 if fs_name in fs_list:
-                    self.__build_clients(fs_name)
+                    self.__build_clients(fs_name, clients_json=self.dump_json)
                 else:
                     sys.stdout.write(f"Filesystem {fs_name} not available\n")
                     return
             else:  # --dump
+                num_clients = num_mounts = num_kclients = num_libs = 0
+                for fs_name in fs_list:
+                    client_metadata = self.stats_json[CLIENT_METADATA_KEY].get(fs_name, {})
+                    client_cnt = len(client_metadata)
+                    if client_cnt:
+                        num_clients = num_clients + client_cnt
+                        num_mounts = num_mounts + len(
+                            [client for client, metadata in client_metadata.items() if
+                             CLIENT_METADATA_MOUNT_POINT_KEY in metadata
+                             and metadata[CLIENT_METADATA_MOUNT_POINT_KEY] != 'N/A'])
+                        num_kclients = num_kclients + len(
+                            [client for client, metadata in client_metadata.items() if
+                             "kernel_version" in metadata])
+                        num_libs = num_clients - (num_mounts + num_kclients)
+                self.dump_json.update({'date': datetime.now().ctime()})
+                client_count = self.dump_json.setdefault("client_count", {})
+                client_count.update({'total_clients': num_clients, 'fuse': num_mounts,
+                                     'kclient': num_kclients, 'libcephfs': num_libs})
+                clients_json = self.dump_json.setdefault("filesystems", {})
                 for fs in fs_list:
-                    self.__build_clients(fs)
+                    self.__build_clients(fs, clients_json)
             sys.stdout.write(json.dumps(self.dump_json))
             sys.stdout.write("\n")
 
@@ -564,7 +583,8 @@ class FSTop(FSTopBase):
                 else:
                     self.run_display()
 
-    def set_option(self, opt):
+    def set_option_all_fs(self, opt):
+        # sets the options for 'All Filesystem Info' screen
         if opt == ord('m'):
             if fs_list:
                 curses.wrapper(self.set_key)
@@ -581,17 +601,38 @@ class FSTop(FSTopBase):
             else:
                 return False
         elif opt == ord('r'):
-            current_states['last_field'] = 'chit'
-            current_states["limit"] = None
-            if isinstance(current_states['last_fs'], list):
-                self.run_all_display()
-            else:
-                self.run_display()
+            if fs_list:
+                current_states['last_field'] = 'chit'
+                current_states["limit"] = None
+            return False  # We are already in run_all_display()
         elif opt == ord('q'):
-            if self.current_screen == FS_TOP_ALL_FS_APP:
-                quit()
+            quit()
+        return True
+
+    def set_option_sel_fs(self, opt, selected_fs):
+        # sets the options for 'Selected Filesystem Info' screen
+        if opt == ord('m'):
+            if selected_fs in fs_list:
+                curses.wrapper(self.set_key)
             else:
-                self.run_all_display()
+                return False
+        elif opt == ord('s'):
+            if selected_fs in fs_list:
+                curses.wrapper(self.choose_field)
+            else:
+                return False
+        elif opt == ord('l'):
+            if selected_fs in fs_list:
+                curses.wrapper(self.set_limit)
+            else:
+                return False
+        elif opt == ord('r'):
+            if selected_fs in fs_list:
+                current_states['last_field'] = 'chit'
+                current_states["limit"] = None
+            return False  # we are already in run_display()
+        elif opt == ord('q'):
+            self.run_all_display()
         return True
 
     def verify_perf_stats_support(self):
@@ -922,19 +963,21 @@ class FSTop(FSTopBase):
 
         curses.halfdelay(1)
         cmd = self.stdscr.getch()
+        global fs_list, current_states
         while not self.exit_ev.is_set():
-            if cmd in [ord('m'), ord('s'), ord('l'), ord('r'), ord('q')]:
-                self.set_option(cmd)
-                self.exit_ev.set()
-
-            global fs_list, current_states
             fs_list = self.get_fs_names()
             fs = current_states["last_fs"]
+            if cmd in [ord('m'), ord('s'), ord('l'), ord('r'), ord('q')]:
+                if self.set_option_sel_fs(cmd, fs):
+                    self.exit_ev.set()
+
             stats_json = self.perf_stats_query()
             vscrollEnd = 0
             if fs not in fs_list:
-                help = "Error: The selected filesystem is not available now. " + help_commands
+                help = f"Error: The selected filesystem '{fs}' is not available now. " \
+                    "[Press 'q' to go back to home (All Filesystem Info) screen]"
                 self.header.erase()  # erase previous text
+                self.fsstats.erase()
                 self.create_header(stats_json, help, screen_title, 3)
             else:
                 self.tablehead_y = 0
@@ -1048,7 +1091,7 @@ class FSTop(FSTopBase):
         cmd = self.stdscr.getch()
         while not self.exit_ev.is_set():
             if cmd in [ord('m'), ord('s'), ord('l'), ord('r'), ord('q')]:
-                if self.set_option(cmd):
+                if self.set_option_all_fs(cmd):
                     self.exit_ev.set()
 
             # header display
