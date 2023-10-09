@@ -260,7 +260,7 @@ class TestClientLimits(CephFSTestCase):
         self.mds_cluster.is_addr_blocklisted(self.mount_a.get_global_addr())
         # the mds should bump up the relevant perf counter
         pd = self.perf_dump()
-        self.assertGreater(pd['mds_sessions']['md_thresh_evicted'], 0)
+        self.assertGreater(pd['mds_sessions']['mdthresh_evicted'], 0)
 
         # reset the config
         self.config_set('client', 'client inject fixed oldest tid', 'false')
