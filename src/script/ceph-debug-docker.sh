@@ -72,10 +72,10 @@ function main {
     printf "branch: %s\nsha1: %s\n" "$branch" "$sha"
 
     if [ -z "$2" ]; then
-        printf "specify the build environment [default \"centos:8\"]: "
+        printf "specify the build environment [default \"centos:stream9\"]: "
         read env
         if [ -z "$env" ]; then
-            env=centos:8
+            env=centos:stream9
         fi
     else
         env="$2"
@@ -95,7 +95,11 @@ function main {
     T=$(mktemp -d)
     pushd "$T"
     case "$env" in
-        centos:stream)
+        centos:stream|centos:stream9)
+            env=centos:stream9
+            distro="centos/9"
+            ;;
+        centos:stream8)
             distro="centos/8"
             ;;
         *)
@@ -122,45 +126,53 @@ RUN apt-key add cephdev.asc && \
     DEBIAN_FRONTEND=noninteractive DEBIAN_PRIORITY=critical apt-get --assume-yes -q --no-install-recommends install -o Dpkg::Options::=--force-confnew --allow-unauthenticated ceph ceph-osd-dbg ceph-mds-dbg ceph-mgr-dbg ceph-mon-dbg ceph-common-dbg ceph-fuse-dbg ceph-test-dbg radosgw-dbg python3-cephfs python3-rados
 EOF
         time run $SUDO docker build $CACHE --tag "$tag" .
-    else # try RHEL flavor
-        case "$env" in
-            centos:7)
-                python_bindings="python36-rados python36-cephfs"
-                base_debuginfo=""
-                ceph_debuginfo="ceph-debuginfo"
-                debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
-                ;;
-            centos:8)
-                python_bindings="python3-rados python3-cephfs"
-                base_debuginfo="glibc-debuginfo"
-                ceph_debuginfo="ceph-base-debuginfo"
-                debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
-                base_url="s|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g"
-                ;;
-            centos:stream)
-                python_bindings="python3-rados python3-cephfs"
-                base_debuginfo="glibc-debuginfo"
-                ceph_debuginfo="ceph-base-debuginfo"
-                debuginfo=/etc/yum.repos.d/CentOS-Stream-Debuginfo.repo
-                ;;
-        esac
-        if [ "${FLAVOR}" = "crimson" ]; then
-            ceph_debuginfo+=" ceph-crimson-osd-debuginfo ceph-crimson-osd"
-        fi
-        cat > Dockerfile <<EOF
-FROM ${env}
-
-WORKDIR /root
-RUN sed -i '${base_url}' /etc/yum.repos.d/CentOS-* && \
-    yum update -y && \
-    sed -i 's/enabled=0/enabled=1/' ${debuginfo} && \
-    yum update -y && \
-    yum install -y tmux epel-release wget psmisc ca-certificates gdb
-RUN wget -O /etc/yum.repos.d/ceph-dev.repo $repo_url && \
-    yum clean all && \
-    yum upgrade -y && \
-    yum install -y ceph ${base_debuginfo} ${ceph_debuginfo} ${python_bindings}
-EOF
+    else
+        # try RHEL flavor
+        {
+            printf 'FROM %s\n' "$env"
+            printf 'WORKDIR /root\n'
+            printf 'RUN true'
+            case "$env" in
+                centos:7)
+                    python_bindings="python36-rados python36-cephfs"
+                    base_debuginfo=""
+                    ceph_debuginfo="ceph-debuginfo"
+                    debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
+                    ;;
+                centos:8)
+                    python_bindings="python3-rados python3-cephfs"
+                    base_debuginfo="glibc-debuginfo"
+                    ceph_debuginfo="ceph-base-debuginfo"
+                    debuginfo=/etc/yum.repos.d/CentOS-Linux-Debuginfo.repo
+                    printf ' && sed -i \x27%s\x27 %s' 's|#baseurl=http://mirror.centos.org|baseurl=http://vault.centos.org|g' '/etc/yum.repos.d/CentOS-*'
+                    ;;
+                centos:stream8)
+                    python_bindings="python3-rados python3-cephfs"
+                    base_debuginfo="glibc-debuginfo"
+                    ceph_debuginfo="ceph-base-debuginfo"
+                    debuginfo=/etc/yum.repos.d/CentOS-Stream-Debuginfo.repo
+                    ;;
+                centos:stream9)
+                    python_bindings="python3-rados python3-cephfs"
+                    base_debuginfo="glibc-debuginfo"
+                    ceph_debuginfo="ceph-base-debuginfo"
+                    debuginfo=/etc/yum.repos.d/centos.repo
+                    ;;
+            esac
+            if [ "${FLAVOR}" = "crimson" ]; then
+                ceph_debuginfo+=" ceph-crimson-osd-debuginfo ceph-crimson-osd"
+            fi
+            printf ' && yum update -y'
+            printf ' && sed -i \x27s/enabled=0/enabled=1/\x27 %s' "$debuginfo"
+            printf ' && yum update -y'
+            printf ' && yum install -y tmux epel-release wget psmisc ca-certificates gdb'
+            printf '\n'
+            printf 'RUN true'
+            printf ' && wget -O /etc/yum.repos.d/ceph-dev.repo %s' "$repo_url"
+            printf ' && yum clean all'
+            printf ' && yum upgrade -y'
+            printf ' && yum install -y ceph %s %s %s' "${base_debuginfo}" "${ceph_debuginfo}" "${python_bindings}"
+        } > Dockerfile
         time run $SUDO docker build $CACHE --tag "$tag" .
     fi
     popd
