@@ -84,7 +84,8 @@ public:
     if (dir) {
       ret = dir->parent_inode->make_path_string(s);
     } else {
-      s = "???";
+      // Couldn't link all the way to our mount point
+      return false;
     }
     s += "/";
     s.append(name.data(), name.length());
