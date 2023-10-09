@@ -567,7 +567,7 @@ inline ssize_t AllocatorLevel01Loose::count_0s(slot_t slot_val, size_t start_pos
  {
    return count_0s(~slot_val, start_pos);
  }
-void AllocatorLevel01Loose::dump(
+void AllocatorLevel01Loose::foreach_internal(
     std::function<void(uint64_t offset, uint64_t length)> notify)
 {
   size_t len = 0;

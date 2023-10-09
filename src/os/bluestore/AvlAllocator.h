@@ -86,7 +86,8 @@ public:
   double get_fragmentation() override;
 
   void dump() override;
-  void dump(std::function<void(uint64_t offset, uint64_t length)> notify) override;
+  void foreach(
+    std::function<void(uint64_t offset, uint64_t length)> notify) override;
   void init_add_free(uint64_t offset, uint64_t length) override;
   void init_rm_free(uint64_t offset, uint64_t length) override;
   void shutdown() override;
@@ -241,6 +242,7 @@ protected:
     return (static_cast<double>(range_tree.size() - 1) / (free_blocks - 1));
   }
   void _dump() const;
+  void _foreach(std::function<void(uint64_t offset, uint64_t length)>) const;
 
   uint64_t _lowest_size_available() {
     auto rs = range_size_tree.begin();

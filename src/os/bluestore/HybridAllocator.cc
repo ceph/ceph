@@ -145,11 +145,13 @@ void HybridAllocator::dump()
     << dendl;
 }
 
-void HybridAllocator::dump(std::function<void(uint64_t offset, uint64_t length)> notify)
+void HybridAllocator::foreach(
+  std::function<void(uint64_t offset, uint64_t length)> notify)
 {
-  AvlAllocator::dump(notify);
+  std::lock_guard l(lock);
+  AvlAllocator::_foreach(notify);
   if (bmap_alloc) {
-    bmap_alloc->dump(notify);
+    bmap_alloc->foreach(notify);
   }
 }
 
