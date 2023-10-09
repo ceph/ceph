@@ -627,7 +627,11 @@ class TestRenameCommand(TestAdminCommands):
         new_fs_name = 'new_cephfs'
         client_id = 'test_new_cephfs'
 
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        sleep(5)
         self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs set {new_fs_name} joinable true')
+        sleep(5)
 
         # authorize a cephx ID access to the renamed file system.
         # use the ID to write to the file system.
@@ -660,8 +664,12 @@ class TestRenameCommand(TestAdminCommands):
         orig_fs_name = self.fs.name
         new_fs_name = 'new_cephfs'
 
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        sleep(5)
         self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
         self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs set {new_fs_name} joinable true')
+        sleep(5)
 
         # original file system name does not appear in `fs ls` command
         self.assertFalse(self.fs.exists())
@@ -680,7 +688,11 @@ class TestRenameCommand(TestAdminCommands):
         new_fs_name = 'new_cephfs'
         data_pool = self.fs.get_data_pool_name()
         metadata_pool = self.fs.get_metadata_pool_name()
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        sleep(5)
         self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
+        self.run_ceph_cmd(f'fs set {new_fs_name} joinable true')
+        sleep(5)
 
         try:
             self.run_ceph_cmd(f"fs new {orig_fs_name} {metadata_pool} {data_pool}")
@@ -717,6 +729,8 @@ class TestRenameCommand(TestAdminCommands):
         """
         That renaming a file system without '--yes-i-really-mean-it' flag fails.
         """
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        sleep(5)
         try:
             self.run_ceph_cmd(f"fs rename {self.fs.name} new_fs")
         except CommandFailedError as ce:
@@ -726,17 +740,23 @@ class TestRenameCommand(TestAdminCommands):
         else:
             self.fail("expected renaming of file system without the "
                       "'--yes-i-really-mean-it' flag to fail ")
+        self.run_ceph_cmd(f'fs set {self.fs.name} joinable true')
+        sleep(5)
 
     def test_fs_rename_fails_for_non_existent_fs(self):
         """
         That renaming a non-existent file system fails.
         """
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        sleep(5)
         try:
             self.run_ceph_cmd("fs rename non_existent_fs new_fs --yes-i-really-mean-it")
         except CommandFailedError as ce:
             self.assertEqual(ce.exitstatus, errno.ENOENT, "invalid error code on renaming a non-existent fs")
         else:
             self.fail("expected renaming of a non-existent file system to fail")
+        self.run_ceph_cmd(f'fs set {self.fs.name} joinable true')
+        sleep(5)
 
     def test_fs_rename_fails_new_name_already_in_use(self):
         """
@@ -744,6 +764,8 @@ class TestRenameCommand(TestAdminCommands):
         """
         self.fs2 = self.mds_cluster.newfs(name='cephfs2', create=True)
 
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        sleep(5)
         try:
             self.run_ceph_cmd(f"fs rename {self.fs.name} {self.fs2.name} --yes-i-really-mean-it")
         except CommandFailedError as ce:
@@ -751,6 +773,8 @@ class TestRenameCommand(TestAdminCommands):
                              "invalid error code on renaming to a fs name that is already in use")
         else:
             self.fail("expected renaming to a new file system name that is already in use to fail.")
+        self.run_ceph_cmd(f'fs set {self.fs.name} joinable true')
+        sleep(5)
 
     def test_fs_rename_fails_with_mirroring_enabled(self):
         """
@@ -760,6 +784,8 @@ class TestRenameCommand(TestAdminCommands):
         new_fs_name = 'new_cephfs'
 
         self.run_ceph_cmd(f'fs mirror enable {orig_fs_name}')
+        self.run_ceph_cmd(f'fs fail {self.fs.name}')
+        sleep(5)
         try:
             self.run_ceph_cmd(f'fs rename {orig_fs_name} {new_fs_name} --yes-i-really-mean-it')
         except CommandFailedError as ce:
@@ -767,6 +793,37 @@ class TestRenameCommand(TestAdminCommands):
         else:
             self.fail("expected renaming of a mirrored file system to fail")
         self.run_ceph_cmd(f'fs mirror disable {orig_fs_name}')
+        self.run_ceph_cmd(f'fs set {self.fs.name} joinable true')
+        sleep(5)
+
+    def test_rename_when_fs_is_online(self):
+        '''
+        Test that the command "ceph fs swap" command fails when first of the
+        two of FSs isn't failed/down.
+        '''
+        client_id = 'test_new_cephfs'
+        new_fs_name = 'new_cephfs'
+        self.negtest_ceph_cmd(
+            args=(f'fs rename {self.fs.name} {new_fs_name} '
+                   '--yes-i-really-mean-it'),
+            errmsgs=(f'CephFS "{self.fs.name}" is not offline. Before '
+                      'renaming a CephFS, it must be marked as down. See '
+                      '`ceph fs fail`.'),
+            retval=errno.EPERM)
+
+        self.fs.getinfo()
+        keyring = self.fs.authorize(client_id, ('/', 'rw'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/',
+                             cephfs_name=self.fs.name)
+
+        self.check_pool_application_metadata_key_value(
+            self.fs.get_data_pool_name(), 'cephfs', 'data', self.fs.name)
+        self.check_pool_application_metadata_key_value(
+            self.fs.get_metadata_pool_name(), 'cephfs', 'metadata',
+            self.fs.name)
 
 
 class TestDump(CephFSTestCase):
