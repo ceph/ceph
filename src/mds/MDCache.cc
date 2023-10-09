@@ -7073,9 +7073,15 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
     clear_complete = true;
 
   // unlink the dentry
-  if (dnl->is_remote() || dnl->is_referent()) {
+  if (dnl->is_remote()) {
     // just unlink.
     dir->unlink_inode(dn, false);
+  } else if (dnl->is_referent()) {
+    // expire the referent inode, too.
+    CInode *ref_in = dnl->get_ref_inode();
+    ceph_assert(ref_in);
+    if (trim_inode(dn, ref_in, con, expiremap))
+      return true; // purging stray instead of trimming
   } else if (dnl->is_primary()) {
     // expire the inode, too.
     CInode *in = dnl->get_inode();
@@ -7795,6 +7801,8 @@ void MDCache::dentry_remove_replica(CDentry *dn, mds_rank_t from, set<SimpleLock
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   if (dnl->is_primary()) {
     maybe_eval_stray(dnl->get_inode());
+  } else if (dnl->is_referent()) {
+    maybe_eval_stray(dnl->get_ref_inode());
   }
 }
 
