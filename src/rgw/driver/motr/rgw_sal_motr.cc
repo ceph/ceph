@@ -1151,9 +1151,9 @@ const std::string& MotrZone::get_current_period_id()
   return current_period->get_id();
 }
 
-std::unique_ptr<LuaManager> MotrStore::get_lua_manager()
+std::unique_ptr<LuaManager> MotrStore::get_lua_manager(const DoutPrefixProvider *dpp, const std::string& luarocks_path)
 {
-  return std::make_unique<MotrLuaManager>(this);
+  return std::make_unique<MotrLuaManager>(this, dpp, luarocks_path);
 }
 
 int MotrObject::get_obj_state(const DoutPrefixProvider* dpp, RGWObjState **_state, optional_yield y, bool follow_olh)
@@ -3898,6 +3898,11 @@ int MotrStore::init_metadata_cache(const DoutPrefixProvider *dpp,
   }
 
   int MotrLuaManager::list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages)
+  {
+    return -ENOENT;
+  }
+  
+  int MotrLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yield y)
   {
     return -ENOENT;
   }

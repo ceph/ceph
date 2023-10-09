@@ -596,7 +596,7 @@ namespace rgw::sal {
     return nullptr;
   }
 
-  std::unique_ptr<LuaManager> DBStore::get_lua_manager()
+  std::unique_ptr<LuaManager> DBStore::get_lua_manager(const std::string& luarocks_path)
   {
     return std::make_unique<DBLuaManager>(this);
   }
@@ -1986,6 +1986,12 @@ namespace rgw::sal {
   {
     return -ENOENT;
   }
+  
+  int DBLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yield y)
+  {
+    return -ENOENT;
+  }
+  
 } // namespace rgw::sal
 
 extern "C" {
