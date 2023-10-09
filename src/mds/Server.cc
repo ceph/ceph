@@ -4061,6 +4061,10 @@ Server::rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn)
   if (xlock_srcdn && !srcdn->is_auth()) {
     CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
     auth_pin_freeze = srcdnl->is_primary() ? srcdnl->get_inode() : nullptr;
+    if (srcdnl->is_primary())
+      auth_pin_freeze = srcdnl->get_inode();
+    else if (srcdnl->is_referent())
+      auth_pin_freeze = srcdnl->get_ref_inode();
   }
   if (!mds->locker->acquire_locks(mdr, lov, auth_pin_freeze))
     return std::make_pair(nullptr, nullptr);
@@ -9637,6 +9641,7 @@ void Server::_rename_prepare(const MDRequestRef& mdr,
     }
   } else if (linkmerge && destdnl->is_referent()) {
       CInode *oldrefi = destdnl->get_ref_inode();
+      dout(10) << " linkmerge and destdnl is referent. oldrefi " << oldrefi << dendl;
       ceph_assert(straydn && oldrefi);  // moving referent inode to straydn.
       // link--, and move.
       if (destdn->is_auth()) {
