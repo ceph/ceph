@@ -547,19 +547,10 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
 
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
 {
-  // TODO: should update the stats upon finishing the scrub
-  peering_state.update_stats([scrub_level, this](auto& history, auto& stats) {
-    const utime_t now = ceph_clock_now();
-    history.last_scrub = peering_state.get_info().last_update;
-    history.last_scrub_stamp = now;
-    history.last_clean_scrub_stamp = now;
-    if (scrub_level == scrub_level_t::deep) {
-      history.last_deep_scrub = history.last_scrub;
-      history.last_deep_scrub_stamp = now;
-    }
-    // yes, please publish the stats
-    return true;
-  });
+  /* We don't actually route the scrub request message into the state machine.
+   * Instead, we handle it directly in PGScrubber::handle_scrub_requested).
+   */
+  ceph_assert(0 == "impossible in crimson");
 }
 
 void PG::log_state_enter(const char *state) {
