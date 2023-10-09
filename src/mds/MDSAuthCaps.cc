@@ -356,8 +356,8 @@ bool MDSAuthCaps::parse(string_view str, ostream *err)
 
     if (err) {
       if (string(iter, end).find("allow") != string::npos) {
-       *err << "Permission flags in MDS caps must start with 'r' or " <<
-	       "'rw' or be '*' or 'all'";
+       *err << "Permission flags in MDS capability string must be '*' or "
+	    << "'all' or must start with 'r'";
       } else {
        *err << "mds capability parse failed, stopped at '"
             << string(iter, end) << "' of '" << str << "'";
