@@ -1523,6 +1523,7 @@ void ECBackend::objects_read_async(
       int r = 0;
       for (auto &&read: to_read) {
 	if (got.first < 0) {
+	  // error handling
 	  if (read.second.second) {
 	    read.second.second->complete(got.first);
 	  }
