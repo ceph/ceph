@@ -1559,7 +1559,8 @@ private: // Bunch of internal functions used only by calc_pg_upmaps (result of c
     int osd,
     std::map<int,std::set<pg_t>>& temp_pgs_by_osd,
     std::set<pg_t>& to_unmap,
-    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap
+    std::map<pg_t, mempool::osdmap::vector<std::pair<int32_t,int32_t>>>& to_upmap,
+    std::map<int,float>& osd_deviation
   );
 
 typedef std::vector<std::pair<pg_t, mempool::osdmap::vector<std::pair<int, int>>>>
