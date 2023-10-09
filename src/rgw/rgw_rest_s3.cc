@@ -5651,10 +5651,13 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
   /* Craft canonical query string. std::moving later so non-const here. */
   auto canonical_qs = rgw::auth::s3::get_v4_canonical_qs(s->info, using_qs);
 
+  /* Craft canonical method. */
+  auto canonical_method = rgw::auth::s3::get_v4_canonical_method(s);
+
   /* Craft canonical request. */
   auto canonical_req_hash = \
     rgw::auth::s3::get_v4_canon_req_hash(s->cct,
-                                         s->info.method,
+                                         std::move(canonical_method),
                                          std::move(canonical_uri),
                                          std::move(canonical_qs),
                                          std::move(*canonical_headers),
@@ -6340,14 +6343,15 @@ rgw::auth::s3::STSEngine::authenticate(
 bool rgw::auth::s3::S3AnonymousEngine::is_applicable(
   const req_state* s
 ) const noexcept {
-  if (s->op == OP_OPTIONS) {
-    return true;
-  }
-
   AwsVersion version;
   AwsRoute route;
   std::tie(version, route) = discover_aws_flavour(s->info);
 
+  /* If HTTP OPTIONS and no authentication provided using the
+   * anonymous engine is applicable */
+  if (s->op == OP_OPTIONS && version == AwsVersion::UNKNOWN) {
+    return true;
+  }
+
   return route == AwsRoute::QUERY_STRING && version == AwsVersion::UNKNOWN;
 }
-

@@ -1385,18 +1385,12 @@ int RGWOp::init_quota()
 }
 
 static bool validate_cors_rule_method(const DoutPrefixProvider *dpp, RGWCORSRule *rule, const char *req_meth) {
-  uint8_t flags = 0;
-
   if (!req_meth) {
     ldpp_dout(dpp, 5) << "req_meth is null" << dendl;
     return false;
   }
 
-  if (strcmp(req_meth, "GET") == 0) flags = RGW_CORS_GET;
-  else if (strcmp(req_meth, "POST") == 0) flags = RGW_CORS_POST;
-  else if (strcmp(req_meth, "PUT") == 0) flags = RGW_CORS_PUT;
-  else if (strcmp(req_meth, "DELETE") == 0) flags = RGW_CORS_DELETE;
-  else if (strcmp(req_meth, "HEAD") == 0) flags = RGW_CORS_HEAD;
+  uint8_t flags = get_cors_method_flags(req_meth);
 
   if (rule->get_allowed_methods() & flags) {
     ldpp_dout(dpp, 10) << "Method " << req_meth << " is supported" << dendl;
