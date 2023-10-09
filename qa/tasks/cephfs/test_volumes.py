@@ -571,8 +571,12 @@ class TestVolumes(TestVolumesHelper):
         oldvolname = self.volname
         newvolname = self._generate_random_volume_name()
         new_data_pool, new_metadata_pool = f"cephfs.{newvolname}.data", f"cephfs.{newvolname}.meta"
+
+        self.run_ceph_cmd(f'fs fail {oldvolname}')
         self._fs_cmd("volume", "rename", oldvolname, newvolname,
                      "--yes-i-really-mean-it")
+        self.run_ceph_cmd(f'fs set {newvolname} joinable true')
+
         volumels = json.loads(self._fs_cmd('volume', 'ls'))
         volnames = [volume['name'] for volume in volumels]
         # volume name changed
@@ -592,10 +596,14 @@ class TestVolumes(TestVolumesHelper):
         oldvolname = self.volname
         newvolname = self._generate_random_volume_name()
         new_data_pool, new_metadata_pool = f"cephfs.{newvolname}.data", f"cephfs.{newvolname}.meta"
+
+        self.run_ceph_cmd(f'fs fail {oldvolname}')
         self._fs_cmd("volume", "rename", oldvolname, newvolname,
                      "--yes-i-really-mean-it")
         self._fs_cmd("volume", "rename", oldvolname, newvolname,
                      "--yes-i-really-mean-it")
+        self.run_ceph_cmd(f'fs set {newvolname} joinable true')
+
         volumels = json.loads(self._fs_cmd('volume', 'ls'))
         volnames = [volume['name'] for volume in volumels]
         self.assertIn(newvolname, volnames)
@@ -609,6 +617,8 @@ class TestVolumes(TestVolumesHelper):
         That renaming volume fails without --yes-i-really-mean-it flag.
         """
         newvolname = self._generate_random_volume_name()
+
+        self.run_ceph_cmd(f'fs fail {self.volname}')
         try:
             self._fs_cmd("volume", "rename", self.volname, newvolname)
         except CommandFailedError as ce:
@@ -618,6 +628,7 @@ class TestVolumes(TestVolumesHelper):
         else:
             self.fail("expected renaming of FS volume to fail without the "
                       "'--yes-i-really-mean-it' flag")
+        self.run_ceph_cmd(f'fs set {self.volname} joinable true')
 
     def test_volume_rename_for_more_than_one_data_pool(self):
         """
@@ -632,8 +643,12 @@ class TestVolumes(TestVolumesHelper):
         self.fs.get_pool_names(refresh=True)
         orig_data_pool_names = list(self.fs.data_pools.values())
         new_metadata_pool = f"cephfs.{newvolname}.meta"
+
+        self.run_ceph_cmd(f'fs fail {oldvolname}')
         self._fs_cmd("volume", "rename", self.volname, newvolname,
                      "--yes-i-really-mean-it")
+        self.run_ceph_cmd(f'fs set {newvolname} joinable true')
+
         volumels = json.loads(self._fs_cmd('volume', 'ls'))
         volnames = [volume['name'] for volume in volumels]
         # volume name changed
@@ -644,6 +659,19 @@ class TestVolumes(TestVolumesHelper):
         self.assertEqual(new_metadata_pool, self.fs.get_metadata_pool_name())
         # data pool names unchanged
         self.assertCountEqual(orig_data_pool_names, list(self.fs.data_pools.values()))
+
+    def test_rename_when_fs_is_online(self):
+        for m in self.mounts:
+            m.umount_wait()
+        newvolname = self._generate_random_volume_name()
+
+        self.negtest_ceph_cmd(
+            args=(f'fs volume rename {self.volname} {newvolname} '
+                   '--yes-i-really-mean-it'),
+            errmsgs=(f"CephFS '{self.volname}' is not offline. Before "
+                      "renaming a CephFS, it must be marked as down. See "
+                      "`ceph fs fail`."),
+            retval=errno.EPERM)
 
     def test_volume_info(self):
         """
