@@ -1355,7 +1355,7 @@ bool AuthMonitor::valid_caps(
     }
   } else if (type == "mds") {
     MDSAuthCaps mdscap;
-    if (!mdscap.parse(g_ceph_context, caps, out)) {
+    if (!mdscap.parse(caps, out)) {
       return false;
     }
   } else {
