@@ -1165,6 +1165,9 @@ COMMAND("osd pool application get "
         "name=key,type=CephString,req=false",
         "get value of key <key> of application <app> on pool <poolname>",
         "osd", "r")
+COMMAND("osd pool availability-status", \
+        "obtain availability stats from all pools", \
+        "osd", "r")
 COMMAND("osd utilization",
 	"get basic pg distribution stats",
 	"osd", "r")
