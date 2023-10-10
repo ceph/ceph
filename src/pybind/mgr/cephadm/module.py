@@ -104,7 +104,7 @@ os._exit = os_exit_noop   # type: ignore
 
 
 # Default container images -----------------------------------------------------
-DEFAULT_IMAGE = 'quay.io/ceph/ceph:v18'
+DEFAULT_IMAGE = 'quay.io/ceph/ceph'  # DO NOT ADD TAG TO THIS
 DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.5.0'
 DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:0.0.2'
