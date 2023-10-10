@@ -25,10 +25,9 @@ struct FLTreeOnode final : Onode, Value {
   };
 
   enum class status_t {
-    STABLE,
-    MUTATED,
+    ALIVE,
     DELETED
-  } status = status_t::STABLE;
+  } status = status_t::ALIVE;
 
   FLTreeOnode(FLTreeOnode&&) = default;
   FLTreeOnode& operator=(FLTreeOnode&&) = delete;
@@ -88,9 +87,7 @@ struct FLTreeOnode final : Onode, Value {
     auto p = prepare_mutate_payload<
       onode_layout_t,
       Recorder>(t);
-    status = status_t::MUTATED;
     layout_func(p.first, p.second);
-    status = status_t::STABLE;
   }
 
   void create_default_layout(Transaction &t) {
