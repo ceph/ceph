@@ -4,9 +4,6 @@ tasks:
 - install:
 - ceph:
     fs: xfs
-    log-ignorelist:
-      - overall HEALTH_
-      - \(CACHE_POOL_NO_HIT_SET\)
 - workunit:
     clients:
       all: [rbd/test_rbd_tasks.sh]
