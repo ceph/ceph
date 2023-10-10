@@ -4799,26 +4799,26 @@ def rollback(func: FuncT) -> FuncT:
             raise
         except (KeyboardInterrupt, Exception) as e:
             logger.error(f'{type(e).__name__}: {e}')
-            if ctx.cleanup_on_failure:
+            if ctx.no_cleanup_on_failure:
                 logger.info('\n\n'
                             '\t***************\n'
-                            '\tCephadm hit an issue during cluster installation. Current cluster files will be deleted automatically,\n'
-                            '\tto disable this behaviour you can pass the --no-cleanup-on-failure flag. In case of any previous\n'
-                            '\tbroken installation user must use the following command to completely delete the broken cluster:\n\n'
+                            '\tCephadm hit an issue during cluster installation. Current cluster files will NOT BE DELETED automatically. To change\n'
+                            '\tthis behaviour do not pass the --no-cleanup-on-failure flag. To remove this broken cluster manually please run:\n\n'
+                            f'\t   > cephadm rm-cluster --force --fsid {ctx.fsid}\n\n'
+                            '\tin case of any previous broken installation, users must use the rm-cluster command to delete the broken cluster:\n\n'
+                            '\t   > cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
+                            '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
+                            '\t***************\n\n')
+            else:
+                logger.info('\n\n'
+                            '\t***************\n'
+                            '\tCephadm hit an issue during cluster installation. Current cluster files will be deleted automatically.\n'
+                            '\tTo disable this behaviour you can pass the --no-cleanup-on-failure flag. In case of any previous\n'
+                            '\tbroken installation, users must use the following command to completely delete the broken cluster:\n\n'
                             '\t> cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
                             '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
                             '\t***************\n\n')
                 _rm_cluster(ctx, keep_logs=False, zap_osds=False)
-            else:
-                logger.info('\n\n'
-                            '\t***************\n'
-                            '\tCephadm hit an issue during cluster installation. Current cluster files will NOT BE DELETED automatically to change\n'
-                            '\tthis behaviour you can pass the --cleanup-on-failure. To remove this broken cluster manually please run:\n\n'
-                            f'\t   > cephadm rm-cluster --force --fsid {ctx.fsid}\n\n'
-                            '\tin case of any previous broken installation user must use the rm-cluster command to delete the broken cluster:\n\n'
-                            '\t   > cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
-                            '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
-                            '\t***************\n\n')
             raise
     return cast(FuncT, _rollback)
 
@@ -7379,22 +7379,10 @@ def _get_parser():
         '--allow-overwrite',
         action='store_true',
         help='allow overwrite of existing --output-* config/keyring/ssh files')
-    # following logic to have both '--cleanup-on-failure' and '--no-cleanup-on-failure'
-    # has been included in argparse of python v3.9, however since we have to support
-    # older python versions the following is more generic. Once python v3.9 becomes
-    # the minium supported version we can implement the same by using the new option
-    # argparse.BooleanOptionalAction
-    group = parser_bootstrap.add_mutually_exclusive_group()
-    group.add_argument(
-        '--cleanup-on-failure',
-        action='store_true',
-        default=True,
-        help='Delete cluster files in case of a failed installation')
-    group.add_argument(
+    parser_bootstrap.add_argument(
         '--no-cleanup-on-failure',
-        action='store_const',
-        const=False,
-        dest='cleanup_on_failure',
+        action='store_true',
+        default=False,
         help='Do not delete cluster files in case of a failed installation')
     parser_bootstrap.add_argument(
         '--allow-fqdn-hostname',
