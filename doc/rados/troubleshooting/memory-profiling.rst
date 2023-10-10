@@ -2,16 +2,23 @@
  Memory Profiling
 ==================
 
-Ceph MON, OSD and MDS can generate heap profiles using
-``tcmalloc``. To generate heap profiles, ensure you have
-``google-perftools`` installed::
+Ceph Monitor, OSD, and MDS can report ``TCMalloc`` heap profiles. Install
+``google-perftools`` if you want to generate these. Your OS distribution might
+package this under a different name (for example, ``gperftools``), and your OS
+distribution might use a different package manager. Run a command similar to
+this one to install ``google-perftools``: 
 
-	sudo apt-get install google-perftools
+.. prompt:: bash 
 
-The profiler dumps output to your ``log file`` directory (i.e.,
-``/var/log/ceph``). See `Logging and Debugging`_ for details.
-To view the profiler logs with Google's performance tools, execute the
-following:: 
+    sudo apt-get install google-perftools
+
+The profiler dumps output to your ``log file`` directory (``/var/log/ceph``).
+See `Logging and Debugging`_ for details.
+
+To view the profiler logs with Google's performance tools, run the following
+command:
+
+.. prompt:: bash
 
     google-pprof --text {path-to-daemon}  {log-path/filename}
 
@@ -48,9 +55,9 @@ For example::
      0.0   0.4%  99.2%      0.0   0.6% decode_message
      ...
 
-Another heap dump on the same daemon will add another file. It is
-convenient to compare to a previous heap dump to show what has grown
-in the interval. For instance::
+Performing another heap dump on the same daemon creates another file. It is
+convenient to compare the new file to a file created by a previous heap dump to
+show what has grown in the interval. For example::
 
     $ google-pprof --text --base out/osd.0.profile.0001.heap \
           ceph-osd out/osd.0.profile.0003.heap
@@ -60,112 +67,137 @@ in the interval. For instance::
      0.0   0.9%  97.7%      0.0  26.1% ReplicatedPG::do_op
      0.0   0.8%  98.5%      0.0   0.8% __gnu_cxx::new_allocator::allocate
 
-Refer to `Google Heap Profiler`_ for additional details.
+See `Google Heap Profiler`_ for additional details.
 
-Once you have the heap profiler installed, start your cluster and
-begin using the heap profiler. You may enable or disable the heap
-profiler at runtime, or ensure that it runs continuously. For the
-following commandline usage, replace ``{daemon-type}`` with ``mon``,
-``osd`` or ``mds``, and replace ``{daemon-id}`` with the OSD number or
-the MON or MDS id.
+After you have installed the heap profiler, start your cluster and begin using
+the heap profiler. You can enable or disable the heap profiler at runtime, or
+ensure that it runs continuously. When running commands based on the examples
+that follow, do the following:
+
+#. replace ``{daemon-type}`` with ``mon``, ``osd`` or ``mds`` 
+#. replace ``{daemon-id}`` with the OSD number or the MON ID or the MDS ID 
 
 
 Starting the Profiler
 ---------------------
 
-To start the heap profiler, execute the following:: 
+To start the heap profiler, run a command of the following form: 
 
-	ceph tell {daemon-type}.{daemon-id} heap start_profiler
+.. prompt:: bash
 
-For example:: 
+   ceph tell {daemon-type}.{daemon-id} heap start_profiler
 
-	ceph tell osd.1 heap start_profiler
+For example:
 
-Alternatively the profile can be started when the daemon starts
-running if the ``CEPH_HEAP_PROFILER_INIT=true`` variable is found in
-the environment.
+.. prompt:: bash
+
+   ceph tell osd.1 heap start_profiler
+
+Alternatively, if the ``CEPH_HEAP_PROFILER_INIT=true`` variable is found in the
+environment, the profile will be started when the daemon starts running.
 
 Printing Stats
 --------------
 
-To print out statistics, execute the following:: 
+To print out statistics, run a command of the following form:
 
-	ceph  tell {daemon-type}.{daemon-id} heap stats
+.. prompt:: bash
 
-For example:: 
+   ceph  tell {daemon-type}.{daemon-id} heap stats
 
-	ceph tell osd.0 heap stats
+For example:
 
-.. note:: Printing stats does not require the profiler to be running and does
-   not dump the heap allocation information to a file.
+.. prompt:: bash
+
+   ceph tell osd.0 heap stats
+
+.. note:: The reporting of stats with this command does not require the
+   profiler to be running and does not dump the heap allocation information to
+   a file.
 
 
 Dumping Heap Information
 ------------------------
 
-To dump heap information, execute the following:: 
+To dump heap information, run a command of the following form:
 
-	ceph tell {daemon-type}.{daemon-id} heap dump
+.. prompt:: bash
 
-For example:: 
+   ceph tell {daemon-type}.{daemon-id} heap dump
 
-	ceph tell mds.a heap dump
+For example:
 
-.. note:: Dumping heap information only works when the profiler is running.
+.. prompt:: bash
+
+   ceph tell mds.a heap dump
+
+.. note:: Dumping heap information works only when the profiler is running.
 
 
 Releasing Memory
 ----------------
 
-To release memory that ``tcmalloc`` has allocated but which is not being used by
-the Ceph daemon itself, execute the following:: 
+To release memory that ``tcmalloc`` has allocated but which is not being used
+by the Ceph daemon itself, run a command of the following form:
 
-	ceph tell {daemon-type}{daemon-id} heap release
+.. prompt:: bash
 
-For example:: 
+   ceph tell {daemon-type}{daemon-id} heap release
 
-	ceph tell osd.2 heap release
+For example:
+
+.. prompt:: bash
+
+    ceph tell osd.2 heap release
 
 
 Stopping the Profiler
 ---------------------
 
-To stop the heap profiler, execute the following:: 
+To stop the heap profiler, run a command of the following form:
 
-	ceph tell {daemon-type}.{daemon-id} heap stop_profiler
+.. prompt:: bash
 
-For example:: 
+   ceph tell {daemon-type}.{daemon-id} heap stop_profiler
 
-	ceph tell osd.0 heap stop_profiler
+For example:
+
+.. prompt:: bash
+
+   ceph tell osd.0 heap stop_profiler
 
 .. _Logging and Debugging: ../log-and-debug
 .. _Google Heap Profiler: http://goog-perftools.sourceforge.net/doc/heap_profiler.html
 
-Alternative ways for memory profiling
--------------------------------------
+Alternative Methods of  Memory Profiling
+----------------------------------------
 
 Running Massif heap profiler with Valgrind
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-The Massif heap profiler tool can be used with Valgrind to
-measure how much heap memory is used and is good for
-troubleshooting for example Ceph RadosGW.
+The Massif heap profiler tool can be used with Valgrind to measure how much
+heap memory is used. This method is well-suited to troubleshooting RadosGW.
 
-See the `Massif documentation <https://valgrind.org/docs/manual/ms-manual.html>`_ for
-more information.
+See the `Massif documentation
+<https://valgrind.org/docs/manual/ms-manual.html>`_ for more information.
 
-Install Valgrind from the package manager for your distribution
-then start the Ceph daemon you want to troubleshoot::
+Install Valgrind from the package manager for your distribution then start the
+Ceph daemon you want to troubleshoot:
 
-        sudo -u ceph valgrind --max-threads=1024 --tool=massif /usr/bin/radosgw -f --cluster ceph --name NAME --setuser ceph --setgroup ceph
+.. prompt:: bash
 
-A file similar to ``massif.out.<pid>`` will be saved when it exits
-in your current working directory. The user running the process above
-must have write permissions in the current directory.
+   sudo -u ceph valgrind --max-threads=1024 --tool=massif /usr/bin/radosgw -f --cluster ceph --name NAME --setuser ceph --setgroup ceph
 
-You can then run the ``ms_print`` command to get a graph and statistics
-from the collected data in the ``massif.out.<pid>`` file::
+When this command has completed its run, a file with a name of the form
+``massif.out.<pid>`` will be saved in your current working directory. To run
+the command above, the user who runs it must have write permissions in the
+current directory.
 
-        ms_print massif.out.12345
+Run the ``ms_print`` command to get a graph and statistics from the collected
+data in the ``massif.out.<pid>`` file:
 
-This output is great for inclusion in a bug report.
+.. prompt:: bash
+
+   ms_print massif.out.12345
+
+The output of this command is helpful when submitting a bug report.
