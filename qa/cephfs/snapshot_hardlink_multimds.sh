@@ -94,11 +94,54 @@ function validate_dpool_object_deletion () {
   fi
 }
 
+function validate_unlink_link_merge() {
+  echo "--------------------------------------------------------------------------------------------------"
+  echo "MULTIMDS - UNLINK - LINKMERGE"
+  echo "Create file dir1/file1 and links dir1/hl_file1 dir2/hl_file1 dir3/hl_file1"
+  echo "create /dir1/file1"
+  echo "data ..." > $MNT/dir1/file1
+  echo "ln /dir1/file1 /dir2/hl_file1"
+  ln $MNT/dir1/file1 $MNT/dir2/hl_file1
+  echo "ln /dir1/file1 /dir3/hl_file1"
+  ln $MNT/dir1/file1 $MNT/dir3/hl_file1
+  echo "ln /dir1/file1 /dir1/hl_file1"
+  ln $MNT/dir1/file1 $MNT/dir1/hl_file1
+  flush_mds_journal
+
+  echo "remove primary link - /dir1/file1 to cause stray reintegration"
+  rm -f $MNT/dir1/file1
+  flush_mds_journal
+  validate_mpool_omap_deletion $DIR1_MDS_OBJ "file1" "dir1"
+  validate_dpool_object_deletion $DIR1_FILE1_DATA_OBJ "/dir1/file1"
+
+  echo "remove other links"
+  echo "remove /dir1/hl_file1"
+  rm -f $MNT/dir1/hl_file1
+  flush_mds_journal
+  validate_mpool_omap_deletion $DIR1_MDS_OBJ "hl_file1" "dir1"
+  validate_dpool_object_deletion $DIR1_HL_FILE1_DATA_OBJ "/dir1/hl_file1"
+
+  echo "remove /dir2/hl_file1"
+  rm -f $MNT/dir2/hl_file1
+  flush_mds_journal
+  validate_mpool_omap_deletion $DIR2_MDS_OBJ "hl_file1" "dir2"
+  validate_dpool_object_deletion $DIR2_HL_FILE1_DATA_OBJ "/dir2/hl_file1"
+
+  echo "remove /dir3/hl_file1"
+  rm -f $MNT/dir3/hl_file1
+  flush_mds_journal
+  validate_mpool_omap_deletion $DIR3_MDS_OBJ "hl_file1" "dir3"
+  validate_dpool_object_deletion $DIR3_HL_FILE1_DATA_OBJ "/dir3/hl_file1"
+  echo "multi-mds unlink-stray reintegration success"
+}
+
 function validate_unlink () {
   echo "--------------------------------------------------------------------------------------------------"
   echo "MULTIMDS - UNLINK"
   echo "unlink /dir2/hl_file1 (secondary link first to avoid stray reintegration)"
   rm -f $MNT/dir2/hl_file1
+  rm -f $MNT/dir1/hl_file1
+  rm -f $MNT/dir3/hl_file1
   echo "unlink /dir1/file1 (primary link)"
   rm -f $MNT/dir1/file1
   flush_mds_journal
@@ -106,9 +149,13 @@ function validate_unlink () {
   sleep 5
   validate_mpool_omap_deletion $DIR1_MDS_OBJ "file1" "dir1"
   validate_mpool_omap_deletion $DIR2_MDS_OBJ "hl_file1" "dir2"
+  validate_mpool_omap_deletion $DIR1_MDS_OBJ "hl_file1" "dir1"
+  validate_mpool_omap_deletion $DIR3_MDS_OBJ "hl_file1" "dir3"
 
   validate_dpool_object_deletion $DIR1_FILE1_DATA_OBJ "/dir1/file1"
   validate_dpool_object_deletion $DIR2_HL_FILE1_DATA_OBJ "/dir2/hl_file1"
+  validate_dpool_object_deletion $DIR1_HL_FILE1_DATA_OBJ "/dir1/hl_file1"
+  validate_dpool_object_deletion $DIR3_HL_FILE1_DATA_OBJ "/dir3/hl_file1"
   echo "multi-mds unlink success"
 }
 
@@ -286,7 +333,8 @@ else
 fi
 setup_test_bed
 validate_link
-#validate_unlink
+validate_unlink
+validate_unlink_link_merge
 #validate_rename
 
 echo "--------------------------------------------------------------------------------------------------"
