@@ -12,9 +12,6 @@ overrides:
     bdev_inject_crash_probability: .5
   ceph:
     fs: xfs
-    log-ignorelist:
-      - overall HEALTH_
-      - \(CACHE_POOL_NO_HIT_SET\)
     conf:
       client:
         rbd default data pool: datapool
