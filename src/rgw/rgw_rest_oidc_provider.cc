@@ -231,3 +231,53 @@ void RGWListOIDCProviders::execute(optional_yield y)
   }
 }
 
+int RGWAddClientIdToOIDCProvider::get_params()
+{
+  auto client_id = s->info.args.get("ClientID");
+
+  if (client_id.empty()) {
+    ldpp_dout(this, 20) << "ERROR: ClientID is empty" << dendl;
+    return -EINVAL;
+  }
+
+  if(std::find(client_ids.begin(), client_ids.end(), client_id) != client_ids.end()){
+    return -EEXIST;
+  }
+
+  client_ids.emplace_back(client_id);
+  return 0;
+}
+
+void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
+{
+  std::unique_ptr<rgw::sal::RGWOIDCProvider> provider = driver->get_oidc_provider();
+  provider->set_arn(provider_arn);
+  provider->set_tenant(s->user->get_tenant());
+  op_ret = provider->get(s, y);
+
+  if (op_ret < 0 && op_ret != -ENOENT && op_ret != -EINVAL) {
+    op_ret = ERR_INTERNAL_ERROR;
+  }
+
+  op_ret = get_params();
+  if (op_ret < 0 && op_ret != -EEXIST) {
+    return;
+  }
+
+  if (op_ret == 0) { //Dont call update for EEXIST
+    provider->set_client_ids(client_ids);
+    op_ret = provider->update(s, y);
+  }
+
+  if (op_ret == 0 || op_ret == -EEXIST) {
+    op_ret = 0;
+    s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
+    provider->dump_all(s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}

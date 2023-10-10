@@ -117,6 +117,29 @@ int RGWOIDCProvider::get(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
+int RGWOIDCProvider::update(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  string url, tenant;
+  auto ret = get_tenant_url_from_arn(tenant, url);
+  if (ret < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to parse arn" << dendl;
+    return -EINVAL;
+  }
+
+  if (this->tenant != tenant) {
+    ldpp_dout(dpp, 0) << "ERROR: tenant in arn doesn't match that of user " << this->tenant << ", "
+                  << tenant << ": " << dendl;
+    return -EINVAL;
+  }
+
+  ret = store_url(dpp, url, false, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  return 0;
+}
+
 void RGWOIDCProvider::dump(Formatter *f) const
 {
   encode_json("OpenIDConnectProviderArn", arn, f);
