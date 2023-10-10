@@ -345,6 +345,7 @@ class Module(MgrModule):
             'optimize_result': self.optimize_result,
             'no_optimization_needed': self.no_optimization_needed,
             'mode': self.get_module_option('mode'),
+            'new_key': "new key",
         }
         return (0, json.dumps(s, indent=4, sort_keys=True), '')
 
