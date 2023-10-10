@@ -1,8 +1,9 @@
 import cherrypy
+from threading import Thread
 from .redfish_dell import RedfishDell
 from .reporter import Reporter
 from .util import Config, Logger
-from typing import Dict
+from typing import Dict, Any, Optional
 from .basesystem import BaseSystem
 import sys
 import argparse
@@ -187,59 +188,63 @@ class API:
         return 'use /system or /admin endpoints'
 
 
-def main(host: str = '',
-         username: str = '',
-         password: str = '',
-         data: str = '',
-         mgr_target_ip: str = '',
-         mgr_target_port: str = '') -> None:
-    # TODO: add a check and fail if host/username/password/data aren't passed
+class NodeProxy(Thread):
+    def __init__(self, **kw: Dict[str, Any]) -> None:
+        super().__init__()
+        for k, v in kw.items():
+            setattr(self, k, v)
+        self.exc: Optional[Exception] = None
 
-    # parser = argparse.ArgumentParser(
-    #     prog='node-proxy',
-    # )
-    # parser.add_argument(
-    #     '--config',
-    #     dest='config',
-    #     type=str,
-    #     required=False,
-    #     default='/etc/ceph/node-proxy.yml'
-    # )
+    def run(self) -> None:
+        try:
+            self.main()
+        except Exception as e:
+            self.exc = e
+            return
 
-    # args = parser.parse_args()
-    config = Config('/etc/ceph/node-proxy.yml', default_config=DEFAULT_CONFIG)
+    def check_status(self) -> bool:
+        if self.__dict__.get('system') and not self.system.run:
+            raise RuntimeError("node-proxy encountered an error.")
+        if self.exc:
+            raise self.exc
+        return True
 
-    log = Logger(__name__, level=config.__dict__['logging']['level'])
+    def main(self) -> None:
+        # TODO: add a check and fail if host/username/password/data aren't passed
 
-    host = host
-    username = username
-    password = password
-    data = json.loads(data)
+        config = Config('/etc/ceph/node-proxy.yml', default_config=DEFAULT_CONFIG)
 
-    # create the redfish system and the obsever
-    log.logger.info("Server initialization...")
-    try:
-        system = RedfishDell(host=host,
-                            username=username,
-                            password=password,
-                            system_endpoint='/Systems/System.Embedded.1',
-                            config=config)
-    except RuntimeError:
-        log.logger.error(f"Can't initialize the redfish system.")
+        log = Logger(__name__, level=config.__dict__['logging']['level'])
 
-    reporter_agent = Reporter(system, data, f"https://{mgr_target_ip}:{mgr_target_port}/node-proxy/data")
-    cherrypy.config.update({
-        'node_proxy': config,
-        'server.socket_port': config.__dict__['server']['port']
-    })
-    c = {'/': {
-        'request.methods_with_bodies': ('POST', 'PUT', 'PATCH'),
-        'request.dispatch': cherrypy.dispatch.MethodDispatcher()
-    }}
-    system.start_update_loop()
-    reporter_agent.run()
-    cherrypy.quickstart(API(system, reporter_agent, config), config=c)
+        self.data = json.loads(self.__dict__['data'])
 
+        # create the redfish system and the obsever
+        log.logger.info(f"Server initialization...")
+        try:
+            self.system = RedfishDell(host=self.__dict__['host'],
+                                      username=self.__dict__['username'],
+                                      password=self.__dict__['password'],
+                                      system_endpoint='/Systems/System.Embedded.1',
+                                      config=config)
+        except RuntimeError:
+            log.logger.error("Can't initialize the redfish system.")
+            raise
 
-if __name__ == '__main__':
-    main()
+        try:
+            reporter_agent = Reporter(self.system,
+                                      self.data,
+                                      f"https://{self.__dict__['mgr_target_ip']}:{self.__dict__['mgr_target_port']}/node-proxy/data")
+        except RuntimeError:
+            log.logger.error("Can't initialize the reporter.")
+            raise
+
+        cherrypy.config.update({
+            'node_proxy': config,
+            'server.socket_port': config.__dict__['server']['port']
+        })
+        c = {'/': {
+            'request.methods_with_bodies': ('POST', 'PUT', 'PATCH'),
+            'request.dispatch': cherrypy.dispatch.MethodDispatcher()
+        }}
+        reporter_agent.run()
+        cherrypy.quickstart(API(self.system, reporter_agent, config), config=c)
