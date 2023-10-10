@@ -40,7 +40,7 @@ from threading import Thread, Event
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
 from pathlib import Path
-import cephadmlib.node_proxy.server
+from cephadmlib.node_proxy.server import NodeProxy
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -4915,27 +4915,32 @@ WantedBy=ceph-{fsid}.target
             raise
         return response_str
 
+    def init_node_proxy(self, ssl_ctx: Any) -> None:
+        node_proxy_data = json.dumps({'keyring': self.keyring,
+                                          'host': self.host})
+        node_proxy_data = node_proxy_data.encode('ascii')
+        result = self.query_endpoint(data=node_proxy_data,
+                                     endpoint='/node-proxy/idrac',
+                                     ssl_ctx=ssl_ctx)
+        result_json = json.loads(result)
+        kwargs = {
+            'host': result_json['result']['addr'],
+            'username': result_json['result']['username'],
+            'password': result_json['result']['password'],
+            'data': node_proxy_data,
+            'mgr_target_ip': self.target_ip,
+            'mgr_target_port': self.target_port,
+        }
+
+        self.t_node_proxy = NodeProxy(**kwargs)
+        self.t_node_proxy.start()
+
     def run(self) -> None:
         self.pull_conf_settings()
         ssl_ctx = ssl.create_default_context()
         ssl_ctx.check_hostname = True
         ssl_ctx.verify_mode = ssl.CERT_REQUIRED
         ssl_ctx.load_verify_locations(self.ca_path)
-        node_proxy_data = json.dumps({'keyring': self.keyring,
-                                      'host': self.host})
-        node_proxy_data = node_proxy_data.encode('ascii')
-        result = self.query_endpoint(data=node_proxy_data,
-                                     endpoint='/node-proxy/idrac',
-                                     ssl_ctx=ssl_ctx)
-        result_json = json.loads(result)
-        t_node_proxy = Thread(target=cephadmlib.node_proxy.server.main,
-                              kwargs={'host': result_json['result']['addr'],
-                                      'username': result_json['result']['username'],
-                                      'password': result_json['result']['password'],
-                                      'data': node_proxy_data,
-                                      'mgr_target_ip': self.target_ip,
-                                      'mgr_target_port': self.target_port})
-        t_node_proxy.start()
 
         try:
             for _ in range(1001):
@@ -4957,7 +4962,16 @@ WantedBy=ceph-{fsid}.target
         if not self.volume_gatherer.is_alive():
             self.volume_gatherer.start()
 
+        # initiate node-proxy thread
+        self.init_node_proxy(ssl_ctx)
+
         while not self.stop:
+            try:
+                _mapper = {True: 'Ok', False: 'Critical'}
+                logger.debug(f'node-proxy status: {_mapper[self.t_node_proxy.check_status()]}')
+            except Exception as e:
+                logger.error(f'node-proxy failure: {e.__class__.__name__}: {e}')
+                self.init_node_proxy(ssl_ctx)
             start_time = time.monotonic()
             ack = self.ack
 
