@@ -405,3 +405,75 @@ void RGWAddClientIdToOIDCProvider::execute(optional_yield y)
     s->formatter->close_section();
   }
 }
+
+RGWUpdateOIDCProviderThumbprint::RGWUpdateOIDCProviderThumbprint()
+  : RGWRestOIDCProvider(rgw::IAM::iamUpdateOIDCProviderThumbprint, RGW_CAP_WRITE)
+{
+}
+
+int RGWUpdateOIDCProviderThumbprint::init_processing(optional_yield y)
+{
+  std::string_view account;
+  if (const auto& acc = s->auth.identity->get_account(); acc) {
+    account = acc->id;
+  } else {
+    account = s->user->get_tenant();
+  }
+  std::string provider_arn = s->info.args.get("OpenIDConnectProviderArn");
+  auto ret = validate_provider_arn(provider_arn, account,
+                               resource, url, s->err.message);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto val_map = s->info.args.get_params();
+  /* From AWS documentation here: https://docs.aws.amazon.com/IAM/latest/APIReference/API_UpdateOpenIDConnectProviderThumbprint.html
+  The list that you pass with this operation completely replaces the existing list of thumbprints. (The lists are not merged.) */
+  for (auto& it : val_map) {
+    if (it.first.find("ThumbprintList.member.") != string::npos) {
+        if (it.second.size() > MAX_OIDC_THUMBPRINT_LEN) {
+          s->err.message = "Thumbprint cannot exceed the maximum length of "
+              + std::to_string(MAX_OIDC_THUMBPRINT_LEN);
+          ldpp_dout(this, 20) << "ERROR: Thumbprint exceeds maximum length of " << MAX_OIDC_THUMBPRINT_LEN << dendl;
+          return -EINVAL;
+        }
+        thumbprints.emplace_back(it.second);
+    }
+  }
+
+  if (thumbprints.empty()) {
+    s->err.message = "Missing required element ThumbprintList";
+    ldpp_dout(this, 20) << "ERROR: Thumbprints list is empty" << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+void RGWUpdateOIDCProviderThumbprint::execute(optional_yield y)
+{
+  RGWOIDCProviderInfo info;
+  op_ret = driver->load_oidc_provider(this, y, resource.account, url, info);
+
+  if (op_ret < 0) {
+    if (op_ret != -ENOENT && op_ret != -EINVAL) {
+      op_ret = ERR_INTERNAL_ERROR;
+    }
+    return;
+  }
+
+  info.thumbprints = std::move(thumbprints);
+
+  constexpr bool exclusive = false;
+  op_ret = driver->store_oidc_provider(this, y, info, exclusive);
+  if (op_ret == 0) {
+    s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->open_object_section("AddClientIDToOpenIDConnectProviderResponse");
+    dump_oidc_provider(info, s->formatter);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
