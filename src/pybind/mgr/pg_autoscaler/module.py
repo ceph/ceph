@@ -721,7 +721,7 @@ class PgAutoscaler(MgrModule):
                     p['pg_num_final'])
                 if p['pg_num_final'] > p['pg_num_target']:
                     too_few.append(msg)
-                else:
+                elif p['pg_num_final'] < p['pg_num_target']:
                     too_many.append(msg)
             if not p['would_adjust']:
                 continue
