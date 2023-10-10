@@ -464,7 +464,7 @@ std::ostream& operator<<(std::ostream& out, const bluestore_blob_use_tracker_t& 
 /// blob: a piece of data on disk
 struct bluestore_blob_t {
 private:
-  PExtentVector extents;              ///< raw data position on device
+  PExtentVector extents;              ///< raw data position on device: sorted by logical offset position
   uint32_t logical_length = 0;        ///< original length of data stored in the blob
   uint32_t compressed_length = 0;     ///< compressed length if any
 
@@ -625,9 +625,10 @@ public:
   uint64_t calc_offset(uint64_t x_off, uint64_t *plen) const {
     uint64_t _x_off = x_off;
     PExtentVector sorted_extents = extents;
-    std::sort(sorted_extents.begin(), sorted_extents.end(), [](const bluestore_pextent_t& l, const bluestore_pextent_t& r) {
-      return l.offset < r.offset;
-    });
+//     std::sort(sorted_extents.begin(), sorted_extents.end(),
+//               [](const bluestore_pextent_t& l, const bluestore_pextent_t& r) {
+//                 return l.offset < r.offset;
+//               });
     std::cout << std::flush;
     for (auto ex : sorted_extents) {
       std::cout << __func__ << " pere extent offset=" << ex.offset
@@ -638,7 +639,10 @@ public:
     while (x_off >= p->length) {
       x_off -= p->length;
       ++p;
-      ceph_assert(p != sorted_extents.end());
+      if (p == sorted_extents.end()) {
+        return bluestore_pextent_t::INVALID_OFFSET;
+      }
+      // ceph_assert(p != sorted_extents.end());
     }
     if (plen)
       *plen = p->length - x_off;
