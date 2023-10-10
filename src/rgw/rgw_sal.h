@@ -15,11 +15,11 @@
 
 #pragma once
 
+#include "common/tracer.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
-#include "common/tracer.h"
 #include "rgw_req_context.h"
 #include "rgw_datalog_notify.h"
 #include "include/random.h"
