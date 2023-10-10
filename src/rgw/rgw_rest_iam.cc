@@ -45,6 +45,7 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"ListOpenIDConnectProviders", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListOIDCProviders;}},
   {"GetOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWGetOIDCProvider;}},
   {"DeleteOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWDeleteOIDCProvider;}},
+  {"AddClientIDToOpenIDConnectProvider", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWAddClientIdToOIDCProvider;}},
   {"TagRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWTagRole(bl_post_body);}},
   {"ListRoleTags", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListRoleTags;}},
   {"UntagRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUntagRole(bl_post_body);}},

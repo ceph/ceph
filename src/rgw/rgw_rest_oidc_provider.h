@@ -62,3 +62,15 @@ class RGWListOIDCProviders : public RGWRestOIDCProvider {
   const char* name() const override { return "list_oidc_providers"; }
   RGWOpType get_type() override { return RGW_OP_LIST_OIDC_PROVIDERS; }
 };
+
+class RGWAddClientIdToOIDCProvider : public RGWRestOIDCProvider {
+  std::string url;
+  std::string client_id;
+public:
+  RGWAddClientIdToOIDCProvider();
+
+  int init_processing(optional_yield y);
+  void execute(optional_yield y) override;
+  const char* name() const override { return "add_client_id_to_oidc_provider"; }
+  RGWOpType get_type() override { return RGW_OP_ADD_CLIENTID_TO_OIDC_PROVIDER; }
+};

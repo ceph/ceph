@@ -143,6 +143,7 @@ enum {
   iamDeleteOIDCProvider,
   iamGetOIDCProvider,
   iamListOIDCProviders,
+  iamAddClientIdToOIDCProvider,
   iamTagRole,
   iamListRoleTags,
   iamUntagRole,
