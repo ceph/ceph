@@ -30,7 +30,7 @@ from io import StringIO
 from threading import Thread, Event
 from urllib.request import urlopen, Request
 from pathlib import Path
-from cephadmlib.node_proxy.server import NodeProxy
+from cephadmlib.node_proxy.main import NodeProxy
 
 from cephadmlib.constants import (
     # default images
