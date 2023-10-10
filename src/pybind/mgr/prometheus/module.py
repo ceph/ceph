@@ -1652,7 +1652,7 @@ class Module(MgrModule, OrchestratorClientMixin):
         """
         Get the perf counters for all daemons
         """
-        for daemon, counters in self.get_all_perf_counters().items():
+        for daemon, counters in self.get_unlabeled_perf_counters().items():
             for path, counter_info in counters.items():
                 # Skip histograms, they are represented by long running avgs
                 stattype = self._stattype_to_str(counter_info['type'])

@@ -79,4 +79,4 @@ class PerfCounters(RESTController):
     @EndpointDoc("Display Perf Counters",
                  responses={200: PERF_SCHEMA})
     def list(self):
-        return mgr.get_all_perf_counters()
+        return mgr.get_unlabeled_perf_counters()

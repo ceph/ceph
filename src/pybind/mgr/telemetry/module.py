@@ -794,7 +794,7 @@ class Module(MgrModule):
         return crashlist
 
     def gather_perf_counters(self, mode: str = 'separated') -> Dict[str, dict]:
-        # Extract perf counter data with get_all_perf_counters(), a method
+        # Extract perf counter data with get_unlabeled_perf_counters(), a method
         # from mgr/mgr_module.py. This method returns a nested dictionary that
         # looks a lot like perf schema, except with some additional fields.
         #
@@ -810,7 +810,7 @@ class Module(MgrModule):
         #           "value": 88814109
         #       },
         #   },
-        all_perf_counters = self.get_all_perf_counters()
+        perf_counters = self.get_unlabeled_perf_counters()
 
         # Initialize 'result' dict
         result: Dict[str, dict] = defaultdict(lambda: defaultdict(
@@ -819,7 +819,7 @@ class Module(MgrModule):
         # 'separated' mode
         anonymized_daemon_dict = {}
 
-        for daemon, all_perf_counters_by_daemon in all_perf_counters.items():
+        for daemon, perf_counters_by_daemon in perf_counters.items():
             daemon_type = daemon[0:3] # i.e. 'mds', 'osd', 'rgw'
 
             if mode == 'separated':
@@ -836,7 +836,7 @@ class Module(MgrModule):
                 else:
                     result[daemon_type]['num_combined_daemons'] += 1
 
-            for collection in all_perf_counters_by_daemon:
+            for collection in perf_counters_by_daemon:
                 # Split the collection to avoid redundancy in final report; i.e.:
                 #   bluestore.kv_flush_lat, bluestore.kv_final_lat -->
                 #   bluestore: kv_flush_lat, kv_final_lat
@@ -856,12 +856,12 @@ class Module(MgrModule):
                 if mode == 'separated':
                     # Add value to result
                     result[daemon][col_0][col_1]['value'] = \
-                            all_perf_counters_by_daemon[collection]['value']
+                            perf_counters_by_daemon[collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in all_perf_counters_by_daemon[collection]:
+                    if 'count' in perf_counters_by_daemon[collection]:
                         result[daemon][col_0][col_1]['count'] = \
-                                all_perf_counters_by_daemon[collection]['count']
+                                perf_counters_by_daemon[collection]['count']
                 elif mode == 'aggregated':
                     # Not every rgw daemon has the same schema. Specifically, each rgw daemon
                     # has a uniquely-named collection that starts off identically (i.e.
@@ -875,14 +875,14 @@ class Module(MgrModule):
                     # the files are of type 'pair' (real-integer-pair, integer-integer pair).
                     # In those cases, the value is a dictionary, and not a number.
                     #   i.e. throttle-msgr_dispatch_throttler-hbserver["wait"]
-                    if isinstance(all_perf_counters_by_daemon[collection]['value'], numbers.Number):
+                    if isinstance(perf_counters_by_daemon[collection]['value'], numbers.Number):
                         result[daemon_type][col_0][col_1]['value'] += \
-                                all_perf_counters_by_daemon[collection]['value']
+                                perf_counters_by_daemon[collection]['value']
 
                     # Check that 'count' exists, as not all counters have a count field.
-                    if 'count' in all_perf_counters_by_daemon[collection]:
+                    if 'count' in perf_counters_by_daemon[collection]:
                         result[daemon_type][col_0][col_1]['count'] += \
-                                all_perf_counters_by_daemon[collection]['count']
+                                perf_counters_by_daemon[collection]['count']
                 else:
                     self.log.error('Incorrect mode specified in gather_perf_counters: {}'.format(mode))
                     return {}
