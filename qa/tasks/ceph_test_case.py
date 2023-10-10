@@ -76,8 +76,8 @@ class RunCephCmd:
 
         proc_stderr = proc.stderr.getvalue().lower()
         msg = ('didn\'t find any of the expected string in stderr.\n'
-               f'expected string: {exp_errmsgs}\n'
-               f'received error message: {proc_stderr}\n'
+               f'expected string -\n{exp_errmsgs}\n'
+               f'received error message -\n{proc_stderr}\n'
                'note: received error message is converted to lowercase')
         for e in exp_errmsgs:
             if e in proc_stderr:
