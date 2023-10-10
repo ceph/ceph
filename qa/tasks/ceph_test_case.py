@@ -13,7 +13,106 @@ log = logging.getLogger(__name__)
 class TestTimeoutError(RuntimeError):
     pass
 
-class CephTestCase(unittest.TestCase):
+
+class RunCephCmd:
+
+    def run_ceph_cmd(self, *args, **kwargs):
+        """
+        *args and **kwargs must contain arguments that are accepted by
+        vstart_runner.LocalRemote._do_run() or teuhology.orchestra.run.run()
+        methods.
+        """
+        if kwargs.get('args') is None and args:
+            if len(args) == 1:
+                args = args[0]
+            kwargs['args'] = args
+        return self.mon_manager.run_cluster_cmd(**kwargs)
+
+    def get_ceph_cmd_result(self, *args, **kwargs):
+        """
+        *args and **kwargs must contain arguments that are accepted by
+        vstart_runner.LocalRemote._do_run() or teuhology.orchestra.run.run()
+        methods.
+        """
+        if kwargs.get('args') is None and args:
+            if len(args) == 1:
+                args = args[0]
+            kwargs['args'] = args
+        return self.run_ceph_cmd(**kwargs).exitstatus
+
+    def get_ceph_cmd_stdout(self, *args, **kwargs):
+        """
+        *args and **kwargs must contain arguments that are accepted by
+        vstart_runner.LocalRemote._do_run() or teuhology.orchestra.run.run()
+        methods.
+        """
+        if kwargs.get('args') is None and args:
+            if len(args) == 1:
+                args = args[0]
+            kwargs['args'] = args
+        kwargs['stdout'] = kwargs.pop('stdout', StringIO())
+        return self.run_ceph_cmd(**kwargs).stdout.getvalue()
+
+    def assert_retval(self, proc_retval, exp_retval):
+        msg = (f'expected return value: {exp_retval}\n'
+               f'received return value: {proc_retval}\n')
+        assert proc_retval == exp_retval, msg
+
+    def _verify(self, proc, exp_retval=None, exp_errmsgs=None):
+        if exp_retval is None and exp_errmsgs is None:
+            raise RuntimeError('Method didn\'t get enough parameters. Pass '
+                               'return value or error message expected from '
+                               'the command/process.')
+
+        if exp_retval is not None:
+            self.assert_retval(proc.returncode, exp_retval)
+        if exp_errmsgs is None:
+            return
+
+        if isinstance(exp_errmsgs, str):
+            exp_errmsgs = (exp_errmsgs, )
+        exp_errmsgs = tuple([e.lower() for e in exp_errmsgs])
+
+        proc_stderr = proc.stderr.getvalue().lower()
+        msg = ('didn\'t find any of the expected string in stderr.\n'
+               f'expected string -\n{exp_errmsgs}\n'
+               f'received error message -\n{proc_stderr}\n'
+               'note: received error message is converted to lowercase')
+        for e in exp_errmsgs:
+            if e in proc_stderr:
+                break
+        # this else is meant for the for loop above.
+        else:
+            assert False, msg
+
+    def negtest_ceph_cmd(self, args, retval=None, errmsgs=None, **kwargs):
+        """
+        Conduct a negative test for the given Ceph command.
+
+        retval and errmsgs are parameters to confirm the cause of command
+        failure.
+
+        *args and **kwargs must contain arguments that are accepted by
+        vstart_runner.LocalRemote._do_run() or teuhology.orchestra.run.run()
+        methods.
+
+        NOTE: errmsgs is expected to be a tuple, but in case there's only one
+        error message, it can also be a string. This method will add the string
+        to a tuple internally.
+        """
+        kwargs['args'] = args
+        # execution is needed to not halt on command failure because we are
+        # conducting negative testing
+        kwargs['check_status'] = False
+        # stderr is needed to check for expected error messages.
+        kwargs['stderr'] = StringIO()
+
+        proc = self.run_ceph_cmd(**kwargs)
+        self._verify(proc, retval, errmsgs)
+        return proc
+
+
+class CephTestCase(unittest.TestCase, RunCephCmd):
     """
     For test tasks that want to define a structured set of
     tests implemented in python.  Subclass this with appropriate
