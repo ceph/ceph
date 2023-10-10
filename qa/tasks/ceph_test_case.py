@@ -104,6 +104,8 @@ class RunCephCmd:
         # execution is needed to not halt on command failure because we are
         # conducting negative testing
         kwargs['check_status'] = False
+        # log stdout since it may contain something useful when command fails
+        kwargs['stdout'] = StringIO()
         # stderr is needed to check for expected error messages.
         kwargs['stderr'] = StringIO()
 
