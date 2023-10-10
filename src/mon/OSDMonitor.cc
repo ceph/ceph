@@ -111,6 +111,8 @@ using ceph::ErasureCodeProfile;
 using ceph::Formatter;
 using ceph::JSONFormatter;
 using ceph::make_message;
+using ceph::make_timespan;
+using ceph::timespan_str;
 
 #define dout_subsys ceph_subsys_mon
 static const string OSD_PG_CREATING_PREFIX("osd_pg_creating");
