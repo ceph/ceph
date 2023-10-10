@@ -6,6 +6,7 @@
 #include <algorithm>
 #include <string>
 #include <boost/tokenizer.hpp>
+#include <boost/algorithm/string.hpp>
 
 #include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
@@ -195,6 +196,36 @@ is_err() const
 {
   return !(http_ret >= 200 && http_ret <= 399);
 }
+
+
+// produces a string that interpets flags, such as "VERSIONED &
+// ~suspended & ~versions_suspended & ~datasync_disabled &
+// ~mfa_enabled & ~obj_lock_enabled"
+//
+// the vector pairs each flag mask with its desciptione
+//
+// if include_missing is true, includes flags with zero values in the
+// interpretation as well
+std::string flag_summary(std::vector<std::pair<int,std::string>> flag_list,
+			 int64_t flags,
+			 bool include_missing)
+{
+  std::string result;
+  std::string neg_result;
+  for (const auto& f : flag_list) {
+    if (f.first & flags) {
+      result += " | " + boost::to_upper_copy<std::string>(f.second);
+    } else if (include_missing) {
+      neg_result += " & ~" + boost::to_lower_copy<std::string>(f.second);
+    }
+  }
+
+  result += neg_result;
+  result.erase(0, 3); // remove initial spaces & op
+
+  return result;
+}
+
 
 // The requestURI transferred from the frontend can be abs_path or absoluteURI
 // If it is absoluteURI, we should adjust it to abs_path for the following 
@@ -2411,6 +2442,19 @@ bool RGWBucketInfo::empty_sync_policy() const
   return sync_policy->empty();
 }
 
+std::string RGWBucketInfo::dump_flags() const {
+  return flag_summary(
+    {
+      { BUCKET_SUSPENDED, "suspended" },
+      { BUCKET_VERSIONED, "versioned" },
+      { BUCKET_VERSIONS_SUSPENDED, "versions_suspended" },
+      { BUCKET_DATASYNC_DISABLED, "datasync_disabled" },
+      { BUCKET_MFA_ENABLED, "mfa_enabled" },
+      { BUCKET_OBJ_LOCK_ENABLED, "obj_lock_enabled" },
+    },
+    flags, true);
+}
+
 struct rgw_pool;
 struct rgw_placement_rule;
 class RGWUserCaps;
@@ -2508,12 +2552,14 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("creation_time", ut, f);
   encode_json("owner", owner.to_str(), f);
   encode_json("flags", flags, f);
+  encode_json("flags_interpreted", dump_flags(), f);
   encode_json("zonegroup", zonegroup, f);
   encode_json("placement_rule", placement_rule, f);
   encode_json("has_instance_obj", has_instance_obj, f);
   encode_json("quota", quota, f);
   encode_json("num_shards", layout.current_index.layout.normal.num_shards, f);
   encode_json("bi_shard_hash_type", (uint32_t)layout.current_index.layout.normal.hash_type, f);
+  encode_json("current_index_layout_generation", get_current_index().gen, f);
   encode_json("requester_pays", requester_pays, f);
   encode_json("has_website", has_website, f);
   if (has_website) {

@@ -323,6 +323,10 @@ static inline const char* to_mime_type(const RGWFormat f)
 
 typedef void *RGWAccessHandle;
 
+std::string flag_summary(std::vector<std::pair<int,std::string>> flag_list,
+			 int64_t flags,
+			 bool include_missing = false);
+
 /* Helper class used for RGWHTTPArgs parsing */
 class NameVal
 {
@@ -956,6 +960,7 @@ struct RGWBucketInfo {
   rgw::bucket_index_layout_generation& get_current_index() {
     return layout.current_index;
   }
+  std::string dump_flags() const;
 
   RGWBucketInfo();
   ~RGWBucketInfo();
