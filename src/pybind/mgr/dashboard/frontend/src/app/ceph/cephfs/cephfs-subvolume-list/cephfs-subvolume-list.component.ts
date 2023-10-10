@@ -68,6 +68,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
   groupsSubject = new ReplaySubject<CephfsSubvolume[]>();
 
   activeGroupName: string = '';
+  displayGroupsTable: boolean = false;
 
   constructor(
     private cephfsSubVolume: CephfsSubvolumeService,
@@ -237,5 +238,13 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       ),
       shareReplay(1)
     );
+  }
+
+  displayGroups() {
+    this.displayGroupsTable = !this.displayGroupsTable;
+  }
+
+  printSelectedGroup(groupName: string) {
+    this.selectSubVolumeGroup(groupName);
   }
 }

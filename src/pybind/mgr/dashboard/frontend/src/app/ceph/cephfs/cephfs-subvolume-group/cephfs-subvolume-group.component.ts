@@ -1,4 +1,5 @@
-import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
+
+import { Component, EventEmitter, Input, OnChanges, OnInit, Output, ViewChild } from '@angular/core';
 import { Observable, ReplaySubject, of } from 'rxjs';
 import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 
@@ -44,6 +45,9 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   fsName: any;
   @Input() pools: any[];
 
+  @Output() emitSelectedGroup = new EventEmitter<string>();
+
+
   columns: CdTableColumn[];
   tableActions: CdTableAction[];
   context: CdTableFetchDataContext;
@@ -53,6 +57,8 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
 
   subvolumeGroup$: Observable<CephfsSubvolumeGroup[]>;
   subject = new ReplaySubject<CephfsSubvolumeGroup[]>();
+
+  isHiddenTableVisible = false;
 
   constructor(
     private cephfsSubvolumeGroup: CephfsSubvolumeGroupService,
@@ -147,6 +153,9 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+    if (selection.first()) {
+      this.emitSelectedGroup.emit(selection.first().name);
+    }
   }
 
   openModal(edit = false) {
@@ -174,5 +183,10 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
           call: this.cephfsSubvolumeGroup.remove(this.fsName, name)
         })
     });
+  }
+
+  onRowSelect(event: any) {
+    console.log(event);
+    this.isHiddenTableVisible = true; // Show the hidden table
   }
 }

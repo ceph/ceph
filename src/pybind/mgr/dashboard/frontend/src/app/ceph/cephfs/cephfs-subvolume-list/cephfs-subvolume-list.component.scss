@@ -1,0 +1,23 @@
+button.dropdown-toggle {
+    position: relative;
+    display: inline-block;
+    text-align: right;
+
+    &::after {
+        border: 0;
+        content: '\f054';
+        font-family: 'ForkAwesome';
+        font-size: 1rem;
+        margin-top: 2px;
+        transition: transform 0.4s ease-in-out;
+    }
+
+    &[aria-expanded='true']::after {
+        transform: rotate(180deg);
+    }
+}
+
+h3 {
+    display: inline-block;
+    text-align: left;
+}

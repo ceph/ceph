@@ -1,41 +1,13 @@
 <div class="row">
-  <div class="col-sm-1">
-    <h3 i18n>Groups</h3>
-    <ng-container *ngIf="subVolumeGroups$ | async as subVolumeGroups">
-      <ul class="nav flex-column nav-pills">
-        <li class="nav-item">
-          <a class="nav-link"
-             [class.active]="!activeGroupName"
-             (click)="selectSubVolumeGroup()">Default</a>
-        </li>
-        <li class="nav-item"
-            *ngFor="let subVolumeGroup of subVolumeGroups">
-          <a class="nav-link text-decoration-none text-break"
-             [class.active]="subVolumeGroup.name === activeGroupName"
-             (click)="selectSubVolumeGroup(subVolumeGroup.name)">{{subVolumeGroup.name}}</a>
-        </li>
-      </ul>
-    </ng-container>
-  </div>
-  <div class="col-11 vertical-line">
-    <cd-table [data]="subVolumes$ | async"
-              columnMode="flex"
-              [columns]="columns"
-              selectionType="single"
-              [hasDetails]="false"
-              (fetchData)="fetchData()"
-              (updateSelection)="updateSelection($event)">
+  <ng-container *ngIf="!displayGroupsTable; else tablesLayout">
+    <ng-template [ngTemplateOutlet]="groupsList"></ng-template>
+    <div class="col-11 vertical-line">
+      
+    <ng-template [ngTemplateOutlet]="subvolumesTable"></ng-template>
 
-      <div class="table-actions btn-toolbar">
-        <cd-table-actions [permission]="permissions.cephfs"
-                          [selection]="selection"
-                          class="btn-group"
-                          id="cephfs-subvolume-actions"
-                          [tableActions]="tableActions">
-        </cd-table-actions>
-      </div>
-    </cd-table>
-  </div>
+    </div>
+  </ng-container>
+
 </div>
 
 <ng-template #quotaUsageTpl
@@ -120,4 +92,78 @@
       </div>
     </ng-container>
   </ng-container>
+</ng-template>
+
+<ng-template #groupsHeader>
+    <div class="inl">
+      <h3 i18n>Groups</h3>
+        <button class="btn btn-block dropdown-toggle"
+                data-toggle="collapse"
+                aria-label="toggle subvolume groups"
+                [attr.aria-expanded]="displayGroupsTable"
+                (click)="displayGroups()"></button>
+    </div>
+</ng-template>
+
+<ng-template #groupsList>
+  <div class="col-sm-1">
+      <ng-template [ngTemplateOutlet]="groupsHeader"></ng-template>
+      <div class="row">
+        <div class="col-sm-1">
+          <ng-container *ngIf="subVolumeGroups$ | async as subVolumeGroups">
+            <ul class="nav flex-column nav-pills">
+              <li class="nav-item">
+                <a class="nav-link"
+                   [class.active]="!activeGroupName"
+                   (click)="selectSubVolumeGroup()">Default</a>
+              </li>
+              <li class="nav-item"
+                  *ngFor="let subVolumeGroup of subVolumeGroups">
+                <a class="nav-link text-decoration-none text-break"
+                   [class.active]="subVolumeGroup.name === activeGroupName"
+                   (click)="selectSubVolumeGroup(subVolumeGroup.name)">{{subVolumeGroup.name}}</a>
+              </li>
+            </ul>
+          </ng-container>
+        </div>
+      </div>
+    </div>
+  </ng-template>
+
+  <ng-template #tablesLayout>
+    <div class="col-sm-6">
+      <ng-template [ngTemplateOutlet]="subvolumeGroupsTable"></ng-template>
+    </div>
+    <div class="col-sm-6">
+      <ng-template [ngTemplateOutlet]="subvolumesTable"></ng-template>
+    </div>
+  </ng-template>
+
+<ng-template #subvolumeGroupsTable>
+  <ng-template [ngTemplateOutlet]="groupsHeader"></ng-template>
+  <cd-cephfs-subvolume-group [fsName]="fsName"
+                             [pools]="pools"
+                             (emitSelectedGroup)="printSelectedGroup($event)">
+</cd-cephfs-subvolume-group>
+</ng-template>
+
+<ng-template #subvolumesTable>
+  <h3>Subvolumes</h3>
+  <cd-table [data]="subVolumes$ | async"
+              columnMode="flex"
+              [columns]="columns"
+              selectionType="single"
+              [hasDetails]="false"
+              (fetchData)="fetchData()"
+              (updateSelection)="updateSelection($event)">
+
+      <div class="table-actions btn-toolbar">
+        <cd-table-actions [permission]="permissions.cephfs"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="cephfs-subvolume-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </cd-table>
 </ng-template>

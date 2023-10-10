@@ -4,29 +4,20 @@
        (navChange)="softRefresh()"
        class="nav-tabs"
        cdStatefulTab="cephfs-tabs">
+    <ng-container ngbNavItem="subvolumes">
+      <a ngbNavLink
+         i18n>Groups & Subvolumes</a>
+      <ng-template ngbNavContent>
+        <cd-cephfs-subvolume-list [fsName]="selection.mdsmap.fs_name"
+                                  [pools]="details.pools"></cd-cephfs-subvolume-list>
+      </ng-template>
+    </ng-container>
     <ng-container ngbNavItem="details">
       <a ngbNavLink
          i18n>Details</a>
       <ng-template ngbNavContent>
         <cd-cephfs-detail [data]="details">
         </cd-cephfs-detail>
-      </ng-template>
-    </ng-container>
-    <ng-container ngbNavItem="subvolumes">
-      <a ngbNavLink
-         i18n>Subvolumes</a>
-      <ng-template ngbNavContent>
-        <cd-cephfs-subvolume-list [fsName]="selection.mdsmap.fs_name"
-                                  [pools]="details.pools"></cd-cephfs-subvolume-list>
-      </ng-template>
-    </ng-container>
-    <ng-container ngbNavItem="subvolume-groups">
-      <a ngbNavLink
-         i18n>Subvolume groups</a>
-      <ng-template ngbNavContent>
-        <cd-cephfs-subvolume-group [fsName]="selection.mdsmap.fs_name"
-                                   [pools]="details.pools">
-        </cd-cephfs-subvolume-group>
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="clients">
