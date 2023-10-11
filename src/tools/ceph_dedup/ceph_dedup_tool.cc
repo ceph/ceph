@@ -521,14 +521,10 @@ int estimate_dedup_ratio(const po::variables_map &opts)
 {
   Rados rados;
   IoCtx io_ctx;
-  std::string chunk_algo = "fastcdc";
-  string fp_algo = "sha1";
   string pool_name;
   uint64_t chunk_size = 8192;
   uint64_t min_chunk_size = 8192;
   uint64_t max_chunk_size = 4*1024*1024;
-  unsigned max_thread = get_opts_max_thread(opts, g_ceph_context);
-  uint32_t report_period = get_opts_report_period(opts, g_ceph_context);
   uint64_t max_read_size = default_op_size;
   uint64_t max_seconds = 0;
   int ret;
@@ -539,24 +535,13 @@ int estimate_dedup_ratio(const po::variables_map &opts)
   librados::pool_stat_t s; 
   list<string> pool_names;
   map<string, librados::pool_stat_t> stats;
+  struct ceph_dedup_options d_opts;
 
   pool_name = get_opts_pool_name(opts);
-  if (opts.count("chunk-algorithm")) {
-    chunk_algo = opts["chunk-algorithm"].as<string>();
-    if (!CDC::create(chunk_algo, 12)) {
-      cerr << "unrecognized chunk-algorithm " << chunk_algo << std::endl;
-      exit(1);
-    }
-  } else {
-    cerr << "must specify chunk-algorithm" << std::endl;
-    exit(1);
-  }
-  fp_algo = get_opts_fp_algo(opts, g_ceph_context);
-  if (opts.count("chunk-size")) {
-    chunk_size = opts["chunk-size"].as<int>();
-  } else {
-    cout << "8192 is set as chunk size by default" << std::endl;
-  }
+  d_opts.load_dedup_conf_by_default(g_ceph_context);
+  d_opts.load_dedup_conf_from_argument(opts);
+
+  chunk_size = d_opts.get_chunk_size();
   if (opts.count("min-chunk-size")) {
     chunk_size = opts["min-chunk-size"].as<int>();
   } else {
@@ -608,13 +593,14 @@ int estimate_dedup_ratio(const po::variables_map &opts)
   // set up chunkers
   if (chunk_size) {
     dedup_estimates.emplace(std::piecewise_construct,
-			    std::forward_as_tuple(chunk_size),
-			    std::forward_as_tuple(chunk_algo, cbits(chunk_size)-1));
+			    std::forward_as_tuple(d_opts.get_chunk_size()),
+			    std::forward_as_tuple(d_opts.get_chunk_algo(),
+			    cbits(d_opts.get_chunk_size())-1));
   } else {
     for (size_t cs = min_chunk_size; cs <= max_chunk_size; cs *= 2) {
       dedup_estimates.emplace(std::piecewise_construct,
 			      std::forward_as_tuple(cs),
-			      std::forward_as_tuple(chunk_algo, cbits(cs)-1));
+			      std::forward_as_tuple(d_opts.get_chunk_algo(), cbits(cs)-1));
     }
   }
 
@@ -635,11 +621,12 @@ int estimate_dedup_ratio(const po::variables_map &opts)
   }
   s = stats[pool_name];
 
-  for (unsigned i = 0; i < max_thread; i++) {
+  for (int i = 0; i < d_opts.get_max_thread(); i++) {
     std::unique_ptr<CrawlerThread> ptr (
-      new EstimateDedupRatio(io_ctx, i, max_thread, begin, end,
-			     chunk_algo, fp_algo, chunk_size,
-			     report_period, s.num_objects, max_read_size,
+      new EstimateDedupRatio(io_ctx, i, d_opts.get_max_thread(), begin, end,
+			     d_opts.get_chunk_algo(), d_opts.get_fp_algo(),
+			     d_opts.get_chunk_size(), d_opts.get_report_period(),
+			     s.num_objects, max_read_size,
 			     max_seconds));
     ptr->create("estimate_thread");
     ptr->set_debug(debug);
@@ -651,7 +638,7 @@ int estimate_dedup_ratio(const po::variables_map &opts)
     p->join();
   }
 
-  print_dedup_estimate(cout, chunk_algo);
+  print_dedup_estimate(cout, d_opts.get_chunk_algo());
 
  out:
   return (ret < 0) ? 1 : 0;
@@ -682,19 +669,19 @@ int chunk_scrub_common(const po::variables_map &opts)
   Rados rados;
   IoCtx io_ctx, chunk_io_ctx;
   std::string object_name, target_object_name;
-  string chunk_pool_name, op_name;
+  string op_name;
   int ret;
-  unsigned max_thread = get_opts_max_thread(opts, g_ceph_context);
   std::map<std::string, std::string>::const_iterator i;
-  uint32_t report_period = get_opts_report_period(opts, g_ceph_context);
   ObjectCursor begin;
   ObjectCursor end;
   librados::pool_stat_t s; 
   list<string> pool_names;
   map<string, librados::pool_stat_t> stats;
+  struct ceph_dedup_options d_opts;
 
+  d_opts.load_dedup_conf_by_default(g_ceph_context);
+  d_opts.load_dedup_conf_from_argument(opts);
   op_name = get_opts_op_name(opts);
-  chunk_pool_name = get_opts_chunk_pool(opts);
   boost::optional<pg_t> pgid(opts.count("pgid"), pg_t());
 
   ret = rados.init_with_context(g_ceph_context);
@@ -708,10 +695,10 @@ int chunk_scrub_common(const po::variables_map &opts)
      ret = -1;
      goto out;
   }
-  ret = rados.ioctx_create(chunk_pool_name.c_str(), chunk_io_ctx);
+  ret = rados.ioctx_create(d_opts.get_chunk_pool_name().c_str(), chunk_io_ctx);
   if (ret < 0) {
     cerr << "error opening pool "
-	 << chunk_pool_name << ": "
+	 << d_opts.get_chunk_pool_name() << ": "
 	 << cpp_strerror(ret) << std::endl;
     goto out;
   }
@@ -840,24 +827,24 @@ int chunk_scrub_common(const po::variables_map &opts)
   glock.lock();
   begin = chunk_io_ctx.object_list_begin();
   end = chunk_io_ctx.object_list_end();
-  pool_names.push_back(chunk_pool_name);
+  pool_names.push_back(d_opts.get_chunk_pool_name());
   ret = rados.get_pool_stats(pool_names, stats);
   if (ret < 0) {
     cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
     glock.unlock();
     return ret;
   }
-  if (stats.find(chunk_pool_name) == stats.end()) {
-    cerr << "stats can not find pool name: " << chunk_pool_name << std::endl;
+  if (stats.find(d_opts.get_chunk_pool_name()) == stats.end()) {
+    cerr << "stats can not find pool name: " << d_opts.get_chunk_pool_name() << std::endl;
     glock.unlock();
     return ret;
   }
-  s = stats[chunk_pool_name];
+  s = stats[d_opts.get_chunk_pool_name()];
 
-  for (unsigned i = 0; i < max_thread; i++) {
+  for (int i = 0; i < d_opts.get_max_thread(); i++) {
     std::unique_ptr<CrawlerThread> ptr (
-      new ChunkScrub(io_ctx, i, max_thread, begin, end, chunk_io_ctx,
-		     report_period, s.num_objects));
+      new ChunkScrub(io_ctx, i, d_opts.get_max_thread(), begin, end, chunk_io_ctx,
+		     d_opts.get_report_period(), s.num_objects));
     ptr->create("estimate_thread");
     estimate_threads.push_back(std::move(ptr));
   }
@@ -879,15 +866,18 @@ int make_dedup_object(const po::variables_map &opts)
 {
   Rados rados;
   IoCtx io_ctx, chunk_io_ctx;
-  std::string object_name, chunk_pool_name, op_name, pool_name, fp_algo;
+  std::string object_name, op_name, pool_name, fp_algo;
   int ret;
   std::map<std::string, std::string>::const_iterator i;
+  struct ceph_dedup_options d_opts;
 
   op_name = get_opts_op_name(opts);
   pool_name = get_opts_pool_name(opts);
   object_name = get_opts_object_name(opts);
-  chunk_pool_name = get_opts_chunk_pool(opts);
   boost::optional<pg_t> pgid(opts.count("pgid"), pg_t());
+
+  d_opts.load_dedup_conf_by_default(g_ceph_context);
+  d_opts.load_dedup_conf_from_argument(opts);
 
   ret = rados.init_with_context(g_ceph_context);
   if (ret < 0) {
@@ -903,18 +893,17 @@ int make_dedup_object(const po::variables_map &opts)
   ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
   if (ret < 0) {
     cerr << "error opening pool "
-	 << chunk_pool_name << ": "
+	 << d_opts.get_chunk_pool_name() << ": "
 	 << cpp_strerror(ret) << std::endl;
     goto out;
   }
-  ret = rados.ioctx_create(chunk_pool_name.c_str(), chunk_io_ctx);
+  ret = rados.ioctx_create(d_opts.get_chunk_pool_name().c_str(), chunk_io_ctx);
   if (ret < 0) {
     cerr << "error opening pool "
-	 << chunk_pool_name << ": "
+	 << d_opts.get_chunk_pool_name() << ": "
 	 << cpp_strerror(ret) << std::endl;
     goto out;
   }
-  fp_algo = get_opts_fp_algo(opts, g_ceph_context);
 
   if (op_name == "chunk-dedup") {
     uint64_t offset, length;
@@ -938,7 +927,7 @@ int make_dedup_object(const po::variables_map &opts)
       cerr << " reading object in base pool fails : " << cpp_strerror(ret) << std::endl;
       goto out;
     }
-    chunk_object = [&fp_algo, &bl]() -> string {
+    chunk_object = [fp_algo=d_opts.get_fp_algo(), &bl]() -> string {
       if (fp_algo == "sha1") {
         return ceph::crypto::digest<ceph::crypto::SHA1>(bl).to_str();
       } else if (fp_algo == "sha256") {
@@ -965,42 +954,35 @@ int make_dedup_object(const po::variables_map &opts)
       goto out;
     }
   } else if (op_name == "object-dedup") {
-    unsigned chunk_size = 0;
     bool snap = false;
-    if (opts.count("dedup-cdc-chunk-size")) {
-      chunk_size = opts["dedup-cdc-chunk-size"].as<unsigned int>();
-    } else {
-      cerr << "must specify --dedup-cdc-chunk-size" << std::endl;
-      exit(1);
-    }
     if (opts.count("snap")) {
       snap = true;
     }
 
     bufferlist inbl;
     ret = rados.mon_command(
-	make_pool_str(pool_name, "fingerprint_algorithm", fp_algo),
+	make_pool_str(pool_name, "fingerprint_algorithm", d_opts.get_fp_algo()),
 	inbl, NULL, NULL);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
       return ret;
     }
     ret = rados.mon_command(
-	make_pool_str(pool_name, "dedup_tier", chunk_pool_name),
+	make_pool_str(pool_name, "dedup_tier", d_opts.get_chunk_pool_name()),
 	inbl, NULL, NULL);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
       return ret;
     }
     ret = rados.mon_command(
-	make_pool_str(pool_name, "dedup_chunk_algorithm", "fastcdc"),
+	make_pool_str(pool_name, "dedup_chunk_algorithm", d_opts.get_chunk_algo()),
 	inbl, NULL, NULL);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
       return ret;
     }
     ret = rados.mon_command(
-	make_pool_str(pool_name, "dedup_cdc_chunk_size", chunk_size),
+	make_pool_str(pool_name, "dedup_cdc_chunk_size", d_opts.get_chunk_size()),
 	inbl, NULL, NULL);
     if (ret < 0) {
       cerr << " operate fail : " << cpp_strerror(ret) << std::endl;

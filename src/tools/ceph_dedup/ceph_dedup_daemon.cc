@@ -254,16 +254,12 @@ public:
     IoCtx &chunk_io_ctx,
     ObjectCursor begin,
     ObjectCursor end,
-    size_t chunk_size,
-    std::string &fp_algo,
-    std::string &chunk_algo,
     SampleDedupGlobal &sample_dedup_global,
-    bool snap) :
+    bool snap, 
+    ceph_dedup_options &d_opts) :
     chunk_io_ctx(chunk_io_ctx),
-    chunk_size(chunk_size),
-    fp_type(pg_pool_t::get_fingerprint_from_str(fp_algo)),
-    chunk_algo(chunk_algo),
     sample_dedup_global(sample_dedup_global),
+    d_opts(d_opts),
     begin(begin),
     end(end),
     snap(snap) {
@@ -323,10 +319,8 @@ private:
   size_t total_object_size = 0;
 
   std::set<std::pair<std::string, snap_t>> oid_for_evict;
-  const size_t chunk_size = 0;
-  pg_pool_t::fingerprint_t fp_type = pg_pool_t::TYPE_FINGERPRINT_NONE;
-  std::string chunk_algo;
   SampleDedupGlobal &sample_dedup_global;
+  struct ceph_dedup_options &d_opts;
   ObjectCursor begin;
   ObjectCursor end;
   bool snap;
@@ -522,7 +516,8 @@ std::vector<std::tuple<bufferlist, pair<uint64_t, uint64_t>>> SampleDedupWorkerT
 {
   std::vector<std::tuple<bufferlist, pair<uint64_t, uint64_t>>> ret;
 
-  unique_ptr<CDC> cdc = CDC::create(chunk_algo, cbits(chunk_size) - 1);
+  unique_ptr<CDC> cdc = CDC::create(d_opts.get_chunk_algo(),
+    cbits(d_opts.get_chunk_size()) - 1);
   vector<pair<uint64_t, uint64_t>> chunks;
   cdc->calc_chunks(data, &chunks);
   for (auto &p : chunks) {
@@ -538,7 +533,7 @@ std::string SampleDedupWorkerThread::generate_fingerprint(bufferlist chunk_data)
 {
   string ret;
 
-  switch (fp_type) {
+  switch (pg_pool_t::get_fingerprint_from_str(d_opts.get_fp_algo())) {
     case pg_pool_t::TYPE_FINGERPRINT_SHA1:
       ret = crypto::digest<crypto::SHA1>(chunk_data).to_str();
       break;
@@ -590,36 +585,9 @@ int SampleDedupWorkerThread::do_chunk_dedup(chunk_t &chunk, snap_t snap)
 int make_crawling_daemon(const po::variables_map &opts)
 {
   CephContext* _cct = g_ceph_context;
-  string base_pool_name = get_opts_pool_name(opts);
-  string chunk_pool_name = get_opts_chunk_pool(opts);
-  unsigned max_thread = get_opts_max_thread(opts, _cct);
-  uint32_t report_period = get_opts_report_period(opts, _cct);
+  struct ceph_dedup_options d_opts;
 
-  int sampling_ratio = 0;
-  if (opts.count("sampling-ratio")) {
-    sampling_ratio = opts["sampling-ratio"].as<int>();
-  } else {
-    sampling_ratio = _cct->_conf.get_val<int64_t>("sampling_ratio");
-  }
-  size_t chunk_size = 8192;
-  if (opts.count("chunk-size")) {
-    chunk_size = opts["chunk-size"].as<int>();
-  } else {
-    chunk_size = _cct->_conf.get_val<int64_t>("chunk_size");
-  }
-  bool snap = true;
-  if (opts.count("no-snap")) {
-    snap = false;
-  }
-
-  int chunk_dedup_threshold = 0;
-  if (opts.count("chunk-dedup-threshold")) {
-    chunk_dedup_threshold = opts["chunk-dedup-threshold"].as<int>();
-  } else {
-    chunk_dedup_threshold = _cct->_conf.get_val<int64_t>("chunk_dedup_threshold");
-  }
-
-  std::string chunk_algo = get_opts_chunk_algo(opts, _cct);
+  d_opts.set_conf(POOL, get_opts_pool_name(opts));
 
   Rados rados;
   int ret = rados.init_with_context(g_ceph_context);
@@ -632,93 +600,83 @@ int make_crawling_daemon(const po::variables_map &opts)
     cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
     return -EINVAL;
   }
-  int wakeup_period = 5;
-  if (opts.count("wakeup-period")) {
-    wakeup_period = opts["wakeup-period"].as<int>();
-  } else {
-    wakeup_period= _cct->_conf.get_val<uint64_t>("wakeup_period");
-  }
-
-  size_t fp_threshold;
-  if (opts.count("fpstore-threshold")) {
-    fp_threshold = opts["fpstore-threshold"].as<size_t>();
-  } else {
-    fp_threshold = _cct->_conf.get_val<uint64_t>("fpstore_threshold");
-  }
-
-  std::string fp_algo = get_opts_fp_algo(opts, _cct);
 
   list<string> pool_names;
   IoCtx io_ctx, chunk_io_ctx;
-  pool_names.push_back(base_pool_name);
-  ret = rados.ioctx_create(base_pool_name.c_str(), io_ctx);
+  pool_names.push_back(d_opts.get_base_pool_name());
+  ret = rados.ioctx_create(d_opts.get_base_pool_name().c_str(), io_ctx);
   if (ret < 0) {
     cerr << "error opening base pool "
-      << base_pool_name << ": "
+      << d_opts.get_base_pool_name() << ": "
       << cpp_strerror(ret) << std::endl;
     return -EINVAL;
   }
 
-  ret = rados.ioctx_create(chunk_pool_name.c_str(), chunk_io_ctx);
+  bool config_done = d_opts.load_dedup_conf_from_pool(io_ctx);
+  
+  if (!config_done) {
+    d_opts.load_dedup_conf_by_default(_cct);
+    d_opts.store_dedup_conf(io_ctx);
+  }
+  d_opts.load_dedup_conf_from_argument(opts);
+
+  bool snap = true;
+  if (opts.count("no-snap")) {
+    snap = false;
+  }
+
+  ret = rados.ioctx_create(d_opts.get_chunk_pool_name().c_str(), chunk_io_ctx);
   if (ret < 0) {
     cerr << "error opening chunk pool "
-      << chunk_pool_name << ": "
+      << d_opts.get_chunk_pool_name() << ": "
       << cpp_strerror(ret) << std::endl;
     return -EINVAL;
   }
+
   bufferlist inbl;
   ret = rados.mon_command(
-      make_pool_str(base_pool_name, "fingerprint_algorithm", fp_algo),
+      make_pool_str(d_opts.get_base_pool_name(), "fingerprint_algorithm", d_opts.get_fp_algo()),
       inbl, NULL, NULL);
   if (ret < 0) {
     cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
     return ret;
   }
   ret = rados.mon_command(
-      make_pool_str(base_pool_name, "dedup_chunk_algorithm", "fastcdc"),
+      make_pool_str(d_opts.get_base_pool_name(), "dedup_chunk_algorithm", d_opts.get_chunk_algo()),
       inbl, NULL, NULL);
   if (ret < 0) {
     cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
     return ret;
   }
   ret = rados.mon_command(
-      make_pool_str(base_pool_name, "dedup_cdc_chunk_size", chunk_size),
+      make_pool_str(d_opts.get_base_pool_name(), "dedup_cdc_chunk_size", d_opts.get_chunk_size()),
       inbl, NULL, NULL);
   if (ret < 0) {
     cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
     return ret;
   }
   ret = rados.mon_command(
-      make_pool_str(base_pool_name, "dedup_tier", chunk_pool_name),
+      make_pool_str(d_opts.get_base_pool_name(), "dedup_tier", d_opts.get_chunk_pool_name()),
       inbl, NULL, NULL);
   if (ret < 0) {
     cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
     return ret;
   }
 
-  cout << "SampleRatio : " << sampling_ratio << std::endl
-    << "Chunk Dedup Threshold : " << chunk_dedup_threshold << std::endl
-    << "Chunk Size : " << chunk_size << std::endl
-    << "Max Thread : " << max_thread << std::endl
-    << "Sample Ratio : " << sampling_ratio << " % " << std::endl
-    << "Base Pool : " << base_pool_name << std::endl
-    << "Chunk Pool : " << chunk_pool_name << std::endl
-    << "Chunk Algorithm : " << chunk_algo << std::endl
-    << "Fingerprint Algorithm : " << fp_algo << std::endl
-    << "Wakeup Period : " << wakeup_period<< std::endl
-    << std::endl;
+  cout << d_opts << std::endl;
 
   while (!all_stop) {
     ObjectCursor begin = io_ctx.object_list_begin();
     ObjectCursor end = io_ctx.object_list_end();
 
     SampleDedupWorkerThread::SampleDedupGlobal sample_dedup_global(
-      chunk_dedup_threshold, sampling_ratio, report_period, fp_threshold);
+      d_opts.get_chunk_dedup_threshold(), d_opts.get_sampling_ratio(),
+      d_opts.get_report_period(), d_opts.get_fp_threshold());
     size_t total_size = 0;
     size_t total_duplicate_size = 0;
     {
       lock_guard lock(glock);
-      for (unsigned i = 0; i < max_thread; i++) {
+      for (int i = 0; i < d_opts.get_max_thread(); i++) {
 	cout << " add thread.. " << std::endl;
 	ObjectCursor shard_start;
 	ObjectCursor shard_end;
@@ -726,7 +684,7 @@ int make_crawling_daemon(const po::variables_map &opts)
 	  begin,
 	  end,
 	  i,
-	  max_thread,
+	  d_opts.get_max_thread(),
 	  &shard_start,
 	  &shard_end);
 
@@ -735,11 +693,9 @@ int make_crawling_daemon(const po::variables_map &opts)
 	  chunk_io_ctx,
 	  shard_start,
 	  shard_end,
-	  chunk_size,
-	  fp_algo,
-	  chunk_algo,
 	  sample_dedup_global,
-	  snap);
+	  snap,
+	  d_opts);
 	threads.back().create("sample_dedup");
       }
     }
@@ -759,7 +715,7 @@ int make_crawling_daemon(const po::variables_map &opts)
       lock_guard lock(glock);
       threads.clear();
     }
-    sleep(wakeup_period);
+    sleep(d_opts.get_wakeup_period());
 
     map<string, librados::pool_stat_t> stats;
     ret = rados.get_pool_stats(pool_names, stats);
@@ -767,8 +723,8 @@ int make_crawling_daemon(const po::variables_map &opts)
       cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
       return -EINVAL;
     }
-    if (stats.find(base_pool_name) == stats.end()) {
-      cerr << "stats can not find pool name: " << base_pool_name << std::endl;
+    if (stats.find(d_opts.get_base_pool_name()) == stats.end()) {
+      cerr << "stats can not find pool name: " << d_opts.get_base_pool_name() << std::endl;
       return -EINVAL;
     }
   }
