@@ -45,7 +45,7 @@ Example::
   POST "<hostname>?Action=Action=CreateOpenIDConnectProvider
     &ThumbprintList.list.1=F7D7B3515DD0D319DD219A43A9EA727AD6065287
     &ClientIDList.list.1=app-profile-jsp
-    &Url=http://localhost:8080/auth/realms/quickstart
+    &Url=http://localhost:8080/auth/realms/quickstart"
 
 
 DeleteOpenIDConnectProvider
@@ -63,7 +63,7 @@ Request Parameters
 
 Example::
   POST "<hostname>?Action=Action=DeleteOpenIDConnectProvider
-    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
+    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart"
 
 
 GetOpenIDConnectProvider
@@ -81,7 +81,7 @@ Request Parameters
 
 Example::
   POST "<hostname>?Action=Action=GetOpenIDConnectProvider
-    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
+    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart"
 
 ListOpenIDConnectProviders
 --------------------------
@@ -95,3 +95,26 @@ None
 
 Example::
   POST "<hostname>?Action=Action=ListOpenIDConnectProviders
+
+AddClientIDToOpenIDConnectProvider
+----------------------------------
+
+Add a client id to the list of existing client ids registered while creating an OpenIDConnectProvider.
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``OpenIDConnectProviderArn``
+
+:Description: ARN of the IDP which is returned by the Create API.
+:Type: String
+
+``ClientID``
+
+:Description: Client Id to add to the existing OpenIDConnectProvider.
+:Type: String
+
+Example::
+  POST "<hostname>?Action=Action=AddClientIDToOpenIDConnectProvider
+    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
+    &ClientID=app-jee-jsp"
