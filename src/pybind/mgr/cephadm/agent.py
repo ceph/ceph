@@ -177,8 +177,9 @@ class NodeProxy:
         }
 
         for component in data['data'].keys():
+            self.mgr.remove_health_warning(mapping[component])
             nok_members = self.get_nok_members(component,
-                                                data['data'])
+                                               data['data'])
 
             if nok_members:
                 count = len(nok_members)
