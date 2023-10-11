@@ -27,6 +27,7 @@
 #include "crimson/osd/backfill_state.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
 #include "crimson/osd/ops_executer.h"
+#include "crimson/osd/ordering.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/logmissing_request.h"
 #include "crimson/osd/osd_operations/logmissing_request_reply.h"
@@ -75,6 +76,8 @@ class PG : public boost::intrusive_ref_counter<
 
   ClientRequest::PGPipeline request_pg_pipeline;
   PGPeeringPipeline peering_request_pg_pipeline;
+
+  crosscore_ordering_t  send_crosscore;
 
   ClientRequest::Orderer client_request_orderer;
 
@@ -540,6 +543,9 @@ public:
     ceph_tid_t rep_tid,
     eversion_t &version);
 
+  crosscore_ordering_t* get_crosscore() {
+    return &send_crosscore;
+  }
 private:
 
   struct SnapTrimMutex {

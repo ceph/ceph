@@ -54,7 +54,9 @@ public:
 
   virtual bool is_connected() const = 0;
 
-  virtual seastar::future<> send(MessageFRef) = 0;
+  virtual seastar::future<> send(MessageFRef,
+	std::optional<crosscore_ordering_t::seq_t> cc_seq = std::nullopt,
+	std::optional<crosscore_ordering_t*> send_crosscore =  std::nullopt) = 0;
 
   virtual seastar::future<> send_keepalive() = 0;
 
@@ -103,7 +105,9 @@ class SocketConnection : public Connection {
 
   bool is_connected() const override;
 
-  seastar::future<> send(MessageURef msg) override;
+  seastar::future<> send(MessageURef msg,
+	  std::optional<crosscore_ordering_t::seq_t> cc_seq = std::nullopt,
+	  std::optional<crosscore_ordering_t*> send_crosscore = std::nullopt) override;
 
   seastar::future<> send_keepalive() override;
 

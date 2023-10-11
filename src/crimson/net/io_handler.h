@@ -173,7 +173,9 @@ public:
     return protocol_is_connected;
   }
 
-  seastar::future<> send(MessageFRef msg) final;
+  seastar::future<> send(MessageFRef msg,
+	std::optional<crosscore_ordering_t::seq_t> cc_seq = std::nullopt,
+	std::optional<crosscore_ordering_t*> send_crosscore = std::nullopt) final;
 
   seastar::future<> send_keepalive() final;
 
@@ -440,9 +442,13 @@ public:
 
   void assign_frame_assembler(FrameAssemblerV2Ref);
 
-  seastar::future<> send_redirected(MessageFRef msg);
+  seastar::future<> send_redirected(MessageFRef msg,
+	std::optional<crosscore_ordering_t::seq_t> cc_seq = std::nullopt,
+	std::optional<crosscore_ordering_t*> send_crosscore = std::nullopt);
 
-  seastar::future<> do_send(MessageFRef msg);
+  seastar::future<> do_send(MessageFRef msg,
+	std::optional<crosscore_ordering_t::seq_t> cc_seq = std::nullopt,
+	std::optional<crosscore_ordering_t*> send_crosscore = std::nullopt);
 
   seastar::future<> send_keepalive_redirected();
 

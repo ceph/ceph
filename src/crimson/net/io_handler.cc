@@ -160,39 +160,55 @@ IOHandler::sweep_out_pending_msgs_to_sent(
 #endif
 }
 
-seastar::future<> IOHandler::send(MessageFRef msg)
+seastar::future<> IOHandler::send(MessageFRef msg,
+	       std::optional<crosscore_ordering_t::seq_t> cc_seq,
+	       std::optional<crosscore_ordering_t*> send_crosscore)
 {
   // sid may be changed on-the-fly during the submission
   if (seastar::this_shard_id() == get_shard_id()) {
-    return do_send(std::move(msg));
+    return do_send(std::move(msg), cc_seq, send_crosscore);
   } else {
     logger().trace("{} send() is directed to {} -- {}",
                    conn, get_shard_id(), *msg);
     return seastar::smp::submit_to(
-        get_shard_id(), [this, msg=std::move(msg)]() mutable {
-      return send_redirected(std::move(msg));
+        get_shard_id(), [this, msg=std::move(msg), cc_seq, send_crosscore]() mutable {
+      return send_redirected(std::move(msg), cc_seq, send_crosscore);
     });
   }
 }
 
-seastar::future<> IOHandler::send_redirected(MessageFRef msg)
+seastar::future<> IOHandler::send_redirected(MessageFRef msg,
+	       std::optional<crosscore_ordering_t::seq_t> cc_seq,
+	       std::optional<crosscore_ordering_t*> send_crosscore)
 {
   // sid may be changed on-the-fly during the submission
   if (seastar::this_shard_id() == get_shard_id()) {
-    return do_send(std::move(msg));
+    return do_send(std::move(msg), cc_seq, send_crosscore);
   } else {
     logger().debug("{} send() is redirected to {} -- {}",
                    conn, get_shard_id(), *msg);
     return seastar::smp::submit_to(
-        get_shard_id(), [this, msg=std::move(msg)]() mutable {
-      return send_redirected(std::move(msg));
+        get_shard_id(), [this, msg=std::move(msg), cc_seq, send_crosscore]() mutable {
+      return send_redirected(std::move(msg), cc_seq, send_crosscore);
     });
   }
 }
 
-seastar::future<> IOHandler::do_send(MessageFRef msg)
+seastar::future<> IOHandler::do_send(MessageFRef msg,
+	       std::optional<crosscore_ordering_t::seq_t> cc_seq,
+	       std::optional<crosscore_ordering_t*> send_crosscore)
 {
   assert(seastar::this_shard_id() == get_shard_id());
+  if(cc_seq.has_value() && send_crosscore.has_value()) {
+    if (!(*send_crosscore)->proceed_or_wait(cc_seq.value())) {
+      logger().debug("{} got {} do_send(), wait at {}",
+                     conn, cc_seq.value(), (*send_crosscore)->get_in_seq());
+      return (*send_crosscore)->wait(cc_seq.value()
+      ).then([this, cc_seq, msg = std::move(msg), send_crosscore]() mutable {
+        return do_send(std::move(msg), cc_seq, send_crosscore);
+      });
+    }
+  }
   logger().trace("{} do_send() got message -- {}", conn, *msg);
   if (get_io_state() != io_state_t::drop) {
     out_pending_msgs.push_back(std::move(msg));

@@ -14,15 +14,19 @@
 
 #pragma once
 
+#include <optional>
 #include <queue>
 #include <seastar/core/future.hh>
 #include <seastar/core/shared_ptr.hh>
 
 #include "Fwd.h"
 
+#include "crimson/osd/ordering.h"
+
 namespace crimson::net {
 
 using seq_num_t = uint64_t;
+using crosscore_ordering_t = crimson::osd::crosscore_ordering_t;
 
 /**
  * Connection
@@ -84,7 +88,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
    * May be invoked from any core, but that requires to chain the returned
    * future to preserve ordering.
    */
-  virtual seastar::future<> send(MessageURef msg) = 0;
+  virtual seastar::future<> send(MessageURef msg,
+	std::optional<crosscore_ordering_t::seq_t> cc_seq = std::nullopt,
+	std::optional<crosscore_ordering_t*> send_crosscore = std::nullopt) = 0;
 
   /**
    * send_keepalive
