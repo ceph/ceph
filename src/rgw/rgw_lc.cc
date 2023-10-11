@@ -519,7 +519,7 @@ static int remove_expired_obj(
   auto obj_key = o.key;
   auto& meta = o.meta;
   int ret;
-  std::string version_id;
+  auto& version_id = obj_key.instance;
   std::unique_ptr<rgw::sal::Notification> notify;
 
   if (!remove_indeed) {
@@ -546,7 +546,6 @@ static int remove_expired_obj(
   del_op->params.obj_owner.set_name(meta.owner_display_name);
   del_op->params.bucket_owner.set_id(bucket_info.owner);
   del_op->params.unmod_since = meta.mtime;
-  del_op->params.marker_version_id = version_id;
 
   // notification supported only for RADOS driver for now
   notify = driver->get_notification(dpp, oc.obj.get(), nullptr, event_type,
@@ -825,7 +824,6 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
   params.access_list_filter = &mp_filter;
 
   const auto event_type = rgw::notify::ObjectExpirationAbortMPU;
-  std::string version_id;
 
   auto pf = [&](RGWLC::LCWorker *wk, WorkQ *wq, WorkItem &wi) {
     int ret{0};
@@ -842,6 +840,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 	  target, lc_id,
 	  const_cast<std::string&>(target->get_tenant()),
 	  lc_req_id, null_yield);
+			auto& version_id = obj.key.instance;
 
       ret = notify->publish_reserve(this, nullptr);
       if (ret < 0) {
@@ -857,7 +856,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       if (ret == 0) {
         ret = notify->publish_commit(
             this, sal_obj->get_obj_size(), ceph::real_clock::now(),
-            sal_obj->get_attrs()[RGW_ATTR_ETAG].to_str(), version_id);
+            sal_obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
+						version_id);
         if (ret < 0) {
           ldpp_dout(wk->get_lc(), 1)
               << "ERROR: notify publish_commit failed, with error: " << ret
@@ -880,6 +880,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
         }
       } /* abort failed */
     }   /* expired */
+		return ret;
   };
 
   worker->workpool->setf(pf);
