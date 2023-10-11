@@ -369,6 +369,7 @@ void MonMap::print_summary(ostream& out) const
     has_printed = true;
   }
   out << "}" << " removed_ranks: {" << removed_ranks << "}";
+  out << " disallowed_leaders: {" << disallowed_leaders << "}";
 }
  
 void MonMap::print(ostream& out) const
