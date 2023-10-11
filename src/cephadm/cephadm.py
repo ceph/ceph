@@ -5417,6 +5417,10 @@ def command_shell(ctx):
         privileged=True)
     command = c.shell_cmd(command)
 
+    if ctx.dry_run:
+        print(' '.join(shlex.quote(arg) for arg in command))
+        return 0
+
     return call_timeout(ctx, command, ctx.timeout)
 
 ##################################
@@ -7165,6 +7169,10 @@ def _get_parser():
         '--no-hosts',
         action='store_true',
         help='dont pass /etc/hosts through to the container')
+    parser_shell.add_argument(
+        '--dry-run',
+        action='store_true',
+        help='print, but do not execute, the container command to start the shell')
 
     parser_enter = subparsers.add_parser(
         'enter', help='run an interactive shell inside a running daemon container')
