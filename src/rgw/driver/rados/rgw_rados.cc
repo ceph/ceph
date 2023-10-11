@@ -6533,6 +6533,9 @@ static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
                               int part_num, int* parts_count, bool prefetch,
                               RGWObjState** pstate, RGWObjManifest** pmanifest)
 {
+  if (!manifest) {
+    return -ERR_INVALID_PART;
+  }
   // navigate to the requested part in the manifest
   RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
   if (end.get_cur_part_id() == 0) { // not multipart
@@ -6639,22 +6642,27 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
   RGWBucketInfo& bucket_info = source->get_bucket_info();
 
   if (params.part_num) {
+    int parts_count = 0;
     // use the manifest to redirect to the requested part number
-    if (!manifest) {
-      return -ERR_INVALID_PART;
-    }
     r = get_part_obj_state(dpp, y, store, bucket_info, &source->get_ctx(),
-                           manifest, *params.part_num, params.parts_count,
+                           manifest, *params.part_num, &parts_count,
                            part_prefetch, &astate, &manifest);
-    if (r < 0) {
+    if (r == -ERR_INVALID_PART && *params.part_num == 1) {
+      // for non-multipart uploads, treat requests for the first part as a
+      // request for the entire range. this behavior is expected by the java
+      // sdk's TransferManager.download()
+      ldpp_dout(dpp, 4) << "requested part #" << *params.part_num
+          << ": " << cpp_strerror(r) << dendl;
+    } else if (r < 0) {
       ldpp_dout(dpp, 4) << "failed to read part #" << *params.part_num
           << ": " << cpp_strerror(r) << dendl;
       return -ERR_INVALID_PART;
-    }
-    if (!astate->exists) {
+    } else if (!astate->exists) {
       ldpp_dout(dpp, 4) << "part #" << *params.part_num
           << " does not exist" << dendl;
       return -ERR_INVALID_PART;
+    } else {
+      params.parts_count = parts_count;
     }
   }
 

@@ -846,9 +846,9 @@ class Object {
 
         /// If non-null, read data/attributes from the given multipart part.
         int* part_num{nullptr};
-        /// If part_num is specified, the total number of multipart parts is
-        /// written to this output parameter.
-        int* parts_count{nullptr};
+        /// If part_num is specified and the object is multipart, the total
+        /// number of multipart parts is assigned to this output parameter.
+        std::optional<int> parts_count;
       } params;
 
       virtual ~ReadOp() = default;
