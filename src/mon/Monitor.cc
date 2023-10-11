@@ -2001,6 +2001,7 @@ void Monitor::handle_probe_reply(MonOpRequestRef op)
       dout(10) << " got newer/committed monmap epoch " << newmap->get_epoch()
 	       << ", mine was " << monmap->get_epoch() << dendl;
       int epoch_diff = newmap->get_epoch() - monmap->get_epoch();
+      dout(20) << " new monmap is " << *newmap  << dendl;
       delete newmap;
       monmap->decode(m->monmap_bl);
       dout(20) << "has_ever_joined: " << has_ever_joined << dendl;
