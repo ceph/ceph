@@ -4002,6 +4002,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
       } else {
 	dout(20) << __func__ << ": LOOKUP op, wait for previous same getattr ops to respond. " << *mdr << dendl;
 	em.first->second->add_request(mdr);
+        mdr->mark_event("joining batch lookup");
 	return;
       }
     } else {
@@ -4013,6 +4014,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
       } else {
 	dout(20) << __func__ << ": GETATTR op, wait for previous same getattr ops to respond. " << *mdr << dendl;
 	em.first->second->add_request(mdr);
+        mdr->mark_event("joining batch getattr");
 	return;
       }
     }
