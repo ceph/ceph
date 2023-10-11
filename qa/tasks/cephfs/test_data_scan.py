@@ -435,12 +435,12 @@ class TestDataScan(CephFSTestCase):
         self.fs.wait_for_daemons()
         log.info(str(self.mds_cluster.status()))
 
-        # Mount a client
-        self.mount_a.mount_wait()
-
         # run scrub as it is recommended post recovery for most
         # (if not all) recovery mechanisms.
         workload.scrub()
+
+        # Mount a client
+        self.mount_a.mount_wait()
 
         # See that the files are present and correct
         errors = workload.validate()
