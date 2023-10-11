@@ -118,3 +118,27 @@ Example::
   POST "<hostname>?Action=Action=AddClientIDToOpenIDConnectProvider
     &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
     &ClientID=app-jee-jsp"
+
+UpdateOpenIDConnectProviderThumbprint
+-------------------------------------
+
+Update the existing thumbprint list of an OpenIDConnectProvider with the given list.
+This API removes the existing thumbprint list and replaces that with the input thumbprint list.
+
+Request Parameters
+~~~~~~~~~~~~~~~~~~
+
+``OpenIDConnectProviderArn``
+
+:Description: ARN of the IDP which is returned by the Create API.
+:Type: String
+
+``ThumbprintList.member.N``
+
+:Description: List of OpenID Connect IDP's server certificates' thumbprints. A maximum of 5 thumbprints are allowed.
+:Type: Array of Strings
+
+Example::
+  POST "<hostname>?Action=Action=UpdateOpenIDConnectProviderThumbprint
+    &OpenIDConnectProviderArn=arn:aws:iam:::oidc-provider/localhost:8080/auth/realms/quickstart
+    &&ThumbprintList.list.1=ABCDB3515DD0D319DD219A43A9EA727AD6061234"
