@@ -2240,14 +2240,13 @@ void RGWGetObj::execute(optional_yield y)
   read_op->params.lastmod = &lastmod;
   if (multipart_part_num) {
     read_op->params.part_num = &*multipart_part_num;
-    multipart_parts_count.emplace(0);
-    read_op->params.parts_count = &*multipart_parts_count;
   }
 
   op_ret = read_op->prepare(s->yield, this);
   version_id = s->object->get_instance();
   s->obj_size = s->object->get_obj_size();
   attrs = s->object->get_attrs();
+  multipart_parts_count = read_op->params.parts_count;
   if (op_ret < 0)
     goto done_err;
 

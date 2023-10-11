@@ -764,7 +764,7 @@ public:
         std::map<std::string, bufferlist> *attrs;
         rgw_obj *target_obj;
         int* part_num = nullptr;
-        int* parts_count = nullptr;
+        std::optional<int> parts_count;
 
         Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
 		 target_obj(nullptr) {}
