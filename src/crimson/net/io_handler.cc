@@ -187,6 +187,17 @@ seastar::future<> IOHandler::send_redirected(MessageFRef msg,
   } else {
     logger().debug("{} send() is redirected to {} -- {}",
                    conn, get_shard_id(), *msg);
+    if(cc_seq.has_value() && send_crosscore.has_value()) {
+      if (!(*send_crosscore)->proceed_or_wait(cc_seq.value())) {
+        logger().debug("{} got {} do_send(), wait at {}",
+                     conn, cc_seq.value(), (*send_crosscore)->get_in_seq());
+        return (*send_crosscore)->wait(cc_seq.value()
+        ).then([this, cc_seq, msg = std::move(msg), send_crosscore]() mutable {
+          return send_redirected(std::move(msg), cc_seq, send_crosscore);
+        });
+      }
+    }
+    cc_seq = (*send_crosscore)->prepare_submit(get_shard_id());
     return seastar::smp::submit_to(
         get_shard_id(), [this, msg=std::move(msg), cc_seq, send_crosscore]() mutable {
       return send_redirected(std::move(msg), cc_seq, send_crosscore);
