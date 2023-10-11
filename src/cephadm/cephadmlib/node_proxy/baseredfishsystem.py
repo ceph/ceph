@@ -1,3 +1,4 @@
+import concurrent.futures
 from .basesystem import BaseSystem
 from .redfish_client import RedFishClient
 from threading import Thread, Lock
@@ -48,14 +49,17 @@ class BaseRedfishSystem(BaseSystem):
             self.log.logger.debug("lock acquired.")
             try:
                 self._update_system()
-                # following calls in theory can be done in parallel
-                self._update_metadata()
-                self._update_memory()
-                self._update_power()
-                self._update_fans()
-                self._update_network()
-                self._update_processors()
-                self._update_storage()
+                update_funcs = [self._update_metadata,
+                                self._update_memory,
+                                self._update_power,
+                                self._update_fans,
+                                self._update_network,
+                                self._update_processors,
+                                self._update_storage]
+
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    executor.map(lambda f: f(), update_funcs)
+
                 self.data_ready = True
                 sleep(5)
             except RuntimeError as e:
