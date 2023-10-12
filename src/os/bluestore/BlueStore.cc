@@ -5028,7 +5028,9 @@ void BlueStore::_init_logger()
 	    PerfCountersBuilder::PRIO_CRITICAL,
 	    unit_t(UNIT_BYTES));
   b.add_u64(l_bluestore_fragmentation, "fragmentation_micros",
-            "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000");
+            "How fragmented bluestore free space is (free extents / max possible number of free extents) * 1000",
+	    "fbss",
+	    PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64(l_bluestore_alloc_unit, "alloc_unit",
 	    "allocation unit size in bytes",
 	    "au_b",
