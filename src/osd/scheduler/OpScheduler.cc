@@ -22,7 +22,7 @@
 namespace ceph::osd::scheduler {
 
 OpSchedulerRef make_scheduler(
-  CephContext *cct, int whoami, uint32_t num_shards, int shard_id,
+  CephContext *cct, int whoami, uint32_t num_op_shard_threads, int shard_id,
   bool is_rotational, std::string_view osd_objectstore, MonClient *monc)
 {
   const std::string *type = &cct->_conf->osd_op_queue;
@@ -46,7 +46,8 @@ OpSchedulerRef make_scheduler(
   } else if (*type == "mclock_scheduler") {
     // default is 'mclock_scheduler'
     return std::make_unique<
-      mClockScheduler>(cct, whoami, num_shards, shard_id, is_rotational, monc);
+      mClockScheduler>(cct, whoami, num_op_shard_threads, shard_id,
+        is_rotational, monc);
   } else {
     ceph_assert("Invalid choice of wq" == 0);
   }

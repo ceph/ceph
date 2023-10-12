@@ -32,13 +32,13 @@ namespace ceph::osd::scheduler {
 
 mClockScheduler::mClockScheduler(CephContext *cct,
   int whoami,
-  uint32_t num_shards,
+  uint32_t num_op_shard_threads,
   int shard_id,
   bool is_rotational,
   MonClient *monc)
   : cct(cct),
     whoami(whoami),
-    num_shards(num_shards),
+    num_op_shard_threads(num_op_shard_threads),
     shard_id(shard_id),
     is_rotational(is_rotational),
     monc(monc),
@@ -50,11 +50,11 @@ mClockScheduler::mClockScheduler(CephContext *cct,
       cct->_conf.get_val<double>("osd_mclock_scheduler_anticipation_timeout"))
 {
   cct->_conf.add_observer(this);
-  ceph_assert(num_shards > 0);
+  ceph_assert(num_op_shard_threads > 0);
   set_osd_capacity_params_from_config();
   set_config_defaults_from_profile();
   client_registry.update_from_config(
-    cct->_conf, osd_bandwidth_capacity_per_shard);
+    cct->_conf, osd_bandwidth_capacity_per_shard_thread);
 }
 
 /* ClientRegistry holds the dmclock::ClientInfo configuration parameters
@@ -65,7 +65,7 @@ mClockScheduler::mClockScheduler(CephContext *cct,
  * mclock expects limit and reservation to have units of <cost>/second
  * (bytes/second), but osd_mclock_scheduler_client_(lim|res) are provided
  * as ratios of the OSD's capacity.  We convert from the one to the other
- * using the capacity_per_shard parameter.
+ * using the capacity_per_shard_thread parameter.
  *
  * Note, mclock profile information will already have been set as a default
  * for the osd_mclock_scheduler_client_* parameters prior to calling
@@ -73,12 +73,12 @@ mClockScheduler::mClockScheduler(CephContext *cct,
  */
 void mClockScheduler::ClientRegistry::update_from_config(
   const ConfigProxy &conf,
-  const double capacity_per_shard)
+  const double capacity_per_shard_thread)
 {
 
   auto get_res = [&](double res) {
     if (res) {
-      return res * capacity_per_shard;
+      return res * capacity_per_shard_thread;
     } else {
       return default_min; // min reservation
     }
@@ -86,7 +86,7 @@ void mClockScheduler::ClientRegistry::update_from_config(
 
   auto get_lim = [&](double lim) {
     if (lim) {
-      return lim * capacity_per_shard;
+      return lim * capacity_per_shard_thread;
     } else {
       return default_max; // high limit
     }
@@ -179,14 +179,15 @@ void mClockScheduler::set_osd_capacity_params_from_config()
 
   osd_bandwidth_cost_per_io =
     static_cast<double>(osd_bandwidth_capacity) / osd_iop_capacity;
-  osd_bandwidth_capacity_per_shard = static_cast<double>(osd_bandwidth_capacity)
-    / static_cast<double>(num_shards);
+  osd_bandwidth_capacity_per_shard_thread =
+    static_cast<double>(osd_bandwidth_capacity) /
+      static_cast<double>(num_op_shard_threads);
 
   dout(1) << __func__ << ": osd_bandwidth_cost_per_io: "
           << std::fixed << std::setprecision(2)
           << osd_bandwidth_cost_per_io << " bytes/io"
-          << ", osd_bandwidth_capacity_per_shard "
-          << osd_bandwidth_capacity_per_shard << " bytes/second"
+          << ", osd_bandwidth_capacity_per_shard_thread "
+          << osd_bandwidth_capacity_per_shard_thread << " bytes/second"
           << dendl;
 }
 
@@ -514,18 +515,18 @@ void mClockScheduler::handle_conf_change(
       changed.count("osd_mclock_max_capacity_iops_ssd")) {
     set_osd_capacity_params_from_config();
     client_registry.update_from_config(
-      conf, osd_bandwidth_capacity_per_shard);
+      conf, osd_bandwidth_capacity_per_shard_thread);
   }
   if (changed.count("osd_mclock_max_sequential_bandwidth_hdd") ||
       changed.count("osd_mclock_max_sequential_bandwidth_ssd")) {
     set_osd_capacity_params_from_config();
     client_registry.update_from_config(
-      conf, osd_bandwidth_capacity_per_shard);
+      conf, osd_bandwidth_capacity_per_shard_thread);
   }
   if (changed.count("osd_mclock_profile")) {
     set_config_defaults_from_profile();
     client_registry.update_from_config(
-      conf, osd_bandwidth_capacity_per_shard);
+      conf, osd_bandwidth_capacity_per_shard_thread);
   }
 
   auto get_changed_key = [&changed]() -> std::optional<std::string> {
@@ -553,7 +554,7 @@ void mClockScheduler::handle_conf_change(
     auto mclock_profile = cct->_conf.get_val<std::string>("osd_mclock_profile");
     if (mclock_profile == "custom") {
       client_registry.update_from_config(
-        conf, osd_bandwidth_capacity_per_shard);
+        conf, osd_bandwidth_capacity_per_shard_thread);
     } else {
       // Attempt to change QoS parameter for a built-in profile. Restore the
       // profile defaults by making one of the OSD shards remove the key from

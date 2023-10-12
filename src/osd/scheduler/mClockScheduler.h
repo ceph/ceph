@@ -94,7 +94,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
 
   CephContext *cct;
   const int whoami;
-  const uint32_t num_shards;
+  const uint32_t num_op_shard_threads;
   const int shard_id;
   const bool is_rotational;
   MonClient *monc;
@@ -120,7 +120,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   double osd_bandwidth_cost_per_io;
 
   /**
-   * osd_bandwidth_capacity_per_shard
+   * osd_bandwidth_capacity_per_shard_thread
    *
    * mClock expects reservation and limit paramters to be expressed in units
    * of cost/second -- which means bytes/second for this implementation.
@@ -128,8 +128,11 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
    * Rather than expecting users to compute appropriate limit and reservation
    * values for each class of OSDs in their cluster, we instead express
    * reservation and limit paramaters as ratios of the OSD's maxmimum capacity.
-   * osd_bandwidth_capacity_per_shard is that capacity divided by the number
-   * of shards.
+   * osd_bandwidth_capacity_per_shard_thread is that capacity divided by the
+   * number of op shard threads. This parameter factors in the number of
+   * threads per OSD shard since there could be more than one worker thread
+   * configured. Therefore, the capacity per shard is actually the capacity
+   * per OSD op shard thread.
    *
    * Set in set_osd_capacity_params_from_config in the constructor and upon
    * config change.
@@ -140,7 +143,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
    *
    * Has units bytes/second.
    */
-  double osd_bandwidth_capacity_per_shard;
+  double osd_bandwidth_capacity_per_shard_thread;
 
   class ClientRegistry {
     std::array<
@@ -167,7 +170,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
      */
     void update_from_config(
       const ConfigProxy &conf,
-      double capacity_per_shard);
+      double capacity_per_shard_thread);
     const crimson::dmclock::ClientInfo *get_info(
       const scheduler_id_t &id) const;
   } client_registry;
@@ -218,13 +221,14 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
    * set_osd_capacity_params_from_config
    *
    * mClockScheduler uses two parameters, osd_bandwidth_cost_per_io
-   * and osd_bandwidth_capacity_per_shard, internally.  These two
-   * parameters are derived from config parameters
+   * and osd_bandwidth_capacity_per_shard_thread, internally.  These
+   * two parameters are derived from config parameters
    * osd_mclock_max_capacity_iops_(hdd|ssd) and
-   * osd_mclock_max_sequential_bandwidth_(hdd|ssd) as well as num_shards.
-   * Invoking set_osd_capacity_params_from_config() resets those derived
-   * params based on the current config and should be invoked any time they
-   * are modified as well as in the constructor.  See handle_conf_change().
+   * osd_mclock_max_sequential_bandwidth_(hdd|ssd) as well as
+   * num_op_shard_threads. Invoking set_osd_capacity_params_from_config()
+   * resets those derived params based on the current config and should be
+   * invoked any time they are modified as well as in the constructor.
+   * See handle_conf_change().
    */
   void set_osd_capacity_params_from_config();
 
@@ -232,7 +236,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   void set_config_defaults_from_profile();
 
 public: 
-  mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
+  mClockScheduler(CephContext *cct, int whoami, uint32_t num_op_shard_threads,
     int shard_id, bool is_rotational, MonClient *monc);
   ~mClockScheduler() override;
 

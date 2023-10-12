@@ -62,7 +62,7 @@ std::ostream &operator<<(std::ostream &lhs, const OpScheduler &);
 using OpSchedulerRef = std::unique_ptr<OpScheduler>;
 
 OpSchedulerRef make_scheduler(
-  CephContext *cct, int whoami, uint32_t num_shards, int shard_id,
+  CephContext *cct, int whoami, uint32_t num_op_shard_threads, int shard_id,
   bool is_rotational, std::string_view osd_objectstore, MonClient *monc);
 
 /**
