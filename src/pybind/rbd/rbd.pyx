@@ -4510,13 +4510,18 @@ written." % (self.name, ret, length))
         def oncomplete_(completion_v):
             cdef:
                 Completion _completion_v = completion_v
-                rbd_mirror_image_info_t *c_info = <rbd_mirror_image_info_t *>_completion_v.buf
-            info = {
-                'global_id' : decode_cstr(c_info[0].global_id),
-                'state'     : int(c_info[0].state),
-                'primary'   : c_info[0].primary,
-            }
-            rbd_mirror_image_get_info_cleanup(c_info)
+                rbd_mirror_image_info_t *c_info
+            return_value = _completion_v.get_return_value()
+            if return_value == 0:
+                c_info = <rbd_mirror_image_info_t *>_completion_v.buf
+                info = {
+                    'global_id' : decode_cstr(c_info[0].global_id),
+                    'state'     : int(c_info[0].state),
+                    'primary'   : c_info[0].primary,
+                }
+                rbd_mirror_image_get_info_cleanup(c_info)
+            else:
+                info = None
             return oncomplete(_completion_v, info)
 
         completion = self.__get_completion(oncomplete_)
