@@ -9,6 +9,7 @@
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "os/Transaction.h"
+#include "osd/OSDMap.h"
 
 using std::string;
 using read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
@@ -78,6 +79,36 @@ OSDMeta::load_final_pool_info(int64_t pool) {
     throw std::runtime_error(fmt::format("read gave enoent on {}",
                                          final_pool_info_oid(pool)));
   }));
+}
+
+void OSDMeta::store_final_pool_info(
+  ceph::os::Transaction &t,
+  OSDMap* lastmap,
+  std::map<epoch_t, OSDMap*> &added_map)
+{
+  for (auto [e, map] : added_map) {
+    if (!lastmap) {
+      lastmap = map;
+      continue;
+    }
+    for (auto &[pool_id, pool] : lastmap->get_pools()) {
+      if (!map->have_pg_pool(pool_id)) {
+	ghobject_t obj = final_pool_info_oid(pool_id);
+	bufferlist bl;
+	encode(pool, bl, CEPH_FEATURES_ALL);
+	string name = lastmap->get_pool_name(pool_id);
+	encode(name, bl);
+	std::map<string, string> profile;
+	if (pool.is_erasure()) {
+	  profile = lastmap->get_erasure_code_profile(
+	    pool.erasure_code_profile);
+	}
+	encode(profile, bl);
+	t.write(coll->get_cid(), obj, 0, bl.length(), bl);
+      }
+    }
+    lastmap = map;
+  }
 }
 
 ghobject_t OSDMeta::osdmap_oid(epoch_t epoch)

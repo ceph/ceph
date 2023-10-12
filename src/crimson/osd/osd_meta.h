@@ -53,6 +53,10 @@ public:
   seastar::future<std::tuple<pg_pool_t,
 			     std::string,
 			     ec_profile_t>> load_final_pool_info(int64_t pool);
+  void store_final_pool_info(
+    ceph::os::Transaction&,
+    OSDMap* lastmap,
+    std::map<epoch_t, OSDMap*>&);
 private:
   static ghobject_t osdmap_oid(epoch_t epoch);
   static ghobject_t final_pool_info_oid(int64_t pool);
