@@ -20,13 +20,16 @@ class JaegerAgentService(CephadmService):
     def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
         assert self.TYPE == daemon_spec.daemon_type
         collectors = []
+        deps: List[str] = []
         for dd in self.mgr.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
             # scrape jaeger-collector nodes
             assert dd.hostname is not None
             port = dd.ports[0] if dd.ports else JaegerCollectorService.DEFAULT_SERVICE_PORT
             url = build_url(host=dd.hostname, port=port).lstrip('/')
             collectors.append(url)
+            deps.append(url)
         daemon_spec.final_config = {'collector_nodes': ",".join(collectors)}
+        daemon_spec.deps = sorted(deps)
         return daemon_spec
 
 
