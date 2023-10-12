@@ -9,6 +9,7 @@
 
 using namespace ceph::perf_counters;
 using namespace rgw::op_counters;
+using namespace rgw::persistent_topic_counters;
 
 PerfCounters *perfcounter = NULL;
 
@@ -88,6 +89,14 @@ void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
 
   lpcb->add_u64_counter(l_rgw_op_list_buckets, "list_buckets_ops", "List buckets");
   lpcb->add_time_avg(l_rgw_op_list_buckets_lat, "list_buckets_lat", "List buckets latency");
+}
+
+void add_rgw_topic_counters(PerfCountersBuilder *lpcb) {
+  lpcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
+
+  lpcb->add_u64(l_rgw_persistent_topic_len, "persistent_topic_len", "Persistent topic queue length");
+  lpcb->add_u64(l_rgw_persistent_topic_size, "persistent_topic_size", "Persistent topic queue size");
+
 }
 
 void frontend_counters_init(CephContext *cct) {
@@ -191,6 +200,30 @@ void tinc(const CountersContainer &counters, int idx, ceph::timespan amt) {
 }
 
 } // namespace rgw::op_counters
+
+namespace rgw::persistent_topic_counters {
+
+const std::string rgw_topic_counters_key = "rgw_topic";
+
+CountersManager::CountersManager(const std::string& topic_name, CephContext *cct)
+    : cct(cct)
+{
+  const std::string topic_key = ceph::perf_counters::key_create(rgw_topic_counters_key, {{"Topic", topic_name}});
+  PerfCountersBuilder pcb(cct, topic_key, l_rgw_topic_first, l_rgw_topic_last);
+  add_rgw_topic_counters(&pcb);
+  topic_counters = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
+  cct->get_perfcounters_collection()->add(topic_counters.get());
+}
+
+void CountersManager::set(int idx, uint64_t v) {
+  topic_counters->set(idx, v);
+}
+
+CountersManager::~CountersManager() {
+  cct->get_perfcounters_collection()->remove(topic_counters.get());
+}
+
+} // namespace rgw::persistent_topic_counters
 
 int rgw_perf_start(CephContext *cct)
 {
