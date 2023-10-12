@@ -420,15 +420,19 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
 seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
                                   epoch_t start, Ref<MOSDMap> m)
 {
-  return seastar::do_for_each(
-    boost::make_counting_iterator(start),
-    boost::make_counting_iterator(m->get_last() + 1),
-    [&t, m, this](epoch_t e) {
+  return seastar::do_with(
+    std::map<epoch_t, OSDMap*>(),
+    [&t, m, start, this](auto &added_maps) {
+    return seastar::do_for_each(
+      boost::make_counting_iterator(start),
+      boost::make_counting_iterator(m->get_last() + 1),
+      [&t, m, this, &added_maps](epoch_t e) {
       if (auto p = m->maps.find(e); p != m->maps.end()) {
 	auto o = std::make_unique<OSDMap>();
 	o->decode(p->second);
 	logger().info("store_maps storing osdmap.{}", e);
 	store_map_bl(t, e, std::move(std::move(p->second)));
+	added_maps.emplace(e, o.get());
 	osdmaps.insert(e, std::move(o));
 	return seastar::now();
       } else if (auto p = m->incremental_maps.find(e);
@@ -436,7 +440,8 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	logger().info("store_maps found osdmap.{} incremental map, "
 	              "loading osdmap.{}", e, e - 1);
 	ceph_assert(std::cmp_greater(e, 0u));
-	return load_map(e - 1).then([e, bl=p->second, &t, this](auto o) {
+	return load_map(e - 1).then(
+	  [&added_maps, e, bl=p->second, &t, this](auto o) {
 	  OSDMap::Incremental inc;
 	  auto i = bl.cbegin();
 	  inc.decode(i);
@@ -445,6 +450,7 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	  o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
 	  logger().info("store_maps storing osdmap.{}", o->get_epoch());
 	  store_map_bl(t, e, std::move(fbl));
+	  added_maps.emplace(e, o.get());
 	  osdmaps.insert(e, std::move(o));
 	  return seastar::now();
 	});
@@ -452,7 +458,13 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	logger().error("MOSDMap lied about what maps it had?");
 	return seastar::now();
       }
+    }).then([&t, this, &added_maps] {
+      auto [e, map] = *added_maps.begin();
+      auto lastmap = osdmaps.find(e - 1).get();
+      meta_coll->store_final_pool_info(t, lastmap, added_maps);
+      return seastar::now();
     });
+  });
 }
 
 seastar::future<Ref<PG>> ShardServices::make_pg(
