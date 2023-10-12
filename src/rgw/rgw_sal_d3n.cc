@@ -53,6 +53,15 @@ std::unique_ptr<Object::ReadOp> D3NFilterObject::get_read_op()
 
 int D3NFilterObject::D3NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
+  next->params.mod_ptr = params.mod_ptr;
+  next->params.unmod_ptr = params.unmod_ptr;
+  next->params.high_precision_time = params.high_precision_time;
+  next->params.mod_zone_id = params.mod_zone_id;
+  next->params.mod_pg_ver = params.mod_pg_ver;
+  next->params.if_match = params.if_match;
+  next->params.if_nomatch = params.if_nomatch;
+  next->params.lastmod = params.lastmod;
+
   return next->prepare(y, dpp);
 }
 
