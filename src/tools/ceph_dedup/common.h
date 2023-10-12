@@ -48,8 +48,6 @@ namespace po = boost::program_options;
 using namespace librados;
 
 constexpr unsigned default_op_size = 1 << 26;
-constexpr unsigned default_max_thread = 2;
-constexpr int32_t default_report_period = 10;
 
 // dedup configuration
 #define SAMPLE_RATIO "sampling_ratio"
