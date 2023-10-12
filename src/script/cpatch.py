@@ -217,6 +217,10 @@ class CLIContext:
     def components_selected(self):
         return bool(self._cli.components)
 
+    @property
+    def cephadm_build_args(self):
+        return list(self._cli.cephadm_build_arg or [])
+
     def build_components(self):
         if self._cli.components:
             return self._cli.components
@@ -304,6 +308,12 @@ class CLIContext:
             dest="log_level",
             const=logging.WARNING,
             help="Only print errors and warnings",
+        )
+        parser.add_argument(
+            "--cephadm-build-arg",
+            "-A",
+            action="append",
+            help="Pass additional arguments to cephadm build script.",
         )
         # selectors
         component_selections = [
@@ -596,7 +606,9 @@ class Builder:
             if not build_cephadm_path.is_file():
                 raise ValueError("no cephadm build script found")
             log.debug("found cephadm compilation script: compiling cephadm")
-            _run([build_cephadm_path, dst_path]).check_returncode()
+            build_cmd = [build_cephadm_path] + self._ctx.cephadm_build_args
+            build_cmd += [dst_path]
+            _run(build_cmd).check_returncode()
         return ["ADD cephadm /usr/sbin/cephadm"]
 
     def _pybind_job(self, component):
