@@ -75,6 +75,7 @@ struct persistency_tracker {
 using queues_t = std::set<std::string>;
 using entries_persistency_tracker = ceph::unordered_map<std::string, persistency_tracker>;
 using queues_persistency_tracker = ceph::unordered_map<std::string, entries_persistency_tracker>;
+using rgw::persistent_topic_counters::CountersManager;
 
 // use mmap/mprotect to allocate 128k coroutine stacks
 auto make_stack_allocator() {
@@ -313,7 +314,9 @@ private:
     spawn::spawn(io_context, [this, queue_name](yield_context yield) {
             cleanup_queue(queue_name, yield);
             }, make_stack_allocator());
-    
+
+    CountersManager queue_counters_container(queue_name, this->get_cct());
+
     while (true) {
       // if queue was empty the last time, sleep for idle timeout
       if (is_idle) {
@@ -520,6 +523,17 @@ private:
             ldpp_dout(this, 1) << "ERROR: failed to commit reservation to queue: " << queue_name << ". error: " << ret << dendl;
           }
         }
+      }
+
+      // updating perfcounters with topic stats
+      uint64_t entries_size;
+      uint32_t entries_number;
+      const auto ret = cls_2pc_queue_get_topic_stats(rados_ioctx, queue_name, entries_number, entries_size);
+      if (ret < 0) {
+        ldpp_dout(this, 1) << "ERROR: topic stats for topic: " << queue_name << ". error: " << ret << dendl;
+      } else {
+        queue_counters_container.set(l_rgw_persistent_topic_len, entries_number);
+        queue_counters_container.set(l_rgw_persistent_topic_size, entries_size);
       }
     }
   }
