@@ -19,15 +19,8 @@ po::options_description make_usage() {
     ("chunk-pool", po::value<std::string>(), ": set chunk pool name")
     ("max-thread", po::value<int>(), ": set max thread")
     ("report-period", po::value<int>(), ": set report-period")
-    ("max-seconds", po::value<int>(), ": set max runtime")
-    ("max-read-size", po::value<int>(), ": set max read size")
     ("pool", po::value<std::string>(), ": set pool name")
-    ("min-chunk-size", po::value<int>(), ": min chunk size (byte)")
-    ("max-chunk-size", po::value<int>(), ": max chunk size (byte)")
-    ("dedup-cdc-chunk-size", po::value<unsigned int>(), ": set dedup chunk size for cdc")
     ("snap", ": deduplciate snapshotted object")
-    ("debug", ": enable debug")
-    ("pgid", ": set pgid")
     ("chunk-dedup-threshold", po::value<int>(), ": set the threshold for chunk dedup (number of duplication) ")
     ("sampling-ratio", po::value<int>(), ": set the sampling ratio (percentile)")
     ("wakeup-period", po::value<int>(), ": set the wakeup period of crawler thread (sec)")
@@ -293,7 +286,6 @@ private:
     size_t max_object_count);
   std::vector<size_t> sample_object(size_t count);
   void try_dedup_and_accumulate_result(ObjectItem &object, snap_t snap = 0);
-  bool ok_to_dedup_all();
   int do_chunk_dedup(chunk_t &chunk, snap_t snap);
   bufferlist read_object(ObjectItem &object);
   std::vector<std::tuple<bufferlist, pair<uint64_t, uint64_t>>> do_cdc(
@@ -643,35 +635,6 @@ int make_crawling_daemon(const po::variables_map &opts)
       << chunk_pool_name << ": "
       << cpp_strerror(ret) << std::endl;
     return -EINVAL;
-  }
-  bufferlist inbl;
-  ret = rados.mon_command(
-      make_pool_str(base_pool_name, "fingerprint_algorithm", fp_algo),
-      inbl, NULL, NULL);
-  if (ret < 0) {
-    cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-  ret = rados.mon_command(
-      make_pool_str(base_pool_name, "dedup_chunk_algorithm", "fastcdc"),
-      inbl, NULL, NULL);
-  if (ret < 0) {
-    cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-  ret = rados.mon_command(
-      make_pool_str(base_pool_name, "dedup_cdc_chunk_size", chunk_size),
-      inbl, NULL, NULL);
-  if (ret < 0) {
-    cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
-    return ret;
-  }
-  ret = rados.mon_command(
-      make_pool_str(base_pool_name, "dedup_tier", chunk_pool_name),
-      inbl, NULL, NULL);
-  if (ret < 0) {
-    cerr << " operate fail : " << cpp_strerror(ret) << std::endl;
-    return ret;
   }
 
   cout << "SampleRatio : " << sampling_ratio << std::endl
