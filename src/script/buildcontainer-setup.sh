@@ -26,7 +26,7 @@ case "${CEPH_BRANCH}~${DISTRO}" in
         fi
     ;;
     *~*centos*stream9)
-        #dnf install -y java-1.8.0-openjdk-headless /usr/bin/rpmbuild wget
+        dnf install -y /usr/bin/rpmbuild wget
         source ./src/script/run-make.sh
         prepare
         if [ "${CLEAN_DNF}" != no ]; then
