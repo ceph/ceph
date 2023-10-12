@@ -4916,10 +4916,13 @@ WantedBy=ceph-{fsid}.target
         return response_str
 
     def init_node_proxy(self, ssl_ctx: Any) -> None:
-        node_proxy_data = json.dumps({'keyring': self.keyring,
-                                          'host': self.host})
-        node_proxy_data = node_proxy_data.encode('ascii')
-        result = self.query_endpoint(data=node_proxy_data,
+        node_proxy_meta = {
+            'cephx': {
+                'name': self.host,
+                'secret': self.keyring
+            }
+        }
+        result = self.query_endpoint(data=json.dumps(node_proxy_meta).encode('ascii'),
                                      endpoint='/node-proxy/idrac',
                                      ssl_ctx=ssl_ctx)
         result_json = json.loads(result)
@@ -4927,7 +4930,7 @@ WantedBy=ceph-{fsid}.target
             'host': result_json['result']['addr'],
             'username': result_json['result']['username'],
             'password': result_json['result']['password'],
-            'data': node_proxy_data,
+            'cephx': node_proxy_meta['cephx'],
             'mgr_target_ip': self.target_ip,
             'mgr_target_port': self.target_port,
         }
