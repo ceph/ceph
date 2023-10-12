@@ -1,3 +1,4 @@
+import socket
 from .util import Config
 from typing import Dict, Any
 from .baseclient import BaseClient
@@ -32,6 +33,12 @@ class BaseSystem:
 
     def get_storage(self) -> Dict[str, Dict[str, Dict]]:
         raise NotImplementedError()
+
+    def get_sn(self) -> str:
+        raise NotImplementedError()
+
+    def get_host(self) -> str:
+        return socket.gethostname()
 
     def start_update_loop(self) -> None:
         raise NotImplementedError()

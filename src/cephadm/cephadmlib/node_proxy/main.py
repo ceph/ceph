@@ -216,8 +216,6 @@ class NodeProxy(Thread):
 
         log = Logger(__name__, level=config.__dict__['logging']['level'])
 
-        self.data = json.loads(self.__dict__['data'])
-
         # create the redfish system and the obsever
         log.logger.info(f"Server initialization...")
         try:
@@ -232,7 +230,7 @@ class NodeProxy(Thread):
 
         try:
             reporter_agent = Reporter(self.system,
-                                      self.data,
+                                      self.__dict__['cephx'],
                                       f"https://{self.__dict__['mgr_target_ip']}:{self.__dict__['mgr_target_port']}/node-proxy/data")
         except RuntimeError:
             log.logger.error("Can't initialize the reporter.")

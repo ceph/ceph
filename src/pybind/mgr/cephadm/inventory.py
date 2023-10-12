@@ -1439,7 +1439,7 @@ class NodeProxyCache:
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         hostname = kw.get('hostname')
         if hostname not in self.data.keys():
-            return self.data
+            return [self.data[h] for h in self.data.keys()]
         else:
             return self.data[hostname]
 
@@ -1456,8 +1456,8 @@ class NodeProxyCache:
 
         for host, data in results.items():
             _result[host] = {}
-            for component, details in data.items():
-                res = any([member['status']['health'].lower() != 'ok' for member in data[component].values()])
+            for component, details in data['status'].items():
+                res = any([member['status']['health'].lower() != 'ok' for member in data['status'][component].values()])
                 _result[host][component] = mapper[res]
 
         if hostname and hostname in results.keys():
@@ -1472,7 +1472,7 @@ class NodeProxyCache:
 
         for host, data in self.data.items():
             try:
-                _result[host] = data[cmd]
+                _result[host] = data['status'][cmd]
             except KeyError:
                 raise RuntimeError(f'Invalid node-proxy category {cmd}')
 

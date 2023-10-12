@@ -6,11 +6,11 @@ from typing import Dict, Any
 
 
 class Reporter:
-    def __init__(self, system: Any, data: Dict[str, Any], observer_url: str) -> None:
+    def __init__(self, system: Any, cephx: Dict[str, Any], observer_url: str) -> None:
         self.system = system
         self.observer_url = observer_url
         self.finish = False
-        self.data = data
+        self.cephx = cephx
         self.log = Logger(__name__)
         self.log.logger.info(f'Observer url set to {self.observer_url}')
 
@@ -36,7 +36,9 @@ class Reporter:
                 self.log.logger.info('data ready to be sent to the mgr.')
                 if not self.system.get_system() == self.system.previous_data:
                     self.log.logger.info('data has changed since last iteration.')
-                    self.data['data'] = self.system.get_system()
+                    self.data = {}
+                    self.data['cephx'] = self.cephx
+                    self.data['patch'] = self.system.get_system()
                     try:
                         # TODO: add a timeout parameter to the reporter in the config file
                         self.log.logger.info(f"sending data to {self.observer_url}")

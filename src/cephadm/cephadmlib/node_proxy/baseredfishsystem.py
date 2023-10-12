@@ -108,12 +108,16 @@ class BaseRedfishSystem(BaseSystem):
 
     def get_system(self) -> Dict[str, Dict[str, Dict]]:
         result = {
-            'storage': self.get_storage(),
-            'processors': self.get_processors(),
-            'network': self.get_network(),
-            'memory': self.get_memory(),
-            'power': self.get_power(),
-            'fans': self.get_fans()
+            'host': self.get_host(),
+            'sn': self.get_sn(),
+            'status': {
+                'storage': self.get_storage(),
+                'processors': self.get_processors(),
+                'network': self.get_network(),
+                'memory': self.get_memory(),
+                'power': self.get_power(),
+                'fans': self.get_fans()
+            }
         }
         return result
 
