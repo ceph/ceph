@@ -24,6 +24,9 @@ class RedfishDellSystem(BaseRedfishSystem):
 
         return normalize_dict(result)
 
+    def get_sn(self) -> str:
+        return self._system['SKU']
+
     def get_status(self) -> Dict[str, Dict[str, Dict]]:
         return self._system['status']
 

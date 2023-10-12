@@ -116,7 +116,7 @@ class NodeProxy:
         if self.validate_node_proxy_data(data):
             idrac_details = self.mgr.get_store('node_proxy/idrac')
             idrac_details_json = json.loads(idrac_details)
-            results['result'] = idrac_details_json[data["host"]]
+            results['result'] = idrac_details_json[data["cephx"]["name"]]
         else:
             results['result'] = self.validate_msg
 
@@ -125,18 +125,18 @@ class NodeProxy:
     def validate_node_proxy_data(self, data: Dict[str, Any]) -> bool:
         self.validate_msg = 'valid node-proxy data received.'
         cherrypy.response.status = 200
-        if 'host' not in data:
+        if 'cephx' not in data:
             cherrypy.response.status = 400
             self.validate_msg = 'The field \'host\' must be provided.'
-        elif 'keyring' not in data:
+        elif 'secret' not in data['cephx']:
             cherrypy.response.status = 400
             self.validate_msg = 'The agent keyring must be provided.'
-        elif not self.mgr.agent_cache.agent_keys.get(data['host']):
+        elif not self.mgr.agent_cache.agent_keys.get(data['cephx']['name']):
             cherrypy.response.status = 400
-            self.validate_msg = f'Make sure the agent is running on {data["host"]}'
-        elif data['keyring'] != self.mgr.agent_cache.agent_keys[data['host']]:
+            self.validate_msg = f'Make sure the agent is running on {data["cephx"]["name"]}'
+        elif data['cephx']['secret'] != self.mgr.agent_cache.agent_keys[data['cephx']['name']]:
             cherrypy.response.status = 403
-            self.validate_msg = f'Got wrong keyring from agent on host {data["host"]}.'
+            self.validate_msg = f'Got wrong keyring from agent on host {data["cephx"]["name"]}.'
 
         return cherrypy.response.status == 200
 
@@ -145,7 +145,7 @@ class NodeProxy:
                         data: Dict[str, Any]) -> List[Dict[str, str]]:
         nok_members: List[Dict[str, str]] = []
 
-        for member in data[component].keys():
+        for member in data.keys():
             # Force a fake error for testing purpose
             if component == 'storage':
                 _status = 'critical'
@@ -154,9 +154,9 @@ class NodeProxy:
                 _status = 'critical'
                 state = "[Fake error] power supply unplugged."
             else:
-                _status = data[component][member]['status']['health'].lower()
+                _status = data[member]['status']['health'].lower()
             if _status.lower() != 'ok':
-                # state = data[component][member]['status']['state']
+                # state = data[member]['status']['state']
                 _member = dict(
                     member=member,
                     status=_status,
@@ -176,10 +176,9 @@ class NodeProxy:
             'fans': 'HARDWARE_FANS'
         }
 
-        for component in data['data'].keys():
+        for component in data['patch']['status'].keys():
             self.mgr.remove_health_warning(mapping[component])
-            nok_members = self.get_nok_members(component,
-                                               data['data'])
+            nok_members = self.get_nok_members(component, data['patch']['status'][component])
 
             if nok_members:
                 count = len(nok_members)
@@ -199,8 +198,8 @@ class NodeProxy:
 
         data: Dict[str, Any] = cherrypy.request.json
         if self.validate_node_proxy_data(data):
-            host = data['host']
-            self.mgr.node_proxy.save(host, data['data'])
+            host = data['cephx']['name']
+            self.mgr.node_proxy.save(host, data['patch'])
             self.raise_alert(data)
 
         results["result"] = self.validate_msg
@@ -238,9 +237,9 @@ class NodeProxy:
         except AttributeError:
             try:
                 result = self.common(**kw)
-            except RuntimeError:
+            except RuntimeError as e:
                 cherrypy.response.status = 404
-                result = {}
+                result = {"error": f"{e}"}
             return {"error": "Not a valid endpoint."}
         finally:
             return result
