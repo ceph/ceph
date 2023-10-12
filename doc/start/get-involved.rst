@@ -32,6 +32,10 @@ These are exciting times in the Ceph community! Get involved!
 |                      | ``#ceph-devel``, ``#ceph-dashboard`` and        |     ``#cephfs``                               |
 |                      | ``#cephfs`` dedicated for Ceph developers.      |                                               |
 +----------------------+-------------------------------------------------+-----------------------------------------------+
+| **Slack**            | Since 2023, the Upstream Ceph community has     |                                               |
+|                      | maintained a community in Slack. Ask your Ceph- | https://ceph-storage.slack.com/               |
+|                      | related questions in Ceph's Slack channels.     |                                               |
++----------------------+-------------------------------------------------+-----------------------------------------------+
 | **User List**        | Ask and answer user-related questions by        |                                               |
 |                      | subscribing to the email list at                | - `User Subscribe`_                           |
 |                      | ceph-users@ceph.io. You can opt out of the email| - `User Unsubscribe`_                         |
