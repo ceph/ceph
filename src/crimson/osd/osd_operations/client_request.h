@@ -87,8 +87,7 @@ public:
     CompletionEvent
   > tracking_events;
 
-  class instance_handle_t : public boost::intrusive_ref_counter<
-    instance_handle_t, boost::thread_unsafe_counter> {
+  class instance_handle_t : public boost::intrusive_ref_counter<instance_handle_t> {
   public:
     // intrusive_ptr because seastar::lw_shared_ptr includes a cpu debug check
     // that we will fail since the core on which we allocate the request may not

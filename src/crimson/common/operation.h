@@ -317,8 +317,7 @@ private:
  * an interface for registering ops in flight and dumping
  * diagnostic information.
  */
-class Operation : public boost::intrusive_ref_counter<
-  Operation, boost::thread_unsafe_counter> {
+class Operation : public boost::intrusive_ref_counter<Operation> {
  public:
   using id_t = uint64_t;
   static constexpr id_t NULL_ID = std::numeric_limits<uint64_t>::max();
