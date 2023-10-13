@@ -9228,7 +9228,9 @@ paths:
           application/json:
             schema:
               properties:
-                daemon_name:
+                placement_spec:
+                  type: string
+                port:
                   type: string
                 realm_token:
                   type: string
@@ -9237,6 +9239,8 @@ paths:
               required:
               - realm_token
               - zone_name
+              - port
+              - placement_spec
               type: object
       responses:
         '201':
