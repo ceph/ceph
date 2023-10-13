@@ -370,16 +370,6 @@ void PgScrubber::send_remotes_reserved(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
-void PgScrubber::send_reservation_failure(epoch_t epoch_queued)
-{
-  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued
-	   << dendl;
-  if (check_interval(epoch_queued)) {  // do not check for 'active'!
-    m_fsm->process_event(ReservationFailure{});
-  }
-  dout(10) << "scrubber event --<< " << __func__ << dendl;
-}
-
 void PgScrubber::send_chunk_free(epoch_t epoch_queued)
 {
   dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued
@@ -1623,25 +1613,6 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
   m_osds->send_message_osd_cluster(reply, op->get_req()->get_connection());
 }
 
-
-/// temporary
-void PgScrubber::grant_from_replica(OpRequestRef op, pg_shard_t from)
-{
-  dout(10) << fmt::format("{}: {}", __func__, *op->get_req()) << dendl;
-  ceph_assert(m_reservations.has_value()); // the FSM should know
-  m_reservations->handle_reserve_grant(op, from);
-}
-
-
-/// temporary
-void PgScrubber::reject_from_replica(OpRequestRef op, pg_shard_t from)
-{
-  dout(10) << fmt::format("{}: {}", __func__, *op->get_req()) << dendl;
-  ceph_assert(m_reservations.has_value()); // the FSM should know
-  m_reservations->handle_reserve_reject(op, from);
-}
-
-
 void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
 {
   dout(10) << __func__ << " " << *op->get_req() << dendl;
@@ -1654,21 +1625,6 @@ void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
   // this specific scrub session has terminated. All incoming events carrying
   // the old tag will be discarded.
   m_fsm->process_event(FullReset{});
-}
-
-void PgScrubber::discard_replica_reservations()
-{
-  dout(10) << __func__ << dendl;
-  if (m_reservations.has_value()) {
-    m_reservations->discard_remote_reservations();
-  }
-}
-
-void PgScrubber::clear_scrub_reservations()
-{
-  dout(10) << __func__ << dendl;
-  m_reservations.reset();	  // the remote reservations
-  m_local_osd_resource.reset();	  // the local reservation
 }
 
 bool PgScrubber::set_reserving_now() {
@@ -2181,12 +2137,6 @@ void PgScrubber::set_scrub_duration()
   });
 }
 
-void PgScrubber::reserve_replicas()
-{
-  dout(10) << __func__ << dendl;
-  m_reservations.emplace(*this);
-}
-
 void PgScrubber::cleanup_on_finish()
 {
   dout(10) << __func__ << dendl;
@@ -2195,7 +2145,7 @@ void PgScrubber::cleanup_on_finish()
   state_clear(PG_STATE_SCRUBBING);
   state_clear(PG_STATE_DEEP_SCRUB);
 
-  clear_scrub_reservations();
+  m_local_osd_resource.reset();
   requeue_waiting();
 
   reset_internal_state();
@@ -2229,7 +2179,7 @@ void PgScrubber::clear_pgscrub_state()
 
   state_clear(PG_STATE_REPAIR);
 
-  clear_scrub_reservations();
+  m_local_osd_resource.reset();
   requeue_waiting();
 
   reset_internal_state();

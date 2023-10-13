@@ -385,17 +385,6 @@ class PGScrubResourcesOK : public PGScrubItem {
 };
 
 /**
- *  scrub resources requests denied by replica(s)
- */
-class PGScrubDenied : public PGScrubItem {
- public:
-  PGScrubDenied(spg_t pg, epoch_t epoch_queued)
-      : PGScrubItem{pg, epoch_queued, "PGScrubDenied"}
-  {}
-  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
-};
-
-/**
  *  called when a repair process completes, to initiate scrubbing. No local/remote
  *  resources are allocated.
  */

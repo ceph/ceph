@@ -24,6 +24,7 @@
 #include "osd/scrubber_common.h"
 
 #include "scrub_machine_lstnr.h"
+#include "scrub_reservations.h"
 
 /// a wrapper that sets the FSM state description used by the
 /// PgScrubber
@@ -100,9 +101,6 @@ struct ReplicaReject : sc::event<ReplicaReject> {
 
 /// all replicas have granted our reserve request
 MEV(RemotesReserved)
-
-/// a reservation request has failed
-MEV(ReservationFailure)
 
 /// reservations have timed out
 MEV(ReservationTimeout)
@@ -391,19 +389,20 @@ struct Session : sc::state<Session, ScrubMachine, ReservingReplicas>,
                               sc::custom_reaction<IntervalChanged>>;
 
   sc::result react(const IntervalChanged&);
+
+  /// managing the scrub session's reservations (optional, as
+  /// it's an RAII wrapper around the state of 'holding reservations')
+  std::optional<ReplicaReservations> m_reservations{std::nullopt};
 };
 
 struct ReservingReplicas : sc::state<ReservingReplicas, Session>,
 			   NamedSimply {
   explicit ReservingReplicas(my_context ctx);
   ~ReservingReplicas();
-  using reactions = mpl::list<
-			      // all replicas granted our resources request
-			      sc::custom_reaction<ReplicaGrant>,
+  using reactions = mpl::list<sc::custom_reaction<ReplicaGrant>,
 			      sc::custom_reaction<ReplicaReject>,
 			      sc::transition<RemotesReserved, ActiveScrubbing>,
-			      sc::custom_reaction<ReservationTimeout>,
-			      sc::custom_reaction<ReservationFailure>>;
+			      sc::custom_reaction<ReservationTimeout>>;
 
   ceph::coarse_real_clock::time_point entered_at =
     ceph::coarse_real_clock::now();
@@ -416,9 +415,6 @@ struct ReservingReplicas : sc::state<ReservingReplicas, Session>,
   sc::result react(const ReplicaReject&);
 
   sc::result react(const ReservationTimeout&);
-
-  /// at least one replica denied us the scrub resources we've requested
-  sc::result react(const ReservationFailure&);
 };
 
 

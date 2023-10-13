@@ -20,7 +20,7 @@ namespace Scrub {
   class ReplicaReservations;
 }
 
-/// Facilitating scrub-realated object access to private PG data
+/// Facilitating scrub-related object access to private PG data
 class ScrubberPasskey {
 private:
   friend class Scrub::ReplicaReservations;
@@ -362,12 +362,6 @@ struct ScrubPgIF {
    */
   virtual void send_remotes_reserved(epoch_t epoch_queued) = 0;
 
-  /**
-   * triggers the 'ReservationFailure' (at least one replica denied us the
-   * requested resources) state-machine event
-   */
-  virtual void send_reservation_failure(epoch_t epoch_queued) = 0;
-
   virtual void cleanup_store(ObjectStore::Transaction* t) = 0;
 
   virtual bool get_store_errors(const scrub_ls_arg_t& arg,
@@ -381,20 +375,6 @@ struct ScrubPgIF {
     ceph::coarse_real_clock::time_point now_is) = 0;
 
   // --------------- reservations -----------------------------------
-
-  /**
-   *  "forget" all replica reservations. No messages are sent to the
-   *  previously-reserved.
-   *
-   *  Used upon interval change. The replicas' state is guaranteed to
-   *  be reset separately by the interval-change event.
-   */
-  virtual void discard_replica_reservations() = 0;
-
-  /**
-   * clear both local and OSD-managed resource reservation flags
-   */
-  virtual void clear_scrub_reservations() = 0;
 
   /**
    * Reserve local scrub resources (managed by the OSD)
