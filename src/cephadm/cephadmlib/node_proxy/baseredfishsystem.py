@@ -10,6 +10,9 @@ from typing import Dict, Any, List
 class BaseRedfishSystem(BaseSystem):
     def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
+        self.common_endpoints: List[str] = kw.get('common_endpoints', ['/Systems/System.Embedded.1',
+                                                                       '/UpdateService'])
+        self.chassis_endpoint: str = kw.get('chassis_endpoint', '/Chassis/System.Embedded.1')
         self.log = Logger(__name__)
         self.host: str = kw['host']
         self.username: str = kw['username']
@@ -25,6 +28,7 @@ class BaseRedfishSystem(BaseSystem):
         self.lock: Lock = Lock()
         self.data: Dict[str, Dict[str, Any]] = {}
         self._system: Dict[str, Dict[str, Any]] = {}
+        self._sys: Dict[str, Any] = {}
         self.start_client()
 
     def start_client(self) -> None:
@@ -49,13 +53,14 @@ class BaseRedfishSystem(BaseSystem):
             self.log.logger.debug("lock acquired.")
             try:
                 self._update_system()
-                update_funcs = [self._update_metadata,
-                                self._update_memory,
+                self._update_sn()
+                update_funcs = [self._update_memory,
                                 self._update_power,
                                 self._update_fans,
                                 self._update_network,
                                 self._update_processors,
-                                self._update_storage]
+                                self._update_storage,
+                                self._update_firmwares]
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
                     executor.map(lambda f: f(), update_funcs)
@@ -93,18 +98,10 @@ class BaseRedfishSystem(BaseSystem):
             raise RuntimeError(f"Could not get path: {path}")
         return result
 
-    def get_members(self, path: str) -> List:
-        _path = self._system[path]['@odata.id']
-        data = self._get_path(_path)
-        return [self._get_path(member['@odata.id']) for member in data['Members']]
-
-    def build_data(self,
-                   fields: List,
-                   path: str) -> Dict[str, Dict[str, Dict]]:
-        raise NotImplementedError()
-
-    # def _update_system(self) -> None:
-    #     raise NotImplementedError()
+    def get_members(self, data: Dict[str, Any], path: str) -> List:
+        _path = data[path]['@odata.id']
+        _data = self._get_path(_path)
+        return [self._get_path(member['@odata.id']) for member in _data['Members']]
 
     def get_system(self) -> Dict[str, Dict[str, Dict]]:
         result = {
@@ -117,15 +114,18 @@ class BaseRedfishSystem(BaseSystem):
                 'memory': self.get_memory(),
                 'power': self.get_power(),
                 'fans': self.get_fans()
-            }
+            },
+            'firmwares': self.get_firmwares()
         }
         return result
 
     def _update_system(self) -> None:
-        redfish_system = self.client.get_path(self.system_endpoint)
-        self._system = {**redfish_system, **self._system}
+        for endpoint in self.common_endpoints:
+            result = self.client.get_path(endpoint)
+            _endpoint = endpoint.strip('/').split('/')[0]
+            self._system[_endpoint] = result
 
-    def _update_metadata(self) -> None:
+    def _update_sn(self) -> None:
         raise NotImplementedError()
 
     def _update_memory(self) -> None:
@@ -144,4 +144,7 @@ class BaseRedfishSystem(BaseSystem):
         raise NotImplementedError()
 
     def _update_storage(self) -> None:
+        raise NotImplementedError()
+
+    def _update_firmwares(self) -> None:
         raise NotImplementedError()
