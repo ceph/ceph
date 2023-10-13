@@ -410,12 +410,11 @@ public:
     tm_ret _remove_collection(
       internal_context_t &ctx,
       const coll_t& cid);
-    using omap_set_kvs_ret = tm_iertr::future<>;
+    using omap_set_kvs_ret = tm_iertr::future<omap_root_t>;
     omap_set_kvs_ret _omap_set_kvs(
       OnodeRef &onode,
       const omap_root_le_t& omap_root,
       Transaction& t,
-      omap_root_le_t& mutable_omap_root,
       std::map<std::string, ceph::bufferlist>&& kvs);
 
     boost::intrusive_ptr<SeastoreCollection> _get_collection(const coll_t& cid);

@@ -30,9 +30,9 @@ public:
   const onode_layout_t &get_layout() const final {
     return layout;
   }
-  onode_layout_t &get_mutable_layout(Transaction &t) final {
-    dirty = true;
-    return layout;
+  template <typename Func>
+  void with_mutable_layout(Transaction &t, Func&& f) {
+    f(layout);
   }
   bool is_alive() const {
     return true;
@@ -40,6 +40,67 @@ public:
   bool is_dirty() const { return dirty; }
   laddr_t get_hint() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
+
+  void update_onode_size(Transaction &t, uint32_t size) final {
+    with_mutable_layout(t, [size](onode_layout_t &mlayout) {
+      mlayout.size = size;
+    });
+  }
+
+  void update_omap_root(Transaction &t, omap_root_t &oroot) final {
+    with_mutable_layout(t, [&oroot](onode_layout_t &mlayout) {
+      mlayout.omap_root.update(oroot);
+    });
+  }
+
+  void update_xattr_root(Transaction &t, omap_root_t &xroot) final {
+    with_mutable_layout(t, [&xroot](onode_layout_t &mlayout) {
+      mlayout.xattr_root.update(xroot);
+    });
+  }
+
+  void update_object_data(Transaction &t, object_data_t &odata) final {
+    with_mutable_layout(t, [&odata](onode_layout_t &mlayout) {
+      mlayout.object_data.update(odata);
+    });
+  }
+
+  void update_object_info(Transaction &t, ceph::bufferlist &oi_bl) final {
+    with_mutable_layout(t, [&oi_bl](onode_layout_t &mlayout) {
+      maybe_inline_memcpy(
+	&mlayout.oi[0],
+	oi_bl.c_str(),
+	oi_bl.length(),
+	onode_layout_t::MAX_OI_LENGTH);
+      mlayout.oi_size = oi_bl.length();
+    });
+  }
+
+  void clear_object_info(Transaction &t) final {
+    with_mutable_layout(t, [](onode_layout_t &mlayout) {
+      memset(&mlayout.oi[0], 0, mlayout.oi_size);
+      mlayout.oi_size = 0;
+    });
+  }
+
+  void update_snapset(Transaction &t, ceph::bufferlist &ss_bl) final {
+    with_mutable_layout(t, [&ss_bl](onode_layout_t &mlayout) {
+      maybe_inline_memcpy(
+	&mlayout.ss[0],
+	ss_bl.c_str(),
+	ss_bl.length(),
+	onode_layout_t::MAX_OI_LENGTH);
+      mlayout.ss_size = ss_bl.length();
+    });
+  }
+
+  void clear_snapset(Transaction &t) final {
+    with_mutable_layout(t, [](onode_layout_t &mlayout) {
+      memset(&mlayout.ss[0], 0, mlayout.ss_size);
+      mlayout.ss_size = 0;
+    });
+  }
+
 };
 
 struct object_data_handler_test_t:

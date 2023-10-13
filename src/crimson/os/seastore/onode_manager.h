@@ -58,12 +58,6 @@ public:
     Transaction &trans,
     const std::vector<ghobject_t> &hoids) = 0;
 
-  using write_dirty_iertr = base_iertr;
-  using write_dirty_ret = write_dirty_iertr::future<>;
-  virtual write_dirty_ret write_dirty(
-    Transaction &trans,
-    const std::vector<OnodeRef> &onodes) = 0;
-
   using erase_onode_iertr = base_iertr;
   using erase_onode_ret = erase_onode_iertr::future<>;
   virtual erase_onode_ret erase_onode(
