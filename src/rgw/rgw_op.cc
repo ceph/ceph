@@ -923,6 +923,10 @@ void rgw_build_iam_environment(rgw::sal::Driver* driver,
     s->env.emplace("aws:username", s->user->get_id().id);
   }
 
+  if (s->auth.identity) {
+    s->env.emplace("rgw:subuser", s->auth.identity->get_subuser().c_str());
+  }
+
   i = m.find("HTTP_X_AMZ_SECURITY_TOKEN");
   if (i != m.end()) {
     s->env.emplace("sts:authentication", "true");
