@@ -1,6 +1,6 @@
 import cherrypy
 from threading import Thread
-from .redfish_dell import RedfishDell
+from .redfishdellsystem import RedfishDellSystem
 from .reporter import Reporter
 from .util import Config, Logger
 from typing import Dict, Any, Optional
@@ -211,19 +211,16 @@ class NodeProxy(Thread):
 
     def main(self) -> None:
         # TODO: add a check and fail if host/username/password/data aren't passed
-
         config = Config('/etc/ceph/node-proxy.yml', default_config=DEFAULT_CONFIG)
-
         log = Logger(__name__, level=config.__dict__['logging']['level'])
 
         # create the redfish system and the obsever
         log.logger.info(f"Server initialization...")
         try:
-            self.system = RedfishDell(host=self.__dict__['host'],
-                                      username=self.__dict__['username'],
-                                      password=self.__dict__['password'],
-                                      system_endpoint='/Systems/System.Embedded.1',
-                                      config=config)
+            self.system = RedfishDellSystem(host=self.__dict__['host'],
+                                            username=self.__dict__['username'],
+                                            password=self.__dict__['password'],
+                                            config=config)
         except RuntimeError:
             log.logger.error("Can't initialize the redfish system.")
             raise

@@ -229,6 +229,12 @@ class NodeProxy:
     def common(self, **kw) -> Dict[str, Any]:
         return self.mgr.node_proxy.common(**kw)
 
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def firmwares(self, **kw) -> Dict[str, Any]:
+        return self.mgr.node_proxy.firmwares(**kw)
+
     def dispatch(self, hostname='', cmd=''):
         kw = dict(hostname=hostname, cmd=cmd)
         try:

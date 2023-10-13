@@ -34,6 +34,9 @@ class BaseSystem:
     def get_storage(self) -> Dict[str, Dict[str, Dict]]:
         raise NotImplementedError()
 
+    def get_firmwares(self) -> Dict[str, Dict[str, Dict]]:
+        raise NotImplementedError()
+
     def get_sn(self) -> str:
         raise NotImplementedError()
 
