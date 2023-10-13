@@ -1553,10 +1553,39 @@ void PgScrubber::map_from_replica(OpRequestRef op)
   }
 }
 
+/**
+ * route incoming replica-reservations requests/responses to the
+ * appropriate handler.
+ * As the ReplicaReservations object is to be owned by the ScrubMachine, we
+ * send the relevant messages to the ScrubMachine.
+ */
+void PgScrubber::handle_scrub_reserve_msgs(OpRequestRef op)
+{
+  dout(10) << fmt::format("{}: {}", __func__, *op->get_req()) << dendl;
+  op->mark_started();
+  if (should_drop_message(op)) {
+    return;
+  }
+  auto m = op->get_req<MOSDScrubReserve>();
+  switch (m->type) {
+    case MOSDScrubReserve::REQUEST:
+      handle_scrub_reserve_request(op);
+      break;
+    case MOSDScrubReserve::GRANT:
+      m_fsm->process_event(ReplicaGrant{op, m->from});
+      break;
+    case MOSDScrubReserve::REJECT:
+      m_fsm->process_event(ReplicaReject{op, m->from});
+      break;
+    case MOSDScrubReserve::RELEASE:
+      handle_scrub_reserve_release(op);
+      break;
+  }
+}
+
+
 void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
 {
-  dout(10) << __func__ << " " << *op->get_req() << dendl;
-  op->mark_started();
   auto request_ep = op->sent_epoch;
   dout(20) << fmt::format("{}: request_ep:{} recovery:{}",
 			  __func__,
@@ -1564,13 +1593,9 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
 			  m_osds->is_recovery_active())
 	   << dendl;
 
-  if (should_drop_message(op)) {
-    return;
-  }
-
-  /* The primary may unilaterally restart the scrub process without notifying
-   * replicas.  Unconditionally clear any existing state prior to handling
-   * the new reservation. */
+  // The primary may unilaterally restart the scrub process without notifying
+  // replicas. Unconditionally clear any existing state prior to handling
+  // the new reservation.
   m_fsm->process_event(FullReset{});
 
   bool granted{false};
@@ -1598,50 +1623,36 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
   m_osds->send_message_osd_cluster(reply, op->get_req()->get_connection());
 }
 
-void PgScrubber::handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from)
-{
-  dout(10) << __func__ << " " << *op->get_req() << dendl;
-  op->mark_started();
 
-  if (should_drop_message(op)) {
-    return;
-  }
-  if (m_reservations.has_value()) {
-    m_reservations->handle_reserve_grant(op, from);
-  } else {
-    dout(20) << __func__ << ": late/unsolicited reservation grant from osd "
-	 << from << " (" << op << ")" << dendl;
-  }
+/// temporary
+void PgScrubber::grant_from_replica(OpRequestRef op, pg_shard_t from)
+{
+  dout(10) << fmt::format("{}: {}", __func__, *op->get_req()) << dendl;
+  ceph_assert(m_reservations.has_value()); // the FSM should know
+  m_reservations->handle_reserve_grant(op, from);
 }
 
-void PgScrubber::handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from)
-{
-  dout(10) << __func__ << " " << *op->get_req() << dendl;
-  op->mark_started();
 
-  if (should_drop_message(op)) {
-    return;
-  }
-  if (m_reservations.has_value()) {
-    // there is an active reservation process. No action is required otherwise.
-    m_reservations->handle_reserve_reject(op, from);
-  }
+/// temporary
+void PgScrubber::reject_from_replica(OpRequestRef op, pg_shard_t from)
+{
+  dout(10) << fmt::format("{}: {}", __func__, *op->get_req()) << dendl;
+  ceph_assert(m_reservations.has_value()); // the FSM should know
+  m_reservations->handle_reserve_reject(op, from);
 }
+
 
 void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
 {
   dout(10) << __func__ << " " << *op->get_req() << dendl;
-  op->mark_started();
   if (should_drop_message(op)) {
     // we might have turned into a Primary in the meantime. The interval
     // change should have been noticed already, and caused us to reset.
     return;
   }
 
-  /*
-   * this specific scrub session has terminated. All incoming events carrying
-   *  the old tag will be discarded.
-   */
+  // this specific scrub session has terminated. All incoming events carrying
+  // the old tag will be discarded.
   m_fsm->process_event(FullReset{});
 }
 
