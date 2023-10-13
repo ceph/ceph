@@ -27,6 +27,7 @@ set(osd_srcs
   scrubber/PrimaryLogScrub.cc
   scrubber/scrub_job.cc
   scrubber/scrub_machine.cc
+  scrubber/scrub_reservations.cc
   scrubber/scrub_resources.cc
   scrubber/ScrubStore.cc
   scrubber/scrub_backend.cc
