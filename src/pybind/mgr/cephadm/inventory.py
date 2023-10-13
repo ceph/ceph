@@ -1481,6 +1481,25 @@ class NodeProxyCache:
         else:
             return _result
 
+    def firmwares(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves firmware information for a specific hostname or all hosts.
+
+        If a 'hostname' is provided in the keyword arguments, retrieves firmware
+        information for that specific host. Otherwise, retrieves firmware
+        information for all available hosts.
+
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: A dictionary containing firmware information for each host.
+        :rtype: Dict[str, Any]
+        """
+        hostname = kw.get('hostname')
+        hosts = [hostname] if hostname else self.data.keys()
+
+        return {host: self.data[host]['firmwares'] for host in hosts}
+
     def criticals(self, **kw):
         return {}
 
