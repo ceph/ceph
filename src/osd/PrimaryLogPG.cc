@@ -1936,27 +1936,11 @@ void PrimaryLogPG::do_request(
     break;
 
   case MSG_OSD_SCRUB_RESERVE:
-    {
-      if (!m_scrubber) {
-        osd->reply_op_error(op, -EAGAIN);
-        return;
-      }
-      auto m = op->get_req<MOSDScrubReserve>();
-      switch (m->type) {
-      case MOSDScrubReserve::REQUEST:
-	m_scrubber->handle_scrub_reserve_request(op);
-	break;
-      case MOSDScrubReserve::GRANT:
-	m_scrubber->handle_scrub_reserve_grant(op, m->from);
-	break;
-      case MOSDScrubReserve::REJECT:
-	m_scrubber->handle_scrub_reserve_reject(op, m->from);
-	break;
-      case MOSDScrubReserve::RELEASE:
-	m_scrubber->handle_scrub_reserve_release(op);
-	break;
-      }
+    if (!m_scrubber) {
+      osd->reply_op_error(op, -EAGAIN);
+      return;
     }
+    m_scrubber->handle_scrub_reserve_msgs(op);
     break;
 
   case MSG_OSD_REP_SCRUB:
