@@ -27,6 +27,7 @@ Highlights
 
 See the relevant sections below for more details on these changes.
 
+* **RADOS** FileStore is not supported in Reef.
 * **RADOS:** RocksDB has been upgraded to version 7.9.2.
 * **RADOS:** There have been significant improvements to RocksDB iteration overhead and performance.
 * **RADOS:** The ``perf dump`` and ``perf schema`` commands have been deprecated in
@@ -115,6 +116,7 @@ MGR
 RADOS
 ~~~~~
 
+* FileStore is not supported in Reef.
 * RocksDB has been upgraded to version 7.9.2, which incorporates several
   performance improvements and features. This is the first release that can
   tune RocksDB settings per column family, which allows for more granular
