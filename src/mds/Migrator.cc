@@ -3606,26 +3606,26 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       }
     }
     else if (icode == 'r') {
-      // remote link
+      // remote link with referent inode
       inodeno_t ino;
       unsigned char d_type;
       mempool::mds_co::string alternate_name;
 
       CDentry::decode_referent(icode, ino, d_type, alternate_name, blp);
-      // referent inode
-      ceph_assert(le);
-      DECODE_START(2, blp);
-      decode_import_inode(dn, blp, oldauth, ls,
-                          peer_exports, updated_scatterlocks);
-      ceph_assert(!dn->is_projected());
-      DECODE_FINISH(blp);
-
       if (dn->get_linkage()->is_referent()) {
 	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
         ceph_assert(dn->get_alternate_name() == alternate_name);
+	ceph_assert(dn->get_linkage()->get_ref_inode()->get_remote_ino() == ino);
       } else {
-	dir->link_remote_inode(dn, ino, d_type);
-        dn->set_alternate_name(std::move(alternate_name));
+	// remote could be set and not the referent.
+        dn->get_linkage()->set_remote(0, 0);
+        dn->get_linkage()->ref_inode = 0;
+        ceph_assert(le);
+        DECODE_START(2, blp);
+        decode_import_inode(dn, blp, oldauth, ls,
+                            peer_exports, updated_scatterlocks);
+        ceph_assert(!dn->is_projected());
+        DECODE_FINISH(blp);
       }
     }
     
