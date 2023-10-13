@@ -39,9 +39,13 @@
 #include "common/CDC.h"
 #include "common/Preforker.h"
 #include "common/ceph_json.h"
+#include "common/debug.h"
 
 #include <boost/program_options/variables_map.hpp>
 #include <boost/program_options/parsers.hpp>
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_ceph_dedup
 
 using namespace std;
 namespace po = boost::program_options;

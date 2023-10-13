@@ -1,5 +1,9 @@
 #include "common.h"
 
+#undef dout_prefix
+#define dout_prefix *_dout << "ceph_dedup_daemon: " \
+                           << __func__ << ": "
+
 ceph::mutex glock = ceph::make_mutex("glock");
 class SampleDedupWorkerThread;
 std::list<SampleDedupWorkerThread> threads;
@@ -176,9 +180,9 @@ public:
     void maybe_print_status() {
       utime_t now = ceph_clock_now();
       if (next_report != utime_t() && now > next_report) {
-	cerr << (int)(now - start) << "s : read "
+	dout(5) << (int)(now - start) << "s : read "
 	     << total_bytes << " bytes so far..."
-	     << std::endl;
+	     << dendl;
 	next_report = now;
 	next_report += report_period;
       }
@@ -275,6 +279,7 @@ public:
     switch (signum) {
     case SIGINT:
     case SIGTERM:
+      dout(0) << "got a signal(" << signum << "), daemon wil be terminiated" << dendl;
       stop = true;
       break;
 
@@ -322,8 +327,6 @@ private:
 
 void SampleDedupWorkerThread::crawl()
 {
-  cout << "new iteration" << std::endl;
-
   ObjectCursor current_object = begin;
   while (!stop && current_object < end) {
     std::vector<ObjectItem> objects;
@@ -373,7 +376,6 @@ void SampleDedupWorkerThread::crawl()
   for (auto &completion : evict_completions) {
     completion->wait_for_complete();
   }
-  cout << "done iteration" << std::endl;
 }
 
 AioCompRef SampleDedupWorkerThread::do_async_evict(string oid)
@@ -403,7 +405,7 @@ std::tuple<std::vector<ObjectItem>, ObjectCursor> SampleDedupWorkerThread::get_o
     &objects,
     &next);
   if (ret < 0 ) {
-    cerr << "error object_list" << std::endl;
+    derr << "error object_list" << dendl;
     objects.clear();
   }
 
@@ -430,8 +432,8 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
 {
   bufferlist data = read_object(object);
   if (data.length() == 0) {
-    cerr << __func__ << " skip object " << object.oid
-	 << " read returned size 0" << std::endl;
+    derr << __func__ << " skip object " << object.oid
+	 << " read returned size 0" << dendl;
     return;
   }
   auto chunks = do_cdc(object, data);
@@ -443,9 +445,9 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
     chunk_total_amount += chunk_data.length();
   }
   if (chunk_total_amount != data.length()) {
-    cerr << __func__ << " sum of chunked length(" << chunk_total_amount
+    derr << __func__ << " sum of chunked length(" << chunk_total_amount
 	 << ") is different from object data length(" << data.length() << ")"
-	 << std::endl;
+	 << dendl;
     return;
   }
 
@@ -464,10 +466,14 @@ void SampleDedupWorkerThread::try_dedup_and_accumulate_result(
       };
 
     if (sample_dedup_global.fp_store.contains(fingerprint)) {
+      dout(20) << "generate a chunk (chunk oid: " << chunk_info.oid << ", offset: " 
+	<< chunk_info.start << ", length: " << chunk_info.size << ", fingerprint: "
+	<< chunk_info.fingerprint << dendl;
       duplicated_size += chunk_data.length();
     }
     if (sample_dedup_global.fp_store.add(chunk_info)) {
       redundant_chunks.push_back(chunk_info);
+      dout(20) << chunk_info.fingerprint << "is duplicated, try to perform dedup" << dendl;
     }
   }
 
@@ -490,15 +496,16 @@ bufferlist SampleDedupWorkerThread::read_object(ObjectItem &object)
     bufferlist partial_data;
     ret = io_ctx.read(object.oid, partial_data, default_op_size, offset);
     if (ret < 0) {
-      cerr << "read object error " << object.oid << " offset " << offset
+      derr << "read object error " << object.oid << " offset " << offset
         << " size " << default_op_size << " error(" << cpp_strerror(ret)
-        << std::endl;
+        << dendl;
       bufferlist empty_buf;
       return empty_buf;
     }
     offset += ret;
     whole_data.claim_append(partial_data);
   }
+  dout(20) << " got object: " << object.oid << " size: " << whole_data.length() << dendl;
   return whole_data;
 }
 
@@ -584,12 +591,12 @@ int make_crawling_daemon(const po::variables_map &opts)
   Rados rados;
   int ret = rados.init_with_context(g_ceph_context);
   if (ret < 0) {
-    cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
+    derr << "couldn't initialize rados: " << cpp_strerror(ret) << dendl;
     return -EINVAL;
   }
   ret = rados.connect();
   if (ret) {
-    cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
+    derr << "couldn't connect to cluster: " << cpp_strerror(ret) << dendl;
     return -EINVAL;
   }
 
@@ -598,9 +605,9 @@ int make_crawling_daemon(const po::variables_map &opts)
   pool_names.push_back(d_opts.get_base_pool_name());
   ret = rados.ioctx_create(d_opts.get_base_pool_name().c_str(), io_ctx);
   if (ret < 0) {
-    cerr << "error opening base pool "
+    derr << "error opening base pool "
       << d_opts.get_base_pool_name() << ": "
-      << cpp_strerror(ret) << std::endl;
+      << cpp_strerror(ret) << dendl;
     return -EINVAL;
   }
 
@@ -619,13 +626,13 @@ int make_crawling_daemon(const po::variables_map &opts)
 
   ret = rados.ioctx_create(d_opts.get_chunk_pool_name().c_str(), chunk_io_ctx);
   if (ret < 0) {
-    cerr << "error opening chunk pool "
+    derr << "error opening chunk pool "
       << d_opts.get_chunk_pool_name() << ": "
-      << cpp_strerror(ret) << std::endl;
+      << cpp_strerror(ret) << dendl;
     return -EINVAL;
   }
 
-  cout << d_opts << std::endl;
+  dout(0) << d_opts << dendl;
 
   while (!all_stop) {
     ObjectCursor begin = io_ctx.object_list_begin();
@@ -639,7 +646,7 @@ int make_crawling_daemon(const po::variables_map &opts)
     {
       lock_guard lock(glock);
       for (int i = 0; i < d_opts.get_max_thread(); i++) {
-	cout << " add thread.. " << std::endl;
+	dout(15) << " spawn thread " << i << dendl;
 	ObjectCursor shard_start;
 	ObjectCursor shard_end;
 	io_ctx.object_list_slice(
@@ -668,10 +675,10 @@ int make_crawling_daemon(const po::variables_map &opts)
       total_duplicate_size += p.get_total_duplicated_size();
     }
 
-    cerr << "Summary: read "
+    dout(5) << "Summary: read "
 	 << total_size << " bytes so far and found saveable space ("
 	 << total_duplicate_size << " bytes)."
-	 << std::endl;
+	 << dendl;
 
     {
       lock_guard lock(glock);
@@ -682,15 +689,16 @@ int make_crawling_daemon(const po::variables_map &opts)
     map<string, librados::pool_stat_t> stats;
     ret = rados.get_pool_stats(pool_names, stats);
     if (ret < 0) {
-      cerr << "error fetching pool stats: " << cpp_strerror(ret) << std::endl;
+      derr << "error fetching pool stats: " << cpp_strerror(ret) << dendl;
       return -EINVAL;
     }
     if (stats.find(d_opts.get_base_pool_name()) == stats.end()) {
-      cerr << "stats can not find pool name: " << d_opts.get_base_pool_name() << std::endl;
+      derr << "stats can not find pool name: " << d_opts.get_base_pool_name() << dendl;
       return -EINVAL;
     }
   }
 
+  dout(0) << "done" << dendl;
   return 0;
 }
 
