@@ -16,7 +16,7 @@
 #define CEPH_ZSTDCOMPRESSOR_H
 
 #define ZSTD_STATIC_LINKING_ONLY
-#include "zstd/lib/zstd.h"
+#include "zstd.h"
 
 #include "include/buffer.h"
 #include "include/encoding.h"
