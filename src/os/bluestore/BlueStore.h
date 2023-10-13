@@ -296,17 +296,17 @@ public:
     uint16_t cache_private = 0; ///< opaque (to us) value used by Cache impl
     uint32_t flags;             ///< FLAG_*
     uint64_t seq;
-    uint32_t poffset, length;
+    uint64_t poffset, length;
     ceph::buffer::list data;
     std::shared_ptr<int64_t> cache_age_bin;  ///< cache age bin
 
     boost::intrusive::list_member_hook<> lru_item;
     boost::intrusive::list_member_hook<> state_item;
 
-    Buffer(BufferSpaceRef space, unsigned s, uint64_t q, uint32_t o, uint32_t l,
+    Buffer(BufferSpaceRef space, unsigned s, uint64_t q, uint64_t o, uint64_t l,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), poffset(o), length(l) {}
-    Buffer(BufferSpaceRef space, unsigned s, uint64_t q, uint32_t o, ceph::buffer::list& b,
+    Buffer(BufferSpaceRef space, unsigned s, uint64_t q, uint64_t o, ceph::buffer::list& b,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), poffset(o),
 	length(b.length()), data(b) {}
@@ -398,6 +398,16 @@ public:
 
     void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near) {
       cache->_audit("_add_buffer start");
+
+      Buffer* asd = nullptr;
+      auto buffer_it = buffer_map.find(b->poffset);
+      if (buffer_it != buffer_map.end()) {
+        asd = (Buffer*)buffer_it->second.get();
+        if (asd->is_writing()) {
+          writing.erase(state_list_t::s_iterator_to(*asd));
+        }
+      }
+
       buffer_map[b->poffset].reset(b);
       if (b->is_writing()) {
         // we might get already cached data for which resetting mempool is inppropriate
@@ -483,7 +493,7 @@ public:
       cache->_trim();
     }
     void _finish_write(Blob& blob, uint64_t poffset, uint64_t seq);
-    void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
+    void did_read(BufferCacheShard* cache, uint64_t offset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
       b->cache_private = _discard(cache, offset, bl.length());
@@ -491,16 +501,16 @@ public:
       cache->_trim();
     }
 
-    void read(BlobRef &blob, uint32_t offset, uint32_t length,
+    void read(BlobRef &blob, uint64_t offset, uint64_t length,
 	      BlueStore::ready_regions_t& res,
 	      interval_set<uint32_t>& res_intervals,
 	      int flags = 0);
 
-    void truncate(Blob *blob, uint32_t offset) {
+    void truncate(Blob *blob, uint64_t offset) {
        discard(blob, offset, (uint32_t)-1 - offset);
     }
 
-    bool _dup_writing(BufferCacheShard* cache, BufferSpace* to);
+    bool _dup_writing(TransContext* tcx, BlobRef blob, BufferCacheShard* cache, BufferSpace* to);
     void split(BufferCacheShard* cache, size_t pos, BufferSpaceRef r);
 
     void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
@@ -2926,9 +2936,14 @@ private:
     unsigned flags) {
     uint64_t poffset = b->get_blob().calc_offset(offset, nullptr);
     ceph_assert(poffset != bluestore_pextent_t::INVALID_OFFSET);
+    #define dout_subsys ceph_subsys_bluestore
+    ldout(b->shared_blob->get_cache()->cct, 20)
+        << __func__ << " adding offset=0x" << std::hex << offset
+        << " poffset=0x" << std::hex << poffset << " " << bl << dendl;
     b->dirty_bc()->write(b->shared_blob->get_cache(), txc->seq, poffset,
                               bl, flags);
     txc->buffers_written.insert({b, poffset});
+    #undef dout_subsys
   }
 
   int _collection_list(

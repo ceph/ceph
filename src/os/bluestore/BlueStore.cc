@@ -13,6 +13,7 @@
  */
 
 #include <bit>
+#include <cstdint>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -25,6 +26,7 @@
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_real.hpp>
 
+#include "include/ceph_assert.h"
 #include "include/cpp-btree/btree_set.h"
 
 #include "BlueStore.h"
@@ -625,10 +627,16 @@ void _dump_extent_map(CephContext *cct, const BlueStore::ExtentMap &em)
 		      << dendl;
     }
     std::lock_guard l(e.blob->shared_blob->get_cache()->lock);
-    for (auto& i : e.blob->get_bc()->buffer_map) {
-      dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
-		      << "~" << i.second->length << std::dec
-		      << " " << *i.second << dendl;
+    for (auto& i : blob.get_extents()) {
+      auto buffer_it = em.onode->buffer_space->buffer_map.find(i.offset);
+      if (buffer_it != em.onode->buffer_space->buffer_map.end()) {
+        dout(LogLevelV) << __func__ << "       0x" << std::hex << i.offset
+                        << "~" << i.length << std::dec << " "
+                        << *buffer_it->second << dendl;
+      } else {
+        dout(LogLevelV) << __func__ << "       0x" << std::hex << i.offset
+                        << "~" << i.length << std::dec << " (not in bufferspace)" << dendl;
+      }
     }
   }
 }
@@ -1786,8 +1794,8 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint64_t offset, u
 
 void BlueStore::BufferSpace::read(
   BlobRef& blob, 
-  uint32_t offset,
-  uint32_t length,
+  uint64_t offset,
+  uint64_t length,
   BlueStore::ready_regions_t& res,
   interval_set<uint32_t>& res_intervals,
   int flags)
@@ -1795,16 +1803,26 @@ void BlueStore::BufferSpace::read(
   BufferCacheShard* cache = blob->shared_blob->get_cache();
   res.clear();
   res_intervals.clear();
-  uint32_t poffset = blob->get_blob().calc_offset(offset, nullptr);
+  uint64_t poffset = blob->get_blob().calc_offset(offset, nullptr);
 
-  uint32_t want_bytes = length;
-  uint32_t end = poffset + length;
+  uint64_t want_bytes = length;
+  uint64_t end = offset + length;
+  ldout(blob->shared_blob->get_cache()->cct, 20) << __func__ << "reading offset=0x" << std::hex
+           << offset << " poffset=0x" << std::hex << poffset 
+           << " want=0x" << std::hex << want_bytes
+           << " end=0x" << std::hex << end 
+           << dendl;
 
   {
     std::lock_guard l(cache->lock);
     auto i = _data_lower_bound(poffset);
-    while (i != buffer_map.end() && poffset < end && i->first < end) {
+    uint64_t pend = poffset + length;
+    // TODO: i->first < end translate to blob offset!
+    while (i != buffer_map.end() && offset < end && i->first < pend) {
       Buffer *b = i->second.get();
+      ldout(blob->shared_blob->get_cache()->cct, 20)
+          << __func__ << " buffer offset=0x" << std::hex << offset
+          << " poffset=0x" << std::hex << poffset << " " << *b << dendl;
       ceph_assert(b->end() > poffset);
 
       bool val = false;
@@ -1817,8 +1835,8 @@ void BlueStore::BufferSpace::read(
 
       if (val) {
         if (b->poffset < poffset) {
-	  uint32_t skip = poffset - b->poffset;
-	  uint32_t l = min(length, b->length - skip);
+	  uint64_t skip = poffset - b->poffset;
+	  uint64_t l = std::min(length, b->length - skip);
 	  res[offset].substr_of(b->data, skip, l);
 	  res_intervals.insert(offset, l);
 	  offset += l;
@@ -1827,11 +1845,12 @@ void BlueStore::BufferSpace::read(
 	    cache->_touch(b);
           }
           poffset = blob->get_blob().calc_offset(offset, nullptr);
+          pend = poffset + length;
           i = _data_lower_bound(poffset);
           continue;
         }
         if (b->poffset > poffset) {
-	  uint32_t gap = b->poffset - poffset;
+	  uint64_t gap = b->poffset - poffset;
 	  if (length <= gap) {
 	    break;
 	  }
@@ -1856,6 +1875,7 @@ void BlueStore::BufferSpace::read(
       }
       poffset = blob->get_blob().calc_offset(offset, nullptr);
       i = _data_lower_bound(poffset);
+      pend = poffset + length;
     }
   }
 
@@ -1873,16 +1893,18 @@ void BlueStore::BufferSpace::_finish_write(Blob &blob, uint64_t offset, uint64_t
   auto buffer_map_it = buffer_map.find(offset);
   auto &buffer = buffer_map_it->second;
   if (buffer_map_it == buffer_map.end()) {
+    ldout(cache->cct, 20) << __func__ << "poffset 0x" << offset
+                          << " not in buffer_map" << dendl;
     return;
   }
   if (buffer->seq > seq) {
+    ldout(cache->cct, 20) << __func__ << "poffset 0x" << offset
+                          << " seq " << seq << " is outdated in buffer_map, current=" << buffer->seq << dendl;
     return;
   }
 
   ceph_assert(buffer->is_writing());
-  auto writing_buffer_it = std::find_if(writing.begin(), writing.end(), [offset, seq](Buffer& buffer) {
-    return buffer.poffset == offset && seq == buffer.seq;
-  });
+  auto writing_buffer_it = state_list_t::s_iterator_to(*buffer.get());
 
   if (buffer->flags & Buffer::FLAG_NOCACHE) {
     writing.erase(writing_buffer_it);
@@ -1906,7 +1928,7 @@ void BlueStore::BufferSpace::_finish_write(Blob &blob, uint64_t offset, uint64_t
   true  if something copied
   false if nothing copied
 */
-bool BlueStore::BufferSpace::_dup_writing(BufferCacheShard* cache, BufferSpace* to)
+bool BlueStore::BufferSpace::_dup_writing(TransContext *txc, BlobRef blob, BufferCacheShard* cache, BufferSpace* to)
 {
   bool copied = false;
   if (!writing.empty()) {
@@ -1915,6 +1937,7 @@ bool BlueStore::BufferSpace::_dup_writing(BufferCacheShard* cache, BufferSpace* 
       Buffer& b = *it;
       Buffer* to_b = new Buffer(to, b.state, b.seq, b.poffset, b.data, b.flags);
       ceph_assert(to_b->is_writing());
+      txc->buffers_written.insert({blob, to_b->poffset});
       to->_add_buffer(cache, to_b, 0, nullptr);
     }
   }
@@ -3260,7 +3283,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       e.blob->dup(*cb);
       // By default do not copy buffers to clones, and let them read data by themselves.
       // The exception are 'writing' buffers, which are not yet stable on device.
-      bool some_copied = e.blob->bc->_dup_writing(cb->shared_blob->get_cache(), cb->bc.get());
+      bool some_copied = e.blob->bc->_dup_writing(txc, cb, cb->shared_blob->get_cache(), cb->bc.get());
       if (some_copied) {
 	// Pretend we just wrote those buffers;
 	// we need to get _finish_write called, so we can clear then from writing list.
@@ -3387,7 +3410,7 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
       }
       // By default do not copy buffers to clones, and let them read data by themselves.
       // The exception are 'writing' buffers, which are not yet stable on device.
-      bool some_copied = e.blob->bc->_dup_writing(cb->shared_blob->get_cache(), cb->bc.get());
+      bool some_copied = e.blob->bc->_dup_writing(txc, cb, cb->shared_blob->get_cache(), cb->bc.get());
       if (some_copied) {
 	// Pretend we just wrote those buffers;
 	// we need to get _finish_write called, so we can clear then from writing list.
@@ -12009,6 +12032,8 @@ void BlueStore::_read_cache(
 
     ready_regions_t cache_res;
     interval_set<uint32_t> cache_interval;
+    ceph_assert(bptr->dirty_bc().get() != nullptr);
+    dout(20) << __func__ << "  bufferspace is " << bptr->dirty_bc() << dendl;
     bptr->dirty_bc()->read(
       bptr, b_off, b_len, cache_res, cache_interval,
       read_cache_policy);

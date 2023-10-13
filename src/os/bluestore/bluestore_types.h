@@ -647,7 +647,7 @@ public:
     if (plen)
       *plen = p->length - x_off;
     std::cout << std::flush;
-    std::cout << __func__ << " pere offset=" << _x_off << " poffset=" << p->offset + x_off << std::endl;
+    std::cout << __func__ << " pere offset=0x" << std::hex <<  _x_off << " poffset=0x" << std::hex << p->offset + x_off << std::endl;
     return p->offset + x_off;
   }
 
