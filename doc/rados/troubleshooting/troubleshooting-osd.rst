@@ -267,206 +267,278 @@ If the cluster has started but an OSD isn't starting, check the following:
 An OSD Failed
 -------------
 
-When a ``ceph-osd`` process dies, surviving ``ceph-osd`` daemons will report
-to the mons that it appears down, which will in turn surface the new status
-via the ``ceph health`` command::
+When an OSD fails, this means that a ``ceph-osd`` process is unresponsive or
+has died and that the corresponding OSD has been marked ``down``. Surviving
+``ceph-osd`` daemons will report to the monitors that the OSD appears to be
+down, and a new status will be visible in the output of the ``ceph health``
+command, as in the following example:
 
-	ceph health
-	HEALTH_WARN 1/3 in osds are down
+.. prompt:: bash
 
-Specifically, you will get a warning whenever there are OSDs marked ``in``
-and ``down``.  You can identify which  are ``down`` with::
+   ceph health
 
-	ceph health detail
-	HEALTH_WARN 1/3 in osds are down
-	osd.0 is down since epoch 23, last address 192.168.106.220:6800/11080
+::
 
-or ::
+   HEALTH_WARN 1/3 in osds are down
 
-	ceph osd tree down
+This health alert is raised whenever there are one or more OSDs marked ``in``
+and ``down``. To see which OSDs are ``down``, add ``detail`` to the command as in
+the following example:
 
-If there is a drive
-failure or other fault preventing ``ceph-osd`` from functioning or
-restarting, an error message should be present in its log file under
-``/var/log/ceph``.
+.. prompt:: bash
 
-If the daemon stopped because of a heartbeat failure or ``suicide timeout``,
-the underlying drive or filesystem may be unresponsive. Check ``dmesg``
-and `syslog`  output for drive or other kernel errors.  You may need to
-specify something like ``dmesg -T`` to get timestamps, otherwise it's
-easy to mistake old errors for new.
+   ceph health detail
 
-If the problem is a software error (failed assertion or other
-unexpected error), search the archives and tracker as above, and
-report it to the `ceph-devel`_ email list if there's no clear fix or
-existing bug.
+::
+
+   HEALTH_WARN 1/3 in osds are down
+   osd.0 is down since epoch 23, last address 192.168.106.220:6800/11080
+
+Alternatively, run the following command:
+
+.. prompt:: bash
+
+    ceph osd tree down
+
+If there is a drive failure or another fault that is preventing a given
+``ceph-osd`` daemon from functioning or restarting, then there should be an
+error message present in its log file under ``/var/log/ceph``.
+
+If the ``ceph-osd`` daemon stopped because of a heartbeat failure or a
+``suicide timeout`` error, then the underlying drive or filesystem might be
+unresponsive. Check ``dmesg`` output and `syslog`  output for drive errors or
+kernel errors. It might be necessary to specify certain flags (for example,
+``dmesg -T`` to see human-readable timestamps) in order to avoid mistaking old
+errors for new errors.
+
+If an entire host's OSDs are ``down``, check to see if there is a network
+error or a hardware issue with the host.
+
+If the OSD problem is the result of a software error (for example, a failed
+assertion or another unexpected error), search for reports of the issue in the
+`bug tracker <https://tracker.ceph/com/projects/ceph>`_ , the `dev mailing list
+archives <https://lists.ceph.io/hyperkitty/list/dev@ceph.io/>`_, and the
+`ceph-users mailing list archives
+<https://lists.ceph.io/hyperkitty/list/ceph-users@ceph.io/>`_.  If there is no
+clear fix or existing bug, then :ref:`report the problem to the ceph-devel
+email list <Get Involved>`.
+
 
 .. _no-free-drive-space:
 
 No Free Drive Space
 -------------------
 
-Ceph prevents you from writing to a full OSD so that you don't lose data.
-In an operational cluster, you should receive a warning when your cluster's OSDs
-and pools approach the full ratio. The ``mon_osd_full_ratio`` defaults to
-``0.95``, or 95% of capacity before it stops clients from writing data.
-The ``mon_osd_backfillfull_ratio`` defaults to ``0.90``, or 90 % of
-capacity above which backfills will not start. The
-OSD nearfull ratio defaults to ``0.85``, or 85% of capacity
-when it generates a health warning.
+If an OSD is full, Ceph prevents data loss by ensuring that no new data is
+written to the OSD. In an properly running cluster, health checks are raised
+when the cluster's OSDs and pools approach certain "fullness" ratios. The
+``mon_osd_full_ratio`` threshold defaults to ``0.95`` (or 95% of capacity):
+this is the point above which clients are prevented from writing data. The
+``mon_osd_backfillfull_ratio`` threshold defaults to ``0.90`` (or 90% of
+capacity): this is the point above which backfills will not start. The
+``mon_osd_nearfull_ratio`` threshold defaults to ``0.85`` (or 85% of capacity):
+this is the point at which it raises the ``OSD_NEARFULL`` health check.
 
-Note that individual OSDs within a cluster will vary in how much data Ceph
-allocates to them.  This utilization can be displayed for each OSD with ::
+OSDs within a cluster will vary in how much data is allocated to them by Ceph.
+To check "fullness" by displaying data utilization for every OSD, run the
+following command:
 
-	ceph osd df
+.. prompt:: bash
 
-Overall cluster / pool fullness can be checked with ::
+   ceph osd df
 
-	ceph df 
+To check "fullness" by displaying a cluster’s overall data usage and data
+distribution among pools, run the following command:
 
-Pay close attention to the **most full** OSDs, not the percentage of raw space
-used as reported by ``ceph df``.  It only takes one outlier OSD filling up to
-fail writes to its pool.  The space available to each pool as reported by
-``ceph df`` considers the ratio settings relative to the *most full* OSD that
-is part of a given pool.  The distribution can be flattened by progressively
-moving data from overfull or to underfull OSDs using the ``reweight-by-utilization``
-command.  With Ceph releases beginning with later revisions of Luminous one can also
-exploit the ``ceph-mgr`` ``balancer`` module to perform this task automatically
-and rather effectively.
+.. prompt:: bash
 
-The ratios can be adjusted:
+   ceph df 
+
+When examining the output of the ``ceph df`` command, pay special attention to
+the **most full** OSDs, as opposed to the percentage of raw space used. If a
+single outlier OSD becomes full, all writes to this OSD's pool might fail as a
+result. When ``ceph df`` reports the space available to a pool, it considers
+the ratio settings relative to the *most full* OSD that is part of the pool. To
+flatten the distribution, two approaches are available: (1) Using the
+``reweight-by-utilization`` command to progressively move data from excessively
+full OSDs or move data to insufficiently full OSDs, and (2) in later revisions
+of Luminous and subsequent releases, exploiting the ``ceph-mgr`` ``balancer``
+module to perform the same task automatically.
+
+To adjust the "fullness" ratios, run a command or commands of the following
+form:
+
+.. prompt:: bash
+
+   ceph osd set-nearfull-ratio <float[0.0-1.0]>
+   ceph osd set-full-ratio <float[0.0-1.0]>
+   ceph osd set-backfillfull-ratio <float[0.0-1.0]>
+
+Sometimes full cluster issues arise because an OSD has failed. This can happen
+either because of a test or because the cluster is small, very full, or
+unbalanced. When an OSD or node holds an excessive percentage of the cluster's
+data, component failures or natural growth can result in the ``nearfull`` and
+``full`` ratios being exceeded.  When testing Ceph's resilience to OSD failures
+on a small cluster, it is advised to leave ample free disk space and to
+consider temporarily lowering the OSD ``full ratio``, OSD ``backfillfull
+ratio``, and OSD ``nearfull ratio``.
+
+The "fullness" status of OSDs is visible in the output of the ``ceph health``
+command, as in the following example:
+
+.. prompt:: bash
+
+   ceph health
 
 ::
 
-    ceph osd set-nearfull-ratio <float[0.0-1.0]>
-    ceph osd set-full-ratio <float[0.0-1.0]>
-    ceph osd set-backfillfull-ratio <float[0.0-1.0]>
+  HEALTH_WARN 1 nearfull osd(s)
 
-Full cluster issues can arise when an OSD fails either as a test or organically
-within small and/or very full or unbalanced cluster. When an OSD or node
-holds an outsize percentage of the cluster's data, the ``nearfull`` and ``full``
-ratios may be exceeded as a result of component failures or even natural growth.
-If you are testing how Ceph reacts to OSD failures on a small
-cluster, you should leave ample free disk space and consider temporarily
-lowering the OSD ``full ratio``, OSD ``backfillfull ratio`` and
-OSD ``nearfull ratio``
+For details, add the ``detail`` command as in the following example:
 
-Full ``ceph-osds`` will be reported by ``ceph health``::
+.. prompt:: bash
 
-	ceph health
-	HEALTH_WARN 1 nearfull osd(s)
+    ceph health detail
 
-Or::
+::
 
-	ceph health detail
-	HEALTH_ERR 1 full osd(s); 1 backfillfull osd(s); 1 nearfull osd(s)
-	osd.3 is full at 97%
-	osd.4 is backfill full at 91%
-	osd.2 is near full at 87%
+    HEALTH_ERR 1 full osd(s); 1 backfillfull osd(s); 1 nearfull osd(s)
+    osd.3 is full at 97%
+    osd.4 is backfill full at 91%
+    osd.2 is near full at 87%
 
-The best way to deal with a full cluster is to add capacity via new OSDs, enabling
-the cluster to redistribute data to newly available storage.
+To address full cluster issues, it is recommended to add capacity by adding
+OSDs. Adding new OSDs allows the cluster to redistribute data to newly
+available storage. Search for ``rados bench`` orphans that are wasting space.
 
-If you cannot start a legacy Filestore OSD because it is full, you may reclaim
-some space deleting a few placement group directories in the full OSD.
+If a legacy Filestore OSD cannot be started because it is full, it is possible
+to reclaim space by deleting a small number of placement group directories in
+the full OSD.
 
-.. important:: If you choose to delete a placement group directory on a full OSD,
-   **DO NOT** delete the same placement group directory on another full OSD, or
-   **YOU WILL LOSE DATA**. You **MUST** maintain at least one copy of your data on
-   at least one OSD.  This is a rare and extreme intervention, and is not to be
-   undertaken lightly.
+.. important:: If you choose to delete a placement group directory on a full
+   OSD, **DO NOT** delete the same placement group directory on another full
+   OSD. **OTHERWISE YOU WILL LOSE DATA**. You **MUST** maintain at least one
+   copy of your data on at least one OSD. Deleting placement group directories
+   is a rare and extreme intervention. It is not to be undertaken lightly.
 
-See `Monitor Config Reference`_ for additional details.
+See `Monitor Config Reference`_ for more information.
+
 
 OSDs are Slow/Unresponsive
 ==========================
 
-A common issue involves slow or unresponsive OSDs. Ensure that you
-have eliminated other troubleshooting possibilities before delving into OSD
-performance issues. For example, ensure that your network(s) is working properly
-and your OSDs are running. Check to see if OSDs are throttling recovery traffic.
+OSDs are sometimes slow or unresponsive. When troubleshooting this common
+problem, it is advised to eliminate other possibilities before investigating
+OSD performance issues. For example, be sure to confirm that your network(s)
+are working properly, to verify that your OSDs are running, and to check
+whether OSDs are throttling recovery traffic.
 
-.. tip:: Newer versions of Ceph provide better recovery handling by preventing
-   recovering OSDs from using up system resources so that ``up`` and ``in``
-   OSDs are not available or are otherwise slow.
+.. tip:: In pre-Luminous releases of Ceph, ``up`` and ``in`` OSDs were
+   sometimes not available or were otherwise slow because recovering OSDs were
+   consuming system resources. Newer releases provide better recovery handling
+   by preventing this phenomenon.
+
 
 Networking Issues
 -----------------
 
-Ceph is a distributed storage system, so it relies upon networks for OSD peering
-and replication, recovery from faults, and periodic heartbeats. Networking
-issues can cause OSD latency and flapping OSDs. See `Flapping OSDs`_ for
-details.
+As a distributed storage system, Ceph relies upon networks for OSD peering and
+replication, recovery from faults, and periodic heartbeats. Networking issues
+can cause OSD latency and flapping OSDs. For more information, see `Flapping
+OSDs`_.
 
-Ensure that Ceph processes and Ceph-dependent processes are connected and/or
-listening. ::
+To make sure that Ceph processes and Ceph-dependent processes are connected and
+listening, run the following commands:
 
-	netstat -a | grep ceph
-	netstat -l | grep ceph
-	sudo netstat -p | grep ceph
+.. prompt:: bash
 
-Check network statistics. ::
+   netstat -a | grep ceph
+   netstat -l | grep ceph
+   sudo netstat -p | grep ceph
 
-	netstat -s
+To check network statistics, run the following command:
+
+.. prompt:: bash
+
+   netstat -s
 
 Drive Configuration
 -------------------
 
-A SAS or SATA storage drive should only house one OSD; NVMe drives readily
-handle two or more. Read and write throughput can bottleneck if other processes
-share the drive, including journals / metadata, operating systems, Ceph monitors,
-`syslog` logs, other OSDs, and non-Ceph processes.
+An SAS or SATA storage drive should house only one OSD, but a NVMe drive can
+easily house two or more. However, it is possible for read and write throughput
+to bottleneck if other processes share the drive. Such processes include:
+journals / metadata, operating systems, Ceph monitors, ``syslog`` logs, other
+OSDs, and non-Ceph processes.
 
-Ceph acknowledges writes *after* journaling, so fast SSDs are an
-attractive option to accelerate the response time--particularly when
-using the ``XFS`` or ``ext4`` file systems for legacy Filestore OSDs.
-By contrast, the ``Btrfs``
-file system can write and journal simultaneously.  (Note, however, that
-we recommend against using ``Btrfs`` for production deployments.)
+Because Ceph acknowledges writes *after* journaling, fast SSDs are an
+attractive option for accelerating response time -- particularly when using the
+``XFS`` or ``ext4`` filesystems for legacy FileStore OSDs.  By contrast, the
+``Btrfs`` file system can write and journal simultaneously. (However, use of
+``Btrfs`` is not recommended for production deployments.)
 
 .. note:: Partitioning a drive does not change its total throughput or
-   sequential read/write limits. Running a journal in a separate partition
-   may help, but you should prefer a separate physical drive.
+   sequential read/write limits. Throughput might be improved somewhat by
+   running a journal in a separate partition, but it is better still to run
+   such a journal in a separate physical drive.
+   
+.. warning:: Reef does not support FileStore. Releases after Reef do not
+   support FileStore. Any information that mentions FileStore is pertinent only
+   to the Quincy release of Ceph and to releases prior to Quincy.
+
 
 Bad Sectors / Fragmented Disk
 -----------------------------
 
-Check your drives for bad blocks, fragmentation, and other errors that can cause
-performance to drop substantially.  Invaluable tools include ``dmesg``, ``syslog``
-logs, and ``smartctl`` (from the ``smartmontools`` package).
+Check your drives for bad blocks, fragmentation, and other errors that can
+cause significantly degraded performance. Tools that are useful in checking for
+drive errors include ``dmesg``, ``syslog`` logs, and ``smartctl`` (found in the
+``smartmontools`` package).
+
+.. note:: ``smartmontools`` 7.0 and late provides NVMe stat passthrough and
+   JSON output.
+
 
 Co-resident Monitors/OSDs
 -------------------------
 
-Monitors are relatively lightweight processes, but they issue lots of
-``fsync()`` calls,
-which can interfere with other workloads, particularly if monitors run on the
-same drive as an OSD. Additionally, if you run monitors on the same host as
-OSDs, you may incur performance issues related to:
+Although monitors are relatively lightweight processes, performance issues can
+result when monitors are run on the same host machine as an OSD. Monitors issue
+many ``fsync()`` calls and this can interfere with other workloads. The danger
+of performance issues is especially acute when the monitors are co-resident on
+the same storage drive as an OSD. In addition, if the monitors are running an
+older kernel (pre-3.0) or a kernel with no ``syncfs(2)`` syscall, then multiple
+OSDs running on the same host might make so many commits as to undermine each
+other's performance.  This problem sometimes results in what is called "the
+bursty writes".
 
-- Running an older kernel (pre-3.0)
-- Running a kernel with no ``syncfs(2)`` syscall.
-
-In these cases, multiple OSDs running on the same host can drag each other down
-by doing lots of commits. That often leads to the bursty writes.
 
 Co-resident Processes
 ---------------------
 
-Spinning up co-resident processes (convergence) such as a cloud-based solution, virtual
-machines and other applications that write data to Ceph while operating on the
-same hardware as OSDs can introduce significant OSD latency. Generally, we
-recommend optimizing hosts for use with Ceph and using other hosts for other
-processes. The practice of separating Ceph operations from other applications
-may help improve performance and may streamline troubleshooting and maintenance.
+Significant OSD latency can result from processes that write data to Ceph (for
+example, cloud-based solutions and virtual machines) while operating on the
+same hardware as OSDs. For this reason, making such processes co-resident with
+OSDs is not generally recommended. Instead, the recommended practice is to
+optimize certain hosts for use with Ceph and use other hosts for other
+processes. This practice of separating Ceph operations from other applications
+might help improve performance and might also streamline troubleshooting and
+maintenance.
+
+Running co-resident processes on the same hardware is sometimes called
+"convergence". When using Ceph, engage in convergence only with expertise and
+after consideration.
+
 
 Logging Levels
 --------------
 
-If you turned logging levels up to track an issue and then forgot to turn
-logging levels back down, the OSD may be putting a lot of logs onto the disk. If
-you intend to keep logging levels high, you may consider mounting a drive to the
-default path for logging (i.e., ``/var/log/ceph/$cluster-$name.log``).
+Performance issues can result from high logging levels. Operators sometimes
+raise logging levels in order to track an issue and then forget to lower them
+afterwards. In such a situation, OSDs might consume valuable system resources to
+write needlessly verbose logs onto the disk. Anyone who does want to use high logging
+levels is advised to consider mounting a drive to the default path for logging
+(for example, ``/var/log/ceph/$cluster-$name.log``).
 
 Recovery Throttling
 -------------------
