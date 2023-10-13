@@ -307,10 +307,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         zone_name: Optional[str] = None,
                         realm_token: Optional[str] = None,
                         port: Optional[int] = None,
-                        placement: Optional[str] = None,
+                        placement: Optional[Union[str, Dict[str, Any]]] = None,
                         start_radosgw: Optional[bool] = True,
                         zone_endpoints: Optional[str] = None,
                         inbuf: Optional[str] = None) -> Any:
+
         if inbuf:
             try:
                 rgw_specs = self._parse_rgw_specs(inbuf)
@@ -318,7 +319,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                 return HandleCommandResult(retval=-errno.EINVAL, stderr=f'{e}')
         elif (zone_name and realm_token):
             token = RealmToken.from_base64_str(realm_token)
-            placement_spec = PlacementSpec.from_string(placement) if placement else None
+            if isinstance(placement, dict):
+                placement_spec = PlacementSpec.from_json(placement) if placement else None
+            elif isinstance(placement, str):
+                placement_spec = PlacementSpec.from_string(placement) if placement else None
             rgw_specs = [RGWSpec(rgw_realm=token.realm_name,
                                  rgw_zone=zone_name,
                                  rgw_realm_token=realm_token,
@@ -371,8 +375,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                            zone_name: Optional[str] = None,
                            realm_token: Optional[str] = None,
                            port: Optional[int] = None,
-                           placement: Optional[str] = None,
+                           placement: Optional[dict] = None,
                            start_radosgw: Optional[bool] = True,
                            zone_endpoints: Optional[str] = None) -> None:
-        self.rgw_zone_create(zone_name, realm_token, port, placement, start_radosgw,
+        placement_spec = placement.get('placement') if placement else None
+        self.rgw_zone_create(zone_name, realm_token, port, placement_spec, start_radosgw,
                              zone_endpoints)
