@@ -507,9 +507,6 @@ public:
   /// queue the message (-> event) that all replicas have reserved scrub resources for us
   void queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority);
 
-  /// queue the message (-> event) that some replicas denied our scrub resources request
-  void queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority);
-
   /// Signals either (a) the end of a sleep period, or (b) a recheck of the availability
   /// of the primary map being created by the backend.
   void queue_for_scrub_resched(PG* pg, Scrub::scrub_prio_t with_priority);

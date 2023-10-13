@@ -86,15 +86,6 @@ void PGScrubResourcesOK::run(OSD* osd,
   pg->unlock();
 }
 
-void PGScrubDenied::run(OSD* osd,
-			OSDShard* sdata,
-			PGRef& pg,
-			ThreadPool::TPHandle& handle)
-{
-  pg->scrub_send_resources_denied(epoch_queued, handle);
-  pg->unlock();
-}
-
 void PGScrubPushesUpdate::run(OSD* osd,
 			      OSDShard* sdata,
 			      PGRef& pg,

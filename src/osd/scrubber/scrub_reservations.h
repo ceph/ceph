@@ -93,8 +93,6 @@ class ReplicaReservations {
    */
   void verify_rejections_source(OpRequestRef op, pg_shard_t from);
 
-  void handle_reserve_reject(OpRequestRef op, pg_shard_t from);
-
   /**
    * Notifies implementation that it is no longer responsible for releasing
    * tracked remote reservations.
