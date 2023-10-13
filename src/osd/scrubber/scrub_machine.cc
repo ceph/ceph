@@ -180,6 +180,28 @@ ReservingReplicas::~ReservingReplicas()
   scrbr->clear_reserving_now();
 }
 
+sc::result ReservingReplicas::react(const ReplicaGrant& ev)
+{
+  // for now - route the message back to the scrubber, as it holds the
+  // ReplicaReservations object
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ReservingReplicas::react(const ReplicaGrant&)" << dendl;
+
+  scrbr->grant_from_replica(ev.m_op, ev.m_from);
+  return discard_event();
+}
+
+sc::result ReservingReplicas::react(const ReplicaReject& ev)
+{
+  // for now - route the message back to the scrubber, as it holds the
+  // ReplicaReservations object
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ReservingReplicas::react(const ReplicaReject&)" << dendl;
+
+  scrbr->reject_from_replica(ev.m_op, ev.m_from);
+  return discard_event();
+}
+
 sc::result ReservingReplicas::react(const ReservationTimeout&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases

@@ -186,12 +186,6 @@ class ReplicaReservations {
   /// send 'release' messages to all replicas we have managed to reserve
   void release_all();
 
-  /// send a reservation request to a replica's OSD
-  void send_request_to_replica(pg_shard_t peer, epoch_t epoch);
-
-  /// let the scrubber know that we have reserved all the replicas
-  void send_all_done();
-
   /// the only replica we are expecting a reply from
   std::optional<pg_shard_t> get_last_sent() const;
 
@@ -367,14 +361,20 @@ class PgScrubber : public ScrubPgIF,
 			      const hobject_t& end) final;
 
   /**
+   * route incoming replica-reservations requests/responses to the
+   * appropriate handler.
+   * As the ReplicaReservations object is to be owned by the ScrubMachine, we
+   * send all relevant messages to the ScrubMachine.
+   */
+  void handle_scrub_reserve_msgs(OpRequestRef op) final;
+
+  /**
    *  we are a replica being asked by the Primary to reserve OSD resources for
    *  scrubbing
    */
-  void handle_scrub_reserve_request(OpRequestRef op) final;
+  void handle_scrub_reserve_request(OpRequestRef op);
 
-  void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from) final;
-  void handle_scrub_reserve_reject(OpRequestRef op, pg_shard_t from) final;
-  void handle_scrub_reserve_release(OpRequestRef op) final;
+  void handle_scrub_reserve_release(OpRequestRef op);
   void discard_replica_reservations() final;
   void clear_scrub_reservations() final;  // PG::clear... fwds to here
 
@@ -610,6 +610,10 @@ class PgScrubber : public ScrubPgIF,
   }
 
   void log_cluster_warning(const std::string& warning) const final;
+
+  // temporary interface to handle forwarded reservation messages:
+  void grant_from_replica(OpRequestRef op, pg_shard_t from) final;
+  void reject_from_replica(OpRequestRef op, pg_shard_t from) final;
 
  protected:
   bool state_test(uint64_t m) const { return m_pg->state_test(m); }

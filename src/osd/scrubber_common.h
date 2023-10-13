@@ -418,14 +418,13 @@ struct ScrubPgIF {
    */
   virtual void update_scrub_job(const requested_scrub_t& request_flags) = 0;
 
-  // on the replica:
-  virtual void handle_scrub_reserve_request(OpRequestRef op) = 0;
-  virtual void handle_scrub_reserve_release(OpRequestRef op) = 0;
-
-  // and on the primary:
-  virtual void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from) = 0;
-  virtual void handle_scrub_reserve_reject(OpRequestRef op,
-					   pg_shard_t from) = 0;
+  /**
+   * route incoming replica-reservations requests/responses to the
+   * appropriate handler.
+   * As the ReplicaReservations object is to be owned by the ScrubMachine, we
+   * send all relevant messages to the ScrubMachine.
+   */
+  virtual void handle_scrub_reserve_msgs(OpRequestRef op) = 0;
 
   virtual void rm_from_osd_scrubbing() = 0;
 

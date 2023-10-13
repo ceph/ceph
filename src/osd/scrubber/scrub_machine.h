@@ -15,6 +15,11 @@
 #include <boost/statechart/transition.hpp>
 
 #include "common/version.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDRepScrub.h"
+#include "messages/MOSDRepScrubMap.h"
+#include "messages/MOSDScrubReserve.h"
+
 #include "include/Context.h"
 #include "osd/scrubber_common.h"
 
@@ -41,6 +46,40 @@ namespace mpl = ::boost::mpl;
 
 void on_event_creation(std::string_view nm);
 void on_event_discard(std::string_view nm);
+
+// reservation grant/reject events carry the peer's response:
+
+/// a replica has granted our reservation request
+struct ReplicaGrant : sc::event<ReplicaGrant> {
+  OpRequestRef m_op;
+  pg_shard_t m_from;
+  ReplicaGrant(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
+  {
+    on_event_creation("ReplicaGrant");
+  }
+  void print(std::ostream* out) const
+  {
+    *out << fmt::format("ReplicaGrant(from: {})", m_from);
+  }
+  std::string_view print() const { return "ReplicaGrant"; }
+  ~ReplicaGrant() { on_event_discard("ReplicaGrant"); }
+};
+
+/// a replica has denied our reservation request
+struct ReplicaReject : sc::event<ReplicaReject> {
+  OpRequestRef m_op;
+  pg_shard_t m_from;
+  ReplicaReject(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
+  {
+    on_event_creation("ReplicaReject");
+  }
+  void print(std::ostream* out) const
+  {
+    *out << fmt::format("ReplicaReject(from: {})", m_from);
+  }
+  std::string_view print() const { return "ReplicaReject"; }
+  ~ReplicaReject() { on_event_discard("ReplicaReject"); }
+};
 
 #define MEV(E)                                          \
   struct E : sc::event<E> {                             \
@@ -360,6 +399,8 @@ struct ReservingReplicas : sc::state<ReservingReplicas, Session>,
   ~ReservingReplicas();
   using reactions = mpl::list<
 			      // all replicas granted our resources request
+			      sc::custom_reaction<ReplicaGrant>,
+			      sc::custom_reaction<ReplicaReject>,
 			      sc::transition<RemotesReserved, ActiveScrubbing>,
 			      sc::custom_reaction<ReservationTimeout>,
 			      sc::custom_reaction<ReservationFailure>>;
@@ -367,6 +408,12 @@ struct ReservingReplicas : sc::state<ReservingReplicas, Session>,
   ceph::coarse_real_clock::time_point entered_at =
     ceph::coarse_real_clock::now();
   ScrubMachine::timer_event_token_t m_timeout_token;
+
+  /// a "raw" event carrying a peer's grant response
+  sc::result react(const ReplicaGrant&);
+
+  /// a "raw" event carrying a peer's denial response
+  sc::result react(const ReplicaReject&);
 
   sc::result react(const ReservationTimeout&);
 
