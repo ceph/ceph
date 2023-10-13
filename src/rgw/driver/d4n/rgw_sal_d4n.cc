@@ -364,6 +364,14 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 		                                                         source->get_key().get_oid(), 
 					   				 attrs, y);
 
+  next->params.mod_ptr = params.mod_ptr;
+  next->params.unmod_ptr = params.unmod_ptr;
+  next->params.high_precision_time = params.high_precision_time;
+  next->params.mod_zone_id = params.mod_zone_id;
+  next->params.mod_pg_ver = params.mod_pg_ver;
+  next->params.if_match = params.if_match;
+  next->params.if_nomatch = params.if_nomatch;
+  next->params.lastmod = params.lastmod;
   int ret = next->prepare(y, dpp);
   
   if (getObjReturn < 0) {
