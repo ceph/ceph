@@ -109,10 +109,12 @@ po::options_description make_usage() {
      ": perform a chunk dedup---deduplicate only a chunk, which is a part of object.")
     ("op object-dedup --pool <POOL> --object <OID> --chunk-pool <POOL> --fingerprint-algorithm <FP> --dedup-cdc-chunk-size <CHUNK_SIZE> [--snap]",
      ": perform a object dedup---deduplicate the entire object, not a chunk. Related snapshots are also deduplicated if --snap is given")
+    ("op enable --pool <POOL> --chunk-pool <POOL>",
+     ": enable deduplication")
     ;
   po::options_description op_desc("Opational arguments");
   op_desc.add_options()
-    ("op", po::value<std::string>(), ": estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|chunk-repair|dump-chunk-refs|chunk-dedup|object-dedup")
+    ("op", po::value<std::string>(), ": estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|chunk-repair|dump-chunk-refs|chunk-dedup|object-dedup|enable")
     ("target-ref", po::value<std::string>(), ": set target object")
     ("target-ref-pool-id", po::value<uint64_t>(), ": set target pool id")
     ("object", po::value<std::string>(), ": set object name")
@@ -1037,6 +1039,60 @@ out:
   return (ret < 0) ? 1 : 0;
 }
 
+int enable_dedup(const po::variables_map &opts)
+{
+  Rados rados;
+  IoCtx io_ctx;
+  std::string base_pool, chunk_pool;
+  int ret = -1;
+  struct ceph_dedup_options d_opts;
+  bool conf_done;
+  CephContext *_cct = g_ceph_context;
+
+  if (opts.count("pool")) {
+    base_pool = opts["pool"].as<string>();
+  } else {
+    cerr << "must specify pool" << std::endl;
+    goto out;
+  } 
+  if (opts.count("chunk-pool")) {
+    chunk_pool = opts["chunk-pool"].as<string>();
+  } else {
+    cerr << "must specify chunk-pool" << std::endl;
+    goto out;
+  }
+
+  ret = rados.init_with_context(_cct);
+  if (ret < 0) {
+    cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
+    goto out;
+  }
+  ret = rados.connect();
+  if (ret) {
+    cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
+    ret = -1;
+    goto out;
+  }
+  ret = rados.ioctx_create(base_pool.c_str(), io_ctx);
+  if (ret < 0) {
+    cerr << "error opening pool "
+	 << base_pool << ": "
+	 << cpp_strerror(ret) << std::endl;
+    goto out;
+  }
+
+  conf_done = d_opts.load_dedup_conf_from_pool(io_ctx);
+  if (!conf_done) {
+    d_opts.load_dedup_conf_by_default(_cct);
+  }
+  d_opts.set_dedup_conf("", CHUNK_POOL, chunk_pool);
+  d_opts.set_dedup_conf("", POOL, base_pool);
+  d_opts.store_dedup_conf(io_ctx);
+
+out:
+  return (ret < 0) ? 1 : 0;
+}
+  
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
@@ -1116,6 +1172,8 @@ int main(int argc, const char **argv)
      *
      */
     ret = make_dedup_object(opts);
+  } else if (op_name == "enable") {
+    ret = enable_dedup(opts);
   } else {
     cerr << "unrecognized op " << op_name << std::endl;
     exit(1);
