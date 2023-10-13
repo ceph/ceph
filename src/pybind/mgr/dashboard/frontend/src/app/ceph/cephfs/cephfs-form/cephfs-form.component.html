@@ -59,7 +59,7 @@
           </div>
 
           <!-- Label -->
-          <div *ngIf="form.controls.placement.value === 'label'"
+          <div *ngIf="form.controls.placement.value === 'label' && !editing"
                class="form-group row">
             <label i18n
                    class="cd-col-form-label"
@@ -79,7 +79,7 @@
           </div>
 
           <!-- Hosts -->
-          <div *ngIf="form.controls.placement.value === 'hosts'"
+          <div *ngIf="form.controls.placement.value === 'hosts' && !editing"
                class="form-group row">
             <label class="cd-col-form-label"
                    for="hosts"
