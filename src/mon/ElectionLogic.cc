@@ -398,7 +398,8 @@ void ElectionLogic::propose_connectivity_handler(int from, epoch_t mepoch,
   ldout(cct, 10) << "propose from rank=" << from << ",from_score=" << from_score
 		 << "; my score=" << my_score
 		 << "; currently acked " << leader_acked
-		 << ",leader_score=" << leader_score << dendl;
+		 << ",leader_score=" << leader_score
+     << ",disallowed_leaders=" << elector->get_disallowed_leaders() << dendl;
 
   bool my_win = (my_score >= 0) && // My score is non-zero; I am allowed to lead
     ((my_rank < from && my_score >= from_score) || // We have same scores and I have lower rank, or
