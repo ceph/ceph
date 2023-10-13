@@ -142,8 +142,6 @@ void ReplicaReservations::send_next_reservation_or_complete()
   }
 }
 
-// temporary comment: the part of handle_reserve_reject() that will not
-// be delegated to the FSM in the following commits
 void ReplicaReservations::verify_rejections_source(
     OpRequestRef op,
     pg_shard_t from)
@@ -169,17 +167,6 @@ void ReplicaReservations::verify_rejections_source(
     // correct peer, wrong answer...
     m_next_to_request--;  // no need to release this one
   }
-}
-
-// to be delegated to the FSM in the following commits
-void ReplicaReservations::handle_reserve_reject(
-    OpRequestRef op,
-    pg_shard_t from)
-{
-  verify_rejections_source(op, from);
-  release_all();
-  m_scrubber.flag_reservations_failure();
-  m_osds->queue_for_scrub_denied(m_pg, scrub_prio_t::low_priority);
 }
 
 std::optional<pg_shard_t> ReplicaReservations::get_last_sent() const

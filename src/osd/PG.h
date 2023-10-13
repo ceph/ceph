@@ -454,12 +454,6 @@ public:
     forward_scrub_event(&ScrubPgIF::send_remotes_reserved, queued, "RemotesReserved");
   }
 
-  void scrub_send_resources_denied(epoch_t queued, ThreadPool::TPHandle& handle)
-  {
-    forward_scrub_event(&ScrubPgIF::send_reservation_failure, queued,
-			"ReservationFailure");
-  }
-
   void scrub_send_scrub_resched(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::send_scrub_resched, queued, "InternalSchedScrub");

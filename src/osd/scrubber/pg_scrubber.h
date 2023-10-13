@@ -265,8 +265,6 @@ class PgScrubber : public ScrubPgIF,
   void handle_scrub_reserve_request(OpRequestRef op);
 
   void handle_scrub_reserve_release(OpRequestRef op);
-  void discard_replica_reservations() final;
-  void clear_scrub_reservations() final;  // PG::clear... fwds to here
 
   // managing scrub op registration
 
@@ -448,7 +446,6 @@ class PgScrubber : public ScrubPgIF,
   void send_preempted_replica() final;
 
   void send_remotes_reserved(epoch_t epoch_queued) final;
-  void send_reservation_failure(epoch_t epoch_queued) final;
 
   /**
    *  does the PG have newer updates than what we (the scrubber) know?
@@ -464,8 +461,6 @@ class PgScrubber : public ScrubPgIF,
   int build_primary_map_chunk() final;
 
   int build_replica_map_chunk() final;
-
-  void reserve_replicas() final;
 
   bool set_reserving_now() final;
   void clear_reserving_now() final;
@@ -500,10 +495,6 @@ class PgScrubber : public ScrubPgIF,
   }
 
   void log_cluster_warning(const std::string& warning) const final;
-
-  // temporary interface to handle forwarded reservation messages:
-  void grant_from_replica(OpRequestRef op, pg_shard_t from) final;
-  void reject_from_replica(OpRequestRef op, pg_shard_t from) final;
 
  protected:
   bool state_test(uint64_t m) const { return m_pg->state_test(m); }
@@ -633,9 +624,8 @@ class PgScrubber : public ScrubPgIF,
 
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
 
-  // 'optional', as 'ReplicaReservations' & 'LocalReservation' are
+  // 'optional', as 'LocalReservation' is
   // 'RAII-designed' to guarantee un-reserving when deleted.
-  std::optional<Scrub::ReplicaReservations> m_reservations;
   std::optional<Scrub::LocalReservation> m_local_osd_resource;
 
   void cleanup_on_finish();  // scrub_clear_state() as called for a Primary when
