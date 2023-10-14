@@ -66,8 +66,9 @@ class ReplicaReservations {
   /// for logs, and for detecting slow peers
   clock::time_point m_last_request_sent_at;
 
-  /// used to prevent multiple "slow response" warnings
-  bool m_slow_response_warned{false};
+  /// the 'slow response' timeout (in milliseconds) - as configured.
+  /// Doubles as a 'do once' flag for the warning.
+  std::chrono::milliseconds m_slow_response_warn_timeout;
 
  public:
   ReplicaReservations(ScrubMachineListener& scrubber);
