@@ -15,6 +15,10 @@
  * has a begin()/end() method pair. This is a problem because we have
  * such classes in Crimson.
  */
+
+template <typename T>
+concept has_formatter = fmt::has_formatter<T, fmt::format_context>::value;
+
 /**
  * Tagging classes that provide support for default fmtlib formatting,
  * by having either
