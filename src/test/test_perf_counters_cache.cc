@@ -960,7 +960,6 @@ TEST(PerfCountersCache, TestLabelStrings) {
 
   // test empty val in a label pair will get the label pair added into the perf counters cache but empty key will not
   std::string label2 = key_create("bad_ctrs1", {{"label3", "val4"}, {"label1", ""}});
-  //EXPECT_DEATH(pcc->set_counter(label2, TEST_PERFCOUNTERS_COUNTER, 2), "");
   pcc->set_counter(label2, TEST_PERFCOUNTERS_COUNTER, 2);
 
   std::string label3 = key_create("bad_ctrs2", {{"", "val4"}, {"label1", "val1"}});
