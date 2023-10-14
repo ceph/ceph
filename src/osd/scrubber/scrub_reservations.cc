@@ -51,6 +51,10 @@ ReplicaReservations::ReplicaReservations(ScrubMachineListener& scrbr)
   m_next_to_request = m_sorted_secondaries.cbegin();
   // send out the 1'st request (unless we have no replicas)
   send_next_reservation_or_complete();
+
+  m_slow_response_warn_timeout =
+      m_scrubber.get_pg_cct()->_conf.get_val<milliseconds>(
+	  "osd_scrub_slow_reservation_response");
 }
 
 void ReplicaReservations::release_all()
@@ -100,15 +104,14 @@ bool ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
   auto elapsed = clock::now() - m_last_request_sent_at;
 
   // log a warning if the response was slow to arrive
-  auto warn_timeout = m_scrubber.get_pg_cct()->_conf.get_val<milliseconds>(
-      "osd_scrub_slow_reservation_response");
-  if (!m_slow_response_warned && (elapsed > warn_timeout)) {
+  if ((m_slow_response_warn_timeout > 0ms) &&
+      (elapsed > m_slow_response_warn_timeout)) {
     dout(1) << fmt::format(
 		   "slow reservation response from {} ({}ms)", from,
 		   duration_cast<milliseconds>(elapsed).count())
 	    << dendl;
     // prevent additional warnings
-    m_slow_response_warned = true;
+    m_slow_response_warn_timeout = 0ms;
   }
   dout(10) << fmt::format(
 		  "granted by {} ({} of {}) in {}ms", from,
