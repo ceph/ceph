@@ -359,17 +359,6 @@ void PgScrubber::send_replica_pushes_upd(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
-void PgScrubber::send_remotes_reserved(epoch_t epoch_queued)
-{
-  dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued
-	   << dendl;
-  // note: scrub is not active yet
-  if (check_interval(epoch_queued)) {
-    m_fsm->process_event(RemotesReserved{});
-  }
-  dout(10) << "scrubber event --<< " << __func__ << dendl;
-}
-
 void PgScrubber::send_chunk_free(epoch_t epoch_queued)
 {
   dout(10) << "scrubber event -->> " << __func__ << " epoch: " << epoch_queued

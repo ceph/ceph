@@ -79,8 +79,11 @@ class ReplicaReservations {
    * the replica we are expecting a reply from) is noted, and triggers
    * one of two: either sending a reservation request to the next replica,
    * or notifying the scrubber that we have reserved them all.
+   *
+   * \returns true if there are no more replicas to send reservation requests
+   * (i.e., the scrubber should proceed to the next phase), false otherwise.
    */
-  void handle_reserve_grant(OpRequestRef op, pg_shard_t from);
+  bool handle_reserve_grant(OpRequestRef op, pg_shard_t from);
 
   /**
    * Verify that the sender of the received rejection is the replica we
@@ -105,6 +108,9 @@ class ReplicaReservations {
    */
   void discard_remote_reservations();
 
+  /// the only replica we are expecting a reply from
+  std::optional<pg_shard_t> get_last_sent() const;
+
   // note: 'public', as accessed via the 'standard' dout_prefix() macro
   std::ostream& gen_prefix(std::ostream& out, std::string fn) const;
 
@@ -112,17 +118,14 @@ class ReplicaReservations {
   /// send 'release' messages to all replicas we have managed to reserve
   void release_all();
 
-  /// the only replica we are expecting a reply from
-  std::optional<pg_shard_t> get_last_sent() const;
-
   /// The number of requests that have been sent (and not rejected) so far.
   size_t active_requests_cnt() const;
 
   /**
-   * Either send a reservation request to the next replica, or notify the
-   * scrubber that we have reserved all the replicas.
+   * Send a reservation request to the next replica.
+   * - if there are no more replicas to send requests to, return true
    */
-  void send_next_reservation_or_complete();
+  bool send_next_reservation_or_complete();
 };
 
 } // namespace Scrub
