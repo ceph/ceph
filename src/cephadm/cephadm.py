@@ -59,7 +59,6 @@ from cephadmlib.constants import (
     CEPH_DEFAULT_PUBKEY,
     CEPH_KEYRING,
     CEPH_PUBKEY,
-    CGROUPS_SPLIT_PODMAN_VERSION,
     CONTAINER_INIT,
     CUSTOM_PS1,
     DATA_DIR,
@@ -2814,7 +2813,7 @@ def get_container(
             '--cidfile',
             f'{runtime_dir}/{service_name}-cid',
         ])
-        if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION and not ctx.no_cgroups_split:
+        if ctx.container_engine.supports_split_cgroups and not ctx.no_cgroups_split:
             container_args.append('--cgroups=split')
         # if /etc/hosts doesn't exist, we can be confident
         # users aren't using it for host name resolution
@@ -3406,7 +3405,7 @@ def get_unit_file(ctx, fsid):
                       'ExecStopPost=-/bin/rm -f %t/%n-pid %t/%n-cid\n'
                       'Type=forking\n'
                       'PIDFile=%t/%n-pid\n')
-        if ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION:
+        if ctx.container_engine.supports_split_cgroups:
             extra_args += 'Delegate=yes\n'
 
     docker = isinstance(ctx.container_engine, Docker)
