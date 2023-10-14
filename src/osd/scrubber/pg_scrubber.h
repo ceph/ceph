@@ -445,8 +445,6 @@ class PgScrubber : public ScrubPgIF,
 
   void send_preempted_replica() final;
 
-  void send_remotes_reserved(epoch_t epoch_queued) final;
-
   /**
    *  does the PG have newer updates than what we (the scrubber) know?
    */

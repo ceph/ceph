@@ -356,12 +356,6 @@ struct ScrubPgIF {
    */
   virtual void clear_pgscrub_state() = 0;
 
-  /**
-   *  triggers the 'RemotesReserved' (all replicas granted scrub resources)
-   *  state-machine event
-   */
-  virtual void send_remotes_reserved(epoch_t epoch_queued) = 0;
-
   virtual void cleanup_store(ObjectStore::Transaction* t) = 0;
 
   virtual bool get_store_errors(const scrub_ls_arg_t& arg,
