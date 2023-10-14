@@ -163,13 +163,22 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
   // initiate the reservation process
   context<Session>().m_reservations.emplace(*scrbr);
 
-  auto timeout = scrbr->get_pg_cct()->_conf.get_val<milliseconds>(
-      "osd_scrub_reservation_timeout");
-  if (timeout.count() > 0) {
-    // Start a timer to handle case where the replicas take a long time to
-    // ack the reservation.  See ReservationTimeout handler below.
-    m_timeout_token = machine.schedule_timer_event_after<ReservationTimeout>(
-      timeout);
+  if (context<Session>().m_reservations->get_last_sent()) {
+    // the 1'st reservation request was sent
+
+    auto timeout = scrbr->get_pg_cct()->_conf.get_val<milliseconds>(
+	"osd_scrub_reservation_timeout");
+    if (timeout.count() > 0) {
+      // Start a timer to handle case where the replicas take a long time to
+      // ack the reservation.  See ReservationTimeout handler below.
+      m_timeout_token =
+	  machine.schedule_timer_event_after<ReservationTimeout>(timeout);
+    }
+  } else {
+    // no replicas to reserve
+    dout(10) << "no replicas to reserve" << dendl;
+    // can't transit directly from here
+    post_event(RemotesReserved{});
   }
 }
 
@@ -186,7 +195,11 @@ sc::result ReservingReplicas::react(const ReplicaGrant& ev)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "ReservingReplicas::react(const ReplicaGrant&)" << dendl;
 
-  context<Session>().m_reservations->handle_reserve_grant(ev.m_op, ev.m_from);
+  if (context<Session>().m_reservations->handle_reserve_grant(
+	  ev.m_op, ev.m_from)) {
+    // we are done with the reservation process
+    return transit<ActiveScrubbing>();
+  }
   return discard_event();
 }
 

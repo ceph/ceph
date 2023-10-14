@@ -84,7 +84,7 @@ ReplicaReservations::~ReplicaReservations()
   release_all();
 }
 
-void ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
+bool ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
 {
   // verify that the grant is from the peer we expected. If not?
   // for now - abort the OSD. \todo reconsider the reaction.
@@ -94,7 +94,7 @@ void ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
 		   get_last_sent().value_or(pg_shard_t{}))
 	    << dendl;
     ceph_assert(from == get_last_sent());
-    return;
+    return false;
   }
 
   auto elapsed = clock::now() - m_last_request_sent_at;
@@ -115,31 +115,31 @@ void ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
 		  active_requests_cnt(), m_sorted_secondaries.size(),
 		  duration_cast<milliseconds>(elapsed).count())
 	   << dendl;
-  send_next_reservation_or_complete();
+  return send_next_reservation_or_complete();
 }
 
-void ReplicaReservations::send_next_reservation_or_complete()
+bool ReplicaReservations::send_next_reservation_or_complete()
 {
   if (m_next_to_request == m_sorted_secondaries.cend()) {
     // granted by all replicas
     dout(10) << "remote reservation complete" << dendl;
-    m_osds->queue_for_scrub_granted(m_pg, scrub_prio_t::low_priority);
-
-  } else {
-    // send the next reservation request
-    const auto peer = *m_next_to_request;
-    const auto epoch = m_pg->get_osdmap_epoch();
-    auto m = make_message<MOSDScrubReserve>(
-	spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::REQUEST,
-	m_pg->pg_whoami);
-    m_pg->send_cluster_message(peer.osd, m, epoch, false);
-    m_last_request_sent_at = clock::now();
-    dout(10) << fmt::format(
-		    "reserving {} (the {} of {} replicas)", *m_next_to_request,
-		    active_requests_cnt()+1, m_sorted_secondaries.size())
-	     << dendl;
-    m_next_to_request++;
+    return true;  // done
   }
+
+  // send the next reservation request
+  const auto peer = *m_next_to_request;
+  const auto epoch = m_pg->get_osdmap_epoch();
+  auto m = make_message<MOSDScrubReserve>(
+      spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::REQUEST,
+      m_pg->pg_whoami);
+  m_pg->send_cluster_message(peer.osd, m, epoch, false);
+  m_last_request_sent_at = clock::now();
+  dout(10) << fmt::format(
+		  "reserving {} (the {} of {} replicas)", *m_next_to_request,
+		  active_requests_cnt() + 1, m_sorted_secondaries.size())
+	   << dendl;
+  m_next_to_request++;
+  return false;
 }
 
 void ReplicaReservations::verify_rejections_source(
