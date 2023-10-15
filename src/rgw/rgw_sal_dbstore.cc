@@ -738,9 +738,9 @@ namespace rgw::sal {
     return std::make_unique<DBObject::DBReadOp>(this, nullptr);
   }
 
-  DBObject::DBReadOp::DBReadOp(DBObject *_source, RGWObjectCtx *_rctx) :
+  DBObject::DBReadOp::DBReadOp(DBObject *_source, RGWObjectCtx *_octx) :
     source(_source),
-    rctx(_rctx),
+    octx(_octx),
     op_target(_source->store->getDB(),
         _source->get_bucket()->get_info(),
         _source->get_obj()),
@@ -1323,7 +1323,7 @@ namespace rgw::sal {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
   {
     /* XXX: same as AtomicWriter..consolidate code */
     parent_op.meta.mtime = mtime;
@@ -1477,7 +1477,7 @@ namespace rgw::sal {
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
                          rgw_zone_set *zones_trace, bool *canceled,
-                         optional_yield y)
+                         const req_context& rctx)
   {
     parent_op.meta.mtime = mtime;
     parent_op.meta.delete_at = delete_at;

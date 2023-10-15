@@ -341,7 +341,8 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     const char *if_nomatch,
                                     const std::string *user_data,
                                     rgw_zone_set *zones_trace,
-                                    bool *pcanceled, optional_yield y)
+                                    bool *pcanceled, 
+                                    const req_context& rctx)
 {
   int r = writer.drain();
   if (r < 0) {
@@ -378,7 +379,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 
   read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, manifest);
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx);
   if (r < 0) {
     if (r == -ETIMEDOUT) {
       // The head object write may eventually succeed, clear the set of objects for deletion. if it
@@ -482,7 +483,8 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        const char *if_nomatch,
                                        const std::string *user_data,
                                        rgw_zone_set *zones_trace,
-                                       bool *pcanceled, optional_yield y)
+                                       bool *pcanceled, 
+                                       const req_context& rctx)
 {
   int r = writer.drain();
   if (r < 0) {
@@ -506,7 +508,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  r = obj_op.write_meta(actual_size, accounted_size, attrs, rctx);
   if (r < 0)
     return r;
 
@@ -531,7 +533,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   bool compressed;
   r = rgw_compression_info_from_attrset(attrs, compressed, info.cs_info);
   if (r < 0) {
-    ldpp_dout(dpp, 1) << "cannot get compression info" << dendl;
+    ldpp_dout(rctx.dpp, 1) << "cannot get compression info" << dendl;
     return r;
   }
 
@@ -543,16 +545,16 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   store->obj_to_raw(bucket_info.placement_rule, meta_obj, &meta_raw_obj); 
 
   rgw_rados_ref meta_obj_ref;
-  r = store->get_raw_obj_ref(dpp, meta_raw_obj, &meta_obj_ref);
+  r = store->get_raw_obj_ref(rctx.dpp, meta_raw_obj, &meta_obj_ref);
   if (r < 0) {
-    ldpp_dout(dpp, -1) << "ERROR: failed to get obj ref of meta obj with ret=" << r << dendl;
+    ldpp_dout(rctx.dpp, -1) << "ERROR: failed to get obj ref of meta obj with ret=" << r << dendl;
     return r;
   }
 
   librados::ObjectWriteOperation op;
   cls_rgw_mp_upload_part_info_update(op, p, info);
-  r = rgw_rados_operate(dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, y);
-  ldpp_dout(dpp, 20) << "Update meta: " << meta_obj_ref.obj.oid << " part " << p << " prefix " << info.manifest.get_prefix() << " return " << r << dendl;
+  r = rgw_rados_operate(rctx.dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, rctx.y);
+  ldpp_dout(rctx.dpp, 20) << "Update meta: " << meta_obj_ref.obj.oid << " part " << p << " prefix " << info.manifest.get_prefix() << " return " << r << dendl;
 
   if (r == -EOPNOTSUPP) {
     // New CLS call to update part info is not yet supported. Fall back to the old handling.
@@ -565,7 +567,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
     op = librados::ObjectWriteOperation{};
     op.assert_exists(); // detect races with abort
     op.omap_set(m);
-    r = rgw_rados_operate(dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, y);
+    r = rgw_rados_operate(rctx.dpp, meta_obj_ref.pool.ioctx(), meta_obj_ref.obj.oid, &op, rctx.y);
   }
   if (r < 0) {
     return r == -ENOENT ? -ERR_NO_SUCH_UPLOAD : r;
@@ -686,7 +688,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
                                     ceph::real_time set_mtime, rgw::sal::Attrs& attrs,
                                     ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
-                                    optional_yield y)
+                                    const req_context& rctx)
 {
   int r = writer.drain();
   if (r < 0)
@@ -742,9 +744,9 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
     etag_bl.append(final_etag_str, strlen(final_etag_str) + 1);
     attrs[RGW_ATTR_ETAG] = etag_bl;
   }
-  r = obj_op.write_meta(dpp, actual_size + cur_size,
+  r = obj_op.write_meta(actual_size + cur_size,
 			accounted_size + *cur_accounted_size,
-			attrs, y);
+			attrs, rctx);
   if (r < 0) {
     return r;
   }

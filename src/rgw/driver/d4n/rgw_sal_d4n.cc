@@ -445,7 +445,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
 {
   cache_block* temp_cache_block = filter->get_cache_block();
   RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
@@ -467,9 +467,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   RGWObjState* astate;
   int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y);
-  obj->get_obj_attrs(y, save_dpp, NULL);
-  obj->get_obj_state(save_dpp, &astate, y);
+			canceled, rctx);
+  obj->get_obj_attrs(rctx.y, save_dpp, NULL);
+  obj->get_obj_state(save_dpp, &astate, rctx.y);
 
   /* Append additional metadata to attributes */ 
   rgw::sal::Attrs baseAttrs = obj->get_attrs();

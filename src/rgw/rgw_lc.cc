@@ -480,7 +480,7 @@ struct lc_op_ctx {
   LCObjsLister& ol;
 
   std::unique_ptr<rgw::sal::Object> obj;
-  RGWObjectCtx rctx;
+  RGWObjectCtx octx;
   const DoutPrefixProvider *dpp;
   WorkQ* wq;
 
@@ -493,7 +493,7 @@ struct lc_op_ctx {
     : cct(env.driver->ctx()), env(env), o(o), next_key_name(next_key_name),
       effective_mtime(effective_mtime),
       driver(env.driver), bucket(env.bucket), op(env.op), ol(env.ol),
-      rctx(env.driver), dpp(dpp), wq(wq)
+      octx(env.driver), dpp(dpp), wq(wq)
     {
       obj = bucket->get_object(o.key);
     }
