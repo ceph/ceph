@@ -6,6 +6,13 @@ tasks:
     client.0:
 
 overrides:
+  install:
+    ceph:
+      extra_system_packages:
+        rpm:
+        - java
+        deb:
+        - default-jre
   ceph:
     conf:
       global:
