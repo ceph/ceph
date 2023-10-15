@@ -544,33 +544,39 @@ Recovery Throttling
 -------------------
 
 Depending upon your configuration, Ceph may reduce recovery rates to maintain
-performance or it may increase recovery rates to the point that recovery
-impacts OSD performance. Check to see if the OSD is recovering.
+client or OSD performance, or it may increase recovery rates to the point that
+recovery impacts client or OSD performance. Check to see if the client or OSD
+is recovering.
+
 
 Kernel Version
 --------------
 
-Check the kernel version you are running. Older kernels may not receive
-new backports that Ceph depends upon for better performance.
+Check the kernel version that you are running. Older kernels may lack updates
+that improve Ceph performance. 
+
 
 Kernel Issues with SyncFS
 -------------------------
 
-Try running one OSD per host to see if performance improves. Old kernels
-might not have a recent enough version of ``glibc`` to support ``syncfs(2)``.
+If you have kernel issues with SyncFS, try running one OSD per host to see if
+performance improves. Old kernels might not have a recent enough version of
+``glibc`` to support ``syncfs(2)``.
+
 
 Filesystem Issues
 -----------------
 
-Currently, we recommend deploying clusters with the BlueStore back end.
-When running a pre-Luminous release or if you have a specific reason to deploy
-OSDs with the previous Filestore backend, we recommend ``XFS``.
+In post-Luminous releases, we recommend deploying clusters with the BlueStore
+back end.  When running a pre-Luminous release, or if you have a specific
+reason to deploy OSDs with the previous Filestore backend, we recommend
+``XFS``.
 
 We recommend against using ``Btrfs`` or ``ext4``.  The ``Btrfs`` filesystem has
-many attractive features, but bugs may lead to
-performance issues and spurious ENOSPC errors.  We do not recommend
-``ext4`` for Filestore OSDs because ``xattr`` limitations break support for long
-object names, which are needed for RGW.
+many attractive features, but bugs may lead to performance issues and spurious
+ENOSPC errors.  We do not recommend ``ext4`` for Filestore OSDs because
+``xattr`` limitations break support for long object names, which are needed for
+RGW.
 
 For more information, see `Filesystem Recommendations`_.
 
@@ -579,31 +585,32 @@ For more information, see `Filesystem Recommendations`_.
 Insufficient RAM
 ----------------
 
-We recommend a *minimum* of 4GB of RAM per OSD daemon and suggest rounding up
-from 6-8GB.  You may notice that during normal operations, ``ceph-osd``
-processes only use a fraction of that amount.
-Unused RAM makes it tempting to use the excess RAM for co-resident
-applications or to skimp on each node's memory capacity.  However,
-when OSDs experience recovery their memory utilization spikes. If
-there is insufficient RAM available, OSD performance will slow considerably
-and the daemons may even crash or be killed by the Linux ``OOM Killer``.
+We recommend a *minimum* of 4GB of RAM per OSD daemon and we suggest rounding
+up from 6GB to 8GB. During normal operations, you may notice that ``ceph-osd``
+processes use only a fraction of that amount.  You might be tempted to use the
+excess RAM for co-resident applications or to skimp on each node's memory
+capacity. However, when OSDs experience recovery their memory utilization
+spikes. If there is insufficient RAM available during recovery, OSD performance
+will slow considerably and the daemons may even crash or be killed by the Linux
+``OOM Killer``.
+
 
 Blocked Requests or Slow Requests
 ---------------------------------
 
-If a ``ceph-osd`` daemon is slow to respond to a request, messages will be logged
-noting ops that are taking too long.  The warning threshold
+When a ``ceph-osd`` daemon is slow to respond to a request, the cluster log
+receives messages reporting ops that are taking too long. The warning threshold
 defaults to 30 seconds and is configurable via the ``osd_op_complaint_time``
-setting.  When this happens, the cluster log will receive messages.
+setting.
 
 Legacy versions of Ceph complain about ``old requests``::
 
-	osd.0 192.168.106.220:6800/18813 312 : [WRN] old request osd_op(client.5099.0:790 fatty_26485_object789 [write 0~4096] 2.5e54f643) v4 received at 2012-03-06 15:42:56.054801 currently waiting for sub ops
+    osd.0 192.168.106.220:6800/18813 312 : [WRN] old request osd_op(client.5099.0:790 fatty_26485_object789 [write 0~4096] 2.5e54f643) v4 received at 2012-03-06 15:42:56.054801 currently waiting for sub ops
 
-New versions of Ceph complain about ``slow requests``::
+Newer versions of Ceph complain about ``slow requests``::
 
-	{date} {osd.num} [WRN] 1 slow requests, 1 included below; oldest blocked for > 30.005692 secs
-	{date} {osd.num}  [WRN] slow request 30.005692 seconds old, received at {date-time}: osd_op(client.4240.0:8 benchmark_data_ceph-1_39426_object7 [write 0~4194304] 0.69848840) v4 currently waiting for subops from [610]
+    {date} {osd.num} [WRN] 1 slow requests, 1 included below; oldest blocked for > 30.005692 secs
+    {date} {osd.num}  [WRN] slow request 30.005692 seconds old, received at {date-time}: osd_op(client.4240.0:8 benchmark_data_ceph-1_39426_object7 [write 0~4194304] 0.69848840) v4 currently waiting for subops from [610]
 
 Possible causes include:
 
@@ -623,27 +630,27 @@ Possible solutions:
 Debugging Slow Requests
 -----------------------
 
-If you run ``ceph daemon osd.<id> dump_historic_ops`` or ``ceph daemon osd.<id> dump_ops_in_flight``,
-you will see a set of operations and a list of events each operation went
-through. These are briefly described below.
+If you run ``ceph daemon osd.<id> dump_historic_ops`` or ``ceph daemon osd.<id>
+dump_ops_in_flight``, you will see a set of operations and a list of events
+each operation went through. These are briefly described below.
 
 Events from the Messenger layer:
 
-- ``header_read``: When the messenger first started reading the message off the wire.
-- ``throttled``: When the messenger tried to acquire memory throttle space to read
+- ``header_read``: The time that the messenger first started reading the message off the wire.
+- ``throttled``: The time that the messenger tried to acquire memory throttle space to read
   the message into memory.
-- ``all_read``: When the messenger finished reading the message off the wire.
-- ``dispatched``: When the messenger gave the message to the OSD.
+- ``all_read``: The time that the messenger finished reading the message off the wire.
+- ``dispatched``: The time that the messenger gave the message to the OSD.
 - ``initiated``: This is identical to ``header_read``. The existence of both is a
   historical oddity.
 
 Events from the OSD as it processes ops:
 
 - ``queued_for_pg``: The op has been put into the queue for processing by its PG.
-- ``reached_pg``: The PG has started doing the op.
-- ``waiting for \*``: The op is waiting for some other work to complete before it
-  can proceed (e.g. a new OSDMap; for its object target to scrub; for the PG to
-  finish peering; all as specified in the message).
+- ``reached_pg``: The PG has started performing the op.
+- ``waiting for \*``: The op is waiting for some other work to complete before
+  it can proceed (for example, a new OSDMap; the scrubbing of its object
+  target; the completion of a PG's peering; all as specified in the message).
 - ``started``: The op has been accepted as something the OSD should do and 
   is now being performed.
 - ``waiting for subops from``: The op has been sent to replica OSDs.
@@ -651,95 +658,115 @@ Events from the OSD as it processes ops:
 Events from ```Filestore```:
 
 - ``commit_queued_for_journal_write``: The op has been given to the FileStore.
-- ``write_thread_in_journal_buffer``: The op is in the journal's buffer and waiting
+- ``write_thread_in_journal_buffer``: The op is in the journal's buffer and is waiting
   to be persisted (as the next disk write).
 - ``journaled_completion_queued``: The op was journaled to disk and its callback
-  queued for invocation.
+  has been queued for invocation.
 
 Events from the OSD after data has been given to underlying storage:
 
-- ``op_commit``: The op has been committed (i.e. written to journal) by the
+- ``op_commit``: The op has been committed (that is, written to journal) by the
   primary OSD.
-- ``op_applied``: The op has been `write()'en <https://www.freebsd.org/cgi/man.cgi?write(2)>`_ to the backing FS (i.e.   applied in memory but not flushed out to disk) on the primary.
+- ``op_applied``: The op has been `write()'en
+  <https://www.freebsd.org/cgi/man.cgi?write(2)>`_ to the backing FS (that is,
+  applied in memory but not flushed out to disk) on the primary.
 - ``sub_op_applied``: ``op_applied``, but for a replica's "subop".
 - ``sub_op_committed``: ``op_commit``, but for a replica's subop (only for EC pools).
 - ``sub_op_commit_rec/sub_op_apply_rec from <X>``: The primary marks this when it
   hears about the above, but for a particular replica (i.e. ``<X>``).
 - ``commit_sent``: We sent a reply back to the client (or primary OSD, for sub ops).
 
-Many of these events are seemingly redundant, but cross important boundaries in
-the internal code (such as passing data across locks into new threads).
+Some of these events may appear redundant, but they cross important boundaries
+in the internal code (such as passing data across locks into new threads).
+
 
 Flapping OSDs
 =============
 
-When OSDs peer and check heartbeats, they use the cluster (back-end)
-network when it's available. See `Monitor/OSD Interaction`_ for details.
+"Flapping" is the term for the phenomenon of an OSD being repeatedly marked
+``up`` and then ``down`` in rapid succession.  This section explains how to
+recognize flapping, and how to mitigate it.
 
-We have traditionally recommended separate *public* (front-end) and *private*
-(cluster / back-end / replication) networks:
+When OSDs peer and check heartbeats, they use the cluster (back-end) network
+when it is available. See `Monitor/OSD Interaction`_ for details.
 
-#. Segregation of heartbeat and replication / recovery traffic (private)
-   from client and OSD <-> mon traffic (public).  This helps keep one
-   from DoS-ing the other, which could in turn result in a cascading failure.
+The upstream Ceph community has traditionally recommended separate *public*
+(front-end) and *private* (cluster / back-end / replication) networks. This
+provides the following benefits:
+
+#. Segregation of (1) heartbeat traffic and replication/recovery traffic
+   (private) from (2) traffic from clients and between OSDs and monitors
+   (public). This helps keep one stream of traffic from DoS-ing the other,
+   which could in turn result in a cascading failure.
 
 #. Additional throughput for both public and private traffic.
 
-When common networking technologies were 100Mb/s and 1Gb/s, this separation
-was often critical.  With today's 10Gb/s, 40Gb/s, and 25/50/100Gb/s
-networks, the above capacity concerns are often diminished or even obviated.
-For example, if your OSD nodes have two network ports, dedicating one to
-the public and the other to the private network means no path redundancy.
-This degrades your ability to weather network maintenance and failures without
-significant cluster or client impact.  Consider instead using both links
-for just a public network:  with bonding (LACP) or equal-cost routing (e.g. FRR)
-you reap the benefits of increased throughput headroom, fault tolerance, and
-reduced OSD flapping.
+In the past, when common networking technologies were measured in a range
+encompassing 100Mb/s and 1Gb/s, this separation was often critical. But with
+today's 10Gb/s, 40Gb/s, and 25/50/100Gb/s networks, the above capacity concerns
+are often diminished or even obviated.  For example, if your OSD nodes have two
+network ports, dedicating one to the public and the other to the private
+network means that you have no path redundancy.  This degrades your ability to
+endure network maintenance and network failures without significant cluster or
+client impact. In situations like this, consider instead using both links for
+only a public network: with bonding (LACP) or equal-cost routing (for example,
+FRR) you reap the benefits of increased throughput headroom, fault tolerance,
+and reduced OSD flapping.
 
 When a private network (or even a single host link) fails or degrades while the
-public network operates normally, OSDs may not handle this situation well. What
-happens is that OSDs use the public network to report each other ``down`` to
-the monitors, while marking themselves ``up``. The monitors then send out,
-again on the public network, an updated cluster map with affected OSDs marked
-`down`. These OSDs reply to the monitors "I'm not dead yet!", and the cycle
-repeats.  We call this scenario 'flapping`, and it can be difficult to isolate
-and remediate.  With no private network, this irksome dynamic is avoided:
-OSDs are generally either ``up`` or ``down`` without flapping.
+public network continues operating normally, OSDs may not handle this situation
+well. In such situations, OSDs use the public network to report each other
+``down`` to the monitors, while marking themselves ``up``. The monitors then
+send out-- again on the public network--an updated cluster map with the
+affected OSDs marked `down`. These OSDs reply to the monitors "I'm not dead
+yet!", and the cycle repeats. We call this scenario 'flapping`, and it can be
+difficult to isolate and remediate. Without a private network, this irksome
+dynamic is avoided: OSDs are generally either ``up`` or ``down`` without
+flapping.
 
-If something does cause OSDs to 'flap' (repeatedly getting marked ``down`` and
+If something does cause OSDs to 'flap' (repeatedly being marked ``down`` and
 then ``up`` again), you can force the monitors to halt the flapping by
-temporarily freezing their states::
+temporarily freezing their states:
 
-	ceph osd set noup      # prevent OSDs from getting marked up
-	ceph osd set nodown    # prevent OSDs from getting marked down
+.. prompt:: bash
 
-These flags are recorded in the osdmap::
+   ceph osd set noup      # prevent OSDs from getting marked up
+   ceph osd set nodown    # prevent OSDs from getting marked down
 
-	ceph osd dump | grep flags
-	flags no-up,no-down
+These flags are recorded in the osdmap:
 
-You can clear the flags with::
+.. prompt:: bash
 
-	ceph osd unset noup
-	ceph osd unset nodown
+   ceph osd dump | grep flags
 
-Two other flags are supported, ``noin`` and ``noout``, which prevent
-booting OSDs from being marked ``in`` (allocated data) or protect OSDs
-from eventually being marked ``out`` (regardless of what the current value for
-``mon_osd_down_out_interval`` is).
+::
 
-.. note:: ``noup``, ``noout``, and ``nodown`` are temporary in the
-   sense that once the flags are cleared, the action they were blocking
-   should occur shortly after.  The ``noin`` flag, on the other hand,
-   prevents OSDs from being marked ``in`` on boot, and any daemons that
-   started while the flag was set will remain that way.
+   flags no-up,no-down
 
-.. note:: The causes and effects of flapping can be somewhat mitigated through
-   careful adjustments to the ``mon_osd_down_out_subtree_limit``,
+You can clear these flags with:
+
+.. prompt:: bash
+
+   ceph osd unset noup
+   ceph osd unset nodown
+
+Two other flags are available, ``noin`` and ``noout``, which prevent booting
+OSDs from being marked ``in`` (allocated data) or protect OSDs from eventually
+being marked ``out`` (regardless of the current value of
+``mon_osd_down_out_interval``).
+
+.. note:: ``noup``, ``noout``, and ``nodown`` are temporary in the sense that
+   after the flags are cleared, the action that they were blocking should be
+   possible shortly thereafter. But the ``noin`` flag prevents OSDs from being
+   marked ``in`` on boot, and any daemons that started while the flag was set
+   will remain that way.
+
+.. note:: The causes and effects of flapping can be mitigated somewhat by
+   making careful adjustments to ``mon_osd_down_out_subtree_limit``,
    ``mon_osd_reporter_subtree_level``, and ``mon_osd_min_down_reporters``.
    Derivation of optimal settings depends on cluster size, topology, and the
-   Ceph  release in use. Their interactions are subtle and beyond the scope of
-   this document.
+   Ceph release in use. The interaction of all of these factors is subtle and
+   is beyond the scope of this document.
 
 
 .. _iostat: https://en.wikipedia.org/wiki/Iostat
@@ -749,7 +776,9 @@ from eventually being marked ``out`` (regardless of what the current value for
 .. _Monitor/OSD Interaction: ../../configuration/mon-osd-interaction
 .. _Monitor Config Reference: ../../configuration/mon-config-ref
 .. _monitoring your OSDs: ../../operations/monitoring-osd-pg
+
 .. _monitoring OSDs: ../../operations/monitoring-osd-pg/#monitoring-osds
+
 .. _subscribe to the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=subscribe+ceph-devel
 .. _unsubscribe from the ceph-devel email list: mailto:majordomo@vger.kernel.org?body=unsubscribe+ceph-devel
 .. _subscribe to the ceph-users email list: mailto:ceph-users-join@lists.ceph.com
