@@ -417,12 +417,13 @@ int RGWDataAccess::Object::put(bufferlist& data,
     puser_data = &(*user_data);
   }
 
+  const req_context rctx{dpp, y, nullptr};
   return processor->complete(obj_size, etag,
 			    &mtime, mtime,
 			    attrs, delete_at,
                             nullptr, nullptr,
                             puser_data,
-                            nullptr, nullptr, y);
+                            nullptr, nullptr, rctx);
 }
 
 void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)

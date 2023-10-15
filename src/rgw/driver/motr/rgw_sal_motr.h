@@ -814,7 +814,7 @@ class MotrAtomicWriter : public StoreWriter {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) override;
+                       const req_context& rctx) override;
 
   unsigned populate_bvec(unsigned len, bufferlist::iterator &bi);
   void cleanup();

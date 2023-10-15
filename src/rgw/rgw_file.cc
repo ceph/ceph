@@ -1937,6 +1937,7 @@ namespace rgw {
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     req_state* state = get_state();
+    const req_context rctx{this, state->yield, nullptr};
 
     size_t osize = rgw_fh->get_size();
     struct timespec octime = rgw_fh->get_ctime();
@@ -2018,7 +2019,7 @@ namespace rgw {
     op_ret = processor->complete(state->obj_size, etag, &mtime, real_time(), attrs,
                                  (delete_at ? *delete_at : real_time()),
                                 if_match, if_nomatch, nullptr, nullptr, nullptr,
-                                state->yield);
+                                rctx);
     if (op_ret != 0) {
       /* revert attr updates */
       rgw_fh->set_mtime(omtime);
