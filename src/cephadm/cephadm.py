@@ -138,8 +138,9 @@ from cephadmlib import runscripts
 from cephadmlib.container_types import (
     CephContainer,
     InitContainer,
-    is_container_running,
+    SidecarContainer,
     extract_uid_gid,
+    is_container_running,
 )
 from cephadmlib.decorators import (
     deprecated_command,
@@ -947,6 +948,7 @@ def deploy_daemon(
     deployment_type: DeploymentType = DeploymentType.DEFAULT,
     endpoints: Optional[List[EndPoint]] = None,
     init_containers: Optional[List['InitContainer']] = None,
+    sidecars: Optional[List[SidecarContainer]] = None,
 ) -> None:
     endpoints = endpoints or []
     daemon_type = ident.daemon_type
@@ -1026,6 +1028,7 @@ def deploy_daemon(
                     osd_fsid=osd_fsid,
                     endpoints=endpoints,
                     init_containers=init_containers,
+                    sidecars=sidecars,
                 )
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
@@ -1090,7 +1093,8 @@ def deploy_daemon_units(
     start: bool = True,
     osd_fsid: Optional[str] = None,
     endpoints: Optional[List[EndPoint]] = None,
-    init_containers: Optional[List['InitContainer']] = None,
+    init_containers: Optional[List[InitContainer]] = None,
+    sidecars: Optional[List[SidecarContainer]] = None,
 ) -> None:
     data_dir = ident.data_dir(ctx.data_dir)
     pre_start_commands: List[runscripts.Command] = []
@@ -1116,6 +1120,7 @@ def deploy_daemon_units(
         ident,
         container=container,
         init_containers=init_containers,
+        sidecars=sidecars,
         endpoints=endpoints,
         pre_start_commands=pre_start_commands,
         post_stop_commands=post_stop_commands,
@@ -1129,7 +1134,12 @@ def deploy_daemon_units(
     ic_ids = [
         DaemonSubIdentity.must(ic.identity) for ic in init_containers or []
     ]
-    systemd_unit.update_files(ctx, ident, init_container_ids=ic_ids)
+    sc_ids = [
+        DaemonSubIdentity.must(sc.identity) for sc in sidecars or []
+    ]
+    systemd_unit.update_files(
+        ctx, ident, init_container_ids=ic_ids, sidecar_ids=sc_ids
+    )
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(ident.fsid, ident.daemon_type, ident.daemon_id)
@@ -3080,6 +3090,7 @@ def _deploy_daemon_container(
     daemon.customize_container_endpoints(daemon_endpoints, deployment_type)
     ctr = daemon.container(ctx)
     ics = daemon.init_containers(ctx)
+    sccs = daemon.sidecar_containers(ctx)
     config, keyring = daemon.config_and_keyring(ctx)
     uid, gid = daemon.uid_gid(ctx)
     deploy_daemon(
@@ -3094,6 +3105,7 @@ def _deploy_daemon_container(
         endpoints=daemon_endpoints,
         osd_fsid=daemon.osd_fsid,
         init_containers=ics,
+        sidecars=sccs,
     )
 
 ##################################
