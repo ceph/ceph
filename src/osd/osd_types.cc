@@ -1755,19 +1755,13 @@ void pg_pool_t::remove_snap(snapid_t s)
 {
   ceph_assert(snaps.count(s));
   snaps.erase(s);
-  snap_seq = snap_seq + 1;
 }
 
 void pg_pool_t::remove_unmanaged_snap(snapid_t s, bool preoctopus_compat)
 {
   ceph_assert(is_unmanaged_snaps_mode());
-  ++snap_seq;
   if (preoctopus_compat) {
     removed_snaps.insert(s);
-    // try to add in the new seq, just to try to keep the interval_set contiguous
-    if (!removed_snaps.contains(get_snap_seq())) {
-      removed_snaps.insert(get_snap_seq());
-    }
   }
 }
 
