@@ -217,7 +217,6 @@ public:
   std::map<int, failure_info_t> failure_info;
   std::map<int,utime_t>    down_pending_out;  // osd down -> out
   bool priority_convert = false;
-  std::map<int64_t,std::set<snapid_t>> pending_pseudo_purged_snaps;
   std::shared_ptr<PriorityCache::PriCache> rocksdb_binned_kv_cache = nullptr;
   std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
   ceph::mutex balancer_lock = ceph::make_mutex("OSDMonitor::balancer_lock");
