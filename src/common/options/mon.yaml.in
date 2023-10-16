@@ -1253,7 +1253,7 @@ options:
   type: int
   level: advanced
   desc: maximum number of PGs the mon will create at once
-  default: 1024
+  default: 1000000
   services:
   - mon
   with_legacy: true
