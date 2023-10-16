@@ -147,6 +147,7 @@ protected:
     pin->key = key;
     pin->intermediate_base = intermediate_base;
     pin->intermediate_key = intermediate_key;
+    pin->intermediate_length = intermediate_length;
     pin->indirect = indirect;
     pin->raw_val = raw_val;
     pin->map_val = map_val;
