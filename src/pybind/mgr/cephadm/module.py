@@ -3516,6 +3516,18 @@ Then run the following:
                                                   f"It is recommended to add the {SpecialHostLabels.ADMIN} label to another host"
                                                   " before completing this operation.\nIf you're certain this is"
                                                   " what you want rerun this command with --force.")
+            # if the user has specified the host we are going to drain
+            # explicitly in any service spec, warn the user. Having a
+            # drained host listed in a placement provides no value, so
+            # they may want to fix it.
+            services_matching_drain_host: List[str] = []
+            for sname, sspec in self.spec_store.all_specs.items():
+                if sspec.placement.hosts and hostname in [h.hostname for h in sspec.placement.hosts]:
+                    services_matching_drain_host.append(sname)
+            if services_matching_drain_host:
+                raise OrchestratorValidationError(f'Host {hostname} was found explicitly listed in the placements '
+                                                  f'of services:\n  {services_matching_drain_host}.\nPlease update those '
+                                                  'specs to not list this host.\nThis warning can be bypassed with --force')
 
         self.add_host_label(hostname, '_no_schedule')
         if not keep_conf_keyring:
