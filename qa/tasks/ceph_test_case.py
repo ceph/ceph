@@ -141,7 +141,7 @@ class CephTestCase(unittest.TestCase):
 
                 if present and not self.match():
                     log.error(f"Log output: \n{self.watcher_process.stdout.getvalue()}\n")
-                    raise AssertionError(f"Expected log message found: '{expected_pattern}'")
+                    raise AssertionError(f"Expected log message not found: '{expected_pattern}'")
                 elif fail or (not present and self.match()):
                     log.error(f"Log output: \n{self.watcher_process.stdout.getvalue()}\n")
                     raise AssertionError(f"Unexpected log message found: '{expected_pattern}'")
