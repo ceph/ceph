@@ -32,6 +32,8 @@ function(build_uring)
   ExternalProject_Get_Property(liburing_ext source_dir)
   set(URING_INCLUDE_DIR "${source_dir}/src/include")
   set(URING_LIBRARY_DIR "${source_dir}/src")
+  set(URING_INCLUDE_DIR ${URING_INCLUDE_DIR} PARENT_SCOPE)
+  set(URING_LIBRARY_DIR ${URING_LIBRARY_DIR} PARENT_SCOPE)
 
   add_library(uring::uring STATIC IMPORTED GLOBAL)
   add_dependencies(uring::uring liburing_ext)

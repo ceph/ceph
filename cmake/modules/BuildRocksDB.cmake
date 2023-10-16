@@ -11,6 +11,13 @@ function(build_rocksdb)
          -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE})
   endif()
 
+  list(APPEND rocksdb_CMAKE_ARGS -DWITH_LIBURING=${WITH_LIBURING})
+  if(WITH_LIBURING)
+    list(APPEND rocksdb_CMAKE_ARGS -During_INCLUDE_DIR=${URING_INCLUDE_DIR})
+    list(APPEND rocksdb_CMAKE_ARGS -During_LIBRARIES=${URING_LIBRARY_DIR})
+    list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES uring::uring)
+  endif()
+
   if(ALLOCATOR STREQUAL "jemalloc")
     list(APPEND rocksdb_CMAKE_ARGS -DWITH_JEMALLOC=ON)
     list(APPEND rocksdb_INTERFACE_LINK_LIBRARIES JeMalloc::JeMalloc)
