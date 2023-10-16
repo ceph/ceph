@@ -401,6 +401,9 @@ public:
             auto remap_len = remap.len;
             auto remap_laddr = original_laddr + remap_offset;
             auto remap_paddr = original_paddr.add_offset(remap_offset);
+	    if (intermediate_key != L_ADDR_NULL) {
+	      remap_paddr = original_paddr;
+	    }
             ceph_assert(remap_len < original_len);
             ceph_assert(remap_offset + remap_len <= original_len);
             ceph_assert(remap_len != 0);
