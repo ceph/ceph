@@ -636,7 +636,7 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.get(offset, t.mapping_delta).refcount > 0);
 
     auto refcnt = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->dec_ref(trans, offset);
+      return tm->remove(trans, offset);
     }).unsafe_get0();
     auto check_refcnt = test_mappings.dec_ref(offset, t.mapping_delta);
     EXPECT_EQ(refcnt, check_refcnt);

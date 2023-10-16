@@ -387,7 +387,7 @@ ObjectDataHandler::write_ret do_removals(
       DEBUGT("decreasing ref: {}",
 	     ctx.t,
 	     pin->get_key());
-      return ctx.tm.dec_ref(
+      return ctx.tm.remove(
 	ctx.t,
 	pin->get_key()
       ).si_then(
@@ -1524,7 +1524,7 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
     object_data.get_reserved_data_base(),
     object_data.get_reserved_data_len(),
     data_base);
-  return ctx.tm.dec_ref(
+  return ctx.tm.remove(
     ctx.t,
     object_data.get_reserved_data_base()
   ).si_then(
