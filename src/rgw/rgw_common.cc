@@ -2723,8 +2723,8 @@ void RGWRateLimitInfo::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("max_read_ops", max_read_ops, obj);
   JSONDecoder::decode_json("max_write_ops", max_write_ops, obj);
-  JSONDecoder::decode_json("max_read_bytes", max_read_ops, obj);
-  JSONDecoder::decode_json("max_write_bytes", max_write_ops, obj);
+  JSONDecoder::decode_json("max_read_bytes", max_read_bytes, obj);
+  JSONDecoder::decode_json("max_write_bytes", max_write_bytes, obj);
   JSONDecoder::decode_json("enabled", enabled, obj);
 }
 
