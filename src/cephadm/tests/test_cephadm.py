@@ -423,13 +423,12 @@ class TestCephAdm(object):
         )
 
         def _crush_location_checker(ctx, ident, container, uid, gid, **kwargs):
-            print(container.args)
-            raise Exception(' '.join(container.args))
+            argval = ' '.join(container.args)
+            assert '--set-crush-location database=a' in argval
 
         _deploy_daemon.side_effect = _crush_location_checker
-
-        with pytest.raises(Exception, match='--set-crush-location database=a'):
-            _cephadm.command_deploy_from(ctx)
+        _cephadm.command_deploy_from(ctx)
+        _deploy_daemon.assert_called()
 
     @mock.patch('cephadm.logger')
     @mock.patch('cephadm.fetch_custom_config_files')
