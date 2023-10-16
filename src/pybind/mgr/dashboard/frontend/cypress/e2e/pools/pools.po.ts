@@ -1,8 +1,8 @@
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
-  index: { url: '#/pool', id: 'cd-pool-list' },
-  create: { url: '#/pool/create', id: 'cd-pool-form' }
+  index: { url: '#/cluster/pool', id: 'cd-pool-list' },
+  create: { url: '#/cluster/pool/create', id: 'cd-pool-form' }
 };
 
 export class PoolPageHelper extends PageHelper {

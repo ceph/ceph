@@ -7,7 +7,11 @@ import moment from 'moment';
 
 import { DashboardNotFoundError } from '~/app/core/error/error';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
-import { ActionLabelsI18n, SucceededActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import {
+  ActionLabelsI18n,
+  SucceededActionLabelsI18n,
+  URLVerbs
+} from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -26,6 +30,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { TimeDiffService } from '~/app/shared/services/time-diff.service';
 import { SilenceMatcherModalComponent } from '../silence-matcher-modal/silence-matcher-modal.component';
+import { ActionUrlMatcherService } from '~/app/shared/services/action-url-matcher.service';
 
 @Component({
   selector: 'cd-prometheus-form',
@@ -78,7 +83,8 @@ export class SilenceFormComponent {
     private modalService: ModalService,
     private silenceMatcher: PrometheusSilenceMatcherService,
     private actionLabels: ActionLabelsI18n,
-    private succeededLabels: SucceededActionLabelsI18n
+    private succeededLabels: SucceededActionLabelsI18n,
+    private urlMatcher: ActionUrlMatcherService
   ) {
     this.init();
   }
@@ -92,8 +98,8 @@ export class SilenceFormComponent {
   }
 
   private chooseMode() {
-    this.edit = this.router.url.startsWith('/monitoring/silences/edit');
-    this.recreate = this.router.url.startsWith('/monitoring/silences/recreate');
+    this.edit = this.urlMatcher.match('monitoring/silences', URLVerbs.EDIT);
+    this.recreate = this.urlMatcher.match('monitoring/silences', URLVerbs.RECREATE);
     if (this.edit) {
       this.action = this.actionLabels.EDIT;
     } else if (this.recreate) {
@@ -304,7 +310,7 @@ export class SilenceFormComponent {
           data.silenceId = resp.body['silenceId'];
         }
         if (this.isNavigate) {
-          this.router.navigate(['/monitoring/silences']);
+          this.router.navigate(['../'], { relativeTo: this.route });
         }
         this.notificationService.show(
           NotificationType.success,

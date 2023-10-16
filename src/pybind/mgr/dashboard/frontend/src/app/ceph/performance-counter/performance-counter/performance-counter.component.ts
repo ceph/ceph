@@ -7,7 +7,7 @@ import { ActivatedRoute } from '@angular/router';
   styleUrls: ['./performance-counter.component.scss']
 })
 export class PerformanceCounterComponent {
-  static defaultFromLink = '/hosts';
+  static defaultFromLink = '/cluster/hosts';
 
   serviceId: string;
   serviceType: string;

@@ -39,7 +39,7 @@ import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-spe
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
 
-const BASE_URL = 'osd';
+const BASE_URL = 'cluster/osd';
 
 @Component({
   selector: 'cd-osd-list',

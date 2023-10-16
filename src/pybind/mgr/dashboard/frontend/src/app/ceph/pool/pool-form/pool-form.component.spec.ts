@@ -1276,18 +1276,18 @@ describe('PoolFormComponent', () => {
     });
 
     it('is not in edit mode if edit is not included in url', () => {
-      setUrl('/pool/add');
+      setUrl('/cluster/pool/add');
       expect(component.editing).toBeFalsy();
     });
 
     it('is in edit mode if edit is included in url', () => {
-      setUrl('/pool/edit/somePoolName');
+      setUrl('/cluster/pool/edit/somePoolName');
       expect(component.editing).toBeTruthy();
     });
 
     describe('after ngOnInit', () => {
       beforeEach(() => {
-        setUrl('/pool/edit/somePoolName');
+        setUrl('/cluster/pool/edit/somePoolName');
         fixture.detectChanges();
       });
 

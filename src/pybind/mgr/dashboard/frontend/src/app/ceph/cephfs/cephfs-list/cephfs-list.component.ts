@@ -22,7 +22,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { NotificationService } from '~/app/shared/services/notification.service';
 
-const BASE_URL = 'cephfs';
+const BASE_URL = 'file/cephfs';
 
 @Component({
   selector: 'cd-cephfs-list',

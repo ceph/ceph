@@ -98,7 +98,7 @@ const routes: Routes = [
         redirectTo: 'error',
         header: $localize`Block Pool is not configured`,
         button_name: $localize`Configure Default pool`,
-        button_route: '/pool/create',
+        button_route: '/cluster/pool/create',
         component: 'Default Pool',
         uiConfig: true
       },

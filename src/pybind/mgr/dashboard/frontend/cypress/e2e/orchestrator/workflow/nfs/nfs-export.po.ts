@@ -3,8 +3,8 @@ import { PageHelper } from '../../../page-helper.po';
 /* tslint:enable*/
 
 const pages = {
-  index: { url: '#/nfs', id: 'cd-nfs-list' },
-  create: { url: '#/nfs/create', id: 'cd-nfs-form' }
+  index: { url: '#/file/nfs', id: 'cd-nfs-list' },
+  create: { url: '#/file/nfs/create', id: 'cd-nfs-form' }
 };
 
 export class NFSPageHelper extends PageHelper {

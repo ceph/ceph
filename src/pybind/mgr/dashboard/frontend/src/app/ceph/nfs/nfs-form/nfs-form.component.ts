@@ -16,7 +16,7 @@ import { NfsFSAbstractionLayer } from '~/app/ceph/nfs/models/nfs.fsal';
 import { Directory, NfsService } from '~/app/shared/api/nfs.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
 import { RgwSiteService } from '~/app/shared/api/rgw-site.service';
-import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormBuilder } from '~/app/shared/forms/cd-form-builder';
@@ -28,6 +28,7 @@ import { CdHttpErrorResponse } from '~/app/shared/services/api-interceptor.servi
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.component';
+import { ActionUrlMatcherService } from '~/app/shared/services/action-url-matcher.service';
 
 @Component({
   selector: 'cd-nfs-form',
@@ -88,7 +89,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
     private formBuilder: CdFormBuilder,
     private taskWrapper: TaskWrapperService,
     private cdRef: ChangeDetectorRef,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private urlMatcher: ActionUrlMatcherService
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().pool;
@@ -105,7 +107,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
       this.nfsService.filesystems()
     ];
 
-    if (this.router.url.startsWith('/nfs/edit')) {
+    if (this.urlMatcher.match('nfs', URLVerbs.EDIT)) {
       this.isEdit = true;
     }
 
@@ -423,7 +425,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     if (this.isEdit) {
       action = this.taskWrapper.wrapTaskAroundCall({
-        task: new FinishedTask('nfs/edit', {
+        task: new FinishedTask('/file/nfs/edit', {
           cluster_id: this.cluster_id,
           export_id: _.parseInt(this.export_id)
         }),
@@ -432,7 +434,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
     } else {
       // Create
       action = this.taskWrapper.wrapTaskAroundCall({
-        task: new FinishedTask('nfs/create', {
+        task: new FinishedTask('/file/nfs/create', {
           path: requestModel.path,
           fsal: requestModel.fsal,
           cluster_id: requestModel.cluster_id
@@ -443,7 +445,7 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
     action.subscribe({
       error: (errorResponse: CdHttpErrorResponse) => this.setFormErrors(errorResponse),
-      complete: () => this.router.navigate(['/nfs'])
+      complete: () => this.router.navigate(['../'], { relativeTo: this.route })
     });
   }
 

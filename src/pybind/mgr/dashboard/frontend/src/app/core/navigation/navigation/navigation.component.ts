@@ -59,10 +59,10 @@ export class NavigationComponent implements OnInit, OnDestroy {
       })
     );
     /*
-     Note: If you're going to add more top notifications please do not forget to increase
-     the number of generated css-classes in section topNotification settings in the scss
-     file.
-     */
+      Note: If you're going to add more top notifications please do not forget to increase
+      the number of generated css-classes in section topNotification settings in the scss
+      file.
+      */
     this.subs.add(
       this.authStorageService.isPwdDisplayed$.subscribe((isDisplayed) => {
         this.showTopNotification('isPwdDisplayed', isDisplayed);
@@ -78,6 +78,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.showTopNotification('motdNotificationEnabled', _.isPlainObject(motd));
       })
     );
+
+    this.restoreDisplayedSubMenu();
   }
 
   ngOnDestroy(): void {
@@ -115,5 +117,11 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.notifications.splice(index, 1);
       }
     }
+  }
+
+  restoreDisplayedSubMenu(): void {
+    const currentPath = window?.location?.hash?.split?.('/')?.[1];
+    if (!currentPath) return;
+    this.toggleSubMenu(currentPath);
   }
 }

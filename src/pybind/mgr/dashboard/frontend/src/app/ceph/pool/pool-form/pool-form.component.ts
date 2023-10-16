@@ -37,6 +37,7 @@ import { CrushRuleFormModalComponent } from '../crush-rule-form-modal/crush-rule
 import { ErasureCodeProfileFormModalComponent } from '../erasure-code-profile-form/erasure-code-profile-form-modal.component';
 import { Pool } from '../pool';
 import { PoolFormData } from './pool-form-data';
+import { ActionUrlMatcherService } from '~/app/shared/services/action-url-matcher.service';
 
 interface FormFieldDescription {
   externalFieldName: string;
@@ -97,10 +98,11 @@ export class PoolFormComponent extends CdForm implements OnInit {
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
     private crushRuleService: CrushRuleService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private urlMatcher: ActionUrlMatcherService
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
+    this.editing = this.urlMatcher.match('pool', URLVerbs.EDIT);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`pool`;
     this.authenticate();
@@ -906,7 +908,7 @@ export class PoolFormComponent extends CdForm implements OnInit {
           }
           this.form.setErrors({ cdSubmitButton: true });
         },
-        complete: () => this.router.navigate(['/pool'])
+        complete: () => this.router.navigate(['/cluster/pool'])
       });
   }
 

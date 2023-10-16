@@ -12,7 +12,7 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { PrometheusAlertService } from '~/app/shared/services/prometheus-alert.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
-const BASE_URL = 'silences'; // as only silence actions can be used
+const BASE_URL = 'observability/monitoring/silences'; // as only silence actions can be used
 
 @Component({
   selector: 'cd-active-alert-list',
@@ -45,8 +45,7 @@ export class ActiveAlertListComponent extends PrometheusListHelper implements On
         disable: (selection: CdTableSelection) =>
           !selection.hasSingleSelection || selection.first().cdExecuting,
         icon: Icons.add,
-        routerLink: () =>
-          '/monitoring' + this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
+        routerLink: () => this.urlBuilder.getCreateFrom(this.selection.first().fingerprint),
         name: $localize`Create Silence`
       }
     ];

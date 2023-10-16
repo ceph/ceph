@@ -28,6 +28,8 @@ import { RgwUserTabsComponent } from './rgw-user-tabs/rgw-user-tabs.component';
 import { RgwMultisiteDetailsComponent } from './rgw-multisite-details/rgw-multisite-details.component';
 import { TreeModule } from '@circlon/angular-tree-component';
 import { DataTableModule } from '~/app/shared/datatable/datatable.module';
+import { FeatureTogglesGuardService } from '~/app/shared/services/feature-toggles-guard.service';
+import { ModuleStatusGuardService } from '~/app/shared/services/module-status-guard.service';
 import { RgwMultisiteRealmFormComponent } from './rgw-multisite-realm-form/rgw-multisite-realm-form.component';
 import { RgwMultisiteZonegroupFormComponent } from './rgw-multisite-zonegroup-form/rgw-multisite-zonegroup-form.component';
 import { RgwMultisiteZoneFormComponent } from './rgw-multisite-zone-form/rgw-multisite-zone-form.component';
@@ -44,6 +46,8 @@ import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-primary-zone.component';
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
+import { NfsListComponent } from '../nfs/nfs-list/nfs-list.component';
+import { NfsFormComponent } from '../nfs/nfs-form/nfs-form.component';
 
 @NgModule({
   imports: [
@@ -106,6 +110,7 @@ import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-inf
 export class RgwModule {}
 
 const routes: Routes = [
+  { path: '', redirectTo: 'overview', pathMatch: 'full' },
   {
     path: '',
     redirectTo: 'rbd',
@@ -184,6 +189,33 @@ const routes: Routes = [
   {
     path: 'multisite',
     children: [{ path: '', component: RgwMultisiteDetailsComponent }]
+  },
+  {
+    path: 'nfs',
+    canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
+    data: {
+      moduleStatusGuardConfig: {
+        uiApiPath: 'nfs-ganesha',
+        redirectTo: 'rgw/error',
+        section: 'nfs-ganesha',
+        section_info: 'NFS GANESHA',
+        header: 'NFS-Ganesha is not configured'
+      },
+      breadcrumbs: 'NFS'
+    },
+    children: [
+      { path: '', component: NfsListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: NfsFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
+        component: NfsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   }
 ];
 

@@ -35,7 +35,7 @@ import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { HostFormComponent } from './host-form/host-form.component';
 
-const BASE_URL = 'hosts';
+const BASE_URL = 'cluster/hosts';
 
 @Component({
   selector: 'cd-hosts',
@@ -82,7 +82,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
   columns: Array<CdTableColumn> = [];
   hosts: Array<object> = [];
   isLoadingHosts = false;
-  cdParams = { fromLink: '/hosts' };
+  cdParams = { fromLink: '/cluster/hosts' };
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   modalRef: NgbModalRef;
@@ -131,7 +131,7 @@ export class HostsComponent extends ListWithDetails implements OnDestroy, OnInit
         permission: 'create',
         icon: Icons.add,
         click: () =>
-          this.router.url.includes('/hosts')
+          this.router.url.includes('/cluster/hosts')
             ? this.router.navigate([BASE_URL, { outlets: { modal: [URLVerbs.ADD] } }])
             : (this.bsModalRef = this.modalService.show(HostFormComponent, {
                 hideMaintenance: this.hideMaintenance

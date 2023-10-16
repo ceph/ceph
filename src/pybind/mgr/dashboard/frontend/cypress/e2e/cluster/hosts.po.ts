@@ -1,8 +1,8 @@
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
-  index: { url: '#/hosts', id: 'cd-hosts' },
-  add: { url: '#/hosts/(modal:add)', id: 'cd-host-form' }
+  index: { url: '#/cluster/hosts', id: 'cd-hosts' },
+  add: { url: '#/cluster/hosts/(modal:add)', id: 'cd-host-form' }
 };
 
 export class HostsPageHelper extends PageHelper {

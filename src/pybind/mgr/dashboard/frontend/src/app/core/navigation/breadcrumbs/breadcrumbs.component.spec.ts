@@ -74,12 +74,12 @@ describe('BreadcrumbsComponent', () => {
 
   it('should run postProcess and split the breadcrumbs when navigating to hosts', fakeAsync(() => {
     fixture.ngZone.run(() => {
-      router.navigateByUrl('/hosts');
+      router.navigateByUrl('/cluster/hosts');
     });
     tick();
     expect(component.crumbs).toEqual([
       { path: null, text: 'Cluster' },
-      { path: '/hosts', text: 'Hosts' }
+      { path: '/cluster/hosts', text: 'Hosts' }
     ]);
   }));
 
@@ -109,12 +109,12 @@ describe('BreadcrumbsComponent', () => {
 
   it('should display Hosts breadcrumb when navigating to perf_counters from Hosts', fakeAsync(() => {
     fixture.ngZone.run(() => {
-      router.navigate(['/perf_counters'], { queryParams: { fromLink: '/hosts' } });
+      router.navigate(['/perf_counters'], { queryParams: { fromLink: '/cluster/hosts' } });
     });
     tick();
     expect(component.crumbs).toEqual([
       { path: null, text: 'Cluster' },
-      { path: '/hosts', text: 'Hosts' },
+      { path: '/cluster/hosts', text: 'Hosts' },
       { path: '', text: 'Performance Counters' }
     ]);
   }));
@@ -155,7 +155,7 @@ describe('BreadcrumbsComponent', () => {
 
   it('should display 2 breadcrumbs in page title when navigating to hosts', fakeAsync(() => {
     fixture.ngZone.run(() => {
-      router.navigateByUrl('/hosts');
+      router.navigateByUrl('/cluster/hosts');
     });
     tick();
     expect(titleService.getTitle()).toEqual('Ceph: Cluster > Hosts');

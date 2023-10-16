@@ -7,7 +7,7 @@ export class Input {
 }
 
 export class ManagerModulesPageHelper extends PageHelper {
-  pages = { index: { url: '#/mgr-modules', id: 'cd-mgr-module-list' } };
+  pages = { index: { url: '#/admin/mgr-modules', id: 'cd-mgr-module-list' } };
 
   /**
    * Selects the Manager Module and then fills in the desired fields.

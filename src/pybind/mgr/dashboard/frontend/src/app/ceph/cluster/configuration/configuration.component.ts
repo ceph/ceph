@@ -96,7 +96,7 @@ export class ConfigurationComponent extends ListWithDetails implements OnInit {
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => `/configuration/edit/${getConfigOptUri()}`,
+      routerLink: () => `/admin/configuration/edit/${getConfigOptUri()}`,
       name: this.actionLabels.EDIT,
       disable: () => !this.isEditable(this.selection)
     };

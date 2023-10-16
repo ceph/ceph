@@ -1,6 +1,6 @@
 import { Component, EventEmitter, Input, OnInit, Output, ViewChild } from '@angular/core';
 import { UntypedFormControl } from '@angular/forms';
-import { Router } from '@angular/router';
+import { ActivatedRoute, Router } from '@angular/router';
 
 import _ from 'lodash';
 
@@ -94,7 +94,8 @@ export class OsdFormComponent extends CdForm implements OnInit {
     private router: Router,
     private modalService: ModalService,
     private osdService: OsdService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private route: ActivatedRoute
   ) {
     super();
     this.resource = $localize`OSDs`;
@@ -267,7 +268,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
         })
         .subscribe({
           complete: () => {
-            this.router.navigate(['/osd']);
+            this.router.navigate(['cluster', 'osd']);
           }
         });
     } else {
@@ -278,7 +279,7 @@ export class OsdFormComponent extends CdForm implements OnInit {
         driveGroups: [this.driveGroup.spec]
       });
       modalRef.componentInstance.submitAction.subscribe(() => {
-        this.router.navigate(['/osd']);
+        this.router.navigate(['../'], { relativeTo: this.route });
       });
       this.previewButtonPanel.submitButton.loading = false;
     }

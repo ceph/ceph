@@ -2,7 +2,7 @@ import { URLVerbs } from '../constants/app.constants';
 import { URLBuilderService } from './url-builder.service';
 
 describe('URLBuilderService', () => {
-  const BASE = 'pool';
+  const BASE = 'cluster/pool';
   const urlBuilder = new URLBuilderService(BASE);
 
   it('get base', () => {

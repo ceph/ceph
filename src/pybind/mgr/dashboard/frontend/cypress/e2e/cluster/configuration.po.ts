@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 export class ConfigurationPageHelper extends PageHelper {
   pages = {
-    index: { url: '#/configuration', id: 'cd-configuration' }
+    index: { url: '#/admin/configuration', id: 'cd-configuration' }
   };
 
   /**

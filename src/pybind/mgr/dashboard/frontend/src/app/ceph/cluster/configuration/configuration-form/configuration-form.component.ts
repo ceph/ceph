@@ -159,7 +159,7 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
             NotificationType.success,
             $localize`Updated config option ${request.name}`
           );
-          this.router.navigate(['/configuration']);
+          this.router.navigate(['/admin/configuration']);
         },
         () => {
           this.configForm.setErrors({ cdSubmitButton: true });
@@ -167,6 +167,6 @@ export class ConfigurationFormComponent extends CdForm implements OnInit {
       );
     }
 
-    this.router.navigate(['/configuration']);
+    this.router.navigate(['/admin/configuration']);
   }
 }

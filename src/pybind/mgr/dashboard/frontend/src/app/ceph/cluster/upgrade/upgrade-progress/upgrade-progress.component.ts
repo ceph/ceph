@@ -50,7 +50,7 @@ export class UpgradeProgressComponent implements OnInit, OnDestroy {
       switchMap(() => this.upgradeService.status()),
       tap((status: UpgradeStatusInterface) => {
         if (!status.in_progress) {
-          this.router.navigate(['/upgrade']);
+          this.router.navigate(['admin', 'upgrade']);
         }
       }),
       shareReplay(1)
@@ -129,7 +129,7 @@ export class UpgradeProgressComponent implements OnInit, OnDestroy {
       },
       complete: () => {
         this.notificationService.show(NotificationType.success, $localize`The upgrade is stopped`);
-        this.router.navigate(['/upgrade']);
+        this.router.navigate(['admin', 'upgrade']);
       }
     });
   }

@@ -132,21 +132,21 @@ export class TaskMessageService {
       this.osd(metadata)
     ),
     // Pool tasks
-    'pool/create': this.newTaskMessage(
+    'cluster/pool/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata) => this.pool(metadata),
       (metadata) => ({
         '17': $localize`Name is already used by ${this.pool(metadata)}.`
       })
     ),
-    'pool/edit': this.newTaskMessage(
+    'cluster/pool/edit': this.newTaskMessage(
       this.commonOperations.update,
       (metadata) => this.pool(metadata),
       (metadata) => ({
         '17': $localize`Name is already used by ${this.pool(metadata)}.`
       })
     ),
-    'pool/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
+    'cluster/pool/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.pool(metadata)
     ),
     // Erasure code profile tasks

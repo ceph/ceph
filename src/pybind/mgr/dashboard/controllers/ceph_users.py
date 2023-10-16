@@ -135,7 +135,7 @@ edit_container = VerticalContainer('Edit User', 'edit_user', fields=[
     cap_container,
 ])
 
-create_form = Form(path='/cluster/user/create',
+create_form = Form(path='/user/create',
                    root_container=create_container,
                    method_type=MethodType.POST.value,
                    task_info=FormTaskInfo("Ceph user '{user_entity}' successfully",
@@ -153,12 +153,12 @@ import_container = VerticalContainer('Import User', 'import_user', fields=[
               help=import_user_help),
 ])
 
-import_user_form = Form(path='/cluster/user/import',
+import_user_form = Form(path='/user/import',
                         root_container=import_container,
                         task_info=FormTaskInfo("successfully", []),
                         method_type=MethodType.POST.value)
 
-edit_form = Form(path='/cluster/user/edit',
+edit_form = Form(path='/user/edit',
                  root_container=edit_container,
                  method_type=MethodType.PUT.value,
                  task_info=FormTaskInfo("Ceph user '{user_entity}' successfully",
@@ -172,13 +172,13 @@ edit_form = Form(path='/cluster/user/edit',
     set_column={"caps": {"cellTemplate": "badgeDict"}},
     actions=[
         TableAction(name='Create', permission='create', icon=Icon.ADD.value,
-                    routerLink='/cluster/user/create'),
+                    routerLink='/admin/user/create'),
         TableAction(name='Edit', permission='update', icon=Icon.EDIT.value,
                     click='edit'),
         TableAction(name='Delete', permission='delete', icon=Icon.DESTROY.value,
                     click='delete', disable=True),
         TableAction(name='Import', permission='create', icon=Icon.IMPORT.value,
-                    routerLink='/cluster/user/import'),
+                    routerLink='/admin/user/import'),
         TableAction(name='Export', permission='read', icon=Icon.EXPORT.value,
                     click='authExport', disable=True)
     ],

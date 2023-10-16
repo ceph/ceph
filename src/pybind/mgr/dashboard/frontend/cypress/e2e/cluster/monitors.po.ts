@@ -2,6 +2,6 @@ import { PageHelper } from '../page-helper.po';
 
 export class MonitorsPageHelper extends PageHelper {
   pages = {
-    index: { url: '#/monitor', id: 'cd-monitor' }
+    index: { url: '#/cluster/monitor', id: 'cd-monitor' }
   };
 }

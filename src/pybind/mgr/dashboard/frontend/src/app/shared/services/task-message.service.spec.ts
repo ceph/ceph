@@ -88,19 +88,19 @@ describe('TaskManagerMessageService', () => {
       });
 
       it('tests pool/create messages', () => {
-        finishedTask.name = 'pool/create';
+        finishedTask.name = 'cluster/pool/create';
         testCreate(defaultMsg);
         testErrorCode(17, `Name is already used by ${defaultMsg}.`);
       });
 
       it('tests pool/edit messages', () => {
-        finishedTask.name = 'pool/edit';
+        finishedTask.name = 'cluster/pool/edit';
         testUpdate(defaultMsg);
         testErrorCode(17, `Name is already used by ${defaultMsg}.`);
       });
 
       it('tests pool/delete messages', () => {
-        finishedTask.name = 'pool/delete';
+        finishedTask.name = 'cluster/pool/delete';
         testDelete(defaultMsg);
       });
     });

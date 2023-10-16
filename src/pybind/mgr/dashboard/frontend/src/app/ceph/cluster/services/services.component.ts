@@ -28,7 +28,7 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { PlacementPipe } from './placement.pipe';
 import { ServiceFormComponent } from './service-form/service-form.component';
 
-const BASE_URL = 'services';
+const BASE_URL = 'admin/services';
 
 @Component({
   selector: 'cd-services',

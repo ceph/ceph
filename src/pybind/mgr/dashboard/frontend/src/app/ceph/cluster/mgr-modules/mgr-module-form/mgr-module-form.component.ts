@@ -101,7 +101,7 @@ export class MgrModuleFormComponent extends CdForm implements OnInit {
   }
 
   goToListView() {
-    this.router.navigate(['/mgr-modules']);
+    this.router.navigate(['/admin/mgr-modules']);
   }
 
   onSubmit() {

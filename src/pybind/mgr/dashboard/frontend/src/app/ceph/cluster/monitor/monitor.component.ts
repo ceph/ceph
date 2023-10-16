@@ -55,13 +55,13 @@ export class MonitorComponent {
     this.monitorService.getMonitor().subscribe((data: any) => {
       data.in_quorum.map((row: any) => {
         row.cdOpenSessions = row.stats.num_sessions.map((i: string) => i[1]);
-        row.cdLink = '/perf_counters/mon/' + row.name;
+        row.cdLink = '/cluster/perf_counters/mon/' + row.name;
         row.cdParams = { fromLink: '/monitor' };
         return row;
       });
 
       data.out_quorum.map((row: any) => {
-        row.cdLink = '/perf_counters/mon/' + row.name;
+        row.cdLink = '/cluster/perf_counters/mon/' + row.name;
         row.cdParams = { fromLink: '/monitor' };
         return row;
       });

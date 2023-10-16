@@ -104,6 +104,6 @@ export class FeedbackComponent implements OnInit, OnDestroy {
 
   redirect() {
     this.activeModal.close();
-    this.router.navigate(['/mgr-modules']);
+    this.router.navigate(['admin', 'mgr-modules']);
   }
 }

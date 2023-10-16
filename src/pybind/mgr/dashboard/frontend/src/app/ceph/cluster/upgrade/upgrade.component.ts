@@ -134,7 +134,7 @@ export class UpgradeComponent implements OnInit, OnDestroy {
           $localize`Started upgrading the cluster`
         );
         this.fetchStatus();
-        this.router.navigate(['/upgrade/progress']);
+        this.router.navigate(['admin', 'upgrade/progress']);
       }
     });
   }

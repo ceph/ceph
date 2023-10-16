@@ -373,10 +373,10 @@ export class ServiceFormComponent extends CdForm implements OnInit {
   ngOnInit(): void {
     this.action = this.actionLabels.CREATE;
     if (this.router.url.includes('services/(modal:create')) {
-      this.pageURL = 'services';
+      this.pageURL = 'admin/services';
     } else if (this.router.url.includes('services/(modal:edit')) {
       this.editing = true;
-      this.pageURL = 'services';
+      this.pageURL = 'admin/services';
       this.route.params.subscribe((params: { type: string; name: string }) => {
         this.serviceName = params.name;
         this.serviceType = params.type;
@@ -839,7 +839,7 @@ export class ServiceFormComponent extends CdForm implements OnInit {
           self.serviceForm.setErrors({ cdSubmitButton: true });
         },
         complete: () => {
-          this.pageURL === 'services'
+          this.pageURL === 'admin/services'
             ? this.router.navigate([this.pageURL, { outlets: { modal: null } }])
             : this.activeModal.close();
         }

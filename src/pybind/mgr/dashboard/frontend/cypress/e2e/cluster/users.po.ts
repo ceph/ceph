@@ -1,8 +1,8 @@
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
-  index: { url: '#/ceph-users', id: 'cd-crud-table' },
-  create: { url: '#/cluster/user/create', id: 'cd-crud-form' }
+  index: { url: '#/admin/ceph-users', id: 'cd-crud-table' },
+  create: { url: '#/admin/user/create', id: 'cd-crud-form' }
 };
 
 export class UsersPageHelper extends PageHelper {

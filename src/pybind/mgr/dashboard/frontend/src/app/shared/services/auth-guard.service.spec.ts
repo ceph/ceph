@@ -44,11 +44,11 @@ describe('AuthGuardService', () => {
 
   it('should prevent user if not loggedIn and redirect to login page', fakeAsync(() => {
     const router = TestBed.inject(Router);
-    state = { url: '/pool', root: null };
+    state = { url: '/cluster/pool', root: null };
     ngZone.run(() => {
       expect(service.canActivate(route, state)).toBe(false);
     });
     tick();
-    expect(router.url).toBe('/login?returnUrl=%2Fpool');
+    expect(router.url).toBe('/login?returnUrl=%2Fcluster%2Fpool');
   }));
 });

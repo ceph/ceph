@@ -31,7 +31,7 @@ import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 import { Pool } from '../pool';
 import { PoolStat, PoolStats } from '../pool-stat';
 
-const BASE_URL = 'pool';
+const BASE_URL = 'cluster/pool';
 
 @Component({
   selector: 'cd-pool-list',

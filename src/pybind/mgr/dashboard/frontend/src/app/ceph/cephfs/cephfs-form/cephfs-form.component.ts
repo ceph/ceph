@@ -63,7 +63,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
     private route: ActivatedRoute
   ) {
     super();
-    this.editing = this.router.url.startsWith(`/cephfs/${URLVerbs.EDIT}`);
+    this.editing = this.router.url.startsWith(`/file/cephfs/${URLVerbs.EDIT}`);
     this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
     this.resource = $localize`File System`;
     this.hosts = {
@@ -140,7 +140,7 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
 
   submit() {
     const volumeName = this.form.get('name').value;
-    const BASE_URL = 'cephfs';
+    const BASE_URL = 'file/cephfs';
 
     if (this.editing) {
       this.taskWrapperService

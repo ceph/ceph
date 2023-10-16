@@ -57,10 +57,10 @@ export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
     const fromPath = route.queryParams.fromLink || null;
     let fromText = '';
     switch (fromPath) {
-      case '/monitor':
+      case '/cluster/monitor':
         fromText = 'Monitors';
         break;
-      case '/hosts':
+      case '/cluster/hosts':
         fromText = 'Hosts';
         break;
     }
@@ -93,288 +93,107 @@ const routes: Routes = [
     children: [
       { path: 'dashboard', component: DashboardComponent },
       { path: 'error', component: ErrorComponent },
+      { path: ':id/error', component: ErrorComponent },
 
-      // Cluster
+      //#region Cluster
       {
-        path: 'expand-cluster',
-        component: CreateClusterComponent,
-        canActivate: [ModuleStatusGuardService],
-        data: {
-          moduleStatusGuardConfig: {
-            uiApiPath: 'orchestrator',
-            redirectTo: 'dashboard',
-            backend: 'cephadm'
-          },
-          breadcrumbs: 'Expand Cluster'
-        }
-      },
-      {
-        path: 'hosts',
-        component: HostsComponent,
-        data: { breadcrumbs: 'Cluster/Hosts' },
+        path: 'cluster',
         children: [
+          { path: '', redirectTo: 'pool', pathMatch: 'full' },
           {
-            path: URLVerbs.ADD,
-            component: HostFormComponent,
-            outlet: 'modal'
-          }
-        ]
-      },
-      {
-        path: 'ceph-users',
-        component: CRUDTableComponent,
-        data: {
-          breadcrumbs: 'Administration/Ceph Users',
-          resource: 'api.cluster.user@1.0'
-        }
-      },
-      {
-        path: 'cluster/user/create',
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: 'Administration/Ceph Users/Create',
-          resource: 'api.cluster.user@1.0'
-        }
-      },
-      {
-        path: 'cluster/user/import',
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: 'Administration/Ceph Users/Import',
-          resource: 'api.cluster.user@1.0'
-        }
-      },
-      {
-        path: 'cluster/user/edit',
-        component: CrudFormComponent,
-        data: {
-          breadcrumbs: 'Administration/Ceph Users/Edit',
-          resource: 'api.cluster.user@1.0'
-        }
-      },
-      {
-        path: 'monitor',
-        component: MonitorComponent,
-        data: { breadcrumbs: 'Cluster/Monitors' }
-      },
-      {
-        path: 'services',
-        component: ServicesComponent,
-        canActivate: [ModuleStatusGuardService],
-        data: {
-          moduleStatusGuardConfig: {
-            uiApiPath: 'orchestrator',
-            redirectTo: 'error',
-            section: 'orch',
-            section_info: 'Orchestrator',
-            header: 'Orchestrator is not available'
-          },
-          breadcrumbs: 'Administration/Services'
-        },
-        children: [
-          {
-            path: URLVerbs.CREATE,
-            component: ServiceFormComponent,
-            outlet: 'modal'
+            path: 'pool',
+            data: { breadcrumbs: 'Cluster/Pools' },
+            loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
           },
           {
-            path: `${URLVerbs.EDIT}/:type/:name`,
-            component: ServiceFormComponent,
-            outlet: 'modal'
-          }
-        ]
-      },
-      {
-        path: 'inventory',
-        canActivate: [ModuleStatusGuardService],
-        component: InventoryComponent,
-        data: {
-          moduleStatusGuardConfig: {
-            uiApiPath: 'orchestrator',
-            redirectTo: 'error',
-            section: 'orch',
-            section_info: 'Orchestrator',
-            header: 'Orchestrator is not available'
-          },
-          breadcrumbs: 'Cluster/Physical Disks'
-        }
-      },
-      {
-        path: 'osd',
-        data: { breadcrumbs: 'Cluster/OSDs' },
-        children: [
-          { path: '', component: OsdListComponent },
-          {
-            path: URLVerbs.CREATE,
-            component: OsdFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
-          }
-        ]
-      },
-      {
-        path: 'configuration',
-        data: { breadcrumbs: 'Administration/Configuration' },
-        children: [
-          { path: '', component: ConfigurationComponent },
-          {
-            path: 'edit/:name',
-            component: ConfigurationFormComponent,
-            data: { breadcrumbs: ActionLabels.EDIT }
-          }
-        ]
-      },
-      {
-        path: 'crush-map',
-        component: CrushmapComponent,
-        data: { breadcrumbs: 'Cluster/CRUSH map' }
-      },
-      {
-        path: 'logs',
-        component: LogsComponent,
-        data: { breadcrumbs: 'Observability/Logs' }
-      },
-      {
-        path: 'telemetry',
-        component: TelemetryComponent,
-        data: { breadcrumbs: 'Telemetry configuration' }
-      },
-      {
-        path: 'monitoring',
-        data: { breadcrumbs: 'Observability/Alerts' },
-        children: [
-          { path: '', redirectTo: 'active-alerts', pathMatch: 'full' },
-          {
-            path: 'active-alerts',
-            data: { breadcrumbs: 'Active Alerts' },
-            component: ActiveAlertListComponent
-          },
-          {
-            path: 'alerts',
-            data: { breadcrumbs: 'Alerts' },
-            component: RulesListComponent
-          },
-          {
-            path: 'silences',
-            data: { breadcrumbs: 'Silences' },
+            path: 'hosts',
+            component: HostsComponent,
+            data: { breadcrumbs: 'Cluster/Hosts' },
             children: [
               {
-                path: '',
-                component: SilenceListComponent
-              },
-              {
-                path: URLVerbs.CREATE,
-                component: SilenceFormComponent,
-                data: { breadcrumbs: `${ActionLabels.CREATE} Silence` }
-              },
-              {
-                path: `${URLVerbs.CREATE}/:id`,
-                component: SilenceFormComponent,
-                data: { breadcrumbs: ActionLabels.CREATE }
-              },
-              {
-                path: `${URLVerbs.EDIT}/:id`,
-                component: SilenceFormComponent,
-                data: { breadcrumbs: ActionLabels.EDIT }
-              },
-              {
-                path: `${URLVerbs.RECREATE}/:id`,
-                component: SilenceFormComponent,
-                data: { breadcrumbs: ActionLabels.RECREATE }
+                path: URLVerbs.ADD,
+                component: HostFormComponent,
+                outlet: 'modal'
               }
             ]
-          }
-        ]
-      },
-      {
-        path: 'upgrade',
-        canActivate: [ModuleStatusGuardService],
-        data: {
-          moduleStatusGuardConfig: {
-            uiApiPath: 'orchestrator',
-            redirectTo: 'error',
-            backend: 'cephadm',
-            section: 'orch',
-            section_info: 'Orchestrator',
-            header: 'Orchestrator is not available'
-          },
-          breadcrumbs: 'Administration/Upgrade'
-        },
-        children: [
-          {
-            path: '',
-            component: UpgradeComponent
           },
           {
-            path: 'progress',
-            component: UpgradeProgressComponent,
-            data: { breadcrumbs: 'Progress' }
-          }
-        ]
-      },
-      {
-        path: 'perf_counters/:type/:id',
-        component: PerformanceCounterComponent,
-        data: {
-          breadcrumbs: PerformanceCounterBreadcrumbsResolver
-        }
-      },
-      // Mgr modules
-      {
-        path: 'mgr-modules',
-        data: { breadcrumbs: 'Administrator/Manager Modules' },
-        children: [
-          {
-            path: '',
-            component: MgrModuleListComponent
+            path: 'osd',
+            data: { breadcrumbs: 'Cluster/OSDs' },
+            children: [
+              { path: '', component: OsdListComponent },
+              {
+                path: URLVerbs.CREATE,
+                component: OsdFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              }
+            ]
           },
           {
-            path: 'edit/:name',
-            component: MgrModuleFormComponent,
+            path: 'inventory',
+            canActivate: [ModuleStatusGuardService],
+            component: InventoryComponent,
             data: {
-              breadcrumbs: StartCaseBreadcrumbsResolver
+              moduleStatusGuardConfig: {
+                uiApiPath: 'orchestrator',
+                redirectTo: 'cluster/error',
+                section: 'orch',
+                section_info: 'Orchestrator',
+                header: 'Orchestrator is not available'
+              },
+              breadcrumbs: 'Cluster/Physical Disks'
+            }
+          },
+          {
+            path: 'crush-map',
+            component: CrushmapComponent,
+            data: { breadcrumbs: 'Cluster/CRUSH map' }
+          },
+          {
+            path: 'monitor',
+            component: MonitorComponent,
+            data: { breadcrumbs: 'Cluster/Monitors' }
+          },
+          {
+            path: 'expand-cluster',
+            component: CreateClusterComponent,
+            canActivate: [ModuleStatusGuardService],
+            data: {
+              moduleStatusGuardConfig: {
+                uiApiPath: 'orchestrator',
+                redirectTo: 'dashboard',
+                backend: 'cephadm'
+              },
+              breadcrumbs: 'Expand Cluster'
+            }
+          },
+          {
+            path: 'perf_counters/:type/:id',
+            component: PerformanceCounterComponent,
+            data: {
+              breadcrumbs: PerformanceCounterBreadcrumbsResolver
             }
           }
         ]
       },
-      // Pools
-      {
-        path: 'pool',
-        data: { breadcrumbs: 'Cluster/Pools' },
-        loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
-      },
-      // Block
+      //#endregion Cluster
+
+      //#region Block
       {
         path: 'block',
         data: { breadcrumbs: true, text: 'Block', path: null },
         loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
       },
-      // File Systems
-      {
-        path: 'cephfs',
-        canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'File/File Systems' },
-        children: [
-          { path: '', component: CephfsListComponent },
-          {
-            path: URLVerbs.CREATE,
-            component: CephfsVolumeFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
-          },
-          {
-            path: `${URLVerbs.EDIT}/:name`,
-            component: CephfsVolumeFormComponent,
-            data: { breadcrumbs: ActionLabels.EDIT }
-          }
-        ]
-      },
-      // Object Gateway
+      //#endregion Block
+
+      //#region Object
       {
         path: 'rgw',
         canActivate: [FeatureTogglesGuardService, ModuleStatusGuardService],
         data: {
           moduleStatusGuardConfig: {
             uiApiPath: 'rgw',
-            redirectTo: 'error',
+            redirectTo: 'rgw/error',
             section: 'rgw',
             section_info: 'Object Gateway',
             header: 'The Object Gateway Service is not configured'
@@ -384,6 +203,250 @@ const routes: Routes = [
           path: null
         },
         loadChildren: () => import('./ceph/rgw/rgw.module').then((m) => m.RoutedRgwModule)
+      },
+      //#endregion Gateway
+
+      //#region File
+      {
+        path: 'file',
+        children: [
+          { path: '', redirectTo: 'cephfs', pathMatch: 'full' },
+          {
+            path: 'cephfs',
+            canActivate: [FeatureTogglesGuardService],
+            data: { breadcrumbs: 'File/File Systems' },
+            children: [
+              { path: '', component: CephfsListComponent },
+              {
+                path: URLVerbs.CREATE,
+                component: CephfsVolumeFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              },
+              {
+                path: `${URLVerbs.EDIT}/:name`,
+                component: CephfsVolumeFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              }
+            ]
+          },
+          {
+            path: 'nfs',
+            canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
+            data: {
+              moduleStatusGuardConfig: {
+                uiApiPath: 'nfs-ganesha',
+                redirectTo: 'file/error',
+                section: 'nfs-ganesha',
+                section_info: 'NFS GANESHA',
+                header: 'NFS-Ganesha is not configured'
+              },
+              breadcrumbs: 'NFS'
+            },
+            children: [
+              { path: '', component: NfsListComponent },
+              {
+                path: URLVerbs.CREATE,
+                component: NfsFormComponent,
+                data: { breadcrumbs: ActionLabels.CREATE }
+              },
+              {
+                path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
+                component: NfsFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              }
+            ]
+          }
+        ]
+      },
+      //#endregion File
+
+      //#region Observability
+      {
+        path: 'observability',
+        children: [
+          { path: '', redirectTo: 'logs', pathMatch: 'full' },
+          {
+            path: 'logs',
+            component: LogsComponent,
+            data: { breadcrumbs: 'Observability/Logs' }
+          },
+          {
+            path: 'monitoring',
+            data: { breadcrumbs: 'Observability/Alerts' },
+            children: [
+              { path: '', redirectTo: 'active-alerts', pathMatch: 'full' },
+              {
+                path: 'active-alerts',
+                data: { breadcrumbs: 'Active Alerts' },
+                component: ActiveAlertListComponent
+              },
+              {
+                path: 'alerts',
+                data: { breadcrumbs: 'Alerts' },
+                component: RulesListComponent
+              },
+              {
+                path: 'silences',
+                data: { breadcrumbs: 'Silences' },
+                children: [
+                  {
+                    path: '',
+                    component: SilenceListComponent
+                  },
+                  {
+                    path: URLVerbs.CREATE,
+                    component: SilenceFormComponent,
+                    data: { breadcrumbs: `${ActionLabels.CREATE} Silence` }
+                  },
+                  {
+                    path: `${URLVerbs.CREATE}/:id`,
+                    component: SilenceFormComponent,
+                    data: { breadcrumbs: ActionLabels.CREATE }
+                  },
+                  {
+                    path: `${URLVerbs.EDIT}/:id`,
+                    component: SilenceFormComponent,
+                    data: { breadcrumbs: ActionLabels.EDIT }
+                  },
+                  {
+                    path: `${URLVerbs.RECREATE}/:id`,
+                    component: SilenceFormComponent,
+                    data: { breadcrumbs: ActionLabels.RECREATE }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      //#endregion Observability
+
+      //#region Administration
+      {
+        path: 'admin',
+        children: [
+          { path: '', redirectTo: 'services', pathMatch: 'full' },
+          {
+            path: 'services',
+            component: ServicesComponent,
+            canActivate: [ModuleStatusGuardService],
+            data: {
+              moduleStatusGuardConfig: {
+                uiApiPath: 'orchestrator',
+                redirectTo: 'admin/error',
+                section: 'orch',
+                section_info: 'Orchestrator',
+                header: 'Orchestrator is not available'
+              },
+              breadcrumbs: 'Administration/Services'
+            },
+            children: [
+              {
+                path: URLVerbs.CREATE,
+                component: ServiceFormComponent,
+                outlet: 'modal'
+              },
+              {
+                path: `${URLVerbs.EDIT}/:type/:name`,
+                component: ServiceFormComponent,
+                outlet: 'modal'
+              }
+            ]
+          },
+          {
+            path: 'upgrade',
+            canActivate: [ModuleStatusGuardService],
+            data: {
+              moduleStatusGuardConfig: {
+                uiApiPath: 'orchestrator',
+                redirectTo: 'admin/error',
+                backend: 'cephadm',
+                section: 'orch',
+                section_info: 'Orchestrator',
+                header: 'Orchestrator is not available'
+              },
+              breadcrumbs: 'Administration/Upgrade'
+            },
+            children: [
+              {
+                path: '',
+                component: UpgradeComponent
+              },
+              {
+                path: 'progress',
+                component: UpgradeProgressComponent,
+                data: { breadcrumbs: 'Progress' }
+              }
+            ]
+          },
+          {
+            path: 'ceph-users',
+            component: CRUDTableComponent,
+            data: {
+              breadcrumbs: 'Administration/Ceph Users',
+              resource: 'api.cluster.user@1.0'
+            }
+          },
+          {
+            path: 'mgr-modules',
+            data: { breadcrumbs: 'Administrator/Manager Modules' },
+            children: [
+              {
+                path: '',
+                component: MgrModuleListComponent
+              },
+              {
+                path: 'edit/:name',
+                component: MgrModuleFormComponent,
+                data: {
+                  breadcrumbs: StartCaseBreadcrumbsResolver
+                }
+              }
+            ]
+          },
+          {
+            path: 'configuration',
+            data: { breadcrumbs: 'Administration/Configuration' },
+            children: [
+              { path: '', component: ConfigurationComponent },
+              {
+                path: 'edit/:name',
+                component: ConfigurationFormComponent,
+                data: { breadcrumbs: ActionLabels.EDIT }
+              }
+            ]
+          },
+          {
+            path: 'user/create',
+            component: CrudFormComponent,
+            data: {
+              breadcrumbs: 'Administration/Ceph Users/Create',
+              resource: 'api.cluster.user@1.0'
+            }
+          },
+          {
+            path: 'user/import',
+            component: CrudFormComponent,
+            data: {
+              breadcrumbs: 'Administration/Ceph Users/Import',
+              resource: 'api.cluster.user@1.0'
+            }
+          },
+          {
+            path: 'user/edit',
+            component: CrudFormComponent,
+            data: {
+              breadcrumbs: 'Administration/Ceph Users/Edit',
+              resource: 'api.cluster.user@1.0'
+            }
+          }
+        ]
+      },
+      //#endregion Administration
+      {
+        path: 'telemetry',
+        component: TelemetryComponent,
+        data: { breadcrumbs: 'Telemetry configuration' }
       },
       // User/Role Management
       {
@@ -400,34 +463,6 @@ const routes: Routes = [
             path: URLVerbs.EDIT,
             component: UserPasswordFormComponent,
             canActivate: [NoSsoGuardService],
-            data: { breadcrumbs: ActionLabels.EDIT }
-          }
-        ]
-      },
-      // NFS
-      {
-        path: 'nfs',
-        canActivateChild: [FeatureTogglesGuardService, ModuleStatusGuardService],
-        data: {
-          moduleStatusGuardConfig: {
-            uiApiPath: 'nfs-ganesha',
-            redirectTo: 'error',
-            section: 'nfs-ganesha',
-            section_info: 'NFS GANESHA',
-            header: 'NFS-Ganesha is not configured'
-          },
-          breadcrumbs: 'NFS'
-        },
-        children: [
-          { path: '', component: NfsListComponent },
-          {
-            path: URLVerbs.CREATE,
-            component: NfsFormComponent,
-            data: { breadcrumbs: ActionLabels.CREATE }
-          },
-          {
-            path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
-            component: NfsFormComponent,
             data: { breadcrumbs: ActionLabels.EDIT }
           }
         ]
@@ -457,7 +492,8 @@ const routes: Routes = [
   imports: [
     RouterModule.forRoot(routes, {
       useHash: true,
-      preloadingStrategy: PreloadAllModules
+      preloadingStrategy: PreloadAllModules,
+      enableTracing: false
     })
   ],
   exports: [RouterModule],

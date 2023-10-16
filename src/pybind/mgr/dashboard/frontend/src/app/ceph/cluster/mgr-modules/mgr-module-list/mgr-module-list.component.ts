@@ -74,7 +74,7 @@ export class MgrModuleListComponent extends ListWithDetails {
           // Disable the 'edit' button when the module has no options.
           return Object.values(this.selection.first().options).length === 0;
         },
-        routerLink: () => `/mgr-modules/edit/${getModuleUri()}`,
+        routerLink: () => `/admin/mgr-modules/edit/${getModuleUri()}`,
         icon: Icons.edit
       },
       {

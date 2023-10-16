@@ -2,7 +2,7 @@ import { PageHelper } from '../page-helper.po';
 
 export class LogsPageHelper extends PageHelper {
   pages = {
-    index: { url: '#/logs', id: 'cd-logs' }
+    index: { url: '#/observability/logs', id: 'cd-logs' }
   };
 
   checkAuditForPoolFunction(poolname: string, poolfunction: string, hour: number, minute: number) {

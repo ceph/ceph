@@ -1,7 +1,7 @@
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
-  index: { url: '#/inventory', id: 'cd-inventory' }
+  index: { url: '#/cluster/inventory', id: 'cd-inventory' }
 };
 
 export class InventoryPageHelper extends PageHelper {

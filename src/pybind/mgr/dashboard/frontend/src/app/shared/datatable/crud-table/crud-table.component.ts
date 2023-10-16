@@ -153,7 +153,7 @@ export class CRUDTableComponent implements OnInit {
     if (this.selection.hasSelection) {
       key = this.selection.first()[this.meta.columnKey];
     }
-    this.router.navigate(['/cluster/user/edit'], { queryParams: { key: key } });
+    this.router.navigate(['/admin/user/edit'], { queryParams: { key: key } });
   }
 
   authExport() {

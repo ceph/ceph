@@ -25,7 +25,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 import { PrometheusSilenceMatcherService } from '~/app/shared/services/prometheus-silence-matcher.service';
 import { URLBuilderService } from '~/app/shared/services/url-builder.service';
 
-const BASE_URL = 'monitoring/silences';
+const BASE_URL = 'observability/monitoring/silences';
 
 @Component({
   providers: [

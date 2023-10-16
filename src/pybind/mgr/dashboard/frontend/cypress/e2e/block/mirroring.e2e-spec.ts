@@ -54,7 +54,7 @@ describe('Mirroring page', () => {
 
           // Login to the second cluster
           // Somehow its not working with the cypress login function
-          cy.visit('#/pool/create').wait(100);
+          cy.visit('#/cluster/pool/create').wait(100);
 
           cy.get('[name=username]').type('admin');
           cy.get('#password').type('admin');

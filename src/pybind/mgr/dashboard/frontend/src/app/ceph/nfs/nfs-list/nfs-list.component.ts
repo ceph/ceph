@@ -1,8 +1,10 @@
 import { Component, OnDestroy, OnInit, TemplateRef, ViewChild } from '@angular/core';
+import { Router, RoutesRecognized } from '@angular/router';
 
 import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
 import { Subscription } from 'rxjs';
+import { filter, pairwise } from 'rxjs/operators';
 
 import { NfsService } from '~/app/shared/api/nfs.service';
 import { ListWithDetails } from '~/app/shared/classes/list-with-details.class';
@@ -65,7 +67,8 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     private nfsService: NfsService,
     private taskListService: TaskListService,
     private taskWrapper: TaskWrapperService,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private router: Router
   ) {
     super();
     this.permission = this.authStorageService.getPermissions().nfs;
@@ -75,10 +78,19 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
         this.selection.first().export_id
       )}`;
 
+    let baseUrl: string = 'file';
+    this.router.events
+      .pipe(
+        filter((e: RoutesRecognized): e is RoutesRecognized => e instanceof RoutesRecognized),
+        pairwise()
+      )
+      .subscribe((events: RoutesRecognized[]) => {
+        baseUrl = events?.[0]?.urlAfterRedirects || 'file';
+      });
     const createAction: CdTableAction = {
       permission: 'create',
       icon: Icons.add,
-      routerLink: () => '/nfs/create',
+      routerLink: () => `${baseUrl}/nfs/create`,
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
       name: this.actionLabels.CREATE
     };
@@ -86,7 +98,7 @@ export class NfsListComponent extends ListWithDetails implements OnInit, OnDestr
     const editAction: CdTableAction = {
       permission: 'update',
       icon: Icons.edit,
-      routerLink: () => `/nfs/edit/${getNfsUri()}`,
+      routerLink: () => `${baseUrl}/nfs/edit/${getNfsUri()}`,
       name: this.actionLabels.EDIT
     };
 

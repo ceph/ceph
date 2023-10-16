@@ -162,7 +162,7 @@ describe('PoolListComponent', () => {
       expect(poolService.delete).toHaveBeenCalledWith(poolName);
       expect(taskWrapper.wrapTaskAroundCall).toHaveBeenCalledWith({
         task: {
-          name: 'pool/delete',
+          name: 'cluster/pool/delete',
           metadata: {
             pool_name: poolName
           }
@@ -213,13 +213,13 @@ describe('PoolListComponent', () => {
     });
 
     it('gets a pool from a task during creation', () => {
-      addTask('pool/create', 'd');
+      addTask('cluster/pool/create', 'd');
       expect(component.pools.length).toBe(4);
       expectItemTasks(component.pools[3], 'Creating');
     });
 
     it('gets all pools with one executing pools', () => {
-      addTask('pool/create', 'a');
+      addTask('cluster/pool/create', 'a');
       expect(component.pools.length).toBe(3);
       expectItemTasks(component.pools[0], 'Creating');
       expect(component.pools[1].cdExecuting).toBeFalsy();
@@ -227,12 +227,12 @@ describe('PoolListComponent', () => {
     });
 
     it('gets all pools with multiple executing pools', () => {
-      addTask('pool/create', 'a');
-      addTask('pool/edit', 'a');
-      addTask('pool/delete', 'a');
-      addTask('pool/edit', 'b');
-      addTask('pool/delete', 'b');
-      addTask('pool/delete', 'c');
+      addTask('cluster/pool/create', 'a');
+      addTask('cluster/pool/edit', 'a');
+      addTask('cluster/pool/delete', 'a');
+      addTask('cluster/pool/edit', 'b');
+      addTask('cluster/pool/delete', 'b');
+      addTask('cluster/pool/delete', 'c');
       expect(component.pools.length).toBe(3);
       expectItemTasks(component.pools[0], 'Creating..., Updating..., Deleting');
       expectItemTasks(component.pools[1], 'Updating..., Deleting');
@@ -240,12 +240,12 @@ describe('PoolListComponent', () => {
     });
 
     it('gets all pools with multiple executing tasks (not only pool tasks)', () => {
-      addTask('rbd/create', 'a');
-      addTask('rbd/edit', 'a');
-      addTask('pool/delete', 'a');
-      addTask('pool/edit', 'b');
-      addTask('rbd/delete', 'b');
-      addTask('rbd/delete', 'c');
+      addTask('block/rbd/create', 'a');
+      addTask('block/rbd/edit', 'a');
+      addTask('cluster/pool/delete', 'a');
+      addTask('cluster/pool/edit', 'b');
+      addTask('block/rbd/delete', 'b');
+      addTask('block/rbd/delete', 'c');
       expect(component.pools.length).toBe(3);
       expectItemTasks(component.pools[0], 'Deleting');
       expectItemTasks(component.pools[1], 'Updating');

@@ -1,8 +1,8 @@
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
-  index: { url: '#/osd', id: 'cd-osd-list' },
-  create: { url: '#/osd/create', id: 'cd-osd-form' }
+  index: { url: '#/cluster/osd', id: 'cd-osd-list' },
+  create: { url: '#/cluster/osd/create', id: 'cd-osd-form' }
 };
 
 export class OSDsPageHelper extends PageHelper {
