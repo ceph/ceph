@@ -399,12 +399,12 @@ public:
     void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near) {
       cache->_audit("_add_buffer start");
 
-      Buffer* asd = nullptr;
+      Buffer* buffer = nullptr;
       auto buffer_it = buffer_map.find(b->poffset);
       if (buffer_it != buffer_map.end()) {
-        asd = (Buffer*)buffer_it->second.get();
-        if (asd->is_writing()) {
-          writing.erase(state_list_t::s_iterator_to(*asd));
+        buffer = (Buffer*)buffer_it->second.get();
+        if (buffer->is_writing()) {
+          writing.erase(state_list_t::s_iterator_to(*buffer));
         }
       }
 
@@ -468,14 +468,7 @@ public:
     int discard(Blob *blob, uint64_t offset, uint64_t length) {
       BufferCacheShard* cache = blob->shared_blob->get_cache();
       std::lock_guard l(cache->lock);
-//       if (offset == bluestore_pextent_t::INVALID_OFFSET) {
-//         return 0;
-//       }
       uint64_t poffset = blob->get_blob().calc_offset(offset, nullptr);
-
-//       if (poffset == bluestore_pextent_t::INVALID_OFFSET) {
-//         return 0;
-//       }
 
       int ret = _discard(cache, poffset, length);
       cache->_trim();
@@ -493,10 +486,10 @@ public:
       cache->_trim();
     }
     void _finish_write(Blob& blob, uint64_t poffset, uint64_t seq);
-    void did_read(BufferCacheShard* cache, uint64_t offset, ceph::buffer::list& bl) {
+    void did_read(BufferCacheShard* cache, uint64_t poffset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
-      Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
-      b->cache_private = _discard(cache, offset, bl.length());
+      Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, poffset, bl);
+      b->cache_private = _discard(cache, poffset, bl.length());
       _add_buffer(cache, b, 1, nullptr);
       cache->_trim();
     }
@@ -718,10 +711,10 @@ public:
     }
     void dup(const Blob& from, bool copy_used_in_blob);
     void copy_from(CephContext* cct, const Blob& from,
-		   uint32_t min_release_size, uint32_t start, uint32_t len);
-    void copy_extents(CephContext* cct, const Blob& from, uint32_t start,
-		      uint32_t pre_len, uint32_t main_len, uint32_t post_len);
-    void copy_extents_over_empty(CephContext* cct, const Blob& from, uint32_t start, uint32_t len);
+		   uint64_t min_release_size, uint64_t start, uint64_t len);
+    void copy_extents(CephContext* cct, const Blob& from, uint64_t start,
+		      uint64_t pre_len, uint64_t main_len, uint64_t post_len);
+    void copy_extents_over_empty(CephContext* cct, const Blob& from, uint64_t start, uint64_t len);
 
     inline const bluestore_blob_t& get_blob() const {
       return blob;
@@ -751,7 +744,7 @@ public:
     bool put_ref(Collection *coll, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
     /// split the blob
-    void split(Collection *coll, uint32_t blob_offset, Blob *o);
+    void split(Collection *coll, uint64_t blob_offset, Blob *o);
     // update caches to reflect content up to seq
     void finish_write(uint64_t poffset, uint64_t seq);
 

@@ -579,6 +579,100 @@ TEST_P(StoreTest, UnprintableCharsName) {
   }
 }
 
+TEST_P(StoreTest, ZeroHoles) {
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP),
+                            string(),
+			    0,
+			    111,
+			    string()));
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP),
+                            string(),
+			    0,
+			    111,
+			    string()));
+  const int OBJ_SIZE = 131072;
+  const int WRITE_SIZE = 16384;
+  int r;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    t.touch(cid, hoid);
+    t.set_alloc_hint(cid, hoid, OBJ_SIZE, WRITE_SIZE, CEPH_OSD_ALLOC_HINT_FLAG_RANDOM_WRITE | CEPH_OSD_ALLOC_HINT_FLAG_COMPRESSIBLE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  bufferlist bl;
+  for (int i = 0; i < 12651; i++) {
+    bl.append(to_string(i % 5));
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 137706, bl.length(), bl);
+    t.collection_move_rename(cid, hoid, cid, hoid2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.collection_move_rename(cid, hoid, cid, hoid2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.collection_move_rename(cid, hoid, cid, hoid2);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  ghobject_t hoid3(hobject_t(sobject_t("Object 3", CEPH_NOSNAP), string(), 0,
+                             111, string()));
+  ghobject_t hoid4(hobject_t(sobject_t("Object 4", CEPH_NOSNAP), string(), 0,
+                             111, string()));
+  {
+    ObjectStore::Transaction t;
+    t.clone(cid, hoid2, hoid3);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.clone(cid, hoid2, hoid4);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  ghobject_t hoid5(hobject_t(sobject_t("Object 5", CEPH_NOSNAP), string(), 0,
+                             111, string()));
+  {
+    ObjectStore::Transaction t;
+    t.collection_move_rename(cid, hoid4, cid, hoid5);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  {
+    ObjectStore::Transaction t;
+    t.zero(cid, hoid5, 125605, 12588);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+
+  bufferlist expected;
+  expected.append_zero(125605+12588);
+  
+  bufferlist trimmed;
+  trimmed.substr_of(bl, 481, bl.length() - 487);
+  expected.append(trimmed);
+
+  bufferlist actual;
+  store->read(ch, hoid5, 0, 137706+12651, actual, 0);
+  ASSERT_TRUE(bl_eq(expected, actual));
+}
+
 TEST_P(StoreTest, FiemapEmpty) {
   coll_t cid;
   int r = 0;
@@ -832,7 +926,6 @@ TEST_P(StoreTest, SmallBlockWrites) {
   zp.zero();
   bufferlist z;
   z.append(zp);
-  std::cout << "pere write a 0x0000~0x1000" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0, 0x1000, a);
@@ -845,7 +938,6 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(a);
     ASSERT_TRUE(bl_eq(exp, in));
   }
-  std::cout << "pere write b 0x1000~0x1000" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0x1000, 0x1000, b);
@@ -859,7 +951,6 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(b);
     ASSERT_TRUE(bl_eq(exp, in));
   }
-  std::cout << "pere write c 0x3000~0x1000 hole" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0x3000, 0x1000, c);
@@ -875,7 +966,6 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(c);
     ASSERT_TRUE(bl_eq(exp, in));
   }
-  std::cout << "pere write a 0x2000~0x1000" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0x2000, 0x1000, a);
@@ -891,7 +981,6 @@ TEST_P(StoreTest, SmallBlockWrites) {
     exp.append(c);
     ASSERT_TRUE(bl_eq(exp, in));
   }
-  std::cout << "pere write c 0x0000~0x1000" << std::endl;
   {
     ObjectStore::Transaction t;
     t.write(cid, hoid, 0, 0x1000, c);
@@ -4220,10 +4309,10 @@ public:
   struct EnterExit {
     const char *msg;
     explicit EnterExit(const char *m) : msg(m) {
-      //cout << pthread_self() << " enter " << msg << std::endl;
+      cout << pthread_self() << " enter " << msg << std::endl;
     }
     ~EnterExit() {
-      //cout << pthread_self() << " exit " << msg << std::endl;
+      cout << pthread_self() << " exit " << msg << std::endl;
     }
   };
 
@@ -5097,7 +5186,7 @@ public:
 
   void print_internal_state() {
     std::lock_guard locker{lock};
-    cerr << "available_objects: " << available_objects.size()
+    std::cout << "available_objects: " << available_objects.size()
 	 << " in_flight_objects: " << in_flight_objects.size()
 	 << " total objects: " << in_flight_objects.size() + available_objects.size()
 	 << " in_flight " << in_flight << std::endl;
@@ -5127,7 +5216,7 @@ void StoreTest::doSyntheticTest(
   }
   for (int i = 0; i < num_ops; ++i) {
     if (!(i % 1000)) {
-      cerr << "Op " << i << std::endl;
+      std::cout << "Op " << i << std::endl;
       test_obj.print_internal_state();
     }
     boost::uniform_int<> true_false(0, 999);
