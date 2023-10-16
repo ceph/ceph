@@ -496,7 +496,9 @@ BtreeLBAManager::scan_mappings(
 	      seastar::stop_iteration::yes);
 	  }
 	  ceph_assert((pos.get_key() + pos.get_val().len) > begin);
-	  f(pos.get_key(), pos.get_val().pladdr.get_paddr(), pos.get_val().len);
+	  if (pos.get_val().pladdr.is_paddr()) {
+	    f(pos.get_key(), pos.get_val().pladdr.get_paddr(), pos.get_val().len);
+	  }
 	  return LBABtree::iterate_repeat_ret_inner(
 	    interruptible::ready_future_marker{},
 	    seastar::stop_iteration::no);
