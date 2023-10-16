@@ -235,6 +235,7 @@ public:
   using ref_iertr = LBAManager::ref_iertr;
   using ref_ret = ref_iertr::future<unsigned>;
 
+#ifdef UNIT_TESTS_BUILT
   /// Add refcount for ref
   ref_ret inc_ref(
     Transaction &t,
@@ -244,14 +245,28 @@ public:
   ref_ret inc_ref(
     Transaction &t,
     laddr_t offset);
+#endif
 
-  /// Remove refcount for ref
-  ref_ret dec_ref(
+  /** 
+   * remove
+   *
+   * Remove the extent and the corresponding lba mapping,
+   * users must make sure that lba mapping's refcount is 1
+   */
+  ref_ret remove(
     Transaction &t,
     LogicalCachedExtentRef &ref);
 
-  /// Remove refcount for offset
-  ref_ret dec_ref(
+  /**
+   * remove
+   *
+   * 1. Remove the indirect mapping(s), and if refcount drops to 0,
+   *    also remove the direct mapping and retire the extent.
+   * 
+   * 2. Remove the direct mapping(s) and retire the extent if
+   * 	refcount drops to 0.
+   */
+  ref_ret remove(
     Transaction &t,
     laddr_t offset) {
     return _dec_ref(t, offset, true);
@@ -259,7 +274,7 @@ public:
 
   /// remove refcount for list of offset
   using refs_ret = ref_iertr::future<std::vector<unsigned>>;
-  refs_ret dec_ref(
+  refs_ret remove(
     Transaction &t,
     std::vector<laddr_t> offsets);
 
@@ -487,10 +502,6 @@ public:
       mapping.is_indirect()
 	? mapping.get_intermediate_key()
 	: mapping.get_key();
-    auto intermediate_base =
-      mapping.is_indirect()
-      ? mapping.get_intermediate_base()
-      : mapping.get_key();
 
     LOG_PREFIX(TransactionManager::clone_pin);
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}, clone_offset {}",
@@ -503,15 +514,7 @@ public:
       intermediate_key,
       mapping.get_val(),
       intermediate_key
-    ).si_then([this, &t, intermediate_base](auto pin) {
-      return inc_ref(t, intermediate_base
-      ).si_then([pin=std::move(pin)](auto) mutable {
-	return std::move(pin);
-      }).handle_error_interruptible(
-	crimson::ct_error::input_output_error::pass_further(),
-	crimson::ct_error::assert_all("not possible")
-      );
-    });
+    );
   }
 
   /* alloc_extents

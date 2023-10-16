@@ -36,7 +36,7 @@ using dec_ref_iertr = OMapInnerNode::base_iertr;
 using dec_ref_ret = dec_ref_iertr::future<>;
 template <typename T>
 dec_ref_ret dec_ref(omap_context_t oc, T&& addr) {
-  return oc.tm.dec_ref(oc.t, std::forward<T>(addr)).handle_error_interruptible(
+  return oc.tm.remove(oc.t, std::forward<T>(addr)).handle_error_interruptible(
     dec_ref_iertr::pass_further{},
     crimson::ct_error::assert_all{
       "Invalid error in OMapInnerNode helper dec_ref"
