@@ -56,8 +56,7 @@ ghobject_t make_temp_oid(int i) {
 
 struct seastore_test_t :
   public seastar_test_suite_t,
-  SeaStoreTestState,
-  ::testing::WithParamInterface<const char*> {
+  SeaStoreTestState {
 
   coll_t coll_name{spg_t{pg_t{0, 0}}};
   CollectionRef coll;
@@ -65,16 +64,7 @@ struct seastore_test_t :
   seastore_test_t() {}
 
   seastar::future<> set_up_fut() final {
-    std::string j_type = GetParam();
-    journal_type_t journal;
-    if (j_type == "segmented") {
-      journal = journal_type_t::SEGMENTED;
-    } else if (j_type == "circularbounded") {
-      journal = journal_type_t::RANDOM_BLOCK;
-    } else {
-      ceph_assert(0 == "no support");
-    }
-    return tm_setup(journal
+    return tm_setup(
     ).then([this] {
       return sharded_seastore->create_new_collection(coll_name);
     }).then([this](auto coll_ref) {

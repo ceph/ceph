@@ -1572,7 +1572,7 @@ struct d_seastore_tm_test_t :
   }
 };
 
-TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
+TEST_P(d_seastore_tm_test_t, 6_random_tree_insert_erase)
 {
   run_async([this] {
     constexpr bool TEST_SEASTORE = true;
@@ -1662,7 +1662,7 @@ TEST_F(d_seastore_tm_test_t, 6_random_tree_insert_erase)
   });
 }
 
-TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
+TEST_P(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
 {
   run_async([this] {
     constexpr double EAGAIN_PROBABILITY = 0.1;
@@ -1781,3 +1781,12 @@ TEST_F(d_seastore_tm_test_t, 7_tree_insert_erase_eagain)
     tree.reset();
   });
 }
+
+INSTANTIATE_TEST_SUITE_P(
+  d_seastore_tm_test,
+  d_seastore_tm_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);
