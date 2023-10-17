@@ -1148,7 +1148,7 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``name`` name of the nvmeof gateway
         self.name = name
         #: ``group`` name of the nvmeof gateway
-        self.group = group
+        self.group = group or ''
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
         #: ``server_key`` gateway server key

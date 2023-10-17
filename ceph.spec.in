@@ -211,7 +211,9 @@ BuildRequires:	selinux-policy-devel
 BuildRequires:	gperf
 BuildRequires:  cmake > 3.5
 BuildRequires:	fuse-devel
-%if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9
+BuildRequires:	git
+BuildRequires:	grpc-devel
+%if 0%{?fedora} || 0%{?suse_version} > 1500 || 0%{?rhel} == 9 || 0%{?openEuler}
 BuildRequires:	gcc-c++ >= 11
 %endif
 %if 0%{?suse_version} == 1500
@@ -581,6 +583,17 @@ ceph-mon is the cluster monitor daemon for the Ceph distributed file
 system. One or more instances of ceph-mon form a Paxos part-time
 parliament cluster that provides extremely reliable and durable storage
 of cluster membership, configuration, and state.
+
+%package mon-client-nvmeof
+Summary:	Ceph NVMeoF Gateway Monitor Client
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Provides:	ceph-test:/usr/bin/ceph-nvmeof-monitor-client
+Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
+%description mon-client-nvmeof
+Ceph NVMeoF Gateway Monitor Client distributes Paxos ANA info
+to NVMeoF Gateway and provides beacons to the monitor daemon
 
 %package mgr
 Summary:        Ceph Manager Daemon
@@ -1987,6 +2000,9 @@ if [ $1 -ge 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mon@\*.service > /dev/null 2>&1 || :
   fi
 fi
+
+%files mon-client-nvmeof
+%{_bindir}/ceph-nvmeof-monitor-client
 
 %files fuse
 %{_bindir}/ceph-fuse
