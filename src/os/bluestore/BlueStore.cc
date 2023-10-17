@@ -13277,7 +13277,11 @@ int BlueStore::omap_get_values(
       r = -ENOENT;
       goto out;
     }
-    iter->upper_bound(*start_after);
+    if (start_after) {
+      iter->upper_bound(*start_after);
+    } else {
+      iter->seek_to_first();
+    }
     for (; iter->valid(); iter->next()) {
       output->insert(make_pair(iter->key(), iter->value()));
     }
