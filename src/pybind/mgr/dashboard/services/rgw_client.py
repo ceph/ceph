@@ -852,6 +852,27 @@ class RgwClient(RestClient):
                    f' For more information about the format look at {link}')
             raise DashboardException(msg=msg, component='rgw')
 
+    @RestClient.api_get('/{bucket_name}?policy')
+    def get_bucket_policy(self, bucket_name: str, request=None):
+        """
+        Gets the bucket policy for a bucket.
+        :param bucket_name: The name of the bucket.
+        :type bucket_name: str
+        :rtype: None
+        """
+        # pylint: disable=unused-argument
+
+        try:
+            request = request()
+            return request
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get(
+                        'Code') == 'NoSuchBucketPolicy':
+                    return None
+            raise e
+
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:
             retention_period_days = int(retention_period_days) if retention_period_days else 0
