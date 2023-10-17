@@ -286,6 +286,10 @@ class RgwBucket(RgwRESTController):
                                              retention_period_days,
                                              retention_period_years)
 
+    def _get_policy(self, bucket: str):
+        rgw_client = RgwClient.admin_instance()
+        return rgw_client.get_bucket_policy(bucket)
+
     @staticmethod
     def strip_tenant_from_bucket_name(bucket_name):
         # type (str) -> str
@@ -338,6 +342,7 @@ class RgwBucket(RgwRESTController):
         result['encryption'] = encryption['Status']
         result['versioning'] = versioning['Status']
         result['mfa_delete'] = versioning['MfaDelete']
+        result['policy'] = self._get_policy(bucket_name)
 
         # Append the locking configuration.
         locking = self._get_locking(result['owner'], daemon_name, bucket_name)
