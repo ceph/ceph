@@ -958,7 +958,7 @@ seastar::future<struct stat> SeaStore::Shard::stat(
     Transaction::src_t::READ,
     "stat",
     op_type_t::STAT,
-    [=, this, &oid](auto &t, auto &onode) {
+    [=, this](auto &t, auto &onode) {
       struct stat st;
       auto &olayout = onode.get_layout();
       st.st_size = olayout.size;
