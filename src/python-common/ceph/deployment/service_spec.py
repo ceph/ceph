@@ -1353,7 +1353,7 @@ class NvmeofServiceSpec(ServiceSpec):
                  max_log_directory_backups: Optional[int] = 10,
                  log_directory: Optional[str] = '/var/log/ceph/',
                  monitor_timeout: Optional[float] = 1.0,
-                 enable_monitor_client: bool = False,
+                 enable_monitor_client: bool = True,
                  placement: Optional[PlacementSpec] = None,
                  unmanaged: bool = False,
                  preview_only: bool = False,
@@ -1379,7 +1379,7 @@ class NvmeofServiceSpec(ServiceSpec):
         #: ``name`` name of the nvmeof gateway
         self.name = name
         #: ``group`` name of the nvmeof gateway
-        self.group = group
+        self.group = group or ''
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
         #: ``state_update_notify`` enables automatic update from OMAP in nvmeof gateway

@@ -1720,6 +1720,13 @@ options:
   default: 500
   services:
   - mon
+- name: mon_max_nvmeof_epochs
+  type: int
+  level: advanced
+  desc: max number of nvmeof gateway maps to store
+  default: 500
+  services:
+  - mon
 - name: mon_max_osd
   type: int
   level: advanced

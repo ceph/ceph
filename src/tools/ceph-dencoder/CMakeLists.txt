@@ -88,6 +88,16 @@ if(WITH_RBD)
   endif()
 endif()
 
+if(WITH_NVMEOF_GATEWAY_MONITOR_CLIENT)
+  add_denc_mod(denc-mod-nvmeof
+    nvmeof_types.cc)
+  target_link_libraries(denc-mod-nvmeof
+    mon
+    ceph-common
+    )
+endif()
+
+
 if(WITH_CEPHFS)
   add_denc_mod(denc-mod-cephfs
     mds_types.cc)
