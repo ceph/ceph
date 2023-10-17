@@ -18,6 +18,7 @@ export class RgwBucketDetailsComponent implements OnChanges {
       this.rgwBucketService.get(this.selection.bid).subscribe((bucket: object) => {
         bucket['lock_retention_period_days'] = this.rgwBucketService.getLockDays(bucket);
         this.selection = bucket;
+        this.selection.policy = JSON.parse(this.selection.policy) || {};
       });
     }
   }
