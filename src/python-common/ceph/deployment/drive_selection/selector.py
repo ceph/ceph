@@ -71,7 +71,7 @@ class DriveSelection(object):
         limit = device_filter.limit or 0
 
         if limit > 0 and (len_devices + self.existing_daemons >= limit):
-            logger.info("Refuse to add {} due to limit policy of <{}>".format(
+            logger.debug("Refuse to add {} due to limit policy of <{}>".format(
                 disk_path, limit))
             return True
         return False
