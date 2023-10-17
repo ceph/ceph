@@ -61,6 +61,7 @@ namespace crimson::os {
 namespace crimson::osd {
 class OpsExecuter;
 class BackfillRecovery;
+class SnapTrimEvent;
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -552,6 +553,20 @@ public:
     eversion_t &version);
 
 private:
+
+  struct SnapTrimMutex {
+    struct WaitPG : OrderedConcurrentPhaseT<WaitPG> {
+      static constexpr auto type_name = "SnapTrimEvent::wait_pg";
+    } wait_pg;
+    seastar::shared_mutex mutex;
+
+    interruptible_future<> lock(SnapTrimEvent &st_event) noexcept;
+
+    void unlock() noexcept {
+      mutex.unlock();
+    }
+  } snaptrim_mutex;
+
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
   using do_osd_ops_iertr =

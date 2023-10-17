@@ -82,11 +82,11 @@ using crimson::common::local_conf;
 
   template<RWState::State State>
   ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_and_clone_obc(
+  ObjectContextLoader::with_clone_obc_direct(
     hobject_t oid,
     with_both_obc_func_t&& func)
   {
-    LOG_PREFIX(ObjectContextLoader::with_head_and_clone_obc);
+    LOG_PREFIX(ObjectContextLoader::with_clone_obc_direct);
     assert(!oid.is_head());
     return with_obc<RWState::RWREAD>(
       oid.get_head(),
@@ -98,14 +98,13 @@ using crimson::common::local_conf;
           crimson::ct_error::enoent::make()
         };
       }
-      auto coid = resolve_oid(head->get_head_ss(), oid);
-      if (!coid) {
-        ERRORDPP("clone {} not found", dpp, oid);
-        return load_obc_iertr::future<>{
-          crimson::ct_error::enoent::make()
-        };
-      }
-      auto [clone, existed] = obc_registry.get_cached_obc(*coid);
+#ifndef NDEBUG
+      auto &ss = head->get_head_ss();
+      auto cit = std::find(
+	std::begin(ss.clones), std::end(ss.clones), oid.snap);
+      assert(cit != std::end(ss.clones));
+#endif
+      auto [clone, existed] = obc_registry.get_cached_obc(oid);
       return clone->template with_lock<State, IOInterruptCondition>(
         [existed=existed, clone=std::move(clone),
          func=std::move(func), head=std::move(head), this]()
@@ -227,7 +226,7 @@ using crimson::common::local_conf;
                                                  with_obc_func_t&&);
 
   template ObjectContextLoader::load_obc_iertr::future<>
-  ObjectContextLoader::with_head_and_clone_obc<RWState::RWWRITE>(
+  ObjectContextLoader::with_clone_obc_direct<RWState::RWWRITE>(
     hobject_t,
     with_both_obc_func_t&&);
 }

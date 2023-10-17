@@ -53,7 +53,7 @@ public:
   // object *and* the matching clone object are being used
   // in func.
   template<RWState::State State>
-  load_obc_iertr::future<> with_head_and_clone_obc(
+  load_obc_iertr::future<> with_clone_obc_direct(
     hobject_t oid,
     with_both_obc_func_t&& func);
 
