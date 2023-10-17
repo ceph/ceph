@@ -51,6 +51,7 @@ set(crimson_seastore_srcs
   journal.cc
   device.cc
   segment_manager_group.cc
+  record_scanner.cc
   journal/circular_bounded_journal.cc
   ../../../test/crimson/seastore/test_block.cc
   ${PROJECT_SOURCE_DIR}/src/os/Transaction.cc

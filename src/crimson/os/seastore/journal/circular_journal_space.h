@@ -39,7 +39,7 @@ class CircularJournalSpace : public JournalAllocator {
   }
 
   segment_nonce_t get_nonce() const final {
-    return 0;
+    return header.magic;
   }
 
   bool needs_roll(std::size_t length) const final;
@@ -117,11 +117,13 @@ class CircularJournalSpace : public JournalAllocator {
     // start offset of CircularBoundedJournal in the device
     journal_seq_t dirty_tail;
     journal_seq_t alloc_tail;
+    segment_nonce_t magic;
 
     DENC(cbj_header_t, v, p) {
       DENC_START(1, 1, p);
       denc(v.dirty_tail, p);
       denc(v.alloc_tail, p);
+      denc(v.magic, p);
       DENC_FINISH(p);
     }
   };
