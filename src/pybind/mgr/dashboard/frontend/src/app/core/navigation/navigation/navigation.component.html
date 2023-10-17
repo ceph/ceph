@@ -18,6 +18,8 @@
              alt="Ceph" />
       </a>
 
+      &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<cd-multicluster-context></cd-multicluster-context>
+
       <button type="button"
               class="navbar-toggler"
               (click)="toggleRightSidebar()">
@@ -295,6 +297,13 @@
                routerLink="/rgw/multisite">Multi-Site</a>
           </li>
         </ul>
+      </li>
+
+      <li routerLinkActive="active"
+          class="nav-item tc_menuitem_cephfs">
+        <a i18n
+           class="nav-link"
+           routerLink="/multi-cluster">Multi-Cluster</a>
       </li>
     </ng-container>
   </ng-template>

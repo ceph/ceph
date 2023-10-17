@@ -3,10 +3,11 @@ import {
   HttpEvent,
   HttpHandler,
   HttpInterceptor,
+  HttpParams,
   HttpRequest
 } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { Router } from '@angular/router';
+import {  Router } from '@angular/router';
 
 import _ from 'lodash';
 import { Observable, throwError as observableThrowError } from 'rxjs';
@@ -37,6 +38,28 @@ export class ApiInterceptorService implements HttpInterceptor {
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     const acceptHeader = request.headers.get('Accept');
     let reqWithVersion: HttpRequest<any>;
+    let params = new HttpParams();
+    // if request.body doesn't contain a key called stack
+    // we add the stack to the request body
+    // this is needed to identify the request on the backend
+    let body = '';
+    if (!request.body?.stack && request.body !== null) {
+      body = JSON.stringify(request.body);
+    }
+
+    if (body !== null || body !== undefined) {
+      params = params.appendAll({
+        path: `${request.url}`,
+        method: `${request.method}`,
+        payload: `${body}`
+      });
+    } else {
+      params = params.appendAll({
+        path: `${request.url}`,
+        method: `${request.method}`
+      });
+    }
+
     if (acceptHeader && acceptHeader.startsWith('application/vnd.ceph.api.v')) {
       reqWithVersion = request.clone();
     } else {
@@ -46,6 +69,15 @@ export class ApiInterceptorService implements HttpInterceptor {
         }
       });
     }
+
+    if (request.url !== 'api/health/set_configs' && request.url !== 'api/health/get_remote_cluster_urls' && request.url !== 'ui-api/langs' && request.url !== 'api/auth/check' && request.url !== 'ui-api/login/custom_banner' && request.url !== 'api/auth') {
+      reqWithVersion = reqWithVersion.clone({
+        url: `api/multicluster/route/`,
+        params: params,
+        method: 'GET',
+      });      
+    }
+
     return next.handle(reqWithVersion).pipe(
       catchError((resp: CdHttpErrorResponse) => {
         if (resp instanceof HttpErrorResponse) {
@@ -130,4 +162,6 @@ export class ApiInterceptorService implements HttpInterceptor {
       );
     });
   }
+
+  
 }

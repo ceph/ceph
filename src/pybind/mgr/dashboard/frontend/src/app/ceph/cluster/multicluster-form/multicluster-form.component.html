@@ -1,0 +1,51 @@
+<cd-modal [modalRef]="activeModal">
+    <ng-container i18n="form title"
+                  class="modal-title">Add Remote Cluster</ng-container>
+  
+    <ng-container class="modal-content">
+      <form name="remoteClusterForm"
+            #frm="ngForm"
+            [formGroup]="remoteClusterForm">
+      <div class="modal-body">
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="apiToken"
+                 i18n>Token
+          </label>
+          <div class="cd-col-form-input">
+            <input id="apiToken"
+                   name="apiToken"
+                   class="form-control"
+                   type="text"
+                   formControlName="apiToken">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('apiToken', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="remoteClusterUrl"
+                 i18n>Remote Cluster URL</label>
+          <div class="cd-col-form-input">
+            <input class="form-control"
+                   type="text"
+                   placeholder="https://localhost:4202"
+                   id="remoteClusterUrl"
+                   name="remoteClusterUrl"
+                   formControlName="remoteClusterUrl">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="onSubmit()"
+                              [submitText]="actionLabels.ADD"
+                              [form]="remoteClusterForm"></cd-form-button-panel>
+      </div>
+      </form>
+    </ng-container>
+  </cd-modal>
+  

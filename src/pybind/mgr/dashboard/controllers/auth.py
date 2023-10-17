@@ -3,6 +3,7 @@
 import http.cookies
 import logging
 import sys
+import cherrypy
 
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
@@ -55,6 +56,24 @@ class Auth(RESTController, ControllerAuthMixin):
 
                 # For backward-compatibility: PyJWT versions < 2.0.0 return bytes.
                 token = token.decode('utf-8') if isinstance(token, bytes) else token
+
+                remote_url = cherrypy.request.headers.get('Referer')
+                config = Settings.REMOTE_CLUSTER_URLS
+                config = list(config)
+
+                if remote_url is not None and token is not None:
+                    if all(entry['remoteClusterUrl'] != remote_url for entry in config):
+                        config.append({'remoteClusterUrl': remote_url, 'apiToken': token})
+                        Settings.MULTICLUSTER_CONFIG = {'current_url': remote_url}
+                        Settings.REMOTE_CLUSTER_URLS = config
+                    else:
+                        for entry in config:
+                            if entry['remoteClusterUrl'] == remote_url:
+                                if entry['apiToken'] != token:
+                                    entry['apiToken'] = token
+                                    Settings.MULTICLUSTER_CONFIG = {'current_url': remote_url}
+                                    Settings.REMOTE_CLUSTER_URLS = config
+                                break
 
                 self._set_token_cookie(url_prefix, token)
                 return {

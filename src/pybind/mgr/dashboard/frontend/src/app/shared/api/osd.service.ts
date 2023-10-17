@@ -83,7 +83,7 @@ export class OsdService {
 
   getOsdSettings(): Observable<OsdSettings> {
     return this.http.get<OsdSettings>(`${this.path}/settings`, {
-      headers: { Accept: 'application/vnd.ceph.api.v0.1+json' }
+      headers: { Accept: 'application/vnd.ceph.api.v1.0+json' }
     });
   }
 

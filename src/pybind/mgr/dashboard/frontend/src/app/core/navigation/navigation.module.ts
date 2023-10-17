@@ -16,6 +16,7 @@ import { DashboardHelpComponent } from './dashboard-help/dashboard-help.componen
 import { IdentityComponent } from './identity/identity.component';
 import { NavigationComponent } from './navigation/navigation.component';
 import { NotificationsComponent } from './notifications/notifications.component';
+import { MulticlusterContextComponent } from './multicluster-context/multicluster-context.component';
 
 @NgModule({
   imports: [
@@ -36,6 +37,7 @@ import { NotificationsComponent } from './notifications/notifications.component'
     NotificationsComponent,
     DashboardHelpComponent,
     AdministrationComponent,
+    MulticlusterContextComponent,
     IdentityComponent
   ],
   exports: [NavigationComponent, BreadcrumbsComponent]

@@ -7,6 +7,7 @@ import threading
 import time
 import uuid
 from base64 import b64encode
+from ..settings import Settings
 
 import cherrypy
 import jwt
@@ -20,6 +21,9 @@ cherrypy.config.update({
     'response.headers.x-content-type-options': 'nosniff',
     'response.headers.strict-transport-security': 'max-age=63072000; includeSubDomains; preload'
 })
+
+logger = logging.getLogger("controllers.rgw")
+
 
 
 class JwtManager(object):
@@ -72,7 +76,25 @@ class JwtManager(object):
         auth_cookie_name = 'token'
         try:
             # use cookie
-            return cherrypy.request.cookie[auth_cookie_name].value
+            remote_url = cherrypy.request.headers.get('Referer')
+            token = cherrypy.request.cookie[auth_cookie_name].value
+            config = Settings.REMOTE_CLUSTER_URLS
+            config = list(config)
+
+            if remote_url is not None and token is not None:
+                if all(entry['remoteClusterUrl'] != remote_url for entry in config):
+                    config.append({'remoteClusterUrl': remote_url, 'apiToken': token})
+                    Settings.MULTICLUSTER_CONFIG = {'current_url': remote_url}
+                    Settings.REMOTE_CLUSTER_URLS = config
+                else:
+                    for entry in config:
+                        if entry['remoteClusterUrl'] == remote_url:
+                            if entry['apiToken'] != token:
+                                entry['apiToken'] = token
+                                Settings.MULTICLUSTER_CONFIG = {'current_url': remote_url}
+                                Settings.REMOTE_CLUSTER_URLS = config
+                            break
+            return token
         except KeyError:
             try:
                 # fall-back: use Authorization header
@@ -80,7 +102,24 @@ class JwtManager(object):
                 if auth_header is not None:
                     scheme, params = auth_header.split(' ', 1)
                     if scheme.lower() == 'bearer':
-                        return params
+                        remote_url = cherrypy.request.headers.get('Referer')
+                        config = Settings.REMOTE_CLUSTER_URLS
+                        config = list(config)
+
+                        if remote_url is not None and params is not None:
+                            if all(entry['remoteClusterUrl'] != remote_url for entry in config):
+                                config.append({'remoteClusterUrl': remote_url, 'apiToken': params})
+                                Settings.MULTICLUSTER_CONFIG = {'current_url': remote_url}
+                                Settings.REMOTE_CLUSTER_URLS = config
+                            else:
+                                for entry in config:
+                                    if entry['remoteClusterUrl'] == remote_url:
+                                        if entry['apiToken'] != params:
+                                            entry['apiToken'] = params
+                                            Settings.MULTICLUSTER_CONFIG = {'current_url': remote_url}
+                                            Settings.REMOTE_CLUSTER_URLS = config
+                                        break
+                    return params
             except IndexError:
                 return None
 

@@ -2,6 +2,7 @@ import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
 
 import * as _ from 'lodash';
 import { Subscription } from 'rxjs';
+import { MulticlusterService } from '~/app/shared/api/multicluster.service';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -46,7 +47,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
     private featureToggles: FeatureTogglesService,
     private telemetryNotificationService: TelemetryNotificationService,
     public prometheusAlertService: PrometheusAlertService,
-    private motdNotificationService: MotdNotificationService
+    private motdNotificationService: MotdNotificationService,
+    private multiClusterService: MulticlusterService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
@@ -78,6 +80,17 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.showTopNotification('motdNotificationEnabled', _.isPlainObject(motd));
       })
     );
+
+    this.multiClusterService.selectedCluster$.subscribe(value => {
+      this.handleSelectionChange(value);
+    });
+  }
+
+  handleSelectionChange(value: object): void {
+    console.log(value);
+    this.multiClusterService.getRemoteData().subscribe((data: any) => {
+      console.log(data);
+    });
   }
 
   ngOnDestroy(): void {

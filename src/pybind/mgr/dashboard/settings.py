@@ -100,6 +100,7 @@ class Options(object):
     # to expire soon
     USER_PWD_EXPIRATION_WARNING_1 = Setting(10, [int])
     USER_PWD_EXPIRATION_WARNING_2 = Setting(5, [int])
+    REMOTE_CLUSTER_URLS = Setting([], [dict, list])
 
     # Password policy
     PWD_POLICY_ENABLED = Setting(True, [bool])
@@ -120,6 +121,8 @@ class Options(object):
                                         [str])
 
     UNSAFE_TLS_v1_2 = Setting(False, [bool])
+
+    MULTICLUSTER_CONFIG = Setting('', [dict, str])
 
     @staticmethod
     def has_default_value(name):

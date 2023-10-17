@@ -61,6 +61,10 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
 import { UpgradeComponent } from './upgrade/upgrade.component';
 import { UpgradeStartModalComponent } from './upgrade/upgrade-form/upgrade-start-modal.component';
 import { UpgradeProgressComponent } from './upgrade/upgrade-progress/upgrade-progress.component';
+import { MulticlusterDashboardComponent } from './multicluster-dashboard/multicluster-dashboard.component';
+import { CoreModule } from '~/app/core/core.module';
+import { MulticlusterFormComponent } from './multicluster-form/multicluster-form.component';
+import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 
 @NgModule({
   imports: [
@@ -81,7 +85,9 @@ import { UpgradeProgressComponent } from './upgrade/upgrade-progress/upgrade-pro
     NgbPopoverModule,
     NgbDropdownModule,
     NgxPipeFunctionModule,
-    NgbProgressbarModule
+    NgbProgressbarModule,
+    CoreModule,
+    DashboardV3Module
   ],
   declarations: [
     HostsComponent,
@@ -124,7 +130,9 @@ import { UpgradeProgressComponent } from './upgrade/upgrade-progress/upgrade-pro
     CreateClusterReviewComponent,
     UpgradeComponent,
     UpgradeStartModalComponent,
-    UpgradeProgressComponent
+    UpgradeProgressComponent,
+    MulticlusterDashboardComponent,
+    MulticlusterFormComponent,
   ],
   providers: [NgbActiveModal]
 })

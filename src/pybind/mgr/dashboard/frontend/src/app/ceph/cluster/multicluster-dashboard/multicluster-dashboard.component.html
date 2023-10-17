@@ -1,0 +1,30 @@
+<div class="row">
+    <div class="col-sm-12 col-lg-12">
+      <div>
+        <cd-table-actions class="btn-group mb-4 me-2"
+                          [permission]="permission"
+                          [selection]="selection"
+                          [tableActions]="addRemoteClusterAction">
+        </cd-table-actions>
+      </div>
+    </div>
+</div>
+<div class="row"
+     *ngIf="capacity">
+    <div class="col-sm-4 ps-0">
+        <cd-card cardTitle="Capacity"
+                 i18n-title
+                 [fullHeight]="true"
+                 aria-label="Capacity card">
+          <ng-container class="ms-4 me-4"
+                        *ngIf="capacity">
+            <cd-dashboard-pie [data]="{max: capacity.total_bytes, current: capacity.total_used_raw_bytes}"
+                              [lowThreshold]="0.9"
+                              [highThreshold]="0.9">
+            </cd-dashboard-pie>
+          </ng-container>
+        </cd-card>
+      </div>
+
+</div>
+  
