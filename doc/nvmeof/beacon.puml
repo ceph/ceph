@@ -1,0 +1,63 @@
+@startuml
+
+package "MNVMeofGwBeacon" #DDDDDD {
+
+    class Beacon {
+        gw_id: String
+        gw_pool: String
+        gw_group: String
+        availability: Availability
+        subsystems: Subsystem[*]
+    }
+
+    note top
+        NVMeoF gateways regularly transmit
+        a Beacon message to the monitor,
+        conveying their current state.
+    end note
+
+    class Subsystem {
+        nqn: String
+        listeners: Listener[*]
+        namespaces: Namespace[*]
+    }
+
+    class Listener {
+        address: String
+        family: String
+        service: Decimal
+        
+    }
+
+    class Namespace {
+        nonce: String
+        ana_grp_id: Decimal
+    }
+
+    note right of Namespace::nonce
+        <b>RADOS</b> connection
+    end note
+
+    enum Availability {
+        CREATED
+        AVAILABLE
+        INACCESSIBLE
+    }
+
+    note right of Availability::CREATED
+        The initial state, 
+        until a <b>MNVMeofGwMap</b>
+        that contains the entry for 
+        this gateway
+    end note
+
+    Beacon::availability --> "1" Availability
+    Beacon::subsystems "1" *-- "n" Subsystem : contains
+
+    Subsystem::listeners "1" *-- "n" Listener : contains
+    Subsystem::namespaces "1" *-- "n" Namespace : contains
+}
+@enduml
+
+
+

@@ -990,3 +990,11 @@ add_ceph_unittest(unittest_weighted_shuffle)
 add_executable(unittest_intarith test_intarith.cc)
 add_ceph_unittest(unittest_intarith)
 #make check ends here
+
+# test_nvmeof_mon_encoding
+add_executable(test_nvmeof_mon_encoding
+  test_nvmeof_mon_encoding.cc
+  )
+target_link_libraries(test_nvmeof_mon_encoding
+  mon ceph-common global-static
+  )
