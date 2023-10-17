@@ -41,7 +41,7 @@ struct RootBlock : CachedExtent {
   CachedExtent* lba_root_node = nullptr;
   CachedExtent* backref_root_node = nullptr;
 
-  RootBlock() : CachedExtent(0) {}
+  RootBlock() : CachedExtent(zero_length_t()) {};
 
   RootBlock(const RootBlock &rhs)
     : CachedExtent(rhs),

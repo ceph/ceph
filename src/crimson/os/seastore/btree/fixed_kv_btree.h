@@ -28,10 +28,12 @@ bool is_valid_child_ptr(ChildableCachedExtent* child);
 template <typename T>
 phy_tree_root_t& get_phy_tree_root(root_t& r);
 
+using get_child_iertr =
+  ::crimson::interruptible::interruptible_errorator<
+    typename trans_intr::condition,
+    get_child_ertr>;
 using get_phy_tree_root_node_ret =
-  std::pair<bool,
-            ::crimson::interruptible::interruptible_future<
-              typename trans_intr::condition, CachedExtentRef>>;
+  std::pair<bool, get_child_iertr::future<CachedExtentRef>>;
 
 template <typename T, typename key_t>
 const get_phy_tree_root_node_ret get_phy_tree_root_node(
@@ -1400,7 +1402,7 @@ private:
     };
 
     if (found) {
-      return fut.then_interruptible(
+      return fut.si_then(
         [this, c, on_found_internal=std::move(on_found_internal),
         on_found_leaf=std::move(on_found_leaf)](auto root) {
         LOG_PREFIX(FixedKVBtree::lookup_root);
@@ -1479,7 +1481,7 @@ private:
 
     auto v = parent->template get_child<internal_node_t>(c, node_iter);
     if (v.has_child()) {
-      return v.get_child_fut().then(
+      return v.get_child_fut().safe_then(
         [on_found=std::move(on_found), node_iter, c,
         parent_entry](auto child) mutable {
         LOG_PREFIX(FixedKVBtree::lookup_internal_level);
@@ -1547,7 +1549,7 @@ private:
 
     auto v = parent->template get_child<leaf_node_t>(c, node_iter);
     if (v.has_child()) {
-      return v.get_child_fut().then(
+      return v.get_child_fut().safe_then(
         [on_found=std::move(on_found), node_iter, c,
         parent_entry](auto child) mutable {
         LOG_PREFIX(FixedKVBtree::lookup_leaf);
@@ -2100,7 +2102,7 @@ private:
 
     auto v = parent_pos.node->template get_child<NodeType>(c, donor_iter);
     if (v.has_child()) {
-      return v.get_child_fut().then(
+      return v.get_child_fut().safe_then(
         [do_merge=std::move(do_merge), &pos,
         donor_iter, donor_is_left, c, parent_pos](auto child) mutable {
         LOG_PREFIX(FixedKVBtree::merge_level);
