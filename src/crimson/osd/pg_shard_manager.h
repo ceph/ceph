@@ -211,7 +211,7 @@ public:
 	      auto &&trigger) {
 	    return shard_services.get_or_create_pg(
 	      std::move(trigger),
-	      opref.get_pgid(), opref.get_epoch(),
+	      opref.get_pgid(),
 	      std::move(opref.get_create_info())
 	    );
 	  }).safe_then([&logger, &shard_services, &opref](Ref<PG> pgref) {
