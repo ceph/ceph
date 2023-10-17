@@ -55,6 +55,19 @@ this requires the account metadata to also manage the index of all buckets under
 we should be able to use the same cls_user calls for `{accountid}.buckets` that we already use for `{userid}.buckets`. so if we solve this scaling problem for users, we could apply the same solution to accounts
 
 
+## account limits
+
+the goal of quota enforcement is to prevent a single account or user from consuming too much storage capacity. but quotas are measured only in total objects and size of object data
+
+for users, rgw also imposes a limit on bucket creation to 1000 per user by default. this prevents unbounded creation of bucket metadata, and also works around the scaling limitations of `{userid}.buckets` mentioned above
+
+at the account level, there should be similar limits on the number of users and roles created
+
+open questions:
+* do we need to limit the number of buckets per account, or just rely on (users-per-account * buckets-per-user)?
+* what about access keys per user?
+
+
 ## iam groups and group policy?
 
 we don't have any support for groups yet. is there interest in groups and group policy? this seems relatively easy to add as future work
