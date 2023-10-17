@@ -564,7 +564,7 @@ struct FixedKVInternalNode
     return this->get_split_pivot().get_offset();
   }
 
-  void prepare_write() final {
+  void prepare_commit() final {
     if (this->is_initial_pending()) {
       if (this->is_rewrite()) {
 	this->set_children_from_prior_instance();
@@ -1004,7 +1004,7 @@ struct FixedKVLeafNode
     }
   }
 
-  void prepare_write() final {
+  void prepare_commit() final {
     if constexpr (has_children) {
       if (this->is_initial_pending()) {
 	if (this->is_rewrite()) {
