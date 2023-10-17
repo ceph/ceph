@@ -125,7 +125,7 @@ class CreateSnapshotRequests:
         self.log.debug("CreateSnapshotRequests.get_mirror_mode: {}/{}/{}".format(
             pool_id, namespace, image_id))
 
-        def cb(comp: rados.Completion, mode: int) -> None:
+        def cb(comp: rados.Completion, mode: Optional[int]) -> None:
             self.handle_get_mirror_mode(image_spec, image, comp, mode)
 
         try:
@@ -140,14 +140,14 @@ class CreateSnapshotRequests:
                                image_spec: ImageSpec,
                                image: rbd.Image,
                                comp: rados.Completion,
-                               mode: int) -> None:
+                               mode: Optional[int]) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
             "CreateSnapshotRequests.handle_get_mirror_mode {}/{}/{}: r={} mode={}".format(
                 pool_id, namespace, image_id, comp.get_return_value(), mode))
 
-        if comp.get_return_value() < 0:
+        if mode is None:
             if comp.get_return_value() != -errno.ENOENT:
                 self.log.error(
                     "error when getting mirror mode for {}/{}/{}: {}".format(
@@ -171,7 +171,7 @@ class CreateSnapshotRequests:
         self.log.debug("CreateSnapshotRequests.get_mirror_info: {}/{}/{}".format(
             pool_id, namespace, image_id))
 
-        def cb(comp: rados.Completion, info: Dict[str, Union[str, int]]) -> None:
+        def cb(comp: rados.Completion, info: Optional[Dict[str, Union[str, int]]]) -> None:
             self.handle_get_mirror_info(image_spec, image, comp, info)
 
         try:
@@ -186,14 +186,14 @@ class CreateSnapshotRequests:
                                image_spec: ImageSpec,
                                image: rbd.Image,
                                comp: rados.Completion,
-                               info: Dict[str, Union[str, int]]) -> None:
+                               info: Optional[Dict[str, Union[str, int]]]) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
             "CreateSnapshotRequests.handle_get_mirror_info {}/{}/{}: r={} info={}".format(
                 pool_id, namespace, image_id, comp.get_return_value(), info))
 
-        if comp.get_return_value() < 0:
+        if info is None:
             if comp.get_return_value() != -errno.ENOENT:
                 self.log.error(
                     "error when getting mirror info for {}/{}/{}: {}".format(
@@ -218,7 +218,7 @@ class CreateSnapshotRequests:
             "CreateSnapshotRequests.create_snapshot for {}/{}/{}".format(
                 pool_id, namespace, image_id))
 
-        def cb(comp: rados.Completion, snap_id: int) -> None:
+        def cb(comp: rados.Completion, snap_id: Optional[int]) -> None:
             self.handle_create_snapshot(image_spec, image, comp, snap_id)
 
         try:
@@ -233,15 +233,14 @@ class CreateSnapshotRequests:
                                image_spec: ImageSpec,
                                image: rbd.Image,
                                comp: rados.Completion,
-                               snap_id: int) -> None:
+                               snap_id: Optional[int]) -> None:
         pool_id, namespace, image_id = image_spec
 
         self.log.debug(
             "CreateSnapshotRequests.handle_create_snapshot for {}/{}/{}: r={}, snap_id={}".format(
                 pool_id, namespace, image_id, comp.get_return_value(), snap_id))
 
-        if comp.get_return_value() < 0 and \
-           comp.get_return_value() != -errno.ENOENT:
+        if snap_id is None and comp.get_return_value() != -errno.ENOENT:
             self.log.error(
                 "error when creating snapshot for {}/{}/{}: {}".format(
                     pool_id, namespace, image_id, comp.get_return_value()))
