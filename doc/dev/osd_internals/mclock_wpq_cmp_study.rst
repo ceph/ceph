@@ -114,29 +114,6 @@ baseline throughput for each device type was determined:
           256 KiB. For HDDs, it was 40MiB. The above throughput was obtained
           by running 4 KiB random writes at a queue depth of 64 for 300 secs.
 
-Factoring I/O Cost in mClock
-============================
-
-The services using mClock have a cost associated with them. The cost can be
-different for each service type. The mClock scheduler factors in the cost
-during calculations for parameters like *reservation*, *weight* and *limit*.
-The calculations determine when the next op for the service type can be
-dequeued from the operation queue. In general, the higher the cost, the longer
-an op remains in the operation queue.
-
-A cost modeling study was performed to determine the cost per I/O and the cost
-per byte for SSD and HDD device types. The following cost specific options are
-used under the hood by mClock,
-
-- :confval:`osd_mclock_cost_per_io_usec`
-- :confval:`osd_mclock_cost_per_io_usec_hdd`
-- :confval:`osd_mclock_cost_per_io_usec_ssd`
-- :confval:`osd_mclock_cost_per_byte_usec`
-- :confval:`osd_mclock_cost_per_byte_usec_hdd`
-- :confval:`osd_mclock_cost_per_byte_usec_ssd`
-
-See :doc:`/rados/configuration/mclock-config-ref` for more details.
-
 MClock Profile Allocations
 ==========================
 
