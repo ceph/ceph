@@ -1,7 +1,7 @@
 # {{ cephadm_managed }}
 [gateway]
 name = {{ name }}
-group = {{ spec.group if spec.group is not none else '' }}
+group = {{ spec.group }}
 addr = {{ addr }}
 port = {{ port }}
 enable_auth = {{ spec.enable_auth }}

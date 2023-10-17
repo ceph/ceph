@@ -517,6 +517,11 @@ else
                 $SUDO rpm --import /etc/pki/rpm-gpg/RPM-GPG-KEY-EPEL-$MAJOR_VERSION
                 $SUDO rm -f /etc/yum.repos.d/dl.fedoraproject.org*
                 if test $ID = centos -a $MAJOR_VERSION = 8 ; then
+                    # for grpc-devel
+                    # See https://copr.fedorainfracloud.org/coprs/ceph/grpc/
+                    $SUDO yum -y install https://dl.fedoraproject.org/pub/epel/epel-release-latest-8.noarch.rpm
+                    $SUDO dnf copr enable -y ceph/grpc
+
                     # Enable 'powertools' or 'PowerTools' repo
                     $SUDO dnf config-manager --set-enabled $(dnf repolist --all 2>/dev/null|gawk 'tolower($0) ~ /^powertools\s/{print $1}')
                     dts_ver=11
