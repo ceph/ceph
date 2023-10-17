@@ -1,120 +1,128 @@
-=====================
+====================
  Troubleshooting PGs
-=====================
+====================
 
 Placement Groups Never Get Clean
 ================================
 
-When you create a cluster and your cluster remains in ``active``,
-``active+remapped`` or ``active+degraded`` status and never achieves an
-``active+clean`` status, you likely have a problem with your configuration.
+If, after you have created your cluster, any Placement Groups (PGs) remain in
+the ``active`` status, the ``active+remapped`` status or the
+``active+degraded`` status and never achieves an ``active+clean`` status, you
+likely have a problem with your configuration.
 
-You may need to review settings in the `Pool, PG and CRUSH Config Reference`_
-and make appropriate adjustments.
+In such a situation, it may be necessary to review the settings in the `Pool,
+PG and CRUSH Config Reference`_ and make appropriate adjustments.
 
-As a general rule, you should run your cluster with more than one OSD and a
-pool size greater than 1 object replica.
+As a general rule, run your cluster with more than one OSD and a pool size
+greater than two object replicas.
 
 .. _one-node-cluster:
 
 One Node Cluster
 ----------------
 
-Ceph no longer provides documentation for operating on a single node, because
-you would never deploy a system designed for distributed computing on a single
-node. Additionally, mounting client kernel modules on a single node containing a
-Ceph  daemon may cause a deadlock due to issues with the Linux kernel itself
-(unless you use VMs for the clients). You can experiment with Ceph in a 1-node
+Ceph no longer provides documentation for operating on a single node.  Systems
+designed for distributed computing by definition do not run on a single node.
+The mounting of client kernel modules on a single node that contains a Ceph
+daemon may cause a deadlock due to issues with the Linux kernel itself (unless
+VMs are used as clients). You can experiment with Ceph in a one-node
 configuration, in spite of the limitations as described herein.
 
-If you are trying to create a cluster on a single node, you must change the
-default of the ``osd_crush_chooseleaf_type`` setting from ``1`` (meaning
+To create a cluster on a single node, you must change the
+``osd_crush_chooseleaf_type`` setting from the default of ``1`` (meaning
 ``host`` or ``node``) to ``0`` (meaning ``osd``) in your Ceph configuration
-file before you create your monitors and OSDs. This tells Ceph that an OSD
-can peer with another OSD on the same host. If you are trying to set up a
-1-node cluster and ``osd_crush_chooseleaf_type`` is greater than ``0``,
-Ceph will try to peer the PGs of one OSD with the PGs of another OSD on
-another node, chassis, rack, row, or even datacenter depending on the setting.
+file before you create your monitors and OSDs. This tells Ceph that an OSD is
+permitted to place another OSD on the same host. If you are trying to set up a
+single-node cluster and ``osd_crush_chooseleaf_type`` is greater than ``0``,
+Ceph will attempt to place the PGs of one OSD with the PGs of another OSD on
+another node, chassis, rack, row, or datacenter depending on the setting.
 
-.. tip:: DO NOT mount kernel clients directly on the same node as your
-   Ceph Storage Cluster, because kernel conflicts can arise. However, you
-   can mount kernel clients within virtual machines (VMs) on a single node.
+.. tip:: DO NOT mount kernel clients directly on the same node as your Ceph
+   Storage Cluster. Kernel conflicts can arise. However, you can mount kernel
+   clients within virtual machines (VMs) on a single node.
 
-If you are creating OSDs using a single disk, you must create directories
-for the data manually first.
+If you are creating OSDs using a single disk, you must manually create
+directories for the data first.
 
 
 Fewer OSDs than Replicas
 ------------------------
 
-If you have brought up two OSDs to an ``up`` and ``in`` state, but you still
-don't see ``active + clean`` placement groups, you may have an
-``osd_pool_default_size`` set to greater than ``2``.
+If two OSDs are in an ``up`` and ``in`` state, but the placement gropus are not
+in an ``active + clean`` state, you may have an ``osd_pool_default_size`` set
+to greater than ``2``.
 
 There are a few ways to address this situation. If you want to operate your
 cluster in an ``active + degraded`` state with two replicas, you can set the
-``osd_pool_default_min_size`` to ``2`` so that you can write objects in
-an ``active + degraded`` state. You may also set the ``osd_pool_default_size``
-setting to ``2`` so that you only have two stored replicas (the original and
-one replica), in which case the cluster should achieve an ``active + clean``
+``osd_pool_default_min_size`` to ``2`` so that you can write objects in an
+``active + degraded`` state. You may also set the ``osd_pool_default_size``
+setting to ``2`` so that you have only two stored replicas (the original and
+one replica). In such a case, the cluster should achieve an ``active + clean``
 state.
 
-.. note:: You can make the changes at runtime. If you make the changes in
-   your Ceph configuration file, you may need to restart your cluster.
+.. note:: You can make the changes while the cluster is running. If you make
+   the changes in your Ceph configuration file, you might need to restart your
+   cluster.
 
 
 Pool Size = 1
 -------------
 
-If you have the ``osd_pool_default_size`` set to ``1``, you will only have
-one copy of the object. OSDs rely on other OSDs to tell them which objects
-they should have. If a first OSD has a copy of an object and there is no
-second copy, then no second OSD can tell the first OSD that it should have
-that copy. For each placement group mapped to the first OSD (see
-``ceph pg dump``), you can force the first OSD to notice the placement groups
-it needs by running::
+If you have ``osd_pool_default_size`` set to ``1``, you will have only one copy
+of the object. OSDs rely on other OSDs to tell them which objects they should
+have. If one OSD has a copy of an object and there is no second copy, then
+there is no second OSD to tell the first OSD that it should have that copy. For
+each placement group mapped to the first OSD (see ``ceph pg dump``), you can
+force the first OSD to notice the placement groups it needs by running a
+command of the following form:
 
-   	ceph osd force-create-pg <pgid>
+.. prompt:: bash
+
+   ceph osd force-create-pg <pgid>
 
 
 CRUSH Map Errors
 ----------------
 
-Another candidate for placement groups remaining unclean involves errors
+If any placement groups in your cluster are unclean, then there might be errors
 in your CRUSH map.
 
 
 Stuck Placement Groups
 ======================
 
-It is normal for placement groups to enter states like "degraded" or "peering"
-following a failure.  Normally these states indicate the normal progression
-through the failure recovery process. However, if a placement group stays in one
-of these states for a long time this may be an indication of a larger problem.
-For this reason, the monitor will warn when placement groups get "stuck" in a
-non-optimal state.  Specifically, we check for:
+It is normal for placement groups to enter "degraded" or "peering" states after
+a component failure. Normally, these states reflect the expected progression
+through the failure recovery process. However, a placement group that stays in
+one of these states for a long time might be an indication of a larger problem.
+For this reason, the Ceph Monitors will warn when placement groups get "stuck"
+in a non-optimal state. Specifically, we check for:
 
-* ``inactive`` - The placement group has not been ``active`` for too long
-  (i.e., it hasn't been able to service read/write requests).
+* ``inactive`` - The placement group has not been ``active`` for too long (that
+  is, it hasn't been able to service read/write requests).
 
-* ``unclean`` - The placement group has not been ``clean`` for too long
-  (i.e., it hasn't been able to completely recover from a previous failure).
+* ``unclean`` - The placement group has not been ``clean`` for too long (that
+  is, it hasn't been able to completely recover from a previous failure).
 
-* ``stale`` - The placement group status has not been updated by a ``ceph-osd``,
-  indicating that all nodes storing this placement group may be ``down``.
+* ``stale`` - The placement group status has not been updated by a
+  ``ceph-osd``.  This indicates that all nodes storing this placement group may
+  be ``down``.
 
-You can explicitly list stuck placement groups with one of::
+List stuck placement groups by running one of the following commands:
 
-	ceph pg dump_stuck stale
-	ceph pg dump_stuck inactive
-	ceph pg dump_stuck unclean
+.. prompt:: bash
 
-For stuck ``stale`` placement groups, it is normally a matter of getting the
-right ``ceph-osd`` daemons running again.  For stuck ``inactive`` placement
-groups, it is usually a peering problem (see :ref:`failures-osd-peering`).  For
-stuck ``unclean`` placement groups, there is usually something preventing
-recovery from completing, like unfound objects (see
-:ref:`failures-osd-unfound`);
+   ceph pg dump_stuck stale
+   ceph pg dump_stuck inactive
+   ceph pg dump_stuck unclean
+
+- Stuck ``stale`` placement groups usually indicate that key ``ceph-osd``
+  daemons are not running.
+- Stuck ``inactive`` placement groups usually indicate a peering problem (see
+  :ref:`failures-osd-peering`).
+- Stuck ``unclean`` placement groups usually indicate that something is
+  preventing recovery from completing, possibly unfound objects (see
+  :ref:`failures-osd-unfound`);
 
 
 
@@ -123,21 +131,28 @@ recovery from completing, like unfound objects (see
 Placement Group Down - Peering Failure
 ======================================
 
-In certain cases, the ``ceph-osd`` `Peering` process can run into
-problems, preventing a PG from becoming active and usable.  For
-example, ``ceph health`` might report::
+In certain cases, the ``ceph-osd`` `peering` process can run into problems,
+which can prevent a PG from becoming active and usable. In such a case, running
+the command ``ceph health detail`` will report something similar to the following:
 
-	ceph health detail
-	HEALTH_ERR 7 pgs degraded; 12 pgs down; 12 pgs peering; 1 pgs recovering; 6 pgs stuck unclean; 114/3300 degraded (3.455%); 1/3 in osds are down
-	...
-	pg 0.5 is down+peering
-	pg 1.4 is down+peering
-	...
-	osd.1 is down since epoch 69, last address 192.168.106.220:6801/8651
+.. prompt:: bash
 
-We can query the cluster to determine exactly why the PG is marked ``down`` with::
+   ceph health detail
 
-	ceph pg 0.5 query
+::
+
+    HEALTH_ERR 7 pgs degraded; 12 pgs down; 12 pgs peering; 1 pgs recovering; 6 pgs stuck unclean; 114/3300 degraded (3.455%); 1/3 in osds are down
+    ...
+    pg 0.5 is down+peering
+    pg 1.4 is down+peering
+    ...
+    osd.1 is down since epoch 69, last address 192.168.106.220:6801/8651
+
+Query the cluster to determine exactly why the PG is marked ``down`` by running a command of the following form:
+
+.. prompt:: bash
+
+   ceph pg 0.5 query
 
 .. code-block:: javascript
 
@@ -164,21 +179,24 @@ We can query the cluster to determine exactly why the PG is marked ``down`` with
     ]
  }
 
-The ``recovery_state`` section tells us that peering is blocked due to
-down ``ceph-osd`` daemons, specifically ``osd.1``.  In this case, we can start that ``ceph-osd``
-and things will recover.
+The ``recovery_state`` section tells us that peering is blocked due to down
+``ceph-osd`` daemons, specifically ``osd.1``. In this case, we can start that
+particular ``ceph-osd`` and recovery will proceed.
 
-Alternatively, if there is a catastrophic failure of ``osd.1`` (e.g., disk
-failure), we can tell the cluster that it is ``lost`` and to cope as
-best it can.
+Alternatively, if there is a catastrophic failure of ``osd.1`` (for example, if
+there has been a disk failure), the cluster can be informed that the OSD is
+``lost`` and the cluster can be instructed that it must cope as best it can.
 
-.. important:: This is dangerous in that the cluster cannot
-   guarantee that the other copies of the data are consistent
-   and up to date.
+.. important:: Informing the cluster that an OSD has been lost is dangerous
+   because the cluster cannot guarantee that the other copies of the data are
+   consistent and up to date.
 
-To instruct Ceph to continue anyway::
+To report an OSD ``lost`` and to instruct Ceph to continue to attempt recovery
+anyway, run a command of the following form:
 
-	ceph osd lost 1
+.. prompt:: bash
+
+   ceph osd lost 1
 
 Recovery will proceed.
 
@@ -188,32 +206,43 @@ Recovery will proceed.
 Unfound Objects
 ===============
 
-Under certain combinations of failures Ceph may complain about
-``unfound`` objects::
+Under certain combinations of failures, Ceph may complain about ``unfound``
+objects, as in this example:
 
-	ceph health detail
-	HEALTH_WARN 1 pgs degraded; 78/3778 unfound (2.065%)
-	pg 2.4 is active+degraded, 78 unfound
+.. prompt:: bash
 
-This means that the storage cluster knows that some objects (or newer
-copies of existing objects) exist, but it hasn't found copies of them.
-One example of how this might come about for a PG whose data is on ceph-osds
-1 and 2:
+   ceph health detail
+
+::
+
+   HEALTH_WARN 1 pgs degraded; 78/3778 unfound (2.065%)
+   pg 2.4 is active+degraded, 78 unfound
+
+This means that the storage cluster knows that some objects (or newer copies of
+existing objects) exist, but it hasn't found copies of them.  Here is an
+example of how this might come about for a PG whose data is on two OSDS, which
+we will call "1" and "2":
 
 * 1 goes down
 * 2 handles some writes, alone
 * 1 comes up
-* 1 and 2 repeer, and the objects missing on 1 are queued for recovery.
+* 1 and 2 re-peer, and the objects missing on 1 are queued for recovery.
 * Before the new objects are copied, 2 goes down.
 
-Now 1 knows that these object exist, but there is no live ``ceph-osd`` who
-has a copy.  In this case, IO to those objects will block, and the
-cluster will hope that the failed node comes back soon; this is
-assumed to be preferable to returning an IO error to the user.
+At this point, 1 knows that these objects exist, but there is no live
+``ceph-osd`` that has a copy of the objects. In this case, IO to those objects
+will block, and the cluster will hope that the failed node comes back soon.
+This is assumed to be preferable to returning an IO error to the user.
 
-First, you can identify which objects are unfound with::
+.. note:: The situation described immediately above is one reason that setting
+   ``size=2`` on a replicated pool and ``m=1`` on an erasure coded pool risks
+   data loss.
 
-	ceph pg 2.4 list_unfound [starting offset, in json]
+Identify which objects are unfound by running a command of the following form:
+
+.. prompt:: bash
+
+   ceph pg 2.4 list_unfound [starting offset, in json]
 
 .. code-block:: javascript
 
@@ -252,22 +281,24 @@ First, you can identify which objects are unfound with::
     "more": false
   }
 
-If there are too many objects to list in a single result, the ``more``
-field will be true and you can query for more.  (Eventually the
-command line tool will hide this from you, but not yet.)
+If there are too many objects to list in a single result, the ``more`` field
+will be true and you can query for more.  (Eventually the command line tool
+will hide this from you, but not yet.)
 
-Second, you can identify which OSDs have been probed or might contain
-data.
+Now you can identify which OSDs have been probed or might contain data.
 
-At the end of the listing (before ``more`` is false), ``might_have_unfound`` is provided
-when ``available_might_have_unfound`` is true.  This is equivalent to the output
-of ``ceph pg #.# query``.  This eliminates the need to use ``query`` directly.
-The ``might_have_unfound`` information given behaves the same way as described below for ``query``.
-The only difference is that OSDs that have ``already probed`` status are ignored.
+At the end of the listing (before ``more: false``), ``might_have_unfound`` is
+provided when ``available_might_have_unfound`` is true.  This is equivalent to
+the output of ``ceph pg #.# query``.  This eliminates the need to use ``query``
+directly.  The ``might_have_unfound`` information given behaves the same way as
+that ``query`` does, which is described below.  The only difference is that
+OSDs that have the status of ``already probed`` are ignored.
 
-Use of ``query``::
+Use of ``query``:
 
-	ceph pg 2.4 query
+.. prompt:: bash
+
+   ceph pg 2.4 query
 
 .. code-block:: javascript
 
@@ -278,8 +309,8 @@ Use of ``query``::
                 { "osd": 1,
                   "status": "osd is down"}]},
 
-In this case, for example, the cluster knows that ``osd.1`` might have
-data, but it is ``down``.  The full range of possible states include:
+In this case, the cluster knows that ``osd.1`` might have data, but it is
+``down``. Here is the full range of possible states:
 
 * already probed
 * querying
@@ -289,31 +320,31 @@ data, but it is ``down``.  The full range of possible states include:
 Sometimes it simply takes some time for the cluster to query possible
 locations.
 
-It is possible that there are other locations where the object can
-exist that are not listed.  For example, if a ceph-osd is stopped and
-taken out of the cluster, the cluster fully recovers, and due to some
-future set of failures ends up with an unfound object, it won't
-consider the long-departed ceph-osd as a potential location to
-consider.  (This scenario, however, is unlikely.)
+It is possible that there are other locations where the object might exist that
+are not listed. For example: if an OSD is stopped and taken out of the cluster
+and then the cluster fully recovers, and then through a subsequent set of
+failures the cluster ends up with an unfound object, the cluster will ignore
+the removed OSD. (This scenario, however, is unlikely.)
 
-If all possible locations have been queried and objects are still
-lost, you may have to give up on the lost objects. This, again, is
-possible given unusual combinations of failures that allow the cluster
-to learn about writes that were performed before the writes themselves
-are recovered.  To mark the "unfound" objects as "lost"::
+If all possible locations have been queried and objects are still lost, you may
+have to give up on the lost objects. This, again, is possible only when unusual
+combinations of failures have occurred that allow the cluster to learn about
+writes that were performed before the writes themselves have been recovered. To
+mark the "unfound" objects as "lost", run a command of the following form:
 
-	ceph pg 2.5 mark_unfound_lost revert|delete
+.. prompt:: bash
 
-This the final argument specifies how the cluster should deal with
-lost objects.
+   ceph pg 2.5 mark_unfound_lost revert|delete
 
-The "delete" option will forget about them entirely.
+Here the final argument (``revert|delete``) specifies how the cluster should
+deal with lost objects.
 
-The "revert" option (not available for erasure coded pools) will
-either roll back to a previous version of the object or (if it was a
-new object) forget about it entirely.  Use this with caution, as it
-may confuse applications that expected the object to exist.
+The ``delete`` option will cause the cluster to forget about them entirely.
 
+The ``revert`` option (which is not available for erasure coded pools) will
+either roll back to a previous version of the object or (if it was a new
+object) forget about the object entirely. Use ``revert`` with caution, as it
+may confuse applications that expect the object to exist.
 
 Homeless Placement Groups
 =========================
