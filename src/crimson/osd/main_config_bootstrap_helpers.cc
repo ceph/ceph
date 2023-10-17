@@ -55,7 +55,8 @@ seastar::future<> populate_config_from_mon()
     auto auth_handler = std::make_unique<DummyAuthHandler>();
     auto msgr = crimson::net::Messenger::create(entity_name_t::CLIENT(),
                                                 "temp_mon_client",
-                                                get_nonce());
+                                                get_nonce(),
+                                                true);
     crimson::mon::Client monc{*msgr, *auth_handler};
     msgr->set_auth_client(&monc);
     msgr->start({&monc}).get();
