@@ -40,6 +40,8 @@ the account name is used only as a convenience for these admin commands/APIs. un
 
 ### account stats and quota
 
+account/user/bucket quotas are disabled by default. they can be enabled/configured by the cluster admin, not the account root user
+
 quota enforcement in rgw depends on usage statistics. each bucket index shard is the source of truth for the entries it contains
 
 over time, the rgw quota cache accumulates the updated bucket shard stats into bucket-wide stats for the enforcement of bucket quotas. eventually, these bucket stats also get accumulated into the user's stats for enforcement of user quotas
