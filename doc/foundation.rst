@@ -28,8 +28,8 @@ Premier
 -------
 
 * `Bloomberg <https://bloomberg.com>`_
-* `China Mobile <https://www.chinamobileltd.com/>`_
-* `DigitalOcean <https://www.digitalocean.com/>`_
+* `Clyso <https://www.clyso.com/en/>`_
+* `IBM <https://ibm.com>`_
 * `Intel <http://www.intel.com/>`_
 * `OVH <https://www.ovh.com/>`_
 * `Red Hat <https://www.redhat.com/>`_
@@ -37,16 +37,16 @@ Premier
 * `SoftIron <https://www.softiron.com/>`_
 * `SUSE <https://www.suse.com/>`_
 * `Western Digital <https://www.wdc.com/>`_
-* `XSKY <https://www.xsky.com/en/>`_
-* `ZTE <https://www.zte.com.cn/global/>`_
 
 General
 -------
 
+* `42on <https://www.42on.com/>`_
+* `Akamai <https://www.akamai.com/>`_
 * `ARM <http://www.arm.com/>`_
 * `Canonical <https://www.canonical.com/>`_
 * `Cloudbase Solutions <https://cloudbase.it/>`_
-* `Clyso <https://www.clyso.com/en/>`_
+* `CloudFerro <https://cloudferro.com/>`_
 * `croit <http://www.croit.io/>`_
 * `EasyStack <https://www.easystack.io/>`_
 * `ISS <http://iss-integration.com/>`_
@@ -97,22 +97,17 @@ Members
 -------
 
 * Anjaneya "Reddy" Chagam (Intel)
-* Dan van der Ster (CERN) - Associate member representative
-* Haomai Wang (XSKY)
-* James Page (Canonical)
-* Lenz Grimmer (SUSE) - Ceph Leadership Team representative
-* Lars Marowsky-Bree (SUSE)
+* Carlos Maltzahn (UCSC) - Associate member representative
+* Dan van der Ster (Clyso) - Ceph Council representative
+* Joachim Kraftmayer (Clyso)
+* Josh Durgin (IBM) - Ceph Council representative
 * Matias Bjorling (Western Digital)
 * Matthew Leonard (Bloomberg)
 * Mike Perez (Red Hat) - Ceph community manager
 * Myoungwon Oh (Samsung Electronics)
 * Martin Verges (croit) - General member representative
 * Pawel Sadowski (OVH)
-* Phil Straw (SoftIron)
-* Robin Johnson (DigitalOcean)
-* Sage Weil (Red Hat) - Ceph project leader
-* Xie Xingguo (ZTE)
-* Zhang Shaowen (China Mobile)
+* Vincent Hsu (IBM)
 
 Joining
 =======
