@@ -423,7 +423,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   std::string_view pin_name(int p) const override;
 
-  std::ostream& print_db_line_prefix(std::ostream& out) override;
+  std::ostream& print_db_line_prefix(std::ostream& out) const override;
 
   const scrub_info_t *scrub_info() const {
     if (!scrub_infop)
@@ -1032,7 +1032,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
            state_test(STATE_RANDEPHEMERALPIN);
   }
 
-  void print(std::ostream& out) override;
+  void print(std::ostream& out) const override;
   void dump(ceph::Formatter *f, int flags = DUMP_DEFAULT) const;
 
   /**

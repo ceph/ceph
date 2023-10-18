@@ -131,7 +131,7 @@ std::string_view CInode::pin_name(int p) const
 }
 
 //int cinode_pins[CINODE_NUM_PINS];  // counts
-ostream& CInode::print_db_line_prefix(ostream& out)
+ostream& CInode::print_db_line_prefix(ostream& out) const
 {
   return out << ceph_clock_now() << " mds." << mdcache->mds->get_nodeid() << ".cache.ino(" << ino() << ") ";
 }
@@ -338,7 +338,7 @@ CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l) :
     state_set(STATE_AUTH);
 }
 
-void CInode::print(ostream& out)
+void CInode::print(ostream& out) const
 {
   out << *this;
 }

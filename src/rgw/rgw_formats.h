@@ -37,6 +37,7 @@ public:
   void open_object_section(std::string_view name) override;
   void open_object_section_in_ns(std::string_view name, const char *ns) override;
   void close_section() override;
+  void dump_null(std::string_view name) override;
   void dump_unsigned(std::string_view name, uint64_t u) override;
   void dump_int(std::string_view name, int64_t u) override;
   void dump_float(std::string_view name, double d) override;
