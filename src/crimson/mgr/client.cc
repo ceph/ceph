@@ -75,6 +75,8 @@ void Client::ms_handle_connect(
       // ask for the mgrconfigure message
       auto m = crimson::make_message<MMgrOpen>();
       m->daemon_name = local_conf()->name.get_id();
+      local_conf().get_config_bl(0, &m->config_bl, &last_config_bl_version);
+      local_conf().get_defaults_bl(&m->config_defaults_bl);
       return conn->send(std::move(m));
     } else {
       return seastar::now();
