@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { CephfsSubvolume } from '../models/cephfs-subvolume.model';
+import { CephfsSubvolume, SubvolumeSnapshot } from '../models/cephfs-subvolume.model';
 import { Observable, of } from 'rxjs';
 import { catchError, mapTo } from 'rxjs/operators';
 import _ from 'lodash';
@@ -13,10 +13,11 @@ export class CephfsSubvolumeService {
 
   constructor(private http: HttpClient) {}
 
-  get(fsName: string, subVolumeGroupName: string = ''): Observable<CephfsSubvolume[]> {
+  get(fsName: string, subVolumeGroupName: string = '', info = true): Observable<CephfsSubvolume[]> {
     return this.http.get<CephfsSubvolume[]>(`${this.baseURL}/${fsName}`, {
       params: {
-        group_name: subVolumeGroupName
+        group_name: subVolumeGroupName,
+        info: info
       }
     });
   }
@@ -86,11 +87,34 @@ export class CephfsSubvolumeService {
     );
   }
 
+  existsInFs(fsName: string, groupName = ''): Observable<boolean> {
+    return this.http.get<boolean>(`${this.baseURL}/${fsName}/exists`, {
+      params: {
+        group_name: groupName
+      }
+    });
+  }
+
   update(fsName: string, subVolumeName: string, size: string, subVolumeGroupName: string = '') {
     return this.http.put(`${this.baseURL}/${fsName}`, {
       subvol_name: subVolumeName,
       size: size,
       group_name: subVolumeGroupName
     });
+  }
+
+  getSnapshots(
+    fsName: string,
+    subVolumeName: string,
+    groupName = ''
+  ): Observable<SubvolumeSnapshot[]> {
+    return this.http.get<SubvolumeSnapshot[]>(
+      `${this.baseURL}/snapshot/${fsName}/${subVolumeName}`,
+      {
+        params: {
+          group_name: groupName
+        }
+      }
+    );
   }
 }

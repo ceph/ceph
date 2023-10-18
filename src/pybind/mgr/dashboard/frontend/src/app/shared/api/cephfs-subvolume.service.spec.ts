@@ -29,7 +29,7 @@ describe('CephfsSubvolumeService', () => {
 
   it('should call get', () => {
     service.get('testFS').subscribe();
-    const req = httpTesting.expectOne('api/cephfs/subvolume/testFS?group_name=');
+    const req = httpTesting.expectOne('api/cephfs/subvolume/testFS?group_name=&info=true');
     expect(req.request.method).toBe('GET');
   });
 
@@ -39,5 +39,13 @@ describe('CephfsSubvolumeService', () => {
       'api/cephfs/subvolume/testFS?subvol_name=testSubvol&group_name=&retain_snapshots=false'
     );
     expect(req.request.method).toBe('DELETE');
+  });
+
+  it('should call getSnapshots', () => {
+    service.getSnapshots('testFS', 'testSubvol').subscribe();
+    const req = httpTesting.expectOne(
+      'api/cephfs/subvolume/snapshot/testFS/testSubvol?group_name='
+    );
+    expect(req.request.method).toBe('GET');
   });
 });
