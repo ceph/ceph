@@ -400,6 +400,42 @@ class TestCephadm(object):
 
                     assert 'myerror' in ''.join(evs)
 
+    @mock.patch("cephadm.serve.CephadmServe._run_cephadm", _run_cephadm('[]'))
+    def test_daemon_action_event_timestamp_update(self, cephadm_module: CephadmOrchestrator):
+        # Test to make sure if a new daemon event is created with the same subject
+        # and message that the timestamp of the event is updated to let users know
+        # when it most recently occurred.
+        cephadm_module.service_cache_timeout = 10
+        with with_host(cephadm_module, 'test'):
+            with with_service(cephadm_module, RGWSpec(service_id='myrgw.foobar', unmanaged=True)) as _, \
+                    with_daemon(cephadm_module, RGWSpec(service_id='myrgw.foobar'), 'test') as daemon_id:
+
+                d_name = 'rgw.' + daemon_id
+
+                now = str_to_datetime('2023-10-18T22:45:29.119250Z')
+                with mock.patch("cephadm.inventory.datetime_now", lambda: now):
+                    c = cephadm_module.daemon_action('redeploy', d_name)
+                    assert wait(cephadm_module,
+                                c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
+
+                    CephadmServe(cephadm_module)._check_daemons()
+
+                d_events = cephadm_module.events.get_for_daemon(d_name)
+                assert len(d_events) == 1
+                assert d_events[0].created == now
+
+                later = str_to_datetime('2023-10-18T23:46:37.119250Z')
+                with mock.patch("cephadm.inventory.datetime_now", lambda: later):
+                    c = cephadm_module.daemon_action('redeploy', d_name)
+                    assert wait(cephadm_module,
+                                c) == f"Scheduled to redeploy rgw.{daemon_id} on host 'test'"
+
+                    CephadmServe(cephadm_module)._check_daemons()
+
+                d_events = cephadm_module.events.get_for_daemon(d_name)
+                assert len(d_events) == 1
+                assert d_events[0].created == later
+
     @pytest.mark.parametrize(
         "action",
         [
