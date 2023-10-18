@@ -100,7 +100,7 @@ class ServerDispatcher : public Dispatcher {
     //cerr << __func__ << " reply message=" << m << std::endl;
     op_wq.queue(m);
   }
-  int ms_handle_authentication(Connection *con) override {
+  int ms_handle_fast_authentication(Connection *con) override {
     return 1;
   }
 };

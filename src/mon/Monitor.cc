@@ -6380,7 +6380,7 @@ int Monitor::handle_auth_request(
       &auth_meta->connection_secret,
       &auth_meta->authorizer_challenge);
     if (isvalid) {
-      ms_handle_authentication(con);
+      ms_handle_fast_authentication(con);
       return 1;
     }
     if (!more && !was_challenge && auth_meta->authorizer_challenge) {
@@ -6501,7 +6501,7 @@ int Monitor::handle_auth_request(
   }
   if (r > 0 &&
       !s->authenticated) {
-    ms_handle_authentication(con);
+    ms_handle_fast_authentication(con);
   }
 
   dout(30) << " r " << r << " reply:\n";
@@ -6539,7 +6539,7 @@ void Monitor::ms_handle_accept(Connection *con)
   }
 }
 
-int Monitor::ms_handle_authentication(Connection *con)
+int Monitor::ms_handle_fast_authentication(Connection *con)
 {
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_MON) {
     // mon <-> mon connections need no Session, and setting one up
