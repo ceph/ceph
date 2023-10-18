@@ -7,6 +7,8 @@ overrides:
         rbd default features: 5
 tasks:
 - ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 - rbd:
     all:
       image_size: 20480

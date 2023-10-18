@@ -9,6 +9,8 @@ overrides:
         debug mds: 20
 tasks:
 - ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 - ceph-fuse:
 - workunit:
     clients:
