@@ -1,3 +1,5 @@
+.. _rados_config_pool_pg_crush_ref:
+
 ======================================
  Pool, PG and CRUSH Config Reference
 ======================================
