@@ -718,6 +718,16 @@ class RGWRoleEndpoints:
         return f'Role {role_name} created successfully'
 
 
+    @staticmethod
+    def role_delete(_, role_name: str):
+        assert role_name
+        rgw_client = RgwClient.admin_instance()
+        rgw_client.delete_role(role_name)
+        return f'Role {role_name} deleted successfully'
+
+
+
+
 # pylint: disable=C0301
 assume_role_policy_help = (
     'Paste a json assume role policy document, to find more information on how to get this document, <a '  # noqa: E501
@@ -746,7 +756,8 @@ create_role_form = Form(path='/rgw/roles/create',
     doc=APIDoc("List of RGW roles", "RGW"),
     actions=[
         TableAction(name='Create', permission='create', icon=Icon.ADD.value,
-                    routerLink='/rgw/roles/create')
+        TableAction(name='Delete', permission='delete', icon=Icon.DESTROY.value,
+                    click='delete', disable=True),
     ],
     forms=[create_role_form],
     permissions=[Scope.CONFIG_OPT],
@@ -756,7 +767,11 @@ create_role_form = Form(path='/rgw/roles/create',
     ),
     create=CRUDCollectionMethod(
         func=RGWRoleEndpoints.role_create,
-        doc=EndpointDoc("Create Ceph User")
+        doc=EndpointDoc("Create RGW role")
+    ),
+    delete=CRUDCollectionMethod(
+        func=RGWRoleEndpoints.role_delete,
+        doc=EndpointDoc("Delete RGW role")
     ),
     set_column={
         "CreateDate": {'cellTemplate': 'date'},
