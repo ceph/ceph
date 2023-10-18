@@ -9,7 +9,6 @@ import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
-import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolumegroup.model';
 import { CephfsSubvolumegroupFormComponent } from '../cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -18,6 +17,7 @@ import { Permissions } from '~/app/shared/models/permissions';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 
 @Component({
   selector: 'cd-cephfs-subvolume-group',

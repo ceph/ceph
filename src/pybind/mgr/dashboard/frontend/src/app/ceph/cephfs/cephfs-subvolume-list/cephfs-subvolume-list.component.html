@@ -1,21 +1,10 @@
 <div class="row">
-  <div class="col-sm-1">
-    <h3 i18n>Groups</h3>
-    <ng-container *ngIf="subVolumeGroups$ | async as subVolumeGroups">
-      <ul class="nav flex-column nav-pills">
-        <li class="nav-item">
-          <a class="nav-link"
-             [class.active]="!activeGroupName"
-             (click)="selectSubVolumeGroup()">Default</a>
-        </li>
-        <li class="nav-item"
-            *ngFor="let subVolumeGroup of subVolumeGroups">
-          <a class="nav-link text-decoration-none text-break"
-             [class.active]="subVolumeGroup.name === activeGroupName"
-             (click)="selectSubVolumeGroup(subVolumeGroup.name)">{{subVolumeGroup.name}}</a>
-        </li>
-      </ul>
-    </ng-container>
+  <div class="col-sm-1"
+       *ngIf="subVolumeGroups$ | async as subVolumeGroups">
+    <cd-vertical-navigation title="Groups"
+                            [items]="subvolumeGroupList"
+                            inputIdentifier="group-filter"
+                            (emitActiveItem)="selectSubVolumeGroup($event)"></cd-vertical-navigation>
   </div>
   <div class="col-11 vertical-line">
     <cd-table [data]="subVolumes$ | async"

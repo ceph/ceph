@@ -1,0 +1,24 @@
+<ng-container *ngIf="items.length">
+  <h3 i18n
+      *ngIf="title">{{title}}</h3>
+  <input type="text"
+         placeholder="Filter by name..."
+         (keyup)="updateFilter()"
+         [id]="inputIdentifier"
+         class="form-control text-center mb-2">
+  <div class="overflow-auto">
+    <ul class="nav flex-column nav-pills">
+      <li class="nav-item"
+          *ngFor="let item of filteredItems; trackBy: trackByFn">
+        <a class="nav-link"
+           [class.active]="!activeItem"
+           (click)="selectItem()"
+           *ngIf="item === ''">Default</a>
+        <a class="nav-link text-decoration-none text-break"
+           [class.active]="item === activeItem"
+           (click)="selectItem(item)"
+           *ngIf="item !== ''">{{item}}</a>
+      </li>
+    </ul>
+  </div>
+</ng-container>
