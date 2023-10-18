@@ -104,6 +104,7 @@ class Validator(Enum):
     RGW_ROLE_NAME = 'rgwRoleName'
     RGW_ROLE_PATH = 'rgwRolePath'
     FILE = 'file'
+    RGW_ROLE_SESSION_DURATION = 'rgwRoleSessionDuration'
 
 
 class FormField(NamedTuple):
@@ -224,6 +225,10 @@ class Container:
                 properties[field.key]['title'] = field.name
                 field_ui_schema['key'] = field_key
                 field_ui_schema['readonly'] = field.readonly
+                if field.readonly:
+                    field_ui_schema['templateOptions'] = {
+                        'disabled': True
+                    }
                 field_ui_schema['help'] = f'{field.help}'
                 field_ui_schema['validators'] = [i.value for i in field.validators]
                 items.append(field_ui_schema)
@@ -307,6 +312,7 @@ class CRUDMeta(SerializableClass):
         self.forms = []
         self.columnKey = ''
         self.detail_columns = []
+        self.resource = ''
 
 
 class CRUDCollectionMethod(NamedTuple):
@@ -330,6 +336,7 @@ class CRUDEndpoint:
                  actions: Optional[List[TableAction]] = None,
                  permissions: Optional[List[str]] = None, forms: Optional[List[Form]] = None,
                  column_key: Optional[str] = None,
+                 resource: Optional[str] = None,
                  meta: CRUDMeta = CRUDMeta(), get_all: Optional[CRUDCollectionMethod] = None,
                  create: Optional[CRUDCollectionMethod] = None,
                  delete: Optional[CRUDCollectionMethod] = None,
@@ -352,6 +359,7 @@ class CRUDEndpoint:
         self.detail_columns = detail_columns if detail_columns is not None else []
         self.extra_endpoints = extra_endpoints if extra_endpoints is not None else []
         self.selection_type = selection_type
+        self.resource = resource
 
     def __call__(self, cls: Any):
         self.create_crud_class(cls)
@@ -415,6 +423,7 @@ class CRUDEndpoint:
             self.generate_forms(model_key)
             self.set_permissions()
             self.set_column_key()
+            self.set_table_resource()
             self.get_detail_columns()
             selection_type = self.__class__.outer_self.selection_type
             self.__class__.outer_self.meta.table.set_selection_type(selection_type)
@@ -468,6 +477,10 @@ class CRUDEndpoint:
             if self.__class__.outer_self.column_key:
                 self.outer_self.meta.columnKey = self.__class__.outer_self.column_key
 
+        def set_table_resource(self):
+            if self.__class__.outer_self.resource:
+                self.outer_self.meta.resource = self.__class__.outer_self.resource
+
         class_name = self.router.path.replace('/', '')
         meta_class = type(f'{class_name}_CRUDClassMetadata',
                           (RESTController,),
@@ -478,6 +491,7 @@ class CRUDEndpoint:
                               'generate_forms': generate_forms,
                               'set_permissions': set_permissions,
                               'set_column_key': set_column_key,
+                              'set_table_resource': set_table_resource,
                               'get_detail_columns': get_detail_columns,
                               'outer_self': self,
                           })

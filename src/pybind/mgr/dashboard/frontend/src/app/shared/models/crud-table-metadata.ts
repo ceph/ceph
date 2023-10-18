@@ -15,4 +15,5 @@ export class CrudMetadata {
   forms: any;
   columnKey: string;
   detail_columns: string[];
+  resource: string;
 }

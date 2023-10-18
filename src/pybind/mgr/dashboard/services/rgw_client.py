@@ -854,7 +854,24 @@ class RgwClient(RestClient):
                    'Looks like the document has a wrong format.'
                    f' For more information about the format look at {link}')
             raise DashboardException(msg=msg, component='rgw')
-    
+
+    def get_role(self, role_name: str):
+        rgw_get_role_command = ['role', 'get', '--role-name', role_name]
+        code, role, _err = mgr.send_rgwadmin_command(rgw_get_role_command)
+        if code != 0:
+            raise DashboardException(msg=f'Error getting role with code {code}: {_err}',
+                                     component='rgw')
+        return role
+
+    def update_role(self, role_name: str, max_session_duration: str):
+        rgw_update_role_command = ['role', 'update', '--role-name',
+                                   role_name, '--max_session_duration', max_session_duration]
+        code, _, _err = mgr.send_rgwadmin_command(rgw_update_role_command,
+                                                  stdout_as_json=False)
+        if code != 0:
+            raise DashboardException(msg=f'Error updating role with code {code}: {_err}',
+                                     component='rgw')
+
     def delete_role(self, role_name: str) -> None:
         rgw_delete_role_command = ['role', 'delete', '--role-name', role_name]
         code, _, _err = mgr.send_rgwadmin_command(rgw_delete_role_command,

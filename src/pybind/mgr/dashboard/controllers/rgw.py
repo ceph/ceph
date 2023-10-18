@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 
+# pylint: disable=C0302
 import json
 import logging
 import re
@@ -717,6 +718,15 @@ class RGWRoleEndpoints:
         rgw_client.create_role(role_name, role_path, role_assume_policy_doc)
         return f'Role {role_name} created successfully'
 
+    @staticmethod
+    def role_update(_, role_name: str, max_session_duration: str):
+        assert role_name
+        assert max_session_duration
+        # convert max_session_duration which is in hours to seconds
+        max_session_duration = int(float(max_session_duration) * 3600)
+        rgw_client = RgwClient.admin_instance()
+        rgw_client.update_role(role_name, str(max_session_duration))
+        return f'Role {role_name} updated successfully'
 
     @staticmethod
     def role_delete(_, role_name: str):
@@ -725,7 +735,18 @@ class RGWRoleEndpoints:
         rgw_client.delete_role(role_name)
         return f'Role {role_name} deleted successfully'
 
+    @staticmethod
+    def model(role_name: str):
+        assert role_name
+        rgw_client = RgwClient.admin_instance()
+        role = rgw_client.get_role(role_name)
+        model = {'role_name': '', 'max_session_duration': ''}
+        model['role_name'] = role['RoleName']
 
+        # convert maxsessionduration which is in seconds to hours
+        if role['MaxSessionDuration']:
+            model['max_session_duration'] = role['MaxSessionDuration'] / 3600
+        return model
 
 
 # pylint: disable=C0301
@@ -733,6 +754,10 @@ assume_role_policy_help = (
     'Paste a json assume role policy document, to find more information on how to get this document, <a '  # noqa: E501
     'href="https://docs.aws.amazon.com/AWSCloudFormation/latest/UserGuide/aws-resource-iam-role.html#cfn-iam-role-assumerolepolicydocument"'  # noqa: E501
     'target="_blank">click here.</a>'
+)
+
+max_session_duration_help = (
+    'The maximum session duration (in hours) that you want to set for the specified role.This setting can have a value from 1 hour to 12 hours.'  # noqa: E501
 )
 
 create_container = VerticalContainer('Create Role', 'create_role', fields=[
@@ -744,11 +769,26 @@ create_container = VerticalContainer('Create Role', 'create_role', fields=[
               field_type='textarea',
               validators=[Validator.JSON]),
 ])
-create_role_form = Form(path='/rgw/roles/create',
+
+edit_container = VerticalContainer('Edit Role', 'edit_role', fields=[
+    FormField('Role name', 'role_name', readonly=True),
+    FormField('Max Session Duration', 'max_session_duration',
+              help=max_session_duration_help,
+              validators=[Validator.RGW_ROLE_SESSION_DURATION])
+])
+
+create_role_form = Form(path='/create',
                         root_container=create_container,
                         task_info=FormTaskInfo("IAM RGW Role '{role_name}' created successfully",
                                                ['role_name']),
                         method_type=MethodType.POST.value)
+
+edit_role_form = Form(path='/edit',
+                      root_container=edit_container,
+                      task_info=FormTaskInfo("IAM RGW Role '{role_name}' edited successfully",
+                                             ['role_name']),
+                      method_type=MethodType.PUT.value,
+                      model_callback=RGWRoleEndpoints.model)
 
 
 @CRUDEndpoint(
@@ -756,11 +796,16 @@ create_role_form = Form(path='/rgw/roles/create',
     doc=APIDoc("List of RGW roles", "RGW"),
     actions=[
         TableAction(name='Create', permission='create', icon=Icon.ADD.value,
+                    routerLink='/rgw/roles/create'),
+        TableAction(name='Edit', permission='update', icon=Icon.EDIT.value,
+                    click='edit', routerLink='/rgw/roles/edit'),
         TableAction(name='Delete', permission='delete', icon=Icon.DESTROY.value,
                     click='delete', disable=True),
     ],
-    forms=[create_role_form],
-    permissions=[Scope.CONFIG_OPT],
+    forms=[create_role_form, edit_role_form],
+    column_key='RoleName',
+    resource='Role',
+    permissions=[Scope.RGW],
     get_all=CRUDCollectionMethod(
         func=RGWRoleEndpoints.role_list,
         doc=EndpointDoc("List RGW roles")
@@ -768,6 +813,10 @@ create_role_form = Form(path='/rgw/roles/create',
     create=CRUDCollectionMethod(
         func=RGWRoleEndpoints.role_create,
         doc=EndpointDoc("Create RGW role")
+    ),
+    edit=CRUDCollectionMethod(
+        func=RGWRoleEndpoints.role_update,
+        doc=EndpointDoc("Edit RGW role")
     ),
     delete=CRUDCollectionMethod(
         func=RGWRoleEndpoints.role_delete,
