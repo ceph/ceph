@@ -272,6 +272,17 @@ public:
     virtual ~AioContext() {}
   };
 
+  struct printer {
+    static constexpr uint8_t ptr = 1;   // pointer to Blob
+    static constexpr uint8_t nick = 2;  // a nickname of this Blob
+    static constexpr uint8_t disk = 4;  // disk allocations of Blob
+    static constexpr uint8_t sdisk = 8; // shortened version of disk allocaitons
+    static constexpr uint8_t use = 16;  // use tracker
+    static constexpr uint8_t suse = 32; // shortened use tracker
+    static constexpr uint8_t chk = 64;  // checksum, full dump
+    static constexpr uint8_t schk = 128; // only base checksum info
+  };
+
   /// cached buffer
   struct Buffer {
     MEMPOOL_CLASS_HELPERS();
@@ -635,19 +646,11 @@ public:
 
     void dump(ceph::Formatter* f) const;
     friend std::ostream& operator<<(std::ostream& out, const Blob &b);
-    struct printer {
+    struct printer : public BlueStore::printer {
       const Blob& blob;
       uint8_t mode;
       printer(const Blob& blob, uint8_t mode)
       :blob(blob), mode(mode) {}
-      static constexpr uint8_t ptr = 1;    //pointer to Blob
-      static constexpr uint8_t nick = 2;   //a nickname of this Blob
-      static constexpr uint8_t disk = 4;   //disk allocations of Blob
-      static constexpr uint8_t sdisk = 8;  //shortened version of disk allocaitons
-      static constexpr uint8_t use = 16;   //use tracker
-      static constexpr uint8_t suse = 32;  //shortened use tracker
-      static constexpr uint8_t chk = 64;   //checksum, full dump
-      static constexpr uint8_t schk = 128; //only base checksum info
     };
     friend std::ostream& operator<<(std::ostream& out, const printer &p);
     printer print(uint8_t mode) const {
@@ -856,6 +859,16 @@ public:
       if (blob) {
 	blob->get_cache()->rm_extent();
       }
+    }
+    struct printer : public BlueStore::printer {
+      const Extent& ext;
+      uint8_t mode;
+      printer(const Extent& ext, uint8_t mode)
+      :ext(ext), mode(mode) {}
+    };
+    friend std::ostream& operator<<(std::ostream& out, const printer &p);
+    printer print(uint8_t mode) const {
+      return printer(*this, mode);
     }
 
     void dump(ceph::Formatter* f) const;
