@@ -9,11 +9,21 @@ describe('RGW roles page', () => {
   });
 
   describe('Create, Edit & Delete rgw roles', () => {
+    const roleName = 'testRole';
+
     it('should create rgw roles', () => {
       roles.navigateTo('create');
-      roles.create('testRole', '/', '{}');
+      roles.create(roleName, '/', '{}');
       roles.navigateTo();
-      roles.checkExist('testRole', true);
+      roles.checkExist(roleName, true);
+    });
+
+    it('should edit rgw role', () => {
+      roles.edit(roleName, 3);
+    });
+
+    it('should delete rgw role', () => {
+      roles.delete(roleName);
     });
   });
 });

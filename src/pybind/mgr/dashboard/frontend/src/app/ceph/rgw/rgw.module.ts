@@ -156,6 +156,13 @@ const routes: Routes = [
         data: {
           breadcrumbs: ActionLabels.CREATE
         }
+      },
+      {
+        path: URLVerbs.EDIT,
+        component: CrudFormComponent,
+        data: {
+          breadcrumbs: ActionLabels.EDIT
+        }
       }
     ]
   },
