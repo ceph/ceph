@@ -989,6 +989,17 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.set_health_warning('CEPHADM_FAILED_DAEMON', f'{len(failed_daemons)} failed cephadm daemon(s)', len(
                 failed_daemons), failed_daemons)
 
+    def get_first_matching_network_ip(self, host: str, sspec: ServiceSpec) -> Optional[str]:
+        sspec_networks = sspec.networks
+        for subnet, ifaces in self.cache.networks.get(host, {}).items():
+            host_network = ipaddress.ip_network(subnet)
+            for spec_network_str in sspec_networks:
+                spec_network = ipaddress.ip_network(spec_network_str)
+                if host_network.overlaps(spec_network):
+                    return list(ifaces.values())[0][0]
+                logger.error(f'{spec_network} from {sspec.service_name()} spec does not overlap with {host_network} on {host}')
+        return None
+
     @staticmethod
     def can_run() -> Tuple[bool, str]:
         if asyncssh is not None:
