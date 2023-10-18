@@ -18,6 +18,11 @@
 
 #include "common/Formatter.h"
 
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "Capability "
+
 
 /*
  * Capability::Export
@@ -174,6 +179,46 @@ Capability::Capability(CInode *i, Session *s, uint64_t id) :
 client_t Capability::get_client() const
 {
   return session ? session->get_client() : client_t(-1);
+}
+
+int Capability::confirm_receipt(ceph_seq_t seq, unsigned caps) {
+  int was_revoking = (_issued & ~_pending);
+  if (seq == last_sent) {
+    _revokes.clear();
+    _issued = caps;
+    // don't add bits
+    _pending &= caps;
+
+    // if the revoking is not totally finished just add the
+    // new revoking caps back.
+    if (was_revoking && revoking()) {
+      CInode *in = get_inode();
+      dout(10) << "revocation is not totally finished yet on " << *in
+               << ", the session " << *session << dendl;
+      _revokes.emplace_back(_pending, last_sent, last_issue);
+      if (!is_notable())
+        mark_notable();
+    }
+  } else {
+    // can i forget any revocations?
+    while (!_revokes.empty() && _revokes.front().seq < seq)
+      _revokes.pop_front();
+    if (!_revokes.empty()) {
+      if (_revokes.front().seq == seq)
+        _revokes.begin()->before = caps;
+      calc_issued();
+    } else {
+      // seq < last_sent
+      _issued = caps | _pending;
+    }
+  }
+
+  if (was_revoking && _issued == _pending) {
+    item_revoking_caps.remove_myself();
+    item_client_revoking_caps.remove_myself();
+    maybe_clear_notable();
+  }
+  return was_revoking & ~_issued; // return revoked
 }
 
 bool Capability::is_stale() const
