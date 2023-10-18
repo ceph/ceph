@@ -82,7 +82,7 @@ std::ostream &operator<<(std::ostream &out, const maybe_K &k) {
 
 std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
 {
-  using P = BlueStore::Blob::printer;
+  using P = BlueStore::printer;
   out << "Blob(";
   if (p.mode & P::ptr) {
     out << &p.blob << " ";
@@ -214,3 +214,10 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
   return out;
 }
 
+std::ostream& operator<<(std::ostream& out, const BlueStore::Extent::printer &p)
+{
+  out << std::hex << "0x" << p.ext.logical_offset << "~" << p.ext.length
+    << ": 0x" << p.ext.blob_offset << "~" << p.ext.length << std::dec
+	<< " " << p.ext.blob->print(p.mode);
+  return out;
+}
