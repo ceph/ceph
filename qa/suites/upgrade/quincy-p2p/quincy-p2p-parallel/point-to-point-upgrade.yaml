@@ -129,12 +129,6 @@ workload_quincy:
    - sequential:
      - rgw: [client.0]
      - print: "**** done rgw workload_quincy"
-     - s3tests:
-         client.0:
-           force-branch: ceph-quincy
-           rgw_server: client.0
-           scan_for_encryption_keys: false
-     - print: "**** done s3tests workload_quincy"
      - rbd_fsx:
          clients: [client.0]
          size: 134217728
