@@ -51,6 +51,9 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_unsigned("num_releases", head.num_releases);
 
   f->dump_int("abort_rc", abort_rc);
+
+  f->dump_unsigned("owner_uid", head.owner_uid);
+  f->dump_unsigned("owner_gid", head.owner_gid);
 }
 
 MetaRequest::~MetaRequest()
