@@ -92,7 +92,7 @@ SnapTrimEvent::start()
   });
 }
 
-CommonPGPipeline& SnapTrimEvent::pp()
+CommonPGPipeline& SnapTrimEvent::client_pp()
 {
   return pg->request_pg_pipeline;
 }
@@ -103,7 +103,7 @@ SnapTrimEvent::with_pg(
 {
   return interruptor::with_interruption([&shard_services, this] {
     return enter_stage<interruptor>(
-      pp().wait_for_active
+      client_pp().wait_for_active
     ).then_interruptible([this] {
       return with_blocking_event<PGActivationBlocker::BlockingEvent,
                                  interruptor>([this] (auto&& trigger) {
@@ -111,18 +111,18 @@ SnapTrimEvent::with_pg(
       });
     }).then_interruptible([this] {
       return enter_stage<interruptor>(
-        pp().recover_missing);
+        client_pp().recover_missing);
     }).then_interruptible([] {
       //return do_recover_missing(pg, get_target_oid());
       return seastar::now();
     }).then_interruptible([this] {
       return enter_stage<interruptor>(
-        pp().get_obc);
+        client_pp().get_obc);
     }).then_interruptible([this] {
       return pg->snaptrim_mutex.lock(*this);
     }).then_interruptible([this] {
       return enter_stage<interruptor>(
-        pp().process);
+        client_pp().process);
     }).then_interruptible([&shard_services, this] {
       return interruptor::async([this] {
         std::vector<hobject_t> to_trim;
@@ -207,7 +207,7 @@ SnapTrimEvent::with_pg(
 }
 
 
-CommonPGPipeline& SnapTrimObjSubEvent::pp()
+CommonPGPipeline& SnapTrimObjSubEvent::client_pp()
 {
   return pg->request_pg_pipeline;
 }
@@ -497,7 +497,7 @@ SnapTrimObjSubEvent::with_pg(
   ShardServices &shard_services, Ref<PG> _pg)
 {
   return enter_stage<interruptor>(
-    pp().wait_for_active
+    client_pp().wait_for_active
   ).then_interruptible([this] {
     return with_blocking_event<PGActivationBlocker::BlockingEvent,
                                interruptor>([this] (auto&& trigger) {
@@ -505,13 +505,13 @@ SnapTrimObjSubEvent::with_pg(
     });
   }).then_interruptible([this] {
     return enter_stage<interruptor>(
-      pp().recover_missing);
+      client_pp().recover_missing);
   }).then_interruptible([] {
     //return do_recover_missing(pg, get_target_oid());
     return seastar::now();
   }).then_interruptible([this] {
     return enter_stage<interruptor>(
-      pp().get_obc);
+      client_pp().get_obc);
   }).then_interruptible([this] {
     logger().debug("{}: getting obc for {}", *this, coid);
     // end of commonality
@@ -521,7 +521,7 @@ SnapTrimObjSubEvent::with_pg(
       [this](auto head_obc, auto clone_obc) {
       logger().debug("{}: got clone_obc={}", *this, clone_obc->get_oid());
       return enter_stage<interruptor>(
-        pp().process
+        client_pp().process
       ).then_interruptible(
         [this,clone_obc=std::move(clone_obc), head_obc=std::move(head_obc)]() mutable {
         logger().debug("{}: processing clone_obc={}", *this, clone_obc->get_oid());

@@ -57,7 +57,7 @@ public:
     ShardServices &shard_services, Ref<PG> pg);
 
 private:
-  CommonPGPipeline& pp();
+  CommonPGPipeline& client_pp();
 
   // bases on 998cb8c141bb89aafae298a9d5e130fbd78fe5f2
   struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
@@ -143,7 +143,7 @@ public:
   remove_or_update_iertr::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
 
-  CommonPGPipeline& pp();
+  CommonPGPipeline& client_pp();
 
 private:
   object_stat_sum_t delta_stats;

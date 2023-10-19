@@ -54,7 +54,7 @@ void PeeringEvent<T>::dump_detail(Formatter *f) const
 
 
 template <class T>
-PGPeeringPipeline &PeeringEvent<T>::pp(PG &pg)
+PGPeeringPipeline &PeeringEvent<T>::peering_pp(PG &pg)
 {
   return pg.peering_request_pg_pipeline;
 }
@@ -73,7 +73,7 @@ seastar::future<> PeeringEvent<T>::with_pg(
   using interruptor = typename T::interruptor;
   return interruptor::with_interruption([this, pg, &shard_services] {
     logger().debug("{}: pg present", *this);
-    return this->template enter_stage<interruptor>(pp(*pg).await_map
+    return this->template enter_stage<interruptor>(peering_pp(*pg).await_map
     ).then_interruptible([this, pg] {
       return this->template with_blocking_event<
 	PG_OSDMapGate::OSDMapBlocker::BlockingEvent
@@ -82,7 +82,7 @@ seastar::future<> PeeringEvent<T>::with_pg(
 	    std::move(trigger), evt.get_epoch_sent());
 	});
     }).then_interruptible([this, pg](auto) {
-      return this->template enter_stage<interruptor>(pp(*pg).process);
+      return this->template enter_stage<interruptor>(peering_pp(*pg).process);
     }).then_interruptible([this, pg, &shard_services] {
       return pg->do_peering_event(evt, ctx
       ).then_interruptible([this, pg, &shard_services] {
