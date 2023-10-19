@@ -2741,20 +2741,38 @@ def get_container(
     if daemon_type == 'rgw':
         entrypoint = '/usr/bin/radosgw'
         name = 'client.rgw.%s' % ident.daemon_id
+        ceph_args = ['-n', name, '-f']
     elif daemon_type == 'rbd-mirror':
         entrypoint = '/usr/bin/rbd-mirror'
         name = 'client.rbd-mirror.%s' % ident.daemon_id
+        ceph_args = ['-n', name, '-f']
     elif daemon_type == 'cephfs-mirror':
         entrypoint = '/usr/bin/cephfs-mirror'
         name = 'client.cephfs-mirror.%s' % ident.daemon_id
+        ceph_args = ['-n', name, '-f']
     elif daemon_type == 'crash':
         entrypoint = '/usr/bin/ceph-crash'
         name = 'client.crash.%s' % ident.daemon_id
+        ceph_args = ['-n', name]
     elif daemon_type in ['mon', 'mgr', 'mds', 'osd']:
         entrypoint = '/usr/bin/ceph-' + daemon_type
         name = ident.daemon_name
+        ceph_args = ['-n', name, '-f']
     elif daemon_type in Monitoring.components:
         entrypoint = ''
+        uid, gid = Monitoring.extract_uid_gid(ctx, daemon_type)
+        monitoring_args = [
+            '--user',
+            str(uid),
+            # FIXME: disable cpu/memory limits for the time being (not supported
+            # by ubuntu 18.04 kernel!)
+        ]
+        container_args.extend(monitoring_args)
+        if daemon_type == 'node-exporter':
+            # in order to support setting '--path.procfs=/host/proc','--path.sysfs=/host/sys',
+            # '--path.rootfs=/rootfs' for node-exporter we need to disable selinux separation
+            # between the node-exporter container and the host to avoid selinux denials
+            container_args.extend(['--security-opt', 'label=disable'])
     elif daemon_type in Tracing.components:
         entrypoint = ''
         name = ident.daemon_name
@@ -2768,6 +2786,7 @@ def get_container(
     elif daemon_type == CephExporter.daemon_type:
         entrypoint = CephExporter.entrypoint
         name = 'client.ceph-exporter.%s' % ident.daemon_id
+        ceph_args = ['-n', name, '-f']
     elif daemon_type == HAproxy.daemon_type:
         name = ident.daemon_name
         container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
@@ -2792,25 +2811,6 @@ def get_container(
         host_network = False
         envs.extend(cc.get_container_envs())
         container_args.extend(cc.get_container_args())
-
-    if daemon_type in Monitoring.components:
-        uid, gid = Monitoring.extract_uid_gid(ctx, daemon_type)
-        monitoring_args = [
-            '--user',
-            str(uid),
-            # FIXME: disable cpu/memory limits for the time being (not supported
-            # by ubuntu 18.04 kernel!)
-        ]
-        container_args.extend(monitoring_args)
-        if daemon_type == 'node-exporter':
-            # in order to support setting '--path.procfs=/host/proc','--path.sysfs=/host/sys',
-            # '--path.rootfs=/rootfs' for node-exporter we need to disable selinux separation
-            # between the node-exporter container and the host to avoid selinux denials
-            container_args.extend(['--security-opt', 'label=disable'])
-    elif daemon_type == 'crash':
-        ceph_args = ['-n', name]
-    elif daemon_type in ceph_daemons():
-        ceph_args = ['-n', name, '-f']
     elif daemon_type == SNMPGateway.daemon_type:
         sg = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
         container_args.append(
