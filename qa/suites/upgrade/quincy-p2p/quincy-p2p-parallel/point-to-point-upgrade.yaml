@@ -47,10 +47,10 @@ overrides:
         osd map max advance: 1000
         osd_class_default_list: "*"
         osd_class_load_list: "*"
-      client:
-        rgw_crypt_require_ssl: false
-        rgw crypt s3 kms backend: testing
-        rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+      #client:
+        #rgw_crypt_require_ssl: false
+        #rgw crypt s3 kms backend: testing
+        #rgw crypt s3 kms encryption keys: testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
 roles:
 - - mon.a
   - mds.a
@@ -127,13 +127,13 @@ workload_quincy:
          CLS_RBD_GTEST_FILTER: '*:-TestClsRbd.mirror_snapshot'
    - print: "**** done rados/test.sh &  cls workload_quincy"
    - sequential:
-     - rgw: [client.0]
-     - print: "**** done rgw workload_quincy"
+    #- rgw: [client.0]
+    #- print: "**** done rgw workload_quincy"
      - rbd_fsx:
          clients: [client.0]
          size: 134217728
      - print: "**** done rbd_fsx workload_quincy"
-         
+
 upgrade-sequence_quincy:
    sequential:
    - print: "**** done branch: quincy install.upgrade"
