@@ -476,7 +476,7 @@ public:
   using Ref = std::unique_ptr<PipelineExitBarrierI>;
 
   /// Waits for exit barrier
-  virtual seastar::future<> wait() = 0;
+  virtual std::optional<seastar::future<>> wait() = 0;
 
   /// Releases pipeline stage, can only be called after wait
   virtual void exit() = 0;
@@ -503,8 +503,8 @@ public:
 class PipelineHandle {
   PipelineExitBarrierI::Ref barrier;
 
-  auto wait_barrier() {
-    return barrier ? barrier->wait() : seastar::now();
+  std::optional<seastar::future<>> wait_barrier() {
+    return barrier ? barrier->wait() : std::nullopt;
   }
 
 public:
@@ -525,15 +525,26 @@ public:
   seastar::future<>
   enter(T &stage, typename T::BlockingEvent::template Trigger<OpT>&& t) {
     ceph_assert(stage.get_core() == seastar::this_shard_id());
-    return wait_barrier().then([this, &stage, t=std::move(t)] () mutable {
-      auto fut = t.maybe_record_blocking(stage.enter(t), stage);
-      exit();
-      return std::move(fut).then(
-        [this, t=std::move(t)](auto &&barrier_ref) mutable {
-        barrier = std::move(barrier_ref);
-        return seastar::now();
+    auto wait_fut = wait_barrier();
+    if (wait_fut.has_value()) {
+      return wait_fut.value().then([this, &stage, t=std::move(t)] () mutable {
+        auto fut = t.maybe_record_blocking(stage.enter(t), stage);
+        exit();
+        return std::move(fut).then(
+          [this, t=std::move(t)](auto &&barrier_ref) mutable {
+          barrier = std::move(barrier_ref);
+          return seastar::now();
+        });
       });
-    });
+    } else {
+        auto fut = t.maybe_record_blocking(stage.enter(t), stage);
+        exit();
+        return std::move(fut).then(
+          [this, t=std::move(t)](auto &&barrier_ref) mutable {
+          barrier = std::move(barrier_ref);
+          return seastar::now();
+        });
+    }
   }
 
   /**
@@ -542,7 +553,7 @@ public:
   seastar::future<> complete() {
     auto ret = wait_barrier();
     barrier.reset();
-    return ret;
+    return ret ? std::move(ret.value()) : seastar::now();
   }
 
   /**
@@ -578,8 +589,8 @@ class OrderedExclusivePhaseT : public PipelineStageIT<T> {
     ExitBarrier(OrderedExclusivePhaseT *phase, Operation::id_t id)
       : phase(phase), op_id(id) {}
 
-    seastar::future<> wait() final {
-      return seastar::now();
+    std::optional<seastar::future<>> wait() final {
+      return std::nullopt;
     }
 
     void exit() final {
@@ -681,7 +692,7 @@ private:
       seastar::future<> &&barrier,
       TriggerT& trigger) : phase(phase), barrier(std::move(barrier)), trigger(trigger) {}
 
-    seastar::future<> wait() final {
+    std::optional<seastar::future<>> wait() final {
       assert(phase);
       assert(barrier);
       auto ret = std::move(*barrier);
@@ -739,8 +750,8 @@ class UnorderedStageT : public PipelineStageIT<T> {
   public:
     ExitBarrier() = default;
 
-    seastar::future<> wait() final {
-      return seastar::now();
+    std::optional<seastar::future<>> wait() final {
+      return std::nullopt;
     }
 
     void exit() final {}
