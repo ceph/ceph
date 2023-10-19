@@ -564,6 +564,7 @@ private:
   template <typename Ret = void>
   using pg_rep_op_fut_t =
     std::tuple<interruptible_future<>,
+               seastar::future<>,
                do_osd_ops_iertr::future<Ret>>;
   do_osd_ops_iertr::future<pg_rep_op_fut_t<MURef<MOSDOpReply>>> do_osd_ops(
     Ref<MOSDOp> m,

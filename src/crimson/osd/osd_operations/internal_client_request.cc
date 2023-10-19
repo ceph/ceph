@@ -98,7 +98,7 @@ seastar::future<> InternalClientRequest::start()
                     return PG::do_osd_ops_iertr::now();
                   }
                 ).safe_then_unpack_interruptible(
-                  [](auto submitted, auto all_completed) {
+                  [](auto submitted_fut, auto error_log_fut, auto all_completed) {
                     return all_completed.handle_error_interruptible(
                       crimson::ct_error::eagain::handle([] {
                         return seastar::now();
