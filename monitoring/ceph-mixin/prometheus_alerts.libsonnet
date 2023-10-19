@@ -236,7 +236,7 @@
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-toomany',
             summary: 'Too many devices are predicted to fail, unable to resolve%(cluster)s' % $.MultiClusterSummary(),
-            description: 'The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availabililty. Prevent data integrity issues by adding new OSDs so that data may be relocated.',
+            description: 'The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availability. Prevent data integrity issues by adding new OSDs so that data may be relocated.',
           },
         },
         {
