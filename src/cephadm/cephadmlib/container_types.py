@@ -487,8 +487,11 @@ def get_running_container_name(
     return None
 
 
-def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
-    # type: (CephadmContext, str, Union[str, List[str]]) -> Tuple[int, int]
+def extract_uid_gid(
+    ctx: CephadmContext,
+    img: str = '',
+    file_path: Union[str, List[str]] = '/var/lib/ceph',
+) -> Tuple[int, int]:
 
     if not img:
         img = ctx.image
@@ -503,10 +506,7 @@ def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
     for fp in paths:
         try:
             out = CephContainer(
-                ctx,
-                image=img,
-                entrypoint='stat',
-                args=['-c', '%u %g', fp]
+                ctx, image=img, entrypoint='stat', args=['-c', '%u %g', fp]
             ).run(verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
             uid, gid = out.split(' ')
             return int(uid), int(gid)
