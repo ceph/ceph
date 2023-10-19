@@ -102,36 +102,36 @@ int ClientIO::init_env(CephContext* cct)
 
     // h3 request pseudo-headers
     if (name == ":method") {
-      env.set("REQUEST_METHOD", value.to_string());
+      env.set("REQUEST_METHOD", value);
       continue;
     }
     if (name == ":scheme") { // unused
       continue;
     }
     if (name == ":authority") {
-      env.set("HTTP_HOST", value.to_string());
+      env.set("HTTP_HOST", value);
       continue;
     }
     if (name == ":path") {
-      env.set("REQUEST_URI", value.to_string());
+      env.set("REQUEST_URI", value);
       // split uri from query
       auto uri = value;
       auto pos = uri.find('?');
       if (pos != uri.npos) {
         auto query = uri.substr(pos + 1);
-        env.set("QUERY_STRING", query.to_string());
+        env.set("QUERY_STRING", query);
         uri = uri.substr(0, pos);
       }
-      env.set("SCRIPT_URI", uri.to_string());
+      env.set("SCRIPT_URI", uri);
       continue;
     }
 
     if (field == http::field::content_length) {
-      env.set("CONTENT_LENGTH", value.to_string());
+      env.set("CONTENT_LENGTH", value);
       continue;
     }
     if (field == http::field::content_type) {
-      env.set("CONTENT_TYPE", value.to_string());
+      env.set("CONTENT_TYPE", value);
       continue;
     }
 
@@ -148,7 +148,7 @@ int ClientIO::init_env(CephContext* cct)
         *dest = std::toupper(*src);
       }
     }
-    env.set(std::move(buf), value.to_string());
+    env.set(std::move(buf), value);
   }
 
   env.set("HTTP_VERSION", "3.0");
