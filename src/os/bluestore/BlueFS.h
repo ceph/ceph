@@ -85,10 +85,22 @@ public:
   virtual void* get_hint_for_log() const = 0;
   virtual void* get_hint_by_dir(std::string_view dirname) const = 0;
 
-  virtual void add_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
-  virtual void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) = 0;
-  virtual void add_usage(void* file_hint, uint64_t fsize) = 0;
-  virtual void sub_usage(void* file_hint, uint64_t fsize) = 0;
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) {
+    for (auto& e : fnode.extents) {
+      add_usage(hint, e);
+    }
+    add_usage(hint, fnode.size, true);
+  }
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) {
+    for (auto& e : fnode.extents) {
+      sub_usage(hint, e);
+    }
+    sub_usage(hint, fnode.size, true);
+  }
+  virtual void add_usage(void* hint, const bluefs_extent_t& extent) = 0;
+  virtual void sub_usage(void* hint, const bluefs_extent_t& extent) = 0;
+  virtual void add_usage(void* hint, uint64_t fsize, bool upd_files = false) = 0;
+  virtual void sub_usage(void* hint, uint64_t fsize, bool upd_files = false) = 0;
   virtual uint8_t select_prefer_bdev(void* hint) = 0;
   virtual void get_paths(const std::string& base, paths& res) const = 0;
   virtual void dump(std::ostream& sout) = 0;
@@ -433,9 +445,12 @@ private:
     return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB;
   }
   const char* get_device_name(unsigned id);
+
+  typedef std::function<void(const bluefs_extent_t)> update_fn_t;
   int _allocate(uint8_t bdev, uint64_t len,
                 uint64_t alloc_unit,
 		bluefs_fnode_t* node,
+                update_fn_t cb = nullptr,
                 size_t alloc_attempts = 0,
                 bool permit_dev_fallback = true);
 
@@ -713,19 +728,19 @@ public:
   void* get_hint_for_log() const override;
   void* get_hint_by_dir(std::string_view dirname) const override;
 
-  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+  void add_usage(void* hint, const bluefs_extent_t& extent) override {
     // do nothing
     return;
   }
-  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+  void sub_usage(void* hint, const bluefs_extent_t& extent) override {
     // do nothing
     return;
   }
-  void add_usage(void* hint, uint64_t fsize) override {
+  void add_usage(void*, uint64_t, bool) override {
     // do nothing
     return;
   }
-  void sub_usage(void* hint, uint64_t fsize) override {
+  void sub_usage(void*, uint64_t, bool) override {
     // do nothing
     return;
   }
