@@ -810,6 +810,49 @@ class Monitoring(ContainerDaemonForm):
                   '--path.rootfs=/rootfs']
         return r
 
+    def get_container_mounts(self, data_dir: str) -> Dict[str, str]:
+        ctx = self.ctx
+        daemon_type = self.identity.daemon_type
+        mounts: Dict[str, str] = {}
+        log_dir = get_log_dir(self.identity.fsid, ctx.log_dir)
+        if daemon_type == 'prometheus':
+            mounts[
+                os.path.join(data_dir, 'etc/prometheus')
+            ] = '/etc/prometheus:Z'
+            mounts[os.path.join(data_dir, 'data')] = '/prometheus:Z'
+        elif daemon_type == 'loki':
+            mounts[os.path.join(data_dir, 'etc/loki')] = '/etc/loki:Z'
+            mounts[os.path.join(data_dir, 'data')] = '/loki:Z'
+        elif daemon_type == 'promtail':
+            mounts[os.path.join(data_dir, 'etc/promtail')] = '/etc/promtail:Z'
+            mounts[log_dir] = '/var/log/ceph:z'
+            mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
+        elif daemon_type == 'node-exporter':
+            mounts[
+                os.path.join(data_dir, 'etc/node-exporter')
+            ] = '/etc/node-exporter:Z'
+            mounts['/proc'] = '/host/proc:ro'
+            mounts['/sys'] = '/host/sys:ro'
+            mounts['/'] = '/rootfs:ro'
+        elif daemon_type == 'grafana':
+            mounts[
+                os.path.join(data_dir, 'etc/grafana/grafana.ini')
+            ] = '/etc/grafana/grafana.ini:Z'
+            mounts[
+                os.path.join(data_dir, 'etc/grafana/provisioning/datasources')
+            ] = '/etc/grafana/provisioning/datasources:Z'
+            mounts[
+                os.path.join(data_dir, 'etc/grafana/certs')
+            ] = '/etc/grafana/certs:Z'
+            mounts[
+                os.path.join(data_dir, 'data/grafana.db')
+            ] = '/var/lib/grafana/grafana.db:Z'
+        elif daemon_type == 'alertmanager':
+            mounts[
+                os.path.join(data_dir, 'etc/alertmanager')
+            ] = '/etc/alertmanager:Z'
+        return mounts
+
 ##################################
 
 
@@ -2619,29 +2662,8 @@ def get_container_mounts(
 
     if daemon_type in Monitoring.components:
         data_dir = ident.data_dir(ctx.data_dir)
-        log_dir = get_log_dir(fsid, ctx.log_dir)
-        if daemon_type == 'prometheus':
-            mounts[os.path.join(data_dir, 'etc/prometheus')] = '/etc/prometheus:Z'
-            mounts[os.path.join(data_dir, 'data')] = '/prometheus:Z'
-        elif daemon_type == 'loki':
-            mounts[os.path.join(data_dir, 'etc/loki')] = '/etc/loki:Z'
-            mounts[os.path.join(data_dir, 'data')] = '/loki:Z'
-        elif daemon_type == 'promtail':
-            mounts[os.path.join(data_dir, 'etc/promtail')] = '/etc/promtail:Z'
-            mounts[log_dir] = '/var/log/ceph:z'
-            mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
-        elif daemon_type == 'node-exporter':
-            mounts[os.path.join(data_dir, 'etc/node-exporter')] = '/etc/node-exporter:Z'
-            mounts['/proc'] = '/host/proc:ro'
-            mounts['/sys'] = '/host/sys:ro'
-            mounts['/'] = '/rootfs:ro'
-        elif daemon_type == 'grafana':
-            mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
-            mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
-            mounts[os.path.join(data_dir, 'etc/grafana/certs')] = '/etc/grafana/certs:Z'
-            mounts[os.path.join(data_dir, 'data/grafana.db')] = '/var/lib/grafana/grafana.db:Z'
-        elif daemon_type == 'alertmanager':
-            mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/etc/alertmanager:Z'
+        monitoring = Monitoring.create(ctx, ident)
+        mounts.update(monitoring.get_container_mounts(data_dir))
 
     if daemon_type == NFSGanesha.daemon_type:
         data_dir = ident.data_dir(ctx.data_dir)
