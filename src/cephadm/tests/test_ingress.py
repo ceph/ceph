@@ -166,7 +166,7 @@ def test_haproxy_extract_uid_gid_haproxy():
             good_haproxy_json(),
             SAMPLE_HAPROXY_IMAGE,
         )
-        with mock.patch("cephadm.CephContainer") as cc:
+        with mock.patch("cephadmlib.container_types.CephContainer") as cc:
             cc.return_value.run.return_value = "500 500"
             uid, gid = hap.uid_gid(ctx)
             cc.return_value.run.assert_called()
@@ -329,7 +329,7 @@ def test_keepalived_extract_uid_gid_keepalived():
             good_keepalived_json(),
             SAMPLE_KEEPALIVED_IMAGE,
         )
-        with mock.patch("cephadm.CephContainer") as cc:
+        with mock.patch("cephadmlib.container_types.CephContainer") as cc:
             cc.return_value.run.return_value = "500 500"
             uid, gid = kad.uid_gid(ctx)
             cc.return_value.run.assert_called()
