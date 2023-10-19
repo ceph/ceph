@@ -1047,31 +1047,9 @@ PG::do_osd_ops(
         fut = submit_error_log(m, op_info, obc, e, rep_tid, version);
       }
       return fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete,  this] {
-        auto log_reply = [m, e, this] {
-          auto reply = crimson::make_message<MOSDOpReply>(
-            m.get(), -e.value(), get_osdmap_epoch(), 0, false);
-          if (m->ops.empty() ? 0 :
-            m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
-            reply->set_result(0);
-          }
-          // For all ops except for CMPEXT, the correct error value is encoded
-          // in e.value(). For CMPEXT, osdop.rval has the actual error value.
-          if (e.value() == ct_error::cmp_fail_error_value) {
-            assert(!m->ops.empty());
-            for (auto &osdop : m->ops) {
-              if (osdop.rval < 0) {
-                reply->set_result(osdop.rval);
-                break;
-              }
-            }
-          }
-          reply->set_enoent_reply_versions(
-          peering_state.get_info().last_update,
-          peering_state.get_info().last_user_version);
-          reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-          return do_osd_ops_iertr::make_ready_future<MURef<MOSDOpReply>>(
-            std::move(reply));
-	};
+        auto log_reply_fut = [m, e, this] {
+          return log_reply(m, e);
+        };
 
         if (!peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
           auto it = log_entry_update_waiting_on.find(rep_tid);
@@ -1087,18 +1065,48 @@ PG::do_osd_ops(
             }
           } else {
             return it->second.all_committed.get_shared_future()
-              .then([this, &version, last_complete, log_reply = std::move(log_reply)] {
+              .then([this, &version, last_complete, log_reply_fut = std::move(log_reply_fut)] {
               if (version != eversion_t()) {
                 peering_state.complete_write(version, last_complete);
               }
-              return log_reply();
+              return log_reply_fut();
             });
           }
         }
-        return log_reply();
+        return log_reply_fut();
       });
     });
   });
+}
+
+PG::do_osd_ops_iertr::future<MURef<MOSDOpReply>>
+PG::log_reply(
+  Ref<MOSDOp> m,
+  const std::error_code& e)
+{
+  auto reply = crimson::make_message<MOSDOpReply>(
+    m.get(), -e.value(), get_osdmap_epoch(), 0, false);
+  if (m->ops.empty() ? 0 :
+    m->ops.back().op.flags & CEPH_OSD_OP_FLAG_FAILOK) {
+      reply->set_result(0);
+    }
+  // For all ops except for CMPEXT, the correct error value is encoded
+  // in e.value(). For CMPEXT, osdop.rval has the actual error value.
+  if (e.value() == ct_error::cmp_fail_error_value) {
+    assert(!m->ops.empty());
+    for (auto &osdop : m->ops) {
+      if (osdop.rval < 0) {
+        reply->set_result(osdop.rval);
+        break;
+      }
+    }
+  }
+  reply->set_enoent_reply_versions(
+    peering_state.get_info().last_update,
+    peering_state.get_info().last_user_version);
+  reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+  return do_osd_ops_iertr::make_ready_future<MURef<MOSDOpReply>>(
+    std::move(reply));
 }
 
 PG::do_osd_ops_iertr::future<PG::pg_rep_op_fut_t<>>
