@@ -1229,9 +1229,9 @@ class TestMonitoring(object):
         daemon_type = 'prometheus'
         daemon_id = 'home'
         fsid = 'aaf5a720-13fe-4a3b-82b9-2d99b7fd9704'
-        args = _cephadm.get_daemon_args(
+        args = _cephadm.Monitoring.create(
             ctx, _cephadm.DaemonIdentity(fsid, daemon_type, daemon_id)
-        )
+        ).get_daemon_args()
         assert any([x.startswith('--web.external-url=http://') for x in args])
 
     @mock.patch('cephadm.call')
