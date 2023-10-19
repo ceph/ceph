@@ -383,6 +383,10 @@ public:
     list_params.prefix = prefix;
   }
 
+  bool is_truncated() {
+    return list_results.is_truncated;
+  }
+
   int init(const DoutPrefixProvider *dpp) {
     return fetch(dpp);
   }
@@ -1052,6 +1056,13 @@ public:
         return true;
 	}
       }
+
+      if (!oc.ol.is_truncated()) {
+        ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
+                          << " the last key " << oc.wq->thr_name() << dendl;
+        *exp_time = real_clock::now();
+        return true;
+      }
       return false;
     }
 
@@ -1175,16 +1186,31 @@ public:
 			<< oc.wq->thr_name() << dendl;
       return false;
     }
-    if (oc.next_has_same_name(o.key.name)) {
-      ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key
-			<< ": next is same object, skipping "
-			<< oc.wq->thr_name() << dendl;
-      return false;
+
+    if (oc.next_key_name) {
+      std::string nkn = *oc.next_key_name;
+      if (oc.next_has_same_name(o.key.name)) {
+        ldpp_dout(dpp, 7) << __func__ << "(): dm-check SAME: key=" << o.key
+                          << " next_key_name: %%" << nkn << "%% "
+                          << oc.wq->thr_name() << dendl;
+        return false;
+      } else {
+        ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
+                          << " next_key_name: %%" << nkn << "%% "
+                          << oc.wq->thr_name() << dendl;
+        *exp_time = real_clock::now();
+        return true;
+    	}
     }
 
-    *exp_time = real_clock::now();
+    if (!oc.ol.is_truncated()) {
+      ldpp_dout(dpp, 7) << __func__ << "(): dm-check DELE: key=" << o.key
+                       << " the last key " << oc.wq->thr_name() << dendl;
+      *exp_time = real_clock::now();
+      return true;
+    }
 
-    return true;
+    return false;
   }
 
   int process(lc_op_ctx& oc) {
