@@ -377,6 +377,10 @@ class Error(Exception):
     pass
 
 
+class ClusterAlreadyExists(Exception):
+    pass
+
+
 class TimeoutExpired(Error):
     pass
 
@@ -3409,10 +3413,14 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
     if daemon_type == 'osd':
         # selinux-policy in the container may not match the host.
         if HostFacts(ctx).selinux_enabled:
-            selinux_folder = '/var/lib/ceph/%s/selinux' % fsid
-            if not os.path.exists(selinux_folder):
-                os.makedirs(selinux_folder, mode=0o755)
-            mounts[selinux_folder] = '/sys/fs/selinux:ro'
+            cluster_dir = f'{ctx.data_dir}/{fsid}'
+            selinux_folder = f'{cluster_dir}/selinux'
+            if os.path.exists(cluster_dir):
+                if not os.path.exists(selinux_folder):
+                    os.makedirs(selinux_folder, mode=0o755)
+                mounts[selinux_folder] = '/sys/fs/selinux:ro'
+            else:
+                logger.error(f'Cluster direcotry {cluster_dir} does not exist.')
         mounts['/'] = '/rootfs'
 
     try:
@@ -5743,6 +5751,7 @@ def create_mgr(
         except Exception as e:
             logger.debug('status failed: %s' % e)
             return False
+
     is_available(ctx, 'mgr', is_mgr_available)
 
 
@@ -6138,6 +6147,43 @@ def save_cluster_config(ctx: CephadmContext, uid: int, gid: int, fsid: str) -> N
         logger.warning(f'Cannot create cluster configuration directory {conf_dir}')
 
 
+def rollback(func: FuncT) -> FuncT:
+    """
+    """
+    @wraps(func)
+    def _rollback(ctx: CephadmContext) -> Any:
+        try:
+            return func(ctx)
+        except ClusterAlreadyExists:
+            # another cluster with the provided fsid already exists: don't remove.
+            raise
+        except (KeyboardInterrupt, Exception) as e:
+            logger.error(f'{type(e).__name__}: {e}')
+            if ctx.cleanup_on_failure:
+                logger.info('\n\n'
+                            '\t***************\n'
+                            '\tCephadm hit an issue during cluster installation. Current cluster files will be deleted automatically,\n'
+                            '\tto disable this behaviour do not pass the --cleanup-on-failure flag. In case of any previous\n'
+                            '\tbroken installation user must use the following command to completely delete the broken cluster:\n\n'
+                            '\t> cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
+                            '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
+                            '\t***************\n\n')
+                _rm_cluster(ctx, keep_logs=False, zap_osds=False)
+            else:
+                logger.info('\n\n'
+                            '\t***************\n'
+                            '\tCephadm hit an issue during cluster installation. Current cluster files will NOT BE DELETED automatically to change\n'
+                            '\tthis behaviour you can pass the --cleanup-on-failure. To remove this broken cluster manually please run:\n\n'
+                            f'\t   > cephadm rm-cluster --force --fsid {ctx.fsid}\n\n'
+                            '\tin case of any previous broken installation user must use the rm-cluster command to delete the broken cluster:\n\n'
+                            '\t   > cephadm rm-cluster --force --zap-osds --fsid <fsid>\n\n'
+                            '\tfor more information please refer to https://docs.ceph.com/en/latest/cephadm/operations/#purging-a-cluster\n'
+                            '\t***************\n\n')
+            raise
+    return cast(FuncT, _rollback)
+
+
+@rollback
 @default_image
 def command_bootstrap(ctx):
     # type: (CephadmContext) -> int
@@ -6168,17 +6214,21 @@ def command_bootstrap(ctx):
     if ctx.fsid:
         data_dir_base = os.path.join(ctx.data_dir, ctx.fsid)
         if os.path.exists(data_dir_base):
-            raise Error(f"A cluster with the same fsid '{ctx.fsid}' already exists.")
+            raise ClusterAlreadyExists(f"A cluster with the same fsid '{ctx.fsid}' already exists.")
         else:
             logger.warning('Specifying an fsid for your cluster offers no advantages and may increase the likelihood of fsid conflicts.')
 
+    # initial vars
+    ctx.fsid = ctx.fsid or make_fsid()
+    fsid = ctx.fsid
+    if not is_fsid(fsid):
+        raise Error('not an fsid: %s' % fsid)
+
     # verify output files
-    for f in [ctx.output_config, ctx.output_keyring,
-              ctx.output_pub_ssh_key]:
+    for f in [ctx.output_config, ctx.output_keyring, ctx.output_pub_ssh_key]:
         if not ctx.allow_overwrite:
             if os.path.exists(f):
-                raise Error('%s already exists; delete or pass '
-                            '--allow-overwrite to overwrite' % f)
+                raise ClusterAlreadyExists('%s already exists; delete or pass --allow-overwrite to overwrite' % f)
         dirname = os.path.dirname(f)
         if dirname and not os.path.exists(dirname):
             fname = os.path.basename(f)
@@ -6199,12 +6249,7 @@ def command_bootstrap(ctx):
     else:
         logger.info('Skip prepare_host')
 
-    # initial vars
-    fsid = ctx.fsid or make_fsid()
-    if not is_fsid(fsid):
-        raise Error('not an fsid: %s' % fsid)
     logger.info('Cluster fsid: %s' % fsid)
-
     hostname = get_hostname()
     if '.' in hostname and not ctx.allow_fqdn_hostname:
         raise Error('hostname is a fully qualified domain name (%s); either fix (e.g., "sudo hostname %s" or similar) or pass --allow-fqdn-hostname' % (hostname, hostname.split('.')[0]))
@@ -7930,14 +7975,20 @@ def get_ceph_cluster_count(ctx: CephadmContext) -> int:
     return len([c for c in os.listdir(ctx.data_dir) if is_fsid(c)])
 
 
-def command_rm_cluster(ctx):
-    # type: (CephadmContext) -> None
+def command_rm_cluster(ctx: CephadmContext) -> None:
     if not ctx.force:
         raise Error('must pass --force to proceed: '
                     'this command may destroy precious data!')
 
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
+    _rm_cluster(ctx, ctx.keep_logs, ctx.zap_osds)
+
+
+def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
+
+    if not ctx.fsid:
+        raise Error('must select the cluster to delete by passing --fsid to proceed')
 
     def disable_systemd_service(unit_name: str) -> None:
         call(ctx, ['systemctl', 'stop', unit_name],
@@ -7946,6 +7997,8 @@ def command_rm_cluster(ctx):
              verbosity=CallVerbosity.DEBUG)
         call(ctx, ['systemctl', 'disable', unit_name],
              verbosity=CallVerbosity.DEBUG)
+
+    logger.info(f'Deleting cluster with fsid: {ctx.fsid}')
 
     # stop + disable individual daemon units
     for d in list_daemons(ctx, detail=False):
@@ -7964,7 +8017,7 @@ def command_rm_cluster(ctx):
          verbosity=CallVerbosity.DEBUG)
 
     # osds?
-    if ctx.zap_osds:
+    if zap_osds:
         _zap_osds(ctx)
 
     # rm units
@@ -7977,7 +8030,7 @@ def command_rm_cluster(ctx):
     # rm data
     call_throws(ctx, ['rm', '-rf', ctx.data_dir + '/' + ctx.fsid])
 
-    if not ctx.keep_logs:
+    if not keep_logs:
         # rm logs
         call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
         call_throws(ctx, ['rm', '-rf', ctx.log_dir
@@ -7997,7 +8050,7 @@ def command_rm_cluster(ctx):
         # rm cephadm logrotate config
         call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/cephadm'])
 
-        if not ctx.keep_logs:
+        if not keep_logs:
             # remove all cephadm logs
             for fname in glob(f'{ctx.log_dir}/cephadm.log*'):
                 os.remove(fname)
@@ -10315,6 +10368,11 @@ def _get_parser():
         action='store_true',
         help='allow overwrite of existing --output-* config/keyring/ssh files')
     parser_bootstrap.add_argument(
+        '--cleanup-on-failure',
+        action='store_true',
+        default=False,
+        help='Delete cluster files in case of a failed installation')
+    parser_bootstrap.add_argument(
         '--allow-fqdn-hostname',
         action='store_true',
         help='allow hostname that is fully-qualified (contains ".")')
@@ -10620,7 +10678,7 @@ def main() -> None:
             check_container_engine(ctx)
         # command handler
         r = ctx.func(ctx)
-    except Error as e:
+    except (Error, ClusterAlreadyExists) as e:
         if ctx.verbose:
             raise
         logger.error('ERROR: %s' % e)
