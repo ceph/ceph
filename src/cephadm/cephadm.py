@@ -1662,6 +1662,11 @@ class Tracing(ContainerDaemonForm):
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return 65534, 65534
 
+    def get_daemon_args(self) -> List[str]:
+        return self.components[self.identity.daemon_type].get(
+            'daemon_args', []
+        )
+
 ##################################
 
 
@@ -2324,7 +2329,8 @@ def get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
         monitoring = Monitoring.create(ctx, ident)
         r += monitoring.get_daemon_args()
     elif daemon_type == 'jaeger-agent':
-        r.extend(Tracing.components[daemon_type]['daemon_args'])
+        tracing = Tracing.create(ctx, ident)
+        r += tracing.get_daemon_args()
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(ctx, ident.fsid, ident.daemon_id)
         r += nfs_ganesha.get_daemon_args()
