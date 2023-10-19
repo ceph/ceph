@@ -221,6 +221,7 @@ class Ceph(ContainerDaemonForm):
     def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:
         self.ctx = ctx
         self._identity = ident
+        self.user_supplied_config = False
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
@@ -300,6 +301,52 @@ class Ceph(ContainerDaemonForm):
             else:
                 r += ['--default-mon-cluster-log-to-stderr=true']
         return r
+
+    @staticmethod
+    def get_ceph_mounts(
+        ctx: CephadmContext,
+        ident: DaemonIdentity,
+        no_config: bool = False,
+    ) -> Dict[str, str]:
+        # Warning: This is a hack done for more expedient refactoring
+        mounts = _get_container_mounts_for_type(
+            ctx, ident.fsid, ident.daemon_type
+        )
+        data_dir = ident.data_dir(ctx.data_dir)
+        if ident.daemon_type == 'rgw':
+            cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (
+                ident.daemon_id
+            )
+        else:
+            cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (
+                ident.daemon_type,
+                ident.daemon_id,
+            )
+        if ident.daemon_type != 'crash':
+            mounts[data_dir] = cdata_dir + ':z'
+        if not no_config:
+            mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
+        if ident.daemon_type in [
+            'rbd-mirror',
+            'cephfs-mirror',
+            'crash',
+            'ceph-exporter',
+        ]:
+            # these do not search for their keyrings in a data directory
+            mounts[
+                data_dir + '/keyring'
+            ] = '/etc/ceph/ceph.client.%s.%s.keyring' % (
+                ident.daemon_type,
+                ident.daemon_id,
+            )
+        return mounts
+
+    def get_container_mounts(self) -> Dict[str, str]:
+        return self.get_ceph_mounts(
+            self.ctx,
+            self.identity,
+            no_config=self.ctx.config and self.user_supplied_config,
+        )
 
 ##################################
 
@@ -1377,6 +1424,9 @@ class CephExporter(ContainerDaemonForm):
         self, ctx: CephadmContext
     ) -> Tuple[Optional[str], Optional[str]]:
         return get_config_and_keyring(ctx)
+
+    def get_container_mounts(self) -> Dict[str, str]:
+        return Ceph.get_ceph_mounts(self.ctx, self.identity)
 
 
 ##################################
@@ -2565,19 +2615,7 @@ def get_container_mounts(
     assert ident.fsid
     assert ident.daemon_id
     if daemon_type in ceph_daemons():
-        mounts = _get_container_mounts_for_type(ctx, fsid, daemon_type)
-        data_dir = ident.data_dir(ctx.data_dir)
-        if daemon_type == 'rgw':
-            cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (ident.daemon_id)
-        else:
-            cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, ident.daemon_id)
-        if daemon_type != 'crash':
-            mounts[data_dir] = cdata_dir + ':z'
-        if not no_config:
-            mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
-        if daemon_type in ['rbd-mirror', 'cephfs-mirror', 'crash', 'ceph-exporter']:
-            # these do not search for their keyrings in a data directory
-            mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, ident.daemon_id)
+        mounts = Ceph.get_ceph_mounts(ctx, ident, no_config=no_config)
 
     if daemon_type in Monitoring.components:
         data_dir = ident.data_dir(ctx.data_dir)
