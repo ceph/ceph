@@ -7985,6 +7985,20 @@ int Client::_getvxattr(
   return res;
 }
 
+bool Client::make_absolute_path_string(Inode *in, std::string& path)
+{
+  if (!metadata.count("root") || !in)
+    return false;
+
+  path = metadata["root"].data();
+  if (!in->make_path_string(path)) {
+    path.clear();
+    return false;
+  }
+
+  return true;
+}
+
 int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 			const UserPerm& perms, InodeRef *inp,
 			std::vector<uint8_t>* aux)
@@ -8027,8 +8041,7 @@ int Client::_do_setattr(Inode *in, struct ceph_statx *stx, int mask,
   int res;
   {
     std::string path;
-    res = in->make_path_string(path);
-    if (res) {
+    if (make_absolute_path_string(in, path)) {
       ldout(cct, 20) << " absolute path: " << path << dendl;
       if (path.length())
         path = path.substr(1);    // drop leading /
@@ -10267,8 +10280,7 @@ int Client::_open(Inode *in, int flags, mode_t mode, Fh **fhp,
     }
 
     std::string path;
-    int result = in->make_path_string(path);
-    if (result) {
+    if (make_absolute_path_string(in, path)) {
       ldout(cct, 20) << __func__ << " absolute path: " << path << dendl;
       if (path.length())
         path = path.substr(1);    // drop leading /

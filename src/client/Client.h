@@ -1362,6 +1362,7 @@ private:
 	       const UserPerm& perms, std::string alternate_name, InodeRef *inp = 0);
   int _mknod(Inode *dir, const char *name, mode_t mode, dev_t rdev,
 	     const UserPerm& perms, InodeRef *inp = 0);
+  bool make_absolute_path_string(Inode *in, std::string& path);
   int _do_setattr(Inode *in, struct ceph_statx *stx, int mask,
 		  const UserPerm& perms, InodeRef *inp,
 		  std::vector<uint8_t>* aux=nullptr);
