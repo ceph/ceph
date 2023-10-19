@@ -217,12 +217,13 @@ class Ceph(ContainerDaemonForm):
         # TODO: figure out a way to un-special-case osd
         return daemon_type in cls._daemons and daemon_type != 'osd'
 
-    def __init__(self, ident: DaemonIdentity) -> None:
+    def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:
+        self.ctx = ctx
         self._identity = ident
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
-        return cls(ident)
+        return cls(ctx, ident)
 
     @property
     def identity(self) -> DaemonIdentity:
@@ -267,6 +268,38 @@ class Ceph(ContainerDaemonForm):
     ) -> Tuple[Optional[str], Optional[str]]:
         return get_config_and_keyring(ctx)
 
+    def get_daemon_args(self) -> List[str]:
+        if self.identity.daemon_type == 'crash':
+            return []
+        r = [
+            '--setuser', 'ceph',
+            '--setgroup', 'ceph',
+            '--default-log-to-file=false',
+        ]
+        log_to_journald = should_log_to_journald(self.ctx)
+        if log_to_journald:
+            r += [
+                '--default-log-to-journald=true',
+                '--default-log-to-stderr=false',
+            ]
+        else:
+            r += [
+                '--default-log-to-stderr=true',
+                '--default-log-stderr-prefix=debug ',
+            ]
+        if self.identity.daemon_type == 'mon':
+            r += [
+                '--default-mon-cluster-log-to-file=false',
+            ]
+            if log_to_journald:
+                r += [
+                    '--default-mon-cluster-log-to-journald=true',
+                    '--default-mon-cluster-log-to-stderr=false',
+                ]
+            else:
+                r += ['--default-mon-cluster-log-to-stderr=true']
+        return r
+
 ##################################
 
 
@@ -278,9 +311,12 @@ class OSD(Ceph):
         return daemon_type == 'osd'
 
     def __init__(
-        self, ident: DaemonIdentity, osd_fsid: Optional[str] = None
+        self,
+        ctx: CephadmContext,
+        ident: DaemonIdentity,
+        osd_fsid: Optional[str] = None,
     ) -> None:
-        super().__init__(ident)
+        super().__init__(ctx, ident)
         self._osd_fsid = osd_fsid
 
     @classmethod
@@ -290,7 +326,7 @@ class OSD(Ceph):
             logger.info(
                 'Creating an OSD daemon form without an OSD FSID value'
             )
-        return cls(ident, osd_fsid)
+        return cls(ctx, ident, osd_fsid)
 
     @staticmethod
     def get_sysctl_settings() -> List[str]:
@@ -2218,34 +2254,9 @@ def get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     r = list()  # type: List[str]
 
     daemon_type = ident.daemon_type
-    if daemon_type in ceph_daemons() and daemon_type not in ['crash', 'ceph-exporter']:
-        r += [
-            '--setuser', 'ceph',
-            '--setgroup', 'ceph',
-            '--default-log-to-file=false',
-        ]
-        log_to_journald = should_log_to_journald(ctx)
-        if log_to_journald:
-            r += [
-                '--default-log-to-journald=true',
-                '--default-log-to-stderr=false',
-            ]
-        else:
-            r += [
-                '--default-log-to-stderr=true',
-                '--default-log-stderr-prefix=debug ',
-            ]
-        if daemon_type == 'mon':
-            r += [
-                '--default-mon-cluster-log-to-file=false',
-            ]
-            if log_to_journald:
-                r += [
-                    '--default-mon-cluster-log-to-journald=true',
-                    '--default-mon-cluster-log-to-stderr=false',
-                ]
-            else:
-                r += ['--default-mon-cluster-log-to-stderr=true']
+    if Ceph.for_daemon_type(daemon_type) or OSD.for_daemon_type(daemon_type):
+        daemon = Ceph.create(ctx, ident)
+        r += daemon.get_daemon_args()
     elif daemon_type in Monitoring.components:
         metadata = Monitoring.components[daemon_type]
         r += metadata.get('args', list())
