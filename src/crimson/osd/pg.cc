@@ -1046,11 +1046,11 @@ PG::do_osd_ops(
         // TODO: https://tracker.ceph.com/issues/61651
         fut = submit_error_log(m, op_info, obc, e, rep_tid, version);
       }
-      return fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete,  this] {
+      return fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete, this] {
         auto log_reply_fut = [m, e, this] {
           return log_reply(m, e);
         };
-
+        auto fut2 = seastar::now();
         if (!peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
           auto it = log_entry_update_waiting_on.find(rep_tid);
           ceph_assert(it != log_entry_update_waiting_on.end());
@@ -1064,16 +1064,18 @@ PG::do_osd_ops(
               peering_state.complete_write(version, last_complete);
             }
           } else {
-            return it->second.all_committed.get_shared_future()
-              .then([this, &version, last_complete, log_reply_fut = std::move(log_reply_fut)] {
+            fut2 = it->second.all_committed.get_shared_future().then(
+              [this, &version, last_complete] {
               if (version != eversion_t()) {
                 peering_state.complete_write(version, last_complete);
               }
-              return log_reply_fut();
+              return seastar::now();
             });
           }
         }
-        return log_reply_fut();
+        return fut2.then([this, log_reply_fut = std::move(log_reply_fut)] {
+          return log_reply_fut();
+        });
       });
     });
   });
