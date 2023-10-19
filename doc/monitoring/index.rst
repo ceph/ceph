@@ -12,7 +12,9 @@ With a good understand of the Ceph monitoring stack and metrics users can create
 Ceph Monitoring stack
 =====================
 
-Ceph provides a default monitoring stack wich is installed by default by cephadm and explained in :doc:`../cephadm/services/monitoring.rst` section.
+Ceph provides a default monitoring stack wich is installed by default by
+cephadm and explained in the :ref:`Monitoring Services
+<mgr-cephadm-monitoring>` section of the cephadm documentation.
 
 
 Ceph metrics:
@@ -163,13 +165,18 @@ All the metrics have the following labels:
 ``job``: prometheus scrape job
 
 
-- ``ceph_pool_metadata``: Information about the pool
-It can be used together with other metrics to provide more contextual information in queries and graphs.
-Apart of the three common labels this metric provide the following extra labels:
-``compression_mode``: compression used in the pool (lz4, snappy, zlib, zstd, none). Example: compression_mode="none"
-``description``: brief description of the pool type (replica:number of replicas or Erasure code: ec profile). Example: description="replica:3"
-``name``: name of the pool. Example: name=".mgr"
-``type``: type of pool (replicated/erasure code). Example: type="replicated"
+- ``ceph_pool_metadata``: Information about the pool It can be used together
+  with other metrics to provide more contextual information in queries and
+  graphs.  Apart of the three common labels this metric provide the following
+  extra labels:
+
+  - ``compression_mode``: compression used in the pool (lz4, snappy, zlib,
+    zstd, none). Example: compression_mode="none"
+
+  - ``description``: brief description of the pool type (replica:number of
+    replicas or Erasure code: ec profile). Example: description="replica:3"
+  - ``name``: name of the pool. Example: name=".mgr"
+  - ``type``: type of pool (replicated/erasure code). Example: type="replicated"
 
 - ``ceph_pool_bytes_used``: Total raw capacity consumed by user data and associated overheads by pool (metadata + redundancy):
 
@@ -229,12 +236,17 @@ Example:
 
 Generic metrics
 ---------------
-- ``ceph_rgw_metadata``: Provides generic information about the RGW daemon.
-It can be used together with other metrics to provide more contextual information in queries and graphs.
-Apart of the three common labels this metric provide the following extra labels:
-``ceph_daemon``: Name of the Ceph daemon. Example: ceph_daemon="rgw.rgwtest.cephtest-node-00.sxizyq",
-``ceph_version``: Version of Ceph daemon. Example: ceph_version="ceph version 17.2.6 (d7ff0d10654d2280e08f1ab989c7cdf3064446a5) quincy (stable)",
-``hostname``: Name of the host where the daemon runs. Example: hostname:"cephtest-node-00.cephlab.com",
+- ``ceph_rgw_metadata``: Provides generic information about the RGW daemon.  It
+  can be used together with other metrics to provide more contextual
+  information in queries and graphs. Apart from the three common labels, this
+  metric provides the following extra labels:
+
+  - ``ceph_daemon``: Name of the Ceph daemon. Example:
+    ceph_daemon="rgw.rgwtest.cephtest-node-00.sxizyq",
+  - ``ceph_version``: Version of Ceph daemon. Example: ceph_version="ceph
+    version 17.2.6 (d7ff0d10654d2280e08f1ab989c7cdf3064446a5) quincy (stable)",
+  - ``hostname``: Name of the host where the daemon runs. Example:
+    hostname:"cephtest-node-00.cephlab.com",
 
 - ``ceph_rgw_req``: Number total of requests for the daemon (GET+PUT+DELETE)
     Useful to detect bottlenecks and optimize load distribution.
@@ -322,14 +334,15 @@ Example:
 Main metrics
 ------------
 
-- ``ceph_mds_metadata``: Provides general information about the MDS daemon.
-It can be used together with other metrics to provide more contextual information in queries and graphs.
-It provides the following extra labels:
-``ceph_version``: MDS daemon Ceph version
-``fs_id``: filesystem cluster id
-``hostname``: Host name where the MDS daemon runs
-``public_addr``: Public address where the MDS daemon runs
-``rank``= Rank of the MDS daemon
+- ``ceph_mds_metadata``: Provides general information about the MDS daemon.  It
+  can be used together with other metrics to provide more contextual
+  information in queries and graphs.  It provides the following extra labels:
+
+  - ``ceph_version``: MDS daemon Ceph version
+  - ``fs_id``: filesystem cluster id
+  - ``hostname``: Host name where the MDS daemon runs
+  - ``public_addr``: Public address where the MDS daemon runs
+  - ``rank``: Rank of the MDS daemon
 
 Example:
 
