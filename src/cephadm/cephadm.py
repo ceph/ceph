@@ -651,12 +651,13 @@ class Monitoring(ContainerDaemonForm):
             raise Error('{} not implemented yet'.format(daemon_type))
         return uid, gid
 
-    def __init__(self, ident: DaemonIdentity) -> None:
+    def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:
+        self.ctx = ctx
         self._identity = ident
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Monitoring':
-        return cls(ident)
+        return cls(ctx, ident)
 
     @property
     def identity(self) -> DaemonIdentity:
@@ -698,6 +699,68 @@ class Monitoring(ContainerDaemonForm):
                         daemon_type.capitalize(), ', '.join(required_args)
                     )
                 )
+
+    def get_daemon_args(self) -> List[str]:
+        ctx = self.ctx
+        daemon_type = self.identity.daemon_type
+        metadata = self.components[daemon_type]
+        r = list(metadata.get('args', []))
+        # set ip and port to bind to for nodeexporter,alertmanager,prometheus
+        if daemon_type not in ['grafana', 'loki', 'promtail']:
+            ip = ''
+            port = self.port_map[daemon_type][0]
+            meta = fetch_meta(ctx)
+            if meta:
+                if 'ip' in meta and meta['ip']:
+                    ip = meta['ip']
+                if 'ports' in meta and meta['ports']:
+                    port = meta['ports'][0]
+            r += [f'--web.listen-address={ip}:{port}']
+            if daemon_type == 'prometheus':
+                config = fetch_configs(ctx)
+                retention_time = config.get('retention_time', '15d')
+                retention_size = config.get('retention_size', '0')  # default to disabled
+                r += [f'--storage.tsdb.retention.time={retention_time}']
+                r += [f'--storage.tsdb.retention.size={retention_size}']
+                scheme = 'http'
+                host = get_fqdn()
+                # in case host is not an fqdn then we use the IP to
+                # avoid producing a broken web.external-url link
+                if '.' not in host:
+                    ipv4_addrs, ipv6_addrs = get_ip_addresses(get_hostname())
+                    # use the first ipv4 (if any) otherwise use the first ipv6
+                    addr = next(iter(ipv4_addrs or ipv6_addrs), None)
+                    host = wrap_ipv6(addr) if addr else host
+                r += [f'--web.external-url={scheme}://{host}:{port}']
+        if daemon_type == 'alertmanager':
+            config = fetch_configs(ctx)
+            peers = config.get('peers', list())  # type: ignore
+            for peer in peers:
+                r += ['--cluster.peer={}'.format(peer)]
+            try:
+                r += [f'--web.config.file={config["web_config"]}']
+            except KeyError:
+                pass
+            # some alertmanager, by default, look elsewhere for a config
+            r += ['--config.file=/etc/alertmanager/alertmanager.yml']
+        if daemon_type == 'promtail':
+            r += ['--config.expand-env']
+        if daemon_type == 'prometheus':
+            config = fetch_configs(ctx)
+            try:
+                r += [f'--web.config.file={config["web_config"]}']
+            except KeyError:
+                pass
+        if daemon_type == 'node-exporter':
+            config = fetch_configs(ctx)
+            try:
+                r += [f'--web.config.file={config["web_config"]}']
+            except KeyError:
+                pass
+            r += ['--path.procfs=/host/proc',
+                  '--path.sysfs=/host/sys',
+                  '--path.rootfs=/rootfs']
+        return r
 
 ##################################
 
@@ -2258,63 +2321,8 @@ def get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
         daemon = Ceph.create(ctx, ident)
         r += daemon.get_daemon_args()
     elif daemon_type in Monitoring.components:
-        metadata = Monitoring.components[daemon_type]
-        r += metadata.get('args', list())
-        # set ip and port to bind to for nodeexporter,alertmanager,prometheus
-        if daemon_type not in ['grafana', 'loki', 'promtail']:
-            ip = ''
-            port = Monitoring.port_map[daemon_type][0]
-            meta = fetch_meta(ctx)
-            if meta:
-                if 'ip' in meta and meta['ip']:
-                    ip = meta['ip']
-                if 'ports' in meta and meta['ports']:
-                    port = meta['ports'][0]
-            r += [f'--web.listen-address={ip}:{port}']
-            if daemon_type == 'prometheus':
-                config = fetch_configs(ctx)
-                retention_time = config.get('retention_time', '15d')
-                retention_size = config.get('retention_size', '0')  # default to disabled
-                r += [f'--storage.tsdb.retention.time={retention_time}']
-                r += [f'--storage.tsdb.retention.size={retention_size}']
-                scheme = 'http'
-                host = get_fqdn()
-                # in case host is not an fqdn then we use the IP to
-                # avoid producing a broken web.external-url link
-                if '.' not in host:
-                    ipv4_addrs, ipv6_addrs = get_ip_addresses(get_hostname())
-                    # use the first ipv4 (if any) otherwise use the first ipv6
-                    addr = next(iter(ipv4_addrs or ipv6_addrs), None)
-                    host = wrap_ipv6(addr) if addr else host
-                r += [f'--web.external-url={scheme}://{host}:{port}']
-        if daemon_type == 'alertmanager':
-            config = fetch_configs(ctx)
-            peers = config.get('peers', list())  # type: ignore
-            for peer in peers:
-                r += ['--cluster.peer={}'.format(peer)]
-            try:
-                r += [f'--web.config.file={config["web_config"]}']
-            except KeyError:
-                pass
-            # some alertmanager, by default, look elsewhere for a config
-            r += ['--config.file=/etc/alertmanager/alertmanager.yml']
-        if daemon_type == 'promtail':
-            r += ['--config.expand-env']
-        if daemon_type == 'prometheus':
-            config = fetch_configs(ctx)
-            try:
-                r += [f'--web.config.file={config["web_config"]}']
-            except KeyError:
-                pass
-        if daemon_type == 'node-exporter':
-            config = fetch_configs(ctx)
-            try:
-                r += [f'--web.config.file={config["web_config"]}']
-            except KeyError:
-                pass
-            r += ['--path.procfs=/host/proc',
-                  '--path.sysfs=/host/sys',
-                  '--path.rootfs=/rootfs']
+        monitoring = Monitoring.create(ctx, ident)
+        r += monitoring.get_daemon_args()
     elif daemon_type == 'jaeger-agent':
         r.extend(Tracing.components[daemon_type]['daemon_args'])
     elif daemon_type == NFSGanesha.daemon_type:
