@@ -1047,9 +1047,6 @@ PG::do_osd_ops(
         fut = submit_error_log(m, op_info, obc, e, rep_tid, version);
       }
       return fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete, this] {
-        auto log_reply_fut = [m, e, this] {
-          return log_reply(m, e);
-        };
         auto fut2 = seastar::now();
         if (!peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
           auto it = log_entry_update_waiting_on.find(rep_tid);
@@ -1057,7 +1054,6 @@ PG::do_osd_ops(
           auto it2 = it->second.waiting_on.find(pg_whoami);
           ceph_assert(it2 != it->second.waiting_on.end());
           it->second.waiting_on.erase(it2);
-
           if (it->second.waiting_on.empty()) {
             log_entry_update_waiting_on.erase(it);
             if (version != eversion_t()) {
@@ -1073,8 +1069,8 @@ PG::do_osd_ops(
             });
           }
         }
-        return fut2.then([this, log_reply_fut = std::move(log_reply_fut)] {
-          return log_reply_fut();
+        return fut2.then([this, m, e] {
+          return log_reply(m, e);
         });
       });
     });
