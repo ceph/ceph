@@ -2319,7 +2319,7 @@ def get_legacy_daemon_fsid(ctx, cluster,
     return fsid
 
 
-def get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
+def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     r = list()  # type: List[str]
 
     daemon_type = ident.daemon_type
@@ -2848,7 +2848,7 @@ def get_container(
         ctx,
         ident=ident,
         entrypoint=entrypoint,
-        args=ceph_args + get_daemon_args(ctx, ident),
+        args=ceph_args + _get_daemon_args(ctx, ident),
         container_args=container_args,
         volume_mounts=get_container_mounts(ctx, ident),
         bind_mounts=get_container_binds(ctx, ident),
