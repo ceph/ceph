@@ -962,7 +962,6 @@ class OSDThrasher(Thrasher):
                 for i in range(0, most_killable):
                     self.kill_osd(osd=acting_set[i], mark_out=True)
                 self.log("dead_osds={d}, live_osds={ld}".format(d=self.dead_osds, ld=self.live_osds))
-                self.log("check for active or peered")
                 with safe_while(
                     sleep=25, tries=5,
                     action='check for active or peered') as proceed:
@@ -2926,8 +2925,10 @@ class CephManager:
         """
         Wrapper to check if all PGs are active or peered
         """
+        self.log("checking for active or peered")
         pgs = self.get_pg_stats()
         if self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs):
+            self.log("all pgs are active or peered!")
             return True
         else:
             self.dump_pgs_not_active_peered(pgs)
