@@ -70,6 +70,10 @@ constexpr unsigned default_op_size = 1 << 26;
 #define CEPH_DEDUP_DAEMON_OBJ "ceph_dedup_daemon_obj"
 #define CEPH_DEDUP_DAEMON_OBJ_SIZE 4096
 
+// information per thread
+#define THREAD_SECTION "threads_info"
+#define THREAD_CHECKPOINT_PREFIX "worker"
+
 struct ceph_dedup_options {
 public:
 
@@ -78,6 +82,9 @@ public:
   bool load_dedup_conf_from_pool(IoCtx &base_pool);
   void load_dedup_conf_by_default(CephContext *_cct);
   void load_dedup_conf_from_argument(const po::variables_map &opts);
+
+  string load_checkpoint_info(int thread_id);
+  void set_checkpoint_info(int id, string oid);
 
   // get/set conf
   void set_conf(string key, string value) {

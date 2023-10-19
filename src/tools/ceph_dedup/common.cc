@@ -140,6 +140,17 @@ void ceph_dedup_options::load_dedup_conf_by_default(CephContext *_cct)
     _cct->_conf.get_val<int64_t>(FP_MEM_THRESHOLD)));
 }
 
+string ceph_dedup_options::load_checkpoint_info(int id)
+{
+  return (string)f[THREAD_SECTION][string(
+	  THREAD_CHECKPOINT_PREFIX + to_string(id))];
+}
+
+void ceph_dedup_options::set_checkpoint_info(int id, string oid) {
+  set_dedup_conf(THREAD_SECTION, string(
+    THREAD_CHECKPOINT_PREFIX + to_string(id)), oid);
+}
+
 std::ostream &operator<<(std::ostream &out, struct ceph_dedup_options &d_opts)
 {
   JSONFormatter formatter;

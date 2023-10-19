@@ -253,13 +253,17 @@ public:
     ObjectCursor end,
     SampleDedupGlobal &sample_dedup_global,
     bool snap, 
+    string checkpoint_oid,
+    bool primary,
     ceph_dedup_options &d_opts) :
     chunk_io_ctx(chunk_io_ctx),
     sample_dedup_global(sample_dedup_global),
     d_opts(d_opts),
     begin(begin),
     end(end),
-    snap(snap) {
+    snap(snap),
+    checkpoint_oid(checkpoint_oid),
+    primary(primary) {
       this->io_ctx.dup(io_ctx);
     }
 
@@ -287,6 +291,9 @@ public:
       ceph_abort_msgf("unexpected signal %d", signum);
     }
   }
+
+  void store_checkpoint_info(std::list<SampleDedupWorkerThread> &threads);
+  
 
 protected:
   void* entry() override {
@@ -323,16 +330,44 @@ private:
   bool snap;
   bool stop = false;
   ceph::mutex m_lock = ceph::make_mutex("SampleDedupWorkerThread");
+  string checkpoint_oid;
+  bool primary = false;
 };
+
+void SampleDedupWorkerThread::store_checkpoint_info(
+  std::list<SampleDedupWorkerThread> &threads) {
+  std::lock_guard l{glock};
+  int id = 0;
+  for (auto &p : threads) {
+    std::unique_lock l{p.m_lock};
+    d_opts.set_checkpoint_info(id, p.checkpoint_oid);
+    id++;
+  }
+  d_opts.store_dedup_conf(io_ctx);
+}
 
 void SampleDedupWorkerThread::crawl()
 {
   ObjectCursor current_object = begin;
+  // find a checkpoint object
+  if (checkpoint_oid != string()) {
+    librados::NObjectIterator it = io_ctx.nobjects_begin();
+    for (;it != io_ctx.nobjects_end(); ++it) {
+      librados::ObjectCursor cursor = it.get_cursor();
+      if (it->get_oid() == checkpoint_oid) {
+       current_object = cursor;
+       break;
+      }
+    }
+    if (it != io_ctx.nobjects_end() && ++it == io_ctx.nobjects_end()) {
+      current_object = io_ctx.nobjects_begin().get_cursor();
+    }
+  }
+
   while (!stop && current_object < end) {
     std::vector<ObjectItem> objects;
     // Get the list of object IDs to deduplicate
     std::tie(objects, current_object) = get_objects(current_object, end, 100);
-
     // Pick few objects to be processed. Sampling ratio decides how many
     // objects to pick. Lower sampling ratio makes crawler have lower crawling
     // overhead but find less duplication.
@@ -375,6 +410,11 @@ void SampleDedupWorkerThread::crawl()
   }
   for (auto &completion : evict_completions) {
     completion->wait_for_complete();
+    std::unique_lock l{m_lock};
+    checkpoint_oid = target.oid;
+    if (primary) {
+      store_checkpoint_info(threads);
+    }
   }
 }
 
@@ -664,6 +704,8 @@ int make_crawling_daemon(const po::variables_map &opts)
 	  shard_end,
 	  sample_dedup_global,
 	  snap,
+	  d_opts.load_checkpoint_info(i),
+	  i == 0 ? true : false,
 	  d_opts);
 	threads.back().create("sample_dedup");
       }
