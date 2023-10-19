@@ -24,7 +24,6 @@
 #include "rgw_ssd_driver.h"
 #include "rgw_redis_driver.h"
 
-#include "rgw_redis_driver.h"
 #include "driver/d4n/d4n_directory.h"
 #include "driver/d4n/d4n_policy.h"
 
@@ -35,6 +34,10 @@
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context
+
+namespace rgw::d4n {
+  class PolicyDriver;
+}
 
 namespace rgw { namespace sal {
 

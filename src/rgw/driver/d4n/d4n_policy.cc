@@ -6,10 +6,6 @@
 
 namespace rgw { namespace d4n {
 
-std::string build_index(std::string bucketName, std::string oid, uint64_t offset, uint64_t size) {
-  return bucketName + "_" + oid + "_" + std::to_string(offset) + "_" + std::to_string(size); 
-}
-
 // initiate a call to async_exec() on the connection's executor
 struct initiate_exec {
   std::shared_ptr<boost::redis::connection> conn;
@@ -178,21 +174,18 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, optional_yield y) {
-  if (entries_map.empty())
+  if (entries_heap.empty())
     return {};
 
-  auto it = std::min_element(std::begin(entries_map), std::end(entries_map),
-			      [](const auto& l, const auto& r) { return l.second->localWeight < r.second->localWeight; });
-
   /* Get victim cache block */
-  std::string key = it->second->key;
+  std::string key = entries_heap.top()->key;
   CacheBlock victim;
 
   victim.cacheObj.bucketName = key.substr(0, key.find('_')); 
   key.erase(0, key.find('_') + 1);
   victim.cacheObj.objName = key.substr(0, key.find('_'));
-  victim.blockID = it->second->offset;
-  victim.size = it->second->len;
+  victim.blockID = entries_heap.top()->offset;
+  victim.size = entries_heap.top()->len;
 
   if (dir->get(&victim, y) < 0) {
     return {};
@@ -216,23 +209,18 @@ int LFUDAPolicy::exist_key(std::string key) {
   return false;
 }
 
-int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
+#if 0
+int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheDriver, optional_yield y) {
   response<std::string> resp;
   int age = get_age(y);
 
   if (exist_key(build_index(block->cacheObj.bucketName, block->cacheObj.objName, block->blockID, block->size))) { /* Local copy */
     auto it = entries_map.find(build_index(block->cacheObj.bucketName, block->cacheObj.objName, block->blockID, block->size));
     it->second->localWeight += age;
-    return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y);
+    return cacheDriver->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y);
   } else {
-    uint64_t freeSpace = cacheNode->get_free_space(dpp);
-
-    while (freeSpace < block->size) { /* Not enough space in local cache */
-      if (int ret = eviction(dpp, cacheNode, y) > 0)
-        freeSpace += ret;
-      else 
-        return -1;
-    }
+    if (eviction(dpp, block->size, cacheDriver, y) < 0)
+      return -1; // what if eviction turns into infinite loop? -Sam
 
     int exists = dir->exist_key(block, y);
     if (exists > 0) { /* Remote copy */
@@ -252,107 +240,141 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
         }
       }
     } else if (!exists) { /* No remote copy */
-      // how to get bufferlist data? -Sam
-      // do I need to add the block to the local cache here? -Sam
-      // update hosts list for block as well?
-      // insert entry here? -Sam
       // localWeight += age;
-      //return cacheNode->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y);
+      //return cacheDriver->set_attr(dpp, block->cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y);
       return 0;
     } else {
       return -1;
     }
   }
 }
+#endif
 
-uint64_t LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y) {
-  CacheBlock victim = find_victim(dpp, y);
+int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) {
+  uint64_t freeSpace = cacheDriver->get_free_space(dpp);
 
-  if (victim.cacheObj.objName.empty()) {
-    ldpp_dout(dpp, 10) << "RGW D4N Policy: Could not find victim block" << dendl;
-    return 0; /* Return zero for failure */
-  }
+  while (freeSpace < size) {
+    CacheBlock victim = find_victim(dpp, y);
 
-  std::string key = build_index(victim.cacheObj.bucketName, victim.cacheObj.objName, victim.blockID, victim.size);
-  auto it = entries_map.find(key);
-  if (it == entries_map.end()) {
-    return 0;
-  }
+    if (victim.cacheObj.objName.empty()) {
+      ldpp_dout(dpp, 10) << "RGW D4N Policy: Could not retrieve victim block" << dendl;
+      return -1;
+    }
 
-  int avgWeight = get_min_avg_weight(y);
-  if (avgWeight < 0) {
-    return 0;
-  }
+    std::string key = victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
+    auto it = entries_map.find(key);
+    if (it == entries_map.end()) {
+      return -1;
+    }
 
-  if (victim.hostsList.size() == 1 && victim.hostsList[0] == dir->cct->_conf->rgw_local_cache_address) { /* Last copy */
-    if (victim.globalWeight) {
-      it->second->localWeight += victim.globalWeight;
-      if (cacheNode->set_attr(dpp, victim.cacheObj.objName, "localWeight", std::to_string(it->second->localWeight), y) < 0) {
-	return 0;
+    int avgWeight = get_min_avg_weight(y);
+    if (avgWeight < 0) {
+      return -1;
+    }
+
+    if (victim.hostsList.size() == 1 && victim.hostsList[0] == dir->cct->_conf->rgw_local_cache_address) { /* Last copy */
+      if (victim.globalWeight) {
+	it->second->localWeight += victim.globalWeight;
+
+	for (auto& entry : entries_heap) {
+	  if (entry->key == key) {
+	    (*(entry->handle))->localWeight = it->second->localWeight;
+	    entries_heap.increase(entry->handle);
+	  }
+	}
+
+	if (cacheDriver->set_attr(dpp, key, "localWeight", std::to_string(it->second->localWeight), y) < 0) {
+	  return -1;
+	}
+
+	victim.globalWeight = 0;
+	if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) {
+	  return -1;
+	}
       }
 
-      victim.globalWeight = 0;
-      if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) {
-	return 0;
+      if (it->second->localWeight > avgWeight) {
+	// TODO: push victim block to remote cache
       }
     }
 
-    if (it->second->localWeight > avgWeight) {
-      // TODO: push victim block to remote cache
+    victim.globalWeight += it->second->localWeight;
+    if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) {
+      return -1;
     }
-  }
 
-  victim.globalWeight += it->second->localWeight;
-  if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) { // just have one update? -Sam
-    return 0;
-  }
-
-  ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
-
-  if (cacheNode->del(dpp, key, y) < 0 && dir->remove_host(&victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) {
-    return 0;
-  } else {
-    uint64_t num_entries = entries_map.size();
-
-    if (!avgWeight) {
-      if (set_min_avg_weight(0, dir->cct->_conf->rgw_local_cache_address, y) < 0) // Where else must this be set? -Sam 
-	return 0;
+    if (dir->remove_host(&victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) {
+      return -1;
     } else {
-      if (set_min_avg_weight(avgWeight - (it->second->localWeight/num_entries), dir->cct->_conf->rgw_local_cache_address, y) < 0) { // Where else must this be set? -Sam 
-	return 0;
-    } 
-      int age = get_age(y);
-      age = std::max(it->second->localWeight, age);
-      if (set_age(age, y) < 0)
-	return 0;
-    }
-  }
+      if (cacheDriver->del(dpp, key, y) < 0) {
+        return -1;
+      } else {
+	ldpp_dout(dpp, 10) << "RGW D4N Policy: Block " << victim.cacheObj.objName << " has been evicted." << dendl;
 
-  return victim.size; // this doesn't account for the additional attributes that were removed and need to be set with the new block -Sam
+	uint64_t num_entries = entries_map.size();
+
+	if (!avgWeight) {
+	  if (set_min_avg_weight(0, dir->cct->_conf->rgw_local_cache_address, y) < 0) // Where else must this be set? -Sam 
+	    return -1;
+	} else {
+	  if (set_min_avg_weight(avgWeight - (it->second->localWeight/num_entries), dir->cct->_conf->rgw_local_cache_address, y) < 0) // Where else must this be set? -Sam 
+	    return -1;
+	} 
+
+	int age = get_age(y);
+	age = std::max(it->second->localWeight, age);
+	if (set_age(age, y) < 0)
+	  return -1;
+      }
+    }
+
+    freeSpace = cacheDriver->get_free_space(dpp);
+  }
+  
+  return 0;
 }
 
-void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y)
+void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y)
 {
-  erase(dpp, key);
+  using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
 
-  int age = get_age(y);
-  assert(age > -1);
+  int age = get_age(y); 
+  int localWeight = age;
+  auto entry = find_entry(key);
+  if (entry != nullptr) { 
+    entry->localWeight += age;
+    localWeight = entry->localWeight;
+  }  
+
+  erase(dpp, key);
   
-  LFUDAEntry *e = new LFUDAEntry(key, offset, len, version, age);
-  entries_lfuda_list.push_back(*e);
+  LFUDAEntry *e = new LFUDAEntry(key, offset, len, version, localWeight);
+  handle_type handle = entries_heap.push(e);
+  e->set_handle(handle);
   entries_map.emplace(key, e);
+
+  if (cacheDriver->set_attr(dpp, key, "localWeight", std::to_string(localWeight), y) < 0) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::update:: " << __func__ << "(): Cache driver set_attr method failed." << dendl;
+  }
 }
 
 bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key)
 {
+  for (auto const& it : entries_heap) {
+    if (it->key == key) {
+      entries_heap.erase(it->handle);
+      break;
+    }
+  }
+
   auto p = entries_map.find(key);
   if (p == entries_map.end()) {
     return false;
   }
 
   entries_map.erase(p);
-  entries_lfuda_list.erase_and_dispose(entries_lfuda_list.iterator_to(*(p->second)), LFUDA_Entry_delete_disposer());
-  return true;
+
+  return false;
 }
 
 int LRUPolicy::exist_key(std::string key)
@@ -364,26 +386,24 @@ int LRUPolicy::exist_key(std::string key)
     return false;
 }
 
-int LRUPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y)
+int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y)
 {
-  uint64_t freeSpace = cacheNode->get_free_space(dpp);
-  while(freeSpace < block->size) {
-    freeSpace = eviction(dpp, cacheNode, y);
+  uint64_t freeSpace = cacheDriver->get_free_space(dpp);
+
+  while (freeSpace < size) {
+    const std::lock_guard l(lru_lock);
+    auto p = entries_lru_list.front();
+    entries_map.erase(entries_map.find(p.key));
+    entries_lru_list.pop_front_and_dispose(Entry_delete_disposer());
+    cacheDriver->delete_data(dpp, p.key, null_yield);
+
+    freeSpace = cacheDriver->get_free_space(dpp);
   }
+
   return 0;
 }
 
-uint64_t LRUPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y)
-{
-  const std::lock_guard l(lru_lock);
-  auto p = entries_lru_list.front();
-  entries_map.erase(entries_map.find(p.key));
-  entries_lru_list.pop_front_and_dispose(Entry_delete_disposer());
-  cacheNode->delete_data(dpp, p.key, null_yield);
-  return cacheNode->get_free_space(dpp);
-}
-
-void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, rgw::cache::CacheDriver* cacheNode, optional_yield y)
+void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y)
 {
   erase(dpp, key);
 
@@ -402,18 +422,6 @@ bool LRUPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key)
   entries_map.erase(p);
   entries_lru_list.erase_and_dispose(entries_lru_list.iterator_to(*(p->second)), Entry_delete_disposer());
   return true;
-}
-
-int PolicyDriver::init() {
-  if (policyName == "lfuda") {
-    cachePolicy = new LFUDAPolicy(io);
-    return 0;
-  } else if (policyName == "lru") {
-    cachePolicy = new LRUPolicy();
-    return 0;
-  }
-
-  return -1;
 }
 
 } } // namespace rgw::d4n
