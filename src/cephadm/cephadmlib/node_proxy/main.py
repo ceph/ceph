@@ -1,5 +1,6 @@
 import cherrypy
-from threading import Thread
+from cherrypy._cpserver import Server
+from threading import Thread, Event
 from .redfishdellsystem import RedfishDellSystem
 from .reporter import Reporter
 from .util import Config, Logger
@@ -8,6 +9,7 @@ from .basesystem import BaseSystem
 import sys
 import argparse
 import json
+import traceback
 
 DEFAULT_CONFIG = {
     'reporter': {
@@ -27,165 +29,116 @@ DEFAULT_CONFIG = {
 }
 
 
-class Memory:
-    exposed = True
+@cherrypy.tools.auth_basic(on=True)
+@cherrypy.tools.allow(methods=['PUT'])
+@cherrypy.tools.json_out()
+class Admin():
+    def __init__(self, api: 'API') -> None:
+        self.api = api
 
-    def __init__(self, backend: BaseSystem) -> None:
-        self.backend = backend
-
-    @cherrypy.tools.json_out()
-    def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'memory': self.backend.get_memory()}
-
-
-class Network:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem) -> None:
-        self.backend = backend
-
-    @cherrypy.tools.json_out()
-    def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'network': self.backend.get_network()}
-
-
-class Processors:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem) -> None:
-        self.backend = backend
-
-    @cherrypy.tools.json_out()
-    def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'processors': self.backend.get_processors()}
-
-
-class Storage:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem) -> None:
-        self.backend = backend
-
-    @cherrypy.tools.json_out()
-    def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'storage': self.backend.get_storage()}
-
-
-class Status:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem) -> None:
-        self.backend = backend
-
-    @cherrypy.tools.json_out()
-    def GET(self) -> Dict[str, Dict[str, Dict]]:
-        return {'status': self.backend.get_status()}
-
-
-class System:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem) -> None:
-        self.memory = Memory(backend)
-        self.network = Network(backend)
-        self.processors = Processors(backend)
-        self.storage = Storage(backend)
-        self.status = Status(backend)
-        # actions = Actions()
-        # control = Control()
-
-
-class Shutdown:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem, reporter: Reporter) -> None:
-        self.backend = backend
-        self.reporter = reporter
-
-    def POST(self) -> str:
-        _stop(self.backend, self.reporter)
-        cherrypy.engine.exit()
-        return 'Server shutdown...'
-
-
-def _stop(backend: BaseSystem, reporter: Reporter) -> None:
-    backend.stop_update_loop()
-    backend.client.logout()
-    reporter.stop()
-
-
-class Start:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem, reporter: Reporter) -> None:
-        self.backend = backend
-        self.reporter = reporter
-
-    def POST(self) -> str:
-        self.backend.start_client()
+    @cherrypy.expose
+    def start(self) -> Dict[str, str]:
+        self.api.backend.start_client()
         # self.backend.start_update_loop()
-        self.reporter.run()
-        return 'node-proxy daemon started'
+        self.api.reporter.run()
+        return {"ok": "node-proxy daemon started"}
+
+    @cherrypy.expose
+    def reload(self) -> Dict[str, str]:
+        self.api.config.reload()
+        return {"ok": "node-proxy config reloaded"}
+
+    def _stop(self) -> None:
+        self.api.backend.stop_update_loop()
+        self.api.backend.client.logout()
+        self.api.reporter.stop()
+
+    @cherrypy.expose
+    def stop(self) -> Dict[str, str]:
+        self._stop()
+        return {"ok": "node-proxy daemon stopped"}
+
+    @cherrypy.expose
+    def shutdown(self) -> Dict[str, str]:
+        self._stop()
+        cherrypy.engine.exit()
+        return {"ok": "Server shutdown."}
+
+    @cherrypy.expose
+    def flush(self) -> Dict[str, str]:
+        self.api.backend.flush()
+        return {"ok": "node-proxy data flushed"}
 
 
-class Stop:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem, reporter: Reporter) -> None:
-        self.backend = backend
-        self.reporter = reporter
-
-    def POST(self) -> str:
-        _stop(self.backend, self.reporter)
-        return 'node-proxy daemon stopped'
-
-
-class ConfigReload:
-    exposed = True
-
-    def __init__(self, config: Config) -> None:
-        self.config = config
-
-    def POST(self) -> str:
-        self.config.reload()
-        return 'node-proxy config reloaded'
-
-
-class Flush:
-    exposed = True
-
-    def __init__(self, backend: BaseSystem) -> None:
-        self.backend = backend
-
-    def POST(self) -> str:
-        self.backend.flush()
-        return 'node-proxy data flushed'
-
-
-class Admin:
-    exposed = False
-
-    def __init__(self, backend: BaseSystem, config: Config, reporter: Reporter) -> None:
-        self.reload = ConfigReload(config)
-        self.flush = Flush(backend)
-        self.shutdown = Shutdown(backend, reporter)
-        self.start = Start(backend, reporter)
-        self.stop = Stop(backend, reporter)
-
-
-class API:
-    exposed = True
-
+class API(Server):
     def __init__(self,
                  backend: BaseSystem,
                  reporter: Reporter,
-                 config: Config) -> None:
+                 config: Config,
+                 addr: str = '0.0.0.0',
+                 port: int = 0) -> None:
+        super().__init__()
+        self.log = Logger(__name__)
+        self.backend = backend
+        self.reporter = reporter
+        self.config = config
+        self.socket_port = self.config.__dict__['server']['port'] if not port else port
+        self.socket_host = addr
+        self.subscribe()
 
-        self.system = System(backend)
-        self.admin = Admin(backend, config, reporter)
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def memory(self) -> Dict[str, Any]:
+        return {'memory': self.backend.get_memory()}
 
-    def GET(self) -> str:
-        return 'use /system or /admin endpoints'
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def network(self) -> Dict[str, Any]:
+        return {'network': self.backend.get_network()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def processors(self) -> Dict[str, Any]:
+        return {'processors': self.backend.get_processors()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def storage(self) -> Dict[str, Any]:
+        return {'storage': self.backend.get_storage()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def power(self) -> Dict[str, Any]:
+        return {'power': self.backend.get_power()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def fans(self) -> Dict[str, Any]:
+        return {'fans': self.backend.get_fans()}
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def firmwares(self) -> Dict[str, Any]:
+        return {'firmwares': self.backend.get_firmwares()}
+
+    @cherrypy.expose
+    @cherrypy.tools.json_out()
+    @cherrypy.tools.json_in()
+    def index(self, endpoint: str) -> Dict[str, Any]:
+        kw = dict(endpoint=endpoint)
+        result = self.common(**kw)
+        return result
+
+    def stop(self) -> None:
+        self.unsubscribe()
+        super().stop()
 
 
 class NodeProxy(Thread):
@@ -194,6 +147,8 @@ class NodeProxy(Thread):
         for k, v in kw.items():
             setattr(self, k, v)
         self.exc: Optional[Exception] = None
+        self.cp_shutdown_event = Event()
+        self.log = Logger(__name__)
 
     def run(self) -> None:
         try:
@@ -202,44 +157,75 @@ class NodeProxy(Thread):
             self.exc = e
             return
 
+    def check_auth(self, realm: str, username: str, password: str) -> bool:
+        return self.__dict__['username'] == username and \
+            self.__dict__['password'] == password
+
     def check_status(self) -> bool:
         if self.__dict__.get('system') and not self.system.run:
             raise RuntimeError("node-proxy encountered an error.")
         if self.exc:
+            traceback.print_tb(self.exc.__traceback__)
+            self.log.logger.error(f"{self.exc.__class__.__name__}: {self.exc}")
             raise self.exc
         return True
 
+    def start_api(self) -> None:
+        cherrypy.server.unsubscribe()
+        cherrypy.engine.start()
+        self.reporter_agent.run()
+        self.cp_shutdown_event.wait()
+        self.cp_shutdown_event.clear()
+        cherrypy.engine.stop()
+        cherrypy.server.httpserver = None
+        self.log.logger.info("node-proxy shutdown.")
+
     def main(self) -> None:
         # TODO: add a check and fail if host/username/password/data aren't passed
-        config = Config('/etc/ceph/node-proxy.yml', default_config=DEFAULT_CONFIG)
-        log = Logger(__name__, level=config.__dict__['logging']['level'])
+        self.config = Config('/etc/ceph/node-proxy.yml', default_config=DEFAULT_CONFIG)
+        self.log = Logger(__name__, level=self.config.__dict__['logging']['level'])
 
         # create the redfish system and the obsever
-        log.logger.info(f"Server initialization...")
+        self.log.logger.info(f"Server initialization...")
         try:
             self.system = RedfishDellSystem(host=self.__dict__['host'],
                                             username=self.__dict__['username'],
                                             password=self.__dict__['password'],
-                                            config=config)
+                                            config=self.config)
         except RuntimeError:
-            log.logger.error("Can't initialize the redfish system.")
+            self.log.logger.error("Can't initialize the redfish system.")
             raise
 
         try:
-            reporter_agent = Reporter(self.system,
-                                      self.__dict__['cephx'],
-                                      f"https://{self.__dict__['mgr_target_ip']}:{self.__dict__['mgr_target_port']}/node-proxy/data")
+            self.reporter_agent = Reporter(self.system,
+                                           self.__dict__['cephx'],
+                                           f"https://{self.__dict__['mgr_target_ip']}:{self.__dict__['mgr_target_port']}/node-proxy/data")
         except RuntimeError:
-            log.logger.error("Can't initialize the reporter.")
+            self.log.logger.error("Can't initialize the reporter.")
             raise
+        self.api = API(self.system,
+                       self.reporter_agent,
+                       self.config)
+        self.admin = Admin(self.api)
+        self.configure()
+        self.start_api()
 
+    def configure(self) -> None:
         cherrypy.config.update({
-            'node_proxy': config,
-            'server.socket_port': config.__dict__['server']['port']
+            'environment': 'production',
+            'engine.autoreload.on': False,
         })
-        c = {'/': {
+        config = {'/': {
             'request.methods_with_bodies': ('POST', 'PUT', 'PATCH'),
-            'request.dispatch': cherrypy.dispatch.MethodDispatcher()
+            'tools.trailing_slash.on': False,
+            'tools.auth_basic.realm': 'localhost',
+            'tools.auth_basic.checkpassword': self.check_auth
         }}
-        reporter_agent.run()
-        cherrypy.quickstart(API(self.system, reporter_agent, config), config=c)
+        cherrypy.tree.mount(self.api, '/', config=config)
+        cherrypy.tree.mount(self.admin, '/admin', config=config)
+        self.api.ssl_certificate = self.__dict__['ssl_crt_path']
+        self.api.ssl_private_key = self.__dict__['ssl_key_path']
+
+    def shutdown(self) -> None:
+        self.log.logger.info("Shutting node-proxy down...")
+        self.cp_shutdown_event.set()
