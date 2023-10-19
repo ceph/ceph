@@ -2561,7 +2561,7 @@ def get_container_mounts(
     """
     # unpack fsid and daemon_type from ident because they're used very frequently
     fsid, daemon_type = ident.fsid, ident.daemon_type
-    mounts = get_container_mounts_for_type(ctx, fsid, daemon_type)
+    mounts = _get_container_mounts_for_type(ctx, fsid, daemon_type)
 
     assert ident.fsid
     assert ident.daemon_id
