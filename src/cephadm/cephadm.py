@@ -243,7 +243,8 @@ class Ceph(ContainerDaemonForm):
         uid, gid = self.uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
-        ctr = get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        ctr = to_deployment_container(ctx, ctr)
         config_json = fetch_configs(ctx)
         if self.identity.daemon_type == 'mon' and config_json is not None:
             if 'crush_location' in config_json:
@@ -464,7 +465,8 @@ class SNMPGateway(ContainerDaemonForm):
             raise Error('config is missing destination attribute(<ip>:<port>) of the target SNMP listener')
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        return get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return self.uid, self.gid
@@ -626,7 +628,8 @@ class Monitoring(ContainerDaemonForm):
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         self._prevalidate(ctx)
-        return get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return self.extract_uid_gid(ctx, self.identity.daemon_type)
@@ -814,7 +817,8 @@ class NFSGanesha(ContainerDaemonForm):
         return 'nfs'
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        return get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
     def customize_container_endpoints(
         self, endpoints: List[EndPoint], deployment_type: DeploymentType
@@ -1023,7 +1027,9 @@ done
         subident = DaemonSubIdentity(
             self.fsid, self.daemon_type, self.daemon_id, 'tcmu'
         )
-        tcmu_container = get_deployment_container(self.ctx, subident)
+        tcmu_container = to_deployment_container(
+            self.ctx, get_container(self.ctx, subident)
+        )
         # TODO: Eventually we don't want to run tcmu-runner through this script.
         # This is intended to be a workaround backported to older releases
         # and should eventually be removed in at least squid onward
@@ -1032,7 +1038,8 @@ done
         return tcmu_container
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        return get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
     def config_and_keyring(
         self, ctx: CephadmContext
@@ -1181,7 +1188,8 @@ class CephNvmeof(ContainerDaemonForm):
         ]
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        return get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return 167, 167  # TODO: need to get properly the uid/gid
@@ -1265,7 +1273,8 @@ class CephExporter(ContainerDaemonForm):
             raise Error(f'Directory does not exist. Got: {self.sock_dir}')
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        return get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return extract_uid_gid(ctx)
@@ -1378,7 +1387,8 @@ class HAproxy(ContainerDaemonForm):
         ]
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        return get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
 ##################################
 
@@ -1490,7 +1500,8 @@ class Keepalived(ContainerDaemonForm):
         return mounts
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        return get_deployment_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
 
 ##################################
@@ -1546,9 +1557,8 @@ class Tracing(ContainerDaemonForm):
         return self._identity
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        # TODO(jjm) this looks to be the only container for deployment
-        # not using get_deployment_container. Previous oversight?
-        return get_container(ctx, self.identity)
+        ctr = get_container(ctx, self.identity)
+        return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return 65534, 65534
@@ -1686,12 +1696,13 @@ class CustomContainer(ContainerDaemonForm):
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         if self._container is None:
-            self._container = get_deployment_container(
+            ctr = get_container(
                 ctx,
                 self.identity,
                 privileged=self.privileged,
                 ptrace=ctx.allow_ptrace,
             )
+            self._container = to_deployment_container(ctx, ctr)
         return self._container
 
     def init_containers(self, ctx: CephadmContext) -> List[InitContainer]:
@@ -5094,19 +5105,6 @@ def command_registry_login(ctx: CephadmContext) -> int:
 
 
 ##################################
-
-
-def get_deployment_container(
-    ctx: CephadmContext,
-    ident: 'DaemonIdentity',
-    privileged: bool = False,
-    ptrace: bool = False,
-    container_args: Optional[List[str]] = None,
-) -> 'CephContainer':
-    # wrapper for get_container specifically for containers made during the `cephadm deploy`
-    # command. Adds some extra things such as extra container args and custom config files
-    c = get_container(ctx, ident, privileged, ptrace, container_args)
-    return to_deployment_container(ctx, c)
 
 
 def to_deployment_container(
