@@ -10,6 +10,7 @@ function(build_quiche)
   # to pass in the boringssl path
   set(cargo_command ${CMAKE_COMMAND} -E env QUICHE_BSSL_PATH=${BORINGSSL_SOURCE_DIR} cargo build)
 
+  list(APPEND cargo_args --package quiche)
   list(APPEND cargo_args --features ffi,pkg-config-meta,qlog)
   list(APPEND cargo_args --release)
 
@@ -24,7 +25,7 @@ function(build_quiche)
   ExternalProject_Add(quiche_ext
     SOURCE_DIR "${quiche_SOURCE_DIR}"
     GIT_REPOSITORY https://github.com/cloudflare/quiche
-    GIT_TAG 0.16.0
+    GIT_TAG 0.18.0
     GIT_SHALLOW TRUE
     GIT_SUBMODULES "" # don't clone its boringssl submodule
     UPDATE_COMMAND ""
