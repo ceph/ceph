@@ -2,8 +2,9 @@ function(build_curl)
   # only build the http bits
   list(APPEND curl_CMAKE_ARGS -DHTTP_ONLY=ON)
 
+  list(APPEND curl_CMAKE_ARGS -DBUILD_SHARED_LIBS=OFF)
+
   list(APPEND curl_DEPENDS boringssl_ext)
-  list(APPEND curl_CMAKE_ARGS -DOPENSSL_USE_STATIC_LIBS=ON)
   list(APPEND curl_CMAKE_ARGS -DOPENSSL_ROOT_DIR=${BORINGSSL_LIBRARY_DIR})
   list(APPEND curl_CMAKE_ARGS -DOPENSSL_INCLUDE_DIR=${BORINGSSL_INCLUDE_DIR})
 
@@ -21,7 +22,7 @@ function(build_curl)
   set(curl_SOURCE_DIR "${CMAKE_CURRENT_BINARY_DIR}/curl/src")
   set(curl_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/curl/bin")
   set(curl_LIBRARY_DIR "${curl_BINARY_DIR}/lib")
-  set(curl_LIBRARY "${curl_LIBRARY_DIR}/libcurl.so")
+  set(curl_LIBRARY "${curl_LIBRARY_DIR}/libcurl.a")
   set(curl_BINARY "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/curl")
   set(curl_BYPRODUCTS ${curl_LIBRARY} ${curl_BINARY})
 
