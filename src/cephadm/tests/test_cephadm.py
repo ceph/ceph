@@ -320,9 +320,9 @@ class TestCephAdm(object):
     @mock.patch('cephadm.logger')
     @mock.patch('cephadm.fetch_custom_config_files')
     @mock.patch('cephadm.get_container')
-    def test_get_deployment_container(self, _get_container, _get_config, _logger):
+    def test_to_deployment_container(self, _get_container, _get_config, _logger):
         """
-        test get_deployment_container properly makes use of extra container args and custom conf files
+        test to_deployment_container properly makes use of extra container args and custom conf files
         """
 
         ctx = _cephadm.CephadmContext()
@@ -356,7 +356,8 @@ class TestCephAdm(object):
             ptrace=False,
             host_network=True,
         )
-        c = _cephadm.get_deployment_container(ctx, ident)
+        c = _cephadm.get_container(ctx, ident)
+        c = _cephadm.to_deployment_container(ctx, c)
 
         assert '--pids-limit=12345' in c.container_args
         assert '--something' in c.container_args
@@ -371,9 +372,9 @@ class TestCephAdm(object):
     @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
     @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
     @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: (0, 0))
-    @mock.patch('cephadm.get_deployment_container')
+    @mock.patch('cephadm.get_container')
     @mock.patch('cephadm.apply_deploy_config_to_ctx', lambda d, c: None)
-    def test_mon_crush_location(self, _get_deployment_container, _migrate_sysctl, _make_var_run, _deploy_daemon, _file_lock, _logger, monkeypatch):
+    def test_mon_crush_location(self, _get_container, _migrate_sysctl, _make_var_run, _deploy_daemon, _file_lock, _logger, monkeypatch):
         """
         test that crush location for mon is set if it is included in config_json
         """
@@ -381,6 +382,7 @@ class TestCephAdm(object):
         monkeypatch.setattr('cephadmlib.context_getters.fetch_configs', _fetch_configs)
         monkeypatch.setattr('cephadm.fetch_configs', _fetch_configs)
         monkeypatch.setattr('cephadm.read_configuration_source', lambda c: {})
+        monkeypatch.setattr('cephadm.fetch_custom_config_files', mock.MagicMock())
 
         ctx = _cephadm.CephadmContext()
         ctx.name = 'mon.test'
@@ -395,7 +397,7 @@ class TestCephAdm(object):
             'crush_location': 'database=a'
         }
 
-        _get_deployment_container.return_value = _cephadm.CephContainer.for_daemon(
+        _get_container.return_value = _cephadm.CephContainer.for_daemon(
             ctx,
             ident=_cephadm.DaemonIdentity(
                 fsid='9b9d7609-f4d5-4aba-94c8-effa764d96c9',
