@@ -259,7 +259,6 @@ overwrite_ops_t prepare_ops_list(
       assert(to_write.size() > 1);
       assert(back.addr + back.len ==
         back.pin->get_key() + back.pin->get_length());
-      assert((*(to_write.begin())).addr == back.pin->get_key());
       ops.to_remap.push_back(extent_to_remap_t::create_remap(
         std::move(back.pin),
         back.addr - back.pin->get_key(),
