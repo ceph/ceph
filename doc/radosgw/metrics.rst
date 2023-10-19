@@ -20,22 +20,22 @@ The following metrics related to S3 or Swift operations are tracked per Ceph Obj
    * - Name
      - Type
      - Description
-   * - put_ops
+   * - put_obj_ops
      - Counter
      - Number of put operations
-   * - put_b
+   * - put_obj_bytes
      - Counter
      - Number of bytes put
-   * - put_initial_lat
+   * - put_obj_lat
      - Guage
      - Total latency of put operations
-   * - get_ops
+   * - get_obj_ops
      - Counter
      - Number of get operations
-   * - get_b
+   * - get_obj_bytes
      - Counter
      - Number of bytes from get requests
-   * - get_initial_lat
+   * - get_obj_lat
      - Guage
      - Total latency of get operations
    * - del_obj_ops
@@ -82,16 +82,16 @@ To view op metrics in the Ceph Object Gateway go to the ``rgw_op`` section of th
         {
             "labels": {},
             "counters": {
-                "put_ops": 2,
-                "put_b": 5327,
-                "put_initial_lat": {
+                "put_obj_ops": 2,
+                "put_obj_bytes": 5327,
+                "put_obj_lat": {
                     "avgcount": 2,
                     "sum": 2.818064835,
                     "avgtime": 1.409032417
                 },
-                "get_ops": 5,
-                "get_b": 5325,
-                "get_initial_lat": {
+                "get_obj_ops": 5,
+                "get_obj_bytes": 5325,
+                "get_obj_lat": {
                     "avgcount": 2,
                     "sum": 0.003000069,
                     "avgtime": 0.001500034
@@ -108,7 +108,7 @@ To view op metrics in the Ceph Object Gateway go to the ``rgw_op`` section of th
     ]
 
 Op Metrics Labels
---------------------
+-----------------
 
 Op metrics can also be tracked per-user or per-bucket. These metrics are exported to Prometheus with labels like Bucket = {name} or User = {userid}::
 
@@ -119,16 +119,16 @@ Op metrics can also be tracked per-user or per-bucket. These metrics are exporte
                 "Bucket": "bucket1"
             },
             "counters": {
-                "put_ops": 2,
-                "put_b": 5327,
-                "put_initial_lat": {
+                "put_obj_ops": 2,
+                "put_obj_bytes": 5327,
+                "put_obj_lat": {
                     "avgcount": 2,
                     "sum": 2.818064835,
                     "avgtime": 1.409032417
                 },
-                "get_ops": 5,
-                "get_b": 5325,
-                "get_initial_lat": {
+                "get_obj_ops": 5,
+                "get_obj_bytes": 5325,
+                "get_obj_lat": {
                     "avgcount": 2,
                     "sum": 0.003000069,
                     "avgtime": 0.001500034
