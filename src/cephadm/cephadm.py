@@ -1352,12 +1352,6 @@ class CephExporter(ContainerDaemonForm):
     def identity(self) -> DaemonIdentity:
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
-    @staticmethod
-    def get_container_mounts() -> Dict[str, str]:
-        mounts = dict()
-        mounts['/var/run/ceph'] = '/var/run/ceph:z'
-        return mounts
-
     def get_daemon_args(self) -> List[str]:
         args = [
             f'--sock-dir={self.sock_dir}',
