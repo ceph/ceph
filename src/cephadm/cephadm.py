@@ -2693,11 +2693,20 @@ def get_ceph_volume_container(ctx: CephadmContext,
     )
 
 
-def set_pids_limit_unlimited(ctx: CephadmContext, container_args: List[str]) -> None:
+def _update_pids_limit(ctx: CephadmContext, daemon_type: str, container_args: List[str]) -> None:
+    """Update container_args to contain a pids limit option if the daemon_type
+    is of a suitable match.
+    """
     # set container's pids-limit to unlimited rather than default (Docker 4096 / Podman 2048)
     # Useful for daemons like iscsi where the default pids-limit limits the number of luns
     # per iscsi target or rgw where increasing the rgw_thread_pool_size to a value near
     # the default pids-limit may cause the container to crash.
+    unlimited_daemons = set(ceph_daemons())
+    unlimited_daemons.add(CephIscsi.daemon_type)
+    unlimited_daemons.add(CephNvmeof.daemon_type)
+    unlimited_daemons.add(NFSGanesha.daemon_type)
+    if daemon_type not in unlimited_daemons:
+        return
     if (
         isinstance(ctx.container_engine, Podman)
         and ctx.container_engine.version >= PIDS_LIMIT_UNLIMITED_PODMAN_VERSION
@@ -2725,12 +2734,7 @@ def get_container(
         envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
     if container_args is None:
         container_args = []
-    unlimited_daemons = set(ceph_daemons())
-    unlimited_daemons.add(CephIscsi.daemon_type)
-    unlimited_daemons.add(CephNvmeof.daemon_type)
-    unlimited_daemons.add(NFSGanesha.daemon_type)
-    if daemon_type in unlimited_daemons:
-        set_pids_limit_unlimited(ctx, container_args)
+    _update_pids_limit(ctx, daemon_type, container_args)
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
         privileged = True
