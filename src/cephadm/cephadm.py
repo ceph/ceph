@@ -153,6 +153,7 @@ from cephadmlib.container_types import (
     CephContainer,
     InitContainer,
     is_container_running,
+    extract_uid_gid,
 )
 from cephadmlib.decorators import (
     deprecated_command,
@@ -2826,37 +2827,6 @@ def _update_container_args_for_podman(
     container_args.extend(
         ctx.container_engine.service_args(ctx, service_name)
     )
-
-
-def extract_uid_gid(ctx, img='', file_path='/var/lib/ceph'):
-    # type: (CephadmContext, str, Union[str, List[str]]) -> Tuple[int, int]
-
-    if not img:
-        img = ctx.image
-
-    if isinstance(file_path, str):
-        paths = [file_path]
-    else:
-        paths = file_path
-
-    ex: Optional[Tuple[str, RuntimeError]] = None
-
-    for fp in paths:
-        try:
-            out = CephContainer(
-                ctx,
-                image=img,
-                entrypoint='stat',
-                args=['-c', '%u %g', fp]
-            ).run(verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
-            uid, gid = out.split(' ')
-            return int(uid), int(gid)
-        except RuntimeError as e:
-            ex = (fp, e)
-    if ex:
-        raise Error(f'Failed to extract uid/gid for path {ex[0]}: {ex[1]}')
-
-    raise RuntimeError('uid/gid not found')
 
 
 def deploy_daemon(
