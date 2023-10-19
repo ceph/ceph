@@ -92,7 +92,23 @@ static bool bl_eq(bufferlist& expected, bufferlist& actual)
   return false;
 }
 
+void dump_bluefs_stats()
+{
+  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
+  ceph_assert(admin_socket);
 
+  ceph::bufferlist in, out;
+  ostringstream err;
+
+  auto r = admin_socket->execute_command(
+    { "{\"prefix\": \"bluefs stats\"}" },
+    in, err, &out);
+  if (r != 0) {
+    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
+  } else {
+    std::cout << std::string(out.c_str(), out.length()) << std::endl;
+  }
+}
 
 template <typename T>
 int queue_transaction(
@@ -10365,24 +10381,11 @@ void doManySetAttr(ObjectStore* store,
 
   std::cout << "done" << std::endl;
   do_check_fn(store);
-  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
-  ceph_assert(admin_socket);
-
-  ceph::bufferlist in, out;
-  ostringstream err;
-
-  auto r = admin_socket->execute_command(
-    { "{\"prefix\": \"bluefs stats\"}" },
-    in, err, &out);
-  if (r != 0) {
-    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
-  } else {
-    std::cout << std::string(out.c_str(), out.length()) << std::endl;
-  }
+  dump_bluefs_stats();
   test_obj.shutdown();
 }
 
-TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
+TEST_P(StoreTestSpecificAUSize, SpilloverLegacyTest) {
   if (string(GetParam()) != "bluestore")
     return;
   if (smr) {
@@ -10412,24 +10415,97 @@ TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
       ceph_assert(bstore);
       bstore->compact();
       const PerfCounters* logger = bstore->get_bluefs_perf_counters();
-      //experimentally it was discovered that this case results in 400+MB spillover
-      //using lower 300MB threshold just to be safe enough
-      std::cout << "DB used:" << logger->get(l_bluefs_db_used_bytes) << std::endl;
-      std::cout << "SLOW used:" << logger->get(l_bluefs_slow_used_bytes) << std::endl;
-      ASSERT_GE(logger->get(l_bluefs_slow_used_bytes), 16 * 1024 * 1024);
-
-      struct store_statfs_t statfs;
-      osd_alert_list_t alerts;
-      int r = store->statfs(&statfs, &alerts);
-      ASSERT_EQ(r, 0);
-      ASSERT_EQ(alerts.count("BLUEFS_SPILLOVER"), 1);
-      std::cout << "spillover_alert:" << alerts.find("BLUEFS_SPILLOVER")->second
-                << std::endl;
+      ASSERT_GT(logger->get(l_bluefs_slow_used_bytes), 0);
     }
   );
 }
 
-TEST_P(StoreTestSpecificAUSize, SpilloverFixedTest) {
+TEST_P(StoreTestSpecificAUSize, SpilloverLegacyFixedByFitToFastTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "SKIP: (FIXME?) adjust me for smr at some point?" << std::endl;
+    return;
+  }
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
+  SetVal(g_conf(), "bluestore_volume_selection_policy", "fit_to_fast");
+  // original RocksDB settings used before https://github.com/ceph/ceph/pull/47221/
+  // which enable BlueFS spillover.
+  SetVal(g_conf(), "bluestore_rocksdb_options",
+    "compression=kNoCompression,max_write_buffer_number=4,"
+    "min_write_buffer_number_to_merge=1,recycle_log_file_num=4,"
+    "write_buffer_size=268435456,writable_file_max_buffer_size=0,"
+    "compaction_readahead_size=2097152,max_background_compactions=2,"
+    "max_total_wal_size=1073741824");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+  doManySetAttr(store.get(),
+    [&](ObjectStore* _store) {
+
+      BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
+      ceph_assert(bstore);
+      bstore->compact();
+      const PerfCounters* logger = bstore->get_bluefs_perf_counters();
+      ASSERT_EQ(logger->get(l_bluefs_slow_used_bytes), 0);
+    }
+  );
+}
+
+void do_bluefs_write(BlueFS* _fs,
+		     const char* dirname,
+		     const char* filename,
+		     uint64_t to_write)
+{
+  BlueFS::FileWriter* h;
+  ASSERT_EQ(0, _fs->open_for_write(dirname, filename, &h, false));
+  uint64_t buf_size = 1ull << 20;
+  string buf(buf_size, 'a');
+  for (uint64_t w = 0; w < to_write; w += buf_size) {
+    h->append(buf.c_str(), buf_size);
+    _fs->fsync(h);
+  }
+  _fs->close_writer(h);
+}
+
+TEST_P(StoreTestSpecificAUSize, SpilloverTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+  if (smr) {
+    cout << "SKIP: (FIXME?) adjust me for smr at some point?" << std::endl;
+    return;
+  }
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
+  SetVal(g_conf(), "bluestore_volume_selection_policy", "rocksdb_original");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  BlueFS* fs = bstore->get_bluefs();
+  do_bluefs_write(fs, "db", "file1", 1ull << 30); // 1GB
+  do_bluefs_write(fs, "db.slow", "file2", 1ull << 30); // 1 GB
+
+  dump_bluefs_stats();
+  const PerfCounters* logger = bstore->get_bluefs_perf_counters();
+  ASSERT_EQ(1ull << 30, logger->get(l_bluefs_slow_used_bytes));
+
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUEFS_SPILLOVER"), 1);
+  std::cout << "spillover_alert:" << alerts.find("BLUEFS_SPILLOVER")->second
+    << std::endl;
+}
+
+TEST_P(StoreTestSpecificAUSize, SpilloverFixedCompletelyTest) {
   if (string(GetParam()) != "bluestore")
     return;
   if (smr) {
@@ -10445,19 +10521,18 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixedTest) {
   g_conf().apply_changes(nullptr);
 
   StartDeferred(65536);
-  doManySetAttr(store.get(),
-    [&](ObjectStore* _store) {
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  BlueFS* fs = bstore->get_bluefs();
+  do_bluefs_write(fs, "db", "file1", 1ull << 30); // 1GB
+  do_bluefs_write(fs, "db.slow", "file2", 1ull << 30); // 1 GB
 
-      BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
-      ceph_assert(bstore);
-      bstore->compact();
-      const PerfCounters* logger = bstore->get_bluefs_perf_counters();
-      ASSERT_EQ(0, logger->get(l_bluefs_slow_used_bytes));
-    }
-  );
+  dump_bluefs_stats();
+  const PerfCounters* logger = bstore->get_bluefs_perf_counters();
+  ASSERT_EQ(0, logger->get(l_bluefs_slow_used_bytes));
 }
 
-TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
+TEST_P(StoreTestSpecificAUSize, SpilloverFixedPartialTest) {
   if (string(GetParam()) != "bluestore")
     return;
   if (smr) {
@@ -10466,52 +10541,34 @@ TEST_P(StoreTestSpecificAUSize, SpilloverFixed2Test) {
   }
 
   SetVal(g_conf(), "bluestore_block_db_create", "true");
-  SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
+  SetVal(g_conf(), "bluestore_block_db_size", stringify(3ull << 30).c_str());
   SetVal(g_conf(), "bluestore_volume_selection_policy", "use_some_extra");
   //default 2.0 factor results in too high threshold, using less value
-  // that results in less but still present spillover.
-  SetVal(g_conf(), "bluestore_volume_selection_reserved_factor", "0.5");
+  // that results in a reduced but existing spillover.
+  //
+  SetVal(g_conf(), "bluestore_volume_selection_reserved_factor", "1");
 
   g_conf().apply_changes(nullptr);
 
   StartDeferred(65536);
-  doManySetAttr(store.get(),
-    [&](ObjectStore* _store) {
+  BlueStore* bstore = dynamic_cast<BlueStore*> (store.get());
+  ceph_assert(bstore);
+  BlueFS* fs = bstore->get_bluefs();
+  do_bluefs_write(fs, "db", "file1", 1ull << 30); // 1 GB
+  do_bluefs_write(fs, "db.slow", "file2", 1ull << 30); // 1 GB
 
-      BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
-      ceph_assert(bstore);
-      bstore->compact();
-      const PerfCounters* logger = bstore->get_bluefs_perf_counters();
-      ASSERT_LE(logger->get(l_bluefs_slow_used_bytes), 300 * 1024 * 1024); // see SpilloverTest for 300MB choice rationale
-    }
-  );
-}
+  dump_bluefs_stats();
+  const PerfCounters* logger = bstore->get_bluefs_perf_counters();
+  ASSERT_LT(100ull << 20, logger->get(l_bluefs_slow_used_bytes));
+  ASSERT_GT(1ull << 30, logger->get(l_bluefs_slow_used_bytes));
 
-TEST_P(StoreTestSpecificAUSize, SpilloverFixed3Test) {
-  if (string(GetParam()) != "bluestore")
-    return;
-  if (smr) {
-    cout << "SKIP: (FIXME?) adjust me for smr at some point?" << std::endl;
-    return;
-  }
-
-  SetVal(g_conf(), "bluestore_block_db_create", "true");
-  SetVal(g_conf(), "bluestore_block_db_size", "3221225472");
-  SetVal(g_conf(), "bluestore_volume_selection_policy", "fit_to_fast");
-
-  g_conf().apply_changes(nullptr);
-
-  StartDeferred(65536);
-  doManySetAttr(store.get(),
-    [&](ObjectStore* _store) {
-
-      BlueStore* bstore = dynamic_cast<BlueStore*> (_store);
-      ceph_assert(bstore);
-      bstore->compact();
-      const PerfCounters* logger = bstore->get_bluefs_perf_counters();
-      ASSERT_EQ(logger->get(l_bluefs_slow_used_bytes), 0); // reffering to SpilloverFixedTest
-    }
-  );
+  struct store_statfs_t statfs;
+  osd_alert_list_t alerts;
+  int r = store->statfs(&statfs, &alerts);
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(alerts.count("BLUEFS_SPILLOVER"), 1);
+  std::cout << "spillover_alert:" << alerts.find("BLUEFS_SPILLOVER")->second
+    << std::endl;
 }
 
 TEST_P(StoreTestSpecificAUSize, Ticket45195Repro) {
@@ -10686,19 +10743,7 @@ TEST_P(StoreTestSpecificAUSize, BluefsWriteInSingleDiskEnvTest) {
   bstore->inject_bluefs_file("db.wal", "store_test_injection_wal", 1 << 20ul);
   bstore->inject_bluefs_file("db", "store_test_injection_wal", 1 << 20ul);
 
-  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
-  ceph_assert(admin_socket);
-
-  ceph::bufferlist in, out;
-  ostringstream err;
-  auto r = admin_socket->execute_command(
-    { "{\"prefix\": \"bluefs stats\"}" },
-    in, err, &out);
-  if (r != 0) {
-    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
-  }  else {
-    std::cout << std::string(out.c_str(), out.length()) << std::endl;
-  }
+  dump_bluefs_stats();
 }
 
 TEST_P(StoreTestSpecificAUSize, BluefsWriteInNoWalDiskEnvTest) {
@@ -10719,20 +10764,7 @@ TEST_P(StoreTestSpecificAUSize, BluefsWriteInNoWalDiskEnvTest) {
   bstore->inject_bluefs_file("db.wal", "store_test_injection_wal", 1 << 20ul);
   bstore->inject_bluefs_file("db", "store_test_injection_wal", 1 << 20ul);
 
-  AdminSocket* admin_socket = g_ceph_context->get_admin_socket();
-  ceph_assert(admin_socket);
-
-  ceph::bufferlist in, out;
-  ostringstream err;
-  auto r = admin_socket->execute_command(
-    { "{\"prefix\": \"bluefs stats\"}" },
-    in, err, &out);
-  if (r != 0) {
-    cerr << "failure querying: " << cpp_strerror(r) << std::endl;
-  }
-  else {
-    std::cout << std::string(out.c_str(), out.length()) << std::endl;
-  }
+  dump_bluefs_stats();
 }
 
 TEST_P(StoreTestOmapUpgrade, NoOmapHeader) {
@@ -10907,6 +10939,8 @@ int main(int argc, char **argv) {
   g_ceph_context->_conf.set_val_or_die("bluestore_nid_prealloc", "10");
   g_ceph_context->_conf.set_val_or_die("bluestore_debug_randomize_serial_transaction",
 				 "10");
+
+  g_ceph_context->_conf.set_val_or_die("bluefs_check_volume_selector_on_umount", "true");
 
   g_ceph_context->_conf.set_val_or_die("bdev_debug_aio", "true");
 
