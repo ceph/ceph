@@ -64,13 +64,13 @@ void add_rgw_op_counters(PerfCountersBuilder *lpcb) {
   // description must match general rgw counters description above
   lpcb->set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
 
-  lpcb->add_u64_counter(l_rgw_op_put, "put_ops", "Puts");
-  lpcb->add_u64_counter(l_rgw_op_put_b, "put_b", "Size of puts");
-  lpcb->add_time_avg(l_rgw_op_put_lat, "put_initial_lat", "Put latency");
+  lpcb->add_u64_counter(l_rgw_op_put_obj, "put_obj_ops", "Puts");
+  lpcb->add_u64_counter(l_rgw_op_put_obj_b, "put_obj_bytes", "Size of puts");
+  lpcb->add_time_avg(l_rgw_op_put_obj_lat, "put_obj_lat", "Put latency");
 
-  lpcb->add_u64_counter(l_rgw_op_get, "get_ops", "Gets");
-  lpcb->add_u64_counter(l_rgw_op_get_b, "get_b", "Size of gets");
-  lpcb->add_time_avg(l_rgw_op_get_lat, "get_initial_lat", "Get latency");
+  lpcb->add_u64_counter(l_rgw_op_get_obj, "get_obj_ops", "Gets");
+  lpcb->add_u64_counter(l_rgw_op_get_obj_b, "get_obj_bytes", "Size of gets");
+  lpcb->add_time_avg(l_rgw_op_get_obj_lat, "get_obj_lat", "Get latency");
 
   lpcb->add_u64_counter(l_rgw_op_del_obj, "del_obj_ops", "Delete objects");
   lpcb->add_u64_counter(l_rgw_op_del_obj_b, "del_obj_bytes", "Size of delete objects");
@@ -129,18 +129,18 @@ CountersContainer get(req_state *s) {
 
   if (user_counters_cache && !s->user->get_id().id.empty()) {
     if (s->user->get_tenant().empty()) {
-      key = std::move(ceph::perf_counters::key_create(rgw_op_counters_key, {{"User", s->user->get_id().id}}));
+      key = ceph::perf_counters::key_create(rgw_op_counters_key, {{"User", s->user->get_id().id}});
     } else {
-      key = std::move(ceph::perf_counters::key_create(rgw_op_counters_key, {{"User", s->user->get_id().id}, {"Tenant", s->user->get_tenant()}}));
+      key = ceph::perf_counters::key_create(rgw_op_counters_key, {{"User", s->user->get_id().id}, {"Tenant", s->user->get_tenant()}});
     }
     counters.user_counters = user_counters_cache->get(key);
   }
 
   if (bucket_counters_cache && !s->bucket_name.empty()) {
     if (s->bucket_tenant.empty()) {
-      key = std::move(ceph::perf_counters::key_create(rgw_op_counters_key, {{"Bucket", s->bucket_name}}));
+      key = ceph::perf_counters::key_create(rgw_op_counters_key, {{"Bucket", s->bucket_name}});
     } else {
-      key = std::move(ceph::perf_counters::key_create(rgw_op_counters_key, {{"Bucket", s->bucket_name}, {"Tenant", s->bucket_tenant}}));
+      key = ceph::perf_counters::key_create(rgw_op_counters_key, {{"Bucket", s->bucket_name}, {"Tenant", s->bucket_tenant}});
     }
     counters.bucket_counters = bucket_counters_cache->get(key);
   }

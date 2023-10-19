@@ -55,13 +55,13 @@ enum {
 enum {
   l_rgw_op_first = 16000,
 
-  l_rgw_op_put,
-  l_rgw_op_put_b,
-  l_rgw_op_put_lat,
+  l_rgw_op_put_obj,
+  l_rgw_op_put_obj_b,
+  l_rgw_op_put_obj_lat,
 
-  l_rgw_op_get,
-  l_rgw_op_get_b,
-  l_rgw_op_get_lat,
+  l_rgw_op_get_obj,
+  l_rgw_op_get_obj_b,
+  l_rgw_op_get_obj_lat,
 
   l_rgw_op_del_obj,
   l_rgw_op_del_obj_b,
