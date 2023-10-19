@@ -1085,7 +1085,6 @@ PG::do_osd_ops(
             if (version != eversion_t()) {
               peering_state.complete_write(version, last_complete);
             }
-            return log_reply();
           } else {
             return it->second.all_committed.get_shared_future()
               .then([this, &version, last_complete, log_reply = std::move(log_reply)] {
@@ -1095,9 +1094,8 @@ PG::do_osd_ops(
               return log_reply();
             });
           }
-        } else {
-          return log_reply();
         }
+        return log_reply();
       });
     });
   });
