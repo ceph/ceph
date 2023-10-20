@@ -2770,6 +2770,7 @@ def get_container(
     d_args: List[str] = []
     envs: List[str] = []
     host_network: bool = True
+    binds: List[List[str]] = []
 
     daemon_type = ident.daemon_type
     if daemon_type in ceph_daemons():
@@ -2855,12 +2856,14 @@ def get_container(
         container_args.extend(['--ulimit', 'memlock=-1:-1'])
         container_args.extend(['--ulimit', 'nofile=10240'])
         container_args.extend(['--cap-add=SYS_ADMIN', '--cap-add=CAP_SYS_NICE'])
+        binds = get_container_binds(ctx, ident)
     elif daemon_type == CephIscsi.daemon_type:
         entrypoint = CephIscsi.entrypoint
         name = ident.daemon_name
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
         privileged = True
+        binds = get_container_binds(ctx, ident)
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
         entrypoint = cc.entrypoint or ''
@@ -2868,6 +2871,7 @@ def get_container(
         envs.extend(cc.get_container_envs())
         container_args.extend(cc.get_container_args())
         d_args.extend(cc.get_daemon_args())
+        binds = get_container_binds(ctx, ident)
     elif daemon_type == SNMPGateway.daemon_type:
         sg = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
         container_args.append(
@@ -2876,7 +2880,6 @@ def get_container(
         d_args.extend(sg.get_daemon_args())
 
     _update_container_args_for_podman(ctx, ident, container_args)
-    binds = get_container_binds(ctx, ident)
     return CephContainer.for_daemon(
         ctx,
         ident=ident,
