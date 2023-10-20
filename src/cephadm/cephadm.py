@@ -1075,7 +1075,7 @@ class CephIscsi(ContainerDaemonForm):
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
-    def get_container_mounts(data_dir, log_dir):
+    def _get_container_mounts(data_dir, log_dir):
         # type: (str, str) -> Dict[str, str]
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
@@ -1086,6 +1086,17 @@ class CephIscsi(ContainerDaemonForm):
         mounts[log_dir] = '/var/log:z'
         mounts['/dev'] = '/dev'
         return mounts
+
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        # Removes ending ".tcmu" from data_dir a tcmu-runner uses the same
+        # data_dir as rbd-runner-api
+        if data_dir.endswith('.tcmu'):
+            data_dir = re.sub(r'\.tcmu$', '', data_dir)
+        log_dir = get_log_dir(self.identity.fsid, ctx.log_dir)
+        mounts.update(CephIscsi._get_container_mounts(data_dir, log_dir))
 
     def customize_container_binds(
         self, ctx: CephadmContext, binds: List[List[str]]
@@ -1238,7 +1249,6 @@ done
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return extract_uid_gid(ctx)
-
 
 ##################################
 
@@ -2684,13 +2694,8 @@ def get_container_mounts(
         mounts.update(CephNvmeof.get_container_mounts(data_dir))
 
     if daemon_type == CephIscsi.daemon_type:
-        data_dir = ident.data_dir(ctx.data_dir)
-        # Removes ending ".tcmu" from data_dir a tcmu-runner uses the same data_dir
-        # as rbd-runner-api
-        if data_dir.endswith('.tcmu'):
-            data_dir = re.sub(r'\.tcmu$', '', data_dir)
-        log_dir = get_log_dir(fsid, ctx.log_dir)
-        mounts.update(CephIscsi.get_container_mounts(data_dir, log_dir))
+        iscsi = CephIscsi.create(ctx, ident)
+        iscsi.customize_container_mounts(ctx, mounts)
 
     if daemon_type == Keepalived.daemon_type:
         data_dir = ident.data_dir(ctx.data_dir)
