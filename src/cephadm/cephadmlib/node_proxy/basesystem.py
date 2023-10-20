@@ -40,6 +40,12 @@ class BaseSystem:
     def get_sn(self) -> str:
         raise NotImplementedError()
 
+    def get_led(self) -> Dict[str, Any]:
+        raise NotImplementedError()
+
+    def set_led(self, data: Dict[str, str]) -> int:
+        raise NotImplementedError()
+
     def get_host(self) -> str:
         return socket.gethostname()
 

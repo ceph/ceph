@@ -21,7 +21,7 @@ class RedFishClient(BaseClient):
         self.log: Logger = Logger(__name__)
         self.log.logger.info(f"Initializing redfish client {__name__}")
         self.host: str = f"https://{host}:{port}"
-        self.token: Dict[str, str] = {}
+        self.token: str = ''
         self.location: str = ''
 
     def login(self) -> None:
@@ -43,15 +43,15 @@ class RedFishClient(BaseClient):
                 msg = f"Can't log in to {self.host} as '{self.username}': {e}"
                 self.log.logger.error(msg)
                 raise RuntimeError
-            self.token = {"X-Auth-Token": _headers['X-Auth-Token']}
+            self.token = _headers['X-Auth-Token']
             self.location = _headers['Location']
 
     def is_logged_in(self) -> bool:
         self.log.logger.debug(f"Checking token validity for {self.host}")
-        if not self.location or not self.token.get('X-Auth-Token'):
+        if not self.location or not self.token:
             self.log.logger.debug(f"No token found for {self.host}.")
             return False
-        headers = {"X-Auth-Token": self.token['X-Auth-Token']}
+        headers = {"X-Auth-Token": self.token}
         try:
             _headers, _data, _status_code = self.query(headers=headers,
                                                        endpoint=self.location)
@@ -64,7 +64,7 @@ class RedFishClient(BaseClient):
     def logout(self) -> Dict[str, Any]:
         try:
             _, _data, _status_code = self.query(method='DELETE',
-                                                headers=self.token,
+                                                headers={"X-Auth-Token": self.token},
                                                 endpoint=self.location)
         except URLError:
             self.log.logger.error(f"Can't log out from {self.host}")
@@ -78,8 +78,7 @@ class RedFishClient(BaseClient):
         if self.PREFIX not in path:
             path = f"{self.PREFIX}{path}"
         try:
-            _, result, _status_code = self.query(headers=self.token,
-                                                 endpoint=path)
+            _, result, _status_code = self.query(endpoint=path)
             result_json = json.loads(result)
             return result_json
         except URLError as e:
@@ -93,14 +92,18 @@ class RedFishClient(BaseClient):
               endpoint: str = '',
               timeout: int = 10) -> Tuple[Dict[str, str], str, int]:
         url = f'{self.host}{endpoint}'
-
+        _headers = headers.copy() if headers else {}
+        if self.token:
+            _headers['X-Auth-Token'] = self.token
+        if not _headers.get('Content-Type') and method in ['POST', 'PUT', 'PATCH']:
+            _headers['Content-Type'] = 'application/json'
         # ssl_ctx = ssl.create_default_context()
         # ssl_ctx.check_hostname = True
         # ssl_ctx.verify_mode = ssl.CERT_REQUIRED
         ssl_ctx = ssl._create_unverified_context()
         _data = bytes(data, 'ascii') if data else None
         try:
-            req = Request(url, _data, headers=headers, method=method)
+            req = Request(url, _data, headers=_headers, method=method)
             with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
                 response_str = response.read()
                 response_headers = response.headers

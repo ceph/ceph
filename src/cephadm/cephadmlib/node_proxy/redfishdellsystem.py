@@ -1,3 +1,4 @@
+import json
 from .baseredfishsystem import BaseRedfishSystem
 from .util import Logger, normalize_dict, to_snake_case
 from typing import Dict, Any, List
@@ -68,6 +69,42 @@ class RedfishDellSystem(BaseRedfishSystem):
 
     def get_fans(self) -> Dict[str, Dict[str, Dict]]:
         return self._sys['fans']
+
+    def get_led(self) -> Dict[str, Dict[str, Dict]]:
+        endpoint = f"/redfish/v1/{self.chassis_endpoint}"
+        result = self.client.query(method='GET',
+                                   endpoint=endpoint,
+                                   timeout=10)
+        response_json = json.loads(result[1])
+        mapper = {
+                'true': 'on',
+                'false': 'off'
+        }
+        if result[2] == 200:
+            return {"state": mapper[str(response_json['LocationIndicatorActive']).lower()]}
+        else:
+            return {"error": "Couldn't retrieve enclosure LED status."}
+
+    def set_led(self, data: Dict[str, str]) -> int:
+        # '{"IndicatorLED": "Lit"}'      -> LocationIndicatorActive = false
+        # '{"IndicatorLED": "Blinking"}' -> LocationIndicatorActive = true
+        mapper = {
+            "on": 'Blinking',
+            "off": 'Lit'
+        }
+        try:
+            _data = {
+                "IndicatorLED": mapper[data["state"].lower()]
+            }
+            _, response, status = self.client.query(
+                data=json.dumps(_data),
+                method='PATCH',
+                endpoint=f"/redfish/v1{self.chassis_endpoint}"
+            )
+        except KeyError:
+            status = 400
+        result = status
+        return result
 
     def _update_network(self) -> None:
         fields = ['Description', 'Name', 'SpeedMbps', 'Status']
@@ -160,4 +197,3 @@ class RedfishDellSystem(BaseRedfishSystem):
         self._sys['firmwares'] = self.build_common_data(data=self._system['UpdateService'],
                                                         fields=fields,
                                                         path='FirmwareInventory')
-        self.log.logger.warning(f"guits-debug1:{self._sys['firmwares']}")

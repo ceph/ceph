@@ -13,6 +13,7 @@ import ssl
 import tempfile
 import threading
 import time
+import base64
 
 from orchestrator import DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
@@ -22,8 +23,10 @@ from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.ssl_cert_utils import SSLCerts
 from mgr_util import test_port_allocation, PortAlreadyInUse
+from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
 
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
+from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -86,8 +89,8 @@ class AgentEndpoint:
 
     def configure(self) -> None:
         self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
-        self.node_proxy = NodeProxy(self.mgr)
         self.configure_tls(self.host_data)
+        self.node_proxy = NodeProxy(self.mgr)
         self.configure_routes()
         self.find_free_port()
 
@@ -95,6 +98,11 @@ class AgentEndpoint:
 class NodeProxy:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
+        self.ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
+        self.ssl_ctx = ssl.create_default_context()
+        self.ssl_ctx.check_hostname = True
+        self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        self.ssl_ctx.load_verify_locations(cadata=self.ssl_root_crt)
 
     def _cp_dispatch(self, vpath: List[str]) -> "NodeProxy":
         if len(vpath) == 2:
@@ -122,18 +130,25 @@ class NodeProxy:
     def validate_node_proxy_data(self, data: Dict[str, Any]) -> bool:
         self.validate_msg = 'valid node-proxy data received.'
         cherrypy.response.status = 200
-        if 'cephx' not in data:
+        try:
+            if 'cephx' not in data.keys():
+                cherrypy.response.status = 400
+                self.validate_msg = 'The field \'cephx\' must be provided.'
+            elif 'name' not in data['cephx'].keys():
+                cherrypy.response.status = 400
+                self.validate_msg = 'The field \'host\' must be provided.'
+            elif 'secret' not in data['cephx'].keys():
+                cherrypy.response.status = 400
+                self.validate_msg = 'The agent keyring must be provided.'
+            elif not self.mgr.agent_cache.agent_keys.get(data['cephx']['name']):
+                cherrypy.response.status = 400
+                self.validate_msg = f'Make sure the agent is running on {data["cephx"]["name"]}'
+            elif data['cephx']['secret'] != self.mgr.agent_cache.agent_keys[data['cephx']['name']]:
+                cherrypy.response.status = 403
+                self.validate_msg = f'Got wrong keyring from agent on host {data["cephx"]["name"]}.'
+        except AttributeError:
             cherrypy.response.status = 400
-            self.validate_msg = 'The field \'host\' must be provided.'
-        elif 'secret' not in data['cephx']:
-            cherrypy.response.status = 400
-            self.validate_msg = 'The agent keyring must be provided.'
-        elif not self.mgr.agent_cache.agent_keys.get(data['cephx']['name']):
-            cherrypy.response.status = 400
-            self.validate_msg = f'Make sure the agent is running on {data["cephx"]["name"]}'
-        elif data['cephx']['secret'] != self.mgr.agent_cache.agent_keys[data['cephx']['name']]:
-            cherrypy.response.status = 403
-            self.validate_msg = f'Got wrong keyring from agent on host {data["cephx"]["name"]}.'
+            self.validate_msg = 'Malformed data received.'
 
         return cherrypy.response.status == 200
 
@@ -202,6 +217,77 @@ class NodeProxy:
         results["result"] = self.validate_msg
 
         return results
+
+    def query_endpoint(self,
+                       addr: str = '',
+                       port: str = '',
+                       method: Optional[str] = None,
+                       headers: Optional[Dict[str, str]] = {},
+                       data: Optional[bytes] = None,
+                       endpoint: str = '',
+                       ssl_ctx: Optional[Any] = None) -> Tuple[int, Dict[str, Any]]:
+        url = f'https://{addr}:{port}{endpoint}'
+        _headers = headers
+        response_json = {}
+        if not _headers.get('Content-Type'):
+            # default to application/json if nothing provided
+            _headers['Content-Type'] = 'application/json'
+        _data = bytes(data, 'ascii') if data else None
+        try:
+            req = Request(url, _data, _headers, method=method)
+            with urlopen(req, context=ssl_ctx) as response:
+                response_str = response.read()
+                response_json = json.loads(response_str)
+                response_status = response.status
+        except HTTPError as e:
+            self.mgr.log.debug(f"{e.code} {e.reason}")
+            response_status = e.code
+        except URLError as e:
+            self.mgr.log.debug(f"{e.reason}")
+            raise
+        except Exception as e:
+            self.mgr.log.error(f"{e}")
+            raise
+        return (response_status, response_json)
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET', 'PATCH'])
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def led(self, **kw: Any) -> Dict[str, Any]:
+        method: str = cherrypy.request.method
+        hostname: Optional[str] = kw.get('hostname')
+        headers: Dict[str, str] = {}
+
+        if not hostname:
+            msg: str = "listing enclosure LED status for all nodes is not implemented."
+            self.mgr.log.debug(msg)
+            raise cherrypy.HTTPError(501, msg)
+
+        addr = self.mgr.inventory.get_addr(hostname)
+
+        if method == 'PATCH':
+            # TODO(guits): need to check the request is authorized
+            # allowing a specific keyring only ? (client.admin or client.agent.. ?)
+            data: str = json.dumps(cherrypy.request.json)
+            username = self.mgr.node_proxy.idrac[hostname]['username']
+            password = self.mgr.node_proxy.idrac[hostname]['password']
+            auth = f"{username}:{password}".encode("utf-8")
+            auth = base64.b64encode(auth).decode("utf-8")
+            headers = {"Authorization": f"Basic {auth}"}
+
+        try:
+            status, result = self.query_endpoint(data=data,
+                                                headers=headers,
+                                                addr=addr,
+                                                method=method,
+                                                port=8080,
+                                                endpoint='/led',
+                                                ssl_ctx=self.ssl_ctx)
+        except URLError as e:
+            raise cherrypy.HTTPError(502, f"{e}")
+        cherrypy.response.status = status
+        return result
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
