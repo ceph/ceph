@@ -2319,17 +2319,6 @@ def get_legacy_daemon_fsid(ctx, cluster,
     return fsid
 
 
-def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
-    r = list()  # type: List[str]
-
-    daemon_type = ident.daemon_type
-    if Ceph.for_daemon_type(daemon_type) or OSD.for_daemon_type(daemon_type):
-        daemon = Ceph.create(ctx, ident)
-        r += daemon.get_daemon_args()
-
-    return r
-
-
 def create_daemon_dirs(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -2741,6 +2730,9 @@ def get_container(
     if container_args is None:
         container_args = []
     _update_pids_limit(ctx, daemon_type, container_args)
+    if Ceph.for_daemon_type(daemon_type) or OSD.for_daemon_type(daemon_type):
+        ceph_daemon = Ceph.create(ctx, ident)
+        d_args.extend(ceph_daemon.get_daemon_args())
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
         privileged = True
@@ -2837,7 +2829,6 @@ def get_container(
         d_args.extend(sg.get_daemon_args())
 
     _update_container_args_for_podman(ctx, ident, container_args)
-    d_args.extend(_get_daemon_args(ctx, ident))
     return CephContainer.for_daemon(
         ctx,
         ident=ident,
