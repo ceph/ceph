@@ -2338,9 +2338,6 @@ def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     elif daemon_type == CephExporter.daemon_type:
         ceph_exporter = CephExporter.init(ctx, ident.fsid, ident.daemon_id)
         r.extend(ceph_exporter.get_daemon_args())
-    elif daemon_type == HAproxy.daemon_type:
-        haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
-        r += haproxy.get_daemon_args()
 
     return r
 
@@ -2811,6 +2808,8 @@ def get_container(
     elif daemon_type == HAproxy.daemon_type:
         name = ident.daemon_name
         container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
+        haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
+        d_args.extend(haproxy.get_daemon_args())
     elif daemon_type == Keepalived.daemon_type:
         name = ident.daemon_name
         envs.extend(Keepalived.get_container_envs())
