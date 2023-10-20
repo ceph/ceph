@@ -664,6 +664,7 @@ In releases of Ceph that are Nautilus and later (inclusive), when the
 ``pg_num``. This process manifests as periods of remapping of PGs and of
 backfill, and is expected behavior and normal.
 
+.. _rados_ops_pgs_get_pg_num:
 
 Get the Number of PGs
 =====================
