@@ -4,7 +4,7 @@ from threading import Thread, Event
 from .redfishdellsystem import RedfishDellSystem
 from .reporter import Reporter
 from .util import Config, Logger
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from .basesystem import BaseSystem
 import sys
 import argparse
@@ -128,12 +128,34 @@ class API(Server):
     def firmwares(self) -> Dict[str, Any]:
         return {'firmwares': self.backend.get_firmwares()}
 
+    def _cp_dispatch(self, vpath: List[str]) -> "API":
+        if vpath[0] == 'led':
+            if cherrypy.request.method == 'GET':
+                return self.get_led
+            if cherrypy.request.method == 'PATCH':
+                return self.set_led
+        return self
+
     @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
+    def get_led(self, **kw: Dict[str, Any]) -> Dict[str, Any]:
+        return self.backend.get_led()
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['PATCH'])
     @cherrypy.tools.json_in()
-    def index(self, endpoint: str) -> Dict[str, Any]:
-        kw = dict(endpoint=endpoint)
-        result = self.common(**kw)
+    @cherrypy.tools.json_out()
+    @cherrypy.tools.auth_basic(on=True)
+    def set_led(self, **kw: Dict[str, Any]) -> Dict[str, Any]:
+        data = cherrypy.request.json
+        rc = self.backend.set_led(data)
+
+        if rc != 200:
+            cherrypy.response.status = rc
+            result = {"state": f"error: please, verify the data you sent."}
+        else:
+            result = {"state": data["state"].lower()}
         return result
 
     def stop(self) -> None:
