@@ -762,7 +762,7 @@ void Elector::notify_rank_removed(unsigned rank_removed, unsigned new_rank)
      In the case where we are removing the highest rank,
      we erase the removed rank from all sets.
    */
-  if (rank_removed < paxos_size()) {
+  if (std::cmp_less(rank_removed, paxos_size())) {
     for (unsigned i = rank_removed + 1; i <= paxos_size() ; ++i) {
       if (live_pinging.count(i)) {
         dead_pinging.erase(i-1);
