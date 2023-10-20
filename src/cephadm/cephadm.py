@@ -2843,11 +2843,12 @@ def get_container(
         )
 
     _update_container_args_for_podman(ctx, ident, container_args)
+    d_args = _get_daemon_args(ctx, ident)
     return CephContainer.for_daemon(
         ctx,
         ident=ident,
         entrypoint=entrypoint,
-        args=ceph_args + _get_daemon_args(ctx, ident),
+        args=ceph_args + d_args,
         container_args=container_args,
         volume_mounts=get_container_mounts(ctx, ident),
         bind_mounts=get_container_binds(ctx, ident),
