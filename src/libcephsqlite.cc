@@ -353,7 +353,7 @@ static int Read(sqlite3_file *file, void *buf, int len, sqlite_int64 off)
     auto end = ceph::coarse_mono_clock::now();
     getdata(f->vfs).logger->tinc(P_OPF_READ, end-start);
     if (rc < len) {
-      memset(buf, 0, len-rc);
+      memset((unsigned char*)buf+rc, 0, len-rc);
       return SQLITE_IOERR_SHORT_READ;
     } else {
       return SQLITE_OK;
