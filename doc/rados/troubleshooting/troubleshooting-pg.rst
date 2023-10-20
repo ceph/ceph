@@ -349,77 +349,106 @@ may confuse applications that expect the object to exist.
 Homeless Placement Groups
 =========================
 
-It is possible for all OSDs that had copies of a given placement groups to fail.
-If that's the case, that subset of the object store is unavailable, and the
-monitor will receive no status updates for those placement groups.  To detect
-this situation, the monitor marks any placement group whose primary OSD has
-failed as ``stale``.  For example::
+It is possible that every OSD that has copies of a given placement group fails.
+If this happens, then the subset of the object store that contains those
+placement groups becomes unavailable and the monitor will receive no status
+updates for those placement groups. The monitor marks as ``stale`` any
+placement group whose primary OSD has failed. For example:
 
-	ceph health
-	HEALTH_WARN 24 pgs stale; 3/300 in osds are down
+.. prompt:: bash
 
-You can identify which placement groups are ``stale``, and what the last OSDs to
-store them were, with::
+   ceph health
 
-	ceph health detail
-	HEALTH_WARN 24 pgs stale; 3/300 in osds are down
-	...
-	pg 2.5 is stuck stale+active+remapped, last acting [2,0]
-	...
-	osd.10 is down since epoch 23, last address 192.168.106.220:6800/11080
-	osd.11 is down since epoch 13, last address 192.168.106.220:6803/11539
-	osd.12 is down since epoch 24, last address 192.168.106.220:6806/11861
+::
 
-If we want to get placement group 2.5 back online, for example, this tells us that
-it was last managed by ``osd.0`` and ``osd.2``.  Restarting those ``ceph-osd``
-daemons will allow the cluster to recover that placement group (and, presumably,
-many others).
+    HEALTH_WARN 24 pgs stale; 3/300 in osds are down
+
+Identify which placement groups are ``stale`` and which were the last OSDs to
+store the ``stale`` placement groups by running the following command:
+
+.. prompt:: bash
+
+   ceph health detail
+
+::
+
+   HEALTH_WARN 24 pgs stale; 3/300 in osds are down
+   ...
+   pg 2.5 is stuck stale+active+remapped, last acting [2,0]
+   ...
+   osd.10 is down since epoch 23, last address 192.168.106.220:6800/11080
+   osd.11 is down since epoch 13, last address 192.168.106.220:6803/11539
+   osd.12 is down since epoch 24, last address 192.168.106.220:6806/11861
+
+This output indicates that placement group 2.5 (``pg 2.5``) was last managed by
+``osd.0`` and ``osd.2``. Restart those OSDs to allow the cluster to recover
+that placement group.
 
 
 Only a Few OSDs Receive Data
 ============================
 
-If you have many nodes in your cluster and only a few of them receive data,
-`check`_ the number of placement groups in your pool. Since placement groups get
-mapped to OSDs, a small number of placement groups will not distribute across
-your cluster. Try creating a pool with a placement group count that is a
-multiple of the number of OSDs. See `Placement Groups`_ for details. The default
-placement group count for pools is not useful, but you can change it `here`_.
+If only a few of the nodes in the cluster are receiving data, check the number
+of placement groups in the pool as instructed in the :ref:`Placement Groups
+<rados_ops_pgs_get_pg_num>` documentation. Since placement groups get mapped to
+OSDs in an operation involving dividing the number of placement groups in the
+cluster by the number of OSDs in the cluster, a small number of placement
+groups (the remainder, in this operation) are sometimes not distributed across
+the cluster. In situations like this, create a pool with a placement group
+count that is a multiple of the number of OSDs. See `Placement Groups`_ for
+details. See the :ref:`Pool, PG, and CRUSH Config Reference
+<rados_config_pool_pg_crush_ref>` for instructions on changing the default
+values used to determine how many placement groups are assigned to each pool.
 
 
 Can't Write Data
 ================
 
-If your cluster is up, but some OSDs are down and you cannot write data,
-check to ensure that you have the minimum number of OSDs running for the
-placement group. If you don't have the minimum number of OSDs running,
-Ceph will not allow you to write data because there is no guarantee
-that Ceph can replicate your data. See ``osd pool default min size``
-in the `Pool, PG and CRUSH Config Reference`_ for details.
+If the cluster is up, but some OSDs are down and you cannot write data, make
+sure that you have the minimum number of OSDs running for the placement group.
+If you don't have the minimum number of OSDs running, Ceph will not allow you
+to write data because there is no guarantee that Ceph can replicate your data.
+See ``osd_pool_default_min_size`` in the :ref:`Pool, PG, and CRUSH Config
+Reference <rados_config_pool_pg_crush_ref>` for details.
 
 
 PGs Inconsistent
 ================
 
-If you receive an ``active + clean + inconsistent`` state, this may happen
-due to an error during scrubbing. As always, we can identify the inconsistent
-placement group(s) with::
+If the command ``ceph health detail`` returns an ``active + clean +
+inconsistent`` state, this might indicate an error during scrubbing. Identify
+the inconsistent placement group or placement groups by running the following
+command:
+
+.. prompt:: bash
 
     $ ceph health detail
+
+::
+
     HEALTH_ERR 1 pgs inconsistent; 2 scrub errors
     pg 0.6 is active+clean+inconsistent, acting [0,1,2]
     2 scrub errors
 
-Or if you prefer inspecting the output in a programmatic way::
+Alternatively, run this command if you prefer to inspect the output in a
+programmatic way:
 
-    $ rados list-inconsistent-pg rbd
+.. prompt:: bash
+
+   $ rados list-inconsistent-pg rbd
+
+::
+
     ["0.6"]
 
 There is only one consistent state, but in the worst case, we could have
 different inconsistencies in multiple perspectives found in more than one
-objects. If an object named ``foo`` in PG ``0.6`` is truncated, we will have::
+object. If an object named ``foo`` in PG ``0.6`` is truncated, the output of
+``rados list-inconsistent-pg rbd`` will look something like this:
 
-    $ rados list-inconsistent-obj 0.6 --format=json-pretty
+.. prompt:: bash
+
+   rados list-inconsistent-obj 0.6 --format=json-pretty
 
 .. code-block:: javascript
 
@@ -473,82 +502,103 @@ objects. If an object named ``foo`` in PG ``0.6`` is truncated, we will have::
         ]
     }
 
-In this case, we can learn from the output:
+In this case, the output indicates the following:
 
-* The only inconsistent object is named ``foo``, and it is its head that has
+* The only inconsistent object is named ``foo``, and its head has
   inconsistencies.
 * The inconsistencies fall into two categories:
 
-  * ``errors``: these errors indicate inconsistencies between shards without a
-    determination of which shard(s) are bad. Check for the ``errors`` in the
-    `shards` array, if available, to pinpoint the problem.
+  #. ``errors``: these errors indicate inconsistencies between shards, without
+     an indication of which shard(s) are bad. Check for the ``errors`` in the
+     ``shards`` array, if available, to pinpoint the problem.
 
-    * ``data_digest_mismatch``: the digest of the replica read from OSD.2 is
-      different from the ones of OSD.0 and OSD.1
-    * ``size_mismatch``: the size of the replica read from OSD.2 is 0, while
-      the size reported by OSD.0 and OSD.1 is 968.
-  * ``union_shard_errors``: the union of all shard specific ``errors`` in
-    ``shards`` array. The ``errors`` are set for the given shard that has the
-    problem. They include errors like ``read_error``. The ``errors`` ending in
-    ``oi`` indicate a comparison with ``selected_object_info``. Look at the
-    ``shards`` array to determine which shard has which error(s).
+     * ``data_digest_mismatch``: the digest of the replica read from ``OSD.2``
+       is different from the digests of the replica reads of ``OSD.0`` and
+       ``OSD.1``
+     * ``size_mismatch``: the size of the replica read from ``OSD.2`` is ``0``,
+       but the size reported by ``OSD.0`` and ``OSD.1`` is ``968``.
 
-    * ``data_digest_mismatch_info``: the digest stored in the object-info is not
-      ``0xffffffff``, which is calculated from the shard read from OSD.2
-    * ``size_mismatch_info``: the size stored in the object-info is different
-      from the one read from OSD.2. The latter is 0.
+  #. ``union_shard_errors``: the union of all shard-specific ``errors`` in the
+     ``shards`` array. The ``errors`` are set for the shard with the problem.
+     These errors include ``read_error`` and other similar errors. The
+     ``errors`` ending in ``oi`` indicate a comparison with
+     ``selected_object_info``. Examine the ``shards`` array to determine
+     which shard has which error or errors.
 
-You can repair the inconsistent placement group by executing::
+     * ``data_digest_mismatch_info``: the digest stored in the ``object-info``
+       is not ``0xffffffff``, which is calculated from the shard read from
+       ``OSD.2``
+     * ``size_mismatch_info``: the size stored in the ``object-info`` is
+       different from the size read from ``OSD.2``. The latter is ``0``.
 
-	ceph pg repair {placement-group-ID}
+.. warning:: If ``read_error`` is listed in a shard's ``errors`` attribute, the
+   inconsistency is likely due to physical storage errors. In cases like this,
+   check the storage used by that OSD. 
+   
+   Examine the output of ``dmesg`` and ``smartctl`` before attempting a drive
+   repair.
 
-Which overwrites the `bad` copies with the `authoritative` ones. In most cases,
-Ceph is able to choose authoritative copies from all available replicas using
-some predefined criteria. But this does not always work. For example, the stored
-data digest could be missing, and the calculated digest will be ignored when
-choosing the authoritative copies. So, please use the above command with caution.
+To repair the inconsistent placement group, run a command of the following
+form:
 
-If ``read_error`` is listed in the ``errors`` attribute of a shard, the
-inconsistency is likely due to disk errors. You might want to check your disk
-used by that OSD.
+.. prompt:: bash
+
+   ceph pg repair {placement-group-ID}
+    
+.. warning: This command overwrites the "bad" copies with "authoritative"
+   copies. In most cases, Ceph is able to choose authoritative copies from all
+   the available replicas by using some predefined criteria. This, however,
+   does not work in every case. For example, it might be the case that the
+   stored data digest is missing, which means that the calculated digest is
+   ignored when Ceph chooses the authoritative copies. Be aware of this, and
+   use the above command with caution.
+
 
 If you receive ``active + clean + inconsistent`` states periodically due to
-clock skew, you may consider configuring your `NTP`_ daemons on your
-monitor hosts to act as peers. See `The Network Time Protocol`_ and Ceph
-`Clock Settings`_ for additional details.
+clock skew, consider configuring the `NTP
+<https://en.wikipedia.org/wiki/Network_Time_Protocol>`_ daemons on your monitor
+hosts to act as peers. See `The Network Time Protocol <http://www.ntp.org>`_
+and Ceph :ref:`Clock Settings <mon-config-ref-clock>` for more information.
 
 
 Erasure Coded PGs are not active+clean
 ======================================
 
-When CRUSH fails to find enough OSDs to map to a PG, it will show as a
-``2147483647`` which is ITEM_NONE or ``no OSD found``. For instance::
+If CRUSH fails to find enough OSDs to map to a PG, it will show as a
+``2147483647`` which is ``ITEM_NONE`` or ``no OSD found``. For example::
 
      [2,1,6,0,5,8,2147483647,7,4]
 
 Not enough OSDs
 ---------------
 
-If the Ceph cluster only has 8 OSDs and the erasure coded pool needs
-9, that is what it will show. You can either create another erasure
-coded pool that requires less OSDs::
+If the Ceph cluster has only eight OSDs and an erasure coded pool needs nine
+OSDs, the cluster will show "Not enough OSDs". In this case, you either create
+another erasure coded pool that requires fewer OSDs, by running commands of the
+following form:
+
+.. prompt:: bash
 
      ceph osd erasure-code-profile set myprofile k=5 m=3
      ceph osd pool create erasurepool erasure myprofile
 
-or add a new OSDs and the PG will automatically use them.
+or add new OSDs, and the PG will automatically use them.
 
 CRUSH constraints cannot be satisfied
 -------------------------------------
 
-If the cluster has enough OSDs, it is possible that the CRUSH rule
-imposes constraints that cannot be satisfied. If there are 10 OSDs on
-two hosts and the CRUSH rule requires that no two OSDs from the
-same host are used in the same PG, the mapping may fail because only
-two OSDs will be found. You can check the constraint by displaying ("dumping")
-the rule::
+If the cluster has enough OSDs, it is possible that the CRUSH rule is imposing
+constraints that cannot be satisfied. If there are ten OSDs on two hosts and
+the CRUSH rule requires that no two OSDs from the same host are used in the
+same PG, the mapping may fail because only two OSDs will be found. Check the
+constraint by displaying ("dumping") the rule, as shown here:
 
-    $ ceph osd crush rule ls
+.. prompt:: bash
+
+   ceph osd crush rule ls
+
+::
+
     [
         "replicated_rule",
         "erasurepool"]
@@ -566,36 +616,43 @@ the rule::
             { "op": "emit"}]}
 
 
-You can resolve the problem by creating a new pool in which PGs are allowed
-to have OSDs residing on the same host with::
+Resolve this problem by creating a new pool in which PGs are allowed to have
+OSDs residing on the same host by running the following commands:
 
-     ceph osd erasure-code-profile set myprofile crush-failure-domain=osd
-     ceph osd pool create erasurepool erasure myprofile
+.. prompt:: bash
+
+   ceph osd erasure-code-profile set myprofile crush-failure-domain=osd
+   ceph osd pool create erasurepool erasure myprofile
 
 CRUSH gives up too soon
 -----------------------
 
-If the Ceph cluster has just enough OSDs to map the PG (for instance a
-cluster with a total of 9 OSDs and an erasure coded pool that requires
-9 OSDs per PG), it is possible that CRUSH gives up before finding a
-mapping. It can be resolved by:
+If the Ceph cluster has just enough OSDs to map the PG (for instance a cluster
+with a total of nine OSDs and an erasure coded pool that requires nine OSDs per
+PG), it is possible that CRUSH gives up before finding a mapping. This problem
+can be resolved by:
 
-* lowering the erasure coded pool requirements to use less OSDs per PG
-  (that requires the creation of another pool as erasure code profiles
-  cannot be dynamically modified).
+* lowering the erasure coded pool requirements to use fewer OSDs per PG (this
+  requires the creation of another pool, because erasure code profiles cannot
+  be modified dynamically).
 
-* adding more OSDs to the cluster (that does not require the erasure
-  coded pool to be modified, it will become clean automatically)
+* adding more OSDs to the cluster (this does not require the erasure coded pool
+  to be modified, because it will become clean automatically)
 
-* use a handmade CRUSH rule that tries more times to find a good
-  mapping. This can be done by setting ``set_choose_tries`` to a value
-  greater than the default.
+* using a handmade CRUSH rule that tries more times to find a good mapping.
+  This can be modified for an existing CRUSH rule by setting
+  ``set_choose_tries`` to a value greater than the default.
 
-You should first verify the problem with ``crushtool`` after
-extracting the crushmap from the cluster so your experiments do not
-modify the Ceph cluster and only work on a local files::
+First, verify the problem by using  ``crushtool`` after extracting the crushmap
+from the cluster. This ensures that your experiments do not modify the Ceph
+cluster and that they operate only on local files:
 
-    $ ceph osd crush rule dump erasurepool
+.. prompt:: bash
+
+   ceph osd crush rule dump erasurepool
+
+::
+
     { "rule_id": 1,
       "rule_name": "erasurepool",
       "type": 3,
@@ -617,44 +674,54 @@ modify the Ceph cluster and only work on a local files::
     bad mapping rule 8 x 79 num_rep 9 result [6,0,2,1,4,7,2147483647,5,8]
     bad mapping rule 8 x 173 num_rep 9 result [0,4,6,8,2,1,3,7,2147483647]
 
-Where ``--num-rep`` is the number of OSDs the erasure code CRUSH
-rule needs, ``--rule`` is the value of the ``rule_id`` field
-displayed by ``ceph osd crush rule dump``.  The test will try mapping
-one million values (i.e. the range defined by ``[--min-x,--max-x]``)
-and must display at least one bad mapping. If it outputs nothing it
-means all mappings are successful and you can stop right there: the
-problem is elsewhere.
+Here, ``--num-rep`` is the number of OSDs that the erasure code CRUSH rule
+needs, ``--rule`` is the value of the ``rule_id`` field that was displayed by
+``ceph osd crush rule dump``. This test will attempt to map one million values
+(in this example, the range defined by ``[--min-x,--max-x]``) and must display
+at least one bad mapping. If this test outputs nothing, all mappings have been
+successful and you can be assured that the problem with your cluster is not
+caused by bad mappings.
 
-The CRUSH rule can be edited by decompiling the crush map::
+Changing the value of set_choose_tries
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    $ crushtool --decompile crush.map > crush.txt
+#. Decompile the CRUSH map to edit the CRUSH rule by running the following
+   command:
 
-and adding the following line to the rule::
+   .. prompt:: bash
 
-    step set_choose_tries 100
+      crushtool --decompile crush.map > crush.txt
 
-The relevant part of the ``crush.txt`` file should look something
-like::
+#. Add the following line to the rule::
 
-     rule erasurepool {
-             id 1
-             type erasure
-             step set_chooseleaf_tries 5
-             step set_choose_tries 100
-             step take default
-             step chooseleaf indep 0 type host
-             step emit
-     }
+      step set_choose_tries 100
 
-It can then be compiled and tested again::
+   The relevant part of the ``crush.txt`` file will resemble this::
 
-    $ crushtool --compile crush.txt -o better-crush.map
+      rule erasurepool {
+              id 1
+              type erasure
+              step set_chooseleaf_tries 5
+              step set_choose_tries 100
+              step take default
+              step chooseleaf indep 0 type host
+              step emit
+      }
 
-When all mappings succeed, an histogram of the number of tries that
-were necessary to find all of them can be displayed with the
-``--show-choose-tries`` option of ``crushtool``::
+#. Recompile and retest the CRUSH rule:
 
-    $ crushtool -i better-crush.map --test --show-bad-mappings \
+   .. prompt:: bash
+
+      crushtool --compile crush.txt -o better-crush.map
+
+#. When all mappings succeed, display a histogram of the number of tries that
+   were necessary to find all of the mapping by using the
+   ``--show-choose-tries`` option of the ``crushtool`` command, as in the
+   following example:
+
+   .. prompt:: bash
+
+      crushtool -i better-crush.map --test --show-bad-mappings \
        --show-choose-tries \
        --rule 1 \
        --num-rep 9 \
@@ -704,14 +771,12 @@ were necessary to find all of them can be displayed with the
     104:         0
     ...
 
-It took 11 tries to map 42 PGs, 12 tries to map 44 PGs etc. The highest number of tries is the minimum value of ``set_choose_tries`` that prevents bad mappings (i.e. 103 in the above output because it did not take more than 103 tries for any PG to be mapped).
+   This output indicates that it took eleven tries to map forty-two PGs, twelve
+   tries to map forty-four PGs etc. The highest number of tries is the minimum
+   value of ``set_choose_tries`` that prevents bad mappings (for example,
+   ``103`` in the above output, because it did not take more than 103 tries for
+   any PG to be mapped).
 
 .. _check: ../../operations/placement-groups#get-the-number-of-placement-groups
-.. _here: ../../configuration/pool-pg-config-ref
 .. _Placement Groups: ../../operations/placement-groups
 .. _Pool, PG and CRUSH Config Reference: ../../configuration/pool-pg-config-ref
-.. _NTP: https://en.wikipedia.org/wiki/Network_Time_Protocol
-.. _The Network Time Protocol: http://www.ntp.org/
-.. _Clock Settings: ../../configuration/mon-config-ref/#clock
-
-
