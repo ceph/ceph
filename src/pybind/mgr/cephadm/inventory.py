@@ -1465,16 +1465,15 @@ class NodeProxyCache:
         else:
             return _result
 
-    def common(self, **kw):
-        hostname = kw.get('hostname',)
-        cmd = kw.get('cmd',)
+    def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
+        hostname = kw.get('hostname')
         _result = {}
 
         for host, data in self.data.items():
             try:
-                _result[host] = data['status'][cmd]
+                _result[host] = data['status'][endpoint]
             except KeyError:
-                raise RuntimeError(f'Invalid node-proxy category {cmd}')
+                raise RuntimeError(f'Invalid node-proxy endpoint {endpoint}')
 
         if hostname and hostname in self.data.keys():
             return _result[hostname]
