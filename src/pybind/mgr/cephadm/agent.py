@@ -100,9 +100,6 @@ class NodeProxy:
         if len(vpath) == 2:
             hostname = vpath.pop(0)
             cherrypy.request.params['hostname'] = hostname
-        cmd = vpath.pop(0)
-        cherrypy.request.params['cmd'] = cmd
-
         return self
 
     @cherrypy.expose
@@ -224,37 +221,47 @@ class NodeProxy:
     def summary(self, **kw: Any) -> Dict[str, Any]:
         return self.mgr.node_proxy.summary(**kw)
 
+    @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
-    def common(self, **kw) -> Dict[str, Any]:
-        return self.mgr.node_proxy.common(**kw)
+    def memory(self, **kw: Any) -> Dict[str, Any]:
+        return self.mgr.node_proxy.common('memory', **kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
-    def firmwares(self, **kw) -> Dict[str, Any]:
+    def network(self, **kw: Any) -> Dict[str, Any]:
+        return self.mgr.node_proxy.common('network', **kw)
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def processors(self, **kw: Any) -> Dict[str, Any]:
+        return self.mgr.node_proxy.common('processors', **kw)
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def storage(self, **kw: Any) -> Dict[str, Any]:
+        return self.mgr.node_proxy.common('storage', **kw)
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def power(self, **kw: Any) -> Dict[str, Any]:
+        return self.mgr.node_proxy.common('power', **kw)
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def fans(self, **kw: Any) -> Dict[str, Any]:
+        return self.mgr.node_proxy.common('fans', **kw)
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def firmwares(self, **kw: Any) -> Dict[str, Any]:
         return self.mgr.node_proxy.firmwares(**kw)
-
-    def dispatch(self, hostname='', cmd=''):
-        kw = dict(hostname=hostname, cmd=cmd)
-        try:
-            func = getattr(self, cmd)
-            result = func(**kw)
-        except AttributeError:
-            try:
-                result = self.common(**kw)
-            except RuntimeError as e:
-                cherrypy.response.status = 404
-                result = {"error": f"{e}"}
-            return {"error": "Not a valid endpoint."}
-        finally:
-            return result
-
-    @cherrypy.expose
-    @cherrypy.tools.json_out()
-    def index(self, hostname=None, cmd=''):
-        result = self.dispatch(hostname, cmd)
-        return result
 
 
 class HostData(Server):
