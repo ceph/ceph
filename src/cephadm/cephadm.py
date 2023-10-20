@@ -1298,7 +1298,7 @@ class CephNvmeof(ContainerDaemonForm):
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
     @staticmethod
-    def get_container_mounts(data_dir: str) -> Dict[str, str]:
+    def _get_container_mounts(data_dir: str) -> Dict[str, str]:
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
@@ -1307,6 +1307,12 @@ class CephNvmeof(ContainerDaemonForm):
         mounts['/dev/hugepages'] = '/dev/hugepages'
         mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
         return mounts
+
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        mounts.update(self._get_container_mounts(data_dir))
 
     def customize_container_binds(
         self, ctx: CephadmContext, binds: List[List[str]]
@@ -2690,8 +2696,8 @@ def get_container_mounts(
         mounts.update(HAproxy.get_container_mounts(data_dir))
 
     if daemon_type == CephNvmeof.daemon_type:
-        data_dir = ident.data_dir(ctx.data_dir)
-        mounts.update(CephNvmeof.get_container_mounts(data_dir))
+        nvmeof = CephNvmeof.create(ctx, ident)
+        nvmeof.customize_container_mounts(ctx, mounts)
 
     if daemon_type == CephIscsi.daemon_type:
         iscsi = CephIscsi.create(ctx, ident)
