@@ -2325,9 +2325,6 @@ def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     if Ceph.for_daemon_type(daemon_type) or OSD.for_daemon_type(daemon_type):
         daemon = Ceph.create(ctx, ident)
         r += daemon.get_daemon_args()
-    elif daemon_type in Monitoring.components:
-        monitoring = Monitoring.create(ctx, ident)
-        r += monitoring.get_daemon_args()
 
     return r
 
@@ -2781,6 +2778,8 @@ def get_container(
             # '--path.rootfs=/rootfs' for node-exporter we need to disable selinux separation
             # between the node-exporter container and the host to avoid selinux denials
             container_args.extend(['--security-opt', 'label=disable'])
+        monitoring = Monitoring.create(ctx, ident)
+        d_args.extend(monitoring.get_daemon_args())
     elif daemon_type in Tracing.components:
         entrypoint = ''
         name = ident.daemon_name
