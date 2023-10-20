@@ -2832,7 +2832,7 @@ def get_container(
         privileged = True
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
-        entrypoint = cc.entrypoint
+        entrypoint = cc.entrypoint or ''
         host_network = False
         envs.extend(cc.get_container_envs())
         container_args.extend(cc.get_container_args())
