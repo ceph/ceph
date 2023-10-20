@@ -2341,9 +2341,6 @@ def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
         r += haproxy.get_daemon_args()
-    elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
-        r.extend(cc.get_daemon_args())
 
     return r
 
@@ -2835,6 +2832,7 @@ def get_container(
         host_network = False
         envs.extend(cc.get_container_envs())
         container_args.extend(cc.get_container_args())
+        d_args.extend(cc.get_daemon_args())
     elif daemon_type == SNMPGateway.daemon_type:
         sg = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
         container_args.append(
