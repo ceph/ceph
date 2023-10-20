@@ -2343,9 +2343,6 @@ def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
         r.extend(cc.get_daemon_args())
-    elif daemon_type == SNMPGateway.daemon_type:
-        sc = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
-        r.extend(sc.get_daemon_args())
 
     return r
 
@@ -2751,6 +2748,7 @@ def get_container(
     entrypoint: str = ''
     name: str = ''
     ceph_args: List[str] = []
+    d_args: List[str] = []
     envs: List[str] = []
     host_network: bool = True
 
@@ -2841,9 +2839,10 @@ def get_container(
         container_args.append(
             f'--env-file={sg.conf_file_path}'
         )
+        d_args.extend(sg.get_daemon_args())
 
     _update_container_args_for_podman(ctx, ident, container_args)
-    d_args = _get_daemon_args(ctx, ident)
+    d_args.extend(_get_daemon_args(ctx, ident))
     return CephContainer.for_daemon(
         ctx,
         ident=ident,
