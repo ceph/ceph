@@ -417,6 +417,7 @@ Useful queries:
   rate(ceph_mds_request[30s]) * on (instance) group_right (ceph_daemon) ceph_mds_metadata
 
 
+BEGIN EDITING BLOCK
 Block metrics
 =============
 
@@ -426,10 +427,11 @@ best performance in the prometheus manager module.
 To produce metrics for RBD images it is needed to configure properly the
 manager option ``mgr/prometheus/rbd_stats_pools``. For more information please
 see :ref:`prometheus-rbd-io-statistics`
+END EDITING BLOCK
 
 
 These metrics have the following labels:
-``image``: Name of the image which produces the metric value.
+``image``: Name of the image that produces the metric value.
 ``instance``: Node where the rbd metric is produced. (It points to the Ceph exporter daemon)
 ``job``: Name of the Prometheus scrape job.
 ``pool``: Image pool name.
@@ -460,7 +462,7 @@ Main metrics
 
 - ``ceph_rbd_write_ops``: RBD image writes count
 
-
+BEGIN EDITING BLOCK
 Useful queries
 --------------
 
@@ -468,7 +470,7 @@ Useful queries
 
   The average of read latencies:
   rate(ceph_rbd_read_latency_sum[30s]) / rate(ceph_rbd_read_latency_count[30s]) * on (instance) group_left (ceph_daemon) ceph_rgw_metadata
-
+END EDITING BLOCK
 
 
 
