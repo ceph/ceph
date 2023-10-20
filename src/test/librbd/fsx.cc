@@ -1162,6 +1162,8 @@ int
 krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 {
 	int ret;
+	int count = 0;
+	uint64_t effective_size;
 
 	ceph_assert(size % truncbdy == 0);
 
@@ -1183,7 +1185,29 @@ krbd_resize(struct rbd_ctx *ctx, uint64_t size)
 	if (ret < 0)
 		return ret;
 
-	return __librbd_resize(ctx, size);
+	ret = __librbd_resize(ctx, size);
+	if (ret < 0)
+		return ret;
+
+	for (;;) {
+		ret = krbd_get_size(ctx, &effective_size);
+		if (ret < 0)
+			return ret;
+
+		if (effective_size == size)
+			break;
+
+		if (count++ >= 15) {
+			prt("BLKGETSIZE64 size error: expected 0x%llx, actual 0x%llx\n",
+			    (unsigned long long)size,
+			    (unsigned long long)effective_size);
+			return -EINVAL;
+		}
+
+		usleep(count * 250 * 1000);
+	}
+
+	return 0;
 }
 
 int
