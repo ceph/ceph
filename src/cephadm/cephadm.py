@@ -2331,9 +2331,6 @@ def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     elif daemon_type == 'jaeger-agent':
         tracing = Tracing.create(ctx, ident)
         r += tracing.get_daemon_args()
-    elif daemon_type == NFSGanesha.daemon_type:
-        nfs_ganesha = NFSGanesha.init(ctx, ident.fsid, ident.daemon_id)
-        r += nfs_ganesha.get_daemon_args()
 
     return r
 
@@ -2797,6 +2794,8 @@ def get_container(
         entrypoint = NFSGanesha.entrypoint
         name = ident.daemon_name
         envs.extend(NFSGanesha.get_container_envs())
+        nfs_ganesha = NFSGanesha.init(ctx, ident.fsid, ident.daemon_id)
+        d_args.extend(nfs_ganesha.get_daemon_args())
     elif daemon_type == CephExporter.daemon_type:
         entrypoint = CephExporter.entrypoint
         name = 'client.ceph-exporter.%s' % ident.daemon_id
