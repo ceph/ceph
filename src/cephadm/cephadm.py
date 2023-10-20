@@ -2334,9 +2334,6 @@ def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.init(ctx, ident.fsid, ident.daemon_id)
         r += nfs_ganesha.get_daemon_args()
-    elif daemon_type == CephExporter.daemon_type:
-        ceph_exporter = CephExporter.init(ctx, ident.fsid, ident.daemon_id)
-        r.extend(ceph_exporter.get_daemon_args())
 
     return r
 
@@ -2804,6 +2801,8 @@ def get_container(
         entrypoint = CephExporter.entrypoint
         name = 'client.ceph-exporter.%s' % ident.daemon_id
         ceph_args = ['-n', name, '-f']
+        ceph_exporter = CephExporter.init(ctx, ident.fsid, ident.daemon_id)
+        d_args.extend(ceph_exporter.get_daemon_args())
     elif daemon_type == HAproxy.daemon_type:
         name = ident.daemon_name
         container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
