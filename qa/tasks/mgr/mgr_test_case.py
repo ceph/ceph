@@ -39,6 +39,14 @@ class MgrCluster(CephCluster):
         return json.loads(
             self.mon_manager.raw_cluster_cmd("mgr", "dump", "--format=json-pretty"))
 
+    def get_registered_clients(self, name, mgr_map = None):
+        if mgr_map is None:
+            mgr_map = self.get_mgr_map()
+        for c in mgr_map['active_clients']:
+            if c['name'] == name:
+                return c['addrvec']
+        return None
+
     def get_active_id(self):
         return self.get_mgr_map()["active_name"]
 

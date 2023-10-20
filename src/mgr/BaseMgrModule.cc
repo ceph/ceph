@@ -1388,12 +1388,15 @@ ceph_is_authorized(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_register_client(BaseMgrModule *self, PyObject *args)
 {
-  char *addrs = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_register_client", &addrs)) {
+  const char* _name = nullptr;
+  char* addrs = nullptr;
+  int replace = 0;
+  if (!PyArg_ParseTuple(args, "zsp:ceph_register_client", &_name, &addrs, &replace)) {
     return nullptr;
   }
+  auto name = _name ? std::string(_name) : std::string(self->this_module->get_name());
   without_gil([&] {
-    self->py_modules->register_client(self->this_module->get_name(), addrs);
+    self->py_modules->register_client(name, addrs, replace);
   });
   Py_RETURN_NONE;
 }
@@ -1401,12 +1404,14 @@ ceph_register_client(BaseMgrModule *self, PyObject *args)
 static PyObject*
 ceph_unregister_client(BaseMgrModule *self, PyObject *args)
 {
-  char *addrs = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_unregister_client", &addrs)) {
+  const char* _name = nullptr;
+  char* addrs = nullptr;
+  if (!PyArg_ParseTuple(args, "zs:ceph_unregister_client", &_name, &addrs)) {
     return nullptr;
   }
+  auto name = _name ? std::string(_name) : std::string(self->this_module->get_name());
   without_gil([&] {
-    self->py_modules->unregister_client(self->this_module->get_name(), addrs);
+    self->py_modules->unregister_client(name, addrs);
   });
   Py_RETURN_NONE;
 }
