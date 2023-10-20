@@ -2763,10 +2763,12 @@ def get_container(
     envs: List[str] = []
     host_network: bool = True
     binds: List[List[str]] = []
+    mounts: Dict[str, str] = {}
 
     daemon_type = ident.daemon_type
     if daemon_type in ceph_daemons():
         envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
+        mounts = get_container_mounts(ctx, ident)
     if container_args is None:
         container_args = []
     _update_pids_limit(ctx, daemon_type, container_args)
@@ -2813,6 +2815,7 @@ def get_container(
             container_args.extend(['--security-opt', 'label=disable'])
         monitoring = Monitoring.create(ctx, ident)
         d_args.extend(monitoring.get_daemon_args())
+        mounts = get_container_mounts(ctx, ident)
     elif daemon_type in Tracing.components:
         entrypoint = ''
         name = ident.daemon_name
@@ -2828,6 +2831,7 @@ def get_container(
         envs.extend(NFSGanesha.get_container_envs())
         nfs_ganesha = NFSGanesha.init(ctx, ident.fsid, ident.daemon_id)
         d_args.extend(nfs_ganesha.get_daemon_args())
+        mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephExporter.daemon_type:
         entrypoint = CephExporter.entrypoint
         name = 'client.ceph-exporter.%s' % ident.daemon_id
@@ -2839,16 +2843,19 @@ def get_container(
         container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
         haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
         d_args.extend(haproxy.get_daemon_args())
+        mounts = get_container_mounts(ctx, ident)
     elif daemon_type == Keepalived.daemon_type:
         name = ident.daemon_name
         envs.extend(Keepalived.get_container_envs())
         container_args.extend(['--cap-add=NET_ADMIN', '--cap-add=NET_RAW'])
+        mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephNvmeof.daemon_type:
         name = ident.daemon_name
         container_args.extend(['--ulimit', 'memlock=-1:-1'])
         container_args.extend(['--ulimit', 'nofile=10240'])
         container_args.extend(['--cap-add=SYS_ADMIN', '--cap-add=CAP_SYS_NICE'])
         binds = get_container_binds(ctx, ident)
+        mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephIscsi.daemon_type:
         entrypoint = CephIscsi.entrypoint
         name = ident.daemon_name
@@ -2856,6 +2863,7 @@ def get_container(
         # to configfs we need to make this a privileged container.
         privileged = True
         binds = get_container_binds(ctx, ident)
+        mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
         entrypoint = cc.entrypoint or ''
@@ -2864,6 +2872,7 @@ def get_container(
         container_args.extend(cc.get_container_args())
         d_args.extend(cc.get_daemon_args())
         binds = get_container_binds(ctx, ident)
+        mounts = get_container_mounts(ctx, ident)
     elif daemon_type == SNMPGateway.daemon_type:
         sg = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
         container_args.append(
@@ -2872,7 +2881,6 @@ def get_container(
         d_args.extend(sg.get_daemon_args())
 
     _update_container_args_for_podman(ctx, ident, container_args)
-    mounts = get_container_mounts(ctx, ident)
     return CephContainer.for_daemon(
         ctx,
         ident=ident,
