@@ -3517,11 +3517,15 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
     }
   } else {
     _inode->gid = mdr->client_request->get_owner_gid();
-    ceph_assert(_inode->gid != (unsigned)-1);
   }
 
   _inode->uid = mdr->client_request->get_owner_uid();
-  ceph_assert(_inode->uid != (unsigned)-1);
+
+  if (_inode->gid == (unsigned)-1 || _inode->uid == (unsigned)-1) {
+    dout(0) << "WARNING: client specified uid " << _inode->uid << " gid " << _inode->gid << " for ino " << _inode->ino << dendl;
+    mds->clog->error() << mdr->client_request->get_source()
+       << " specified uid " << _inode->uid << " gid " << _inode->gid << " for ino " << _inode->ino;
+  }
 
   _inode->btime = _inode->ctime = _inode->mtime = _inode->atime =
     mdr->get_op_stamp();
