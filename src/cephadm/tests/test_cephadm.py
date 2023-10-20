@@ -1575,7 +1575,7 @@ class TestShell(object):
             retval = _cephadm.command_shell(ctx)
             assert retval == 0
 
-        cmd = ['shell', '--name', 'foo.bar']
+        cmd = ['shell', '--name', 'mgr.bar']
         with with_cephadm_ctx(cmd) as ctx:
             err = r'must pass --fsid'
             with pytest.raises(_cephadm.Error, match=err):
@@ -1583,7 +1583,7 @@ class TestShell(object):
                 assert retval == 1
 
         fsid = '00000000-0000-0000-0000-0000deadbeef'
-        cmd = ['shell', '--name', 'foo.bar', '--fsid', fsid]
+        cmd = ['shell', '--name', 'mgr.bar', '--fsid', fsid]
         with with_cephadm_ctx(cmd) as ctx:
             retval = _cephadm.command_shell(ctx)
             assert retval == 0

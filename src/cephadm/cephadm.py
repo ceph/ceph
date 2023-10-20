@@ -2561,17 +2561,9 @@ def get_container_binds(
     ctx: CephadmContext, ident: 'DaemonIdentity'
 ) -> List[List[str]]:
     binds: List[List[str]] = list()
-
-    if ident.daemon_type == CephIscsi.daemon_type:
-        iscsi = CephIscsi.create(ctx, ident)
-        iscsi.customize_container_binds(ctx, binds)
-    if ident.daemon_type == CephNvmeof.daemon_type:
-        nvmeof = CephNvmeof.create(ctx, ident)
-        nvmeof.customize_container_binds(ctx, binds)
-    elif ident.daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.create(ctx, ident)
-        cc.customize_container_binds(ctx, binds)
-
+    daemon = daemon_form_create(ctx, ident)
+    assert isinstance(daemon, ContainerDaemonForm)
+    daemon.customize_container_binds(ctx, binds)
     return binds
 
 
