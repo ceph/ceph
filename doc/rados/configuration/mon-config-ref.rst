@@ -538,6 +538,8 @@ Trimming requires that the placement groups are ``active+clean``.
 
 .. index:: Ceph Monitor; clock
 
+.. _mon-config-ref-clock:
+
 Clock
 -----
 
