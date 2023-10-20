@@ -973,7 +973,11 @@ public:
       need_resharding = true;
       if (suggested_num_shards) {
         uint32_t obj_multiplier = 2;
-        if (is_multisite) {
+        // the 'is_multisite' will be false when the zone does not log data for replication
+        // such as single zone and archive zone types. But we do want archive zone
+        // to be able to scale up the shard count faster because bucket index can
+        // get considerably large as we preserve multiple versions of objects
+        if (is_multisite || driver->get_zone()->get_tier_type() == "archive") {
           // if we're maintaining bilogs for multisite, reshards are significantly
           // more expensive. scale up the shard count much faster to minimize the
           // number of reshard events during a write workload
