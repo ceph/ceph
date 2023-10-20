@@ -1169,6 +1169,16 @@ wait_for_snap_removed_from_trash()
     return 1
 }
 
+count_mirror_snaps()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+
+    rbd --cluster ${cluster} snap ls ${pool}/${image} --all |
+        grep -c -F " mirror ("
+}
+
 write_image()
 {
     local cluster=$1
