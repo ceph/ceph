@@ -812,10 +812,10 @@ class RgwRealm(RESTController):
     @UpdatePermission
     @allow_empty_body
     # pylint: disable=W0613
-    def import_realm_token(self, realm_token, zone_name, daemon_name=None):
+    def import_realm_token(self, realm_token, zone_name, port, placement_spec):
         try:
             multisite_instance = RgwMultisite()
-            result = CephService.import_realm_token(realm_token, zone_name)
+            result = CephService.import_realm_token(realm_token, zone_name, port, placement_spec)
             multisite_instance.update_period()
             return result
         except NoRgwDaemonsException as e:
