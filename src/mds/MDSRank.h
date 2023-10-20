@@ -296,6 +296,13 @@ class MDSRank {
     }
 
     /**
+     * Abort the MDS and flush any clog messages.
+     *
+     * Callers must already hold mds_lock.
+     */
+    void abort(std::string_view msg);
+
+    /**
      * Report state DAMAGED to the mon, and then pass on to respawn().  Call
      * this when an unrecoverable error is encountered while attempting
      * to load an MDS rank's data structures.  This is *not* for use with
