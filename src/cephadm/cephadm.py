@@ -1697,10 +1697,16 @@ class Keepalived(ContainerDaemonForm):
         return extract_uid_gid(self.ctx, file_path='/var/lib')
 
     @staticmethod
-    def get_container_mounts(data_dir: str) -> Dict[str, str]:
+    def _get_container_mounts(data_dir: str) -> Dict[str, str]:
         mounts = dict()
         mounts[os.path.join(data_dir, 'keepalived.conf')] = '/etc/keepalived/keepalived.conf'
         return mounts
+
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        mounts.update(self._get_container_mounts(data_dir))
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         ctr = get_container(ctx, self.identity)
@@ -2704,8 +2710,8 @@ def get_container_mounts(
         iscsi.customize_container_mounts(ctx, mounts)
 
     if daemon_type == Keepalived.daemon_type:
-        data_dir = ident.data_dir(ctx.data_dir)
-        mounts.update(Keepalived.get_container_mounts(data_dir))
+        keepalive = Keepalived.create(ctx, ident)
+        keepalive.customize_container_mounts(ctx, mounts)
 
     if daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.create(ctx, ident)
