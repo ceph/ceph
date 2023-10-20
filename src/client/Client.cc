@@ -11003,15 +11003,11 @@ void Client::do_readahead(Fh *f, Inode *in, uint64_t off, uint64_t len)
 
 void Client::C_Read_Async_Finisher::finish(int r)
 {
-  clnt->client_lock.lock();
-
   // Do read ahead as long as we aren't completing with 0 bytes
   if (r != 0)
     clnt->do_readahead(f, in, off, len);
 
   onfinish->complete(r);
-
-  clnt->client_lock.unlock();
 }
 
 int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
@@ -11043,9 +11039,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     Context *crf = io_finish.release();
 
     // Complete the crf immediately with 0 bytes
-    client_lock.unlock();
     crf->complete(0);
-    client_lock.lock();
 
     // Signal async completion
     return 0;
@@ -11077,9 +11071,7 @@ int Client::_read_async(Fh *f, uint64_t off, uint64_t len, bufferlist *bl,
     Context *crf = io_finish.release();
     if (r != 0) {
       // need to do readahead, so complete the crf
-      client_lock.unlock();
       crf->complete(r);
-      client_lock.lock();
     } else {
       get_cap_ref(in, CEPH_CAP_FILE_CACHE);
     }
