@@ -5,6 +5,8 @@ overrides:
       osd:
         osd objectstore: filestore
         osd sloppy crc: true
+        osd op thread timeout: 900
+        osd op thread suicide timeout: 1800
   ceph-deploy:
     fs: xfs
     filestore: True
