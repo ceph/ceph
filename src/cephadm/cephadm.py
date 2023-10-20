@@ -2329,9 +2329,6 @@ def _get_daemon_args(ctx: CephadmContext, ident: 'DaemonIdentity') -> List[str]:
     elif daemon_type in Monitoring.components:
         monitoring = Monitoring.create(ctx, ident)
         r += monitoring.get_daemon_args()
-    elif daemon_type == 'jaeger-agent':
-        tracing = Tracing.create(ctx, ident)
-        r += tracing.get_daemon_args()
 
     return r
 
@@ -2791,6 +2788,9 @@ def get_container(
         config = fetch_configs(ctx)
         Tracing.set_configuration(config, daemon_type)
         envs.extend(Tracing.components[daemon_type].get('envs', []))
+        if daemon_type == 'jaeger-agent':
+            tracing = Tracing.create(ctx, ident)
+            d_args.extend(tracing.get_daemon_args())
     elif daemon_type == NFSGanesha.daemon_type:
         entrypoint = NFSGanesha.entrypoint
         name = ident.daemon_name
