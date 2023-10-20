@@ -111,10 +111,12 @@ po::options_description make_usage() {
      ": perform a object dedup---deduplicate the entire object, not a chunk. Related snapshots are also deduplicated if --snap is given")
     ("op enable --pool <POOL> --chunk-pool <POOL>",
      ": enable deduplication")
+    ("op set-dedup-conf --pool <POOL> --option-name <OPTION NAME> --value <VALUE>",
+     ": set deduplication configuration. Users must specify the target POOL")
     ;
   po::options_description op_desc("Opational arguments");
   op_desc.add_options()
-    ("op", po::value<std::string>(), ": estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|chunk-repair|dump-chunk-refs|chunk-dedup|object-dedup|enable")
+    ("op", po::value<std::string>(), ": estimate|chunk-scrub|chunk-get-ref|chunk-put-ref|chunk-repair|dump-chunk-refs|chunk-dedup|object-dedup|enable|set-dedup-conf")
     ("target-ref", po::value<std::string>(), ": set target object")
     ("target-ref-pool-id", po::value<uint64_t>(), ": set target pool id")
     ("object", po::value<std::string>(), ": set object name")
@@ -136,6 +138,8 @@ po::options_description make_usage() {
     ("debug", ": enable debug")
     ("pgid", ": set pgid")
     ("daemon", ": execute sample dedup in daemon mode")
+    ("option-name", po::value<std::string>(),": dedup option name, max_thread|chunk_pool|chunk_size|chunk_algorithm|fingerprint_algorithm|chunk_dedup_threshold|wakeup_period|report_period|fpstore_threshold|sampling_ratio")
+    ("value", po::value<std::string>(),": set corresponding dedup option value")
   ;
   desc.add(op_desc);
   return desc;
@@ -1054,7 +1058,7 @@ int enable_dedup(const po::variables_map &opts)
   } else {
     cerr << "must specify pool" << std::endl;
     goto out;
-  } 
+  }
   if (opts.count("chunk-pool")) {
     chunk_pool = opts["chunk-pool"].as<string>();
   } else {
@@ -1092,7 +1096,71 @@ int enable_dedup(const po::variables_map &opts)
 out:
   return (ret < 0) ? 1 : 0;
 }
-  
+
+int set_dedup_conf(const po::variables_map &opts)
+{
+  Rados rados;
+  IoCtx io_ctx;
+  std::string pool_name, fp_algo;
+  int ret;
+  std::map<std::string, std::string>::const_iterator i;
+  struct ceph_dedup_options d_opts;
+  bool conf_done;
+  std::string key, value;
+  CephContext *_cct = g_ceph_context;
+
+  pool_name = get_opts_pool_name(opts);
+
+  ret = rados.init_with_context(_cct);
+  if (ret < 0) {
+    cerr << "couldn't initialize rados: " << cpp_strerror(ret) << std::endl;
+    goto out;
+  }
+  ret = rados.connect();
+  if (ret) {
+    cerr << "couldn't connect to cluster: " << cpp_strerror(ret) << std::endl;
+    ret = -1;
+    goto out;
+  }
+  ret = rados.ioctx_create(pool_name.c_str(), io_ctx);
+  if (ret < 0) {
+    cerr << "error opening pool "
+      << pool_name << ": "
+      << cpp_strerror(ret) << std::endl;
+    goto out;
+  }
+
+  if (opts.count("option-name")) {
+    key = opts["option-name"].as<string>();
+  } else {
+    cerr << "must specify option-name" << std::endl;
+    goto out;
+  } 
+  if (opts.count("value")) {
+    value = opts["value"].as<string>();
+  } else {
+    cerr << "must specify value" << std::endl;
+    goto out;
+  }
+
+  conf_done = d_opts.load_dedup_conf_from_pool(io_ctx);
+  if (!conf_done) {
+    d_opts.load_dedup_conf_by_default(_cct);
+    d_opts.set_conf(POOL, pool_name);
+  }
+  d_opts.set_dedup_conf("", key, value);
+  d_opts.store_dedup_conf(io_ctx);
+  conf_done = d_opts.load_dedup_conf_from_pool(io_ctx);
+  if (!conf_done) {
+    cerr << " failed to store dedudp conf " << std::endl;
+    goto out;
+  }
+  cout << d_opts << std::endl;
+
+out:
+  return (ret < 0) ? 1 : 0;
+}
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
@@ -1174,6 +1242,8 @@ int main(int argc, const char **argv)
     ret = make_dedup_object(opts);
   } else if (op_name == "enable") {
     ret = enable_dedup(opts);
+  } else if (op_name == "set-dedup-conf") {
+    ret = set_dedup_conf(opts);
   } else {
     cerr << "unrecognized op " << op_name << std::endl;
     exit(1);
