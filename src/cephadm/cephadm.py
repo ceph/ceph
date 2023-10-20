@@ -1756,6 +1756,16 @@ class Keepalived(ContainerDaemonForm):
         ctr = get_container(ctx, self.identity)
         return to_deployment_container(ctx, ctr)
 
+    def customize_container_envs(
+        self, ctx: CephadmContext, envs: List[str]
+    ) -> None:
+        envs.extend(self.get_container_envs())
+
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(['--cap-add=NET_ADMIN', '--cap-add=NET_RAW'])
+
 
 ##################################
 
@@ -2905,9 +2915,9 @@ def get_container(
         d_args.extend(haproxy.get_daemon_args())
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == Keepalived.daemon_type:
-        name = ident.daemon_name
-        envs.extend(Keepalived.get_container_envs())
-        container_args.extend(['--cap-add=NET_ADMIN', '--cap-add=NET_RAW'])
+        keepalived = Keepalived.create(ctx, ident)
+        keepalived.customize_container_envs(ctx, envs)
+        keepalived.customize_container_args(ctx, container_args)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephNvmeof.daemon_type:
         nvmeof = CephNvmeof.create(ctx, ident)
