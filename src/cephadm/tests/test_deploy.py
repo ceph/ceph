@@ -227,6 +227,9 @@ def test_deploy_iscsi_container(cephadm_fs, monkeypatch):
     assert runfile_lines[-1].endswith('quay.io/ayeaye/iscsi:latest')
     assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' not in runfile_lines[-1]
     assert '--pids-limit' in runfile_lines[-1]
+    assert '--privileged' in runfile_lines[-1]
+    assert f'-v {basedir}/iscsi-gateway.cfg:/etc/ceph/iscsi-gateway.cfg:z' in runfile_lines[-1]
+    assert '--mount type=bind,source=/lib/modules,destination=/lib/modules' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     with open(basedir / 'config') as f:
         assert f.read() == 'XXXXXXX'
