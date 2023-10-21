@@ -64,6 +64,8 @@ def test_deploy_nfs_container(cephadm_fs, monkeypatch):
     assert runfile_lines[-1].endswith('quay.io/ceph/ceph:latest -F -L STDERR')
     assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' not in runfile_lines[-1]
     assert '--pids-limit' in runfile_lines[-1]
+    assert '-e CEPH_CONF=' in runfile_lines[-1]
+    assert f'-v /var/lib/ceph/{fsid}/nfs.fun/etc/ganesha:/etc/ganesha:z' in runfile_lines[-1]
     _firewalld().open_ports.assert_called_with([2049])
     with open(f'/var/lib/ceph/{fsid}/nfs.fun/config') as f:
         assert f.read() == 'BALONEY'
