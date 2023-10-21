@@ -302,6 +302,8 @@ def test_deploy_a_monitoring_container(cephadm_fs, monkeypatch):
     assert runfile_lines[-1].endswith(
         'quay.io/titans/prometheus:latest --config.file=/etc/prometheus/prometheus.yml --storage.tsdb.path=/prometheus --web.listen-address=:9095 --storage.tsdb.retention.time=15d --storage.tsdb.retention.size=0 --web.external-url=http://10.10.10.10:9095'
     )
+    assert '--user 8765' in runfile_lines[-1]
+    assert f'-v /var/lib/ceph/{fsid}/prometheus.fire/etc/prometheus:/etc/prometheus:Z' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     assert not (basedir / 'config').exists()
     assert not (basedir / 'keyring').exists()
