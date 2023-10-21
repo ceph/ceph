@@ -2647,17 +2647,8 @@ def get_container_mounts(
 
 def _update_podman_mounts(ctx: CephadmContext, mounts: Dict[str, str]) -> None:
     """Update the given mounts dict with mounts specific to podman."""
-    # Modifications podman makes to /etc/hosts causes issues with
-    # certain daemons (specifically referencing "host.containers.internal" entry
-    # being added to /etc/hosts in this case). To avoid that, but still
-    # allow users to use /etc/hosts for hostname resolution, we can
-    # mount the host's /etc/hosts file.
-    # https://tracker.ceph.com/issues/58532
-    # https://tracker.ceph.com/issues/57018
     if isinstance(ctx.container_engine, Podman):
-        if os.path.exists('/etc/hosts'):
-            if '/etc/hosts' not in mounts:
-                mounts['/etc/hosts'] = '/etc/hosts:ro'
+        ctx.container_engine.update_mounts(ctx, mounts)
 
 
 def get_ceph_volume_container(ctx: CephadmContext,
