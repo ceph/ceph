@@ -70,7 +70,6 @@ from cephadmlib.constants import (
     LOGROTATE_DIR,
     LOG_DIR,
     LOG_DIR_MODE,
-    PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
     SYSCTL_DIR,
     UNIT_DIR,
 )
@@ -2692,13 +2691,7 @@ def _update_pids_limit(ctx: CephadmContext, daemon_type: str, container_args: Li
     unlimited_daemons.add(NFSGanesha.daemon_type)
     if daemon_type not in unlimited_daemons:
         return
-    if (
-        isinstance(ctx.container_engine, Podman)
-        and ctx.container_engine.version >= PIDS_LIMIT_UNLIMITED_PODMAN_VERSION
-    ):
-        container_args.append('--pids-limit=-1')
-    else:
-        container_args.append('--pids-limit=0')
+    container_args.append(ctx.container_engine.unlimited_pids_option)
 
 
 def get_container(
