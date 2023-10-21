@@ -271,6 +271,11 @@ def test_deploy_nvmeof_container(cephadm_fs, monkeypatch):
     assert runfile_lines[-1].endswith('quay.io/ownf/nmve:latest')
     assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' not in runfile_lines[-1]
     assert '--pids-limit' in runfile_lines[-1]
+    assert '--ulimit memlock=-1:-1' in runfile_lines[-1]
+    assert '--cap-add=SYS_ADMIN' in runfile_lines[-1]
+    assert '--cap-add=CAP_SYS_NICE' in runfile_lines[-1]
+    assert f'-v {basedir}/ceph-nvmeof.conf:/src/ceph-nvmeof.conf:z' in runfile_lines[-1]
+    assert '--mount type=bind,source=/lib/modules,destination=/lib/modules' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     with open(basedir / 'config') as f:
         assert f.read() == 'XXXXXXX'
