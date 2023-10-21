@@ -134,6 +134,11 @@ def test_deploy_keepalived_container(cephadm_fs, monkeypatch):
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
     assert runfile_lines[-1].endswith('quay.io/eeranimated/keepalived:latest')
+    assert '-e KEEPALIVED_AUTOCONF=false' in runfile_lines[-1]
+    assert '-e KEEPALIVED_DEBUG=false' in runfile_lines[-1]
+    assert '--cap-add=NET_ADMIN' in runfile_lines[-1]
+    assert '--cap-add=NET_RAW' in runfile_lines[-1]
+    assert f'-v {basedir}/keepalived.conf:/etc/keepalived/keepalived.conf' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     assert not (basedir / 'config').exists()
     assert not (basedir / 'keyring').exists()
