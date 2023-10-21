@@ -334,6 +334,7 @@ def test_deploy_a_tracing_container(cephadm_fs, monkeypatch):
     with open(basedir / 'unit.run') as f:
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
+    assert '-e discovery.type=single-node' in runfile_lines[-1]
     assert runfile_lines[-1].endswith('quay.io/rubber/elasticsearch:latest')
     _firewalld().open_ports.assert_not_called()
     assert not (basedir / 'config').exists()
