@@ -370,6 +370,9 @@ def test_deploy_ceph_mgr_container(cephadm_fs, monkeypatch):
     )
     assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' in runfile_lines[-1]
     assert '--pids-limit' in runfile_lines[-1]
+    assert '--entrypoint /usr/bin/ceph-mgr' in runfile_lines[-1]
+    assert f'-v /var/lib/ceph/{fsid}/mgr.foo:/var/lib/ceph/mgr/ceph-foo:z' in runfile_lines[-1]
+    assert f'-v /var/log/ceph/{fsid}:/var/log/ceph:z' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     with open(basedir / 'config') as f:
         assert f.read() == 'XXXXXXX'
