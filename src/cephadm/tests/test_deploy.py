@@ -179,6 +179,8 @@ def test_deploy_haproxy_container(cephadm_fs, monkeypatch):
         'quay.io/lfeuwbo/haproxy:latest haproxy -f /var/lib/haproxy/haproxy.cfg'
     )
     assert '--pids-limit' not in runfile_lines[-1]
+    assert '--user=root' in runfile_lines[-1]
+    assert f'-v {basedir}/haproxy:/var/lib/haproxy' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     assert not (basedir / 'config').exists()
     assert not (basedir / 'keyring').exists()
