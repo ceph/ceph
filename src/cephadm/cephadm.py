@@ -370,6 +370,11 @@ class Ceph(ContainerDaemonForm):
         args.extend(['-n', name, '-f'])
         args.extend(self.get_daemon_args())
 
+    def customize_container_envs(
+        self, ctx: CephadmContext, envs: List[str]
+    ) -> None:
+        envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
+
     def default_entrypoint(self) -> str:
         ep = {
             'rgw': '/usr/bin/radosgw',
@@ -1597,6 +1602,11 @@ class CephExporter(ContainerDaemonForm):
         name = 'client.ceph-exporter.%s' % self.identity.daemon_id
         args.extend(['-n', name, '-f'])
         args.extend(self.get_daemon_args())
+
+    def customize_container_envs(
+        self, ctx: CephadmContext, envs: List[str]
+    ) -> None:
+        envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
 
     def default_entrypoint(self) -> str:
         return self.entrypoint
