@@ -97,6 +97,7 @@ def test_deploy_snmp_container(cephadm_fs, monkeypatch):
         'quay.io/aaabbb/snmp:latest --web.listen-address=:9464 --snmp.destination=192.168.100.10:8899 --snmp.version=V2c --log.level=info --snmp.trap-description-template=/etc/snmp_notifier/description-template.tpl'
     )
     assert '--pids-limit' not in runfile_lines[-1]
+    assert f'--env-file=/var/lib/ceph/{fsid}/snmp-gateway.sunmop/snmp-gateway.conf' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     basedir = pathlib.Path(f'/var/lib/ceph/{fsid}/snmp-gateway.sunmop')
     assert basedir.is_dir()
