@@ -62,6 +62,7 @@ def test_deploy_nfs_container(cephadm_fs, monkeypatch):
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
     assert runfile_lines[-1].endswith('quay.io/ceph/ceph:latest -F -L STDERR')
+    assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' not in runfile_lines[-1]
     _firewalld().open_ports.assert_called_with([2049])
     with open(f'/var/lib/ceph/{fsid}/nfs.fun/config') as f:
         assert f.read() == 'BALONEY'
@@ -211,6 +212,7 @@ def test_deploy_iscsi_container(cephadm_fs, monkeypatch):
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
     assert runfile_lines[-1].endswith('quay.io/ayeaye/iscsi:latest')
+    assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' not in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     with open(basedir / 'config') as f:
         assert f.read() == 'XXXXXXX'
@@ -250,6 +252,7 @@ def test_deploy_nvmeof_container(cephadm_fs, monkeypatch):
         runfile_lines = f.read().splitlines()
     assert 'podman' in runfile_lines[-1]
     assert runfile_lines[-1].endswith('quay.io/ownf/nmve:latest')
+    assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' not in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     with open(basedir / 'config') as f:
         assert f.read() == 'XXXXXXX'
@@ -360,6 +363,7 @@ def test_deploy_ceph_mgr_container(cephadm_fs, monkeypatch):
     assert runfile_lines[-1].endswith(
         'quay.io/ceph/ceph:latest -n mgr.foo -f --setuser ceph --setgroup ceph --default-log-to-file=false --default-log-to-journald=true --default-log-to-stderr=false'
     )
+    assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     with open(basedir / 'config') as f:
         assert f.read() == 'XXXXXXX'
@@ -408,6 +412,7 @@ def test_deploy_ceph_exporter_container(cephadm_fs, monkeypatch):
         'quay.io/ceph/ceph:latest -n client.ceph-exporter.zaq -f --sock-dir=/var/run/ceph/ --addrs=0.0.0.0 --port=9926 --prio-limit=12 --stats-period=5'
     )
     assert '--entrypoint /usr/bin/ceph-exporter' in runfile_lines[-1]
+    assert '-e TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES' in runfile_lines[-1]
     _firewalld().open_ports.assert_not_called()
     with open(basedir / 'config') as f:
         assert f.read() == 'XXXXXXX'
