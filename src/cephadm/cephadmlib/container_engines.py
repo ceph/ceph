@@ -11,6 +11,7 @@ from .constants import (
     CGROUPS_SPLIT_PODMAN_VERSION,
     DEFAULT_MODE,
     MIN_PODMAN_VERSION,
+    PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
 )
 from .exceptions import Error
 
@@ -44,6 +45,15 @@ class Podman(ContainerEngine):
     def supports_split_cgroups(self) -> bool:
         """Return true if this version of podman supports split cgroups."""
         return self.version >= CGROUPS_SPLIT_PODMAN_VERSION
+
+    @property
+    def unlimited_pids_option(self) -> str:
+        """The option to pass to the container engine for allowing unlimited
+        pids (processes).
+        """
+        if self.version >= PIDS_LIMIT_UNLIMITED_PODMAN_VERSION:
+            return '--pids-limit=-1'
+        return '--pids-limit=0'
 
     def service_args(
         self, ctx: CephadmContext, service_name: str
