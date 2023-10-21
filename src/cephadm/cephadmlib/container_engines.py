@@ -2,7 +2,7 @@
 
 import os
 
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict
 
 from .call_wrappers import call_throws, CallVerbosity
 from .context import CephadmContext
@@ -77,6 +77,21 @@ class Podman(ContainerEngine):
         if not os.path.exists('/etc/hosts'):
             args.append('--no-hosts')
         return args
+
+    def update_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        """Update mounts adding entries that are specific to podman."""
+        # Modifications podman makes to /etc/hosts causes issues with certain
+        # daemons (specifically referencing "host.containers.internal" entry
+        # being added to /etc/hosts in this case). To avoid that, but still
+        # allow users to use /etc/hosts for hostname resolution, we can mount
+        # the host's /etc/hosts file.
+        # https://tracker.ceph.com/issues/58532
+        # https://tracker.ceph.com/issues/57018
+        if os.path.exists('/etc/hosts'):
+            if '/etc/hosts' not in mounts:
+                mounts['/etc/hosts'] = '/etc/hosts:ro'
 
 
 class Docker(ContainerEngine):
