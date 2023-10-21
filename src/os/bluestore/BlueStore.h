@@ -265,6 +265,8 @@ public:
   struct BufferSpace;
   struct Collection;
   struct Onode;
+  class Scanner;
+  class Estimator;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -1154,6 +1156,8 @@ public:
     /// seek to the first lextent including or after offset
     extent_map_t::iterator seek_lextent(uint64_t offset);
     extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
+    /// seek to the exactly the extent, or after offset
+    extent_map_t::iterator seek_nextent(uint64_t offset);
 
     /// split extent
     extent_map_t::iterator split_at(extent_map_t::iterator p, uint32_t offset);

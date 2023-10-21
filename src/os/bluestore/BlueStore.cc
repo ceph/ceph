@@ -54,6 +54,7 @@
 #include "common/WorkQueue.h"
 #include "kv/KeyValueHistogram.h"
 #include "Writer.h"
+#include "Compression.h"
 
 #if defined(WITH_LTTNG)
 #define TRACEPOINT_DEFINE
@@ -4345,6 +4346,16 @@ BlueStore::extent_map_t::iterator BlueStore::ExtentMap::maybe_split_at(uint32_t 
       // the extent is either outside offset or exactly at
     }
   }
+  return p;
+}
+
+// If there exist extent at `offset` return it,
+// otherwise return smallest that `offset < logical_offset`.
+BlueStore::extent_map_t::iterator BlueStore::ExtentMap::seek_nextent(
+  uint64_t offset)
+{
+  Extent dummy(offset);
+  auto p = extent_map.lower_bound(dummy);
   return p;
 }
 
