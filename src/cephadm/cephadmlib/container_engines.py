@@ -175,3 +175,17 @@ def registry_login(
             'Failed to login to custom registry @ %s as %s with given password'
             % (ctx.registry_url, ctx.registry_username)
         )
+
+
+def pull_command(
+    ctx: CephadmContext, image: str, insecure: bool = False
+) -> List[str]:
+    """Return a command that can be run to pull an image."""
+    cmd = [ctx.container_engine.path, 'pull', image]
+    if isinstance(ctx.container_engine, Podman):
+        if insecure:
+            cmd.append('--tls-verify=false')
+
+        if os.path.exists('/etc/ceph/podman-auth.json'):
+            cmd.append('--authfile=/etc/ceph/podman-auth.json')
+    return cmd
