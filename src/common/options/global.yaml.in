@@ -3540,6 +3540,13 @@ options:
   with_legacy: true
   see_also:
   - rocksdb_cf_compact_on_deletion
+-name：rocksdb_cf_compact_on_deletion_ratio
+  type:float
+  level: dev
+  default: 0.5
+  with_legacy: true
+  see_also:
+  - rocksdb_cf_compact_on_deletion
 - name: osd_client_op_priority
   type: uint
   level: advanced
