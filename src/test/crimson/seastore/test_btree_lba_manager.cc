@@ -249,7 +249,7 @@ struct lba_btree_test : btree_test_base {
   }
 
   static auto get_map_val(extent_len_t len) {
-    return lba_map_val_t{0, P_ADDR_NULL, len, 0};
+    return lba_map_val_t{0, (pladdr_t)P_ADDR_NULL, len, 0};
   }
 
   device_off_t next_off = 0;
@@ -432,7 +432,7 @@ struct btree_lba_manager_test : btree_test_base {
 	    0,
 	    get_paddr());
 	return lba_manager->alloc_extent(
-	  t, hint, len, extent->get_paddr(), extent.get());
+	  t, hint, len, extent->get_paddr(), *extent);
       }).unsafe_get0();
     logger().debug("alloc'd: {}", *ret);
     EXPECT_EQ(len, ret->get_length());
@@ -468,11 +468,13 @@ struct btree_lba_manager_test : btree_test_base {
       [=, this](auto &t) {
 	return lba_manager->decref_extent(
 	  t,
-	  target->first
+	  target->first,
+	  true
 	).si_then([this, &t, target](auto result) {
 	  EXPECT_EQ(result.refcount, target->second.refcount);
 	  if (result.refcount == 0) {
-	    return cache->retire_extent_addr(t, result.addr, result.length);
+	    return cache->retire_extent_addr(
+	      t, result.addr.get_paddr(), result.length);
 	  }
 	  return Cache::retire_extent_iertr::now();
 	});

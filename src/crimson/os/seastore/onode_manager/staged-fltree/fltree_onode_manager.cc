@@ -93,15 +93,18 @@ FLTreeOnodeManager::write_dirty_ret FLTreeOnodeManager::write_dirty(
 {
   return trans_intr::do_for_each(
     onodes,
-    [this, &trans](auto &onode) -> eagain_ifuture<> {
+    [&trans](auto &onode) -> eagain_ifuture<> {
+      if (!onode) {
+	return eagain_iertr::make_ready_future<>();
+      }
       auto &flonode = static_cast<FLTreeOnode&>(*onode);
+      if (!flonode.is_alive()) {
+	return eagain_iertr::make_ready_future<>();
+      }
       switch (flonode.status) {
       case FLTreeOnode::status_t::MUTATED: {
         flonode.populate_recorder(trans);
         return eagain_iertr::make_ready_future<>();
-      }
-      case FLTreeOnode::status_t::DELETED: {
-        return tree.erase(trans, flonode);
       }
       case FLTreeOnode::status_t::STABLE: {
         return eagain_iertr::make_ready_future<>();
@@ -118,7 +121,7 @@ FLTreeOnodeManager::erase_onode_ret FLTreeOnodeManager::erase_onode(
 {
   auto &flonode = static_cast<FLTreeOnode&>(*onode);
   flonode.mark_delete();
-  return erase_onode_iertr::now();
+  return tree.erase(trans, flonode);
 }
 
 FLTreeOnodeManager::list_onodes_ret FLTreeOnodeManager::list_onodes(

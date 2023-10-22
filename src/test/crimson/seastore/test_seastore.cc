@@ -107,6 +107,8 @@ struct seastore_test_t :
     std::map<string, bufferlist> omap;
     bufferlist contents;
 
+    std::map<snapid_t, bufferlist> clone_contents;
+
     void touch(
       CTransaction &t) {
       t.touch(cid, oid);
@@ -234,6 +236,32 @@ struct seastore_test_t :
 	coll,
 	std::move(t)).get0();
     }
+
+    void clone(
+      SeaStoreShard &sharded_seastore,
+      snapid_t snap) {
+      ghobject_t coid = oid;
+      coid.hobj.snap = snap;
+      CTransaction t;
+      t.clone(cid, oid, coid);
+      sharded_seastore.do_transaction(
+	coll,
+	std::move(t)).get0();
+      clone_contents[snap].reserve(contents.length());
+      auto it = contents.begin();
+      it.copy_all(clone_contents[snap]);
+    }
+
+    object_state_t get_clone(snapid_t snap) {
+      auto coid = oid;
+      coid.hobj.snap = snap;
+      auto clone_obj = object_state_t{cid, coll, coid};
+      clone_obj.contents.reserve(clone_contents[snap].length());
+      auto it = clone_contents[snap].begin();
+      it.copy_all(clone_obj.contents);
+      return clone_obj;
+    }
+
     void write(
       SeaStoreShard &sharded_seastore,
       uint64_t offset,
@@ -298,10 +326,12 @@ struct seastore_test_t :
       uint64_t offset,
       uint64_t len) {
       bufferlist to_check;
-      to_check.substr_of(
-	contents,
-	offset,
-	len);
+      if (contents.length() >= offset) {
+	to_check.substr_of(
+	  contents,
+	  offset,
+	  std::min(len, (uint64_t)contents.length()));
+      }
       auto ret = sharded_seastore.read(
 	coll,
 	oid,
@@ -754,6 +784,79 @@ TEST_P(seastore_test_t, omap_test_simple)
     test_obj.check_omap_key(
       *sharded_seastore,
       "asdf");
+  });
+}
+
+TEST_P(seastore_test_t, clone_aligned_extents)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.write(*sharded_seastore, 0, 4096, 'a');
+
+    test_obj.clone(*sharded_seastore, 10);
+    std::cout << "reading origin after clone10" << std::endl;
+    test_obj.read(*sharded_seastore, 0, 4096);
+    test_obj.write(*sharded_seastore, 0, 4096, 'b');
+    test_obj.write(*sharded_seastore, 4096, 4096, 'c');
+    std::cout << "reading origin after clone10 and write" << std::endl;
+    test_obj.read(*sharded_seastore, 0, 8192);
+    auto clone_obj10 = test_obj.get_clone(10);
+    std::cout << "reading clone after clone10 and write" << std::endl;
+    clone_obj10.read(*sharded_seastore, 0, 8192);
+
+    test_obj.clone(*sharded_seastore, 20);
+    std::cout << "reading origin after clone20" << std::endl;
+    test_obj.read(*sharded_seastore, 0, 4096);
+    test_obj.write(*sharded_seastore, 0, 4096, 'd');
+    test_obj.write(*sharded_seastore, 4096, 4096, 'e');
+    test_obj.write(*sharded_seastore, 8192, 4096, 'f');
+    std::cout << "reading origin after clone20 and write" << std::endl;
+    test_obj.read(*sharded_seastore, 0, 12288);
+    auto clone_obj20 = test_obj.get_clone(20);
+    std::cout << "reading clone after clone20 and write" << std::endl;
+    clone_obj10.read(*sharded_seastore, 0, 12288);
+    clone_obj20.read(*sharded_seastore, 0, 12288);
+  });
+}
+
+TEST_P(seastore_test_t, clone_unaligned_extents)
+{
+  run_async([this] {
+    auto &test_obj = get_object(make_oid(0));
+    test_obj.write(*sharded_seastore, 0, 8192, 'a');
+    test_obj.write(*sharded_seastore, 8192, 8192, 'b');
+    test_obj.write(*sharded_seastore, 16384, 8192, 'c');
+
+    test_obj.clone(*sharded_seastore, 10);
+    test_obj.write(*sharded_seastore, 4096, 12288, 'd');
+    std::cout << "reading origin after clone10 and write" << std::endl;
+    test_obj.read(*sharded_seastore, 0, 24576);
+
+    auto clone_obj10 = test_obj.get_clone(10);
+    std::cout << "reading clone after clone10 and write" << std::endl;
+    clone_obj10.read(*sharded_seastore, 0, 24576);
+
+    test_obj.clone(*sharded_seastore, 20);
+    test_obj.write(*sharded_seastore, 8192, 12288, 'e');
+    std::cout << "reading origin after clone20 and write" << std::endl;
+    test_obj.read(*sharded_seastore, 0, 24576);
+
+    auto clone_obj20 = test_obj.get_clone(20);
+    std::cout << "reading clone after clone20 and write" << std::endl;
+    clone_obj10.read(*sharded_seastore, 0, 24576);
+    clone_obj20.read(*sharded_seastore, 0, 24576);
+
+    test_obj.write(*sharded_seastore, 0, 24576, 'f');
+    test_obj.clone(*sharded_seastore, 30);
+    test_obj.write(*sharded_seastore, 8192, 4096, 'g');
+    std::cout << "reading origin after clone30 and write" << std::endl;
+    test_obj.read(*sharded_seastore, 0, 24576);
+
+    auto clone_obj30 = test_obj.get_clone(30);
+    std::cout << "reading clone after clone30 and write" << std::endl;
+    clone_obj10.read(*sharded_seastore, 0, 24576);
+    clone_obj20.read(*sharded_seastore, 0, 24576);
+    clone_obj30.read(*sharded_seastore, 0, 24576);
   });
 }
 

@@ -469,7 +469,7 @@ public:
       } else {
         touch_extent(*ret);
         SUBDEBUGT(seastore_cache, "{} {}~{} is present on t without been \
-          fully loaded, reading ...", t, T::TYPE, offset, length);
+          fully loaded, reading ... {}", t, T::TYPE, offset, length, *ret);
         auto bp = alloc_cache_buf(ret->get_length());
         ret->set_bptr(std::move(bp));
         return read_extent<T>(
@@ -910,8 +910,6 @@ public:
     laddr_t original_laddr,
     std::optional<ceph::bufferptr> &&original_bptr) {
     LOG_PREFIX(Cache::alloc_remapped_extent);
-    SUBTRACET(seastore_cache, "allocate {} {}B, hint={}",
-              t, T::TYPE, remap_length, remap_laddr);
     assert(remap_laddr >= original_laddr);
     TCachedExtentRef<T> ext;
     if (original_bptr.has_value()) {
@@ -934,6 +932,8 @@ public:
               t.get_trans_id());
 
     t.add_fresh_extent(ext);
+    SUBTRACET(seastore_cache, "allocated {} {}B, hint={}, has ptr? {} -- {}",
+      t, T::TYPE, remap_length, remap_laddr, original_bptr.has_value(), *ext);
     return ext;
   }
 
