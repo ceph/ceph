@@ -939,8 +939,9 @@ int RocksDBStore::update_column_family_options(const std::string& base_name,
   if (cct->_conf->rocksdb_cf_compact_on_deletion) {
     size_t sliding_window = cct->_conf->rocksdb_cf_compact_on_deletion_sliding_window;
     size_t trigger = cct->_conf->rocksdb_cf_compact_on_deletion_trigger;
+    float ratio = cct->_conf->rocksdb_cf_compact_on_deletion_ratio;
     cf_opt->table_properties_collector_factories.emplace_back(
-        rocksdb::NewCompactOnDeletionCollectorFactory(sliding_window, trigger));
+        rocksdb::NewCompactOnDeletionCollectorFactory(sliding_window, trigger, ratio));
   }
   return 0;
 }
