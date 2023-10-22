@@ -49,13 +49,24 @@ bool SocketConnection::is_connected() const
 }
 
 #ifdef UNIT_TESTS_BUILT
-bool SocketConnection::is_closed() const
+bool SocketConnection::is_protocol_ready() const
+{
+  assert(seastar::this_shard_id() == msgr_sid);
+  return protocol->is_ready();
+}
+
+bool SocketConnection::is_protocol_standby() const {
+  assert(seastar::this_shard_id() == msgr_sid);
+  return protocol->is_standby();
+}
+
+bool SocketConnection::is_protocol_closed() const
 {
   assert(seastar::this_shard_id() == msgr_sid);
   return protocol->is_closed();
 }
 
-bool SocketConnection::is_closed_clean() const
+bool SocketConnection::is_protocol_closed_clean() const
 {
   assert(seastar::this_shard_id() == msgr_sid);
   return protocol->is_closed_clean();

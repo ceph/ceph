@@ -21,12 +21,12 @@ target_link_libraries(unittest-seastar-denc crimson GTest::Main)
 
 add_executable(unittest-seastar-socket test_socket.cc)
 add_ceph_unittest(unittest-seastar-socket
-  --memory 256M --smp 2)
+  --memory 256M --smp 4)
 target_link_libraries(unittest-seastar-socket crimson)
 
 add_executable(unittest-seastar-messenger test_messenger.cc)
 add_ceph_unittest(unittest-seastar-messenger
-  --memory 256M --smp 1)
+  --memory 256M --smp 4)
 target_link_libraries(unittest-seastar-messenger crimson)
 
 add_executable(test-seastar-messenger-peer test_messenger_peer.cc)
