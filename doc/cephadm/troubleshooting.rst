@@ -299,6 +299,10 @@ from the monmap by following these steps:
 
 .. _cephadm-manually-deploy-mgr:
 
+5. Start mon daemon on the surviving monitor::
+
+    cephadm unit --name mon.`hostname` start
+
 Manually Deploying a Manager Daemon
 -----------------------------------
 At least one manager (mgr) daemon is required by cephadm in order to manage the
