@@ -194,7 +194,7 @@ public:
       intrusive_ptr_release(&request);
     }
     void requeue(ShardServices &shard_services, Ref<PG> pg);
-    void clear_and_cancel();
+    void clear_and_cancel(PG &pg);
   };
   void complete_request();
 
@@ -252,14 +252,16 @@ private:
   interruptible_future<> do_process(
     instance_handle_t &ihref,
     Ref<PG>& pg,
-    crimson::osd::ObjectContextRef obc);
+    crimson::osd::ObjectContextRef obc,
+    unsigned this_instance_id);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_pg_op(
     Ref<PG> &pg);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_op(
       instance_handle_t &ihref,
-      Ref<PG> &pg);
+      Ref<PG> &pg,
+      unsigned this_instance_id);
   bool is_pg_op() const;
 
   PGPipeline &client_pp(PG &pg);
