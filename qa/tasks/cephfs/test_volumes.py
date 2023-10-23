@@ -661,6 +661,24 @@ class TestVolumes(TestVolumesHelper):
         self.assertEqual(vol_info["used_size"], 0,
                          "Size should be zero when volumes directory is empty")
 
+    def test_volume_info_pending_subvol_deletions(self):
+        """
+        Tests the pending_subvolume_deletions in 'fs volume info' command
+        """
+        subvolname = self._generate_random_subvolume_name()
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolname, "--mode=777")
+        # create 3K zero byte files
+        self._do_subvolume_io(subvolname, number_of_files=3000, file_size=0)
+        # Delete the subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolname)
+        # get volume metadata
+        vol_info = json.loads(self._get_volume_info(self.volname))
+        self.assertNotEqual(vol_info['pending_subvolume_deletions'], 0,
+                            "pending_subvolume_deletions should be 1")
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_volume_info_without_subvolumegroup(self):
         """
         Tests the 'fs volume info' command without subvolume group
