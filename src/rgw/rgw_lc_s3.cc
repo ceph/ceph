@@ -64,11 +64,15 @@ void LCExpiration_S3::decode_xml(XMLObj *obj)
 
 void LCNoncurExpiration_S3::decode_xml(XMLObj *obj)
 {
+  RGWXMLDecoder::decode_xml("NewerNoncurrentVersions", newer_noncurrent, obj);
   RGWXMLDecoder::decode_xml("NoncurrentDays", days, obj, true);
 }
 
 void LCNoncurExpiration_S3::dump_xml(Formatter *f) const
 {
+  if(has_newer()) {
+    encode_xml("NewerNoncurrentVersions", newer_noncurrent, f);
+  }
   encode_xml("NoncurrentDays", days, f);
 }
 
