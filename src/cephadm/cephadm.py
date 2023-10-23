@@ -3901,20 +3901,72 @@ def command_agent(ctx: CephadmContext) -> None:
 def command_version(ctx):
     # type: (CephadmContext) -> int
     import importlib
+    import zipimport
+    import types
 
+    vmod: Optional[types.ModuleType]
+    zmod: Optional[types.ModuleType]
     try:
-        vmod = importlib.import_module('_version')
+        vmod = importlib.import_module('_cephadmmeta.version')
+        zmod = vmod
     except ImportError:
-        print('cephadm version UNKNOWN')
-        return 1
-    _unset = '<UNSET>'
-    print('cephadm version {0} ({1}) {2} ({3})'.format(
-        getattr(vmod, 'CEPH_GIT_NICE_VER', _unset),
-        getattr(vmod, 'CEPH_GIT_VER', _unset),
-        getattr(vmod, 'CEPH_RELEASE_NAME', _unset),
-        getattr(vmod, 'CEPH_RELEASE_TYPE', _unset),
-    ))
+        vmod = zmod = None
+    if vmod is None:
+        # fallback to earlier location
+        try:
+            vmod = importlib.import_module('_version')
+        except ImportError:
+            pass
+    if zmod is None:
+        # fallback to outer package, for zip import module
+        try:
+            zmod = importlib.import_module('_cephadmmeta')
+        except ImportError:
+            zmod = None
+
+    if not ctx.verbose:
+        if vmod is None:
+            print('cephadm version UNKNOWN')
+            return 1
+        _unset = '<UNSET>'
+        print(
+            'cephadm version {0} ({1}) {2} ({3})'.format(
+                getattr(vmod, 'CEPH_GIT_NICE_VER', _unset),
+                getattr(vmod, 'CEPH_GIT_VER', _unset),
+                getattr(vmod, 'CEPH_RELEASE_NAME', _unset),
+                getattr(vmod, 'CEPH_RELEASE_TYPE', _unset),
+            )
+        )
+        return 0
+
+    out: Dict[str, Any] = {'name': 'cephadm'}
+    ceph_vars = [
+        'CEPH_GIT_NICE_VER',
+        'CEPH_GIT_VER',
+        'CEPH_RELEASE_NAME',
+        'CEPH_RELEASE_TYPE',
+    ]
+    for var in ceph_vars:
+        value = getattr(vmod, var, None)
+        if value is not None:
+            out[var.lower()] = value
+
+    loader = getattr(zmod, '__loader__', None)
+    if loader and isinstance(loader, zipimport.zipimporter):
+        try:
+            deps_info = json.loads(loader.get_data('_cephadmmeta/deps.json'))
+            out['bundled_packages'] = deps_info
+        except OSError:
+            pass
+        files = getattr(loader, '_files', {})
+        out['zip_root_entries'] = sorted(
+            {p.split('/')[0] for p in files.keys()}
+        )
+
+    json.dump(out, sys.stdout, indent=2)
+    print()
     return 0
+
 
 ##################################
 
@@ -6947,6 +6999,11 @@ def _get_parser():
     parser_version = subparsers.add_parser(
         'version', help='get cephadm version')
     parser_version.set_defaults(func=command_version)
+    parser_version.add_argument(
+        '--verbose',
+        action='store_true',
+        help='Detailed version information',
+    )
 
     parser_pull = subparsers.add_parser(
         'pull', help='pull the default container image')
