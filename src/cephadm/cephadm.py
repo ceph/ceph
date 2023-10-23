@@ -4937,6 +4937,8 @@ WantedBy=ceph-{fsid}.target
             'ssl_crt_path': self.listener_cert_path,
             'ssl_key_path': self.listener_key_path
         }
+        if result_json['result'].get('port'):
+            kwargs['port'] = result_json['result']['port']
 
         self.t_node_proxy = NodeProxy(**kwargs)
         self.t_node_proxy.start()
