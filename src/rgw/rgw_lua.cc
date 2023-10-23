@@ -213,11 +213,33 @@ int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
     return rc;
   }
   install_dir.assign(tmp_luarocks_path);
+  
+  {  
+    bp::ipstream is;
+    const auto cmd = p.string() + " config";
+    bp::child c(cmd, bp::std_in.close(), (bp::std_err & bp::std_out) > is);
+    
+    std::string lines = std::string("Lua CMD: ") + cmd;
+    std::string line;
+    
+    do {
+      if (!line.empty()) {
+        lines.append("\n\t");
+        lines.append(line);
+      }
+    } while (c.running() && std::getline(is, line));
+
+    c.wait();
+    line = "exit code: " + std::to_string(c.exit_code());
+    lines.append("\n\t");
+    lines.append(line);
+    ldpp_dout(dpp, 20) << lines << dendl;
+  }
 
   // the lua rocks install dir will be created by luarocks the first time it is called
   for (const auto& package : packages) {
     bp::ipstream is;
-    const auto cmd = p.string() + " install --lua-version " + CEPH_LUA_VERSION + " --tree " + install_dir + " --deps-mode one " + package;
+    const auto cmd = p.string() + " install --no-doc --no-manifest --check-lua-versions --lua-version " + CEPH_LUA_VERSION + " --tree " + install_dir + " --deps-mode one " + package;
     bp::child c(cmd, bp::std_in.close(), (bp::std_err & bp::std_out) > is);
 
     // once package reload is supported, code should yield when reading output
