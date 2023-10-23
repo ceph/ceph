@@ -164,9 +164,19 @@ MEV(SchedReplica)
 /// that is in-flight to the local ObjectStore
 MEV(ReplicaPushesUpd)
 
-/// a new interval has dawned.
-/// For a Primary: Discards replica reservations, so that the FullReset that would
-/// follow it would not attempt to release them.
+/**
+ * IntervalChanged
+ *
+ * This event notifies the ScrubMachine that it is no longer responsible for
+ * releasing replica state.  It will generally be submitted upon a PG interval
+ * change.
+ *
+ * This event is distinct from FullReset because replicas are always responsible
+ * for releasing any interval specific state (including but certainly not limited to
+ * scrub reservations) upon interval change, without coordination from the
+ * Primary.  This event notifies the ScrubMachine that it can forget about
+ * such remote state.
+ */
 MEV(IntervalChanged)
 
 /// guarantee that the FSM is in the quiescent state (i.e. NotActive)
