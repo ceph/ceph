@@ -211,6 +211,7 @@ class NodeProxy(Thread):
         self.log.logger.info(f"Server initialization...")
         try:
             self.system = RedfishDellSystem(host=self.__dict__['host'],
+                                            port=self.__dict__.get('port', 443),
                                             username=self.__dict__['username'],
                                             password=self.__dict__['password'],
                                             config=self.config)
