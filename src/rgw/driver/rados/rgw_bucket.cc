@@ -2574,11 +2574,12 @@ int RGWMetadataHandlerPut_BucketInstance::put_check(const DoutPrefixProvider *dp
       }
     }
     bci.info.layout.current_index.layout.type = rule_info.index_type;
-  } else {
+
     /* always keep bucket versioning enabled on archive zone */
     if (bihandler->driver->get_zone()->get_tier_type() == "archive") {
       bci.info.flags = (bci.info.flags & ~BUCKET_VERSIONS_SUSPENDED) | BUCKET_VERSIONED;
     }
+  } else {
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
