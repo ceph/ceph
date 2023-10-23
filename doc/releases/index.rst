@@ -73,6 +73,7 @@ Release timeline
 .. _17.2.4: quincy#v17-2-4-quincy
 .. _17.2.5: quincy#v17-2-5-quincy
 .. _17.2.6: quincy#v17-2-6-quincy
+.. _17.2.7: quincy#v17-2-7-quincy
 
 .. _Pacific: pacific
 .. _16.2.14: pacific#v16-2-14-pacific
