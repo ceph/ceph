@@ -511,9 +511,9 @@ options:
   type: millisecs
   level: advanced
   desc: Maximum wait (milliseconds) for scrub reservations before issuing a cluster-log warning
-  long_desc: Waiting too long for a replica to respond to scrub resource reservation request
-   (after at least half of the replicas have responded). Disable by setting to a very large value.
-  default: 2200
+  long_desc: Waiting too long for a replica to respond to scrub resource reservation request.
+    Disable by setting to a very large value.
+  default: 30000
   min: 500
   see_also:
   - osd_scrub_reservation_timeout
@@ -525,7 +525,7 @@ options:
   long_desc: Maximum wait (milliseconds) for all replicas to respond to
     scrub reservation requests, before the scrub session is aborted. Disable by setting
     to a very large value.
-  default: 5000
+  default: 300000
   min: 2000
   see_also:
   - osd_scrub_slow_reservation_response
