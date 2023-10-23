@@ -15,10 +15,11 @@ class BaseRedfishSystem(BaseSystem):
         self.chassis_endpoint: str = kw.get('chassis_endpoint', '/Chassis/System.Embedded.1')
         self.log = Logger(__name__)
         self.host: str = kw['host']
+        self.port: int = kw['port']
         self.username: str = kw['username']
         self.password: str = kw['password']
         # move the following line (class attribute?)
-        self.client = RedFishClient(host=self.host, username=self.username, password=self.password)
+        self.client = RedFishClient(host=self.host, port=self.port, username=self.username, password=self.password)
         self.log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
 
         self.run: bool = False
