@@ -66,14 +66,14 @@ export class RgwRealmService {
     };
   }
 
-  importRealmToken(realm_token: string, zone_name: string) {
-    return this.rgwDaemonService.request((params: HttpParams) => {
-      params = params.appendAll({
-        realm_token: realm_token,
-        zone_name: zone_name
-      });
-      return this.http.post(`${this.url}/import_realm_token`, null, { params: params });
-    });
+  importRealmToken(realm_token: string, zone_name: string, port: number, placementSpec: object) {
+    let requestBody = {
+      realm_token: realm_token,
+      zone_name: zone_name,
+      port: port,
+      placement_spec: placementSpec
+    };
+    return this.http.post(`${this.url}/import_realm_token`, requestBody);
   }
 
   getRealmTokens() {
