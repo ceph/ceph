@@ -122,7 +122,9 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
     op.expiration_date = ceph::from_iso_8601(rule.get_expiration().get_date());
   }
   if (rule.get_noncur_expiration().has_days()) {
-    op.noncur_expiration = rule.get_noncur_expiration().get_days();
+    const auto& exp = rule.get_noncur_expiration();
+    op.noncur_expiration = exp.get_days();
+    op.newer_noncurrent = exp.get_newer();
   }
   if (rule.get_mp_expiration().has_days()) {
     op.mp_expiration = rule.get_mp_expiration().get_days();
@@ -180,33 +182,6 @@ int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
     return -ERR_INVALID_REQUEST;
   }
   return 0;
-}
-
-bool RGWLifecycleConfiguration::has_same_action(const lc_op& first,
-						const lc_op& second) {
-  if ((first.expiration > 0 || first.expiration_date != boost::none) && 
-    (second.expiration > 0 || second.expiration_date != boost::none)) {
-    return true;
-  } else if (first.noncur_expiration > 0 && second.noncur_expiration > 0) {
-    return true;
-  } else if (first.mp_expiration > 0 && second.mp_expiration > 0) {
-    return true;
-  } else if (!first.transitions.empty() && !second.transitions.empty()) {
-    for (auto &elem : first.transitions) {
-      if (second.transitions.find(elem.first) != second.transitions.end()) {
-        return true;
-      }
-    }
-  } else if (!first.noncur_transitions.empty() &&
-	     !second.noncur_transitions.empty()) {
-    for (auto &elem : first.noncur_transitions) {
-      if (second.noncur_transitions.find(elem.first) !=
-	  second.noncur_transitions.end()) {
-        return true;
-      }
-    }
-  }
-  return false;
 }
 
 /* Formerly, this method checked for duplicate rules using an invalid
@@ -373,13 +348,14 @@ class LCObjsLister {
   string prefix;
   vector<rgw_bucket_dir_entry>::iterator obj_iter;
   rgw_bucket_dir_entry pre_obj;
+  uint64_t num_noncurrent{0};
   int64_t delay_ms;
 
 public:
   LCObjsLister(rgw::sal::Driver* _driver, rgw::sal::Bucket* _bucket) :
       driver(_driver), bucket(_bucket) {
     list_params.list_versions = bucket->versioned();
-    list_params.allow_unordered = true;
+    list_params.allow_unordered = true; // XXX can be unconditionally true, so long as all versions of one object are assured to be on one shard and always ordered on that shard (true today in RADOS)
     delay_ms = driver->ctx()->_conf.get_val<int64_t>("rgw_lc_thread_delay");
   }
 
@@ -426,6 +402,13 @@ public:
       }
       delay();
     }
+
+    if (obj_iter->key.name == pre_obj.key.name) {
+      ++num_noncurrent;
+    } else {
+      num_noncurrent = 0; // XXX the first element must be current or a delete marker (?)
+    }
+
     /* returning address of entry in objs */
     *obj = &(*obj_iter);
     return obj_iter != list_results.objs.end();
@@ -451,6 +434,7 @@ public:
     return ((obj_iter + 1)->key.name);
   }
 
+  uint64_t get_num_noncurrent() { return num_noncurrent; }
 }; /* LCObjsLister */
 
 struct op_env {
@@ -477,6 +461,7 @@ struct lc_op_ctx {
   op_env env;
   rgw_bucket_dir_entry o;
   boost::optional<std::string> next_key_name;
+  uint64_t num_noncurrent;
   ceph::real_time effective_mtime;
 
   rgw::sal::Driver* driver;
@@ -493,10 +478,11 @@ struct lc_op_ctx {
 
   lc_op_ctx(op_env& env, rgw_bucket_dir_entry& o,
 	    boost::optional<std::string> next_key_name,
+	    uint64_t num_noncurrent,
 	    ceph::real_time effective_mtime,
 	    const DoutPrefixProvider *dpp, WorkQ* wq)
     : cct(env.driver->ctx()), env(env), o(o), next_key_name(next_key_name),
-      effective_mtime(effective_mtime),
+      num_noncurrent(num_noncurrent), effective_mtime(effective_mtime),
       driver(env.driver), bucket(env.bucket), op(env.op), ol(env.ol),
       octx(env.driver), dpp(dpp), wq(wq)
     {
@@ -654,6 +640,7 @@ class LCOpRule {
 
   op_env env;
   boost::optional<std::string> next_key_name;
+  uint64_t num_noncurrent;
   ceph::real_time effective_mtime;
 
   std::vector<shared_ptr<LCOpFilter> > filters; // n.b., sharing ovhd
@@ -1198,10 +1185,12 @@ public:
 				      exp_time);
 
     ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key << ": is_expired="
-		      << is_expired << " "
-		      << oc.wq->thr_name() << dendl;
+		       << is_expired << " " << ": num_noncurrent="
+		       << oc.num_noncurrent
+		       << oc.wq->thr_name() << dendl;
 
     return is_expired &&
+      (oc.num_noncurrent > oc.op.newer_noncurrent) &&
       pass_object_lock_check(oc.driver, oc.obj.get(), dpp);
   }
 
@@ -1211,9 +1200,9 @@ public:
 			       rgw::notify::ObjectExpirationNoncurrent);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: remove_expired_obj (non-current expiration) " 
-		       << oc.bucket << ":" << o.key
-		       << " " << cpp_strerror(r)
-		       << " " << oc.wq->thr_name() << dendl;
+			   << oc.bucket << ":" << o.key
+			   << " " << cpp_strerror(r)
+			   << " " << oc.wq->thr_name() << dendl;
       return r;
     }
     if (perfcounter) {
@@ -1567,6 +1556,7 @@ void LCOpRule::build()
 void LCOpRule::update()
 {
   next_key_name = env.ol.next_key_name();
+  num_noncurrent = env.ol.get_num_noncurrent();
   effective_mtime = env.ol.get_prev_obj().meta.mtime;
 }
 
@@ -1574,7 +1564,7 @@ int LCOpRule::process(rgw_bucket_dir_entry& o,
 		      const DoutPrefixProvider *dpp,
 		      WorkQ* wq)
 {
-  lc_op_ctx ctx(env, o, next_key_name, effective_mtime, dpp, wq);
+  lc_op_ctx ctx(env, o, next_key_name, num_noncurrent, effective_mtime, dpp, wq);
   shared_ptr<LCOpAction> *selected = nullptr; // n.b., req'd by sharing
   real_time exp;
 

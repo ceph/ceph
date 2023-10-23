@@ -44,26 +44,31 @@ protected:
   std::string days;
   //At present only current object has expiration date
   std::string date;
+  std::string newer_noncurrent;
 public:
   LCExpiration() {}
   LCExpiration(const std::string& _days, const std::string& _date) : days(_days), date(_date) {}
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 2, bl);
+    ENCODE_START(4, 2, bl);
     encode(days, bl);
     encode(date, bl);
+    encode(newer_noncurrent, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
     decode(days, bl);
     if (struct_v >= 3) {
       decode(date, bl);
+      if (struct_v >= 4) {
+	decode(newer_noncurrent, bl);
+      }
     }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
-//  static void generate_test_instances(list<ACLOwner*>& o);
+  //  static void generate_test_instances(list<ACLOwner*>& o);
   void set_days(const std::string& _days) { days = _days; }
   std::string get_days_str() const {
     return days;
@@ -71,6 +76,11 @@ public:
   int get_days() const {return atoi(days.c_str()); }
   bool has_days() const {
     return !days.empty();
+  }
+  void set_newer(const std::string& _newer) { newer_noncurrent = _newer; }
+  int get_newer() const {return atoi(newer_noncurrent.c_str()); }
+  bool has_newer() const {
+    return !newer_noncurrent.empty();
   }
   void set_date(const std::string& _date) { date = _date; }
   std::string get_date() const {
@@ -440,6 +450,7 @@ struct lc_op
   bool dm_expiration{false};
   int expiration{0};
   int noncur_expiration{0};
+  int newer_noncurrent{0};
   int mp_expiration{0};
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
@@ -463,7 +474,6 @@ protected:
   std::multimap<std::string, lc_op> prefix_map;
   std::multimap<std::string, LCRule> rule_map;
   bool _add_rule(const LCRule& rule);
-  bool has_same_action(const lc_op& first, const lc_op& second);
 public:
   explicit RGWLifecycleConfiguration(CephContext *_cct) : cct(_cct) {}
   RGWLifecycleConfiguration() : cct(NULL) {}
