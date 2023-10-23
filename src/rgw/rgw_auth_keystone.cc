@@ -80,9 +80,6 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
   validate.set_url(url);
 
   int ret = validate.process(null_yield);
-  if (ret < 0) {
-    throw ret;
-  }
 
   /* NULL terminate for debug output. */
   token_body_bl.append(static_cast<char>(0));
@@ -100,6 +97,10 @@ TokenEngine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string&
     ldpp_dout(dpp, 5) << "Failed keystone auth from " << url << " with "
                   << validate.get_http_status() << dendl;
     return boost::none;
+  }
+  // throw any other http or connection errors
+  if (ret < 0) {
+    throw ret;
   }
 
   ldpp_dout(dpp, 20) << "received response status=" << validate.get_http_status()
@@ -425,11 +426,6 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
 
   /* send request */
   ret = validate.process(null_yield);
-  if (ret < 0) {
-    ldpp_dout(dpp, 2) << "s3 keystone: token validation ERROR: "
-                  << token_body_bl.c_str() << dendl;
-    throw ret;
-  }
 
   /* if the supplied signature is wrong, we will get 401 from Keystone */
   if (validate.get_http_status() ==
@@ -438,6 +434,12 @@ EC2Engine::get_from_keystone(const DoutPrefixProvider* dpp, const std::string_vi
   } else if (validate.get_http_status() ==
           decltype(validate)::HTTP_STATUS_NOTFOUND) {
     return std::make_pair(boost::none, -ERR_INVALID_ACCESS_KEY);
+  }
+  // throw any other http or connection errors
+  if (ret < 0) {
+    ldpp_dout(dpp, 2) << "s3 keystone: token validation ERROR: "
+                  << token_body_bl.c_str() << dendl;
+    throw ret;
   }
 
   /* now parse response */
@@ -501,16 +503,17 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
 
   /* send request */
   ret = secret.process(null_yield);
+
+  /* if the supplied access key isn't found, we will get 404 from Keystone */
+  if (secret.get_http_status() ==
+          decltype(secret)::HTTP_STATUS_NOTFOUND) {
+    return make_pair(boost::none, -ERR_INVALID_ACCESS_KEY);
+  }
+  // return any other http or connection errors
   if (ret < 0) {
     ldpp_dout(dpp, 2) << "s3 keystone: secret fetching error: "
                   << token_body_bl.c_str() << dendl;
     return make_pair(boost::none, ret);
-  }
-
-  /* if the supplied signature is wrong, we will get 401 from Keystone */
-  if (secret.get_http_status() ==
-          decltype(secret)::HTTP_STATUS_NOTFOUND) {
-    return make_pair(boost::none, -EINVAL);
   }
 
   /* now parse response */
@@ -659,6 +662,12 @@ rgw::auth::Engine::result_t EC2Engine::authenticate(
   auto [t, secret_key, failure_reason] =
     get_access_token(dpp, access_key_id, string_to_sign, signature, signature_factory);
   if (! t) {
+    if (failure_reason == -ERR_SIGNATURE_NO_MATCH) {
+      // we looked up a secret but it didn't generate the same signature as
+      // the client. since we found this access key in keystone, we should
+      // reject the request instead of trying other engines
+      return result_t::reject(failure_reason);
+    }
     return result_t::deny(failure_reason);
   }
 
