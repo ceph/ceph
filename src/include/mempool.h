@@ -26,7 +26,7 @@
 #include <boost/container/flat_set.hpp>
 #include <boost/container/flat_map.hpp>
 
-#ifdef _GNU_SOURCE
+#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
 #  include <sched.h>
 #endif
 
@@ -206,13 +206,7 @@ enum {
 };
 
 static size_t pick_a_shard_int() {
-#ifndef _GNU_SOURCE
-  // Dirt cheap, see:
-  //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
-  size_t me = (size_t)pthread_self();
-  size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
-  return i;
-#else
+#if defined(_GNU_SOURCE) && defined(WITH_SEASTAR) && !defined(WITH_ALIEN)
   // a thread local storage is actually just an approximation;
   // what we truly want is a _cpu local storage_.
   //
@@ -220,6 +214,12 @@ static size_t pick_a_shard_int() {
   // a syscall-handled-in-userspace (vdso!). it grabs the cpu
   // id kernel exposes to a task on context switch.
   return sched_getcpu() & ((1 << num_shard_bits) - 1);
+#else
+  // Dirt cheap, see:
+  //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
+  size_t me = (size_t)pthread_self();
+  size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
+  return i;
 #endif
 }
 
