@@ -237,6 +237,9 @@ public:
       head.ext_num_retry = head.num_retry;
       head.ext_num_fwd = head.num_fwd;
 
+      head.owner_uid = head.caller_uid;
+      head.owner_gid = head.caller_gid;
+
       /* Can't set the btime from legacy struct */
       if (head.op == CEPH_MDS_OP_SETATTR) {
 	int localmask = head.args.setattr.mask;
