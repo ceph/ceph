@@ -224,6 +224,9 @@ public:
       copy_from_legacy_head(&head, &old_mds_head);
       head.version = 0;
 
+      head.ext_num_retry = head.num_retry;
+      head.ext_num_fwd = head.num_fwd;
+
       /* Can't set the btime from legacy struct */
       if (head.op == CEPH_MDS_OP_SETATTR) {
 	int localmask = head.args.setattr.mask;
