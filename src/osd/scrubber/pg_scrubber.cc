@@ -10,6 +10,7 @@
 #include "debug.h"
 
 #include "common/errno.h"
+#include "include/object_fmt.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
