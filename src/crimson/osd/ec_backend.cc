@@ -430,7 +430,23 @@ void ECBackend::handle_sub_write(
   const ZTracer::Trace &trace,
   ECListener& eclistener)
 {
-  std::ignore = handle_sub_write(from, std::move(op), eclistener);
+  LOG_PREFIX(ECBackend::handle_sub_write);
+  const auto tid = op.tid;
+  DEBUG("tid {}", tid);
+  std::ignore = handle_sub_write(
+    from, std::move(op), eclistener
+  ).si_then([tid, &eclistener, this] {
+    assert(eclistener.pgb_is_primary());
+    ECSubWriteReply reply;
+    reply.tid = tid;
+    //reply.last_complete = last_complete;
+    reply.committed = true;
+    reply.applied = true;
+    reply.from = eclistener.whoami_shard();
+    logger().debug("ECBackend::{} from {}",
+		    "handle_sub_write::reply", reply.from);
+    return handle_rep_write_reply(std::move(reply));
+  }, crimson::ct_error::assert_all{});
 }
 
 ECBackend::write_iertr::future<>
