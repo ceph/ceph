@@ -450,7 +450,7 @@ private:
     uint64_t truncate_size);
   virtual rep_op_fut_t
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,
-		      const hobject_t& hoid,
+		      crimson::osd::ObjectContextRef &&obc,
 		      ceph::os::Transaction&& txn,
 		      osd_op_params_t&& osd_op_p,
 		      epoch_t min_epoch, epoch_t max_epoch,

@@ -36,13 +36,15 @@ ReplicatedBackend::_read(const hobject_t& hoid,
 
 ReplicatedBackend::rep_op_fut_t
 ReplicatedBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
-                                       const hobject_t& hoid,
+                                       crimson::osd::ObjectContextRef &&obc,
                                        ceph::os::Transaction&& txn,
                                        osd_op_params_t&& osd_op_p,
                                        epoch_t min_epoch, epoch_t map_epoch,
 				       std::vector<pg_log_entry_t>&& log_entries)
 {
+  LOCAL_LOGGER.debug("ReplicatedBackend::{}", __func__);
   LOG_PREFIX(ReplicatedBackend::_submit_transaction);
+  const hobject_t& hoid = obc->obs.oi.soid;
   DEBUGDPP("object {}, {}", dpp, hoid);
 
   const ceph_tid_t tid = shard_services.get_tid();

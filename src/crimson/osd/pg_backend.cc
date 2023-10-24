@@ -207,7 +207,7 @@ PGBackend::mutate_object(
     obc->obs.oi = object_info_t(obc->obs.oi.soid);
   }
   return _submit_transaction(
-    std::move(pg_shards), obc->obs.oi.soid, std::move(txn),
+    std::move(pg_shards), std::move(obc), std::move(txn),
     std::move(osd_op_p), min_epoch, map_epoch, std::move(log_entries));
 }
 
