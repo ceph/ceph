@@ -160,14 +160,9 @@ public:
   const std::set<pg_shard_t> &get_acting_recovery_backfill_shards() const override {
     return get_acting_recovery_backfill();
   }
-  bool should_send_op(pg_shard_t peer, const hobject_t &hoid) override {
-    if (peer == get_primary()) {
-      // TODO XXX FIXME
-      assert(peer == get_primary());
-      return true;
-    }
-    abort();
-  }
+
+  bool should_send_op(pg_shard_t peer, const hobject_t &hoid) override;
+
   spg_t primary_spg_t() const override {
     return spg_t(get_info().pgid.pgid, get_primary().shard);
   }

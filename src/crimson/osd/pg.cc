@@ -286,6 +286,34 @@ void PG::recheck_readable()
   }
 }
 
+bool PG::should_send_op(pg_shard_t peer, const hobject_t &hoid)
+{
+  if (peer == get_primary()) {
+    return true;
+  }
+  bool should_send =
+    hoid.pool != (int64_t)get_pgid().pool() ||
+    hoid <= peering_state.get_peer_info(peer).last_backfill ||
+    (recovery_handler->backfill_state &&
+      hoid <= recovery_handler->backfill_state->get_last_backfill_started());
+  if (!should_send) {
+    ceph_assert(is_backfill_target(peer));
+    logger().debug("{}: {} shipping empty opt to osd.{}, object {}"
+		   " beyond std::max(last_backfill_started,"
+		   " peer_info[peer].last_backfill {})",
+		   *this, __func__, peer, hoid,
+		   peering_state.get_peer_info(peer).last_backfill);
+    return should_send;
+  }
+  if (peering_state.is_async_recovery_target(peer) &&
+      peering_state.get_peer_missing(peer).is_missing(hoid)) {
+    should_send = false;
+    logger().info("{}: {} shipping empty opt to osd.{}, object {}"
+		  " which is pending recovery in async_recovery_targets",
+		 *this, __func__, peer, hoid);
+  }
+  return should_send;
+}
 unsigned PG::get_target_pg_log_entries() const
 {
   const unsigned local_num_pgs = shard_services.get_num_local_pgs();
