@@ -68,7 +68,7 @@ export class CdFormGroup extends UntypedFormGroup {
   showError(controlName: string, form: NgForm, errorName?: string): boolean {
     const control = this.get(controlName);
     return (
-      (form.submitted || control.dirty) &&
+      (form?.submitted || control.dirty) &&
       (errorName ? control.hasError(errorName) : control.invalid)
     );
   }
