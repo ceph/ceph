@@ -10,7 +10,7 @@ class BaseSystem:
         self.config: Config = kw['config']
         self.client: BaseClient
 
-    def get_system(self) -> Dict[str, Dict[str, Dict]]:
+    def get_system(self) -> Dict[str, Any]:
         raise NotImplementedError()
 
     def get_status(self) -> Dict[str, Dict[str, Dict]]:
@@ -23,6 +23,9 @@ class BaseSystem:
         raise NotImplementedError()
 
     def get_memory(self) -> Dict[str, Dict[str, Dict]]:
+        raise NotImplementedError()
+
+    def get_fans(self) -> Dict[str, Dict[str, Dict]]:
         raise NotImplementedError()
 
     def get_power(self) -> Dict[str, Dict[str, Dict]]:
