@@ -89,9 +89,11 @@ seastar::future<> InternalClientRequest::start()
                   osd_ops,
                   std::as_const(op_info),
                   get_do_osd_ops_params(),
+                  // success_func
                   [] {
                     return PG::do_osd_ops_iertr::now();
                   },
+                  // failure_func
                   [] (const std::error_code& e) {
                     return PG::do_osd_ops_iertr::now();
                   }
