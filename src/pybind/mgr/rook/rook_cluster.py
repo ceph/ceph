@@ -226,7 +226,7 @@ class PDFetcher(DefaultFetcher):
     def fetch(self) -> None:
         """ Collect the devices information from k8s configmaps"""
         self.dev_cms: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
-                                                              namespace=self.rook_env.namespace,
+                                                              namespace=self.rook_env.operator_namespace,
                                                               label_selector='app=rook-discover')
 
     def devices(self) -> Dict[str, List[Device]]:
@@ -760,7 +760,7 @@ class RookCluster(object):
 
     def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, List[Device]]:
         self.fetcher: Optional[DefaultFetcher] = None
-        op_settings = self.coreV1_api.read_namespaced_config_map(name="rook-ceph-operator-config", namespace=self.rook_env.namespace).data
+        op_settings = self.coreV1_api.read_namespaced_config_map(name="rook-ceph-operator-config", namespace=self.rook_env.operator_namespace).data
         if op_settings.get('ROOK_ENABLE_DISCOVERY_DAEMON', 'false').lower() == 'true':
             self.fetcher = PDFetcher(self.coreV1_api, self.rook_env)
         else:
