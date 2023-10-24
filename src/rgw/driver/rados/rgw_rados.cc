@@ -4293,6 +4293,20 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     cs_info.blocks = std::move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
     cb.get_attrs()[RGW_ATTR_COMPRESSION] = tmp;
+  } else if (auto c = cb.get_attrs().find(RGW_ATTR_COMPRESSION);
+             c != cb.get_attrs().end()) {
+    // if the object was transferred in its compressed+encrypted form, use its
+    // original uncompressed size
+    try {
+      RGWCompressionInfo info;
+      auto p = c->second.cbegin();
+      decode(info, p);
+      accounted_size = info.orig_size;
+    } catch (const buffer::error&) {
+      ldpp_dout(rctx.dpp, 0) << "ERROR: could not decode compression attr for "
+          "replicated object " << dest_obj << dendl;
+      // decode error isn't fatal, but we might put the wrong size in the index
+    }
   }
 
   if (override_owner) {
