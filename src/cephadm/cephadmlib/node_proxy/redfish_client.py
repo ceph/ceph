@@ -1,8 +1,6 @@
-import time
-import datetime
 import ssl
 import json
-from urllib.error import HTTPError, URLError
+from urllib.error import URLError
 from urllib.request import urlopen, Request
 from .baseclient import BaseClient
 from .util import Logger
@@ -14,13 +12,13 @@ class RedFishClient(BaseClient):
 
     def __init__(self,
                  host: str = "",
-                 port: str = "443",
+                 port: int = 443,
                  username: str = "",
                  password: str = ""):
         super().__init__(host, username, password)
         self.log: Logger = Logger(__name__)
         self.log.logger.info(f"Initializing redfish client {__name__}")
-        self.host: str = f"https://{host}:{port}"
+        self.host: str = f"https://{host}:{str(port)}"
         self.token: str = ''
         self.location: str = ''
 

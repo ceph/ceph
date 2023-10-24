@@ -42,7 +42,6 @@ class RedfishDellSystem(BaseRedfishSystem):
                         self.log.logger.warning(f"Could not find field: {field} in data: {data[elt]}")
         return normalize_dict(result)
 
-
     def get_sn(self) -> str:
         return self._sys['SKU']
 
@@ -70,15 +69,15 @@ class RedfishDellSystem(BaseRedfishSystem):
     def get_fans(self) -> Dict[str, Dict[str, Dict]]:
         return self._sys['fans']
 
-    def get_led(self) -> Dict[str, Dict[str, Dict]]:
+    def get_led(self) -> Dict[str, Any]:
         endpoint = f"/redfish/v1/{self.chassis_endpoint}"
         result = self.client.query(method='GET',
                                    endpoint=endpoint,
                                    timeout=10)
         response_json = json.loads(result[1])
         mapper = {
-                'true': 'on',
-                'false': 'off'
+            'true': 'on',
+            'false': 'off'
         }
         if result[2] == 200:
             return {"state": mapper[str(response_json['LocationIndicatorActive']).lower()]}
