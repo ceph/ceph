@@ -1468,7 +1468,7 @@ PG::interruptible_future<> PG::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>
   auto* ec_backend=dynamic_cast<::ECBackend*>(&get_backend());
   assert(ec_backend);
   return ec_backend->handle_rep_write_reply(
-    std::move(m)
+    std::move(m->op)
   ).handle_error_interruptible(crimson::ct_error::assert_all{});
 }
 

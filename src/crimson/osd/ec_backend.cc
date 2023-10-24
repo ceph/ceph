@@ -441,9 +441,8 @@ ECBackend::handle_rep_write_op(
 }
 
 ECBackend::write_iertr::future<>
-ECBackend::handle_rep_write_reply(Ref<MOSDECSubOpWriteReply> m)
+ECBackend::handle_rep_write_reply(ECSubWriteReply&& op)
 {
-  const auto& op = m->op;
   assert(rmw_pipeline.tid_to_op_map.contains(op.tid));
   const auto& from = op.from;
   auto& wop = *rmw_pipeline.tid_to_op_map.at(op.tid);
