@@ -155,10 +155,17 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
   } else {
     prefix = rule.get_prefix();
   }
-  if (rule.get_filter().has_tags()){
-    op.obj_tags = rule.get_filter().get_tags();
+  const auto& filter = rule.get_filter();
+  if (filter.has_tags()){
+    op.obj_tags = filter.get_tags();
   }
-  op.rule_flags = rule.get_filter().get_flags();
+  if (filter.has_size_gt()) {
+    op.size_gt = filter.get_size_gt();
+  }
+  if (filter.has_size_lt()) {
+    op.size_lt = filter.get_size_lt();
+  }
+  op.rule_flags = filter.get_flags();
   prefix_map.emplace(std::move(prefix), std::move(op));
   return true;
 }
@@ -262,8 +269,9 @@ static inline std::ostream& operator<<(std::ostream &os, rgw::sal::Lifecycle::LC
   return os;
 }
 
-static bool obj_has_expired(const DoutPrefixProvider *dpp, CephContext *cct, ceph::real_time mtime, int days,
-			    ceph::real_time *expire_time = nullptr)
+static bool obj_has_expired(
+  const DoutPrefixProvider *dpp, CephContext *cct, ceph::real_time mtime,
+  int days, ceph::real_time *expire_time = nullptr)
 {
   double timediff, cmp;
   utime_t base_time;
@@ -496,6 +504,37 @@ struct lc_op_ctx {
 
 }; /* lc_op_ctx */
 
+
+static bool pass_size_limit_checks(const DoutPrefixProvider *dpp, lc_op_ctx& oc) {
+
+  const auto& op = oc.op;
+  if (op.size_gt || op.size_lt) {
+    int ret{0};
+    auto& bucket = oc.bucket;
+    auto& o = oc.o;
+    std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(o.key);
+
+    RGWObjState *obj_state{nullptr};
+    ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
+    if (ret < 0) {
+      return false;
+    }
+
+    bool gt_p{true};
+    bool lt_p{true};
+
+    if (op.size_gt) {
+      gt_p = (obj_state->size > op.size_gt.get());
+    }
+    if (op.size_lt) {
+      lt_p = (obj_state->size < op.size_lt.get());
+    }
+
+    return gt_p && lt_p;
+  } /* require size check */
+
+  return true;
+}
 
 static std::string lc_id = "rgw lifecycle";
 static std::string lc_req_id = "0";
@@ -1122,10 +1161,14 @@ public:
       is_expired = obj_has_expired(dpp, oc.cct, mtime, op.expiration, exp_time);
     }
 
+    auto size_check_p = pass_size_limit_checks(dpp, oc);
+
     ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key << ": is_expired="
-		      << (int)is_expired << " "
-		      << oc.wq->thr_name() << dendl;
-    return is_expired;
+		       << (int)is_expired << " size_check_p: "
+		       << size_check_p << " "
+		       << oc.wq->thr_name() << dendl;
+
+    return is_expired && size_check_p;
   }
 
   int process(lc_op_ctx& oc) override {
@@ -1183,14 +1226,18 @@ public:
     int expiration = oc.op.noncur_expiration;
     bool is_expired = obj_has_expired(dpp, oc.cct, oc.effective_mtime, expiration,
 				      exp_time);
+    auto size_check_p = pass_size_limit_checks(dpp, oc);
+    auto newer_noncurrent_p = (oc.num_noncurrent > oc.op.newer_noncurrent);
 
     ldpp_dout(dpp, 20) << __func__ << "(): key=" << o.key << ": is_expired="
 		       << is_expired << " " << ": num_noncurrent="
-		       << oc.num_noncurrent
+		       << oc.num_noncurrent << " size_check_p: "
+		       << size_check_p << " newer_noncurrent_p: "
+		       << newer_noncurrent_p << " "
 		       << oc.wq->thr_name() << dendl;
 
     return is_expired &&
-      (oc.num_noncurrent > oc.op.newer_noncurrent) &&
+      (oc.num_noncurrent > oc.op.newer_noncurrent) && size_check_p &&
       pass_object_lock_check(oc.driver, oc.obj.get(), dpp);
   }
 
@@ -1299,15 +1346,18 @@ public:
       is_expired = obj_has_expired(dpp, oc.cct, mtime, transition.days, exp_time);
     }
 
+    auto size_check_p = pass_size_limit_checks(dpp, oc);
+
     ldpp_dout(oc.dpp, 20) << __func__ << "(): key=" << o.key << ": is_expired="
-		      << is_expired << " "
-		      << oc.wq->thr_name() << dendl;
+			  << is_expired << " " << " size_check_p: "
+			  << size_check_p << " "
+			  << oc.wq->thr_name() << dendl;
 
     need_to_process =
       (rgw_placement_rule::get_canonical_storage_class(o.meta.storage_class) !=
        transition.storage_class);
 
-    return is_expired;
+    return is_expired && size_check_p;
   }
 
   bool should_process() override {

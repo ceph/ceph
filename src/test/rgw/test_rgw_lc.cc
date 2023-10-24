@@ -149,6 +149,41 @@ TEST(TestLCConfigurationDecoder, XMLDoc4)
   ASSERT_EQ(noncur_expiration.get_newer(), 5);
 }
 
+static const char *xmldoc_5 =
+R"(<Rule>
+        <ID>expire-gt</ID>
+        <Expiration>
+            <Days>365</Days>
+        </Expiration>
+        <Filter>
+           <And>
+           <Prefix></Prefix>
+           <ObjectSizeGreaterThan>1024</ObjectSizeGreaterThan>
+           <ObjectSizeLessThan>65536</ObjectSizeLessThan>
+           </And>
+        </Filter>
+        <Status>Enabled</Status>
+    </Rule>
+)";
+
+TEST(TestLCConfigurationDecoder, XMLDoc5)
+{
+  RGWXMLDecoder::XMLParser parser;
+  ASSERT_TRUE(parser.init());
+  auto result1 = parser.parse(xmldoc_5, strlen(xmldoc_5), 1);
+  ASSERT_TRUE(result1);
+  LCRule_S3 rule;
+  auto result2 = RGWXMLDecoder::decode_xml("Rule", rule, &parser, true);
+  ASSERT_TRUE(result2);
+  /* check results */
+  ASSERT_TRUE(rule.is_enabled());
+  const auto& expiration = rule.get_expiration();
+  ASSERT_EQ(expiration.get_days(), 365);
+  const auto& filter = rule.get_filter();
+  ASSERT_EQ(filter.get_size_gt(), 1024);
+  ASSERT_EQ(filter.get_size_lt(), 65536);
+}
+
 struct LCWorkTimeTests : ::testing::Test
 {
    CephContext* cct;
