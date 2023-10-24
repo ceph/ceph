@@ -426,7 +426,7 @@ public:
 
   virtual rep_op_fut_t
   submit_transaction(const std::set<pg_shard_t> &pg_shards,
-		     const hobject_t& hoid,
+		     crimson::osd::ObjectContextRef&& obc,
 		     crimson::osd::ObjectContextRef&& new_clone,
 		     ceph::os::Transaction&& txn,
 		     osd_op_params_t&& osd_op_p,

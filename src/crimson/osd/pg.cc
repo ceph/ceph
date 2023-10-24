@@ -987,7 +987,7 @@ PG::submit_transaction(
 
   auto [submitted, all_completed] = co_await backend->submit_transaction(
       peering_state.get_acting_recovery_backfill(),
-      obc->obs.oi.soid,
+      std::move(obc),
       std::move(new_clone),
       std::move(txn),
       std::move(osd_op_p),
