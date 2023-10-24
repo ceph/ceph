@@ -8,6 +8,8 @@ tasks:
 - install:
 - ceph:
     fs: xfs
+    log-ignorelist:
+    - \(POOL_APP_NOT_ENABLED\)
 - workunit:
     clients:
       all:

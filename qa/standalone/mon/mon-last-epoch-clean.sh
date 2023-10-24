@@ -173,7 +173,7 @@ function TEST_mon_last_clean_epoch() {
   local dir=$1
 
   run_mon $dir a || return 1
-  run_mgr $dir x || return 1
+  run_mgr $dir x --mon-warn-on-pool-no-app=false || return 1
   run_osd $dir 0 || return 1
   run_osd $dir 1 || return 1
   run_osd $dir 2 || return 1

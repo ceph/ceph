@@ -15,4 +15,5 @@ tasks:
       - \(OSD_
       - \(OBJECT_
       - overall HEALTH
+      - \(POOL_APP_NOT_ENABLED\)
 - ssh_keys:

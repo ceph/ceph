@@ -3,6 +3,7 @@ overrides:
     log-ignorelist:
     - but it is still running
     - objects unfound and apparently lost
+    - \(POOL_APP_NOT_ENABLED\)
     conf:
       osd:
         osd scrub min interval: 60

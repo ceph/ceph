@@ -9,7 +9,6 @@ overrides:
       - \(SLOW_OPS\)
       - \(MON_DOWN\)
       - \(PG_
-      - \(POOL_APP_NOT_ENABLED\)
       - \(SMALLER_PGP_NUM\)
       - slow request
     conf:
