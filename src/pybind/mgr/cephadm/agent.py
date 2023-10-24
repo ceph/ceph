@@ -119,9 +119,8 @@ class NodeProxy:
         results: Dict[str, Any] = {}
 
         if self.validate_node_proxy_data(data):
-            idrac_details = self.mgr.get_store('node_proxy/idrac')
-            idrac_details_json = json.loads(idrac_details)
-            results['result'] = idrac_details_json[data["cephx"]["name"]]
+            host = data["cephx"]["name"]
+            results['result'] = self.mgr.node_proxy.idrac.get(host)
         else:
             results['result'] = self.validate_msg
 
