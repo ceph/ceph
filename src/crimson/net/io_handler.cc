@@ -292,7 +292,7 @@ void IOHandler::assign_frame_assembler(FrameAssemblerV2Ref fa)
 
 void IOHandler::do_set_io_state(
     io_state_t new_state,
-    std::optional<crosscore_t::seq_t> cc_seq,
+    std::optional<cc_seq_t> cc_seq,
     FrameAssemblerV2Ref fa,
     bool set_notify_out)
 {
@@ -363,7 +363,7 @@ void IOHandler::do_set_io_state(
 }
 
 seastar::future<> IOHandler::set_io_state(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     io_state_t new_state,
     FrameAssemblerV2Ref fa,
     bool set_notify_out)
@@ -385,7 +385,7 @@ seastar::future<> IOHandler::set_io_state(
 
 seastar::future<IOHandler::exit_dispatching_ret>
 IOHandler::wait_io_exit_dispatching(
-    crosscore_t::seq_t cc_seq)
+    cc_seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == get_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
@@ -429,7 +429,7 @@ IOHandler::wait_io_exit_dispatching(
 }
 
 seastar::future<> IOHandler::reset_session(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     bool full)
 {
   assert(seastar::this_shard_id() == get_shard_id());
@@ -454,7 +454,7 @@ seastar::future<> IOHandler::reset_session(
 }
 
 seastar::future<> IOHandler::reset_peer_state(
-    crosscore_t::seq_t cc_seq)
+    cc_seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == get_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
@@ -476,7 +476,7 @@ seastar::future<> IOHandler::reset_peer_state(
 }
 
 seastar::future<> IOHandler::requeue_out_sent(
-    crosscore_t::seq_t cc_seq)
+    cc_seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == get_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
@@ -517,7 +517,7 @@ void IOHandler::do_requeue_out_sent()
 }
 
 seastar::future<> IOHandler::requeue_out_sent_up_to(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     seq_num_t msg_seq)
 {
   assert(seastar::this_shard_id() == get_shard_id());
@@ -583,7 +583,7 @@ void IOHandler::discard_out_sent()
 
 seastar::future<>
 IOHandler::dispatch_accept(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     seastar::shard_id new_sid,
     ConnectionFRef conn_fref,
     bool is_replace)
@@ -593,7 +593,7 @@ IOHandler::dispatch_accept(
 
 seastar::future<>
 IOHandler::dispatch_connect(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     seastar::shard_id new_sid,
     ConnectionFRef conn_fref)
 {
@@ -620,7 +620,7 @@ IOHandler::cleanup_prv_shard(seastar::shard_id prv_sid)
 
 seastar::future<>
 IOHandler::to_new_sid(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     seastar::shard_id new_sid,
     ConnectionFRef conn_fref,
     std::optional<bool> is_replace)
@@ -735,7 +735,7 @@ IOHandler::to_new_sid(
 }
 
 seastar::future<> IOHandler::set_accepted_sid(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     seastar::shard_id sid,
     ConnectionFRef conn_fref)
 {
@@ -1183,7 +1183,7 @@ void IOHandler::do_in_dispatch()
 
 seastar::future<>
 IOHandler::close_io(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     bool is_dispatch_reset,
     bool is_replace)
 {
