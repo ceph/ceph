@@ -206,6 +206,8 @@ class LCFilter
 
 protected:
   std::string prefix;
+  std::string size_gt;
+  std::string size_lt;
   RGWObjTags obj_tags;
   uint32_t flags;
 
@@ -227,13 +229,15 @@ public:
   }
 
   bool empty() const {
-    return !(has_prefix() || has_tags() || has_flags());
+    return !(has_prefix() || has_tags() || has_flags() ||
+	     has_size_rule());
   }
 
   // Determine if we need AND tag when creating xml
   bool has_multi_condition() const {
-    if (obj_tags.count() + int(has_prefix()) + int(has_flags()) > 1) // Prefix is a member of Filter
-      return true;
+    if (obj_tags.count() + int(has_prefix()) + int(has_flags()) + int(has_size_rule()) > 1) {
+	return true;
+    }
     return false;
   }
 
@@ -245,6 +249,34 @@ public:
     return !obj_tags.empty();
   }
 
+  bool has_size_gt() const {
+    return !(size_gt.empty());
+  }
+
+  bool has_size_lt() const {
+    return !(size_lt.empty());
+  }
+
+  bool has_size_rule() const {
+    return (has_size_gt() || has_size_lt());
+  }
+
+  uint64_t get_size_gt() const {
+    uint64_t sz{0};
+    try {
+      sz = uint64_t(std::stoull(size_gt));
+    } catch (...) {}
+    return sz;
+  }
+
+  uint64_t get_size_lt() const {
+    uint64_t sz{0};
+    try {
+      sz = uint64_t(std::stoull(size_lt));
+    } catch (...) {}
+    return sz;
+  }
+
   bool has_flags() const {
     return !(flags == uint32_t(LCFlagType::none));
   }
@@ -254,10 +286,12 @@ public:
   }
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(prefix, bl);
     encode(obj_tags, bl);
     encode(flags, bl);
+    encode(size_gt, bl);
+    encode(size_lt, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
@@ -267,6 +301,10 @@ public:
       decode(obj_tags, bl);
       if (struct_v >= 3) {
 	decode(flags, bl);
+	if (struct_v >= 4) {
+	  decode(size_gt, bl);
+	  decode(size_lt, bl);
+	}
       }
     }
     DECODE_FINISH(bl);
@@ -450,8 +488,10 @@ struct lc_op
   bool dm_expiration{false};
   int expiration{0};
   int noncur_expiration{0};
-  int newer_noncurrent{0};
+  uint64_t newer_noncurrent{0};
   int mp_expiration{0};
+  boost::optional<uint64_t> size_gt;
+  boost::optional<uint64_t> size_lt;
   boost::optional<ceph::real_time> expiration_date;
   boost::optional<RGWObjTags> obj_tags;
   std::map<std::string, transition_action> transitions;

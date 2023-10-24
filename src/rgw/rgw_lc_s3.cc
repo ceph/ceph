@@ -132,6 +132,12 @@ void LCFilter_S3::dump_xml(Formatter *f) const
       encode_xml("ArchiveZone", "", f);
     }
   }
+  if (has_size_gt()) {
+    encode_xml("ObjectSizeGreaterThanw", size_gt, f);
+  }
+  if (has_size_lt()) {
+    encode_xml("ObjectSizeLessThan", size_lt, f);
+  }
   if (multi) {
     f->close_section(); // And
   }
@@ -158,6 +164,13 @@ void LCFilter_S3::decode_xml(XMLObj *obj)
   /* parse optional ArchiveZone flag (extension) */
   if (o->find_first("ArchiveZone")) {
     flags |= make_flag(LCFlagType::ArchiveZone);
+  }
+
+  RGWXMLDecoder::decode_xml("ObjectSizeGreaterThan", size_gt, o, false);
+  RGWXMLDecoder::decode_xml("ObjectSizeLessThan", size_lt, o, false);
+  if (has_size_gt() && has_size_lt() &&
+      (size_lt <= size_gt)) {
+    throw RGWXMLDecoder::err("Filter maximum object size must be larger than the minimum object size");
   }
 
   obj_tags.clear(); // why is this needed?
@@ -222,6 +235,13 @@ void LCRule_S3::decode_xml(XMLObj *obj)
 
   RGWXMLDecoder::decode_xml("ID", id, obj);
 
+  if (!RGWXMLDecoder::decode_xml("Status", status, obj)) {
+    throw RGWXMLDecoder::err("missing Status in Rule");
+  }
+  if (status.compare("Enabled") != 0 && status.compare("Disabled") != 0) {
+    throw RGWXMLDecoder::err("bad Status in Rule");
+  }
+
   LCFilter_S3 filter_s3;
   if (!RGWXMLDecoder::decode_xml("Filter", filter_s3, obj)) {
     // Ideally the following code should be deprecated and we should return
@@ -237,13 +257,6 @@ void LCRule_S3::decode_xml(XMLObj *obj)
     }
   }
   filter = (LCFilter)filter_s3;
-
-  if (!RGWXMLDecoder::decode_xml("Status", status, obj)) {
-    throw RGWXMLDecoder::err("missing Status in Filter");
-  }
-  if (status.compare("Enabled") != 0 && status.compare("Disabled") != 0) {
-    throw RGWXMLDecoder::err("bad Status in Filter");
-  }
 
   LCExpiration_S3 s3_expiration;
   LCNoncurExpiration_S3 s3_noncur_expiration;
