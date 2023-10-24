@@ -93,7 +93,7 @@ MURef<MOSDRepOp> ReplicatedBackend::new_repop_msg(
 ReplicatedBackend::rep_op_fut_t
 ReplicatedBackend::submit_transaction(
   const std::set<pg_shard_t> &pg_shards,
-  const hobject_t& hoid,
+  crimson::osd::ObjectContextRef &&obc,
   crimson::osd::ObjectContextRef &&new_clone,
   ceph::os::Transaction&& t,
   osd_op_params_t&& opp,
@@ -101,6 +101,7 @@ ReplicatedBackend::submit_transaction(
   std::vector<pg_log_entry_t>&& logv)
 {
   LOG_PREFIX(ReplicatedBackend::submit_transaction);
+  const hobject_t& hoid = obc->obs.oi.soid;
   DEBUGDPP("object {}", dpp, hoid);
   auto log_entries = std::move(logv);
   auto txn = std::move(t);
