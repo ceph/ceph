@@ -4230,7 +4230,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   string etag;
   real_time set_mtime;
-  uint64_t expected_size = 0;
+  uint64_t accounted_size = 0;
 
   RGWObjState *dest_state = NULL;
   RGWObjManifest *manifest = nullptr;
@@ -4269,7 +4269,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   }
 
   ret = conn->complete_request(in_stream_req, &etag, &set_mtime,
-                               &expected_size, nullptr, nullptr, rctx.y);
+                               &accounted_size, nullptr, nullptr, rctx.y);
   if (ret < 0) {
     goto set_err_state;
   }
@@ -4277,17 +4277,18 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   if (ret < 0) {
     goto set_err_state;
   }
-  if (cb.get_data_len() != expected_size) {
+  if (cb.get_data_len() != accounted_size) {
     ret = -EIO;
     ldpp_dout(rctx.dpp, 0) << "ERROR: object truncated during fetching, expected "
-        << expected_size << " bytes but received " << cb.get_data_len() << dendl;
+        << accounted_size << " bytes but received " << cb.get_data_len() << dendl;
     goto set_err_state;
   }
+
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
     RGWCompressionInfo cs_info;
     cs_info.compression_type = plugin->get_type_name();
-    cs_info.orig_size = cb.get_data_len();
+    cs_info.orig_size = accounted_size;
     cs_info.compressor_message = compressor->get_compressor_message();
     cs_info.blocks = std::move(compressor->get_compression_blocks());
     encode(cs_info, tmp);
@@ -4421,7 +4422,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 #define MAX_COMPLETE_RETRY 100
   for (i = 0; i < MAX_COMPLETE_RETRY; i++) {
     bool canceled = false;
-    ret = processor.complete(cb.get_data_len(), etag, mtime, set_mtime,
+    ret = processor.complete(accounted_size, etag, mtime, set_mtime,
                              attrs, delete_at, nullptr, nullptr, nullptr,
                              zones_trace, &canceled, rctx);
     if (ret < 0) {
