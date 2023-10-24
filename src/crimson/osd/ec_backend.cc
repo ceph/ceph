@@ -443,11 +443,14 @@ ECBackend::handle_rep_write_op(
 ECBackend::write_iertr::future<>
 ECBackend::handle_rep_write_reply(ECSubWriteReply&& op)
 {
+  logger().debug("ECBackend::{}", __func__);
   assert(rmw_pipeline.tid_to_op_map.contains(op.tid));
   const auto& from = op.from;
   auto& wop = *rmw_pipeline.tid_to_op_map.at(op.tid);
   if (op.committed) {
     // TODO: trace.event("sub write committed");
+    logger().debug("ECBackend::{} from {} pending_commit {}",
+		    __func__, from, wop.pending_commit);
     ceph_assert(wop.pending_commit.count(from));
     wop.pending_commit.erase(from);
   }
@@ -461,7 +464,7 @@ ECBackend::handle_rep_write_reply(ECSubWriteReply&& op)
       wop.on_all_commit &&
       // also wait for apply, to preserve ordering with luminous peers.
       wop.pending_apply.empty()) {
-    logger().info("{}: calling on_all_commit on {}", __func__, wop);
+    logger().info("ECBackend::{}: calling on_all_commit on {}", __func__, wop);
     wop.on_all_commit->complete(0);
     wop.on_all_commit = 0;
     // TODO: wop.trace.event("ec write all committed");
