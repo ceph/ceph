@@ -151,7 +151,7 @@ public:
 
   template <typename T, typename F>
   auto process_ordered_op_remotely(
-      crosscore_ordering_t::seq_t cc_seq,
+      OSDConnectionPriv::crosscore_ordering_t::seq_t cc_seq,
       ShardServices &target_shard_services,
       typename T::IRef &&op,
       F &&f) {

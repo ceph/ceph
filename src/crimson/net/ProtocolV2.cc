@@ -2073,7 +2073,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
 // READY state
 
 seastar::future<> ProtocolV2::notify_out_fault(
-    crosscore_t::seq_t cc_seq,
+    cc_seq_t cc_seq,
     const char *where,
     std::exception_ptr eptr,
     io_handler_state _io_states)
@@ -2121,7 +2121,7 @@ void ProtocolV2::execute_standby()
 }
 
 seastar::future<> ProtocolV2::notify_out(
-    crosscore_t::seq_t cc_seq)
+    cc_seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
@@ -2210,7 +2210,7 @@ void ProtocolV2::execute_server_wait()
 // CLOSING state
 
 seastar::future<> ProtocolV2::notify_mark_down(
-    crosscore_t::seq_t cc_seq)
+    cc_seq_t cc_seq)
 {
   assert(seastar::this_shard_id() == conn.get_messenger_shard_id());
   if (!crosscore.proceed_or_wait(cc_seq)) {
