@@ -1036,7 +1036,7 @@ PG::do_osd_ops(
     // failure_func
     [m, &op_info, obc, this] (const std::error_code& e) {
     return seastar::do_with(eversion_t(), [m, &op_info, obc, e, this](auto &version) {
-      auto fut = seastar::now();
+      auto error_log_fut = seastar::now();
       epoch_t epoch = get_osdmap_epoch();
       ceph_tid_t rep_tid = shard_services.get_tid();
       auto last_complete = peering_state.get_info().last_complete;
@@ -1044,10 +1044,10 @@ PG::do_osd_ops(
         // This should be executed as OrderedExclusivePhaseT so that
         // successive ops will not reorder.
         // TODO: https://tracker.ceph.com/issues/61651
-        fut = submit_error_log(m, op_info, obc, e, rep_tid, version);
+        error_log_fut = submit_error_log(m, op_info, obc, e, rep_tid, version);
       }
-      return fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete, this] {
-        auto fut2 = seastar::now();
+      return error_log_fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete, this] {
+        auto fut = seastar::now();
         if (!peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
           auto it = log_entry_update_waiting_on.find(rep_tid);
           ceph_assert(it != log_entry_update_waiting_on.end());
@@ -1060,7 +1060,7 @@ PG::do_osd_ops(
               peering_state.complete_write(version, last_complete);
             }
           } else {
-            fut2 = it->second.all_committed.get_shared_future().then(
+            fut = it->second.all_committed.get_shared_future().then(
               [this, &version, last_complete] {
               if (version != eversion_t()) {
                 peering_state.complete_write(version, last_complete);
@@ -1069,7 +1069,7 @@ PG::do_osd_ops(
             });
           }
         }
-        return fut2.then([this, m, e] {
+        return fut.then([this, m, e] {
           return log_reply(m, e);
         });
       });
