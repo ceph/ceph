@@ -47,7 +47,7 @@ public:
   write_iertr::future<> handle_rep_write_op(
     Ref<MOSDECSubOpWrite>,
     crimson::osd::PG& pg);
-  write_iertr::future<> handle_rep_write_reply(Ref<MOSDECSubOpWriteReply>);
+  write_iertr::future<> handle_rep_write_reply(ECSubWriteReply&& op);
   ll_read_ierrorator::future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
   ll_read_ierrorator::future<> handle_rep_read_reply(Ref<MOSDECSubOpReadReply>);
 private:
