@@ -7375,14 +7375,13 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size, bl);
     ASSERT_EQ(r, (int)block_size);
     expected.append(string(block_size, 'b'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
   }
@@ -7400,14 +7399,13 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size, bl);
     ASSERT_EQ(r, (int)block_size);
     expected.append(string(block_size, 'b'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
   }
@@ -7423,11 +7421,6 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     ASSERT_EQ(r, 0);
   }
   {
-    // we need to wait some time for mempool
-    // thread to update stats to be able to check blob/extent numbers from
-    // perf counters.
-    sleep(1);
-
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size, bl);
     ASSERT_EQ(r, (int)block_size);
@@ -7470,6 +7463,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     expected.append(string(block_size * 2, 'e'));
     ASSERT_TRUE(bl_eq(expected, bl));
   }
+  store->refresh_perf_counters();
   ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
   ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
 
@@ -8653,15 +8647,14 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 9, block_size * 2, bl);
     ASSERT_EQ(r, (int)block_size * 2);
     expected.append(string(block_size, 'b'));
     expected.append(string(block_size, 'a'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 1u);
   }
@@ -8680,9 +8673,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 7, block_size * 3, bl);
     ASSERT_EQ(r, (int)block_size * 3);
@@ -8690,6 +8681,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     expected.append(string(block_size, 0));
     expected.append(string(block_size, 'b'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 2u);
   }
@@ -8707,9 +8699,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 11, block_size * 3, bl);
     ASSERT_EQ(r, (int)block_size * 3);
@@ -8717,6 +8707,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     expected.append(string(block_size, 0));
     expected.append(string(block_size, 'd'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 3u);
   }
@@ -8736,9 +8727,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 17, block_size * 3, bl);
     ASSERT_EQ(r, (int)block_size * 3);
@@ -8746,6 +8735,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     expected.append(string(block_size, 0));
     expected.append(string(block_size, 'e'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 5u);
   }
@@ -8764,9 +8754,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, block_size * 16, block_size * 4, bl);
     ASSERT_EQ(r, (int)block_size * 4);
@@ -8775,6 +8763,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     expected.append(string(block_size, 'f'));
     expected.append(string(block_size, 'e'));
     ASSERT_TRUE(bl_eq(expected, bl));
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 2u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 4u);
   }
@@ -8839,9 +8828,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
   }
   {
     // We need to issue a read to trigger cache stat update that refresh
-    // perf counters. additionally we need to wait some time for mempool
-    // thread to update stats.
-    sleep(1);
+    // perf counters.
     bufferlist bl, expected;
     r = store->read(ch, hoid, 0, block_size * 3, bl);
     ASSERT_EQ(r, (int)block_size * 3);
@@ -8852,6 +8839,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     expected.append(string(block_size, 'a'));
     ASSERT_TRUE(bl_eq(expected, bl));
 
+    store->refresh_perf_counters();
     ASSERT_EQ(logger->get(l_bluestore_blobs), 1u);
     ASSERT_EQ(logger->get(l_bluestore_extents), 3u);
   }
