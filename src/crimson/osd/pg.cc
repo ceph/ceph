@@ -1114,9 +1114,7 @@ PG::do_osd_ops(
   ObjectContextRef obc,
   std::vector<OSDOp>& ops,
   const OpInfo &op_info,
-  const do_osd_ops_params_t &&msg_params,
-  do_osd_ops_success_func_t success_func,
-  do_osd_ops_failure_func_t failure_func)
+  const do_osd_ops_params_t &&msg_params)
 {
   // This overload is generally used for internal client requests,
   // use an empty SnapContext.
@@ -1133,8 +1131,14 @@ PG::do_osd_ops(
         SnapContext{}
       ),
       ops,
-      std::move(success_func),
-      std::move(failure_func));
+      // success_func
+      [] {
+        return do_osd_ops_iertr::now();
+      },
+      // failure_func
+      [] (const std::error_code& e) {
+        return do_osd_ops_iertr::now();
+      });
   });
 }
 
