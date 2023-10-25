@@ -571,10 +571,7 @@ private:
     ObjectContextRef obc,
     const OpInfo &op_info,
     const SnapContext& snapc);
-  using do_osd_ops_success_func_t =
-    std::function<do_osd_ops_iertr::future<>()>;
-  using do_osd_ops_failure_func_t =
-    std::function<do_osd_ops_iertr::future<>(const std::error_code&)>;
+
   struct do_osd_ops_params_t;
   do_osd_ops_iertr::future<MURef<MOSDOpReply>> log_reply(
     Ref<MOSDOp> m,
@@ -583,9 +580,7 @@ private:
     ObjectContextRef obc,
     std::vector<OSDOp>& ops,
     const OpInfo &op_info,
-    const do_osd_ops_params_t &&params,
-    do_osd_ops_success_func_t success_func,
-    do_osd_ops_failure_func_t failure_func);
+    const do_osd_ops_params_t &&params);
   template <class Ret, class SuccessFunc, class FailureFunc>
   do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
     seastar::lw_shared_ptr<OpsExecuter> ox,
