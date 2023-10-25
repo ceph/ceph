@@ -53,6 +53,10 @@ namespace crimson::os::seastore {
   class TransactionConflictCondition;
 }
 
+namespace crimson::osd {
+  class IOInterruptCondition;
+}
+
 // GCC tries to instantiate
 // seastar::lw_shared_ptr<crimson::os::seastore::TransactionConflictCondition>.
 // but we *may* not have the definition of TransactionConflictCondition at this moment,
@@ -135,6 +139,9 @@ struct interrupt_cond_t {
 
 template <typename InterruptCond>
 thread_local interrupt_cond_t<InterruptCond> interrupt_cond;
+
+extern template thread_local interrupt_cond_t<crimson::osd::IOInterruptCondition>
+interrupt_cond<crimson::osd::IOInterruptCondition>;
 
 extern template thread_local interrupt_cond_t<crimson::os::seastore::TransactionConflictCondition>
 interrupt_cond<crimson::os::seastore::TransactionConflictCondition>;
