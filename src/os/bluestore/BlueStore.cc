@@ -1310,6 +1310,7 @@ struct LruBufferCacheShard : public BlueStore::BufferCacheShard {
                  uint64_t *blobs,
                  uint64_t *buffers,
                  uint64_t *bytes) override {
+    std::lock_guard l(lock);
     *extents += num_extents;
     *blobs += num_blobs;
     *buffers += num;
@@ -1615,6 +1616,7 @@ public:
                  uint64_t *blobs,
                  uint64_t *buffers,
                  uint64_t *bytes) override {
+    std::lock_guard l(lock);
     *extents += num_extents;
     *blobs += num_blobs;
     *buffers += num;
@@ -5358,7 +5360,7 @@ void *BlueStore::MempoolThread::entry()
     _resize_shards(interval_stats_trim);
     interval_stats_trim = false;
 
-    store->_update_logger();
+    store->refresh_perf_counters();
     auto wait = ceph::make_timespan(
       store->cct->_conf->bluestore_cache_trim_interval);
     cond.wait_for(l, wait);
@@ -11780,7 +11782,7 @@ void BlueStore::_reap_collections()
   }
 }
 
-void BlueStore::_update_logger()
+void BlueStore::refresh_perf_counters()
 {
   uint64_t num_onodes = 0;
   uint64_t num_pinned_onodes = 0;
