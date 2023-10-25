@@ -4528,7 +4528,7 @@ BlueStore::ExtentMap::debug_list_disk_layout()
     }
 
     unsigned csum_i = 0;
-    size_t csum_cnt;
+    size_t csum_cnt = 0;
     uint32_t length;
     if (bblob.has_csum()) {
       csum_cnt = bblob.get_csum_count();
