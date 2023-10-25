@@ -6,6 +6,7 @@ import { Subscription } from 'rxjs';
 import { FaviconService } from '~/app/shared/services/favicon.service';
 import { SummaryService } from '~/app/shared/services/summary.service';
 import { TaskManagerService } from '~/app/shared/services/task-manager.service';
+import { MultiClusterService } from '../../../shared/api/multi-cluster.service';
 
 @Component({
   selector: 'cd-workbench-layout',
@@ -20,11 +21,13 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
     public router: Router,
     private summaryService: SummaryService,
     private taskManagerService: TaskManagerService,
-    private faviconService: FaviconService
+    private faviconService: FaviconService,
+    private multiClusterService: MultiClusterService
   ) {}
 
   ngOnInit() {
     this.subs.add(this.summaryService.startPolling());
+    this.subs.add(this.multiClusterService.startPolling());
     this.subs.add(this.taskManagerService.init(this.summaryService));
     this.faviconService.init();
   }
