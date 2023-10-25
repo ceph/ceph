@@ -297,11 +297,11 @@ from the monmap by following these steps:
 
 4. Follow the steps in :ref:`rados-mon-remove-from-unhealthy` starting from step 3 ("extracing a copy of the monmap")
 
-.. _cephadm-manually-deploy-mgr:
-
 5. Start mon daemon on the surviving monitor::
 
     cephadm unit --name mon.`hostname` start
+
+.. _cephadm-manually-deploy-mgr:
 
 Manually Deploying a Manager Daemon
 -----------------------------------
