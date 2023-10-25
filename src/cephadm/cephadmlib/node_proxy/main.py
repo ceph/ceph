@@ -219,7 +219,10 @@ class NodeProxy(Thread):
         try:
             self.reporter_agent = Reporter(self.system,
                                            self.__dict__['cephx'],
-                                           f"https://{self.__dict__['mgr_target_ip']}:{self.__dict__['mgr_target_port']}/node-proxy/data")
+                                           reporter_scheme=self.__dict__.get('reporter_scheme', 'https'),
+                                           reporter_hostname=self.__dict__['mgr_target_ip'],
+                                           reporter_port=self.__dict__['mgr_target_port'],
+                                           reporter_endpoint=self.__dict__.get('reporter_endpoint', '/node-proxy/data'))
         except RuntimeError:
             self.log.logger.error("Can't initialize the reporter.")
             raise

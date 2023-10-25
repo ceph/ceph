@@ -3,7 +3,10 @@ import yaml
 import os
 import time
 import re
-from typing import Dict, List, Callable, Any
+import ssl
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen, Request
+from typing import Dict, List, Callable, Any, Optional, MutableMapping, Tuple
 
 
 class Logger:
@@ -98,3 +101,38 @@ def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Cal
             return f(*args, **kwargs)
         return _retry
     return decorator
+
+
+def http_req(hostname: str = '',
+             port: int = 443,
+             method: Optional[str] = None,
+             headers: MutableMapping[str, str] = {},
+             data: Optional[str] = None,
+             endpoint: str = '/',
+             scheme: str = 'https',
+             ssl_verify: bool = False,
+             timeout: Optional[int] = None,
+             ssl_ctx: Optional[Any] = None) -> Tuple[Any, Any, Any]:
+
+    if not ssl_ctx:
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        if not ssl_verify:
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+        else:
+            ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+
+    url: str = f'{scheme}://{hostname}:{str(port)}{endpoint}'
+    _data = bytes(data, 'ascii') if data else None
+
+    try:
+        req = Request(url, _data, headers, method=method)
+        with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
+            response_str = response.read()
+            response_headers = response.headers
+            response_code = response.code
+        return response_headers, response_str.decode(), response_code
+    except (HTTPError, URLError) as e:
+        print(f'{e}')
+        # handle error here if needed
+        raise
