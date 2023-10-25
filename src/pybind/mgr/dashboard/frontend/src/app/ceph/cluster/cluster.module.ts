@@ -61,6 +61,8 @@ import { TelemetryComponent } from './telemetry/telemetry.component';
 import { UpgradeComponent } from './upgrade/upgrade.component';
 import { UpgradeStartModalComponent } from './upgrade/upgrade-form/upgrade-start-modal.component';
 import { UpgradeProgressComponent } from './upgrade/upgrade-progress/upgrade-progress.component';
+import { MultiClusterComponent } from './multi-cluster/multi-cluster.component';
+import { MultiClusterFormComponent } from './multi-cluster/multi-cluster-form/multi-cluster-form.component';
 
 @NgModule({
   imports: [
@@ -124,7 +126,9 @@ import { UpgradeProgressComponent } from './upgrade/upgrade-progress/upgrade-pro
     CreateClusterReviewComponent,
     UpgradeComponent,
     UpgradeStartModalComponent,
-    UpgradeProgressComponent
+    UpgradeProgressComponent,
+    MultiClusterComponent,
+    MultiClusterFormComponent
   ],
   providers: [NgbActiveModal]
 })

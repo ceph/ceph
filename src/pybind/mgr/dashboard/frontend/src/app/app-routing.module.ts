@@ -48,6 +48,7 @@ import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
 import { UpgradeComponent } from './ceph/cluster/upgrade/upgrade.component';
 import { CephfsVolumeFormComponent } from './ceph/cephfs/cephfs-form/cephfs-form.component';
 import { UpgradeProgressComponent } from './ceph/cluster/upgrade/upgrade-progress/upgrade-progress.component';
+import { MultiClusterComponent } from './ceph/cluster/multi-cluster/multi-cluster.component';
 
 @Injectable()
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
@@ -183,6 +184,10 @@ const routes: Routes = [
             outlet: 'modal'
           }
         ]
+      },
+      {
+        path: 'multi-cluster',
+        component: MultiClusterComponent
       },
       {
         path: 'inventory',

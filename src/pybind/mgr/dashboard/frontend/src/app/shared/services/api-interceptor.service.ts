@@ -18,6 +18,9 @@ import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
+// import { MultiClusterService } from '../api/multi-cluster.service';
+// import { SummaryService } from './summary.service';
+// import { SummaryService } from './summary.service';
 
 export class CdHttpErrorResponse extends HttpErrorResponse {
   preventDefault: Function;
@@ -28,15 +31,58 @@ export class CdHttpErrorResponse extends HttpErrorResponse {
   providedIn: 'root'
 })
 export class ApiInterceptorService implements HttpInterceptor {
+  // private URL: string;
+  // private apiUrl: string;
+  // private token: string;
   constructor(
     private router: Router,
     private authStorageService: AuthStorageService,
     public notificationService: NotificationService
-  ) {}
+  ) // private multiClusterService: MultiClusterService,
+  // private summaryservice: SummaryService
+  {
+    // this.multiClusterService.getCluster().subscribe((cluster: any) => {
+    //   console.log(cluster['config']);
+    //   this.token = cluster['config'].filter((item: any) =>
+    //     item['token'] ? item['url'] === this.apiUrl : null
+    //   );
+    //   console.log('here', this.token);
+    // });
+    // this.summaryservice.subscribe((summary) => {
+    //   this.URL = summary.current_url;
+    // });
+  }
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     const acceptHeader = request.headers.get('Accept');
     let reqWithVersion: HttpRequest<any>;
+    // let params = new HttpParams();
+    // if request.body doesn't contain a key called stack
+    // we add the stack to the request body
+    // this is needed to identify the request on the backend
+    // let body = '';
+    // if (!request.body?.stack && request.body !== null) {
+    //   body = JSON.stringify(request.body);
+    // }
+    const origin = window.location.origin;
+    // if (body !== null || body !== undefined) {
+    //   params = params.appendAll({
+    //     path: `${request.url}`,
+    //     method: `${request.method}`,
+    //     payload: `${body}`
+    //   });
+    // } else {
+    //   params = params.appendAll({
+    //     path: `${request.url}`,
+    //     method: `${request.method}`
+    //   });
+    // }
+    // if(request.url.includes('api/prometheus')) {
+    //   params = params.appendAll({
+    //     api_name: 'prometheus'
+    //   })
+    // }
+    // console.log(this.URL, this.apiUrl);
     if (acceptHeader && acceptHeader.startsWith('application/vnd.ceph.api.v')) {
       reqWithVersion = request.clone();
     } else {
@@ -46,6 +92,45 @@ export class ApiInterceptorService implements HttpInterceptor {
         }
       });
     }
+    const apiUrl = localStorage.getItem('cluster_api_url');
+    const currentRoute = this.router.url.split('?')[0];
+
+    const API_TO_AVOID = [
+      'api/auth/login',
+      'api/auth/logout',
+      'api/multicluster/get_config',
+      'api/multicluster/set_config',
+      'api/multicluster/auth'
+    ];
+
+    const token = localStorage.getItem('token_of_selected_cluster');
+
+    if (
+      !currentRoute.includes('login') &&
+      !API_TO_AVOID.includes(request.url) &&
+      apiUrl &&
+      !apiUrl.includes(origin)
+    ) {
+      console.log('i am heree', request.url);
+      reqWithVersion = reqWithVersion.clone({
+        url: `${apiUrl}${reqWithVersion.url}`,
+        setHeaders: {
+          'Access-Control-Allow-Origin': 'https://127.0.0.1:4200',
+          Authorization: `Bearer ${token}`
+        }
+      });
+    }
+
+    // console.log(reqWithVersion);
+    // const apiUrl = localStorage.getItem('cluster_api_url');
+    // if (this.URL && apiUrl && !this.URL.includes(apiUrl) && !apiUrl.includes(origin)) {
+    //   console.log('i am heree', apiUrl, this.URL);
+    //   reqWithVersion = reqWithVersion.clone({
+    //     url: `api/multicluster/route/`,
+    //     params: params,
+    //     method: 'GET'
+    //   });
+    // }
     return next.handle(reqWithVersion).pipe(
       catchError((resp: CdHttpErrorResponse) => {
         if (resp instanceof HttpErrorResponse) {

@@ -121,6 +121,8 @@ class Options(object):
 
     UNSAFE_TLS_v1_2 = Setting(False, [bool])
 
+    MULTICLUSTER_CONFIG = Setting({}, [dict, str])
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \

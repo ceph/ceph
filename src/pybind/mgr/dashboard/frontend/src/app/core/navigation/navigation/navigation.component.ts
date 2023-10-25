@@ -1,7 +1,11 @@
 import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 
 import * as _ from 'lodash';
 import { Subscription } from 'rxjs';
+// import { AuthService } from '~/app/shared/api/auth.service';
+// import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
+import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -40,19 +44,39 @@ export class NavigationComponent implements OnInit, OnDestroy {
   displayedSubMenu = {};
   private subs = new Subscription();
 
+  clusters: string[] = [];
+  selectedCluster = '';
+
   constructor(
+    // private authService: AuthService,
     private authStorageService: AuthStorageService,
     private summaryService: SummaryService,
     private featureToggles: FeatureTogglesService,
     private telemetryNotificationService: TelemetryNotificationService,
     public prometheusAlertService: PrometheusAlertService,
-    private motdNotificationService: MotdNotificationService
+    private motdNotificationService: MotdNotificationService,
+    private router: Router,
+    private multiClusterService: MultiClusterService // private mgrModuleService: MgrModuleService
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.enabledFeature$ = this.featureToggles.get();
   }
 
   ngOnInit() {
+    this.subs.add(
+      this.multiClusterService.subscribe((resp: string) => {
+        // assign urls from resp['config ] array to clusters array
+        this.clusters = resp['config']?.map((config: string) => config['url']);
+        this.clusters?.unshift(window.location.origin);
+
+        this.selectedCluster = resp['current_url'] || localStorage.getItem('cluster_api_url');
+        resp['config']?.forEach((config: any) => {
+          if (config['url'] === this.selectedCluster) {
+            localStorage.setItem('token_of_selected_cluster', config['token']);
+          }
+        });
+      })
+    );
     this.subs.add(
       this.summaryService.subscribe((summary) => {
         this.summaryData = summary;
@@ -115,5 +139,34 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.notifications.splice(index, 1);
       }
     }
+  }
+
+  onClusterSelection(url: string) {
+    this.multiClusterService.setCluster(url).subscribe((resp: any) => {
+      // let token: string;
+      localStorage.setItem('cluster_api_url', url);
+      this.selectedCluster = url;
+      resp['config'].forEach((config: any) => {
+        if (config['url'] === this.selectedCluster) {
+          localStorage.setItem('token_of_selected_cluster', config['token']);
+        }
+      });
+      // this.multiClusterService.setCluster(url).subscribe(() => this.summaryService.refresh());
+      // this.authService.check(token).subscribe((resp: any) => {
+      //   this.authStorageService.set(resp.permissions);
+      // });
+      this.summaryService.refresh();
+      //get the current route without the cluster_api_url
+      const currentRoute = this.router.url.split('?')[0];
+      if (currentRoute.includes('dashboard')) {
+        this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
+          this.router.navigate([currentRoute]);
+        });
+      } else {
+        this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+          this.router.navigate([currentRoute]);
+        });
+      }
+    });
   }
 }
