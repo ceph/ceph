@@ -1405,14 +1405,14 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   for (epoch_t e = since + 1; e <= to; ++e) {
     bufferlist bl;
     if (get_inc_map_bl(e, bl)) {
-      m->incremental_maps[e] = std::move(bl);
+      m->incremental_maps[e] = bl;
     } else {
       dout(10) << __func__ << " missing incremental map " << e << dendl;
       if (!get_map_bl(e, bl)) {
 	derr << __func__ << " also missing full map " << e << dendl;
 	goto panic;
       }
-      m->maps[e] = std::move(bl);
+      m->maps[e] = bl;
     }
     max--;
     max_bytes -= bl.length();
