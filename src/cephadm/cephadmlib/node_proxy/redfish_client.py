@@ -1,10 +1,9 @@
-import ssl
 import json
-from urllib.error import URLError
-from urllib.request import urlopen, Request
+from urllib.error import HTTPError, URLError
 from .baseclient import BaseClient
-from .util import Logger
+from .util import Logger, http_req
 from typing import Dict, Any, Tuple, Optional
+from http.client import HTTPMessage
 
 
 class RedFishClient(BaseClient):
@@ -18,14 +17,16 @@ class RedFishClient(BaseClient):
         super().__init__(host, username, password)
         self.log: Logger = Logger(__name__)
         self.log.logger.info(f"Initializing redfish client {__name__}")
-        self.host: str = f"https://{host}:{str(port)}"
+        self.host: str = host
+        self.port: int = port
+        self.url: str = f"https://{self.host}:{self.port}"
         self.token: str = ''
         self.location: str = ''
 
     def login(self) -> None:
         if not self.is_logged_in():
             self.log.logger.info("Logging in to "
-                                 f"{self.host} as '{self.username}'")
+                                 f"{self.url} as '{self.username}'")
             idrac_credentials = json.dumps({"UserName": self.username,
                                             "Password": self.password})
             headers = {"Content-Type": "application/json"}
@@ -35,19 +36,19 @@ class RedFishClient(BaseClient):
                                                            headers=headers,
                                                            endpoint='/redfish/v1/SessionService/Sessions/')
                 if _status_code != 201:
-                    self.log.logger.error(f"Can't log in to {self.host} as '{self.username}': {_status_code}")
+                    self.log.logger.error(f"Can't log in to {self.url} as '{self.username}': {_status_code}")
                     raise RuntimeError
             except URLError as e:
-                msg = f"Can't log in to {self.host} as '{self.username}': {e}"
+                msg = f"Can't log in to {self.url} as '{self.username}': {e}"
                 self.log.logger.error(msg)
                 raise RuntimeError
             self.token = _headers['X-Auth-Token']
             self.location = _headers['Location']
 
     def is_logged_in(self) -> bool:
-        self.log.logger.debug(f"Checking token validity for {self.host}")
+        self.log.logger.debug(f"Checking token validity for {self.url}")
         if not self.location or not self.token:
-            self.log.logger.debug(f"No token found for {self.host}.")
+            self.log.logger.debug(f"No token found for {self.url}.")
             return False
         headers = {"X-Auth-Token": self.token}
         try:
@@ -55,7 +56,7 @@ class RedFishClient(BaseClient):
                                                        endpoint=self.location)
         except URLError as e:
             self.log.logger.error("Can't check token "
-                                  f"validity for {self.host}: {e}")
+                                  f"validity for {self.url}: {e}")
             raise RuntimeError
         return _status_code == 200
 
@@ -65,7 +66,7 @@ class RedFishClient(BaseClient):
                                                 headers={"X-Auth-Token": self.token},
                                                 endpoint=self.location)
         except URLError:
-            self.log.logger.error(f"Can't log out from {self.host}")
+            self.log.logger.error(f"Can't log out from {self.url}")
             return {}
 
         response_str = _data
@@ -88,25 +89,24 @@ class RedFishClient(BaseClient):
               headers: Dict[str, str] = {},
               method: Optional[str] = None,
               endpoint: str = '',
-              timeout: int = 10) -> Tuple[Dict[str, str], str, int]:
-        url = f'{self.host}{endpoint}'
+              timeout: int = 10) -> Tuple[HTTPMessage, str, int]:
         _headers = headers.copy() if headers else {}
         if self.token:
             _headers['X-Auth-Token'] = self.token
         if not _headers.get('Content-Type') and method in ['POST', 'PUT', 'PATCH']:
             _headers['Content-Type'] = 'application/json'
-        # ssl_ctx = ssl.create_default_context()
-        # ssl_ctx.check_hostname = True
-        # ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        ssl_ctx = ssl._create_unverified_context()
-        _data = bytes(data, 'ascii') if data else None
         try:
-            req = Request(url, _data, headers=_headers, method=method)
-            with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
-                response_str = response.read()
-                response_headers = response.headers
-        except URLError as e:
+            (response_headers,
+             response_str,
+             response_status) = http_req(hostname=self.host,
+                                         port=self.port,
+                                         endpoint=endpoint,
+                                         headers=_headers,
+                                         method=method,
+                                         data=data,
+                                         timeout=timeout)
+
+            return response_headers, response_str, response_status
+        except (HTTPError, URLError) as e:
             self.log.logger.debug(f"{e}")
             raise
-
-        return response_headers, response_str, response.status

@@ -1,18 +1,32 @@
 from threading import Thread
-import requests
 import time
-from .util import Logger
+import json
+from .util import Logger, http_req
+from urllib.error import HTTPError, URLError
 from typing import Dict, Any
 
 
 class Reporter:
-    def __init__(self, system: Any, cephx: Dict[str, Any], observer_url: str) -> None:
+    def __init__(self,
+                 system: Any,
+                 cephx: Dict[str, Any],
+                 reporter_scheme: str = 'https',
+                 reporter_hostname: str = '',
+                 reporter_port: int = 443,
+                 reporter_endpoint: str = '/node-proxy/data') -> None:
         self.system = system
-        self.observer_url = observer_url
+        self.data: Dict[str, Any] = {}
         self.finish = False
         self.cephx = cephx
+        self.data['cephx'] = self.cephx
+        self.reporter_scheme: str = reporter_scheme
+        self.reporter_hostname: str = reporter_hostname
+        self.reporter_port: int = reporter_port
+        self.reporter_endpoint: str = reporter_endpoint
         self.log = Logger(__name__)
-        self.log.logger.info(f'Observer url set to {self.observer_url}')
+        self.reporter_url: str = (f"{reporter_scheme}:{reporter_hostname}:"
+                                  f"{reporter_port}{reporter_endpoint}")
+        self.log.logger.info(f'Reporter url set to {self.reporter_url}')
 
     def stop(self) -> None:
         self.finish = True
@@ -36,15 +50,18 @@ class Reporter:
                 self.log.logger.info('data ready to be sent to the mgr.')
                 if not self.system.get_system() == self.system.previous_data:
                     self.log.logger.info('data has changed since last iteration.')
-                    self.data = {}
-                    self.data['cephx'] = self.cephx
                     self.data['patch'] = self.system.get_system()
                     try:
                         # TODO: add a timeout parameter to the reporter in the config file
-                        self.log.logger.info(f"sending data to {self.observer_url}")
-                        r = requests.post(f"{self.observer_url}", json=self.data, timeout=5, verify=False)
-                    except (requests.exceptions.RequestException,
-                            requests.exceptions.ConnectionError) as e:
+                        self.log.logger.info(f"sending data to {self.reporter_url}")
+                        http_req(hostname=self.reporter_hostname,
+                                 port=self.reporter_port,
+                                 method='POST',
+                                 headers={'Content-Type': 'application/json'},
+                                 endpoint=self.reporter_endpoint,
+                                 scheme=self.reporter_scheme,
+                                 data=json.dumps(self.data))
+                    except (HTTPError, URLError) as e:
                         self.log.logger.error(f"The reporter couldn't send data to the mgr: {e}")
                         # Need to add a new parameter 'max_retries' to the reporter if it can't
                         # send the data for more than x times, maybe the daemon should stop altogether
