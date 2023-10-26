@@ -16,10 +16,9 @@ class TrashPurgeScheduleHandler:
     SCHEDULE_OID = "rbd_trash_purge_schedule"
     REFRESH_DELAY_SECONDS = 60.0
 
-    lock = Lock()
-    condition = Condition(lock)
-
     def __init__(self, module: Any) -> None:
+        self.lock = Lock()
+        self.condition = Condition(self.lock)
         self.module = module
         self.log = module.log
         self.last_refresh_pools = datetime(1970, 1, 1)
