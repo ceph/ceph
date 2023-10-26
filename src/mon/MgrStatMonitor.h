@@ -14,12 +14,14 @@ class MgrStatMonitor : public PaxosService {
   PGMapDigest digest;
   ServiceMap service_map;
   std::map<std::string,ProgressEvent> progress_events;
+  std::map<uint64_t, PoolAvailability> pool_availability;
 
   // pending commit
   PGMapDigest pending_digest;
   health_check_map_t pending_health_checks;
   std::map<std::string,ProgressEvent> pending_progress_events;
   ceph::buffer::list pending_service_map_bl;
+  std::map<uint64_t, PoolAvailability> pending_pool_availability;
 
 public:
   MgrStatMonitor(Monitor &mn, Paxos &p, const std::string& service_name);
@@ -48,6 +50,8 @@ public:
 
   bool preprocess_getpoolstats(MonOpRequestRef op);
   bool preprocess_statfs(MonOpRequestRef op);
+
+  void calc_pool_availability();
 
   void check_sub(Subscription *sub);
   void check_subs();
@@ -81,6 +85,10 @@ public:
 
   const PGMapDigest& get_digest() {
     return digest;
+  }
+
+  const std::map<uint64_t, PoolAvailability>& get_pool_availability() {
+    return pool_availability;
   }
 
   ceph_statfs get_statfs(OSDMap& osdmap,
