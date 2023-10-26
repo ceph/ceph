@@ -1003,7 +1003,7 @@ public:
   }
 };
 
-void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
+void Migrator::dispatch_export_dir(const MDRequestRef& mdr, int count)
 {
   CDir *dir = mdr->more()->export_dir;
   dout(7) << *mdr << " " << *dir << dendl;
