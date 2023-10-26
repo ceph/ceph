@@ -595,6 +595,10 @@ struct HTTPMetaTable : public EmptyMetaTable {
 
     if (strcasecmp(index, "Parameters") == 0) {
       create_metatable<StringMapMetaTable<>>(L, name, index, false, &(info->args.get_params()));
+    } else if (strcasecmp(index, "Environment") == 0) {
+      using http_env_map_t = std::map<std::string, std::string, ltstr_nocase>;
+      create_metatable<StringMapMetaTable<http_env_map_t, StringMapWriteableNewIndex<http_env_map_t>>>(L, name, index, false, 
+          const_cast<http_env_map_t*>(&(info->env->get_map())));
     } else if (strcasecmp(index, "Resources") == 0) {
       // TODO: add non-const api to get resources
       create_metatable<StringMapMetaTable<>>(L, name, index, false,
