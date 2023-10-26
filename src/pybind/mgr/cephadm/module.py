@@ -1637,6 +1637,96 @@ Then run the following:
         return self._add_host(spec)
 
     @handle_orch_error
+    def hardware_status(self,
+                        hostname: Optional[str] = None,
+                        category: str = 'summary',
+                        format: Format = Format.plain) -> str:
+        """
+        Display hardware status summary
+
+        :param hostname: hostname
+        """
+
+        table_heading_mapping = {
+            'summary': ['HOST', 'STORAGE', 'CPU', 'NET', 'MEMORY', 'POWER', 'FANS'],
+            'firmwares': ['HOST', 'COMPONENT', 'NAME', 'DATE', 'VERSION', 'STATUS'],
+            'criticals': ['HOST', 'COMPONENT', 'NAME', 'STATUS', 'STATE'],
+            'memory': ['HOST', 'NAME', 'STATUS', 'STATE'],
+            'storage': ['HOST', 'NAME', 'MODEL', 'SIZE', 'PROTOCOL', 'SN', 'STATUS', 'STATE'],
+            'processors': ['HOST', 'NAME', 'MODEL', 'CORES', 'THREADS', 'STATUS', 'STATE'],
+            'network': ['HOST', 'NAME', 'SPEED', 'STATUS', 'STATE'],
+            'power': ['HOST', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
+            'fans': ['HOST', 'ID', 'NAME', 'STATUS', 'STATE']
+        }
+        table_headings = table_heading_mapping.get(category, [])
+        table = PrettyTable(
+            table_headings,
+            border=True)
+        if category not in table_heading_mapping.keys():
+            return f"'{category}' is not a valid category."
+        if category == 'summary':
+            data = self.node_proxy.summary(hostname=hostname)
+            for k, v in data.items():
+                row = [k]
+                row.extend([v[key] for key in ['storage', 'processors', 'network', 'memory', 'power', 'fans']])
+                table.add_row(row)
+            output = table.get_string()
+        elif category == 'firmwares':
+            output = "Missing host name" if hostname is None else self._firmwares_table(hostname, table)
+        elif category == 'criticals':
+            output = self._criticals_table(hostname, table)
+        else:
+            output = self._common_table(category, hostname, table)
+
+        return output if 'output' in locals() else table.get_string()
+
+    def _firmwares_table(self, hostname, table):
+        data = self.node_proxy.firmwares(hostname=hostname)
+        for host, details in data.items():
+            for k, v in details.items():
+                table.add_row((host, k, v['name'], v['release_date'], v['version'], v['status']['health']))
+        return table.get_string()
+
+    def _criticals_table(self, hostname, table):
+        data = self.node_proxy.criticals(hostname=hostname)
+        for host, host_details in data.items():
+            for component, component_details in host_details.items():
+                for member, member_details in component_details.items():
+                    description = member_details.get('description') or member_details.get('name')
+                    table.add_row((host, component, description, member_details['status']['health'], member_details['status']['state']))
+        return table.get_string()
+
+    def _common_table(self, category, hostname, table):
+        data = self.node_proxy.common(endpoint=category, hostname=hostname)
+        mapping = {
+            'memory': ('description', 'health', 'state'),
+            'storage': ('description', 'model', 'capacity_bytes', 'protocol', 'serial_number', 'health', 'state'),
+            'processors': ('model', 'total_cores', 'total_threads', 'health', 'state'),
+            'network': ('name', 'speed_mbps', 'health', 'state'),
+            'power': ('name', 'model', 'manufacturer', 'health', 'state'),
+            'fans': ('name', 'health', 'state')
+        }
+
+        fields = mapping.get(category, ())
+        for host, details in data.items():
+            for k, v in details.items():
+                row = []
+                for field in fields:
+                    if field in v:
+                        row.append(v[field])
+                    elif field in v.get('status', {}):
+                        row.append(v['status'][field])
+                    else:
+                        row.append('')
+                if category in ('power', 'fans', 'processors'):
+                    table.add_row((host,) + (k,) + tuple(row))
+                else:
+                    table.add_row((host,) + tuple(row))
+
+
+        return table.get_string()
+
+    @handle_orch_error
     def remove_host(self, host: str, force: bool = False, offline: bool = False) -> str:
         """
         Remove a host from orchestrator management.
