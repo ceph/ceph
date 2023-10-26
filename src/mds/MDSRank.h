@@ -308,7 +308,7 @@ class MDSRank {
 
     int send_message_mds(const ref_t<Message>& m, mds_rank_t mds);
     int send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &addr);
-    void forward_message_mds(MDRequestRef& mdr, mds_rank_t mds);
+    void forward_message_mds(const MDRequestRef& mdr, mds_rank_t mds);
     void send_message_client_counted(const ref_t<Message>& m, client_t client);
     void send_message_client_counted(const ref_t<Message>& m, Session* session);
     void send_message_client_counted(const ref_t<Message>& m, const ConnectionRef& connection);

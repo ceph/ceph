@@ -185,7 +185,7 @@ public:
 
   // -- import/export --
   // exporter
-  void dispatch_export_dir(MDRequestRef& mdr, int count);
+  void dispatch_export_dir(const MDRequestRef& mdr, int count);
   void export_dir(CDir *dir, mds_rank_t dest);
   void export_empty_import(CDir *dir);
 
