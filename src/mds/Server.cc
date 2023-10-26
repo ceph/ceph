@@ -2642,7 +2642,8 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 	mdr->batch_op_map->erase(it);
 	return;
       }
-      mdr = std::move(new_batch_head);
+      mds->finisher->queue(new C_MDS_RetryRequest(mdcache, new_batch_head));
+      return;
     } else {
       return;
     }
