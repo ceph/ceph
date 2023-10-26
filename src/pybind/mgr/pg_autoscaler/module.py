@@ -260,6 +260,13 @@ class PgAutoscaler(MgrModule):
         else:
             return False
 
+    def has_norecover_flag(self) -> bool:
+        flags = self.get_osdmap().dump().get('flags', '')
+        if 'norecover' in flags:
+            return True
+        else:
+            return False
+
     @CLIWriteCommand("osd pool get noautoscale")
     def get_noautoscale(self) -> Tuple[int, str, str]:
         """
@@ -321,7 +328,7 @@ class PgAutoscaler(MgrModule):
     def serve(self) -> None:
         self.config_notify()
         while not self._shutdown.is_set():
-            if not self.has_noautoscale_flag():
+            if not self.has_noautoscale_flag() and not self.has_norecover_flag():
                 osdmap = self.get_osdmap()
                 pools = osdmap.get_pools_by_name()
                 self._maybe_adjust(osdmap, pools)
