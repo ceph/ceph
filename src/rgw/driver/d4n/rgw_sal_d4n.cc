@@ -122,14 +122,11 @@ int D4NFilterObject::copy_object(User* user,
                               const DoutPrefixProvider* dpp,
                               optional_yield y)
 {
-  rgw::d4n::CacheBlock block = rgw::d4n::CacheBlock{
-                                 .cacheObj = {
-                                   .objName = this->get_key().get_oid(), 
-                                   .bucketName = src_bucket->get_name()
-                                 },
-                                 .blockID = 0, // TODO: get correct blockID
+  rgw::d4n::CacheObj obj = rgw::d4n::CacheObj{
+                                 .objName = this->get_key().get_oid(),
+                                 .bucketName = src_bucket->get_name()
                                };
-  int copy_valueReturn = driver->get_block_dir()->copy(&block, dest_object->get_name(), dest_bucket->get_name(), y);
+  int copy_valueReturn = driver->get_obj_dir()->copy(&obj, dest_object->get_name(), dest_bucket->get_name(), y);
 
   if (copy_valueReturn < 0) {
     ldpp_dout(dpp, 20) << "D4N Filter: Block directory copy operation failed." << dendl;
