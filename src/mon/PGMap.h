@@ -28,6 +28,7 @@
 #include "include/mempool.h"
 #include "mon/health_check.h"
 #include <sstream>
+#include "mon/mon_types.h"
 
 namespace ceph { class Formatter; }
 
@@ -50,6 +51,7 @@ public:
   osd_stat_t osd_sum;
   mempool::pgmap::map<std::string,osd_stat_t> osd_sum_by_class;
   mempool::pgmap::unordered_map<uint64_t,int32_t> num_pg_by_state;
+  mempool::pgmap::map<uint64_t,std::vector<pg_t>> pool_pg_unavailable_map;
   struct pg_count {
     int32_t acting = 0;
     int32_t up_not_acting = 0;
@@ -421,6 +423,7 @@ public:
 
   void apply_incremental(CephContext *cct, const Incremental& inc);
   void calc_stats();
+  void calc_pool_stuck_unavailable_pg_map(const OSDMap& osdmap);
   void stat_pg_add(const pg_t &pgid, const pg_stat_t &s,
 		   bool sameosds=false);
   bool stat_pg_sub(const pg_t &pgid, const pg_stat_t &s,

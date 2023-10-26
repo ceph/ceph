@@ -672,4 +672,62 @@ struct ProgressEvent {
 };
 WRITE_CLASS_ENCODER(ProgressEvent)
 
+struct PoolAvailability {
+  std::string pool_name;
+  utime_t started_at;
+  uint64_t uptime;
+  utime_t last_uptime;
+  uint64_t downtime;
+  utime_t last_downtime;
+  uint64_t num_failures;
+  bool is_avail;
+
+  PoolAvailability()
+    : pool_name(""), started_at(ceph_clock_now()),
+      uptime(0), last_uptime(ceph_clock_now()),
+      downtime(0), last_downtime(ceph_clock_now()),
+      num_failures(0), is_avail(true)
+  {
+  }
+
+  void dump(ceph::Formatter *f) const {
+    ceph_assert(f != NULL);
+    f->dump_stream("pool_name") << pool_name;
+    f->dump_stream("started_at") << started_at;
+    f->dump_int("uptime", uptime);
+    f->dump_stream("last_uptime") << last_uptime;
+    f->dump_int("downtime", downtime);
+    f->dump_stream("last_downtime") << last_downtime;
+    f->dump_int("num_failures", num_failures);
+    f->dump_bool("is_avail", is_avail);
+  }
+
+  void encode(ceph::buffer::list &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(pool_name, bl);
+    encode(started_at, bl);
+    encode(uptime, bl);
+    encode(last_uptime, bl);
+    encode(downtime, bl);
+    encode(last_downtime, bl);
+    encode(num_failures, bl);
+    encode(is_avail, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator &p) {
+    DECODE_START(1, p);
+    decode(pool_name, p);
+    decode(started_at, p);
+    decode(uptime, p);
+    decode(last_uptime, p);
+    decode(downtime, p);
+    decode(last_downtime, p);
+    decode(num_failures, p);
+    decode(is_avail, p);
+    DECODE_FINISH(p);
+  }
+};
+WRITE_CLASS_ENCODER(PoolAvailability)
+
 #endif
