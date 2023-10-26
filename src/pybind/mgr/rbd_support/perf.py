@@ -39,15 +39,6 @@ REPORT_MAX_RESULTS = 64
 
 
 class PerfHandler:
-    user_queries = {}
-    image_cache = {}
-
-    lock = Lock()
-    query_condition = Condition(lock)
-    refresh_condition = Condition(lock)
-
-    image_name_cache = {}
-    image_name_refresh_time = datetime.fromtimestamp(0)
 
     @classmethod
     def prepare_regex(cls, value):
@@ -85,6 +76,16 @@ class PerfHandler:
                 and (pool_key[0] == search_key[0] or not search_key[0]))
 
     def __init__(self, module):
+        self.user_queries = {}
+        self.image_cache = {}
+
+        self.lock = Lock()
+        self.query_condition = Condition(self.lock)
+        self.refresh_condition = Condition(self.lock)
+
+        self.image_name_cache = {}
+        self.image_name_refresh_time = datetime.fromtimestamp(0)
+
         self.module = module
         self.log = module.log
 
