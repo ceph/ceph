@@ -66,6 +66,79 @@ void MgrStatMonitor::create_initial()
   encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
 
+void MgrStatMonitor::calc_pool_availability()
+{
+  dout(20) << __func__ << dendl;
+  auto pool_avail_end = pool_availability.end();
+  for (const auto& i : digest.pool_pg_unavailable_map) {
+    const auto& poolid = i.first;
+    if (pool_availability.find(poolid) == pool_avail_end){
+      // New Pool so we add.
+      pool_availability.insert({poolid, PoolAvailability()});
+      dout(20) << __func__ << "Adding pool: " << poolid << dendl;
+    }
+  }
+  utime_t now(ceph_clock_now());
+  auto pool_unavail_end = digest.pool_pg_unavailable_map.end();
+  for (const auto& i : pool_availability) {
+    const auto& poolid = i.first;
+    if (digest.pool_pg_unavailable_map.find(poolid) ==
+      pool_unavail_end) {
+      // delete none exist pool
+      pool_availability.erase(poolid);
+      dout(20) << __func__ << "Deleting pool: " << poolid << dendl;
+      continue;
+    }
+    if (mon.osdmon()->osdmap.have_pg_pool(poolid)){
+      // Currently, couldn't find an elegant way to get pool name
+      pool_availability[poolid].pool_name = mon.osdmon()->osdmap.get_pool_name(poolid);
+    } else {
+      pool_availability.erase(poolid);
+      dout(20) << __func__ << "pool: " 
+	       << poolid << " no longer exists in osdmap! Deleting pool: " 
+         << poolid << dendl;
+      continue;
+    }
+    if (pool_availability[poolid].is_avail) {
+      if (!digest.pool_pg_unavailable_map[poolid].empty()) {
+        // avail to unavail
+        dout(20) << __func__ 
+		 << ": Pool " << poolid << " status: Available to Unavailable" << dendl;
+        pool_availability[poolid].is_avail = false;
+        pool_availability[poolid].num_failures += 1;
+        pool_availability[poolid].last_downtime = now;
+        pool_availability[poolid].uptime +=
+          now - pool_availability[poolid].last_uptime;
+      } else {
+        // avail to avail
+        dout(20) << __func__ 
+		 << ": Pool " << poolid << " status: Available to Available" << dendl;
+        pool_availability[poolid].uptime +=
+          now - pool_availability[poolid].last_uptime;
+        pool_availability[poolid].last_uptime = now;
+      }
+    } else {
+      if (!digest.pool_pg_unavailable_map[poolid].empty()) {
+        // unavail to unavail
+        dout(20) << __func__ 
+		 << ": Pool " << poolid << " status: Unavailable to Unavailable" << dendl;
+        pool_availability[poolid].downtime +=
+          now - pool_availability[poolid].last_downtime;
+        pool_availability[poolid].last_downtime = now;
+      } else {
+        // unavail to avail
+        dout(20) << __func__ 
+		 << ": Pool " << poolid << " status: Unavailable to Available" << dendl;
+        pool_availability[poolid].is_avail = true;
+        pool_availability[poolid].last_uptime = now;
+        pool_availability[poolid].uptime +=
+          now - pool_availability[poolid].last_downtime;
+      }
+    }
+  }
+  pending_pool_availability.swap(pool_availability);
+}
+
 void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
 {
   version = get_last_committed();
@@ -82,9 +155,13 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
       if (!p.end()) {
 	decode(progress_events, p);
       }
+      if (!p.end()) {
+        decode(pool_availability, p);
+      }
       dout(10) << __func__ << " v" << version
 	       << " service_map e" << service_map.epoch
 	       << " " << progress_events.size() << " progress events"
+         << " " << pool_availability.size() << " pools availability tracked"
 	       << dendl;
     }
     catch (ceph::buffer::error& e) {
@@ -95,6 +172,7 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
   check_subs();
   update_logger();
   mon.osdmon()->notify_new_pg_digest();
+  calc_pool_availability();
 }
 
 void MgrStatMonitor::update_logger()
@@ -156,6 +234,7 @@ void MgrStatMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   ceph_assert(pending_service_map_bl.length());
   bl.append(pending_service_map_bl);
   encode(pending_progress_events, bl);
+  encode(pending_pool_availability, bl);
   put_version(t, version, bl);
   put_last_committed(t, version);
 
@@ -256,6 +335,15 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   jf.open_object_section("progress_events");
   for (auto& i : pending_progress_events) {
     jf.dump_object(i.first.c_str(), i.second);
+  }
+  jf.close_section();
+  jf.flush(*_dout);
+  *_dout << dendl;
+  dout(20) << "pool_availability:\n";
+  JSONFormatter jf(true);
+  jf.open_object_section("pool_availability");
+  for (auto& i : pending_pool_availability) {
+    jf.dump_object(std::to_string(i.first), i.second);
   }
   jf.close_section();
   jf.flush(*_dout);
