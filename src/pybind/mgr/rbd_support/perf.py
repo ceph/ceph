@@ -65,15 +65,6 @@ ExtractDataFuncT = Callable[[int, Optional[RawImageCounterT], SumImageCounterT],
 
 
 class PerfHandler:
-    user_queries: Dict[PoolKeyT, Dict[str, Any]] = {}
-    image_cache: Dict[str, str] = {}
-
-    lock = Lock()
-    query_condition = Condition(lock)
-    refresh_condition = Condition(lock)
-
-    image_name_cache: Dict[Tuple[int, str], Dict[str, str]] = {}
-    image_name_refresh_time = datetime.fromtimestamp(0)
 
     @classmethod
     def prepare_regex(cls, value: Any) -> str:
@@ -114,6 +105,16 @@ class PerfHandler:
                 and (pool_key[0] == search_key[0] or not search_key[0]))
 
     def __init__(self, module: Any) -> None:
+        self.user_queries: Dict[PoolKeyT, Dict[str, Any]] = {}
+        self.image_cache: Dict[str, str] = {}
+
+        self.lock = Lock()
+        self.query_condition = Condition(self.lock)
+        self.refresh_condition = Condition(self.lock)
+
+        self.image_name_cache: Dict[Tuple[int, str], Dict[str, str]] = {}
+        self.image_name_refresh_time = datetime.fromtimestamp(0)
+
         self.module = module
         self.log = module.log
 
