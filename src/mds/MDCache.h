@@ -415,16 +415,16 @@ class MDCache {
     return active_requests.count(rid);
   }
   MDRequestRef request_get(metareqid_t rid);
-  void request_pin_ref(MDRequestRef& r, CInode *ref, std::vector<CDentry*>& trace);
-  void request_finish(MDRequestRef& mdr);
-  void request_forward(MDRequestRef& mdr, mds_rank_t mds, int port=0);
-  void dispatch_request(MDRequestRef& mdr);
-  void request_drop_foreign_locks(MDRequestRef& mdr);
-  void request_drop_non_rdlocks(MDRequestRef& r);
-  void request_drop_locks(MDRequestRef& r);
-  void request_cleanup(MDRequestRef& r);
+  void request_pin_ref(const MDRequestRef& r, CInode *ref, std::vector<CDentry*>& trace);
+  void request_finish(const MDRequestRef& mdr);
+  void request_forward(const MDRequestRef& mdr, mds_rank_t mds, int port=0);
+  void dispatch_request(const MDRequestRef& mdr);
+  void request_drop_foreign_locks(const MDRequestRef& mdr);
+  void request_drop_non_rdlocks(const MDRequestRef& r);
+  void request_drop_locks(const MDRequestRef& r);
+  void request_cleanup(const MDRequestRef& r);
   
-  void request_kill(MDRequestRef& r);  // called when session closes
+  void request_kill(const MDRequestRef& r);  // called when session closes
 
   // journal/snap helpers
   CInode *pick_inode_snap(CInode *in, snapid_t follows);
@@ -500,7 +500,7 @@ class MDCache {
   void add_rollback(metareqid_t reqid, mds_rank_t leader) {
     resolve_need_rollback[reqid] = leader;
   }
-  void finish_rollback(metareqid_t reqid, MDRequestRef& mdr);
+  void finish_rollback(metareqid_t reqid, const MDRequestRef& mdr);
 
   // ambiguous imports
   void add_ambiguous_import(dirfrag_t base, const std::vector<dirfrag_t>& bounds);
@@ -844,17 +844,17 @@ class MDCache {
    * If it returns 2 the request has been forwarded, and again the requester
    * should unwind itself and back out.
    */
-  int path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
+  int path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
 		    const filepath& path, int flags,
 		    std::vector<CDentry*> *pdnvec, CInode **pin=nullptr);
 
-  int maybe_request_forward_to_auth(MDRequestRef& mdr, MDSContextFactory& cf,
+  int maybe_request_forward_to_auth(const MDRequestRef& mdr, MDSContextFactory& cf,
 				    MDSCacheObject *p);
 
   CInode *cache_traverse(const filepath& path);
 
   void open_remote_dirfrag(CInode *diri, frag_t fg, MDSContext *fin);
-  CInode *get_dentry_inode(CDentry *dn, MDRequestRef& mdr, bool projected=false);
+  CInode *get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool projected=false);
 
   bool parallel_fetch(std::map<inodeno_t,filepath>& pathmap, std::set<inodeno_t>& missing);
   bool parallel_fetch_traverse_dir(inodeno_t ino, filepath& path, 
@@ -912,8 +912,8 @@ class MDCache {
   // -- namespace --
   void encode_remote_dentry_link(CDentry::linkage_t *dnl, bufferlist& bl);
   void decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::const_iterator& p);
-  void send_dentry_link(CDentry *dn, MDRequestRef& mdr);
-  void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr);
+  void send_dentry_link(CDentry *dn, const MDRequestRef& mdr);
+  void send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr);
 
   void wait_for_uncommitted_fragment(dirfrag_t dirfrag, MDSContext *c) {
     uncommitted_fragments.at(dirfrag).waiters.push_back(c);
@@ -1159,7 +1159,7 @@ class MDCache {
 
   int dump_cache(std::string_view fn, Formatter *f, double timeout);
 
-  void flush_dentry_work(MDRequestRef& mdr);
+  void flush_dentry_work(const MDRequestRef& mdr);
   /**
    * Resolve path to a dentry and pass it onto the ScrubStack.
    *
@@ -1168,10 +1168,10 @@ class MDCache {
    * this scrub (we won't block them on a whole scrub as it can take a very
    * long time)
    */
-  void enqueue_scrub_work(MDRequestRef& mdr);
-  void repair_inode_stats_work(MDRequestRef& mdr);
-  void repair_dirfrag_stats_work(MDRequestRef& mdr);
-  void rdlock_dirfrags_stats_work(MDRequestRef& mdr);
+  void enqueue_scrub_work(const MDRequestRef& mdr);
+  void repair_inode_stats_work(const MDRequestRef& mdr);
+  void repair_dirfrag_stats_work(const MDRequestRef& mdr);
+  void rdlock_dirfrags_stats_work(const MDRequestRef& mdr);
 
   ceph::unordered_map<inodeno_t,CInode*> inode_map;  // map of head inodes by ino
   std::map<vinodeno_t, CInode*> snap_inode_map;  // map of snap inodes by ino
@@ -1329,14 +1329,14 @@ class MDCache {
 
   bool can_fragment(CInode *diri, const std::vector<CDir*>& dirs);
   void fragment_freeze_dirs(const std::vector<CDir*>& dirs);
-  void fragment_mark_and_complete(MDRequestRef& mdr);
-  void fragment_frozen(MDRequestRef& mdr, int r);
+  void fragment_mark_and_complete(const MDRequestRef& mdr);
+  void fragment_frozen(const MDRequestRef& mdr, int r);
   void fragment_unmark_unfreeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_drop_locks(fragment_info_t &info);
   void fragment_maybe_finish(const fragment_info_iterator& it);
-  void dispatch_fragment_dir(MDRequestRef& mdr);
-  void _fragment_logged(MDRequestRef& mdr);
-  void _fragment_stored(MDRequestRef& mdr);
+  void dispatch_fragment_dir(const MDRequestRef& mdr);
+  void _fragment_logged(const MDRequestRef& mdr);
+  void _fragment_stored(const MDRequestRef& mdr);
   void _fragment_committed(dirfrag_t f, const MDRequestRef& mdr);
   void _fragment_old_purged(dirfrag_t f, int bits, const MDRequestRef& mdr);
 
@@ -1393,14 +1393,14 @@ class C_MDS_RetryRequest : public MDSInternalContext {
   MDCache *cache;
   MDRequestRef mdr;
  public:
-  C_MDS_RetryRequest(MDCache *c, MDRequestRef& r) :
+  C_MDS_RetryRequest(MDCache *c, const MDRequestRef& r) :
     MDSInternalContext(c->mds), cache(c), mdr(r) {}
   void finish(int r) override;
 };
 
 class CF_MDS_RetryRequestFactory : public MDSContextFactory {
 public:
-  CF_MDS_RetryRequestFactory(MDCache *cache, MDRequestRef &mdr, bool dl) :
+  CF_MDS_RetryRequestFactory(MDCache *cache, const MDRequestRef& mdr, bool dl) :
     mdcache(cache), mdr(mdr), drop_locks(dl) {}
   MDSContext *build() override;
 private:
