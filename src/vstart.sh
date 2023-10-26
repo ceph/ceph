@@ -860,11 +860,11 @@ $CCLIENTDEBUG
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
 
-        ; rgw backend store = dbstore
-        ; dbstore_db_dir = /home/ali/dbstore_dir
-        ; dbstore_config_uri = file://$HOME/dbstore_dir/dbstore-config.db
-        ; debug rgw dbstore = 20
-        rgw config store = rados
+        rgw backend store = dbstore
+        dbstore_db_dir = /home/fedora/dbstore_dir
+        dbstore_config_uri = file://$HOME/dbstore_dir/dbstore-config.db
+        debug rgw dbstore = 20
+        rgw config store = dbstore
 
         $(format_conf "${extra_conf}")
 EOF
