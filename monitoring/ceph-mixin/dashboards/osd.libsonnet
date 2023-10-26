@@ -342,7 +342,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.graphPanelSchema({},
                          title,
                          description,
-                         'null',
+                         'null as zero',
                          false,
                          formatY1,
                          'short',
