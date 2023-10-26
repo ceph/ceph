@@ -1504,7 +1504,7 @@ int MDSRank::send_message_mds(const ref_t<Message>& m, const entity_addrvec_t &a
   return messenger->send_to_mds(ref_t<Message>(m).detach(), addr);
 }
 
-void MDSRank::forward_message_mds(MDRequestRef& mdr, mds_rank_t mds)
+void MDSRank::forward_message_mds(const MDRequestRef& mdr, mds_rank_t mds)
 {
   ceph_assert(mds != whoami);
 
