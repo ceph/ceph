@@ -604,6 +604,11 @@ void PrimaryLogPG::maybe_kick_recovery(
   if (!recovery_state.get_missing_loc().needs_recovery(soid, &v))
     return;
 
+  if (osd->recovery_is_paused()) {
+    dout(10) << "In maybe_kick_recovery: NORECOVER flag is set" << dendl;
+    return;
+  }
+
   map<hobject_t, ObjectContextRef>::const_iterator p = recovering.find(soid);
   if (p != recovering.end()) {
     dout(7) << "object " << soid << " v " << v << ", already recovering." << dendl;
