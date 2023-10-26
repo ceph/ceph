@@ -897,7 +897,7 @@ public:
       void setDB(DB * st) { db = st; }
       DB *getDB(void) { return db; }
 
-      DB *getDB(std::string tenant) { return dbsm->getDB(tenant, false); }
+      DB *getDB(std::string tenant, std::string db_path, std::string db_name_prefix) { return dbsm->getDB(tenant, false, db_path, db_name_prefix); }
   };
 
 } } // namespace rgw::sal

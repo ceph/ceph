@@ -123,6 +123,8 @@ int main(int argc, char *argv[])
 {
   string tenant = "Redhat";
   string logfile = "rgw_dbstore_bin.log";
+  string db_dir = "/var/lib/ceph/radosgw";
+  string db_name_prefix = "dbstore";
   int loglevel = 20;
 
   DBStoreManager *dbsm;
@@ -148,7 +150,7 @@ int main(int argc, char *argv[])
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
                 CODE_ENVIRONMENT_DAEMON, CINIT_FLAG_NO_MON_CONFIG, 1);
   dbsm = new DBStoreManager(cct.get(), logfile, loglevel);
-  dbs = dbsm->getDB(tenant, true);
+  dbs = dbsm->getDB(tenant, true, db_dir, db_name_prefix);
 
   cout<<"No. of threads being created = "<<num_thr<<"\n";
 

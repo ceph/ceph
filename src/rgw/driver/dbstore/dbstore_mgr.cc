@@ -15,7 +15,7 @@ using namespace std;
  * If not found and 'create' set to true, create one
  * and return
  */
-DB *DBStoreManager::getDB (string tenant, bool create)
+DB *DBStoreManager::getDB (string tenant, bool create, std::string db_path, std::string db_name_prefix)
 {
   map<string, DB*>::iterator iter;
   DB *dbs = nullptr;
@@ -36,17 +36,16 @@ not_found:
   if (!create)
     return nullptr;
 
-  dbs = createDB(tenant);
+  dbs = createDB(tenant, db_path, db_name_prefix);
 
   return dbs;
 }
 
 /* Create DBStore instance */
-DB *DBStoreManager::createDB(std::string tenant) {
+DB *DBStoreManager::createDB(std::string tenant, std::string db_path, std::string db_name_prefix) {
   DB *dbs = nullptr;
   pair<map<string, DB*>::iterator,bool> ret;
-  const auto& db_path = g_conf().get_val<std::string>("dbstore_db_dir");
-  const auto& db_name = g_conf().get_val<std::string>("dbstore_db_name_prefix") + "-" + tenant;
+  const auto& db_name = db_name_prefix + "-" + tenant;
 
   auto db_full_path = std::filesystem::path(db_path) / db_name;
   ldout(cct, 0) << "DB initialization full db_path("<<db_full_path<<")" << dendl;

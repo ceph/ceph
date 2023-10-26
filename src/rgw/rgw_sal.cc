@@ -48,7 +48,7 @@
 extern "C" {
 extern rgw::sal::Driver* newRadosStore(void);
 #ifdef WITH_RADOSGW_DBSTORE
-extern rgw::sal::Driver* newDBStore(CephContext *cct);
+extern rgw::sal::Driver* newDBStore(CephContext *cct, std::string db_dir, std::string db_name_prefix);
 #endif
 #ifdef WITH_RADOSGW_MOTR
 extern rgw::sal::Driver* newMotrStore(CephContext *cct);
@@ -141,6 +141,30 @@ rgw::sal::Driver* DriverManager::read_rados_config(const DoutPrefixProvider* dpp
 
   return driver;
 }
+
+
+rgw::sal::Driver* DriverManager::read_dbstore_config(const DoutPrefixProvider* dpp,
+                                              JSONFormattable sal_config,
+                                              rgw::sal::Driver* driver,
+                                              CephContext* cct,
+                                              bool use_lc_thread) {
+    std::string db_dir;
+    if (sal_config.exists("db_dir")) {
+      db_dir = sal_config["db_dir"];
+    } else {
+      delete driver;
+      return nullptr;
+    }
+
+    driver = newDBStore(cct, sal_config["db_dir"], sal_config["db_name_prefix"]);
+    if ((*(rgw::sal::DBStore*)driver).set_run_lc_thread(use_lc_thread)
+                                    .initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+
+}
+
 // to be moved out of DriverManager
 rgw::sal::Driver* DriverManager::read_base_config(const DoutPrefixProvider* dpp,
                                               JSONFormattable sal_config,
@@ -197,34 +221,50 @@ rgw::sal::Driver* DriverManager::create_drivers(const DoutPrefixProvider* dpp,
                                               bool use_gc, optional_yield y)
 {
   if (sal_config.exists("type")) {
-    std::string type = sal_config["type"];
-    if(type.compare("rados") == 0) {
-      driver = read_rados_config(dpp,
-                                 sal_config,
-                                 driver,
-                                 cct,
-                                 use_gc_thread,
-                                 use_lc_thread,
-                                 quota_threads,
-                                 run_sync_thread,
-                                 run_reshard_thread,
-                                 run_notification_thread,
-                                 use_cache, use_gc, y);
-    } else if(type.compare("base") == 0) {
-      driver = read_base_config(dpp,
-                                sal_config,
-                                driver,
-                                cct,
-                                use_gc_thread,
-                                use_lc_thread,
-                                quota_threads,
-                                run_sync_thread,
-                                run_reshard_thread,
-                                run_notification_thread,
-                                use_cache, use_gc, y);
-    } else {
-    return nullptr;
-    }
+      std::string type = sal_config["type"];
+      if(type.compare("rados") == 0) {
+        driver = read_rados_config(dpp,
+                                   sal_config,
+                                   driver,
+                                   cct,
+                                   use_gc_thread,
+                                   use_lc_thread,
+                                   quota_threads,
+                                   run_sync_thread,
+                                   run_reshard_thread,
+                                   run_notification_thread,
+                                   use_cache, use_gc, y);
+      } else if(type.compare("dbstore") == 0) {
+        driver = read_dbstore_config(dpp,
+                                  sal_config,
+                                  driver,
+                                  cct,
+                                  use_lc_thread);
+      } else if(type.compare("base") == 0) {
+        driver = read_base_config(dpp,
+                                  sal_config,
+                                  driver,
+                                  cct,
+                                  use_gc_thread,
+                                  use_lc_thread,
+                                  quota_threads,
+                                  run_sync_thread,
+                                  run_reshard_thread,
+                                  run_notification_thread,
+                                  use_cache, use_gc, y);
+      }
+  } else if (sal_config.exists("next")) {
+    driver = create_drivers(dpp,
+                          sal_config["next"],
+                          driver,
+                          cct,
+                          use_gc_thread,
+                          use_lc_thread,
+                          quota_threads,
+                          run_sync_thread,
+                          run_reshard_thread,
+                          run_notification_thread,
+                          use_cache, use_gc, y);
   }
   return driver;
 }
@@ -245,6 +285,18 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   rgw::sal::Driver* driver{nullptr};
 
   if (cfg.store_name.compare("rados") == 0) {
+    return create_drivers(dpp,
+                          sal_config,
+                          driver,
+                          cct,
+                          use_gc_thread,
+                          use_lc_thread,
+                          quota_threads,
+                          run_sync_thread,
+                          run_reshard_thread,
+                          run_notification_thread,
+                          use_cache, use_gc, y);
+  } else if (cfg.store_name.compare("dbstore") == 0) {
     return create_drivers(dpp,
                           sal_config,
                           driver,
@@ -326,7 +378,8 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   }
 #ifdef WITH_RADOSGW_DBSTORE
   else if (cfg.store_name.compare("dbstore") == 0) {
-    driver = newDBStore(cct);
+    //driver = newDBStore(cct);
+    driver = nullptr;
 
     if ((*(rgw::sal::DBStore*)driver).set_run_lc_thread(use_lc_thread)
                                     .initialize(cct, dpp) < 0) {
@@ -431,7 +484,8 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
     }
   } else if (cfg.store_name.compare("dbstore") == 0) {
 #ifdef WITH_RADOSGW_DBSTORE
-    driver = newDBStore(cct);
+    //driver = newDBStore(cct);
+    driver = nullptr;
 
     if ((*(rgw::sal::DBStore*)driver).initialize(cct, dpp) < 0) {
       delete driver;

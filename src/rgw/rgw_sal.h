@@ -1589,6 +1589,12 @@ public:
                                           bool use_cache,
                                           bool use_gc, optional_yield y);
 
+  static rgw::sal::Driver* read_dbstore_config(const DoutPrefixProvider* dpp,
+                                          JSONFormattable sal_config,
+                                          rgw::sal::Driver* driver,
+                                          CephContext* cct,
+                                          bool use_lc_thread);
+
   static rgw::sal::Driver* read_base_config(const DoutPrefixProvider* dpp,
                                           JSONFormattable sal_config,
                                           rgw::sal::Driver* driver,

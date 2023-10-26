@@ -28,17 +28,17 @@ private:
   CephContext *cct;
 
 public:
-  DBStoreManager(CephContext *_cct): DBStoreHandles() {
+  DBStoreManager(CephContext *_cct, std::string db_dir, std::string db_name_prefix): DBStoreHandles() {
     cct = _cct;
-	default_db = createDB(default_tenant);
+	default_db = createDB(default_tenant, db_dir, db_name_prefix);
   };
-  DBStoreManager(CephContext *_cct, std::string logfile, int loglevel): DBStoreHandles() {
+  DBStoreManager(CephContext *_cct, std::string logfile, int loglevel, std::string db_dir, std::string db_name_prefix): DBStoreHandles() {
     /* No ceph context. Create one with log args provided */
     cct = _cct;
     cct->_log->set_log_file(logfile);
     cct->_log->reopen_log_file();
     cct->_conf->subsys.set_log_level(ceph_subsys_rgw, loglevel);
-    default_db = createDB(default_tenant);
+    default_db = createDB(default_tenant, db_dir, db_name_prefix);
   };
   ~DBStoreManager() { destroyAllHandles(); };
 
@@ -48,8 +48,8 @@ public:
    * being deleted while using it.
    */
   DB* getDB () { return default_db; };
-  DB* getDB (std::string tenant, bool create);
-  DB* createDB (std::string tenant);
+  DB* getDB (std::string tenant, bool create, std::string db_dir, std::string db_name_prefix);
+  DB* createDB (std::string tenant, std::string db_dir, std::string db_name_prefix);
   void deleteDB (std::string tenant);
   void deleteDB (DB* db);
   void destroyAllHandles();

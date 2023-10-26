@@ -1996,10 +1996,10 @@ namespace rgw::sal {
 
 extern "C" {
 
-  void *newDBStore(CephContext *cct)
+  void *newDBStore(CephContext *cct, std::string db_dir, std::string db_name_prefix = "dbstore")
   {
     rgw::sal::DBStore *driver = new rgw::sal::DBStore();
-    DBStoreManager *dbsm = new DBStoreManager(cct);
+    DBStoreManager *dbsm = new DBStoreManager(cct, db_dir, db_name_prefix);
 
     DB *db = dbsm->getDB();
     if (!db) {
