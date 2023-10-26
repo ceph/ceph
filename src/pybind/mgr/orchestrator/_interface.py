@@ -359,6 +359,15 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def hardware_status(self, hostname: Optional[str] = None, category: Optional[str] = 'summary') -> OrchResult[str]:
+        """
+        Display hardware status.
+
+        :param category: category
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def remove_host(self, host: str, force: bool, offline: bool, rm_crush_entry: bool) -> OrchResult[str]:
         """
         Remove a host from the orchestrator inventory.

@@ -488,6 +488,13 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
         return self._apply_misc([s], False, Format.plain)
 
+    @_cli_write_command('orch hardware status')
+    def _hardware_status(self, hostname: Optional[str] = None, _end_positional_: int = 0, category: str = 'summary') -> HandleCommandResult:
+        """Display hardware status"""
+        completion = self.hardware_status(hostname, category)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_write_command('orch host rm')
     def _remove_host(self, hostname: str, force: bool = False, offline: bool = False, rm_crush_entry: bool = False) -> HandleCommandResult:
         """Remove a host"""
