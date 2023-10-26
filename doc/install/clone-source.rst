@@ -154,13 +154,13 @@ Updating Submodules
 
    .. prompt:: bash $
 
-      git submodule update --force --init --recursive
+      git submodule update --force --init --recursive --progress
       git clean -fdx
       git submodule foreach git clean -fdx
 
    If you still have problems with a submodule directory, use ``rm -rf
    [directory name]`` to remove the directory. Then run ``git submodule update
-   --init --recursive`` again.
+   --init --recursive --progress`` again.
 
 #. Run ``git status`` again:
 

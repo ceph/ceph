@@ -2,7 +2,7 @@
 set -ex
 
 if [ -d .git ]; then
-    git submodule update --init --recursive
+    git submodule update --init --recursive --progress
 fi
 
 : ${BUILD_DIR:=build}

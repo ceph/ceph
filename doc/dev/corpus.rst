@@ -27,7 +27,7 @@ script of ``script/gen-corpus.sh``, or by following the instructions below:
 
 	git clone ceph.git
 	cd ceph
-	git submodule update --init --recursive
+	git submodule update --init --recursive --progress
 
 #. Build with flag to dump objects to ``/tmp/foo``::
 

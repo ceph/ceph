@@ -58,7 +58,7 @@ if [ -e rocksdb ]; then
 fi
 
 pushd $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../
-git submodule update --init src/rocksdb
+git submodule update --init --progress src/rocksdb
 popd
 git clone $(dirname /home/ubuntu/cephtest/clone.client.0/qa/workunits/rados/bash.sh)/../../../src/rocksdb rocksdb
 
