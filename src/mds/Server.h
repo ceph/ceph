@@ -162,61 +162,61 @@ public:
   void handle_client_request(const cref_t<MClientRequest> &m);
   void handle_client_reply(const cref_t<MClientReply> &m);
 
-  void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
+  void journal_and_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
 			 LogEvent *le, MDSLogContextBase *fin);
   void submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin,
-                          MDRequestRef& mdr, std::string_view event);
-  void dispatch_client_request(MDRequestRef& mdr);
+                          const MDRequestRef& mdr, std::string_view event);
+  void dispatch_client_request(const MDRequestRef& mdr);
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
-  void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
-  void respond_to_request(MDRequestRef& mdr, int r = 0);
+  void early_reply(const MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);
+  void respond_to_request(const MDRequestRef& mdr, int r = 0);
   void set_trace_dist(const ref_t<MClientReply> &reply, CInode *in, CDentry *dn,
-		      MDRequestRef& mdr);
+		      const MDRequestRef& mdr);
 
   void handle_peer_request(const cref_t<MMDSPeerRequest> &m);
   void handle_peer_request_reply(const cref_t<MMDSPeerRequest> &m);
-  void dispatch_peer_request(MDRequestRef& mdr);
-  void handle_peer_auth_pin(MDRequestRef& mdr);
-  void handle_peer_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack);
+  void dispatch_peer_request(const MDRequestRef& mdr);
+  void handle_peer_auth_pin(const MDRequestRef& mdr);
+  void handle_peer_auth_pin_ack(const MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack);
 
   // some helpers
-  bool check_fragment_space(MDRequestRef& mdr, CDir *in);
-  bool check_dir_max_entries(MDRequestRef& mdr, CDir *in);
-  bool check_access(MDRequestRef& mdr, CInode *in, unsigned mask);
+  bool check_fragment_space(const MDRequestRef& mdr, CDir *in);
+  bool check_dir_max_entries(const MDRequestRef& mdr, CDir *in);
+  bool check_access(const MDRequestRef& mdr, CInode *in, unsigned mask);
   bool _check_access(Session *session, CInode *in, unsigned mask, int caller_uid, int caller_gid, int setattr_uid, int setattr_gid);
-  CDentry *prepare_stray_dentry(MDRequestRef& mdr, CInode *in);
-  CInode* prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
+  CDentry *prepare_stray_dentry(const MDRequestRef& mdr, CInode *in);
+  CInode* prepare_new_inode(const MDRequestRef& mdr, CDir *dir, inodeno_t useino, unsigned mode,
 			    const file_layout_t *layout=nullptr);
-  void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
-  void apply_allocated_inos(MDRequestRef& mdr, Session *session);
+  void journal_allocated_inos(const MDRequestRef& mdr, EMetaBlob *blob);
+  void apply_allocated_inos(const MDRequestRef& mdr, Session *session);
 
-  void _try_open_ino(MDRequestRef& mdr, int r, inodeno_t ino);
-  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
+  void _try_open_ino(const MDRequestRef& mdr, int r, inodeno_t ino);
+  CInode* rdlock_path_pin_ref(const MDRequestRef& mdr, bool want_auth,
 			      bool no_want_auth=false);
-  CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
+  CDentry* rdlock_path_xlock_dentry(const MDRequestRef& mdr, bool create,
 				    bool okexist=false, bool authexist=false,
 				    bool want_layout=false);
   std::pair<CDentry*, CDentry*>
-	    rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn);
+	    rdlock_two_paths_xlock_destdn(const MDRequestRef& mdr, bool xlock_srcdn);
 
-  CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
+  CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, const MDRequestRef& mdr);
 
   // requests on existing inodes.
-  void handle_client_getattr(MDRequestRef& mdr, bool is_lookup);
-  void handle_client_lookup_ino(MDRequestRef& mdr,
+  void handle_client_getattr(const MDRequestRef& mdr, bool is_lookup);
+  void handle_client_lookup_ino(const MDRequestRef& mdr,
 				bool want_parent, bool want_dentry);
-  void _lookup_snap_ino(MDRequestRef& mdr);
-  void _lookup_ino_2(MDRequestRef& mdr, int r);
-  void handle_client_readdir(MDRequestRef& mdr);
-  void handle_client_file_setlock(MDRequestRef& mdr);
-  void handle_client_file_readlock(MDRequestRef& mdr);
+  void _lookup_snap_ino(const MDRequestRef& mdr);
+  void _lookup_ino_2(const MDRequestRef& mdr, int r);
+  void handle_client_readdir(const MDRequestRef& mdr);
+  void handle_client_file_setlock(const MDRequestRef& mdr);
+  void handle_client_file_readlock(const MDRequestRef& mdr);
 
-  bool xlock_policylock(MDRequestRef& mdr, CInode *in,
+  bool xlock_policylock(const MDRequestRef& mdr, CInode *in,
 			bool want_layout=false, bool xlock_snaplock=false);
-  CInode* try_get_auth_inode(MDRequestRef& mdr, inodeno_t ino);
-  void handle_client_setattr(MDRequestRef& mdr);
-  void handle_client_setlayout(MDRequestRef& mdr);
-  void handle_client_setdirlayout(MDRequestRef& mdr);
+  CInode* try_get_auth_inode(const MDRequestRef& mdr, inodeno_t ino);
+  void handle_client_setattr(const MDRequestRef& mdr);
+  void handle_client_setlayout(const MDRequestRef& mdr);
+  void handle_client_setdirlayout(const MDRequestRef& mdr);
 
   int parse_quota_vxattr(std::string name, std::string value, quota_info_t *quota);
   void create_quota_realm(CInode *in);
@@ -226,100 +226,100 @@ public:
 				 file_layout_t *layout);
   int parse_layout_vxattr(std::string name, std::string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);
-  int check_layout_vxattr(MDRequestRef& mdr,
+  int check_layout_vxattr(const MDRequestRef& mdr,
                           std::string name,
                           std::string value,
                           file_layout_t *layout);
-  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
-  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
-  void handle_client_getvxattr(MDRequestRef& mdr);
-  void handle_client_setxattr(MDRequestRef& mdr);
-  void handle_client_removexattr(MDRequestRef& mdr);
+  void handle_set_vxattr(const MDRequestRef& mdr, CInode *cur);
+  void handle_remove_vxattr(const MDRequestRef& mdr, CInode *cur);
+  void handle_client_getvxattr(const MDRequestRef& mdr);
+  void handle_client_setxattr(const MDRequestRef& mdr);
+  void handle_client_removexattr(const MDRequestRef& mdr);
 
-  void handle_client_fsync(MDRequestRef& mdr);
+  void handle_client_fsync(const MDRequestRef& mdr);
 
   // open
-  void handle_client_open(MDRequestRef& mdr);
-  void handle_client_openc(MDRequestRef& mdr);  // O_CREAT variant.
-  void do_open_truncate(MDRequestRef& mdr, int cmode);  // O_TRUNC variant.
+  void handle_client_open(const MDRequestRef& mdr);
+  void handle_client_openc(const MDRequestRef& mdr);  // O_CREAT variant.
+  void do_open_truncate(const MDRequestRef& mdr, int cmode);  // O_TRUNC variant.
 
   // namespace changes
-  void handle_client_mknod(MDRequestRef& mdr);
-  void handle_client_mkdir(MDRequestRef& mdr);
-  void handle_client_symlink(MDRequestRef& mdr);
+  void handle_client_mknod(const MDRequestRef& mdr);
+  void handle_client_mkdir(const MDRequestRef& mdr);
+  void handle_client_symlink(const MDRequestRef& mdr);
 
   // link
-  void handle_client_link(MDRequestRef& mdr);
-  void _link_local(MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm);
-  void _link_local_finish(MDRequestRef& mdr, CDentry *dn, CInode *targeti,
+  void handle_client_link(const MDRequestRef& mdr);
+  void _link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, SnapRealm *target_realm);
+  void _link_local_finish(const MDRequestRef& mdr, CDentry *dn, CInode *targeti,
 			  version_t, version_t, bool);
 
-  void _link_remote(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
-  void _link_remote_finish(MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
+  void _link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti);
+  void _link_remote_finish(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode *targeti,
 			   version_t);
 
-  void handle_peer_link_prep(MDRequestRef& mdr);
-  void _logged_peer_link(MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
-  void _commit_peer_link(MDRequestRef& mdr, int r, CInode *targeti);
-  void _committed_peer(MDRequestRef& mdr);  // use for rename, too
-  void handle_peer_link_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
-  void do_link_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr);
-  void _link_rollback_finish(MutationRef& mut, MDRequestRef& mdr,
+  void handle_peer_link_prep(const MDRequestRef& mdr);
+  void _logged_peer_link(const MDRequestRef& mdr, CInode *targeti, bool adjust_realm);
+  void _commit_peer_link(const MDRequestRef& mdr, int r, CInode *targeti);
+  void _committed_peer(const MDRequestRef& mdr);  // use for rename, too
+  void handle_peer_link_prep_ack(const MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
+  void do_link_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequestRef& mdr);
+  void _link_rollback_finish(MutationRef& mut, const MDRequestRef& mdr,
 			     std::map<client_t,ref_t<MClientSnap>>& split);
 
   // unlink
-  void handle_client_unlink(MDRequestRef& mdr);
-  bool _dir_is_nonempty_unlocked(MDRequestRef& mdr, CInode *rmdiri);
-  bool _dir_is_nonempty(MDRequestRef& mdr, CInode *rmdiri);
-  void _unlink_local(MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
-  void _unlink_local_finish(MDRequestRef& mdr,
+  void handle_client_unlink(const MDRequestRef& mdr);
+  bool _dir_is_nonempty_unlocked(const MDRequestRef& mdr, CInode *rmdiri);
+  bool _dir_is_nonempty(const MDRequestRef& mdr, CInode *rmdiri);
+  void _unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *straydn);
+  void _unlink_local_finish(const MDRequestRef& mdr,
 			    CDentry *dn, CDentry *straydn,
 			    version_t);
-  bool _rmdir_prepare_witness(MDRequestRef& mdr, mds_rank_t who, std::vector<CDentry*>& trace, CDentry *straydn);
-  void handle_peer_rmdir_prep(MDRequestRef& mdr);
-  void _logged_peer_rmdir(MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
-  void _commit_peer_rmdir(MDRequestRef& mdr, int r, CDentry *straydn);
-  void handle_peer_rmdir_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack);
-  void do_rmdir_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr);
-  void _rmdir_rollback_finish(MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
+  bool _rmdir_prepare_witness(const MDRequestRef& mdr, mds_rank_t who, std::vector<CDentry*>& trace, CDentry *straydn);
+  void handle_peer_rmdir_prep(const MDRequestRef& mdr);
+  void _logged_peer_rmdir(const MDRequestRef& mdr, CDentry *srcdn, CDentry *straydn);
+  void _commit_peer_rmdir(const MDRequestRef& mdr, int r, CDentry *straydn);
+  void handle_peer_rmdir_prep_ack(const MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &ack);
+  void do_rmdir_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequestRef& mdr);
+  void _rmdir_rollback_finish(const MDRequestRef& mdr, metareqid_t reqid, CDentry *dn, CDentry *straydn);
 
   // rename
-  void handle_client_rename(MDRequestRef& mdr);
-  void _rename_finish(MDRequestRef& mdr,
+  void handle_client_rename(const MDRequestRef& mdr);
+  void _rename_finish(const MDRequestRef& mdr,
 		      CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
-  void handle_client_lssnap(MDRequestRef& mdr);
-  void handle_client_mksnap(MDRequestRef& mdr);
-  void _mksnap_finish(MDRequestRef& mdr, CInode *diri, SnapInfo &info);
-  void handle_client_rmsnap(MDRequestRef& mdr);
-  void _rmsnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
-  void handle_client_renamesnap(MDRequestRef& mdr);
-  void _renamesnap_finish(MDRequestRef& mdr, CInode *diri, snapid_t snapid);
-  void handle_client_readdir_snapdiff(MDRequestRef& mdr);
+  void handle_client_lssnap(const MDRequestRef& mdr);
+  void handle_client_mksnap(const MDRequestRef& mdr);
+  void _mksnap_finish(const MDRequestRef& mdr, CInode *diri, SnapInfo &info);
+  void handle_client_rmsnap(const MDRequestRef& mdr);
+  void _rmsnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+  void handle_client_renamesnap(const MDRequestRef& mdr);
+  void _renamesnap_finish(const MDRequestRef& mdr, CInode *diri, snapid_t snapid);
+  void handle_client_readdir_snapdiff(const MDRequestRef& mdr);
 
   // helpers
-  bool _rename_prepare_witness(MDRequestRef& mdr, mds_rank_t who, std::set<mds_rank_t> &witnesse,
+  bool _rename_prepare_witness(const MDRequestRef& mdr, mds_rank_t who, std::set<mds_rank_t> &witnesse,
 			       std::vector<CDentry*>& srctrace, std::vector<CDentry*>& dsttrace, CDentry *straydn);
-  version_t _rename_prepare_import(MDRequestRef& mdr, CDentry *srcdn, bufferlist *client_map_bl);
+  version_t _rename_prepare_import(const MDRequestRef& mdr, CDentry *srcdn, bufferlist *client_map_bl);
   bool _need_force_journal(CInode *diri, bool empty);
-  void _rename_prepare(MDRequestRef& mdr,
+  void _rename_prepare(const MDRequestRef& mdr,
 		       EMetaBlob *metablob, bufferlist *client_map_bl,
 		       CDentry *srcdn, CDentry *destdn, std::string_view alternate_name,
                        CDentry *straydn);
   /* set not_journaling=true if you're going to discard the results --
    * this bypasses the asserts to make sure we're journaling the right
    * things on the right nodes */
-  void _rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void _rename_apply(const MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
 
   // slaving
-  void handle_peer_rename_prep(MDRequestRef& mdr);
-  void handle_peer_rename_prep_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
-  void handle_peer_rename_notify_ack(MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
-  void _peer_rename_sessions_flushed(MDRequestRef& mdr);
-  void _logged_peer_rename(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void _commit_peer_rename(MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
-  void do_rename_rollback(bufferlist &rbl, mds_rank_t leader, MDRequestRef& mdr, bool finish_mdr=false);
-  void _rename_rollback_finish(MutationRef& mut, MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
+  void handle_peer_rename_prep(const MDRequestRef& mdr);
+  void handle_peer_rename_prep_ack(const MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
+  void handle_peer_rename_notify_ack(const MDRequestRef& mdr, const cref_t<MMDSPeerRequest> &m);
+  void _peer_rename_sessions_flushed(const MDRequestRef& mdr);
+  void _logged_peer_rename(const MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void _commit_peer_rename(const MDRequestRef& mdr, int r, CDentry *srcdn, CDentry *destdn, CDentry *straydn);
+  void do_rename_rollback(bufferlist &rbl, mds_rank_t leader, const MDRequestRef& mdr, bool finish_mdr=false);
+  void _rename_rollback_finish(MutationRef& mut, const MDRequestRef& mdr, CDentry *srcdn, version_t srcdnpv,
 			       CDentry *destdn, CDentry *staydn, std::map<client_t,ref_t<MClientSnap>> splits[2],
 			       bool finish_mdr);
 
@@ -481,10 +481,10 @@ private:
            xattr_name == "ceph.mirror.dirty_snap_id";
   }
 
-  void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
+  void reply_client_request(const MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder& gather);
 
-  void _finalize_readdir(MDRequestRef& mdr,
+  void _finalize_readdir(const MDRequestRef& mdr,
                          CInode *diri,
                          CDir* dir,
                          bool start,
@@ -495,7 +495,7 @@ private:
                          bufferlist& dnbl);
   void _readdir_diff(
     utime_t now,
-    MDRequestRef& mdr,
+    const MDRequestRef& mdr,
     CInode* diri,
     CDir* dir,
     SnapRealm* realm,
@@ -506,7 +506,7 @@ private:
     unsigned req_flags,
     bufferlist& dirbl);
   bool build_snap_diff(
-    MDRequestRef& mdr,
+    const MDRequestRef& mdr,
     CDir* dir,
     int bytes_left,
     dentry_key_t* skip_key,

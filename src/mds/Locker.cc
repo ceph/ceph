@@ -139,7 +139,7 @@ void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data
   }
 }
 
-bool Locker::try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
+bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
 				    int n, bool want_layout)
 {
   dout(10) << __func__ << " " << *mdr << " " << *in << dendl;
@@ -205,10 +205,10 @@ failed:
 }
 
 struct MarkEventOnDestruct {
-  MDRequestRef& mdr;
+  MDRequestRef mdr;
   std::string_view message;
   bool mark_event;
-  MarkEventOnDestruct(MDRequestRef& _mdr, std::string_view _message) :
+  MarkEventOnDestruct(const MDRequestRef& _mdr, std::string_view _message) :
       mdr(_mdr),
       message(_message),
       mark_event(true) {}
@@ -220,7 +220,7 @@ struct MarkEventOnDestruct {
 
 /* If this function returns false, the mdr has been placed
  * on the appropriate wait list */
-bool Locker::acquire_locks(MDRequestRef& mdr,
+bool Locker::acquire_locks(const MDRequestRef& mdr,
 			   MutationImpl::LockOpVec& lov,
 			   CInode *auth_pin_freeze,
 			   bool auth_pin_nonblocking)
@@ -892,7 +892,7 @@ void Locker::invalidate_lock_caches(SimpleLock *lock)
   }
 }
 
-void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout)
+void Locker::create_lock_cache(const MDRequestRef& mdr, CInode *diri, file_layout_t *dir_layout)
 {
   if (mdr->lock_cache)
     return;
@@ -1039,7 +1039,7 @@ void Locker::create_lock_cache(MDRequestRef& mdr, CInode *diri, file_layout_t *d
   mdr->lock_cache = lock_cache;
 }
 
-bool Locker::find_and_attach_lock_cache(MDRequestRef& mdr, CInode *diri)
+bool Locker::find_and_attach_lock_cache(const MDRequestRef& mdr, CInode *diri)
 {
   if (mdr->lock_cache)
     return true;
@@ -1569,7 +1569,7 @@ bool Locker::rdlock_try(SimpleLock *lock, client_t client)
   return false;
 }
 
-bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
+bool Locker::rdlock_start(SimpleLock *lock, const MDRequestRef& mut, bool as_anon)
 {
   dout(7) << "rdlock_start  on " << *lock << " on " << *lock->get_parent() << dendl;  
 
@@ -1660,7 +1660,7 @@ void Locker::rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *
   }
 }
 
-bool Locker::rdlock_try_set(MutationImpl::LockOpVec& lov, MDRequestRef& mdr)
+bool Locker::rdlock_try_set(MutationImpl::LockOpVec& lov, const MDRequestRef& mdr)
 {
   dout(10) << __func__  << dendl;
   for (const auto& p : lov) {
@@ -1747,7 +1747,7 @@ bool Locker::wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t clien
   return false;
 }
 
-bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut)
+bool Locker::wrlock_start(const MutationImpl::LockOp &op, const MDRequestRef& mut)
 {
   SimpleLock *lock = op.lock;
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
@@ -1840,7 +1840,7 @@ void Locker::wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *
 
 // remote wrlock
 
-void Locker::remote_wrlock_start(SimpleLock *lock, mds_rank_t target, MDRequestRef& mut)
+void Locker::remote_wrlock_start(SimpleLock *lock, mds_rank_t target, const MDRequestRef& mut)
 {
   dout(7) << "remote_wrlock_start mds." << target << " on " << *lock << " on " << *lock->get_parent() << dendl;
 
@@ -1891,7 +1891,7 @@ void Locker::remote_wrlock_finish(const MutationImpl::lock_iterator& it, Mutatio
 // ------------------
 // xlock
 
-bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
+bool Locker::xlock_start(SimpleLock *lock, const MDRequestRef& mut)
 {
   if (lock->get_type() == CEPH_LOCK_IVERSION ||
       lock->get_type() == CEPH_LOCK_DVERSION)
@@ -2179,7 +2179,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 
 Capability* Locker::issue_new_caps(CInode *in,
 				   int mode,
-				   MDRequestRef& mdr,
+				   const MDRequestRef& mdr,
 				   SnapRealm *realm)
 {
   dout(7) << "issue_new_caps for mode " << mode << " on " << *in << dendl;
@@ -3415,7 +3415,7 @@ public:
   }
 };
 
-void Locker::process_request_cap_release(MDRequestRef& mdr, client_t client, const ceph_mds_request_release& item,
+void Locker::process_request_cap_release(const MDRequestRef& mdr, client_t client, const ceph_mds_request_release& item,
 					 std::string_view dname)
 {
   inodeno_t ino = (uint64_t)item.ino;
@@ -3534,7 +3534,7 @@ void Locker::kick_issue_caps(CInode *in, client_t client, ceph_seq_t seq)
   issue_caps(in, cap);
 }
 
-void Locker::kick_cap_releases(MDRequestRef& mdr)
+void Locker::kick_cap_releases(const MDRequestRef& mdr)
 {
   client_t client = mdr->get_client();
   for (map<vinodeno_t,ceph_seq_t>::iterator p = mdr->cap_releases.begin();
@@ -4253,7 +4253,7 @@ void Locker::handle_client_lease(const cref_t<MClientLease> &m)
 }
 
 
-void Locker::issue_client_lease(CDentry *dn, CInode *in, MDRequestRef &mdr, utime_t now,
+void Locker::issue_client_lease(CDentry *dn, CInode *in, const MDRequestRef& mdr, utime_t now,
                                 bufferlist &bl)
 {
   client_t client = mdr->get_client();
@@ -5329,7 +5329,7 @@ void Locker::local_wrlock_grab(LocalLockC *lock, MutationRef& mut)
   ceph_assert(it->is_wrlock());
 }
 
-bool Locker::local_wrlock_start(LocalLockC *lock, MDRequestRef& mut)
+bool Locker::local_wrlock_start(LocalLockC *lock, const MDRequestRef& mut)
 {
   dout(7) << "local_wrlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -5361,7 +5361,7 @@ void Locker::local_wrlock_finish(const MutationImpl::lock_iterator& it, Mutation
   }
 }
 
-bool Locker::local_xlock_start(LocalLockC *lock, MDRequestRef& mut)
+bool Locker::local_xlock_start(LocalLockC *lock, const MDRequestRef& mut)
 {
   dout(7) << "local_xlock_start  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
