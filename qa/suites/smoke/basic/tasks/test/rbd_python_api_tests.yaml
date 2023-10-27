@@ -5,6 +5,8 @@ overrides:
       - python3-pytest
 tasks:
 - ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 - ceph-fuse:
 - workunit:
     clients:

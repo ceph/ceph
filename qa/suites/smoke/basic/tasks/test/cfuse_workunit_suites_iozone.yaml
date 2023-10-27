@@ -1,5 +1,7 @@
 tasks:
 - ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 - ceph-fuse: [client.0]
 - workunit:
     clients:
