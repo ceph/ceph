@@ -13,7 +13,7 @@
         <a class="nav-link"
            [class.active]="!activeItem"
            (click)="selectItem()"
-           *ngIf="item === ''">Default</a>
+           *ngIf="item === ''">_nogroup</a>
         <a class="nav-link text-decoration-none text-break"
            [class.active]="item === activeItem"
            (click)="selectItem(item)"

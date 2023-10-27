@@ -1,5 +1,5 @@
-import { Component, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
-import { Observable, ReplaySubject, of } from 'rxjs';
+import { Component, Input, OnChanges, OnInit, SimpleChanges, ViewChild } from '@angular/core';
+import { BehaviorSubject, Observable, of } from 'rxjs';
 import { catchError, shareReplay, switchMap } from 'rxjs/operators';
 
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
@@ -52,7 +52,7 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   permissions: Permissions;
 
   subvolumeGroup$: Observable<CephfsSubvolumeGroup[]>;
-  subject = new ReplaySubject<CephfsSubvolumeGroup[]>();
+  subject = new BehaviorSubject<CephfsSubvolumeGroup[]>([]);
 
   constructor(
     private cephfsSubvolumeGroup: CephfsSubvolumeGroupService,
@@ -138,11 +138,13 @@ export class CephfsSubvolumeGroupComponent implements OnInit, OnChanges {
   }
 
   fetchData() {
-    this.subject.next();
+    this.subject.next([]);
   }
 
-  ngOnChanges() {
-    this.subject.next();
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes.fsName) {
+      this.subject.next([]);
+    }
   }
 
   updateSelection(selection: CdTableSelection) {
