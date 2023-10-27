@@ -1603,31 +1603,31 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 /** Check if the req_state's user has the necessary permissions
  * to do the requested action */
 rgw::IAM::Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
-			  const std::vector<rgw::IAM::Policy>& user_policies,
-                          const rgw::IAM::Environment& env,
-                          const uint64_t op,
-                          const rgw::ARN& arn);
-bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            req_state * const s,
-                            RGWAccessControlPolicy * const user_acl,
-                            const std::vector<rgw::IAM::Policy>& user_policies,
-                            const std::vector<rgw::IAM::Policy>& session_policies,
-                            const rgw::ARN& res,
-                            const uint64_t op,
-                            bool mandatory_policy=true);
+                                                   const std::vector<rgw::IAM::Policy>& user_policies,
+                                                   const rgw::IAM::Environment& env,
+                                                   const uint64_t op,
+                                                   const rgw::ARN& arn);
+int verify_user_permission(const DoutPrefixProvider* dpp,
+                           req_state * const s,
+                           RGWAccessControlPolicy * const user_acl,
+                           const std::vector<rgw::IAM::Policy>& user_policies,
+                           const std::vector<rgw::IAM::Policy>& session_policies,
+                           const rgw::ARN& res,
+                           const uint64_t op,
+                           bool mandatory_policy=true);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       RGWAccessControlPolicy * const user_acl,
                                       const int perm);
-bool verify_user_permission(const DoutPrefixProvider* dpp,
-                            req_state * const s,
-                            const rgw::ARN& res,
-                            const uint64_t op,
-                            bool mandatory_policy=true);
+int verify_user_permission(const DoutPrefixProvider* dpp,
+                           req_state * const s,
+                           const rgw::ARN& res,
+                           const uint64_t op,
+                           bool mandatory_policy=true);
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       req_state * const s,
                                       int perm);
-bool verify_bucket_permission(
+int verify_bucket_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
   const rgw_bucket& bucket,
@@ -1637,7 +1637,7 @@ bool verify_bucket_permission(
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
-bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op);
+int verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s, const uint64_t op);
 bool verify_bucket_permission_no_policy(
   const DoutPrefixProvider* dpp,
   req_state * const s,
@@ -1649,7 +1649,7 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp,
 					const int perm);
 int verify_bucket_owner_or_policy(req_state* const s,
 				  const uint64_t op);
-extern bool verify_object_permission(
+extern int verify_object_permission(
   const DoutPrefixProvider* dpp,
   req_state * const s,
   const rgw_obj& obj,
@@ -1660,7 +1660,7 @@ extern bool verify_object_permission(
   const std::vector<rgw::IAM::Policy>& identity_policies,
   const std::vector<rgw::IAM::Policy>& session_policies,
   const uint64_t op);
-extern bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op);
+extern int verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint64_t op);
 extern bool verify_object_permission_no_policy(
   const DoutPrefixProvider* dpp,
   req_state * const s,

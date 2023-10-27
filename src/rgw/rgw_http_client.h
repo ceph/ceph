@@ -54,6 +54,7 @@ protected:
   std::string method;
   std::string url;
 
+  std::string unix_socket;
   std::string protocol;
   std::string host;
   std::string resource_prefix;
@@ -123,6 +124,10 @@ public:
     headers.push_back(std::pair<std::string, std::string>(name, val));
   }
 
+  void set_headers(const param_vec_t& h) {
+    headers = h;
+  }
+
   void set_send_length(size_t len) {
     send_len = len;
     has_send_len = true;
@@ -188,6 +193,10 @@ public:
 
   void set_client_key(const std::string& _client_key) {
     client_key = _client_key;
+  }
+
+  void set_unix_socket(const std::string& _unix_socket) {
+    unix_socket = _unix_socket;
   }
 };
 

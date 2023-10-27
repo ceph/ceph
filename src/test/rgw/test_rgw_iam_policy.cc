@@ -131,6 +131,11 @@ public:
     return 0;
   }
 
+  const rgw_user get_rgw_user() const override {
+    abort();
+    return {};
+  }
+
   void to_str(std::ostream& out) const override {
     out << id;
   }

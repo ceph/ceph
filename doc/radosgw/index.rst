@@ -58,6 +58,7 @@ Storage Cluster with one API and then retrieve that data with the other API.
    OpenStack Barbican Integration <barbican>
    HashiCorp Vault Integration <vault>
    KMIP Integration <kmip>
+   External IAM Authorization <external-iam>
    Open Policy Agent Integration <opa>
    Multi-tenancy <multitenancy>
    Compression <compression>

@@ -45,13 +45,10 @@ int RGWRestRole::verify_permission(optional_yield y)
 
   string resource_name = role->get_path() + role_name;
   uint64_t op = get_op();
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(resource_name,
-                                            "role",
-                                             s->user->get_tenant(), true),
-                                             op)) {
-    return -EACCES;
+  if (int res = verify_user_permission(this, s,
+                                       rgw::ARN(resource_name, "role", s->user->get_tenant(), true),
+                                       op); res) {
+    return res;
   }
 
   _role = std::move(role);
@@ -138,15 +135,9 @@ int RGWCreateRole::verify_permission(optional_yield y)
   string role_path = s->info.args.get("Path");
 
   string resource_name = role_path + role_name;
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(resource_name,
-                                            "role",
-                                             s->user->get_tenant(), true),
-                                             get_op())) {
-    return -EACCES;
-  }
-  return 0;
+  return verify_user_permission(this, s,
+                                rgw::ARN(resource_name, "role", s->user->get_tenant(), true),
+                                get_op());
 }
 
 int RGWCreateRole::get_params()
@@ -387,15 +378,9 @@ int RGWGetRole::_verify_permission(const rgw::sal::RGWRole* role)
   }
 
   string resource_name = role->get_path() + role->get_name();
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(resource_name,
-                                            "role",
-                                             s->user->get_tenant(), true),
-                                             get_op())) {
-    return -EACCES;
-  }
-  return 0;
+  return verify_user_permission(this, s,
+                                rgw::ARN(resource_name, "role", s->user->get_tenant(), true),
+                                get_op());
 }
 
 int RGWGetRole::get_params()
@@ -515,14 +500,7 @@ int RGWListRoles::verify_permission(optional_yield y)
     return ret;
   }
 
-  if (!verify_user_permission(this, 
-                              s,
-                              rgw::ARN(),
-                              get_op())) {
-    return -EACCES;
-  }
-
-  return 0;
+  return verify_user_permission(this, s, rgw::ARN(), get_op());
 }
 
 int RGWListRoles::get_params()

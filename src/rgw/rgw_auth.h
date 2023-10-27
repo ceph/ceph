@@ -81,6 +81,9 @@ public:
   /* Subuser of Account */
   virtual std::string get_subuser() const = 0;
 
+  /* rgw_user struct of Account used for IAM evaluation */
+  virtual const rgw_user get_rgw_user() const = 0;
+
   virtual std::string get_role_tenant() const { return ""; }
 
   /* write any auth-specific fields that are safe to expose in the ops log */
@@ -478,6 +481,10 @@ public:
     return {};
   }
 
+  virtual const rgw_user get_rgw_user() const override {
+    return rgw_user(this->role_tenant, this->user_name);
+  }
+
   struct Factory {
     virtual ~Factory() {}
 
@@ -624,6 +631,7 @@ public:
   uint32_t get_identity_type() const override { return info.acct_type; }
   std::string get_acct_name() const override { return info.acct_name; }
   std::string get_subuser() const override { return {}; }
+  virtual const rgw_user get_rgw_user() const override { return info.acct_user; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -687,6 +695,7 @@ public:
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
   void write_ops_log_entry(rgw_log_entry& entry) const override;
+  virtual const rgw_user get_rgw_user() const override { return user_info.user_id; }
 
   struct Factory {
     virtual ~Factory() {}
@@ -747,6 +756,7 @@ public:
   std::string get_subuser() const override { return {}; }
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
   std::string get_role_tenant() const override { return role.tenant; }
+  virtual const rgw_user get_rgw_user() const override { return token_attrs.user_id; }
 
   struct Factory {
     virtual ~Factory() {}
