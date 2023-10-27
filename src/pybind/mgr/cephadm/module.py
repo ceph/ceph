@@ -40,6 +40,7 @@ from cephadm.agent import CephadmAgentHelpers
 
 
 from mgr_module import MgrModule, HandleCommandResult, Option, NotifyType
+from mgr_util import build_url
 import orchestrator
 from orchestrator.module import to_format, Format
 
@@ -472,6 +473,13 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Default timeout applied to cephadm commands run directly on '
             'the host (in seconds)'
         ),
+        Option(
+            'cephadm_log_destination',
+            type='str',
+            default='',
+            desc="Destination for cephadm command's persistent logging",
+            enum_allowed=['file', 'syslog', 'file,syslog'],
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -554,6 +562,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.cgroups_split = True
             self.log_refresh_metadata = False
             self.default_cephadm_command_timeout = 0
+            self.cephadm_log_destination = ''
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -904,6 +913,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 status_desc=status_desc,
                 created=_as_datetime(d.get('created')),
                 started=_as_datetime(d.get('started')),
+                last_refresh=datetime_now(),
                 last_configured=_as_datetime(d.get('last_configured')),
                 last_deployed=_as_datetime(d.get('last_deployed')),
                 memory_usage=d.get('memory_usage'),
@@ -2703,6 +2713,12 @@ Then run the following:
                 deps.append(f'{hash(alertmanager_user + alertmanager_password)}')
         elif daemon_type == 'promtail':
             deps += get_daemon_names(['loki'])
+        elif daemon_type == JaegerAgentService.TYPE:
+            for dd in self.cache.get_daemons_by_type(JaegerCollectorService.TYPE):
+                assert dd.hostname is not None
+                port = dd.ports[0] if dd.ports else JaegerCollectorService.DEFAULT_SERVICE_PORT
+                deps.append(build_url(host=dd.hostname, port=port).lstrip('/'))
+            deps = sorted(deps)
         else:
             # TODO(redo): some error message!
             pass
@@ -3363,7 +3379,7 @@ Then run the following:
         return self.to_remove_osds.all_osds()
 
     @handle_orch_error
-    def drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False) -> str:
+    def drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False, zap_osd_devices: bool = False) -> str:
         """
         Drain all daemons from a host.
         :param host: host name
@@ -3389,7 +3405,7 @@ Then run the following:
         daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_host(hostname)
 
         osds_to_remove = [d.daemon_id for d in daemons if d.daemon_type == 'osd']
-        self.remove_osds(osds_to_remove)
+        self.remove_osds(osds_to_remove, zap=zap_osd_devices)
 
         daemons_table = ""
         daemons_table += "{:<20} {:<15}\n".format("type", "id")

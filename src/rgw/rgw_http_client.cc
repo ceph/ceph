@@ -1017,7 +1017,10 @@ int RGWHTTPManager::set_request_state(RGWHTTPClient *client, RGWHTTPRequestSetSt
     return 0;
   }
 
+  // mutex already locked
+  // coverity[missing_lock:SUPPRESS]
   req_data->write_paused = suggested_wr_paused;
+  // coverity[missing_lock:SUPPRESS]
   req_data->read_paused = suggested_rd_paused;
 
   int bitmask = CURLPAUSE_CONT;

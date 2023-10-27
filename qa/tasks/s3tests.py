@@ -377,7 +377,11 @@ def run_tests(ctx, config):
             args += ['REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt']
         else:
             args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
-        attrs = ["not fails_on_rgw", "not lifecycle_expiration"]
+        attrs = ["not fails_on_rgw"]
+        if not client_config.get('lifecycle_tests'):
+            attrs += ['not lifecycle_expiration', 'not lifecycle_transition']
+        if not client_config.get('cloudtier_tests'):
+            attrs += ['not cloud_transition']
         if not client_config.get('sts_tests', False):
             attrs += ["not test_of_sts"]
         if not client_config.get('webidentity_tests', False):

@@ -124,6 +124,7 @@ int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const RGWAcc
   }
   std::string service = "iam";
   RGWRESTSimpleRequest req(cct, info.method, url, NULL, &params, api_name);
+  // coverity[uninit_use_in_call:SUPPRESS]
   return req.forward_request(dpp, key, info, max_response, inbl, outbl, y, service);
 }
 
@@ -143,6 +144,7 @@ int RGWRESTConn::put_obj_send_init(const rgw_obj& obj, const rgw_http_param_pair
   }
 
   RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, api_name, host_style);
+  // coverity[uninit_use_in_call:SUPPRESS]
   wr->send_init(obj);
   *req = wr;
   return 0;
@@ -160,6 +162,7 @@ int RGWRESTConn::put_obj_async_init(const DoutPrefixProvider *dpp, const rgw_use
   param_vec_t params;
   populate_params(params, &uid, self_zone_group);
   RGWRESTStreamS3PutObj *wr = new RGWRESTStreamS3PutObj(cct, "PUT", url, NULL, &params, api_name, host_style);
+  // coverity[uninit_use_in_call:SUPPRESS]
   wr->put_obj_init(dpp, key, obj, attrs);
   *req = wr;
   return 0;
@@ -290,6 +293,7 @@ int RGWRESTConn::get_obj(const DoutPrefixProvider *dpp, const rgw_obj& obj, cons
     set_header(buf, extra_headers, "RANGE");
   }
 
+  // coverity[uninit_use_in_call:SUPPRESS]
   int r = (*req)->send_prepare(dpp, key, extra_headers, obj);
   if (r < 0) {
     goto done_err;

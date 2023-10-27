@@ -594,10 +594,6 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
     } else {
       m_task_finisher->queue(TASK_CODE_REQUEST_LOCK, ctx);
     }
-  } else if (is_blocklisted()) {
-    lderr(m_image_ctx.cct) << this << " blocklisted waiting for exclusive lock"
-                           << dendl;
-    m_image_ctx.exclusive_lock->handle_peer_notification(0);
   }
 }
 

@@ -73,6 +73,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
     } else {
       this.snapshotForm.get('snapshotName').setValue(this.snapName);
       this.snapshotForm.get('snapshotName').setValidators([Validators.required]);
+      this.snapshotForm.get('snapshotName').updateValueAndValidity();
     }
   }
 

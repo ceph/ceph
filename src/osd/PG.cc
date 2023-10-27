@@ -1348,11 +1348,14 @@ Scrub::schedule_result_t PG::sched_scrub()
   ceph_assert(m_scrubber);
 
   if (is_scrub_queued_or_active()) {
-    return schedule_result_t::already_started;
+     dout(10) << __func__ << ": already scrubbing" << dendl;
+     return schedule_result_t::target_specific_failure;
   }
 
   if (!is_primary() || !is_active() || !is_clean()) {
-    return schedule_result_t::bad_pg_state;
+    dout(10) << __func__ << ": cannot scrub (not a clean and active primary)"
+      << dendl;
+    return schedule_result_t::target_specific_failure;
   }
 
   if (state_test(PG_STATE_SNAPTRIM) || state_test(PG_STATE_SNAPTRIM_WAIT)) {
@@ -1360,7 +1363,7 @@ Scrub::schedule_result_t PG::sched_scrub()
     // (on the transition from NotTrimming to Trimming/WaitReservation),
     // i.e. some time before setting 'snaptrim'.
     dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
-    return schedule_result_t::bad_pg_state;
+    return schedule_result_t::target_specific_failure;
   }
 
   // analyse the combination of the requested scrub flags, the osd/pool configuration
@@ -1372,14 +1375,14 @@ Scrub::schedule_result_t PG::sched_scrub()
     // (due to configuration or priority issues)
     // The reason was already reported by the callee.
     dout(10) << __func__ << ": failed to initiate a scrub" << dendl;
-    return schedule_result_t::preconditions;
+    return schedule_result_t::target_specific_failure;
   }
 
   // try to reserve the local OSD resources. If failing: no harm. We will
   // be retried by the OSD later on.
   if (!m_scrubber->reserve_local()) {
     dout(10) << __func__ << ": failed to reserve locally" << dendl;
-    return schedule_result_t::no_local_resources;
+    return schedule_result_t::osd_wide_failure;
   }
 
   // can commit to the updated flags now, as nothing will stop the scrub
@@ -2835,4 +2838,12 @@ void PG::with_heartbeat_peers(std::function<void(int)>&& f)
 
 uint64_t PG::get_min_alloc_size() const {
   return osd->store->get_min_alloc_size();
+}
+
+PGLockWrapper::~PGLockWrapper()
+{
+  if (m_pg) {
+    // otherwise - we were 'moved from'
+    m_pg->unlock();
+  }
 }

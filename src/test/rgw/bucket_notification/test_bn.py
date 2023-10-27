@@ -1615,8 +1615,7 @@ def test_ps_s3_notification_push_kafka_on_master():
         time.sleep(5)
         receiver.verify_s3_events(keys, exact_match=True, deletions=True, etags=etags)
     except Exception as e:
-        print(e)
-        assert False
+        assert False, str(e)
     finally:
         # cleanup
         if s3_notification_conf is not None:
@@ -3262,8 +3261,8 @@ def test_ps_s3_persistent_topic_configs_ttl():
 @attr('basic_test')
 def test_ps_s3_persistent_topic_configs_max_retries():
     """ test persistent topic configurations with max_retries and retry_sleep_duration """
-    config_dict = {"time_to_live": "None", "max_retries": 20, "retry_sleep_duration": 1}
-    buffer = 20
+    config_dict = {"time_to_live": "None", "max_retries": 10, "retry_sleep_duration": 1}
+    buffer = 30
     persistency_time = config_dict["max_retries"]*config_dict["retry_sleep_duration"] + buffer
 
     ps_s3_persistent_topic_configs(persistency_time, config_dict)

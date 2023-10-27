@@ -328,6 +328,9 @@ struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine>,
     ceph::coarse_real_clock::now();
   ScrubMachine::timer_event_token_t m_timeout_token;
 
+  /// if true - we must 'clear_reserving_now()' upon exit
+  bool m_holding_isreserving_flag{false};
+
   sc::result react(const FullReset&);
 
   sc::result react(const ReservationTimeout&);

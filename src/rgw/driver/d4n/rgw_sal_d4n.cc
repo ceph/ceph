@@ -365,10 +365,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 	source->set_instance(it->second);
       } else if (!std::strcmp(it->first.data(), "source_zone_short_id")) {
 	astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second));
-      } else if (!std::strcmp(it->first.data(), "bucket_count")) {
-	source->get_bucket()->set_count(std::stoull(it->second));
-      } else if (!std::strcmp(it->first.data(), "bucket_size")) {
-	source->get_bucket()->set_size(std::stoull(it->second));
       } else if (!std::strcmp(it->first.data(), "user_quota.max_size")) {
         quota_info.max_size = std::stoull(it->second);
       } else if (!std::strcmp(it->first.data(), "user_quota.max_objects")) {
@@ -449,7 +445,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
 {
   cache_block* temp_cache_block = filter->get_cache_block();
   RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
@@ -471,9 +467,9 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   RGWObjState* astate;
   int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y);
-  obj->get_obj_attrs(y, save_dpp, NULL);
-  obj->get_obj_state(save_dpp, &astate, y);
+			canceled, rctx);
+  obj->get_obj_attrs(rctx.y, save_dpp, NULL);
+  obj->get_obj_state(save_dpp, &astate, rctx.y);
 
   /* Append additional metadata to attributes */ 
   rgw::sal::Attrs baseAttrs = obj->get_attrs();
@@ -516,14 +512,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
   }
-
-  bl.append(std::to_string(obj->get_bucket()->get_count()));
-  baseAttrs.insert({"bucket_count", bl});
-  bl.clear();
-
-  bl.append(std::to_string(obj->get_bucket()->get_size()));
-  baseAttrs.insert({"bucket_size", bl});
-  bl.clear();
 
   RGWUserInfo info = obj->get_bucket()->get_owner()->get_info();
   bl.append(std::to_string(info.quota.user_quota.max_size));

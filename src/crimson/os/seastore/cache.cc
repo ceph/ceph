@@ -780,7 +780,7 @@ void Cache::commit_replace_extent(
   extents.replace(*next, *prev);
 
   if (prev->get_type() == extent_types_t::ROOT) {
-    assert(prev->is_clean()
+    assert(prev->is_stable_clean()
       || prev->primary_ref_list_hook.is_linked());
     if (prev->is_dirty()) {
       stats.dirty_bytes -= prev->get_length();

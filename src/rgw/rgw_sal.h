@@ -15,14 +15,16 @@
 
 #pragma once
 
+#include "common/tracer.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
 #include "rgw_user.h"
 #include "rgw_notify_event_type.h"
-#include "common/tracer.h"
+#include "rgw_req_context.h"
 #include "rgw_datalog_notify.h"
 #include "include/random.h"
 
+struct RGWBucketEnt;
 class RGWRESTMgr;
 class RGWAccessListFilter;
 class RGWLC;
@@ -243,7 +245,7 @@ class ObjectProcessor : public DataProcessor {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) = 0;
+                       const req_context& rctx) = 0;
 };
 
 /** A list of key-value attributes */
@@ -395,8 +397,8 @@ class Driver {
     virtual const RGWSyncModuleInstanceRef& get_sync_module() = 0;
     /** Get the ID of the current host */
     virtual std::string get_host_id() = 0;
-    /** Get a Lua script manager for running lua scripts */
-    virtual std::unique_ptr<LuaManager> get_lua_manager() = 0;
+    /** Get a Lua script manager for running lua scripts and reloading packages */
+    virtual std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) = 0;
     /** Get an IAM Role by name etc. */
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
@@ -450,6 +452,18 @@ class Driver {
 
     /** Register admin APIs unique to this driver */
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
+};
+
+/**
+ * @brief A list of buckets
+ *
+ * This is the result from a bucket listing operation.
+ */
+struct BucketList {
+  /// The list of results, sorted by bucket name
+  std::vector<RGWBucketEnt> buckets;
+  /// The next marker to resume listing, or empty
+  std::string next_marker;
 };
 
 /**
@@ -660,9 +674,8 @@ class Bucket {
     // XXXX hack
     virtual void set_owner(rgw::sal::User* _owner) = 0;
 
-    /** Load this bucket from the backing store.  Requires the key to be set, fills other fields.
-     * If @a get_stats is true, then statistics on the bucket are also looked up. */
-    virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats = false) = 0;
+    /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
+    virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Read the bucket stats from the backing Store, synchronous */
     virtual int read_stats(const DoutPrefixProvider *dpp,
 			   const bucket_index_layout_generation& idx_layout,
@@ -675,11 +688,11 @@ class Bucket {
 				 const bucket_index_layout_generation& idx_layout,
 				 int shard_id, RGWGetBucketStats_CB* ctx) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
-    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-    /** Refresh the metadata stats (size, count, and so on) from the backing store */
-    virtual int update_container_stats(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                RGWBucketEnt* optional_ent) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
-    virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int check_bucket_shards(const DoutPrefixProvider* dpp,
+                                    uint64_t num_objs, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
      * change ownership of the objects in the bucket. */
     virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) = 0;
@@ -717,10 +730,6 @@ class Bucket {
     virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) = 0;
     /** Remove this specific bucket instance from the backing store.  May be removed from API */
     virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) = 0;
-    /** Set the cached object count of this bucket */
-    virtual void set_count(uint64_t _count) = 0;
-    /** Set the cached size of this bucket */
-    virtual void set_size(uint64_t _size) = 0;
 
     /** Check if this instantiation is empty */
     virtual bool empty() const = 0;
@@ -732,12 +741,6 @@ class Bucket {
     virtual const std::string& get_marker() const = 0;
     /** Get the cached ID of this bucket */
     virtual const std::string& get_bucket_id() const = 0;
-    /** Get the cached size of this bucket */
-    virtual size_t get_size() const = 0;
-    /** Get the cached rounded size of this bucket */
-    virtual size_t get_size_rounded() const = 0;
-    /** Get the cached object count of this bucket */
-    virtual uint64_t get_count() const = 0;
     /** Get the cached placement rule of this bucket */
     virtual rgw_placement_rule& get_placement_rule() = 0;
     /** Get the cached creation time of this bucket */
@@ -815,51 +818,6 @@ class Bucket {
 
     virtual bool operator==(const Bucket& b) const = 0;
     virtual bool operator!=(const Bucket& b) const = 0;
-
-    friend class BucketList;
-};
-
-/**
- * @brief A list of buckets
- *
- * This is the result from a bucket listing operation.
- */
-class BucketList {
-  std::map<std::string, std::unique_ptr<Bucket>> buckets;
-  bool truncated;
-
-public:
-  BucketList() : buckets(), truncated(false) {}
-  BucketList(BucketList&& _bl) :
-    buckets(std::move(_bl.buckets)),
-    truncated(_bl.truncated)
-    { }
-  BucketList& operator=(const BucketList&) = delete;
-  BucketList& operator=(BucketList&& _bl) {
-    for (auto& ent : _bl.buckets) {
-      buckets.emplace(ent.first, std::move(ent.second));
-    }
-    truncated = _bl.truncated;
-    return *this;
-  };
-
-  /** Get the list of buckets.  The list is a map of <bucket-name, Bucket> pairs. */
-  std::map<std::string, std::unique_ptr<Bucket>>& get_buckets() { return buckets; }
-  /** True if the list is truncated (that is, there are more buckets to list) */
-  bool is_truncated(void) const { return truncated; }
-  /** Set the truncated state of the list */
-  void set_truncated(bool trunc) { truncated = trunc; }
-  /** Add a bucket to the list.  Takes ownership of the bucket */
-  void add(std::unique_ptr<Bucket> bucket) {
-    buckets.emplace(bucket->get_name(), std::move(bucket));
-  }
-  /** The number of buckets in this list */
-  size_t count() const { return buckets.size(); }
-  /** Clear the list */
-  void clear(void) {
-    buckets.clear();
-    truncated = false;
-  }
 };
 
 /**
@@ -1430,7 +1388,7 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) = 0;
+                       const req_context& rctx) = 0;
 };
 
 
@@ -1477,7 +1435,7 @@ public:
   /** Get the API name of this zonegroup */
   virtual const std::string& get_api_name() const = 0;
   /** Get the list of placement target names for this zone */
-  virtual int get_placement_target_names(std::set<std::string>& names) const = 0;
+  virtual void get_placement_target_names(std::set<std::string>& names) const = 0;
   /** Get the name of the default placement target for this zone */
   virtual const std::string& get_default_placement_name() const = 0;
   /** Get the list of hostnames from this zone */
@@ -1557,6 +1515,12 @@ public:
   virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) = 0;
   /** List lua packages */
   virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) = 0;
+  /** Reload lua packages */
+  virtual int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) = 0;
+  /** Get the path to the loarocks install location **/
+  virtual const std::string& luarocks_path() const = 0;
+  /** Set the path to the loarocks install location **/
+  virtual void set_luarocks_path(const std::string& path) = 0;
 };
 
 /** @} namespace rgw::sal in group RGWSAL */

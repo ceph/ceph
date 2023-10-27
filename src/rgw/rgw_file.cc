@@ -23,7 +23,7 @@
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_zone.h"
-#include "rgw_file.h"
+#include "rgw_file_int.h"
 #include "rgw_lib_frontend.h"
 #include "rgw_perf_counters.h"
 #include "common/errno.h"
@@ -901,6 +901,10 @@ namespace rgw {
     }
     break;
     default:
+      if (unlikely(rgw_fh->is_bucket())) {
+	/* treat buckets like immutable, namespace roots */
+	return 0; /* it's not an error, we just won't do it */
+      }
       break;
     };
 
@@ -1834,7 +1838,8 @@ namespace rgw {
     ceph_assert(! dlo_manifest);
     ceph_assert(! slo_info);
 
-    perfcounter->inc(l_rgw_put);
+    counters = rgw::op_counters::get(state);
+    rgw::op_counters::inc(counters, l_rgw_op_put_obj, 1);
     op_ret = -EINVAL;
 
     if (state->object->empty()) {
@@ -1933,6 +1938,7 @@ namespace rgw {
     char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
     unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
     req_state* state = get_state();
+    const req_context rctx{this, state->yield, nullptr};
 
     size_t osize = rgw_fh->get_size();
     struct timespec octime = rgw_fh->get_ctime();
@@ -1940,7 +1946,7 @@ namespace rgw {
     real_time appx_t = real_clock::now();
 
     state->obj_size = bytes_written;
-    perfcounter->inc(l_rgw_put_b, state->obj_size);
+    rgw::op_counters::inc(counters, l_rgw_op_put_obj_b, state->obj_size);
 
     // flush data in filters
     op_ret = filter->process({}, state->obj_size);
@@ -2014,7 +2020,7 @@ namespace rgw {
     op_ret = processor->complete(state->obj_size, etag, &mtime, real_time(), attrs,
                                  (delete_at ? *delete_at : real_time()),
                                 if_match, if_nomatch, nullptr, nullptr, nullptr,
-                                state->yield);
+                                rctx);
     if (op_ret != 0) {
       /* revert attr updates */
       rgw_fh->set_mtime(omtime);
@@ -2023,7 +2029,7 @@ namespace rgw {
     }
 
   done:
-    perfcounter->tinc(l_rgw_put_lat, state->time_elapsed());
+    rgw::op_counters::tinc(counters, l_rgw_op_put_obj_lat, state->time_elapsed());
     return op_ret;
   } /* exec_finish */
 

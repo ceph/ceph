@@ -4,7 +4,7 @@
     <li *ngFor="let status of zone.fullSyncStatus">
       <span *ngIf="!status?.includes(zone.name) && !status?.includes(zone.syncstatus) && !status?.includes('failed') && !status?.includes('error')">
         <span *ngIf="status?.includes(':')">
-          <b>{{ status.split(':')[0] | titlecase }}</b>:{{ status.split(':')[1] | titlecase}}
+          <b>{{ status.split(': ')[0] | titlecase }}</b>:{{ status.split(': ')[1] | titlecase}}
         </span>
         <span *ngIf="!status?.includes(':')">
           <b>{{ status | titlecase }}</b>

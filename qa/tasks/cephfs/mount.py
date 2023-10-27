@@ -734,15 +734,19 @@ class CephFSMount(object):
         if perms:
             self.run_shell(args=f'chmod {perms} {path}')
 
-    def read_file(self, path):
+    def read_file(self, path, sudo=False):
         """
         Return the data from the file on given path.
         """
         if path.find(self.hostfs_mntpt) == -1:
             path = os.path.join(self.hostfs_mntpt, path)
 
-        return self.run_shell(args=['cat', path]).\
-            stdout.getvalue().strip()
+        args = []
+        if sudo:
+            args.append('sudo')
+        args += ['cat', path]
+
+        return self.run_shell(args=args, omit_sudo=False).stdout.getvalue().strip()
 
     def create_destroy(self):
         assert(self.is_mounted())

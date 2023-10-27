@@ -58,8 +58,8 @@ public:
     { return next->is_master_zonegroup(); }
   virtual const std::string& get_api_name() const override
     { return next->get_api_name(); }
-  virtual int get_placement_target_names(std::set<std::string>& names) const override
-    { return next->get_placement_target_names(names); }
+  virtual void get_placement_target_names(std::set<std::string>& names) const override
+    { next->get_placement_target_names(names); }
   virtual const std::string& get_default_placement_name() const override
     { return next->get_default_placement_name(); }
   virtual int get_hostnames(std::list<std::string>& names) const override
@@ -264,7 +264,7 @@ public:
 			  std::string& metadata_key, optional_yield y) override;
   virtual const RGWSyncModuleInstanceRef& get_sync_module() override;
   virtual std::string get_host_id() override { return next->get_host_id(); }
-  virtual std::unique_ptr<LuaManager> get_lua_manager() override;
+  virtual std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					    std::string tenant,
 					    std::string path="",
@@ -424,8 +424,7 @@ public:
 		      optional_yield y) override;
 
   virtual void set_owner(rgw::sal::User* _owner) override { next->set_owner(_owner); }
-  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-			  bool get_stats = false) override;
+  virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read_stats(const DoutPrefixProvider *dpp,
 			 const bucket_index_layout_generation& idx_layout,
 			 int shard_id, std::string* bucket_ver, std::string* master_ver,
@@ -435,9 +434,10 @@ public:
   virtual int read_stats_async(const DoutPrefixProvider *dpp,
 			       const bucket_index_layout_generation& idx_layout,
 			       int shard_id, RGWGetBucketStats_CB* ctx) override;
-  virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
-  virtual int update_container_stats(const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y) override;
+  int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                      RGWBucketEnt* ent) override;
+  int check_bucket_shards(const DoutPrefixProvider* dpp,
+                          uint64_t num_objs, optional_yield y) override;
   virtual int chown(const DoutPrefixProvider* dpp, User& new_user,
 		    optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
@@ -471,16 +471,11 @@ public:
   virtual int rebuild_index(const DoutPrefixProvider *dpp) override;
   virtual int set_tag_timeout(const DoutPrefixProvider *dpp, uint64_t timeout) override;
   virtual int purge_instance(const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual void set_count(uint64_t _count) override { return next->set_count(_count); }
-  virtual void set_size(uint64_t _size) override { return next->set_size(_size); }
   virtual bool empty() const override { return next->empty(); }
   virtual const std::string& get_name() const override { return next->get_name(); }
   virtual const std::string& get_tenant() const override { return next->get_tenant(); }
   virtual const std::string& get_marker() const override { return next->get_marker(); }
   virtual const std::string& get_bucket_id() const override { return next->get_bucket_id(); }
-  virtual size_t get_size() const override { return next->get_size(); }
-  virtual size_t get_size_rounded() const override { return next->get_size_rounded(); }
-  virtual uint64_t get_count() const override { return next->get_count(); }
   virtual rgw_placement_rule& get_placement_rule() override { return next->get_placement_rule(); }
   virtual ceph::real_time& get_creation_time() override { return next->get_creation_time(); }
   virtual ceph::real_time& get_modification_time() override { return next->get_modification_time(); }
@@ -884,7 +879,7 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) override;
+                       const req_context& rctx) override;
 };
 
 class FilterLuaManager : public LuaManager {
@@ -901,6 +896,10 @@ public:
   virtual int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
   virtual int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
   virtual int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;
+  virtual int reload_packages(const DoutPrefixProvider* dpp, optional_yield y) override;
+  const std::string& luarocks_path() const override;
+  void set_luarocks_path(const std::string& path) override;
+
 };
 
 } } // namespace rgw::sal

@@ -619,13 +619,14 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& _u, rgw_bucket& _b, optional_
     return r;
   }
 
-  r = bucket->sync_user_stats(dpp, y);
+  RGWBucketEnt ent;
+  r = bucket->sync_user_stats(dpp, y, &ent);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "ERROR: sync_user_stats() for user=" << _u << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
   }
 
-  return bucket->check_bucket_shards(dpp, y);
+  return bucket->check_bucket_shards(dpp, ent.count, y);
 }
 
 int RGWUserStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& _u, optional_yield y)

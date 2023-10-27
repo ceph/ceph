@@ -251,6 +251,7 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
 {
   formatter->open_object_section("log_entry");
   formatter->dump_string("bucket", entry.bucket);
+  formatter->dump_string("object", entry.obj.name);
   {
     auto t = utime_t{entry.time};
     t.gmtime(formatter->dump_stream("time"));      // UTC

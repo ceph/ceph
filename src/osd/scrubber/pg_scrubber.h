@@ -131,7 +131,7 @@ class ReplicaReservations {
   bool m_had_rejections{false};
   int m_pending{-1};
   const pg_info_t& m_pg_info;
-  ScrubQueue::ScrubJobRef m_scrub_job;	///< a ref to this PG's scrub job
+  Scrub::ScrubJobRef m_scrub_job;	///< a ref to this PG's scrub job
   const ConfigProxy& m_conf;
 
   // detecting slow peers (see 'slow-secondary' above)
@@ -161,7 +161,7 @@ class ReplicaReservations {
 
   ReplicaReservations(PG* pg,
                       pg_shard_t whoami,
-                      ScrubQueue::ScrubJobRef scrubjob,
+                      Scrub::ScrubJobRef scrubjob,
                       const ConfigProxy& conf); 
 
   ~ReplicaReservations();
@@ -547,7 +547,7 @@ class PgScrubber : public ScrubPgIF,
 
   void reserve_replicas() final;
 
-  void set_reserving_now() final;
+  bool set_reserving_now() final;
   void clear_reserving_now() final;
 
   [[nodiscard]] bool was_epoch_changed() const final;
@@ -595,7 +595,7 @@ class PgScrubber : public ScrubPgIF,
   virtual void _scrub_clear_state() {}
 
   utime_t m_scrub_reg_stamp;		///< stamp we registered for
-  ScrubQueue::ScrubJobRef m_scrub_job;	///< the scrub-job used by the OSD to
+  Scrub::ScrubJobRef m_scrub_job;	///< the scrub-job used by the OSD to
 					///< schedule us
 
   ostream& show(ostream& out) const override;

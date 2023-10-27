@@ -1321,7 +1321,7 @@ out:
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
   } else {
     // reply immediately

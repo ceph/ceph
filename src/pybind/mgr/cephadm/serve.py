@@ -1060,6 +1060,11 @@ class CephadmServe:
                     diff = list(set(last_deps) - set(deps))
                     if any('secure_monitoring_stack' in e for e in diff):
                         action = 'redeploy'
+                elif dd.daemon_type == 'jaeger-agent':
+                    # changes to jaeger-agent deps affect the way the unit.run for
+                    # the daemon is written, which we rewrite on redeploy, but not
+                    # on reconfig.
+                    action = 'redeploy'
 
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
                 self.log.debug(
@@ -1576,6 +1581,11 @@ class CephadmServe:
             # the asyncio based timeout in the mgr module
             timeout -= 5
         final_args += ['--timeout', str(timeout)]
+
+        if self.mgr.cephadm_log_destination:
+            values = self.mgr.cephadm_log_destination.split(',')
+            for value in values:
+                final_args.append(f'--log-dest={value}')
 
         # subcommand
         if isinstance(command, list):

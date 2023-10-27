@@ -1249,6 +1249,10 @@ class TestFsAuthorize(CephFSTestCase):
         self.captester.run_cap_tests(self.fs, self.client_id, PERM)
 
     def test_single_path_rootsquash(self):
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
         PERM = 'rw'
         FS_AUTH_CAPS = (('/', PERM, 'root_squash'),)
         self.captester = CapTester(self.mount_a, '/')
@@ -1259,7 +1263,36 @@ class TestFsAuthorize(CephFSTestCase):
         # Since root_squash is set in client caps, client can read but not
         # write even thought access level is set to "rw".
         self.captester.conduct_pos_test_for_read_caps()
+        self.captester.conduct_pos_test_for_open_caps()
         self.captester.conduct_neg_test_for_write_caps(sudo_write=True)
+        self.captester.conduct_neg_test_for_chown_caps()
+        self.captester.conduct_neg_test_for_truncate_caps()
+
+    def test_single_path_rootsquash_issue_56067(self):
+        """
+        That a FS client using root squash MDS caps allows non-root user to write data
+        to a file. And after client remount, the non-root user can read the data that
+        was previously written by it. https://tracker.ceph.com/issues/56067
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("only FUSE client has CEPHFS_FEATURE_MDS_AUTH_CAPS "
+                          "needed to enforce root_squash MDS caps")
+
+        keyring = self.fs.authorize(self.client_id, ('/', 'rw', 'root_squash'))
+        keyring_path = self.mount_a.client_remote.mktemp(data=keyring)
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/')
+        filedata, filename = 'some data on fs 1', 'file_on_fs1'
+        filepath = os_path_join(self.mount_a.hostfs_mntpt, filename)
+        self.mount_a.write_file(filepath, filedata)
+
+        self.mount_a.remount(client_id=self.client_id,
+                             client_keyring_path=keyring_path,
+                             cephfs_mntpt='/')
+        if filepath.find(self.mount_a.hostfs_mntpt) != -1:
+            contents = self.mount_a.read_file(filepath)
+            self.assertEqual(filedata, contents)
 
     def test_single_path_authorize_on_nonalphanumeric_fsname(self):
         """
@@ -1765,3 +1798,78 @@ class TestFsBalRankMask(CephFSTestCase):
             self.fs.set_bal_rank_mask(bal_rank_mask)
         except CommandFailedError as e:
             self.assertEqual(e.exitstatus, errno.EINVAL)
+
+
+class TestPermErrMsg(CephFSTestCase):
+
+    CLIENT_NAME = 'client.testuser'
+    FS1_NAME, FS2_NAME, FS3_NAME = 'abcd', 'efgh', 'ijkl'
+
+    EXPECTED_ERRNO = 22
+    EXPECTED_ERRMSG = ("Permission flags in MDS capability string must be '*' "
+                       "or 'all' or must start with 'r'")
+
+    MONCAP = f'allow r fsname={FS1_NAME}'
+    OSDCAP = f'allow rw tag cephfs data={FS1_NAME}'
+    MDSCAPS = [
+        'allow w',
+        f'allow w fsname={FS1_NAME}',
+
+        f'allow rw fsname={FS1_NAME}, allow w fsname={FS2_NAME}',
+        f'allow w fsname={FS1_NAME}, allow rw fsname={FS2_NAME}',
+        f'allow w fsname={FS1_NAME}, allow w fsname={FS2_NAME}',
+
+        (f'allow rw fsname={FS1_NAME}, allow rw fsname={FS2_NAME}, allow '
+         f'w fsname={FS3_NAME}'),
+
+        # without space after comma
+        f'allow rw fsname={FS1_NAME},allow w fsname={FS2_NAME}',
+
+
+        'allow wr',
+        f'allow wr fsname={FS1_NAME}',
+
+        f'allow rw fsname={FS1_NAME}, allow wr fsname={FS2_NAME}',
+        f'allow wr fsname={FS1_NAME}, allow rw fsname={FS2_NAME}',
+        f'allow wr fsname={FS1_NAME}, allow wr fsname={FS2_NAME}',
+
+        (f'allow rw fsname={FS1_NAME}, allow rw fsname={FS2_NAME}, allow '
+         f'wr fsname={FS3_NAME}'),
+
+        # without space after comma
+        f'allow rw fsname={FS1_NAME},allow wr fsname={FS2_NAME}']
+
+    def _negtestcmd(self, SUBCMD, MDSCAP):
+        return self.negtest_ceph_cmd(
+            args=(f'{SUBCMD} {self.CLIENT_NAME} '
+                  f'mon "{self.MONCAP}" osd "{self.OSDCAP}" mds "{MDSCAP}"'),
+            retval=self.EXPECTED_ERRNO, errmsgs=self.EXPECTED_ERRMSG)
+
+    def test_auth_add(self):
+        for mdscap in self.MDSCAPS:
+            self._negtestcmd('auth add', mdscap)
+
+    def test_auth_caps(self):
+        for mdscap in self.MDSCAPS:
+            self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth add {self.CLIENT_NAME}')
+
+            self._negtestcmd('auth caps', mdscap)
+
+            self.fs.mon_manager.run_cluster_cmd(
+                args=f'auth rm {self.CLIENT_NAME}')
+
+    def test_auth_get_or_create(self):
+        for mdscap in self.MDSCAPS:
+            self._negtestcmd('auth get-or-create', mdscap)
+
+    def test_auth_get_or_create_key(self):
+        for mdscap in self.MDSCAPS:
+            self._negtestcmd('auth get-or-create-key', mdscap)
+
+    def test_fs_authorize(self):
+        for wrong_perm in ('w', 'wr'):
+            self.negtest_ceph_cmd(
+                args=(f'fs authorize {self.fs.name} {self.CLIENT_NAME} / '
+                      f'{wrong_perm}'), retval=self.EXPECTED_ERRNO,
+                errmsgs=self.EXPECTED_ERRMSG)

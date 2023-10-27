@@ -140,23 +140,28 @@ static int drain_aio(std::list<librados::AioCompletion*>& handles)
 
 int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
 			       const std::string& end_marker, uint64_t max, bool need_stats,
-			       BucketList &buckets, optional_yield y)
+			       BucketList &result, optional_yield y)
 {
   RGWUserBuckets ulist;
   bool is_truncated = false;
-  int ret;
 
-  buckets.clear();
-  ret = store->ctl()->user->list_buckets(dpp, info.user_id, marker, end_marker, max,
-					 need_stats, &ulist, &is_truncated, y);
+  int ret = store->ctl()->user->list_buckets(dpp, get_id(), marker, end_marker,
+                                             max, need_stats, &ulist,
+                                             &is_truncated, y);
   if (ret < 0)
     return ret;
 
-  buckets.set_truncated(is_truncated);
-  for (const auto& ent : ulist.get_buckets()) {
-    buckets.add(std::unique_ptr<Bucket>(new RadosBucket(this->store, ent.second, this)));
+  result.buckets.clear();
+
+  for (auto& ent : ulist.get_buckets()) {
+    result.buckets.push_back(std::move(ent.second));
   }
 
+  if (is_truncated && !result.buckets.empty()) {
+    result.next_marker = result.buckets.back().bucket.name;
+  } else {
+    result.next_marker.clear();
+  }
   return 0;
 }
 
@@ -451,8 +456,11 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
   }
 
   // remove lifecycle config, if any (XXX note could be made generic)
-  (void) store->getRados()->get_lc()->remove_bucket_config(
-    this, get_attrs());
+  if (get_attrs().count(RGW_ATTR_LC)) {
+    constexpr bool merge_attrs = false; // don't update xattrs, we're deleting
+    (void) store->getRados()->get_lc()->remove_bucket_config(
+      this, get_attrs(), merge_attrs);
+  }
 
   ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y, nullptr);
   if (ret < 0) {
@@ -617,7 +625,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
     return ret;
   }
 
-  sync_user_stats(dpp, y);
+  sync_user_stats(dpp, y, nullptr);
   if (ret < 0) {
      ldpp_dout(dpp, 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -636,7 +644,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   return ret;
 }
 
-int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bool get_stats)
+int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
 
@@ -662,10 +670,6 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y, bo
 
   bucket_version = ep_ot.read_version;
 
-  if (get_stats) {
-    ret = store->ctl()->bucket->read_bucket_stats(info.bucket, &ent, y, dpp);
-  }
-
   return ret;
 }
 
@@ -685,42 +689,16 @@ int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return store->getRados()->get_bucket_stats_async(dpp, get_info(), idx_layout, shard_id, ctx);
 }
 
-int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* ent)
 {
-  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, &ent);
+  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, ent);
 }
 
-int RadosBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
+                                     uint64_t num_objs, optional_yield y)
 {
-  int ret;
-  map<std::string, RGWBucketEnt> m;
-
-  m[info.bucket.name] = ent;
-  ret = store->getRados()->update_containers_stats(m, dpp, y);
-  if (!ret)
-    return -EEXIST;
-  if (ret < 0)
-    return ret;
-
-  map<std::string, RGWBucketEnt>::iterator iter = m.find(info.bucket.name);
-  if (iter == m.end())
-    return -EINVAL;
-
-  ent.count = iter->second.count;
-  ent.size = iter->second.size;
-  ent.size_rounded = iter->second.size_rounded;
-  ent.creation_time = iter->second.creation_time;
-  ent.placement_rule = std::move(iter->second.placement_rule);
-
-  info.creation_time = ent.creation_time;
-  info.placement_rule = ent.placement_rule;
-
-  return 0;
-}
-
-int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
-{
-      return store->getRados()->check_bucket_shards(info, info.bucket, get_count(), dpp, y);
+  return store->getRados()->check_bucket_shards(info, num_objs, dpp, y);
 }
 
 int RadosBucket::link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv)
@@ -772,12 +750,6 @@ int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::r
 {
   mtime = _mtime;
   return store->getRados()->put_bucket_instance_info(info, exclusive, mtime, &attrs, dpp, y);
-}
-
-/* Make sure to call get_bucket_info() if you need it first */
-bool RadosBucket::is_owner(User* user)
-{
-  return (info.owner.compare(user->get_id()) == 0);
 }
 
 int RadosBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)
@@ -881,7 +853,7 @@ int RadosBucket::set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy &
     cerr << "ERROR: failed to set bucket owner: " << cpp_strerror(-r) << std::endl;
     return r;
   }
-  
+
   return 0;
 }
 
@@ -1031,8 +1003,8 @@ std::string RadosBucket::topics_oid() const {
   return pubsub_oid_prefix + get_tenant() + ".bucket." + get_name() + "/" + get_marker();
 }
 
-int RadosBucket::read_topics(rgw_pubsub_bucket_topics& notifications, 
-    RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp) 
+int RadosBucket::read_topics(rgw_pubsub_bucket_topics& notifications,
+    RGWObjVersionTracker* objv_tracker, optional_yield y, const DoutPrefixProvider *dpp)
 {
   // read from cache
   auto cache = store->getRados()->get_topic_cache();
@@ -1058,7 +1030,7 @@ int RadosBucket::read_topics(rgw_pubsub_bucket_topics& notifications,
   try {
     decode(notifications, iter);
   } catch (buffer::error& err) {
-    ldpp_dout(dpp, 20) << " failed to decode bucket notifications from oid: " << topics_oid() << ". for bucket: " 
+    ldpp_dout(dpp, 20) << " failed to decode bucket notifications from oid: " << topics_oid() << ". for bucket: "
       << get_name() << ". error: " << err.what() << dendl;
     return -EIO;
   }
@@ -1077,14 +1049,14 @@ int RadosBucket::write_topics(const rgw_pubsub_bucket_topics& notifications,
   encode(notifications, bl);
 
   return rgw_put_system_obj(dpp, store->svc()->sysobj,
-      store->svc()->zone->get_zone_params().log_pool, 
+      store->svc()->zone->get_zone_params().log_pool,
       topics_oid(),
       bl, false, objv_tracker, real_time(), y);
 }
 
-int RadosBucket::remove_topics(RGWObjVersionTracker* objv_tracker, 
+int RadosBucket::remove_topics(RGWObjVersionTracker* objv_tracker,
     optional_yield y, const DoutPrefixProvider *dpp) {
-  return rgw_delete_system_obj(dpp, store->svc()->sysobj, 
+  return rgw_delete_system_obj(dpp, store->svc()->sysobj,
       store->svc()->zone->get_zone_params().log_pool,
       topics_oid(),
       objv_tracker, y);
@@ -1365,7 +1337,7 @@ int RadosStore::read_topics(const std::string& tenant, rgw_pubsub_topics& topics
   try {
     decode(topics, iter);
   } catch (buffer::error& err) {
-    ldpp_dout(dpp, 20) << " failed to decode topics from oid: " << topics_oid(tenant) << 
+    ldpp_dout(dpp, 20) << " failed to decode topics from oid: " << topics_oid(tenant) <<
       ". error: " << err.what() << dendl;
     return -EIO;
   }
@@ -1379,14 +1351,14 @@ int RadosStore::write_topics(const std::string& tenant, const rgw_pubsub_topics&
   encode(topics, bl);
 
   return rgw_put_system_obj(dpp, svc()->sysobj,
-      svc()->zone->get_zone_params().log_pool, 
+      svc()->zone->get_zone_params().log_pool,
       topics_oid(tenant),
       bl, false, objv_tracker, real_time(), y);
 }
 
 int RadosStore::remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) {
-  return rgw_delete_system_obj(dpp, svc()->sysobj, 
+  return rgw_delete_system_obj(dpp, svc()->sysobj,
       svc()->zone->get_zone_params().log_pool,
       topics_oid(tenant),
       objv_tracker, y);
@@ -1543,9 +1515,9 @@ void RadosStore::register_admin_apis(RGWRESTMgr* mgr)
   mgr->register_resource("ratelimit", new RGWRESTMgr_Ratelimit);
 }
 
-std::unique_ptr<LuaManager> RadosStore::get_lua_manager()
+std::unique_ptr<LuaManager> RadosStore::get_lua_manager(const std::string& luarocks_path)
 {
-  return std::make_unique<RadosLuaManager>(this);
+  return std::make_unique<RadosLuaManager>(this, luarocks_path);
 }
 
 std::unique_ptr<RGWRole> RadosStore::get_role(std::string name,
@@ -2119,7 +2091,8 @@ int RadosObject::write_cloud_tier(const DoutPrefixProvider* dpp,
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_TAIL_TAG);
 
-  return obj_op.write_meta(dpp, 0, 0, attrs, y);
+  const req_context rctx{dpp, y, nullptr};
+  return obj_op.write_meta(0, 0, attrs, rctx);
 }
 
 int RadosObject::get_max_chunk_size(const DoutPrefixProvider* dpp, rgw_placement_rule placement_rule, uint64_t* max_chunk_size, uint64_t* alignment)
@@ -2206,12 +2179,12 @@ std::unique_ptr<Object::ReadOp> RadosObject::get_read_op()
   return std::make_unique<RadosObject::RadosReadOp>(this, rados_ctx);
 }
 
-RadosObject::RadosReadOp::RadosReadOp(RadosObject *_source, RGWObjectCtx *_rctx) :
+RadosObject::RadosReadOp::RadosReadOp(RadosObject *_source, RGWObjectCtx *_octx) :
 	source(_source),
-	rctx(_rctx),
+	octx(_octx),
 	op_target(_source->store->getRados(),
 		  _source->get_bucket()->get_info(),
-		  *static_cast<RGWObjectCtx *>(rctx),
+		  *static_cast<RGWObjectCtx *>(octx),
 		  _source->get_obj()),
 	parent_op(&op_target)
 { }
@@ -2507,7 +2480,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   if (!remove_objs.empty()) {
     del_op->params.remove_objs = &remove_objs;
   }
-  
+
   del_op->params.abortmp = true;
   del_op->params.parts_accounted_size = parts_accounted_size;
 
@@ -2530,6 +2503,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
   int ret;
   std::string oid = mp_obj.get_key();
   RGWObjectCtx obj_ctx(store);
+  const req_context rctx{dpp, y, nullptr};
 
   do {
     char buf[33];
@@ -2565,7 +2539,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     encode(upload_info, bl);
     obj_op.meta.data = &bl;
 
-    ret = obj_op.write_meta(dpp, bl.length(), 0, attrs, y);
+    ret = obj_op.write_meta(bl.length(), 0, attrs, rctx);
   } while (ret == -EEXIST);
 
   return ret;
@@ -2776,9 +2750,9 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
           ldpp_dout(dpp, 0) << "ERROR: compression type was changed during multipart upload ("
                            << cs_info.compression_type << ">>" << obj_part.cs_info.compression_type << ")" << dendl;
           ret = -ERR_INVALID_PART;
-          return ret; 
+          return ret;
       }
-      
+
       if (part_compressed) {
         int64_t new_ofs; // offset in compression data for new part
         if (cs_info.blocks.size() > 0)
@@ -2792,7 +2766,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
           cb.len = block.len;
           cs_info.blocks.push_back(cb);
           new_ofs = cb.new_ofs + cb.len;
-        } 
+        }
         if (!compressed)
           cs_info.compression_type = obj_part.cs_info.compression_type;
         cs_info.orig_size += obj_part.cs_info.orig_size;
@@ -2848,7 +2822,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.completeMultipart = true;
   obj_op.meta.olh_epoch = olh_epoch;
 
-  ret = obj_op.write_meta(dpp, ofs, accounted_size, attrs, y);
+  const req_context rctx{dpp, y, nullptr};
+  ret = obj_op.write_meta(ofs, accounted_size, attrs, rctx);
   if (ret < 0)
     return ret;
 
@@ -3127,10 +3102,10 @@ int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, y);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx);
 }
 
 int RadosAppendWriter::prepare(optional_yield y)
@@ -3150,10 +3125,10 @@ int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, y);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx);
 }
 
 int RadosMultipartWriter::prepare(optional_yield y)
@@ -3173,10 +3148,10 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, y);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx);
 }
 
 const std::string& RadosZoneGroup::get_endpoint() const
@@ -3198,13 +3173,11 @@ bool RadosZoneGroup::placement_target_exists(std::string& target) const
   return !!group.placement_targets.count(target);
 }
 
-int RadosZoneGroup::get_placement_target_names(std::set<std::string>& names) const
+void RadosZoneGroup::get_placement_target_names(std::set<std::string>& names) const
 {
   for (const auto& target : group.placement_targets) {
     names.emplace(target.second.name);
   }
-
-  return 0;
 }
 
 int RadosZoneGroup::get_placement_tier(const rgw_placement_rule& rule,
@@ -3348,15 +3321,18 @@ RGWBucketSyncPolicyHandlerRef RadosZone::get_sync_policy_handler()
   return store->svc()->zone->get_sync_policy_handler(get_id());
 }
 
-RadosLuaManager::RadosLuaManager(RadosStore* _s) : 
+RadosLuaManager::RadosLuaManager(RadosStore* _s, const std::string& _luarocks_path) :
+  StoreLuaManager(_luarocks_path),
   store(_s),
-  pool((store->svc() && store->svc()->zone) ? store->svc()->zone->get_zone_params().log_pool : rgw_pool())
+  pool((store->svc() && store->svc()->zone) ? store->svc()->zone->get_zone_params().log_pool : rgw_pool()),
+  ioctx(*store->getRados()->get_lc_pool_ctx()),
+  packages_watcher(this)
 { }
 
 int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
 {
   if (pool.empty()) {
-    ldpp_dout(dpp, 10) << "WARNING: missing pool when reading lua script " << dendl;
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when reading Lua script " << dendl;
     return 0;
   }
   bufferlist bl;
@@ -3379,7 +3355,7 @@ int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
 int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script)
 {
   if (pool.empty()) {
-    ldpp_dout(dpp, 10) << "WARNING: missing pool when writing lua script " << dendl;
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when writing Lua script " << dendl;
     return 0;
   }
   bufferlist bl;
@@ -3396,7 +3372,7 @@ int RadosLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,
 int RadosLuaManager::del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key)
 {
   if (pool.empty()) {
-    ldpp_dout(dpp, 10) << "WARNING: missing pool when deleting lua script " << dendl;
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when deleting Lua script " << dendl;
     return 0;
   }
   int r = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, key, nullptr, y);
@@ -3411,28 +3387,31 @@ const std::string PACKAGE_LIST_OBJECT_NAME = "lua_package_allowlist";
 
 int RadosLuaManager::add_package(const DoutPrefixProvider *dpp, optional_yield y, const std::string& package_name)
 {
+  if (!ioctx.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when adding Lua package" << dendl;
+    return 0;
+  }
   // add package to list
   const bufferlist empty_bl;
   std::map<std::string, bufferlist> new_package{{package_name, empty_bl}};
   librados::ObjectWriteOperation op;
   op.omap_set(new_package);
-  auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+  return rgw_rados_operate(dpp, ioctx,
       PACKAGE_LIST_OBJECT_NAME, &op, y);
-
-  if (ret < 0) {
-    return ret;
-  }
-  return 0;
 }
 
 int RadosLuaManager::remove_package(const DoutPrefixProvider *dpp, optional_yield y, const std::string& package_name)
 {
+  if (!ioctx.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when removing Lua package" << dendl;
+    return -ENOENT;
+  }
   librados::ObjectWriteOperation op;
   size_t pos = package_name.find(" ");
   if (pos != package_name.npos) {
     // remove specfic version of the the package
     op.omap_rm_keys(std::set<std::string>({package_name}));
-    auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+    auto ret = rgw_rados_operate(dpp, ioctx,
         PACKAGE_LIST_OBJECT_NAME, &op, y);
     if (ret < 0) {
         return ret;
@@ -3449,7 +3428,7 @@ int RadosLuaManager::remove_package(const DoutPrefixProvider *dpp, optional_yiel
     const std::string package_no_version = package.substr(0, package.find(" "));
     if (package_no_version.compare(package_name) == 0) {
         op.omap_rm_keys(std::set<std::string>({package}));
-        ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+        ret = rgw_rados_operate(dpp, ioctx,
             PACKAGE_LIST_OBJECT_NAME, &op, y);
         if (ret < 0) {
             return ret;
@@ -3461,6 +3440,10 @@ int RadosLuaManager::remove_package(const DoutPrefixProvider *dpp, optional_yiel
 
 int RadosLuaManager::list_packages(const DoutPrefixProvider *dpp, optional_yield y, rgw::lua::packages_t& packages)
 {
+  if (!ioctx.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when listing Lua packages" << dendl;
+    return -ENOENT;
+  }
   constexpr auto max_chunk = 1024U;
   std::string start_after;
   bool more = true;
@@ -3469,7 +3452,7 @@ int RadosLuaManager::list_packages(const DoutPrefixProvider *dpp, optional_yield
     librados::ObjectReadOperation op;
     rgw::lua::packages_t packages_chunk;
     op.omap_get_keys2(start_after, max_chunk, &packages_chunk, &more, &rval);
-    const auto ret = rgw_rados_operate(dpp, *(store->getRados()->get_lc_pool_ctx()),
+    const auto ret = rgw_rados_operate(dpp, ioctx,
       PACKAGE_LIST_OBJECT_NAME, &op, nullptr, y);
 
     if (ret < 0) {
@@ -3480,6 +3463,162 @@ int RadosLuaManager::list_packages(const DoutPrefixProvider *dpp, optional_yield
   }
 
   return 0;
+}
+
+int RadosLuaManager::watch_reload(const DoutPrefixProvider* dpp)
+{
+  if (!ioctx.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when watching reloads of Lua packages" << dendl;
+    return -ENOENT;
+  }
+  // create the object to watch (object may already exist)
+  librados::ObjectWriteOperation op;
+  op.create(false);
+  auto r = rgw_rados_operate(dpp, ioctx,
+      PACKAGE_LIST_OBJECT_NAME, &op, null_yield);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to watch " << PACKAGE_LIST_OBJECT_NAME
+        << ". cannot create object. error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  r = ioctx.watch2(PACKAGE_LIST_OBJECT_NAME, &watch_handle, &packages_watcher);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to watch " << PACKAGE_LIST_OBJECT_NAME
+        << ". error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ldpp_dout(dpp, 20) << "Started watching for reloads of  " << PACKAGE_LIST_OBJECT_NAME
+    << " with handle: " << watch_handle << dendl;
+
+  return 0;
+}
+
+int RadosLuaManager::unwatch_reload(const DoutPrefixProvider* dpp)
+{
+  if (watch_handle == 0) {
+    // nothing to unwatch
+    return 0;
+  }
+
+  if (!ioctx.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when unwatching reloads of Lua packages" << dendl;
+    return -ENOENT;
+  }
+  const auto r = ioctx.unwatch2(watch_handle);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to unwatch " << PACKAGE_LIST_OBJECT_NAME
+        << ". error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  ldpp_dout(dpp, 20) << "Stopped watching for reloads of " << PACKAGE_LIST_OBJECT_NAME
+    << " with handle: " << watch_handle << dendl;
+
+  return 0;
+}
+
+void RadosLuaManager::ack_reload(const DoutPrefixProvider* dpp, uint64_t notify_id, uint64_t cookie, int reload_status) {
+  if (!ioctx.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool when acking reload of Lua packages" << dendl;
+    return;
+  }
+  bufferlist reply;
+  ceph::encode(reload_status, reply);
+  ioctx.notify_ack(PACKAGE_LIST_OBJECT_NAME, notify_id, cookie, reply);
+}
+
+void RadosLuaManager::handle_reload_notify(const DoutPrefixProvider* dpp, optional_yield y, uint64_t notify_id, uint64_t cookie) {
+  if (cookie != watch_handle) {
+    return;
+  }
+
+  rgw::lua::packages_t failed_packages;
+  std::string install_dir;
+  auto r = rgw::lua::install_packages(dpp, store, 
+      y, store->ctx()->_conf.get_val<std::string>("rgw_luarocks_location"), 
+      failed_packages, install_dir);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "WARNING: failed to install Lua packages from allowlist. error code: " << r
+            << dendl;
+  }
+  set_luarocks_path(install_dir);
+  for (const auto &p : failed_packages) {
+    ldpp_dout(dpp, 5) << "WARNING: failed to install Lua package: " << p
+            << " from allowlist" << dendl;
+  }
+  
+  ack_reload(dpp, notify_id, cookie, r);
+}
+
+int RadosLuaManager::reload_packages(const DoutPrefixProvider *dpp, optional_yield y)
+{
+  if (!ioctx.is_valid()) {
+    ldpp_dout(dpp, 10) << "WARNING: missing pool trying to notify reload of Lua packages" << dendl;
+    return -ENOENT;
+  }
+  bufferlist empty_bl;
+  bufferlist reply_bl;
+  const uint64_t timeout_ms = 0;
+  auto r = rgw_rados_notify(dpp,
+      ioctx,
+      PACKAGE_LIST_OBJECT_NAME,
+      empty_bl, timeout_ms, &reply_bl, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to notify reload on " << PACKAGE_LIST_OBJECT_NAME
+        << ". error: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+ 
+  std::vector<librados::notify_ack_t> acks;
+  std::vector<librados::notify_timeout_t> timeouts;
+  ioctx.decode_notify_response(reply_bl, &acks, &timeouts);
+  if (timeouts.size() > 0) {
+    ldpp_dout(dpp, 1) << "ERROR: failed to notify reload on " << PACKAGE_LIST_OBJECT_NAME
+      << ". error: timeout" << dendl;
+    return -EAGAIN;
+  }
+  for (auto& ack : acks) {
+    try {
+      auto iter = ack.payload_bl.cbegin();
+      ceph::decode(r, iter);
+    } catch (buffer::error& err) {
+      ldpp_dout(dpp, 1) << "ERROR: couldn't decode Lua packages reload status. error: " << 
+        err.what() << dendl;
+      return -EINVAL;
+    }
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return 0;
+}
+
+void RadosLuaManager::PackagesWatcher::handle_notify(uint64_t notify_id, uint64_t cookie, uint64_t notifier_id, bufferlist &bl)
+{
+  parent->handle_reload_notify(this, null_yield, notify_id, cookie);
+}
+
+void RadosLuaManager::PackagesWatcher::handle_error(uint64_t cookie, int err)
+{
+  if (parent->watch_handle != cookie) {
+    return;
+  }
+  ldpp_dout(this, 5) << "WARNING: restarting reload watch handler. error: " << err << dendl;
+
+  parent->unwatch_reload(this);
+  parent->watch_reload(this);
+}
+
+CephContext* RadosLuaManager::PackagesWatcher::get_cct() const {
+  return parent->store->ctx();
+}
+
+unsigned RadosLuaManager::PackagesWatcher::get_subsys() const {
+  return dout_subsys;
+}
+
+std::ostream& RadosLuaManager::PackagesWatcher::gen_prefix(std::ostream& out) const {
+  return out << "rgw lua package reloader: ";
 }
 
 int RadosOIDCProvider::store_url(const DoutPrefixProvider *dpp, const std::string& url, bool exclusive, optional_yield y)

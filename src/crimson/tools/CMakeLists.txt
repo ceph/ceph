@@ -15,4 +15,8 @@ add_executable(perf-async-msgr perf_async_msgr.cc)
 target_link_libraries(perf-async-msgr ceph-common global ${ALLOC_LIBS})
 
 add_executable(perf-staged-fltree perf_staged_fltree.cc)
+if(WITH_TESTS)
+target_link_libraries(perf-staged-fltree crimson-seastore crimson::gtest)
+else()
 target_link_libraries(perf-staged-fltree crimson-seastore)
+endif()

@@ -32,6 +32,11 @@ private:
   ScrubberPasskey& operator=(const ScrubberPasskey&) = delete;
 };
 
+/// randomly returns true with probability equal to the passed parameter
+static inline bool random_bool_with_probability(double probability) {
+  return (ceph::util::generate_random_number<double>(0.0, 1.0) < probability);
+}
+
 namespace Scrub {
 
 /// high/low OP priority
@@ -42,12 +47,35 @@ enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 using act_token_t = uint32_t;
 
 /// "environment" preconditions affecting which PGs are eligible for scrubbing
-struct ScrubPreconds {
+struct OSDRestrictions {
   bool allow_requested_repair_only{false};
   bool load_is_low{true};
   bool time_permit{true};
   bool only_deadlined{false};
 };
+
+}  // namespace Scrub
+
+namespace fmt {
+template <>
+struct formatter<Scrub::OSDRestrictions> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+
+  template <typename FormatContext>
+  auto format(const Scrub::OSDRestrictions& conds, FormatContext& ctx)
+  {
+    return fmt::format_to(
+      ctx.out(),
+      "overdue-only:{} load:{} time:{} repair-only:{}",
+        conds.only_deadlined,
+        conds.load_is_low ? "ok" : "high",
+        conds.time_permit ? "ok" : "no",
+        conds.allow_requested_repair_only);
+  }
+};
+}  // namespace fmt
+
+namespace Scrub {
 
 /// PG services used by the scrubber backend
 struct PgScrubBeListener {

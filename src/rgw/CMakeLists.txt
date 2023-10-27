@@ -217,15 +217,24 @@ if(WITH_RADOSGW_DBSTORE)
   list(APPEND librgw_common_srcs rgw_sal_dbstore.cc)
 endif()
 if(WITH_RADOSGW_MOTR)
-  list(APPEND librgw_common_srcs rgw_sal_motr.cc)
+  list(APPEND librgw_common_srcs driver/motr/rgw_sal_motr.cc)
 endif()
 if(WITH_RADOSGW_DAOS)
-  list(APPEND librgw_common_srcs rgw_sal_daos.cc)
+  list(APPEND librgw_common_srcs driver/motr/rgw_sal_daos.cc)
 endif()
 if(WITH_RADOSGW_D4N)
   list(APPEND librgw_common_srcs driver/d4n/d4n_directory.cc)
   list(APPEND librgw_common_srcs driver/d4n/d4n_datacache.cc)
   list(APPEND librgw_common_srcs driver/d4n/rgw_sal_d4n.cc)
+endif()
+if(WITH_RADOSGW_POSIX)
+  #add_subdirectory(driver/posix)
+  find_package(LMDB REQUIRED)
+  add_compile_definitions(LMDB_SAFE_NO_CPP_UTILITIES)
+  list(APPEND librgw_common_srcs
+	      driver/posix/rgw_sal_posix.cc
+	      driver/posix/lmdb-safe.cc
+	      driver/posix/notify.cpp)
 endif()
 if(WITH_JAEGER)
   list(APPEND librgw_common_srcs rgw_tracer.cc)
@@ -235,7 +244,6 @@ if(WITH_RADOSGW_ARROW_FLIGHT)
   # list(APPEND radosgw_srcs rgw_flight.cc rgw_flight_frontend.cc)
   list(APPEND librgw_common_srcs rgw_flight.cc rgw_flight_frontend.cc)
 endif(WITH_RADOSGW_ARROW_FLIGHT)
-
 
 add_library(rgw_common STATIC ${librgw_common_srcs})
 
@@ -270,6 +278,7 @@ target_link_libraries(rgw_common
     ${EXPAT_LIBRARIES}
     ${ARROW_LIBRARIES}
     ${ARROW_FLIGHT_LIBRARIES}
+    ${LMDB_LIBRARIES}
     ${ALLOC_LIBS}
   PUBLIC
     ${LUA_LIBRARIES}

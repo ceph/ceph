@@ -442,6 +442,13 @@ public:
            state == extent_state_t::EXIST_CLEAN;
   }
 
+  // Returs true if extent is stable and clean
+  bool is_stable_clean() const {
+    ceph_assert(is_valid());
+    return state == extent_state_t::CLEAN ||
+           state == extent_state_t::CLEAN_PENDING;
+  }
+
   /// Ruturns true if data is persisted while metadata isn't
   bool is_exist_clean() const {
     return state == extent_state_t::EXIST_CLEAN;
@@ -707,9 +714,10 @@ protected:
       length(other.get_length()),
       version(other.version),
       poffset(other.poffset) {
+      assert((length % CEPH_PAGE_SIZE) == 0);
       if (other.is_fully_loaded()) {
-        ptr = std::make_optional<ceph::bufferptr>
-          (other.ptr->c_str(), other.ptr->length());
+        ptr.emplace(buffer::create_page_aligned(length));
+        other.ptr->copy_out(0, length, ptr->c_str());
       } else {
         // the extent must be fully loaded before CoW
         assert(length == 0); // in case of root
@@ -1198,7 +1206,7 @@ public:
 
   void maybe_set_intermediate_laddr(LBAMapping &mapping) {
     laddr = mapping.is_indirect()
-      ? mapping.get_intermediate_key()
+      ? mapping.get_intermediate_base()
       : mapping.get_key();
   }
 
@@ -1233,6 +1241,8 @@ protected:
   }
 
 private:
+  // the logical address of the extent, and if shared,
+  // it is the intermediate_base, see BtreeLBAMapping comments.
   laddr_t laddr = L_ADDR_NULL;
 };
 

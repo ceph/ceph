@@ -315,3 +315,16 @@ target_link_libraries(radosgw-cr-test ${rgw_libs} librados
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   GTest::GTest)
+
+if(WITH_RADOSGW_POSIX)
+  # unittest_posix_bucket_cache
+  add_executable(unittest_posix_bucket_cache
+          test_posix_bucket_cache.cc)
+  add_ceph_unittest(unittest_posix_bucket_cache)
+  target_compile_definitions(unittest_posix_bucket_cache PUBLIC LMDB_SAFE_NO_CPP_UTILITIES)
+  target_include_directories(unittest_posix_bucket_cache
+    SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw"
+    SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/driver/posix")
+  target_link_libraries(unittest_posix_bucket_cache  ${UNITTEST_LIBS}
+    ${rgw_libs} ${LMDB_LIBRARIES})
+endif(WITH_RADOSGW_POSIX)

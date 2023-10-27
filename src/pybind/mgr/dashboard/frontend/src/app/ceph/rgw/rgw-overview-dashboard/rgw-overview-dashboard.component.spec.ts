@@ -14,6 +14,7 @@ import { HealthService } from '~/app/shared/api/health.service';
 import { CardRowComponent } from '~/app/shared/components/card-row/card-row.component';
 import { CardComponent } from '~/app/shared/components/card/card.component';
 import { NO_ERRORS_SCHEMA } from '@angular/core';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwOverviewDashboardComponent', () => {
   let component: RgwOverviewDashboardComponent;
@@ -62,17 +63,15 @@ describe('RgwOverviewDashboardComponent', () => {
   let listBucketsSpy: jest.SpyInstance;
   let healthDataSpy: jest.SpyInstance;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [
-        RgwOverviewDashboardComponent,
-        CardComponent,
-        CardRowComponent,
-        DimlessBinaryPipe
-      ],
-      schemas: [NO_ERRORS_SCHEMA],
-      imports: [HttpClientTestingModule]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [
+      RgwOverviewDashboardComponent,
+      CardComponent,
+      CardRowComponent,
+      DimlessBinaryPipe
+    ],
+    schemas: [NO_ERRORS_SCHEMA],
+    imports: [HttpClientTestingModule]
   });
 
   beforeEach(() => {

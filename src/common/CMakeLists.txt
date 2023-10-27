@@ -83,6 +83,7 @@ set(common_srcs
   options.cc
   page.cc
   perf_counters.cc
+  perf_counters_cache.cc
   perf_counters_collection.cc
   perf_counters_key.cc
   perf_histogram.cc

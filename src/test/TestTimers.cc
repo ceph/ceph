@@ -308,6 +308,8 @@ static int safe_timer_loop_test(SafeTimer &safe_timer,
               << std::endl;
     return -1;
   }
+
+  return 0;
 }
 
 int main(int argc, const char **argv)

@@ -264,20 +264,20 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     } else {
       f->open_array_section("config");
     }
-    for (auto s : sections) {
-      for (auto& i : s.second->options) {
+    for (auto& [sec_name, section] : sections) {
+      for (auto& [opt_name, masked_opt] : section->options) {
 	if (!f) {
-	  tbl << s.first;
-	  tbl << i.second.mask.to_str();
-	  tbl << Option::level_to_str(i.second.opt->level);
-          tbl << i.first;
-	  tbl << i.second.raw_value;
-	  tbl << (i.second.opt->can_update_at_runtime() ? "" : "*");
+	  tbl << sec_name;
+	  tbl << masked_opt.mask.to_str();
+	  tbl << Option::level_to_str(masked_opt.opt->level);
+          tbl << opt_name;
+	  tbl << masked_opt.raw_value;
+	  tbl << (masked_opt.opt->can_update_at_runtime() ? "" : "*");
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section("option");
-	  f->dump_string("section", s.first);
-	  i.second.dump(f.get());
+	  f->dump_string("section", sec_name);
+	  masked_opt.dump(f.get());
 	  f->close_section();
 	}
       }
@@ -736,7 +736,7 @@ update:
   mon.kvmon()->propose_pending();
   paxos.unplug();
   force_immediate_propose();
-  wait_for_finished_proposal(
+  wait_for_commit(
     op,
     new Monitor::C_Command(
       mon, op, 0, ss.str(), odata,
@@ -831,6 +831,7 @@ void ConfigMonitor::load_config()
     
     MaskedOption mopt(opt);
     mopt.raw_value = value;
+    mopt.localized_name = name;
     string section_name;
     if (who.size() &&
 	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {

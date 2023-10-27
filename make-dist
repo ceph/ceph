@@ -132,7 +132,7 @@ build_dashboard_frontend() {
 
   $CURR_DIR/src/tools/setup-virtualenv.sh $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
-  $TEMP_DIR/bin/nodeenv --verbose -p --node=16.20.1
+  $TEMP_DIR/bin/nodeenv --verbose -p --node=18.17.0
   cd src/pybind/mgr/dashboard/frontend
 
   . $TEMP_DIR/bin/activate

@@ -6,17 +6,16 @@ import { SharedModule } from '~/app/shared/shared.module';
 import { ToastrModule } from 'ngx-toastr';
 import { RouterTestingModule } from '@angular/router/testing';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('CephfsSubvolumeListComponent', () => {
   let component: CephfsSubvolumeListComponent;
   let fixture: ComponentFixture<CephfsSubvolumeListComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [CephfsSubvolumeListComponent],
-      imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), RouterTestingModule],
-      providers: [NgbActiveModal]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [CephfsSubvolumeListComponent],
+    imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot(), RouterTestingModule],
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

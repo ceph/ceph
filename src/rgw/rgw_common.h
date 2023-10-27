@@ -25,6 +25,7 @@
 
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
+#include "common/tracer.h"
 #include "rgw_acl.h"
 #include "rgw_bucket_layout.h"
 #include "rgw_cors.h"
@@ -43,7 +44,6 @@
 #include "cls/rgw/cls_rgw_types.h"
 #include "include/rados/librados.hpp"
 #include "rgw_public_access.h"
-#include "common/tracer.h"
 #include "rgw_sal_fwd.h"
 
 namespace ceph {
@@ -1232,7 +1232,7 @@ struct req_state : DoutPrefixProvider {
 
   std::vector<rgw::IAM::Policy> session_policies;
 
-  jspan trace;
+  jspan_ptr trace;
   bool trace_enabled = false;
 
   //Principal tags that come in as part of AssumeRoleWithWebIdentity

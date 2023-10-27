@@ -19,6 +19,7 @@ from ceph.deployment.inventory import Device  # noqa: F401; pylint: disable=unus
 from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, OSDMethod
 from ceph.deployment.service_spec import PlacementSpec, ServiceSpec, service_spec_allow_invalid_from_json, TracingSpec
 from ceph.deployment.hostspec import SpecValidationError
+from ceph.deployment.utils import unwrap_ipv6
 from ceph.utils import datetime_now
 
 from mgr_util import to_pretty_timedelta, format_bytes
@@ -132,6 +133,19 @@ class HostDetails:
 
 
 yaml.add_representer(HostDetails, HostDetails.yaml_representer)
+
+
+class DaemonFields(enum.Enum):
+    service_name = 'service_name'
+    daemon_type = 'daemon_type'
+    name = 'name'
+    host = 'host'
+    status = 'status'
+    refreshed = 'refreshed'
+    age = 'age'
+    mem_use = 'mem_use'
+    mem_lim = 'mem_lim'
+    image = 'image'
 
 
 class ServiceType(enum.Enum):
@@ -466,6 +480,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         if labels and len(labels) == 1:
             labels = labels[0].split(',')
 
+        if addr is not None:
+            addr = unwrap_ipv6(addr)
+
         s = HostSpec(hostname=hostname, addr=addr, labels=labels, status=_status)
 
         return self._apply_misc([s], False, Format.plain)
@@ -478,9 +495,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return HandleCommandResult(stdout=completion.result_str())
 
     @_cli_write_command('orch host drain')
-    def _drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False) -> HandleCommandResult:
+    def _drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False, zap_osd_devices: bool = False) -> HandleCommandResult:
         """drain all daemons from a host"""
-        completion = self.drain_host(hostname, force, keep_conf_keyring)
+        completion = self.drain_host(hostname, force, keep_conf_keyring, zap_osd_devices)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
@@ -814,6 +831,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                       service_name: Optional[str] = None,
                       daemon_type: Optional[str] = None,
                       daemon_id: Optional[str] = None,
+                      sort_by: Optional[DaemonFields] = DaemonFields.name,
                       format: Format = Format.plain,
                       refresh: bool = False) -> HandleCommandResult:
         """
@@ -829,6 +847,31 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
         def ukn(s: Optional[str]) -> str:
             return '<unknown>' if s is None else s
+
+        def sort_by_field(d: DaemonDescription) -> Any:
+            if sort_by == DaemonFields.name:
+                return d.name()
+            elif sort_by == DaemonFields.host:
+                return d.hostname
+            elif sort_by == DaemonFields.status:
+                return d.status.name if d.status else None
+            elif sort_by == DaemonFields.refreshed:
+                return d.last_refresh
+            elif sort_by == DaemonFields.age:
+                return d.created
+            elif sort_by == DaemonFields.mem_use:
+                return d.memory_usage
+            elif sort_by == DaemonFields.mem_lim:
+                return d.memory_request
+            elif sort_by == DaemonFields.image:
+                return d.container_image_id
+            elif sort_by == DaemonFields.daemon_type:
+                return d.daemon_type
+            elif sort_by == DaemonFields.service_name:
+                return d.service_name()
+            else:
+                return None
+
         # Sort the list for display
         daemons.sort(key=lambda s: (ukn(s.daemon_type), ukn(s.hostname), ukn(s.daemon_id)))
 
@@ -852,7 +895,7 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table._align['MEM LIM'] = 'r'
             table.left_padding_width = 0
             table.right_padding_width = 2
-            for s in natsorted(daemons, key=lambda d: d.name()):
+            for s in natsorted(daemons, key=lambda d: sort_by_field(d)):
                 if s.status_desc:
                     status = s.status_desc
                 else:

@@ -432,9 +432,9 @@ const RGWSyncModuleInstanceRef& FilterDriver::get_sync_module()
   return next->get_sync_module();
 }
 
-std::unique_ptr<LuaManager> FilterDriver::get_lua_manager()
+std::unique_ptr<LuaManager> FilterDriver::get_lua_manager(const std::string& luarocks_path)
 {
-  std::unique_ptr<LuaManager> nm = next->get_lua_manager();
+  std::unique_ptr<LuaManager> nm = next->get_lua_manager(luarocks_path);
 
   return std::make_unique<FilterLuaManager>(std::move(nm));
 }
@@ -536,20 +536,8 @@ int FilterUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& m
 			     const std::string& end_marker, uint64_t max,
 			     bool need_stats, BucketList &buckets, optional_yield y)
 {
-  BucketList bl;
-  int ret;
-
-  buckets.clear();
-  ret = next->list_buckets(dpp, marker, end_marker, max, need_stats, bl, y);
-  if (ret < 0)
-    return ret;
-
-  buckets.set_truncated(bl.is_truncated());
-  for (auto& ent : bl.get_buckets()) {
-    buckets.add(std::make_unique<FilterBucket>(std::move(ent.second), this));
-  }
-
-  return 0;
+  return next->list_buckets(dpp, marker, end_marker, max,
+                            need_stats, buckets, y);
 }
 
 int FilterUser::create_bucket(const DoutPrefixProvider* dpp,
@@ -682,10 +670,9 @@ int FilterBucket::set_acl(const DoutPrefixProvider* dpp,
   return next->set_acl(dpp, acl, y);
 }
 
-int FilterBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y,
-			      bool get_stats)
+int FilterBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->load_bucket(dpp, y, get_stats);
+  return next->load_bucket(dpp, y);
 }
 
 int FilterBucket::read_stats(const DoutPrefixProvider *dpp,
@@ -706,19 +693,16 @@ int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return next->read_stats_async(dpp, idx_layout, shard_id, ctx);
 }
 
-int FilterBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y)
+int FilterBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                  RGWBucketEnt* ent)
 {
-  return next->sync_user_stats(dpp, y);
+  return next->sync_user_stats(dpp, y, ent);
 }
 
-int FilterBucket::update_container_stats(const DoutPrefixProvider* dpp, optional_yield y)
+int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
+                                      uint64_t num_objs, optional_yield y)
 {
-  return next->update_container_stats(dpp, y);
-}
-
-int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp, optional_yield y)
-{
-  return next->check_bucket_shards(dpp, y);
+  return next->check_bucket_shards(dpp, num_objs, y);
 }
 
 int FilterBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
@@ -1292,11 +1276,11 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       const req_context& rctx)
 {
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y);
+			canceled, rctx);
 }
 
 int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
@@ -1333,6 +1317,19 @@ int FilterLuaManager::list_packages(const DoutPrefixProvider* dpp, optional_yiel
                                    rgw::lua::packages_t& packages)
 {
   return next->list_packages(dpp, y, packages);
+}
+
+int FilterLuaManager::reload_packages(const DoutPrefixProvider* dpp, optional_yield y)
+{
+  return next->reload_packages(dpp, y);
+}
+
+const std::string& FilterLuaManager::luarocks_path() const {
+  return next->luarocks_path();
+}
+
+void FilterLuaManager::set_luarocks_path(const std::string& path) {
+  next->set_luarocks_path(path);
 }
 
 } } // namespace rgw::sal

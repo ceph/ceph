@@ -38,6 +38,7 @@
 #include "crush/CrushTreeDumper.h"
 #include "common/Clock.h"
 #include "mon/PGMap.h"
+#include "common/pick_address.h"
 
 using std::list;
 using std::make_pair;
@@ -1625,6 +1626,27 @@ void OSDMap::get_full_osd_counts(set<int> *full, set<int> *backfill,
 	backfill->emplace(i);
       else if (osd_state[i] & CEPH_OSD_NEARFULL)
 	nearfull->emplace(i);
+    }
+  }
+}
+
+void OSDMap::get_out_of_subnet_osd_counts(CephContext *cct,
+                                          std::string const &public_network,
+                                          set<int> *unreachable) const
+{
+  unreachable->clear();
+  for (int i = 0; i < max_osd; i++) {
+    if (exists(i) && is_up(i)) {
+      if (const auto& addrs = get_addrs(i).v; addrs.size() >= 2) {
+        auto v1_addr = addrs[0].ip_only_to_str();
+        if (!is_addr_in_subnet(cct, public_network, v1_addr)) {
+          unreachable->emplace(i);
+        }
+        auto v2_addr = addrs[1].ip_only_to_str();
+        if (!is_addr_in_subnet(cct, public_network, v2_addr)) {
+          unreachable->emplace(i);
+        }
+      }
     }
   }
 }
@@ -4108,6 +4130,8 @@ string OSDMap::get_flag_string(unsigned f)
     s += ",purged_snapdirs";
   if (f & CEPH_OSDMAP_PGLOG_HARDLIMIT)
     s += ",pglog_hardlimit";
+  if (f & CEPH_OSDMAP_NOAUTOSCALE)
+    s += ",noautoscale";
   if (s.length())
     s.erase(0, 1);
   return s;
@@ -4993,17 +5017,16 @@ int OSDMap::balance_primaries(
   map<uint64_t,set<pg_t>> acting_prims_by_osd;
   pgs_by_osd = tmp_osd_map.get_pgs_by_osd(cct, pid, &prim_pgs_by_osd, &acting_prims_by_osd);
 
-  // Transfer pgs into a map, `pgs_to_check`. This will tell us the total num_changes after all
-  //     calculations have been finalized.
-  // Transfer osds into a set, `osds_to_check`.
-  // This is to avoid poor runtime when we loop through the pgs and to set up
-  // our call to calc_desired_primary_distribution.
+  // Construct information about the pgs and osds we will consider in new primary mappings,
+  // as well as a map of all pgs and their original primary osds.
   map<pg_t,bool> prim_pgs_to_check;
   vector<uint64_t> osds_to_check;
+  map<pg_t, uint64_t> orig_prims;
   for (const auto & [osd, pgs] : prim_pgs_by_osd) {
     osds_to_check.push_back(osd);
     for (const auto & pg : pgs) {
       prim_pgs_to_check.insert({pg, false});
+      orig_prims.insert({pg, osd});
     }
   }
 
@@ -5077,9 +5100,14 @@ int OSDMap::balance_primaries(
 	prim_dist_scores[up_primary] -= 1;
 
 	// Update the mappings
-	pending_inc->new_pg_upmap_primary[pg] = curr_best_osd;
 	tmp_osd_map.pg_upmap_primaries[pg] = curr_best_osd;
-	prim_pgs_to_check[pg] = true; // mark that this pg changed mappings
+	if (curr_best_osd == orig_prims[pg]) {
+          pending_inc->new_pg_upmap_primary.erase(pg);
+          prim_pgs_to_check[pg] = false;
+	} else {
+	  pending_inc->new_pg_upmap_primary[pg] = curr_best_osd;
+          prim_pgs_to_check[pg] = true; // mark that this pg changed mappings
+	}
 
 	curr_num_changes++;
       }
@@ -7229,6 +7257,29 @@ void OSDMap::check_health(CephContext *cct,
     if (weight1 != weight2) {
       ss << "Stretch mode buckets have different weights!";
       checks->add("UNEVEN_WEIGHTS_STRETCH_MODE", HEALTH_WARN, ss.str(), 0);
+    }
+  }
+
+  // PUBLIC ADDRESS IS IN SUBNET MASK
+  {
+    auto public_network = cct->_conf.get_val<std::string>("public_network");
+
+    if (!public_network.empty()) {
+      set<int> unreachable;
+      get_out_of_subnet_osd_counts(cct, public_network, &unreachable);
+      if (unreachable.size()) {
+        ostringstream ss;
+        ss << unreachable.size()
+           << " osds(s) "
+           << (unreachable.size() == 1 ? "is" : "are")
+           << " not reachable";
+        auto& d = checks->add("OSD_UNREACHABLE", HEALTH_ERR, ss.str(), unreachable.size());
+        for (auto& i: unreachable) {
+          ostringstream ss;
+          ss << "osd." << i << "'s public address is not in '" << public_network << "' subnet";
+          d.detail.push_back(ss.str());
+        }
+      }
     }
   }
 }

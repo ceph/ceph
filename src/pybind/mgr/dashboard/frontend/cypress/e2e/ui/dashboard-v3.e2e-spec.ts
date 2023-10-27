@@ -39,7 +39,7 @@ describe('Dashboard-v3 Main Page', () => {
     it('should verify that cards exist on dashboard in proper order', () => {
       // Ensures that cards are all displayed on the dashboard tab while being in the proper
       // order, checks for card title and position via indexing into a list of all cards.
-      const order = ['Details', 'Status', 'Capacity', 'Inventory', 'Cluster Utilization'];
+      const order = ['Details', 'Inventory', 'Status', 'Capacity', 'Cluster Utilization'];
 
       for (let i = 0; i < order.length; i++) {
         dashboard.card(i).should('contain.text', order[i]);

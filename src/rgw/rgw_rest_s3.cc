@@ -87,11 +87,11 @@ void list_all_buckets_end(req_state *s)
   s->formatter->close_section();
 }
 
-void dump_bucket(req_state *s, rgw::sal::Bucket& obj)
+void dump_bucket(req_state *s, const RGWBucketEnt& ent)
 {
   s->formatter->open_object_section("Bucket");
-  s->formatter->dump_string("Name", obj.get_name());
-  dump_time(s, "CreationDate", obj.get_creation_time());
+  s->formatter->dump_string("Name", ent.bucket.name);
+  dump_time(s, "CreationDate", ent.creation_time);
   s->formatter->close_section();
 }
 
@@ -594,7 +594,8 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
   }
 
   std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses);
+  int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
+                                   crypt_http_responses);
   if (res < 0) {
     return res;
   }
@@ -616,7 +617,7 @@ int RGWGetObj_ObjStore_S3::get_decrypt_filter(std::unique_ptr<RGWGetObj_Filter> 
       ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
       return -EIO;
     }
-  } else {
+  } else if (manifest_bl) {
     // otherwise, we read the part lengths from the manifest
     res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
                                                       parts_len);
@@ -1454,16 +1455,13 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
   }
 }
 
-void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::BucketList& buckets)
+void RGWListBuckets_ObjStore_S3::send_response_data(std::span<const RGWBucketEnt> buckets)
 {
   if (!sent_data)
     return;
 
-  auto& m = buckets.get_buckets();
-
-  for (auto iter = m.begin(); iter != m.end(); ++iter) {
-    auto& bucket = iter->second;
-    dump_bucket(s, *bucket);
+  for (const auto& ent : buckets) {
+    dump_bucket(s, ent);
   }
   rgw_flush_formatter(s, s->formatter);
 }
@@ -2338,25 +2336,28 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket)
+static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket,
+                                 RGWStorageStats& stats)
 {
-  dump_header(s, "X-RGW-Object-Count", static_cast<long long>(bucket->get_count()));
-  dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(bucket->get_size()));
+  dump_header(s, "X-RGW-Object-Count", static_cast<long long>(stats.num_objects));
+  dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(stats.size));
+
   // only bucket's owner is allowed to get the quota settings of the account
   if (bucket->is_owner(s->user.get())) {
     auto user_info = s->user->get_info();
+    auto bucket_quota = s->bucket->get_info().quota; // bucket quota
     dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
     dump_header(s, "X-RGW-Quota-User-Objects", static_cast<long long>(user_info.quota.user_quota.max_objects));
     dump_header(s, "X-RGW-Quota-Max-Buckets", static_cast<long long>(user_info.max_buckets));
-    dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(user_info.quota.bucket_quota.max_size));
-    dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(user_info.quota.bucket_quota.max_objects));
+    dump_header(s, "X-RGW-Quota-Bucket-Size", static_cast<long long>(bucket_quota.max_size));
+    dump_header(s, "X-RGW-Quota-Bucket-Objects", static_cast<long long>(bucket_quota.max_objects));
   }
 }
 
 void RGWStatBucket_ObjStore_S3::send_response()
 {
   if (op_ret >= 0) {
-    dump_bucket_metadata(s, bucket.get());
+    dump_bucket_metadata(s, bucket.get(), stats);
   }
 
   set_req_state_err(s, op_ret);
@@ -2766,7 +2767,8 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
   std::map<std::string, std::string> crypt_http_responses_unused;
 
   std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_decrypt(s, attrs, &block_crypt, crypt_http_responses_unused);
+  int res = rgw_s3_prepare_decrypt(s, s->yield, attrs, &block_crypt,
+                                   crypt_http_responses_unused);
   if (res < 0) {
     return res;
   }
@@ -2788,7 +2790,7 @@ int RGWPutObj_ObjStore_S3::get_decrypt_filter(
       ldpp_dout(this, 1) << "failed to decode RGW_ATTR_CRYPT_PARTS" << dendl;
       return -EIO;
     }
-  } else {
+  } else if (manifest_bl) {
     // otherwise, we read the part lengths from the manifest
     res = RGWGetObj_BlockDecrypt::read_manifest_parts(this, *manifest_bl,
                                                       parts_len);
@@ -2819,7 +2821,8 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
       std::unique_ptr<BlockCrypt> block_crypt;
       /* We are adding to existing object.
        * We use crypto mode that configured as if we were decrypting. */
-      res = rgw_s3_prepare_decrypt(s, obj->get_attrs(), &block_crypt, crypt_http_responses);
+      res = rgw_s3_prepare_decrypt(s, s->yield, obj->get_attrs(),
+                                   &block_crypt, crypt_http_responses);
       if (res == 0 && block_crypt != nullptr)
         filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
@@ -2828,7 +2831,8 @@ int RGWPutObj_ObjStore_S3::get_encrypt_filter(
   else
   {
     std::unique_ptr<BlockCrypt> block_crypt;
-    res = rgw_s3_prepare_encrypt(s, attrs, &block_crypt, crypt_http_responses);
+    res = rgw_s3_prepare_encrypt(s, s->yield, attrs, &block_crypt,
+                                 crypt_http_responses);
     if (res == 0 && block_crypt != nullptr) {
       filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
     }
@@ -2869,10 +2873,6 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
   }
 
   map_qs_metadata(s, false);
-
-  ldpp_dout(this, 20) << "adding bucket to policy env: " << s->bucket->get_name()
-		    << dendl;
-  env.add_var("bucket", s->bucket->get_name());
 
   bool done;
   do {
@@ -2937,6 +2937,10 @@ int RGWPostObj_ObjStore_S3::get_params(optional_yield y)
     ldpp_dout(this, 5) << __func__ << "(): get_encryption_defaults() returned ret=" << r << dendl;
     return r;
   }
+
+  ldpp_dout(this, 20) << "adding bucket to policy env: " << s->bucket->get_name()
+		    << dendl;
+  env.add_var("bucket", s->bucket->get_name());
 
   string object_str;
   if (!part_str(parts, "key", &object_str)) {
@@ -3375,7 +3379,7 @@ int RGWPostObj_ObjStore_S3::get_encrypt_filter(
     rgw::sal::DataProcessor *cb)
 {
   std::unique_ptr<BlockCrypt> block_crypt;
-  int res = rgw_s3_prepare_encrypt(s, attrs, &block_crypt,
+  int res = rgw_s3_prepare_encrypt(s, s->yield, attrs, &block_crypt,
                                    crypt_http_responses);
   if (res == 0 && block_crypt != nullptr) {
     filter->reset(new RGWPutObj_BlockEncrypt(s, s->cct, cb, std::move(block_crypt), s->yield));
@@ -3993,7 +3997,7 @@ void RGWInitMultipart_ObjStore_S3::send_response()
 int RGWInitMultipart_ObjStore_S3::prepare_encryption(map<string, bufferlist>& attrs)
 {
   int res = 0;
-  res = rgw_s3_prepare_encrypt(s, attrs, nullptr, crypt_http_responses);
+  res = rgw_s3_prepare_encrypt(s, s->yield, attrs, nullptr, crypt_http_responses);
   return res;
 }
 
@@ -5281,7 +5285,6 @@ bool RGWHandler_REST_S3Website::web_dir() const {
   std::unique_ptr<rgw::sal::Object> obj = s->bucket->get_object(rgw_obj_key(subdir_name));
 
   obj->set_atomic();
-  obj->set_prefetch_data();
 
   RGWObjState* state = nullptr;
   if (obj->get_obj_state(s, &state, s->yield) < 0) {

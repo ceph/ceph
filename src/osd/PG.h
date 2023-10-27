@@ -1450,4 +1450,22 @@ public:
  }
 };
 
+/**
+ * Initialized with a locked PG. That PG is unlocked in the
+ * destructor.
+ * Used by OsdScrub when initiating a scrub.
+ */
+class PGLockWrapper {
+ public:
+  explicit PGLockWrapper(PGRef locked_pg) : m_pg{locked_pg} {}
+  PGRef pg() { return m_pg; }
+  ~PGLockWrapper();
+  PGLockWrapper(PGLockWrapper&& rhs) : m_pg(std::move(rhs.m_pg)) {
+    rhs.m_pg = nullptr;
+  }
+  PGLockWrapper(const PGLockWrapper& rhs) = delete;
+ private:
+  PGRef m_pg;
+};
+
 #endif

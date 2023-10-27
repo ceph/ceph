@@ -17,4 +17,12 @@ export class CardComponent {
   removeBorder = false;
   @Input()
   shadow = false;
+  @Input()
+  cardFooter = false;
+  @Input()
+  fullHeight = false;
+  @Input()
+  alignItemsCenter = false;
+  @Input()
+  justifyContentCenter = false;
 }

@@ -592,7 +592,7 @@ struct seastore_test_t :
 	  EXPECT_GE(next, right_bound);
 	} else {
 	  // next <= *correct_end since *correct_end is the next object to list
-	  EXPECT_LE(next, *correct_end);
+	  EXPECT_LE(listed.back(), *correct_end);
 	  // next > *(correct_end - 1) since we already listed it
 	  EXPECT_GT(next, *(correct_end - 1));
 	}

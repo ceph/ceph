@@ -450,11 +450,22 @@ class RgwBucketUi(RgwBucket):
         users_count = 0
         daemon_object = RgwDaemon()
         daemons = json.loads(daemon_object.list())
+        unique_realms = set()
         for daemon in daemons:
-            buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
-            users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
-            users_count += len(users)
-            buckets_count += len(buckets)
+            realm_name = daemon.get('realm_name', None)
+            if realm_name:
+                if realm_name not in unique_realms:
+                    unique_realms.add(realm_name)
+                    buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
+                    users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
+                    users_count += len(users)
+                    buckets_count += len(buckets)
+            else:
+                buckets = json.loads(RgwBucket.list(self, daemon_name=daemon['id']))
+                users = json.loads(RgwUser.list(self, daemon_name=daemon['id']))
+                users_count = len(users)
+                buckets_count = len(buckets)
+
         return {
             'buckets_count': buckets_count,
             'users_count': users_count
@@ -801,10 +812,10 @@ class RgwRealm(RESTController):
     @UpdatePermission
     @allow_empty_body
     # pylint: disable=W0613
-    def import_realm_token(self, realm_token, zone_name, daemon_name=None):
+    def import_realm_token(self, realm_token, zone_name, port, placement_spec):
         try:
             multisite_instance = RgwMultisite()
-            result = CephService.import_realm_token(realm_token, zone_name)
+            result = CephService.import_realm_token(realm_token, zone_name, port, placement_spec)
             multisite_instance.update_period()
             return result
         except NoRgwDaemonsException as e:

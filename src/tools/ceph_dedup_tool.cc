@@ -1101,7 +1101,7 @@ int estimate_dedup_ratio(const po::variables_map &opts)
 			     max_seconds));
     ptr->create("estimate_thread");
     ptr->set_debug(debug);
-    estimate_threads.push_back(move(ptr));
+    estimate_threads.push_back(std::move(ptr));
   }
   glock.unlock();
 
@@ -1319,7 +1319,7 @@ int chunk_scrub_common(const po::variables_map &opts)
       new ChunkScrub(io_ctx, i, max_thread, begin, end, chunk_io_ctx,
 		     report_period, s.num_objects));
     ptr->create("estimate_thread");
-    estimate_threads.push_back(move(ptr));
+    estimate_threads.push_back(std::move(ptr));
   }
   glock.unlock();
 

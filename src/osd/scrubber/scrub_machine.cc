@@ -120,7 +120,14 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
 
   // prevent the OSD from starting another scrub while we are trying to secure
   // replicas resources
-  scrbr->set_reserving_now();
+  if (!scrbr->set_reserving_now()) {
+    dout(1) << "ReservingReplicas::ReservingReplicas() some other PG is "
+		"already reserving replicas resources"
+	     << dendl;
+    post_event(ReservationFailure{});
+    return;
+  }
+  m_holding_isreserving_flag = true;
   scrbr->reserve_replicas();
 
   auto timeout = scrbr->get_cct()->_conf.get_val<
@@ -136,7 +143,9 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
 ReservingReplicas::~ReservingReplicas()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  scrbr->clear_reserving_now();
+  if (m_holding_isreserving_flag) {
+    scrbr->clear_reserving_now();
+  }
 }
 
 sc::result ReservingReplicas::react(const ReservationTimeout&)

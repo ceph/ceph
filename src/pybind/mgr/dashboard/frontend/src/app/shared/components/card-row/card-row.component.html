@@ -1,31 +1,35 @@
-<div class="d-flex pl-1 pb-2 pt-2">
-  <div class="ms-2 me-auto">
-    <a [routerLink]="link"
-       *ngIf="link && total > 0; else noLinkTitle"
-       [ngPlural]="total"
-       i18n>
-        {{ total }}
-      <ng-template ngPluralCase="=0">{{ title }}</ng-template>
-      <ng-template ngPluralCase="=1">{{ title }}</ng-template>
-      <ng-template ngPluralCase="other">{{ title }}s</ng-template>
-    </a>
+<hr>
+<li class="list-group-item">
+  <div class="d-flex pl-1 pb-2 pt-2">
+    <div class="ms-4 me-auto">
+      <a [routerLink]="link"
+         *ngIf="link && total > 0; else noLinkTitle"
+         [ngPlural]="total"
+        i18n>
+          {{ total }}
+        <ng-template ngPluralCase="=0">{{ title }}</ng-template>
+        <ng-template ngPluralCase="=1">{{ title }}</ng-template>
+        <ng-template ngPluralCase="other">{{ title }}s</ng-template>
+      </a>
+    </div>
+    <span class="me-3">
+      <ng-container [ngSwitch]="summaryType">
+        <ng-container *ngSwitchCase="'iscsi'">
+          <ng-container *ngTemplateOutlet="iscsiSummary"></ng-container>
+        </ng-container>
+        <ng-container *ngSwitchCase="'osd'">
+          <ng-container *ngTemplateOutlet="osdSummary"></ng-container>
+        </ng-container>
+        <ng-container *ngSwitchCase="'simplified'">
+          <ng-container *ngTemplateOutlet="simplifiedSummary"></ng-container>
+        </ng-container>
+        <ng-container *ngSwitchDefault>
+          <ng-container *ngTemplateOutlet="defaultSummary"></ng-container>
+        </ng-container>
+      </ng-container>
+    </span>
   </div>
-
-  <ng-container [ngSwitch]="summaryType">
-    <ng-container *ngSwitchCase="'iscsi'">
-      <ng-container *ngTemplateOutlet="iscsiSummary"></ng-container>
-    </ng-container>
-    <ng-container *ngSwitchCase="'osd'">
-      <ng-container *ngTemplateOutlet="osdSummary"></ng-container>
-    </ng-container>
-    <ng-container *ngSwitchCase="'simplified'">
-      <ng-container *ngTemplateOutlet="simplifiedSummary"></ng-container>
-    </ng-container>
-    <ng-container *ngSwitchDefault>
-      <ng-container *ngTemplateOutlet="defaultSummary"></ng-container>
-    </ng-container>
-  </ng-container>
-</div>
+</li>
 
 <ng-template #defaultSummary>
   <span *ngIf="data.success || data.categoryPgAmount?.clean || (data.success === 0 && data.total === 0)">

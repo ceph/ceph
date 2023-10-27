@@ -6,6 +6,7 @@
 #include <sstream>
 #include <string>
 
+#include <boost/asio.hpp>
 #include <boost/optional.hpp>
 
 extern "C" {
@@ -155,7 +156,9 @@ void usage()
   cout << "  bucket unlink              unlink bucket from specified user\n";
   cout << "  bucket stats               returns bucket statistics\n";
   cout << "  bucket rm                  remove bucket\n";
-  cout << "  bucket check               check bucket index\n";
+  cout << "  bucket check               check bucket index by verifying size and object count stats\n";
+  cout << "  bucket check olh           check for olh index entries and objects that are pending removal\n";
+  cout << "  bucket check unlinked      check for object versions that are not visible in a bucket listing \n";
   cout << "  bucket chown               link bucket to specified user and update its object ACLs\n";
   cout << "  bucket reshard             reshard bucket\n";
   cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
@@ -312,12 +315,14 @@ void usage()
   cout << "  topic list                 list bucket notifications topics\n";
   cout << "  topic get                  get a bucket notifications topic\n";
   cout << "  topic rm                   remove a bucket notifications topic\n";
-  cout << "  script put                 upload a lua script to a context\n";
-  cout << "  script get                 get the lua script of a context\n";
-  cout << "  script rm                  remove the lua scripts of a context\n";
-  cout << "  script-package add         add a lua package to the scripts allowlist\n";
-  cout << "  script-package rm          remove a lua package from the scripts allowlist\n";
-  cout << "  script-package list        get the lua packages allowlist\n";
+  cout << "  topic stats                get a bucket notifications persistent topic stats (i.e. reservations, entries & size)\n";
+  cout << "  script put                 upload a Lua script to a context\n";
+  cout << "  script get                 get the Lua script of a context\n";
+  cout << "  script rm                  remove the Lua scripts of a context\n";
+  cout << "  script-package add         add a Lua package to the scripts allowlist\n";
+  cout << "  script-package rm          remove a Lua package from the scripts allowlist\n";
+  cout << "  script-package list        get the Lua packages allowlist\n";
+  cout << "  script-package reload      install/remove Lua packages according to allowlist\n";
   cout << "  notification list          list bucket notifications configuration\n";
   cout << "  notification get           get a bucket notifications configuration\n";
   cout << "  notification rm            remove a bucket notifications configuration\n";
@@ -489,8 +494,12 @@ void usage()
   cout << "   --notification-id         bucket notifications id\n";
   cout << "\nScript options:\n";
   cout << "   --context                 context in which the script runs. one of: "+LUA_CONTEXT_LIST+"\n";
-  cout << "   --package                 name of the lua package that should be added/removed to/from the allowlist\n";
+  cout << "   --package                 name of the Lua package that should be added/removed to/from the allowlist\n";
   cout << "   --allow-compilation       package is allowed to compile C code as part of its installation\n";
+  cout << "\nBucket check olh/unlinked options:\n";
+  cout << "   --min-age-hours           minimum age of unlinked objects to consider for bucket check unlinked (default: 1)\n";
+  cout << "   --dump-keys               when specified, all keys identified as problematic are printed to stdout\n";
+  cout << "   --hide-progress           when specified, per-shard progress details are not printed to stderr\n";
   cout << "\nradoslist options:\n";
   cout << "   --rgw-obj-fs              the field separator that will separate the rados\n";
   cout << "                             object name from the rgw object name;\n";
@@ -659,6 +668,8 @@ enum class OPT {
   BUCKET_LAYOUT,
   BUCKET_STATS,
   BUCKET_CHECK,
+  BUCKET_CHECK_OLH,
+  BUCKET_CHECK_UNLINKED,
   BUCKET_SYNC_CHECKPOINT,
   BUCKET_SYNC_INFO,
   BUCKET_SYNC_STATUS,
@@ -847,7 +858,8 @@ enum class OPT {
   SCRIPT_RM,
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
-  SCRIPT_PACKAGE_LIST
+  SCRIPT_PACKAGE_LIST,
+  SCRIPT_PACKAGE_RELOAD
 };
 
 }
@@ -878,6 +890,8 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket layout", OPT::BUCKET_LAYOUT },
   { "bucket stats", OPT::BUCKET_STATS },
   { "bucket check", OPT::BUCKET_CHECK },
+  { "bucket check olh", OPT::BUCKET_CHECK_OLH },
+  { "bucket check unlinked", OPT::BUCKET_CHECK_UNLINKED },
   { "bucket sync checkpoint", OPT::BUCKET_SYNC_CHECKPOINT },
   { "bucket sync info", OPT::BUCKET_SYNC_INFO },
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
@@ -1084,6 +1098,7 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package add", OPT::SCRIPT_PACKAGE_ADD },
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
+  { "script-package reload", OPT::SCRIPT_PACKAGE_RELOAD },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -2991,6 +3006,14 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return ret;
   }
 
+  if (! is_layout_reshardable((*bucket)->get_info().layout)) {
+    std::cerr << "Bucket '" << (*bucket)->get_name() <<
+      "' currently has layout '" <<
+      current_layout_desc((*bucket)->get_info().layout) <<
+      "', which does not support resharding." << std::endl;
+    return -EINVAL;
+  }
+
   int num_source_shards = rgw::current_num_shards((*bucket)->get_info().layout);
 
   if (num_shards <= num_source_shards && !yes_i_really_mean_it) {
@@ -3447,6 +3470,9 @@ int main(int argc, const char **argv)
   std::optional<int> bucket_index_max_shards;
 
   int max_concurrent_ios = 32;
+  ceph::timespan min_age = std::chrono::hours(1);
+  bool hide_progress = false;
+  bool dump_keys = false;
   uint64_t orphan_stale_secs = (24 * 3600);
   int detail = false;
 
@@ -3711,6 +3737,8 @@ int main(int argc, const char **argv)
         cerr << "ERROR: failed to parse max concurrent ios: " << err << std::endl;
         return EINVAL;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--min-age-hours", (char*)NULL)) {
+      min_age = std::chrono::hours(atoi(val.c_str()));
     } else if (ceph_argparse_witharg(args, i, &val, "--orphan-stale-secs", (char*)NULL)) {
       orphan_stale_secs = (uint64_t)strict_strtoll(val.c_str(), 10, &err);
       if (!err.empty()) {
@@ -3793,6 +3821,10 @@ int main(int argc, const char **argv)
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &inconsistent_index, NULL, "--inconsistent-index", (char*)NULL)) {
      // do nothing
+    } else if (ceph_argparse_flag(args, i, "--hide-progress", (char*)NULL)) {
+      hide_progress = true;
+    } else if (ceph_argparse_flag(args, i, "--dump-keys", (char*)NULL)) {
+      dump_keys = true;
     } else if (ceph_argparse_binary_flag(args, i, &placement_inline_data, NULL, "--placement-inline-data", (char*)NULL)) {
       placement_inline_data_specified = true;
      // do nothing
@@ -6450,6 +6482,9 @@ int main(int argc, const char **argv)
   bucket_op.set_delete_children(delete_child_objects);
   bucket_op.set_fix_index(fix);
   bucket_op.set_max_aio(max_concurrent_ios);
+  bucket_op.set_min_age(min_age);
+  bucket_op.set_dump_keys(dump_keys);
+  bucket_op.set_hide_progress(hide_progress);
 
   // required to gather errors from operations
   std::string err_msg;
@@ -6982,6 +7017,7 @@ int main(int argc, const char **argv)
           return -ENOENT;
         }
       }
+      bucket_op.marker = marker;
       RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     } else {
       int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
@@ -8077,7 +8113,8 @@ next:
           "have the resharding feature enabled." << std::endl;
       return ENOTSUP;
     }
-    if (!RGWBucketReshard::can_reshard(bucket->get_info(), zone_svc) &&
+
+    if (!RGWBucketReshard::should_zone_reshard_now(bucket->get_info(), zone_svc) &&
         !yes_i_really_mean_it) {
       std::cerr << "Bucket '" << bucket->get_name() << "' already has too many "
           "log generations (" << bucket->get_info().layout.logs.size() << ") "
@@ -8374,6 +8411,28 @@ next:
     } else {
       RGWBucketAdminOp::check_index(driver, bucket_op, stream_flusher, null_yield, dpp());
     }
+  }
+
+  if (opt_cmd == OPT::BUCKET_CHECK_OLH) {
+    rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr <<
+	      "WARNING: this command is only relevant when the cluster has a RADOS backing store." <<
+	      std::endl;
+      return 0;
+    }
+    RGWBucketAdminOp::check_index_olh(store, bucket_op, stream_flusher, dpp());
+  }
+
+  if (opt_cmd == OPT::BUCKET_CHECK_UNLINKED) {
+    rgw::sal::RadosStore* store = dynamic_cast<rgw::sal::RadosStore*>(driver);
+    if (!store) {
+      cerr <<
+	      "WARNING: this command is only relevant when the cluster has a RADOS backing store." <<
+	      std::endl;
+      return 0;
+    }
+    RGWBucketAdminOp::check_index_unlinked(store, bucket_op, stream_flusher, dpp());
   }
 
   if (opt_cmd == OPT::BUCKET_RM) {
@@ -8682,7 +8741,7 @@ next:
           cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
-        ret = bucket->sync_user_stats(dpp(), null_yield);
+        ret = bucket->sync_user_stats(dpp(), null_yield, nullptr);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -10685,7 +10744,7 @@ next:
       cerr << "ERROR: cannot specify tenant in background context" << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
@@ -10703,7 +10762,7 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     std::string script;
     const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
     if (rc == -ENOENT) {
@@ -10727,7 +10786,7 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
-    auto lua_manager = driver->get_lua_manager();
+    auto lua_manager = driver->get_lua_manager("");
     const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
@@ -10738,16 +10797,16 @@ next:
   if (opt_cmd == OPT::SCRIPT_PACKAGE_ADD) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
-      cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
+      cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
     const auto rc = rgw::lua::add_package(dpp(), driver, null_yield, *script_package, bool(allow_compilation));
     if (rc < 0) {
-      cerr << "ERROR: failed to add lua package: " << script_package << " .error: " << rc << std::endl;
+      cerr << "ERROR: failed to add Lua package: " << script_package << " .error: " << rc << std::endl;
       return -rc;
     }
 #else
-    cerr << "ERROR: adding lua packages is not permitted" << std::endl;
+    cerr << "ERROR: adding Lua packages is not permitted" << std::endl;
     return EPERM;
 #endif
   }
@@ -10755,7 +10814,7 @@ next:
   if (opt_cmd == OPT::SCRIPT_PACKAGE_RM) {
 #ifdef WITH_RADOSGW_LUA_PACKAGES
     if (!script_package) {
-      cerr << "ERROR: lua package name was not provided (via --package)" << std::endl;
+      cerr << "ERROR: Lua package name was not provided (via --package)" << std::endl;
       return EINVAL;
     }
     const auto rc = rgw::lua::remove_package(dpp(), driver, null_yield, *script_package);
@@ -10764,11 +10823,11 @@ next:
       return 0;
     }
     if (rc < 0) {
-      cerr << "ERROR: failed to remove lua package: " << script_package << " .error: " << rc << std::endl;
+      cerr << "ERROR: failed to remove Lua package: " << script_package << " .error: " << rc << std::endl;
       return -rc;
     }
 #else
-    cerr << "ERROR: removing lua packages in not permitted" << std::endl;
+    cerr << "ERROR: removing Lua packages in not permitted" << std::endl;
     return EPERM;
 #endif
   }
@@ -10778,9 +10837,9 @@ next:
     rgw::lua::packages_t packages;
     const auto rc = rgw::lua::list_packages(dpp(), driver, null_yield, packages);
     if (rc == -ENOENT) {
-      std::cout << "no lua packages in allowlist" << std::endl;
+      std::cout << "no Lua packages in allowlist" << std::endl;
     } else if (rc < 0) {
-      cerr << "ERROR: failed to read lua packages allowlist. error: " << rc << std::endl;
+      cerr << "ERROR: failed to read Lua packages allowlist. error: " << rc << std::endl;
       return rc;
     } else {
       for (const auto& package : packages) {
@@ -10788,11 +10847,23 @@ next:
       }
     }
 #else
-    cerr << "ERROR: listing lua packages in not permitted" << std::endl;
+    cerr << "ERROR: listing Lua packages in not permitted" << std::endl;
     return EPERM;
 #endif
   }
 
+  if (opt_cmd == OPT::SCRIPT_PACKAGE_RELOAD) {
+#ifdef WITH_RADOSGW_LUA_PACKAGES
+    const auto rc = rgw::lua::reload_packages(dpp(), driver, null_yield);
+    if (rc < 0) {
+      cerr << "ERROR: failed to reload Lua packages. error: " << rc << std::endl;
+      return rc;
+    }
+#else
+    cerr << "ERROR: reloading Lua packages in not permitted" << std::endl;
+    return EPERM;
+#endif
+  }
   return 0;
 }
 

@@ -734,6 +734,11 @@ class LocalFuseMount(LocalCephFSMount, FuseMount):
 
         if os.getuid() != 0:
             mount_cmd += ['--client_die_on_failed_dentry_invalidate=false']
+            # XXX: Passing ceph-fuse option above makes using sudo command
+            # redunant. Plus, we prefer that vstart_runner.py doesn't use sudo
+            # command as far as possbile.
+            mount_cmd.remove('sudo')
+
         return mount_cmd
 
     @property
