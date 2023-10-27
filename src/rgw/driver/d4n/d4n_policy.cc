@@ -174,21 +174,18 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
 }
 
 CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, optional_yield y) {
-  if (entries_map.empty())
+  if (entries_heap.empty())
     return {};
 
-  auto it = std::min_element(std::begin(entries_map), std::end(entries_map),
-			      [](const auto& l, const auto& r) { return l.second->localWeight < r.second->localWeight; });
-
   /* Get victim cache block */
-  std::string key = it->second->key;
+  std::string key = entries_heap.top()->key;
   CacheBlock victim;
 
   victim.cacheObj.bucketName = key.substr(0, key.find('_')); 
   key.erase(0, key.find('_') + 1);
   victim.cacheObj.objName = key.substr(0, key.find('_'));
-  victim.blockID = it->second->offset;
-  victim.size = it->second->len;
+  victim.blockID = entries_heap.top()->offset;
+  victim.size = entries_heap.top()->len;
 
   if (dir->get(&victim, y) < 0) {
     return {};
@@ -260,7 +257,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     CacheBlock victim = find_victim(dpp, y);
 
     if (victim.cacheObj.objName.empty()) {
-      ldpp_dout(dpp, 10) << "RGW D4N Policy: Could not find victim block" << dendl;
+      ldpp_dout(dpp, 10) << "RGW D4N Policy: Could not retrieve victim block" << dendl;
       return -1;
     }
 
@@ -352,7 +349,8 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
   erase(dpp, key);
   
   LFUDAEntry *e = new LFUDAEntry(key, offset, len, version, localWeight);
-  entries_lfuda_list.push_back(*e);
+  handle_type handle = entries_heap.push(e);
+  e->set_handle(handle);
   entries_map.emplace(key, e);
 
   if (cacheDriver->set_attr(dpp, key, "localWeight", std::to_string(localWeight), y) < 0) {
@@ -375,8 +373,8 @@ bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key)
   }
 
   entries_map.erase(p);
-  entries_lfuda_list.erase_and_dispose(entries_lfuda_list.iterator_to(*(p->second)), LFUDA_Entry_delete_disposer());
-  return true;
+
+  return false;
 }
 
 int LRUPolicy::exist_key(std::string key)

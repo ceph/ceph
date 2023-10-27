@@ -56,8 +56,13 @@ class LFUDAPolicy : public CachePolicy {
 
     struct LFUDAEntry : public Entry {
       int localWeight;
-      LFUDAEntry(std::string& key, uint64_t offset, uint64_t len, std::string version, int localWeight) : Entry(key, offset, len, version), 
-													  localWeight(localWeight) {}
+      using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
+      handle_type handle;
+
+      LFUDAEntry(std::string& key, uint64_t offset, uint64_t len, std::string& version, int localWeight) : Entry(key, offset, len, version),
+													    localWeight(localWeight) {}
+      
+      void set_handle(handle_type handle_) { handle = handle_; } 
     };
 
     using Heap = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>;
@@ -66,7 +71,6 @@ class LFUDAPolicy : public CachePolicy {
 
     net::io_context& io;
     std::shared_ptr<connection> conn;
-    List entries_lfuda_list;
     BlockDirectory* dir;
     rgw::cache::CacheDriver* cacheDriver;
 
@@ -75,12 +79,6 @@ class LFUDAPolicy : public CachePolicy {
     int set_min_avg_weight(size_t weight, std::string cacheLocation, optional_yield y);
     int get_min_avg_weight(optional_yield y);
     CacheBlock find_victim(const DoutPrefixProvider* dpp, optional_yield y);
-    LFUDAEntry* find_entry(std::string key) { 
-      auto it = entries_map.find(key); 
-      if (it == entries_map.end())
-        return nullptr;
-      return it->second;
-    }
 
   public:
     LFUDAPolicy(net::io_context& io_context, rgw::cache::CacheDriver* cacheDriver) : CachePolicy(), io(io_context), cacheDriver{cacheDriver} {
