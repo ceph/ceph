@@ -405,11 +405,11 @@ Can't Write Data
 ================
 
 If the cluster is up, but some OSDs are down and you cannot write data, make
-sure that you have the minimum number of OSDs running for the placement group.
-If you don't have the minimum number of OSDs running, Ceph will not allow you
-to write data because there is no guarantee that Ceph can replicate your data.
-See ``osd_pool_default_min_size`` in the :ref:`Pool, PG, and CRUSH Config
-Reference <rados_config_pool_pg_crush_ref>` for details.
+sure that you have the minimum number of OSDs running in the pool. If you don't
+have the minimum number of OSDs running in the pool, Ceph will not allow you to
+write data to it because there is no guarantee that Ceph can replicate your
+data. See ``osd_pool_default_min_size`` in the :ref:`Pool, PG, and CRUSH
+Config Reference <rados_config_pool_pg_crush_ref>` for details.
 
 
 PGs Inconsistent
