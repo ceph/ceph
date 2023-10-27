@@ -499,47 +499,6 @@ You may set values for the following keys:
    :Type: Integer
    :Valid Range: ``1`` sets flag, ``0`` unsets flag
 
-.. _hit_set_type:
-
-.. describe:: hit_set_type
-
-   :Description: Enables HitSet tracking for cache pools.
-                 For additional information, see `Bloom Filter`_.
-   :Type: String
-   :Valid Settings: ``bloom``, ``explicit_hash``, ``explicit_object``
-   :Default: ``bloom``. Other values are for testing.
-
-.. _hit_set_count:
-
-.. describe:: hit_set_count
-
-   :Description: Determines the number of HitSets to store for cache pools. The
-                 higher the value, the more RAM is consumed by the ``ceph-osd``
-                 daemon.
-   :Type: Integer
-   :Valid Range: ``1``. Agent doesn't handle > ``1`` yet.
-
-.. _hit_set_period:
-
-.. describe:: hit_set_period
-
-   :Description: Determines the duration of a HitSet period (in seconds) for
-                 cache pools. The higher the value, the more RAM is consumed
-                 by the ``ceph-osd`` daemon.
-   :Type: Integer
-   :Example: ``3600`` (3600 seconds: one hour)
-
-.. _hit_set_fpp:
-
-.. describe:: hit_set_fpp
-
-   :Description: Determines the probability of false positives for the
-                 ``bloom`` HitSet type. For additional information, see `Bloom
-                 Filter`_.
-   :Type: Double
-   :Valid Range: ``0.0`` - ``1.0``
-   :Default: ``0.05``
-
 .. _cache_target_dirty_ratio:
 
 .. describe:: cache_target_dirty_ratio
@@ -592,23 +551,6 @@ You may set values for the following keys:
                  ``max_objects`` threshold is triggered.
    :Type: Integer
    :Example: ``1000000`` #1M objects
-
-
-.. describe:: hit_set_grade_decay_rate
-   
-   :Description: Sets the temperature decay rate between two successive 
-                 HitSets.
-   :Type: Integer
-   :Valid Range: 0 - 100
-   :Default: ``20``
-
-.. describe:: hit_set_search_last_n
-   
-   :Description: Count at most N appearances in HitSets. Used for temperature 
-                 calculation.
-   :Type: Integer
-   :Valid Range: 0 - hit_set_count
-   :Default: ``1``
 
 .. _cache_min_flush_age:
 
@@ -737,35 +679,6 @@ You may get values from the following keys:
 ``crush_rule``
 
 :Description: See crush_rule_.
-
-
-``hit_set_type``
-
-:Description: See hit_set_type_.
-
-:Type: String
-:Valid Settings: ``bloom``, ``explicit_hash``, ``explicit_object``
-
-
-``hit_set_count``
-
-:Description: See hit_set_count_.
-
-:Type: Integer
-
-
-``hit_set_period``
-
-:Description: See hit_set_period_.
-
-:Type: Integer
-
-
-``hit_set_fpp``
-
-:Description: See hit_set_fpp_.
-
-:Type: Double
 
 
 ``cache_target_dirty_ratio``
