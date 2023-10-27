@@ -938,6 +938,12 @@ void MDSRank::respawn()
   }
 }
 
+void MDSRank::abort(std::string_view msg)
+{
+  monc->flush_log();
+  ceph_abort(msg);
+}
+
 void MDSRank::damaged()
 {
   ceph_assert(whoami != MDS_RANK_NONE);
@@ -2301,11 +2307,11 @@ void MDSRankDispatcher::handle_mds_map(
       // "bootstrapping" state.
       usleep(sleep_rank_change);
     } if (state == MDSMap::STATE_STANDBY_REPLAY) {
-      dout(1) << "handle_mds_map i am now mds." << mds_gid << "." << incarnation
+      dout(1) << "handle_mds_map I am now mds." << mds_gid << "." << incarnation
           << " replaying mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(mds_gid));
     } else {
-      dout(1) << "handle_mds_map i am now mds." << whoami << "." << incarnation << dendl;
+      dout(1) << "handle_mds_map I am now mds." << whoami << "." << incarnation << dendl;
       messenger->set_myname(entity_name_t::MDS(whoami));
     }
   }

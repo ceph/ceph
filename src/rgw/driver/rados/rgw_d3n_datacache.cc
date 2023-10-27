@@ -65,6 +65,7 @@ D3nDataCache::D3nDataCache()
 
 void D3nDataCache::init(CephContext *_cct) {
   cct = _cct;
+  // coverity[missing_lock:SUPPRESS]
   free_data_cache_size = cct->_conf->rgw_d3n_l1_datacache_size;
   head = nullptr;
   tail = nullptr;

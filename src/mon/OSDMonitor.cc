@@ -3076,7 +3076,7 @@ bool OSDMonitor::prepare_mark_me_dead(MonOpRequestRef op)
     pending_inc.new_xinfo[target_osd] = osdmap.osd_xinfo[target_osd];
   }
   pending_inc.new_xinfo[target_osd].dead_epoch = m->get_epoch();
-  wait_for_finished_proposal(
+  wait_for_commit(
     op,
     new LambdaContext(
       [op, this] (int r) {
@@ -4299,7 +4299,7 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
   if (HAVE_FEATURE(m->get_connection()->get_features(), SERVER_OCTOPUS)) {
     auto reply = make_message<MRemoveSnaps>();
     reply->snaps = m->snaps;
-    wait_for_finished_proposal(op, new C_ReplyOp(this, op, reply));
+    wait_for_commit(op, new C_ReplyOp(this, op, reply));
   }
 
   return true;
@@ -8234,7 +8234,7 @@ bool OSDMonitor::prepare_set_flag(MonOpRequestRef op, int flag)
     pending_inc.new_flags = osdmap.get_flags();
   pending_inc.new_flags |= flag;
   ss << OSDMap::get_flag_string(flag) << " is set";
-  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+  wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 						    get_last_committed() + 1));
   return true;
 }
@@ -8247,7 +8247,7 @@ bool OSDMonitor::prepare_unset_flag(MonOpRequestRef op, int flag)
     pending_inc.new_flags = osdmap.get_flags();
   pending_inc.new_flags &= ~flag;
   ss << OSDMap::get_flag_string(flag) << " is unset";
-  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+  wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 						    get_last_committed() + 1));
   return true;
 }
@@ -9783,6 +9783,7 @@ static int parse_reweights(CephContext *cct,
 }
 
 int OSDMonitor::prepare_command_osd_destroy(
+    MonOpRequestRef op,
     int32_t id,
     stringstream& ss)
 {
@@ -9814,10 +9815,11 @@ int OSDMonitor::prepare_command_osd_destroy(
   EntityName cephx_entity, lockbox_entity;
   bool idempotent_auth = false, idempotent_cks = false;
 
-  int err = mon.authmon()->validate_osd_destroy(id, uuid,
-                                                 cephx_entity,
-                                                 lockbox_entity,
-                                                 ss);
+  auto&& authmon = mon.authmon();
+  int err = authmon->validate_osd_destroy(id, uuid,
+                                          cephx_entity,
+                                          lockbox_entity,
+                                          ss);
   if (err < 0) {
     if (err == -ENOENT) {
       idempotent_auth = true;
@@ -9826,21 +9828,28 @@ int OSDMonitor::prepare_command_osd_destroy(
     }
   }
 
-  auto svc = mon.kvmon();
-  err = svc->validate_osd_destroy(id, uuid);
+  auto&& kvmon = mon.kvmon();
+  err = kvmon->validate_osd_destroy(id, uuid);
   if (err < 0) {
     ceph_assert(err == -ENOENT);
     err = 0;
     idempotent_cks = true;
   }
 
-  if (!idempotent_auth) {
-    err = mon.authmon()->do_osd_destroy(cephx_entity, lockbox_entity);
-    ceph_assert(0 == err);
+  if (!idempotent_auth && !authmon->is_writeable()) {
+    authmon->wait_for_writeable(op, new C_RetryMessage(this, op));
+    return -EAGAIN;
+  }
+  if (!idempotent_cks && !kvmon->is_writeable()) {
+    kvmon->wait_for_writeable(op, new C_RetryMessage(this, op));
+    return -EAGAIN;
   }
 
+  if (!idempotent_auth) {
+    authmon->do_osd_destroy(cephx_entity, lockbox_entity);
+  }
   if (!idempotent_cks) {
-    svc->do_osd_destroy(id, uuid);
+    kvmon->do_osd_destroy(id, uuid);
   }
 
   pending_inc.new_state[id] = CEPH_OSD_DESTROYED;
@@ -9855,6 +9864,7 @@ int OSDMonitor::prepare_command_osd_destroy(
 }
 
 int OSDMonitor::prepare_command_osd_purge(
+    MonOpRequestRef op,
     int32_t id,
     stringstream& ss)
 {
@@ -9895,7 +9905,11 @@ int OSDMonitor::prepare_command_osd_purge(
 
   // no point destroying the osd again if it has already been marked destroyed
   if (!osdmap.is_destroyed(id)) {
-    err = prepare_command_osd_destroy(id, ss);
+    /* N.B.: up to this point, we've not changed pending at all.
+     * ::prepare_command_osd_destroy may return -EAGAIN if the kvmon/authmon is
+     * not writeable without changing pending. It will queue `op` if we should wait.
+     */
+    err = prepare_command_osd_destroy(op, id, ss);
     if (err < 0) {
       if (err == -ENOENT) {
         err = 0;
@@ -10101,7 +10115,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush set-device-class") {
@@ -10179,7 +10193,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     ss << "set osd(s) " << updated << " to class '" << device_class << "'";
     getline(ss, rs);
-    wait_for_finished_proposal(
+    wait_for_commit(
       op,
       new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
     return true;
@@ -10238,7 +10252,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     ss << "done removing class of osd(s): " << updated;
     getline(ss, rs);
-    wait_for_finished_proposal(
+    wait_for_commit(
       op,
       new Monitor::C_Command(mon,op, 0, rs, get_last_committed() + 1));
     return true;
@@ -10671,7 +10685,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << action << " item id " << osdid << " name '" << osd_name << "' weight "
        << weight << " at location " << loc << " to crush map";
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						      get_last_committed() + 1));
     return true;
 
@@ -10720,7 +10734,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	   << "' weight " << weight
 	   << " at location " << loc << " to crush map";
 	getline(ss, rs);
-	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+	wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
 	return true;
       }
@@ -10759,7 +10773,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  pending_inc.crush.clear();
 	  newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
 	  getline(ss, rs);
-	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+	  wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
 	  return true;
 	}
@@ -10812,7 +10826,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "swapped bucket of " << source << " to " << dest;
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
-    wait_for_finished_proposal(op,
+    wait_for_commit(op,
 			       new Monitor::C_Command(mon, op, err, ss.str(),
 						      get_last_committed() + 1));
     return true;
@@ -10869,7 +10883,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = 0;
       }
     }
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, ss.str(),
+    wait_for_commit(op, new Monitor::C_Command(mon, op, err, ss.str(),
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush rm" ||
@@ -10891,7 +10905,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = 0;
 	ss << "device '" << name << "' does not appear in the crush map";
 	getline(ss, rs);
-	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+	wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
 	return true;
       }
@@ -10925,7 +10939,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
           pending_inc.new_crush_node_flags[id] = 0;
 	ss << "removed item id " << id << " name '" << name << "' from crush map";
 	getline(ss, rs);
-	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+	wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
 	return true;
       }
@@ -10939,7 +10953,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     ss << "reweighted crush hierarchy";
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush reweight") {
@@ -10977,7 +10991,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "reweighted item id " << id << " name '" << name << "' to " << w
        << " in crush map";
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush reweight-subtree") {
@@ -11015,7 +11029,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "reweighted subtree id " << id << " name '" << name << "' to " << w
        << " in crush map";
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush tunables") {
@@ -11053,7 +11067,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     ss << "adjusted tunables profile to " << profile;
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd crush set-tunable") {
@@ -11093,7 +11107,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     ss << "adjusted tunable " << tunable << " to " << value;
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
 
@@ -11133,7 +11147,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     }
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
 
@@ -11172,7 +11186,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     }
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
 
@@ -11198,7 +11212,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       }
 
       getline(ss, rs);
-      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+      wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 							get_last_committed() + 1));
       return true;
     } else {
@@ -11276,7 +11290,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
                                                       get_last_committed() + 1));
     return true;
 
@@ -11335,7 +11349,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
                                                       get_last_committed() + 1));
     return true;
 
@@ -11376,7 +11390,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     }
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
 
@@ -11414,7 +11428,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.crush.clear();
     newcrush.encode(pending_inc.crush, mon.get_quorum_con_features());
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
                                get_last_committed() + 1));
     return true;
 
@@ -11454,7 +11468,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     pending_inc.new_max_osd = newmax;
     ss << "set new max_osd = " << pending_inc.new_max_osd;
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
 
@@ -11476,7 +11490,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       pending_inc.new_nearfull_ratio = n;
     ss << prefix << " " << n;
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd set-require-min-compat-client") {
@@ -11541,7 +11555,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "set require_min_compat_client to " << vno;
     pending_inc.new_require_min_compat_client = vno;
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 							  get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pause") {
@@ -11598,6 +11612,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	err = -EPERM;
 	goto reply_no_propose;
       }
+    } else if (key == "noautoscale") {
+      return prepare_set_flag(op, CEPH_OSDMAP_NOAUTOSCALE);
     } else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
@@ -11630,6 +11646,8 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       return prepare_unset_flag(op, CEPH_OSDMAP_NOTIERAGENT);
     else if (key == "nosnaptrim")
       return prepare_unset_flag(op, CEPH_OSDMAP_NOSNAPTRIM);
+    else if (key == "noautoscale")
+      return prepare_unset_flag(op, CEPH_OSDMAP_NOAUTOSCALE);
     else {
       ss << "unrecognized flag '" << key << "'";
       err = -EINVAL;
@@ -11855,7 +11873,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (any) {
       getline(ss, rs);
-      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, rs,
+      wait_for_commit(op, new Monitor::C_Command(mon, op, err, rs,
 						get_last_committed() + 1));
       return true;
     }
@@ -12017,7 +12035,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if (any) {
       getline(ss, rs);
-      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, err, rs,
+      wait_for_commit(op, new Monitor::C_Command(mon, op, err, rs,
                                  get_last_committed() + 1));
       return true;
     }
@@ -12222,7 +12240,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "pool of " << pgid << " is pending removal";
       err = -ENOENT;
       getline(ss, rs);
-      wait_for_finished_proposal(op,
+      wait_for_commit(op,
         new Monitor::C_Command(mon, op, err, rs, get_last_committed() + 1));
       return true;
     }
@@ -12502,7 +12520,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       pending_inc.new_primary_affinity[id] = ww;
       ss << "set osd." << id << " primary-affinity to " << w << " (" << std::ios::hex << ww << std::ios::dec << ")";
       getline(ss, rs);
-      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+      wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
                                                 get_last_committed() + 1));
       return true;
     } else {
@@ -12535,7 +12553,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       pending_inc.new_weight[id] = ww;
       ss << "reweighted osd." << id << " to " << w << " (" << std::hex << ww << std::dec << ")";
       getline(ss, rs);
-      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+      wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						get_last_committed() + 1));
       return true;
     } else {
@@ -12552,7 +12570,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
     pending_inc.new_weight.insert(weights.begin(), weights.end());
-    wait_for_finished_proposal(
+    wait_for_commit(
 	op,
 	new Monitor::C_Command(mon, op, 0, rs, rdata, get_last_committed() + 1));
     return true;
@@ -12584,7 +12602,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       pending_inc.new_lost[id] = e;
       ss << "marked osd lost in epoch " << e;
       getline(ss, rs);
-      wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+      wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						get_last_committed() + 1));
       return true;
     }
@@ -12665,11 +12683,17 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
     paxos.plug();
     if (is_destroy) {
-      err = prepare_command_osd_destroy(id, ss);
+      err = prepare_command_osd_destroy(op, id, ss);
+      if (err == EAGAIN) {
+        return false;
+      }
       // we checked above that it should exist.
       ceph_assert(err != -ENOENT);
     } else {
-      err = prepare_command_osd_purge(id, ss);
+      err = prepare_command_osd_purge(op, id, ss);
+      if (err == EAGAIN) {
+        return false;
+      }
       if (err == -ENOENT) {
         err = 0;
         ss << "osd." << id << " does not exist.";
@@ -12689,7 +12713,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
 
     getline(ss, rs);
-    wait_for_finished_proposal(op,
+    wait_for_commit(op,
         new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
     force_immediate_propose();
     return true;
@@ -12744,7 +12768,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
     }
 
-    wait_for_finished_proposal(op,
+    wait_for_commit(op,
         new Monitor::C_Command(mon, op, 0, rs, rdata,
                                get_last_committed() + 1));
     force_immediate_propose();
@@ -12812,7 +12836,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << new_id;
       rdata.append(ss);
     }
-    wait_for_finished_proposal(op,
+    wait_for_commit(op,
         new Monitor::C_Command(mon, op, 0, rs, rdata,
                                get_last_committed() + 1));
     return true;
@@ -12831,7 +12855,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     ss << " removed all blocklist entries";
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
                                               get_last_committed() + 1));
     return true;
   } else if (prefix == "osd blocklist" ||
@@ -12917,7 +12941,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
 	ss << "blocklisting " << addr << " until " << expires << " (" << d << " sec)";
 	getline(ss, rs);
-	wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+	wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						  get_last_committed() + 1));
 	return true;
       } else if (blocklistop == "rm") {
@@ -12941,7 +12965,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 						 pending_inc.new_range_blocklist))) {
 	  ss << "un-blocklisting " << addr;
 	  getline(ss, rs);
-	  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+	  wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						    get_last_committed() + 1));
 	  return true;
 	}
@@ -12996,7 +13020,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "created pool " << poolstr << " snap " << snapname;
     }
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool rmsnap") {
@@ -13036,7 +13060,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "already removed pool " << poolstr << " snap " << snapname;
     }
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool create") {
@@ -13211,7 +13235,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       ss << "pool '" << poolstr << "' created";
     }
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
 
@@ -13292,7 +13316,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
         << cpp_strerror(ret);
     }
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, ret, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, ret, rs,
 					      get_last_committed() + 1));
     return true;
 
@@ -13304,7 +13328,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
       goto reply_no_propose;
 
     getline(ss, rs);
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 						   get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier add") {
@@ -13371,7 +13395,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     np->set_snap_epoch(pending_inc.epoch); // tier will update to our snap info
     ntp->tier_of = pool_id;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a tier of '" << poolstr << "'";
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier remove" ||
@@ -13430,7 +13454,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     np->tiers.erase(tierpool_id);
     ntp->clear_tier();
     ss << "pool '" << tierpoolstr << "' is now (or already was) not a tier of '" << poolstr << "'";
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier set-overlay") {
@@ -13487,7 +13511,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << "overlay for '" << poolstr << "' is now (or already was) '" << overlaypoolstr << "'";
     if (overlay_p->cache_mode == pg_pool_t::CACHEMODE_NONE)
       ss <<" (WARNING: overlay pool cache_mode is still NONE)";
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier remove-overlay" ||
@@ -13528,7 +13552,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     np->clear_write_tier();
     np->set_last_force_op_resend(pending_inc.epoch);
     ss << "there is now (or already was) no overlay for '" << poolstr << "'";
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier cache-mode") {
@@ -13673,7 +13697,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 	  base_pool->write_tier == pool_id)
 	ss <<" (WARNING: pool is still configured as read or write tier)";
     }
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd tier add-cache") {
@@ -13768,7 +13792,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ntp->hit_set_params = hsp;
     ntp->target_max_bytes = size;
     ss << "pool '" << tierpoolstr << "' is now (or already was) a cache tier of '" << poolstr << "'";
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, ss.str(),
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, ss.str(),
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool set-quota") {
@@ -13817,7 +13841,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     ss << "set-quota " << field << " = " << value << " for pool " << poolstr;
     rs = ss.str();
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					      get_last_committed() + 1));
     return true;
   } else if (prefix == "osd pool application enable" ||
@@ -13941,7 +13965,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 
  update:
   getline(ss, rs);
-  wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+  wait_for_commit(op, new Monitor::C_Command(mon, op, 0, rs,
 					    get_last_committed() + 1));
   return true;
 

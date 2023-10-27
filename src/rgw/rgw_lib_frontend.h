@@ -6,7 +6,7 @@
 #include <boost/container/flat_map.hpp>
 
 #include "rgw_lib.h"
-#include "rgw_file.h"
+#include "rgw_file_int.h"
 
 namespace rgw {
 

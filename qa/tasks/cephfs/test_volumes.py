@@ -1871,6 +1871,32 @@ class TestSubvolumeGroups(TestVolumesHelper):
         ret = self._fs_cmd("subvolumegroup", "exist", self.volname)
         self.assertEqual(ret.strip('\n'), "no subvolumegroup exists")
 
+    def test_subvolume_group_rm_when_its_not_empty(self):
+        group = self._generate_random_group_name()
+        subvolume = self._generate_random_subvolume_name()
+
+        # create subvolumegroup
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+        # try, remove subvolume group
+        try:
+            self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+        except CommandFailedError as ce:
+            self.assertEqual(ce.exitstatus, errno.ENOTEMPTY, "invalid error code on deleting "
+                             "subvolumegroup when it is not empty")
+        else:
+            self.fail("expected the 'fs subvolumegroup rm' command to fail")
+        
+        # delete subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+
+        # delete subvolumegroup
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
 
 class TestSubvolumes(TestVolumesHelper):
     """Tests for FS subvolume operations, except snapshot and snapshot clone."""
@@ -7367,6 +7393,29 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
         self.config_set('mgr', 'mgr/volumes/max_concurrent_clones', 2)
         max_concurrent_clones = int(self.config_get('mgr', 'mgr/volumes/max_concurrent_clones'))
         self.assertEqual(max_concurrent_clones, 2)
+
+    def test_periodic_async_work(self):
+        """
+        to validate that the async thread (purge thread in this case) will
+        process a job that's manually created.
+        """
+
+        self.config_set('mgr', 'mgr/volumes/periodic_async_work', True)
+
+        trashdir = os.path.join("./", "volumes", "_deleting")
+        entry = os.path.join(trashdir, "subvol")
+        # hand create the directory
+        self.mount_a.run_shell(['sudo', 'mkdir', '-p', entry], omit_sudo=False)
+
+        # verify trash dir is processed
+        self._wait_for_trash_empty()
+
+        self.config_set('mgr', 'mgr/volumes/periodic_async_work', False)
+
+        # wait a bit so that the default wakeup time (5s) is consumed
+        # by the async threads (i.e., the default gets honoured before
+        # the file system gets purged).
+        time.sleep(10)
 
     def test_subvolume_under_group_snapshot_clone(self):
         subvolume = self._generate_random_subvolume_name()

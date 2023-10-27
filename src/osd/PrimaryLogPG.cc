@@ -2573,6 +2573,11 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     return cache_result_t::HANDLED_PROXY;
   case object_manifest_t::TYPE_CHUNKED:
     {
+      // in case of metadata handling ops don't need to promote chunk objects
+      if (op->may_read() && !op->may_read_data() && !op->may_write()) {
+        return cache_result_t::NOOP;
+      }
+
       if (can_proxy_chunked_read(op, obc)) {
 	map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(obc->obs.oi.soid);
         if (p != flush_ops.end()) {

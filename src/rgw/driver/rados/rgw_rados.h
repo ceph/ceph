@@ -816,13 +816,12 @@ public:
 
       explicit Write(RGWRados::Object *_target) : target(_target) {}
 
-      int _do_write_meta(const DoutPrefixProvider *dpp,
-                     uint64_t size, uint64_t accounted_size,
+      int _do_write_meta(uint64_t size, uint64_t accounted_size,
                      std::map<std::string, bufferlist>& attrs,
                      bool modify_tail, bool assume_noent,
-                     void *index_op, optional_yield y);
-      int write_meta(const DoutPrefixProvider *dpp, uint64_t size, uint64_t accounted_size,
-                     std::map<std::string, bufferlist>& attrs, optional_yield y);
+                     void *index_op, const req_context& rctx);
+      int write_meta(uint64_t size, uint64_t accounted_size,
+                     std::map<std::string, bufferlist>& attrs, const req_context& rctx);
       int write_data(const char *data, uint64_t ofs, uint64_t len, bool exclusive);
       const req_state* get_req_state() {
         return nullptr;  /* XXX dang Only used by LTTng, and it handles null anyway */
@@ -1144,8 +1143,8 @@ public:
                        std::string *petag,
                        void (*progress_cb)(off_t, void *),
                        void *progress_data,
-                       const DoutPrefixProvider *dpp,
-                       RGWFetchObjFilter *filter, optional_yield y,
+                       const req_context& rctx,
+                       RGWFetchObjFilter *filter,
                        bool stat_follow_olh,
                        const rgw_obj& stat_dest_obj,
                        const rgw_zone_set_entry& source_trace_entry,
@@ -1376,7 +1375,6 @@ public:
   void gen_rand_obj_instance_name(rgw_obj_key *target_key);
   void gen_rand_obj_instance_name(rgw_obj *target);
 
-  int update_containers_stats(std::map<std::string, RGWBucketEnt>& m, const DoutPrefixProvider *dpp, optional_yield y);
   int append_async(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, size_t size, bufferlist& bl);
 
 public:
@@ -1560,8 +1558,8 @@ public:
                   RGWQuota& quota, uint64_t obj_size,
 		  optional_yield y, bool check_size_only = false);
 
-  int check_bucket_shards(const RGWBucketInfo& bucket_info, const rgw_bucket& bucket,
-			  uint64_t num_objs, const DoutPrefixProvider *dpp, optional_yield y);
+  int check_bucket_shards(const RGWBucketInfo& bucket_info, uint64_t num_objs,
+                          const DoutPrefixProvider *dpp, optional_yield y);
 
   int add_bucket_to_reshard(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, uint32_t new_num_shards, optional_yield y);
 

@@ -293,10 +293,6 @@ struct BucketMetaTable : public EmptyMetaTable {
       pushstring(L, bucket->get_marker());
     } else if (strcasecmp(index, "Id") == 0) {
       pushstring(L, bucket->get_bucket_id());
-    } else if (strcasecmp(index, "Count") == 0) {
-      lua_pushinteger(L, bucket->get_count());
-    } else if (strcasecmp(index, "Size") == 0) {
-      lua_pushinteger(L, bucket->get_size());
     } else if (strcasecmp(index, "ZoneGroupId") == 0) {
       pushstring(L, bucket->get_info().zonegroup);
     } else if (strcasecmp(index, "CreationTime") == 0) {
@@ -788,7 +784,7 @@ int execute(
   int rc = 0;
   try {
     open_standard_libs(L);
-    set_package_path(L, s->penv.lua.luarocks_path);
+    set_package_path(L, s->penv.lua.manager->luarocks_path());
 
     create_debug_action(L, s->cct);  
   

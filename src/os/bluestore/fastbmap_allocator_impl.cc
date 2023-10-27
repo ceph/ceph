@@ -633,7 +633,7 @@ uint64_t AllocatorLevel01Loose::_claim_free_to_left_l0(int64_t l0_pos_start)
 {
   int64_t d0 = L0_ENTRIES_PER_SLOT;
 
-  int64_t pos = l0_pos_start - 1;
+  int64_t pos = l0_pos_start ? l0_pos_start - 1 : 0;
   slot_t bits = (slot_t)1 << (pos % d0);
   int64_t idx = pos / d0;
   slot_t* val_s = l0.data() + idx;

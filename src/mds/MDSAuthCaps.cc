@@ -354,10 +354,15 @@ bool MDSAuthCaps::parse(string_view str, ostream *err)
     // Make sure no grants are kept after parsing failed!
     grants.clear();
 
-    if (err)
-      *err << "mds capability parse failed, stopped at '"
-	   << string(iter, end)
-           << "' of '" << str << "'";
+    if (err) {
+      if (string(iter, end).find("allow") != string::npos) {
+       *err << "Permission flags in MDS capability string must be '*' or "
+	    << "'all' or must start with 'r'";
+      } else {
+       *err << "mds capability parse failed, stopped at '"
+            << string(iter, end) << "' of '" << str << "'";
+      }
+    }
     return false; 
   }
 }
@@ -538,3 +543,9 @@ ostream &operator<<(ostream &out, const MDSAuthCaps &cap)
   return out;
 }
 
+ostream &operator<<(ostream &out, const MDSCapAuth &auth)
+{
+  out << "MDSCapAuth(" << auth.match << "readable="
+      << auth.readable << ", writeable=" << auth.writeable << ")";
+  return out;
+}

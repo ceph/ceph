@@ -363,6 +363,9 @@
 /* Backend CORTX-DAOS for Rados Gateway */
 #cmakedefine WITH_RADOSGW_DAOS
 
+/* Backend POSIX for Rados Gateway */
+#cmakedefine WITH_RADOSGW_POSIX
+
 /* Defined if std::map::merge() is supported */
 #cmakedefine HAVE_STDLIB_MAP_SPLICING
 

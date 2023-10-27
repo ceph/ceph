@@ -16,6 +16,7 @@
 
 #include <array>
 #include <memory>
+#include <span>
 #include <string>
 #include <set>
 #include <map>
@@ -835,7 +836,7 @@ public:
   void execute(optional_yield y) override;
 
   virtual int get_params(optional_yield y) = 0;
-  virtual void handle_listing_chunk(rgw::sal::BucketList&& buckets) {
+  virtual void handle_listing_chunk(std::span<RGWBucketEnt> buckets) {
     /* The default implementation, used by e.g. S3, just generates a new
      * part of listing and sends it client immediately. Swift can behave
      * differently: when the reverse option is requested, all incoming
@@ -843,7 +844,7 @@ public:
     return send_response_data(buckets);
   }
   virtual void send_response_begin(bool has_buckets) = 0;
-  virtual void send_response_data(rgw::sal::BucketList& buckets) = 0;
+  virtual void send_response_data(std::span<const RGWBucketEnt> buckets) = 0;
   virtual void send_response_end() = 0;
   void send_response() override {}
 
@@ -910,23 +911,21 @@ protected:
   std::string max_keys;
   std::string delimiter;
   std::string encoding_type;
-  bool list_versions;
-  int max;
+  bool list_versions{false};
+  int max{0};
   std::vector<rgw_bucket_dir_entry> objs;
   std::map<std::string, bool> common_prefixes;
+  std::optional<RGWStorageStats> stats; // initialized if need_container_stats()
 
-  int default_max;
-  bool is_truncated;
-  bool allow_unordered;
+  int default_max{0};
+  bool is_truncated{false};
+  bool allow_unordered{false};
 
-  int shard_id;
+  int shard_id{-1};
 
   int parse_max_keys();
 
 public:
-  RGWListBucket() : list_versions(false), max(0),
-                    default_max(0), is_truncated(false),
-		    allow_unordered(false), shard_id(-1) {}
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1063,6 +1062,7 @@ public:
 class RGWStatBucket : public RGWOp {
 protected:
   std::unique_ptr<rgw::sal::Bucket> bucket;
+  RGWStorageStats stats;
 
 public:
   int verify_permission(optional_yield y) override;
@@ -1220,7 +1220,7 @@ protected:
   std::string multipart_upload_id;
   std::string multipart_part_str;
   int multipart_part_num = 0;
-  jspan multipart_trace;
+  jspan_ptr multipart_trace;
 
   boost::optional<ceph::real_time> delete_at;
   //append obj
@@ -1847,7 +1847,7 @@ protected:
   std::string upload_id;
   RGWAccessControlPolicy policy;
   ceph::real_time mtime;
-  jspan multipart_trace;
+  jspan_ptr multipart_trace;
 
 public:
   RGWInitMultipart() {}
@@ -1875,7 +1875,7 @@ protected:
   std::string version_id;
   bufferlist data;
   std::unique_ptr<rgw::sal::MPSerializer> serializer;
-  jspan multipart_trace;
+  jspan_ptr multipart_trace;
 
 public:
   RGWCompleteMultipart() {}
@@ -1896,7 +1896,7 @@ public:
 
 class RGWAbortMultipart : public RGWOp {
 protected:
-  jspan multipart_trace;
+  jspan_ptr multipart_trace;
 public:
   RGWAbortMultipart() {}
 

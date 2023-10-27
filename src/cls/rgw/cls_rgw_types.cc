@@ -385,39 +385,31 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key,
                                 RGWObjCategory *category,
                                 rgw_bucket_category_stats *accounted_stats)
 {
-  bool account = false;
-  auto iter = data.cbegin();
   using ceph::decode;
-  switch (type) {
-    case BIIndexType::Plain:
-        account = true;
-        // NO BREAK; falls through to case InstanceIdx:
-    case BIIndexType::Instance:
-      {
-        rgw_bucket_dir_entry entry;
-        decode(entry, iter);
-        account = (account && entry.exists);
-        *key = entry.key;
-        *category = entry.meta.category;
-        accounted_stats->num_entries++;
-        accounted_stats->total_size += entry.meta.accounted_size;
-        accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
-        accounted_stats->actual_size += entry.meta.size;
-      }
-      break;
-    case BIIndexType::OLH:
-      {
-        rgw_bucket_olh_entry entry;
-        decode(entry, iter);
-        *key = entry.key;
-      }
-      break;
-    default:
-      break;
+  auto iter = data.cbegin();
+  if (type == BIIndexType::OLH) {
+    rgw_bucket_olh_entry entry;
+    decode(entry, iter);
+    *key = entry.key;
+    return false;
   }
 
-  return account;
+  rgw_bucket_dir_entry entry;
+  decode(entry, iter);
+  *key = entry.key;
+  *category = entry.meta.category;
+  accounted_stats->num_entries++;
+  accounted_stats->total_size += entry.meta.accounted_size;
+  accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
+  accounted_stats->actual_size += entry.meta.size;
+  if (type == BIIndexType::Plain) {
+    return entry.exists && entry.flags == 0;
+  } else if (type == BIIndexType::Instance) {
+    return entry.exists;
+  }
+  return false;
 }
+
 void rgw_cls_bi_entry::generate_test_instances(list<rgw_cls_bi_entry*>& o)
 {
   using ceph::encode;

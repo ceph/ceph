@@ -36,28 +36,21 @@ public:
 };
 
 class RGWListBuckets_ObjStore_SWIFT : public RGWListBuckets_ObjStore {
-  bool need_stats;
-  bool wants_reversed;
+  bool need_stats{true};
+  bool wants_reversed{false};
   std::string prefix;
-  std::vector<rgw::sal::BucketList> reverse_buffer;
+  std::deque<RGWBucketEnt> reverse_buffer;
 
   uint64_t get_default_max() const override {
     return 0;
   }
 
 public:
-  RGWListBuckets_ObjStore_SWIFT()
-    : need_stats(true),
-      wants_reversed(false) {
-  }
-  ~RGWListBuckets_ObjStore_SWIFT() override {}
-
   int get_params(optional_yield y) override;
-  void handle_listing_chunk(rgw::sal::BucketList&& buckets) override;
+  void handle_listing_chunk(std::span<RGWBucketEnt> buckets) override;
   void send_response_begin(bool has_buckets) override;
-  void send_response_data(rgw::sal::BucketList& buckets) override;
-  void send_response_data_reversed(rgw::sal::BucketList& buckets);
-  void dump_bucket_entry(const rgw::sal::Bucket& obj);
+  void send_response_data(std::span<const RGWBucketEnt> buckets) override;
+  void dump_bucket_entry(const RGWBucketEnt& ent);
   void send_response_end() override;
 
   bool should_get_stats() override { return need_stats; }

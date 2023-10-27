@@ -63,6 +63,7 @@ struct MaskedOption {
   const Option *opt;              ///< the option
   OptionMask mask;
   std::unique_ptr<const Option> unknown_opt; ///< if fabricated for an unknown option
+  std::string localized_name;     ///< localized name for the option
 
   MaskedOption(const Option *o, bool fab=false) : opt(o) {
     if (fab) {
@@ -74,6 +75,7 @@ struct MaskedOption {
     opt = o.opt;
     mask = std::move(o.mask);
     unknown_opt = std::move(o.unknown_opt);
+    localized_name = std::move(o.localized_name);
   }
   const MaskedOption& operator=(const MaskedOption& o) = delete;
   const MaskedOption& operator=(MaskedOption&& o) = delete;

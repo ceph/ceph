@@ -241,7 +241,7 @@ class TestDevice(object):
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_removable_device(self, fake_call, device_info):
-        data = {"/dev/sdb": {"removable": 1}}
+        data = {"/dev/sdb": {"removable": "1"}}
         lsblk = {"TYPE": "disk", "NAME": "sdb"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/sdb")
@@ -249,7 +249,7 @@ class TestDevice(object):
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_device_with_gpt_headers(self, fake_call, device_info):
-        data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
+        data = {"/dev/sdb": {"removable": "0", "size": 5368709120}}
         lsblk = {"TYPE": "disk", "NAME": "sdb"}
         blkid= {"PTTYPE": "gpt"}
         device_info(
@@ -262,7 +262,7 @@ class TestDevice(object):
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_accept_non_removable_device(self, fake_call, device_info):
-        data = {"/dev/sdb": {"removable": 0, "size": 5368709120}}
+        data = {"/dev/sdb": {"removable": "0", "size": 5368709120}}
         lsblk = {"TYPE": "disk", "NAME": "sdb"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/sdb")
@@ -286,7 +286,7 @@ class TestDevice(object):
                                       fake_call):
         m_os_path_islink.return_value = True
         m_os_path_realpath.return_value = '/dev/sdb'
-        data = {"/dev/sdb": {"ro": 0, "size": 5368709120}}
+        data = {"/dev/sdb": {"ro": "0", "size": 5368709120}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/test_symlink")
@@ -304,7 +304,7 @@ class TestDevice(object):
                                              fake_call):
         m_os_path_islink.return_value = True
         m_os_readlink.return_value = '/dev/dm-0'
-        data = {"/dev/mapper/mpatha": {"ro": 0, "size": 5368709120}}
+        data = {"/dev/mapper/mpatha": {"ro": "0", "size": 5368709120}}
         lsblk = {"TYPE": "disk"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/mapper/mpatha")
@@ -312,7 +312,7 @@ class TestDevice(object):
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_reject_readonly_device(self, fake_call, device_info):
-        data = {"/dev/cdrom": {"ro": 1}}
+        data = {"/dev/cdrom": {"ro": "1"}}
         lsblk = {"TYPE": "disk", "NAME": "cdrom"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/cdrom")
@@ -328,7 +328,7 @@ class TestDevice(object):
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)
     def test_accept_non_readonly_device(self, fake_call, device_info):
-        data = {"/dev/sda": {"ro": 0, "size": 5368709120}}
+        data = {"/dev/sda": {"ro": "0", "size": 5368709120}}
         lsblk = {"TYPE": "disk", "NAME": "sda"}
         device_info(devices=data,lsblk=lsblk)
         disk = device.Device("/dev/sda")
@@ -594,10 +594,10 @@ class TestDeviceOrdering(object):
 
     def setup_method(self):
         self.data = {
-                "/dev/sda": {"removable": 0},
-                "/dev/sdb": {"removable": 1}, # invalid
-                "/dev/sdc": {"removable": 0},
-                "/dev/sdd": {"removable": 1}, # invalid
+                "/dev/sda": {"removable": "0"},
+                "/dev/sdb": {"removable": "1"}, # invalid
+                "/dev/sdc": {"removable": "0"},
+                "/dev/sdd": {"removable": "1"}, # invalid
         }
 
     @patch("ceph_volume.util.disk.has_bluestore_label", lambda x: False)

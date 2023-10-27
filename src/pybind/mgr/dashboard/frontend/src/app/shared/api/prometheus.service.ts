@@ -32,6 +32,12 @@ export class PrometheusService {
 
   constructor(private http: HttpClient) {}
 
+  unsubscribe() {
+    if (this.timerGetPrometheusDataSub) {
+      this.timerGetPrometheusDataSub.unsubscribe();
+    }
+  }
+
   getPrometheusData(params: any): any {
     return this.http.get<any>(`${this.baseURL}/data`, { params });
   }

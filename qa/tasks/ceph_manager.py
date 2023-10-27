@@ -234,6 +234,7 @@ class OSDThrasher(Thrasher):
         self.chance_thrash_pg_upmap_items = self.config.get('chance_thrash_pg_upmap', 1.0)
         self.random_eio = self.config.get('random_eio')
         self.chance_force_recovery = self.config.get('chance_force_recovery', 0.3)
+        self.chance_reset_purged_snaps_last = self.config.get('chance_reset_purged_snaps_last', 0.3)
 
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * len(num_osds)
@@ -779,6 +780,19 @@ class OSDThrasher(Thrasher):
         else:
            self.cancel_force_recovery()
 
+    def reset_purged_snaps_last(self):
+        """
+        Run reset_purged_snaps_last
+        """
+        self.log('reset_purged_snaps_last')
+        for osd in self.in_osds:
+            try:
+               self.ceph_manager.raw_cluster_cmd(
+               'tell', "osd.%s" % (str(osd)),
+               'reset_purged_snaps_last')
+            except CommandFailedError:
+                self.log('Failed to reset_purged_snaps_last, ignoring')
+
     def all_up(self):
         """
         Make sure all osds are up and not out.
@@ -1229,6 +1243,8 @@ class OSDThrasher(Thrasher):
             actions.append((self.thrash_pg_upmap_items, self.chance_thrash_pg_upmap_items,))
         if self.chance_force_recovery > 0:
             actions.append((self.force_cancel_recovery, self.chance_force_recovery))
+        if self.chance_reset_purged_snaps_last > 0:
+            actions.append((self.reset_purged_snaps_last, self.chance_reset_purged_snaps_last))
 
         for key in ['heartbeat_inject_failure', 'filestore_inject_stall']:
             for scenario in [

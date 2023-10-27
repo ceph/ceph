@@ -55,8 +55,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
   fsalAvailabilityError: string = null;
 
   defaultAccessType = { RGW: 'RO' };
-  nfsAccessType: any[] = this.nfsService.nfsAccessType;
-  nfsSquash: any[] = Object.keys(this.nfsService.nfsSquash);
+  nfsAccessType: any[] = [];
+  nfsSquash: any[] = [];
 
   action: string;
   resource: string;
@@ -93,10 +93,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
     super();
     this.permission = this.authStorageService.getPermissions().pool;
     this.resource = $localize`NFS export`;
-    this.createForm();
   }
 
   ngOnInit() {
+    this.nfsAccessType = this.nfsService.nfsAccessType;
+    this.nfsSquash = Object.keys(this.nfsService.nfsSquash);
+    this.createForm();
     const promises: Observable<any>[] = [
       this.nfsService.listClusters(),
       this.nfsService.fsals(),

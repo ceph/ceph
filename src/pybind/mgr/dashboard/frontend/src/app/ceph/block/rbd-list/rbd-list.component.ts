@@ -63,10 +63,6 @@ export class RbdListComponent extends ListWithDetails implements OnInit {
   deleteTpl: TemplateRef<any>;
   @ViewChild('removingStatTpl', { static: true })
   removingStatTpl: TemplateRef<any>;
-  @ViewChild('provisionedNotAvailableTooltipTpl', { static: true })
-  provisionedNotAvailableTooltipTpl: TemplateRef<any>;
-  @ViewChild('totalProvisionedNotAvailableTooltipTpl', { static: true })
-  totalProvisionedNotAvailableTooltipTpl: TemplateRef<any>;
   @ViewChild('forcePromoteConfirmation', { static: true })
   forcePromoteConfirmation: TemplateRef<any>;
   @ViewChild('usedTmpl', { static: true })

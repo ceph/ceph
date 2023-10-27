@@ -21,6 +21,7 @@
 #include "common/utf8.h"
 #include "common/ceph_json.h"
 #include "common/static_ptr.h"
+#include "common/perf_counters_key.h"
 #include "rgw_tracer.h"
 
 #include "rgw_rados.h"
@@ -1691,7 +1692,8 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
     return 0;
   }
 
-  perfcounter->inc(l_rgw_get_b, cur_end - cur_ofs);
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_get_obj_b, cur_end - cur_ofs);
   filter->fixup_range(cur_ofs, cur_end);
   op_ret = read_op->iterate(this, cur_ofs, cur_end, filter, s->yield);
   if (op_ret >= 0)
@@ -1764,8 +1766,9 @@ static int iterate_user_manifest_parts(const DoutPrefixProvider *dpp,
 	found_end = true;
       }
 
-      perfcounter->tinc(l_rgw_get_lat,
-			(ceph_clock_now() - start_time));
+      rgw::op_counters::CountersContainer counters;
+      rgw::op_counters::tinc(counters, l_rgw_op_get_obj_lat,
+                            (ceph_clock_now() - start_time));
 
       if (found_start && !handled_end) {
         len_count += end_ofs - start_ofs;
@@ -1860,8 +1863,9 @@ static int iterate_slo_parts(const DoutPrefixProvider *dpp,
       found_end = true;
     }
 
-    perfcounter->tinc(l_rgw_get_lat,
-		      (ceph_clock_now() - start_time));
+    rgw::op_counters::CountersContainer counters;
+    rgw::op_counters::tinc(counters, l_rgw_op_get_obj_lat,
+                          (ceph_clock_now() - start_time));
 
     if (found_start) {
       if (cb) {
@@ -2208,7 +2212,8 @@ void RGWGetObj::execute(optional_yield y)
   std::unique_ptr<RGWGetObj_Filter> run_lua;
   map<string, bufferlist>::iterator attr_iter;
 
-  perfcounter->inc(l_rgw_get);
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_get_obj, 1);
 
   std::unique_ptr<rgw::sal::Object::ReadOp> read_op(s->object->get_read_op());
 
@@ -2406,14 +2411,15 @@ void RGWGetObj::execute(optional_yield y)
     return;
   }
 
-  perfcounter->inc(l_rgw_get_b, end - ofs);
+  rgw::op_counters::inc(counters, l_rgw_op_get_obj_b, end-ofs);
 
   op_ret = read_op->iterate(this, ofs_x, end_x, filter, s->yield);
 
   if (op_ret >= 0)
     op_ret = filter->flush();
 
-  perfcounter->tinc(l_rgw_get_lat, s->time_elapsed());
+  rgw::op_counters::tinc(counters, l_rgw_op_get_obj_lat, s->time_elapsed());
+
   if (op_ret < 0) {
     goto done_err;
   }
@@ -2489,29 +2495,49 @@ void RGWListBuckets::execute(optional_yield y)
 
   const uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
 
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_list_buckets, 1);
+
+  auto g = make_scope_guard([this, &started] {
+      if (!started) {
+        send_response_begin(false);
+      }
+      send_response_end();
+    });
+
   op_ret = get_params(y);
   if (op_ret < 0) {
-    goto send_end;
+    return;
   }
 
   if (supports_account_metadata()) {
     op_ret = s->user->read_attrs(this, s->yield);
     if (op_ret < 0) {
-      goto send_end;
+      return;
     }
   }
 
-  is_truncated = false;
+  /* We need to have stats for all our policies - even if a given policy
+   * isn't actually used in a given account. In such situation its usage
+   * stats would be simply full of zeros. */
+  std::set<std::string> targets;
+  driver->get_zone()->get_zonegroup().get_placement_target_names(targets);
+  for (const auto& policy : targets) {
+    policies_stats[policy] = {};
+  }
+
+  rgw::sal::BucketList listing;
   do {
-    rgw::sal::BucketList buckets;
     uint64_t read_count;
-    if (limit >= 0) {
+    if (limit == 0) {
+      break;
+    } else if (limit > 0) {
       read_count = min(limit - total_count, max_buckets);
     } else {
       read_count = max_buckets;
     }
 
-    op_ret = s->user->list_buckets(this, marker, end_marker, read_count, should_get_stats(), buckets, y);
+    op_ret = s->user->list_buckets(this, marker, end_marker, read_count, should_get_stats(), listing, y);
 
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
@@ -2521,58 +2547,35 @@ void RGWListBuckets::execute(optional_yield y)
       break;
     }
 
-    is_truncated = buckets.is_truncated();
+    marker = listing.next_marker;
 
-    /* We need to have stats for all our policies - even if a given policy
-     * isn't actually used in a given account. In such situation its usage
-     * stats would be simply full of zeros. */
-    std::set<std::string> targets;
-    if (driver->get_zone()->get_zonegroup().get_placement_target_names(targets)) {
-      for (const auto& policy : targets) {
-	policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
-      }
-    }
-
-    std::map<std::string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();
-    for (const auto& kv : m) {
-      const auto& bucket = kv.second;
-
-      global_stats.bytes_used += bucket->get_size();
-      global_stats.bytes_used_rounded += bucket->get_size_rounded();
-      global_stats.objects_count += bucket->get_count();
+    for (const auto& ent : listing.buckets) {
+      global_stats.bytes_used += ent.size;
+      global_stats.bytes_used_rounded += ent.size_rounded;
+      global_stats.objects_count += ent.count;
 
       /* operator[] still can create a new entry for storage policy seen
        * for first time. */
-      auto& policy_stats = policies_stats[bucket->get_placement_rule().to_str()];
-      policy_stats.bytes_used += bucket->get_size();
-      policy_stats.bytes_used_rounded += bucket->get_size_rounded();
+      auto& policy_stats = policies_stats[ent.placement_rule.to_str()];
+      policy_stats.bytes_used += ent.size;
+      policy_stats.bytes_used_rounded += ent.size_rounded;
       policy_stats.buckets_count++;
-      policy_stats.objects_count += bucket->get_count();
+      policy_stats.objects_count += ent.count;
     }
-    global_stats.buckets_count += m.size();
-    total_count += m.size();
+    global_stats.buckets_count += listing.buckets.size();
+    total_count += listing.buckets.size();
 
-    done = (m.size() < read_count || (limit >= 0 && total_count >= (uint64_t)limit));
+    done = (limit >= 0 && std::cmp_greater_equal(total_count, limit));
 
     if (!started) {
-      send_response_begin(buckets.count() > 0);
+      send_response_begin(!listing.buckets.empty());
       started = true;
     }
 
-    if (read_count > 0 &&
-        !m.empty()) {
-      auto riter = m.rbegin();
-      marker = riter->first;
-
-      handle_listing_chunk(std::move(buckets));
-    }
-  } while (is_truncated && !done);
-
-send_end:
-  if (!started) {
-    send_response_begin(false);
-  }
-  send_response_end();
+    handle_listing_chunk(listing.buckets);
+  } while (!marker.empty() && !done);
+  
+  rgw::op_counters::tinc(counters, l_rgw_op_list_buckets_lat, s->time_elapsed());
 }
 
 void RGWGetUsage::execute(optional_yield y)
@@ -2650,58 +2653,44 @@ int RGWStatAccount::verify_permission(optional_yield y)
 
 void RGWStatAccount::execute(optional_yield y)
 {
-  string marker;
-  rgw::sal::BucketList buckets;
   uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
-  const string *lastmarker;
 
+  /* We need to have stats for all our policies - even if a given policy
+   * isn't actually used in a given account. In such situation its usage
+   * stats would be simply full of zeros. */
+  std::set<std::string> names;
+  driver->get_zone()->get_zonegroup().get_placement_target_names(names);
+  for (const auto& policy : names) {
+    policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
+  }
+
+  rgw::sal::BucketList listing;
   do {
-
-    lastmarker = nullptr;
-    op_ret = s->user->list_buckets(this, marker, string(), max_buckets, true, buckets, y);
+    op_ret = s->user->list_buckets(this, listing.next_marker, string(),
+                                   max_buckets, true, listing, y);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
       ldpp_dout(this, 10) << "WARNING: failed on list_buckets uid="
 			<< s->user->get_id() << " ret=" << op_ret << dendl;
-      break;
-    } else {
-      /* We need to have stats for all our policies - even if a given policy
-       * isn't actually used in a given account. In such situation its usage
-       * stats would be simply full of zeros. */
-      std::set<std::string> names;
-      driver->get_zone()->get_zonegroup().get_placement_target_names(names);
-      for (const auto& policy : names) {
-        policies_stats.emplace(policy, decltype(policies_stats)::mapped_type());
-      }
-
-      std::map<std::string, std::unique_ptr<rgw::sal::Bucket>>& m = buckets.get_buckets();
-      for (const auto& kv : m) {
-        const auto& bucket = kv.second;
-	lastmarker = &kv.first;
-
-        global_stats.bytes_used += bucket->get_size();
-        global_stats.bytes_used_rounded += bucket->get_size_rounded();
-        global_stats.objects_count += bucket->get_count();
-
-        /* operator[] still can create a new entry for storage policy seen
-         * for first time. */
-        auto& policy_stats = policies_stats[bucket->get_placement_rule().to_str()];
-        policy_stats.bytes_used += bucket->get_size();
-        policy_stats.bytes_used_rounded += bucket->get_size_rounded();
-        policy_stats.buckets_count++;
-        policy_stats.objects_count += bucket->get_count();
-      }
-      global_stats.buckets_count += m.size();
-
+      return;
     }
-    if (!lastmarker) {
-	ldpp_dout(this, -1) << "ERROR: rgw_read_user_buckets, stasis at marker="
-	      << marker << " uid=" << s->user->get_id() << dendl;
-	break;
+
+    for (const auto& ent : listing.buckets) {
+      global_stats.bytes_used += ent.size;
+      global_stats.bytes_used_rounded += ent.size_rounded;
+      global_stats.objects_count += ent.count;
+
+      /* operator[] still can create a new entry for storage policy seen
+       * for first time. */
+      auto& policy_stats = policies_stats[ent.placement_rule.to_str()];
+      policy_stats.bytes_used += ent.size;
+      policy_stats.bytes_used_rounded += ent.size_rounded;
+      policy_stats.buckets_count++;
+      policy_stats.objects_count += ent.count;
     }
-    marker = *lastmarker;
-  } while (buckets.is_truncated());
+    global_stats.buckets_count += listing.buckets.size();
+  } while (!listing.next_marker.empty());
 }
 
 int RGWGetBucketVersioning::verify_permission(optional_yield y)
@@ -2956,6 +2945,22 @@ void RGWStatBucket::pre_exec()
   rgw_bucket_object_pre_exec(s);
 }
 
+// read the bucket's stats for RGWObjCategory::Main
+static int load_bucket_stats(const DoutPrefixProvider* dpp, optional_yield y,
+                             rgw::sal::Bucket& bucket, RGWStorageStats& stats)
+{
+  const auto& index = bucket.get_info().layout.current_index;
+  std::string bver, mver; // ignored
+  std::map<RGWObjCategory, RGWStorageStats> categories;
+
+  int r = bucket.read_stats(dpp, index, -1, &bver, &mver, categories);
+  if (r < 0) {
+    return r;
+  }
+  stats = categories[RGWObjCategory::Main];
+  return 0;
+}
+
 void RGWStatBucket::execute(optional_yield y)
 {
   if (!s->bucket_exists) {
@@ -2967,7 +2972,8 @@ void RGWStatBucket::execute(optional_yield y)
   if (op_ret) {
     return;
   }
-  op_ret = bucket->update_container_stats(s, y);
+
+  op_ret = load_bucket_stats(this, y, *s->bucket, stats);
 }
 
 int RGWListBucket::verify_permission(optional_yield y)
@@ -3030,7 +3036,10 @@ void RGWListBucket::execute(optional_yield y)
   }
 
   if (need_container_stats()) {
-    op_ret = s->bucket->update_container_stats(s, y);
+    stats.emplace();
+    if (int ret = load_bucket_stats(this, y, *s->bucket, *stats); ret < 0) {
+      stats = std::nullopt; // just don't return stats
+    }
   }
 
   rgw::sal::Bucket::ListParams params;
@@ -3051,6 +3060,10 @@ void RGWListBucket::execute(optional_yield y)
     objs = std::move(results.objs);
     common_prefixes = std::move(results.common_prefixes);
   }
+
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_list_obj, 1);
+  rgw::op_counters::tinc(counters, l_rgw_op_list_obj_lat, s->time_elapsed());
 }
 
 int RGWGetBucketLogging::verify_permission(optional_yield y)
@@ -3069,6 +3082,36 @@ int RGWGetBucketLocation::verify_permission(optional_yield y)
     rgw_iam_add_buckettags(this, s);
 
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLocation);
+}
+
+// list the user's buckets to check whether they're at their maximum
+static int check_user_max_buckets(const DoutPrefixProvider* dpp,
+                                  rgw::sal::User& user, optional_yield y)
+{
+  int32_t remaining = user.get_max_buckets();
+  if (!remaining) { // unlimited
+    return 0;
+  }
+
+  uint64_t max_buckets = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+
+  rgw::sal::BucketList listing;
+  do {
+    size_t to_read = std::max<size_t>(max_buckets, remaining);
+
+    int ret = user.list_buckets(dpp, listing.next_marker, string(),
+                                to_read, false, listing, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    remaining -= listing.buckets.size();
+    if (remaining <= 0) {
+      return -ERR_TOO_MANY_BUCKETS;
+    }
+  } while (!listing.next_marker.empty());
+
+  return 0;
 }
 
 int RGWCreateBucket::verify_permission(optional_yield y)
@@ -3103,21 +3146,7 @@ int RGWCreateBucket::verify_permission(optional_yield y)
     return -EPERM;
   }
 
-  if (s->user->get_max_buckets()) {
-    rgw::sal::BucketList buckets;
-    string marker;
-    op_ret = s->user->list_buckets(this, marker, string(), s->user->get_max_buckets(),
-				   false, buckets, y);
-    if (op_ret < 0) {
-      return op_ret;
-    }
-
-    if ((int)buckets.count() >= s->user->get_max_buckets()) {
-      return -ERR_TOO_MANY_BUCKETS;
-    }
-  }
-
-  return 0;
+  return check_user_max_buckets(this, *s->user, y);
 }
 
 void RGWCreateBucket::pre_exec()
@@ -3355,7 +3384,7 @@ void RGWCreateBucket::execute(optional_yield y)
     }
   }
 
-  s->bucket_owner.set_id(s->user->get_id()); /* XXX dang use s->bucket->owner */
+  s->bucket_owner.set_id(s->user->get_id());
   s->bucket_owner.set_name(s->user->get_display_name());
 
   string zonegroup_id;
@@ -3535,7 +3564,7 @@ void RGWDeleteBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = s->bucket->sync_user_stats(this, y);
+  op_ret = s->bucket->sync_user_stats(this, y, nullptr);
   if ( op_ret < 0) {
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
@@ -3556,7 +3585,7 @@ void RGWDeleteBucket::execute(optional_yield y)
     return;
   }
 
-  op_ret = rgw_remove_sse_s3_bucket_key(s);
+  op_ret = rgw_remove_sse_s3_bucket_key(s, y);
   if (op_ret != 0) {
       // do nothing; it will already have been logged
   }
@@ -3567,6 +3596,10 @@ void RGWDeleteBucket::execute(optional_yield y)
       // in either case, we've already called ctl.bucket->unlink_bucket()
       op_ret = 0;
   }
+
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_del_bucket, 1);
+  rgw::op_counters::tinc(counters, l_rgw_op_del_bucket_lat, s->time_elapsed());
 
   return;
 }
@@ -3994,11 +4027,14 @@ void RGWPutObj::execute(optional_yield y)
   off_t fst;
   off_t lst;
 
+  auto counters = rgw::op_counters::get(s);
+
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
-  perfcounter->inc(l_rgw_put);
+  rgw::op_counters::inc(counters, l_rgw_op_put_obj, 1);
+
   // report latency on return
   auto put_lat = make_scope_guard([&] {
-      perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
+      rgw::op_counters::tinc(counters, l_rgw_op_put_obj_lat, s->time_elapsed());
     });
 
   op_ret = -EINVAL;
@@ -4273,7 +4309,7 @@ void RGWPutObj::execute(optional_yield y)
   s->obj_size = ofs;
   s->object->set_obj_size(ofs);
 
-  perfcounter->inc(l_rgw_put_b, s->obj_size);
+  rgw::op_counters::inc(counters, l_rgw_op_put_obj_b, s->obj_size);
 
   op_ret = do_aws4_auth_completion();
   if (op_ret < 0) {
@@ -4376,10 +4412,11 @@ void RGWPutObj::execute(optional_yield y)
   }
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
+  const req_context rctx{this, s->yield, s->trace.get()};
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
-                               s->yield);
+                               rctx);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
 
   // send request to notification manager
@@ -4644,10 +4681,11 @@ void RGWPostObj::execute(optional_yield y)
       emplace_attr(RGW_ATTR_COMPRESSION, std::move(tmp));
     }
 
+    const req_context rctx{this, s->yield, s->trace.get()};
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(), attrs,
                                 (delete_at ? *delete_at : real_time()),
                                 nullptr, nullptr, nullptr, nullptr, nullptr,
-                                s->yield);
+                                rctx);
     if (op_ret < 0) {
       return;
     }
@@ -4896,7 +4934,6 @@ void RGWPutMetadataObject::pre_exec()
 
 void RGWPutMetadataObject::execute(optional_yield y)
 {
-  rgw_obj target_obj;
   rgw::sal::Attrs attrs, rmattrs;
 
   s->object->set_atomic();
@@ -4912,7 +4949,7 @@ void RGWPutMetadataObject::execute(optional_yield y)
   }
 
   /* check if obj exists, read orig attrs */
-  op_ret = s->object->get_obj_attrs(s->yield, s, &target_obj);
+  op_ret = s->object->get_obj_attrs(s->yield, s);
   if (op_ret < 0) {
     return;
   }
@@ -5230,6 +5267,11 @@ void RGWDeleteObj::execute(optional_yield y)
     if (op_ret == -ERR_PRECONDITION_FAILED && no_precondition_error) {
       op_ret = 0;
     }
+
+    auto counters = rgw::op_counters::get(s);
+    rgw::op_counters::inc(counters, l_rgw_op_del_obj, 1);
+    rgw::op_counters::inc(counters, l_rgw_op_del_obj_b, obj_size);
+    rgw::op_counters::tinc(counters, l_rgw_op_del_obj_lat, s->time_elapsed());
 
     // send request to notification manager
     int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
@@ -5690,6 +5732,11 @@ void RGWCopyObj::execute(optional_yield y)
     ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
     // too late to rollback operation, hence op_ret is not set here
   }
+
+  auto counters = rgw::op_counters::get(s);
+  rgw::op_counters::inc(counters, l_rgw_op_copy_obj, 1);
+  rgw::op_counters::inc(counters, l_rgw_op_copy_obj_b, obj_size);
+  rgw::op_counters::tinc(counters, l_rgw_op_copy_obj_lat, s->time_elapsed());
 }
 
 int RGWGetACLs::verify_permission(optional_yield y)
@@ -7460,21 +7507,7 @@ RGWBulkUploadOp::handle_upload_path(req_state *s)
 
 int RGWBulkUploadOp::handle_dir_verify_permission(optional_yield y)
 {
-  if (s->user->get_max_buckets() > 0) {
-    rgw::sal::BucketList buckets;
-    std::string marker;
-    op_ret = s->user->list_buckets(this, marker, std::string(), s->user->get_max_buckets(),
-                                   false, buckets, y);
-    if (op_ret < 0) {
-      return op_ret;
-    }
-
-    if (buckets.count() >= static_cast<size_t>(s->user->get_max_buckets())) {
-      return -ERR_TOO_MANY_BUCKETS;
-    }
-  }
-
-  return 0;
+  return check_user_max_buckets(this, *s->user, y);
 }
 
 static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, req_info& info, const std::string& bucket_name)
@@ -7773,10 +7806,11 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   }
 
   /* Complete the transaction. */
+  const req_context rctx{this, s->yield, s->trace.get()};
   op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
                               attrs, ceph::real_time() /* delete_at */,
                               nullptr, nullptr, nullptr, nullptr, nullptr,
-                              s->yield);
+                              rctx);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;
   }

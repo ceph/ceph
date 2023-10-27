@@ -135,7 +135,7 @@ public:
     return 0;
   }
   void send_response_begin(bool has_buckets) override;
-  void send_response_data(rgw::sal::BucketList& buckets) override;
+  void send_response_data(std::span<const RGWBucketEnt> buckets) override;
   void send_response_end() override;
 };
 
@@ -882,7 +882,7 @@ inline int valid_s3_bucket_name(const std::string& name, bool relaxed=false)
       continue;
 
     if (c == '.') {
-      if (!relaxed && s && *s) {
+      if (!relaxed) {
 	// name cannot have consecutive periods or dashes
 	// adjacent to periods
 	// ensure s is neither the first nor the last character

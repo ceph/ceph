@@ -116,7 +116,7 @@ def task(ctx, config):
         if role == "all":
             continue
 
-        assert 'client' in role
+        assert 'client' in role, f"unexpected client name: {role}"
         created_mnt_dir = _make_scratch_dir(ctx, role, config.get('subdir'))
         created_mountpoint[role] = created_mnt_dir
 

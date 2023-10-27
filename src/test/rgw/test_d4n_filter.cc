@@ -25,6 +25,7 @@ string redisHost = "";
 vector<const char*> args;
 class Environment* env;
 const DoutPrefixProvider* dpp;
+const req_context rctx{dpp, null_yield, nullptr};
 
 class StoreObject : public rgw::sal::StoreObject {
   friend class D4NFilterFixture;
@@ -194,7 +195,7 @@ class D4NFilterFixture : public ::testing::Test {
                        &if_match, &if_nomatch,
                        &user_data,
                        &zones_trace, &canceled,
-                       null_yield);
+                       rctx);
 
       return ret;
     }
@@ -454,7 +455,7 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
 		   &if_match, &if_nomatch,
 		   &user_data,
 		   &zones_trace, &canceled,
-		   null_yield), 0);
+		   rctx), 0);
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
@@ -579,7 +580,7 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
 		   &if_match, &if_nomatch,
 		   &user_data,
 		   &zones_trace, &canceled,
-		   null_yield), 0);
+		   rctx), 0);
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
@@ -1763,8 +1764,6 @@ TEST_F(D4NFilterFixture, StoreGetMetadata) {
   EXPECT_EQ(storeObject->state.accounted_size, (uint64_t)200);
   EXPECT_EQ(storeObject->state.epoch, (uint64_t)3);
   EXPECT_EQ(storeObject->state.zone_short_id, (uint32_t)300);
-  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_count(), (uint64_t)10);
-  EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_size(), (uint64_t)20);
   EXPECT_EQ(info.quota.user_quota.max_size, (int64_t)0);
   EXPECT_EQ(info.quota.user_quota.max_objects, (int64_t)0);
   EXPECT_EQ(testObject_StoreGetMetadata->get_bucket()->get_owner()->get_max_buckets(), (int32_t)2000);
@@ -1906,7 +1905,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 
   ASSERT_EQ(testWriter->prepare(null_yield), 0);
   
-  ASSERT_EQ(testWriter->process(move(data), 0), 0);
+  ASSERT_EQ(testWriter->process(std::move(data), 0), 0);
 
   ASSERT_EQ(testWriter->complete(accounted_size, etag,
 		 &mtime, set_mtime,
@@ -1915,7 +1914,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 		 &if_match, &if_nomatch,
 		 &user_data,
 		 &zones_trace, &canceled,
-		 null_yield), 0);
+		 rctx), 0);
  
   client.hget("rgw-object:test_object_DataCheck:cache", "data", [&data](cpp_redis::reply& reply) {
     if (reply.is_string()) {
@@ -1931,7 +1930,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 
   ASSERT_EQ(testWriter->prepare(null_yield), 0);
   
-  ASSERT_EQ(testWriter->process(move(dataNew), 0), 0);
+  ASSERT_EQ(testWriter->process(std::move(dataNew), 0), 0);
 
   ASSERT_EQ(testWriter->complete(accounted_size, etag,
 		 &mtime, set_mtime,
@@ -1940,7 +1939,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 		 &if_match, &if_nomatch,
 		 &user_data,
 		 &zones_trace, &canceled,
-		 null_yield), 0);
+		 rctx), 0);
 
   client.hget("rgw-object:test_object_DataCheck:cache", "data", [&dataNew](cpp_redis::reply& reply) {
     if (reply.is_string()) {

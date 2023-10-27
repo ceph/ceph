@@ -24,9 +24,12 @@ endforeach()
 list(APPEND CMAKE_MODULE_PATH "${CMAKE_SOURCE_DIR}/cmake/modules/")
 
 if(NOT CMAKE_BUILD_TYPE AND EXISTS "${CMAKE_SOURCE_DIR}/.git")
+  message(WARNING "CMAKE_BUILD_TYPE not specified, assuming CMAKE_BUILD_TYPE=Debug because .git exists.")
   set(default_build_type "Debug")
   set(CMAKE_BUILD_TYPE "${default_build_type}" CACHE
       STRING "Default BUILD_TYPE is Debug, other options are: RelWithDebInfo, Release, and MinSizeRel." FORCE)
+else()
+  message(WARNING "CMAKE_BUILD_TYPE not specified, leaving unset because .git does NOT exist.")
 endif()
 
 if(CMAKE_SYSTEM_NAME MATCHES "Linux")
@@ -253,6 +256,15 @@ set(HAVE_LIBURING ${WITH_LIBURING})
 CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_LIBURING "Require and build with system liburing" OFF
   "HAVE_LIBAIO;WITH_BLUESTORE" OFF)
 
+if(WITH_LIBURING)
+  if(WITH_SYSTEM_LIBURING)
+    find_package(uring REQUIRED)
+  else()
+    include(Builduring)
+    build_uring()
+  endif()
+endif()
+
 CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
   "WITH_BLUESTORE" OFF)
 if(WITH_BLUESTORE_PMEM)
@@ -454,6 +466,7 @@ option(WITH_RADOSGW_DBSTORE "DBStore backend for RADOS Gateway" ON)
 option(WITH_RADOSGW_MOTR "CORTX-Motr backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_DAOS "DAOS backend for RADOS Gateway" OFF)
 option(WITH_RADOSGW_D4N "D4N wrapper for RADOS Gateway" ON)
+option(WITH_RADOSGW_POSIX "POSIX backend for Rados Gateway" ON)
 option(WITH_RADOSGW_SELECT_PARQUET "Support for s3 select on parquet objects" ON)
 option(WITH_RADOSGW_ARROW_FLIGHT "Build arrow flight when not using system-provided arrow" OFF)
 option(WITH_RADOSGW_BACKTRACE_LOGGING "Enable backtraces in rgw logs" OFF)

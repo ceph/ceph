@@ -416,6 +416,7 @@ RGWKMIPManagerImpl::add_request(RGWKMIPTransceiver *req)
     return -ECANCELED;
   // requests is a boost::intrusive::list, which manages pointers and does not copy the instance
   // coverity[leaked_storage:SUPPRESS]
+  // coverity[uninit_use_in_call:SUPPRESS]
   requests.push_back(*new Request{*req});
   l.unlock();
   if (worker)

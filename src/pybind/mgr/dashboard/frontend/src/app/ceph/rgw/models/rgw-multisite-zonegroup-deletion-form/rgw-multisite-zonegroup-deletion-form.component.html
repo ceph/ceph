@@ -1,6 +1,6 @@
 <cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title"
-                class="modal-title">Delete Zonegroup</ng-container>
+                class="modal-title">Delete Zone Group</ng-container>
 
   <ng-container class="modal-content">
     <form name="zonegroupForm"
@@ -8,12 +8,12 @@
           novalidate>
       <div class="modal-body ms-4">
         <label i18n>
-          This will delete your <strong>{{zonegroup?.name}}</strong> Zonegroup.
+          This will delete your <strong>{{zonegroup?.name}}</strong> Zone Group.
         </label>
         <ng-container *ngIf="zonesList.length > 0">
           <label class="mt-3"
                  i18n>
-              Do you want to delete the associated zones and pools with the <strong>{{zonegroup?.name}}</strong> Zonegroup?</label>
+              Do you want to delete the associated zones and pools with the <strong>{{zonegroup?.name}}</strong> Zone Group?</label>
           <ng-container *ngIf="includedPools.size > 0">
             <label i18n>
               This will delete the following:</label>

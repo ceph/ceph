@@ -257,6 +257,7 @@ options:
 	--no-parallel: dont start all OSDs in parallel
 	--no-restart: dont restart process when using ceph-run
 	--jaeger: use jaegertracing for tracing
+	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
@@ -534,6 +535,10 @@ case $1 in
         ;;
     --with-restful)
         with_mgr_restful=true
+        ;;
+    --seastore-device-size)
+        seastore_size="$2"
+        shift
         ;;
     --seastore-devs)
         parse_block_devs --seastore-devs "$2"
@@ -832,6 +837,14 @@ EOF
         bdev ioring = true"
         fi
     fi
+
+    if [ "$objectstore" == "seastore" ]; then
+      if [[ ${seastore_size+x} ]]; then
+        SEASTORE_OPTS="
+        seastore device size = $seastore_size"
+      fi
+    fi
+
     wconf <<EOF
 [client]
 $CCLIENTDEBUG
@@ -883,6 +896,7 @@ $BLUESTORE_OPTS
         ; kstore
         kstore fsck on mount = true
         osd objectstore = $objectstore
+$SEASTORE_OPTS
 $COSDSHORT
         $(format_conf "${extra_conf}")
 [mon]
@@ -1573,7 +1587,7 @@ EOF
     fi
     if [ "$cephadm" -gt 0 ]; then
         debug echo Setting mon public_network ...
-        public_network=$(ip route list | grep -w "$IP" | awk '{print $1}')
+        public_network=$(ip route list | grep -w "$IP" | grep -v default | awk '{print $1}')
         ceph_adm config set mon public_network $public_network
     fi
 fi
@@ -1782,7 +1796,7 @@ do_rgw()
             --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log \
             --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok \
             --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid \
-            --rgw_luarocks_location=${CEPH_OUT_DIR}/luarocks \
+            --rgw_luarocks_location=${CEPH_OUT_DIR}/radosgw.${current_port}.luarocks  \
             ${RGWDEBUG} \
             -n ${rgw_name} \
             "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}${flight_conf:+,arrow_flight}"

@@ -32,7 +32,6 @@ namespace rgw::flight {
 #endif
 
 struct RGWLuaProcessEnv {
-  std::string luarocks_path;
   rgw::lua::Background* background = nullptr;
   std::unique_ptr<rgw::sal::LuaManager> manager;
 };

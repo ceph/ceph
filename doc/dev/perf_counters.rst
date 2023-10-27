@@ -1,3 +1,5 @@
+.. _Perf Counters:
+
 ===============
  Perf counters
 ===============
@@ -199,6 +201,8 @@ The actual dump is similar to the schema, except that average values are grouped
       "put_sum" : 82760
    }
  }
+
+.. _Labeled Perf Counters:
 
 Labeled Perf Counters
 ---------------------
