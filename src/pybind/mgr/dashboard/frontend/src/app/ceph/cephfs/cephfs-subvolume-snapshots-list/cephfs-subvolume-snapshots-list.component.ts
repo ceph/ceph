@@ -1,5 +1,5 @@
 import { Component, Input, OnChanges, OnInit, SimpleChanges } from '@angular/core';
-import { Observable, ReplaySubject, forkJoin, of } from 'rxjs';
+import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
 import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
@@ -21,8 +21,8 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
 
   subVolumes$: Observable<CephfsSubvolume[]>;
   snapshots$: Observable<any[]>;
-  snapshotSubject = new ReplaySubject<SubvolumeSnapshot[]>();
-  subVolumeSubject = new ReplaySubject<CephfsSubvolume[]>();
+  snapshotSubject = new BehaviorSubject<SubvolumeSnapshot[]>([]);
+  subVolumeSubject = new BehaviorSubject<CephfsSubvolume[]>([]);
 
   subvolumeGroupList: string[] = [];
   subVolumesList: string[];
@@ -71,7 +71,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
       .get(this.fsName)
       .pipe(
         switchMap((groups) => {
-          // manually adding the group 'default' to the list.
+          // manually adding the group '_nogroup' to the list.
           groups.unshift({ name: '' });
 
           const observables = groups.map((group) =>
@@ -98,7 +98,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
 
   ngOnChanges(changes: SimpleChanges): void {
     if (changes.fsName) {
-      this.subVolumeSubject.next();
+      this.subVolumeSubject.next([]);
     }
   }
 
@@ -143,6 +143,6 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
   }
 
   fetchData() {
-    this.snapshotSubject.next();
+    this.snapshotSubject.next([]);
   }
 }
