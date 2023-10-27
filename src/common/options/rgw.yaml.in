@@ -3896,3 +3896,47 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_user_counters_cache
+  type: bool
+  level: dev
+  default: false
+  desc: enable a rgw perf counters cache for counters with user label
+  long desc: If set to true, rgw creates perf counters with a label for the user and stores them
+    in a perf counters cache. This perf counters cache contains only perf counters labeled by user.
+  see_also:
+  - rgw_user_counters_cache_size
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_user_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Number of labeled perf counters the user perf counters cache can store
+  default: 10000
+  services:
+  - rgw
+  see_also:
+  - rgw_user_counters_cache
+  with_legacy: true
+- name: rgw_bucket_counters_cache
+  type: bool
+  level: dev
+  default: false
+  desc: enable a rgw perf counters cache for counters with bucket label
+  long desc: If set to true, rgw creates perf counters with a label for the bucket and stores them
+    in a perf counters cache. This perf counters cache contains only perf counters labeled by bucket.
+  see_also:
+  - rgw_bucket_counters_cache_size
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_bucket_counters_cache_size
+  type: uint
+  level: advanced
+  desc: Number of labeled perf counters the bucket perf counters cache can store
+  default: 10000
+  services:
+  - rgw
+  see_also:
+  - rgw_bucket_counters_cache
+  with_legacy: true
