@@ -4275,6 +4275,8 @@ int main(int argc, const char **argv)
       cerr << "couldn't init config storage provider" << std::endl;
       return EIO;
     }
+
+    // this sal_config is only in scope for this block of the conditional on 4110
     JSONFormattable sal_config;
     sal_config.set("type", "rados");
 
