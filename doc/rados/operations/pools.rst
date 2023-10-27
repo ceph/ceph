@@ -499,41 +499,6 @@ You may set values for the following keys:
    :Type: Integer
    :Valid Range: ``1`` sets flag, ``0`` unsets flag
 
-.. _cache_target_dirty_ratio:
-
-.. describe:: cache_target_dirty_ratio
-
-   :Description: Sets a flush threshold for the percentage of the cache pool
-                 containing modified (dirty) objects. When this threshold is
-                 reached, the cache-tiering agent will flush these objects to
-                 the backing storage pool.
-   :Type: Double
-   :Default: ``.4``
-
-.. _cache_target_dirty_high_ratio:
-
-.. describe:: cache_target_dirty_high_ratio
-   
-   :Description: Sets a flush threshold for the percentage of the cache pool
-                 containing modified (dirty) objects. When this threshold is
-                 reached, the cache-tiering agent will flush these objects to
-                 the backing storage pool with a higher speed (as compared with
-                 ``cache_target_dirty_ratio``).
-   :Type: Double
-   :Default: ``.6``
-
-.. _cache_target_full_ratio:
-
-.. describe:: cache_target_full_ratio
-   
-   :Description: Sets an eviction threshold for the percentage of the cache
-                 pool containing unmodified (clean) objects. When this
-                 threshold is reached, the cache-tiering agent will evict 
-                 these objects from the cache pool.
-
-   :Type: Double
-   :Default: ``.8``
-
 .. _target_max_bytes:
 
 .. describe:: target_max_bytes
@@ -551,24 +516,6 @@ You may set values for the following keys:
                  ``max_objects`` threshold is triggered.
    :Type: Integer
    :Example: ``1000000`` #1M objects
-
-.. _cache_min_flush_age:
-
-.. describe:: cache_min_flush_age
-   
-   :Description: Sets the time (in seconds) before the cache-tiering agent
-                 flushes an object from the cache pool to the storage pool.
-   :Type: Integer
-   :Example: ``600`` (600 seconds: ten minutes)
-
-.. _cache_min_evict_age:
-
-.. describe:: cache_min_evict_age
-   
-   :Description: Sets the time (in seconds) before the cache-tiering agent
-                 evicts an object from the cache pool.
-   :Type: Integer
-   :Example: ``1800`` (1800 seconds: thirty minutes)
 
 .. _fast_read:
 
@@ -681,27 +628,6 @@ You may get values from the following keys:
 :Description: See crush_rule_.
 
 
-``cache_target_dirty_ratio``
-
-:Description: See cache_target_dirty_ratio_.
-
-:Type: Double
-
-
-``cache_target_dirty_high_ratio``
-
-:Description: See cache_target_dirty_high_ratio_.
-
-:Type: Double
-
-
-``cache_target_full_ratio``
-
-:Description: See cache_target_full_ratio_.
-
-:Type: Double
-
-
 ``target_max_bytes``
 
 :Description: See target_max_bytes_.
@@ -712,20 +638,6 @@ You may get values from the following keys:
 ``target_max_objects``
 
 :Description: See target_max_objects_.
-
-:Type: Integer
-
-
-``cache_min_flush_age``
-
-:Description: See cache_min_flush_age_.
-
-:Type: Integer
-
-
-``cache_min_evict_age``
-
-:Description: See cache_min_evict_age_.
 
 :Type: Integer
 
