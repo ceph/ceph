@@ -2166,8 +2166,6 @@ void PgScrubber::clear_pgscrub_state()
   state_clear(PG_STATE_SCRUBBING);
   state_clear(PG_STATE_DEEP_SCRUB);
 
-  state_clear(PG_STATE_REPAIR);
-
   m_local_osd_resource.reset();
   requeue_waiting();
 
