@@ -61,6 +61,7 @@ class Trash(GroupTemplate):
         """
         def rmtree(root_path):
             log.debug("rmtree {0}".format(root_path))
+
             try:
                 with self.fs.opendir(root_path) as dir_handle:
                     d = self.fs.readdir(dir_handle)
@@ -76,6 +77,7 @@ class Trash(GroupTemplate):
                 return
             except cephfs.Error as e:
                 raise VolumeException(-e.args[0], e.args[1])
+
             # remove the directory only if we were not asked to cancel
             # (else we would fail to remove this anyway)
             if not should_cancel():

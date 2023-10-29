@@ -104,10 +104,27 @@ class ThreadPoolPurgeQueueMixin(AsyncJobs):
     """
     def __init__(self, volume_client, tp_size):
         self.vc = volume_client
+        self.disable_purge_trash = False
         super(ThreadPoolPurgeQueueMixin, self).__init__(volume_client, "purgejob", tp_size)
+
+    def set_config_opt_disable_purge_trash(self, disable_purge_trash):
+        """
+        Set the value of the config option "disable_purge_trash" to the latest
+        value passed by the user. This allows not only stopping the purges in
+        the future but also allows halting ongoing purges midway.
+        """
+        self.disable_purge_trash = disable_purge_trash
+        if self.disable_purge_trash:
+            self.vc.purge_queue.cancel_all_jobs()
+
+    def should_purge_trash(self):
+        return not self.disable_purge_trash
 
     def get_next_job(self, volname, running_jobs):
         return get_trash_entry_for_volume(self.fs_client, self.vc.volspec, volname, running_jobs)
 
     def execute_job(self, volname, job, should_cancel):
+        if self.disable_purge_trash:
+            return
+
         purge_trash_entry_for_volume(self.fs_client, self.vc.volspec, volname, job, should_cancel)
