@@ -873,57 +873,76 @@ PG::do_osd_ops_execute(
   }).safe_then_unpack_interruptible(
     [success_func=std::move(success_func), rollbacker, this, failure_func_ptr]
     (auto submitted_fut, auto _pre_all_completed_fut) mutable {
+    /*
+    _pre_all_completed_fut  type is: osd_op_ierrorator::future<>
+    submitted_fut           type is: interruptible_future<>
+    */
 
-    auto pre_all_completed_fut = _pre_all_completed_fut.safe_then_interruptible_tuple(
-      std::move(success_func),
+    return _pre_all_completed_fut.safe_then_interruptible(
+    [success_func=std::move(success_func)] {
+        return success_func();
+    }).handle_error_interruptible(
       crimson::ct_error::object_corrupted::handle(
       [rollbacker, this] (const std::error_code& e) mutable {
       // this is a path for EIO. it's special because we want to fix the obejct
       // and try again. that is, the layer above `PG::do_osd_ops` is supposed to
       // restart the execution.
-      return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [obc=rollbacker.get_obc(), this] {
-        return repair_object(obc->obs.oi.soid,
-                             obc->obs.oi.version
-        ).then_interruptible([] {
+
+      //return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+      //[obc=rollbacker.get_obc(), this] {
+      //  return repair_object(obc->obs.oi.soid,
+      //                       obc->obs.oi.version
+      //  ).then_interruptible([] {
           auto all_completed_fut =
             do_osd_ops_iertr::future<Ret>{crimson::ct_error::eagain::make()};
 
-          return all_completed_fut;
-        });
-      });
+          return seastar::make_ready_future<
+            std::pair<seastar::future<>,
+                      do_osd_ops_iertr::future<Ret>>>(
+            std::make_pair(
+               std::move(seastar::now()),    // error_log_fut
+               std::move(all_completed_fut)) // all_completed_fut
+          );
+        //});
+      //});
     }), OpsExecuter::osd_op_errorator::all_same_way(
         [rollbacker, failure_func_ptr]
         (const std::error_code& e) mutable {
-          return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-          [e, failure_func_ptr] {
+          //return rollbacker.rollback_obc_if_modified(e).then_interruptible(
+          //[e, failure_func_ptr] {
             return (*failure_func_ptr)(e);
-          });
-    }));
-
-    return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
-      std::move(submitted_fut),        // submitted_fut
-      std::move(seastar::now()),       // error_log_fut
-      std::move(pre_all_completed_fut) // all_completed_fut
-    );
+          //});
+    })).then_interruptible(
+    [submitted_fut = std::move(submitted_fut)] (auto fut_pair) mutable {
+      return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
+        std::move(submitted_fut),  // submitted_fut
+        std::move(fut_pair.first), // error_log_fut
+        std::move(fut_pair.second) // all_completed_futt
+      );
+    });
   }, OpsExecuter::osd_op_errorator::all_same_way(
     [rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
 
-    auto pre_all_completed_fut = e.value() == ENOENT ?
-      (*failure_func_ptr)(e) :
-      rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [e, failure_func_ptr] {
-          return (*failure_func_ptr)(e);
-      });
+    OpsExecuter::interruptible_future<> maybe_rollback_fut = seastar::now();
 
-    return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
-      std::move(seastar::now()),       // submitted_fut
-      std::move(seastar::now()),       // error_log_fut
-      std::move(pre_all_completed_fut) // all_completed_fut
-    );
+    if (e.value() == ENOENT) {
+      maybe_rollback_fut = rollbacker.rollback_obc_if_modified(e);
+    }
+
+    // failure_func_ptr returns a pair of `error_log_fut` and `all_completed_fut`
+    return maybe_rollback_fut.then_interruptible([e, failure_func_ptr] {
+      return (*failure_func_ptr)(e).then([] (auto fut_pair) {
+        return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
+          std::move(seastar::now()), // submitted_fut
+          std::move(fut_pair.first), // error_log_fut
+          std::move(fut_pair.second) // all_completed_fut
+        );
+      });
+    });
   }));
 }
+
 seastar::future<> PG::submit_error_log(
   Ref<MOSDOp> m,
   const OpInfo &op_info,
@@ -1033,8 +1052,17 @@ PG::do_osd_ops(
         reply->set_reply_versions(peering_state.get_info().last_update,
           peering_state.get_info().last_user_version);
       }
-      return do_osd_ops_iertr::make_ready_future<MURef<MOSDOpReply>>(
-        std::move(reply));
+      auto error_log_fut = seastar::now();
+      auto all_completed_fut =
+        do_osd_ops_iertr::make_ready_future<MURef<MOSDOpReply>>(
+          std::move(reply));
+
+      return seastar::make_ready_future<
+        std::pair<seastar::future<>,
+                  do_osd_ops_iertr::future<MURef<MOSDOpReply>>>>(
+        std::make_pair(
+          std::move(error_log_fut),       // error_log_fut
+          std::move(all_completed_fut))); // all_completed_fut
     },
     // failure_func
     [m, &op_info, obc, this] (const std::error_code& e) {
@@ -1044,12 +1072,11 @@ PG::do_osd_ops(
       ceph_tid_t rep_tid = shard_services.get_tid();
       auto last_complete = peering_state.get_info().last_complete;
       if (op_info.may_write()) {
-        // This should be executed as OrderedExclusivePhaseT so that
-        // successive ops will not reorder.
-        // TODO: https://tracker.ceph.com/issues/61651
         error_log_fut = submit_error_log(m, op_info, obc, e, rep_tid, version);
       }
-      return error_log_fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete, this] {
+
+      auto all_completed =
+        [m, e, epoch, &op_info, rep_tid, &version, last_complete, this] {
         auto fut = seastar::now();
         if (!peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
           auto it = log_entry_update_waiting_on.find(rep_tid);
@@ -1075,7 +1102,14 @@ PG::do_osd_ops(
         return fut.then([this, m, e] {
           return log_reply(m, e);
         });
-      });
+      };
+
+      return seastar::make_ready_future<
+        std::pair<seastar::future<>,
+                  do_osd_ops_iertr::future<MURef<MOSDOpReply>>>>(
+        std::make_pair(
+          std::move(error_log_fut),  // error_log_fut
+          all_completed()));         // all_completed_fut
     });
   });
 }
@@ -1134,11 +1168,23 @@ PG::do_osd_ops(
       ops,
       // success_func
       [] {
-        return do_osd_ops_iertr::now();
+        return seastar::make_ready_future<
+          std::pair<seastar::future<>,
+                    do_osd_ops_iertr::future<void>>>(
+          std::make_pair(
+            std::move(seastar::now()),              // error_log_fut
+            std::move(PG::do_osd_ops_iertr::now())) // all_completed_fut
+        );
       },
       // failure_func
       [] (const std::error_code& e) {
-        return do_osd_ops_iertr::now();
+        return seastar::make_ready_future<
+          std::pair<seastar::future<>,
+                    do_osd_ops_iertr::future<void>>>(
+          std::make_pair(
+            std::move(seastar::now()),              // error_log_fut
+            std::move(PG::do_osd_ops_iertr::now())) // all_completed_fut
+        );
       });
   });
 }
