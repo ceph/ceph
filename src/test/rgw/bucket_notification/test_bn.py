@@ -4282,6 +4282,76 @@ def test_ps_s3_multiple_topics_notification():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
+@attr('basic_test')
+def test_ps_s3_topic_permissions():
+    """ test s3 topic set/get/delete permissions """
+    conn1 = connection()
+    conn2 = another_user()
+    zonegroup = 'default'
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name + TOPIC_SUFFIX
+    topic_policy = json.dumps({
+        "Version": "2012-10-17",
+        "Statement": [
+            {
+                "Sid": "Statement",
+                "Effect": "Deny",
+                "Principal": "*",
+                "Action": ["sns:Publish", "sns:SetTopicAttributes", "sns:GetTopicAttributes"],
+                "Resource": f"arn:aws:sns:{zonegroup}::{topic_name}"
+            }
+        ]
+    })
+    # create s3 topic with DENY policy
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args, policy_text=topic_policy)
+    topic_arn = topic_conf.set_config()
+
+    # 2nd user tries to fetch the topic
+    topic_conf2 = PSTopicS3(conn2, topic_name, zonegroup, endpoint_args=endpoint_args)
+    _, status = topic_conf2.get_config(topic_arn=topic_arn)
+    assert_equal(status, 403)
+    try:
+        # 2nd user tries to set the attribute
+        status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
+        assert False, "'AccessDenied' error is expected"
+    except Exception as err:
+        print(err)
+
+    # create bucket for conn2 and try publishing notification to topic
+    _ = conn2.create_bucket(bucket_name)
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+    try:
+        s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
+        _, status = s3_notification_conf2.set_config()
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as error:
+        assert_equal(error.response['Error']['Code'], 'AccessDenied')
+
+    # Topic policy is now added by the 1st user to allow 2nd user.
+    topic_policy  = topic_policy.replace("Deny", "Allow")
+    topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args, policy_text=topic_policy)
+    topic_arn = topic_conf.set_config()
+    # 2nd user try to fetch topic again
+    _, status = topic_conf2.get_config(topic_arn=topic_arn)
+    assert_equal(status, 200)
+    # 2nd user tries to set the attribute again
+    status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
+    assert_equal(status, 200)
+    # 2nd user tries to publish notification again
+    s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf2.set_config()
+    assert_equal(status, 200)
+
+    # cleanup
+    s3_notification_conf2.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    conn2.delete_bucket(bucket_name)
 
 def kafka_security(security_type, mechanism='PLAIN'):
     """ test pushing kafka s3 notification securly to master """
