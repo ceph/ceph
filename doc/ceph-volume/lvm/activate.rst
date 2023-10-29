@@ -10,8 +10,9 @@ This activation process enables a systemd unit that persists the OSD ID and its
 UUID (also called ``fsid`` in Ceph CLI tools), so that at boot time it can
 understand what OSD is enabled and needs to be mounted.
 
-.. note:: The execution of this call is fully idempotent, and there is no
-          side-effects when running multiple times
+.. note:: The execution of this call is fully idempotent. This means that the
+   call can be executed multiple times without changing the result of its first
+   successful execution.
 
 For OSDs deployed by cephadm, please refer to :ref:`cephadm-osd-activate`
 instead.
