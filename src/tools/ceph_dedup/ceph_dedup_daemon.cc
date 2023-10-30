@@ -40,6 +40,7 @@ po::options_description make_usage() {
     (",d", "run in foreground, log to stderr")
     (",f", "run in foreground, log to usual location")
     ("debug_ms", po::value<std::string>(), "set message debug level (e.g. 1)")
+    ("run-once", ": do a single iteration for debug")
   ;
   desc.add(op_desc);
   return desc;
@@ -647,6 +648,7 @@ int make_crawling_daemon(const po::variables_map &opts)
 {
   CephContext* _cct = g_ceph_context;
   struct ceph_dedup_options d_opts;
+  bool run_once = false; // for debug
 
   d_opts.set_conf(POOL, get_opts_pool_name(opts));
 
@@ -694,6 +696,10 @@ int make_crawling_daemon(const po::variables_map &opts)
     return -EINVAL;
   }
 
+  if (opts.count("run-once")) {
+    run_once = true;
+  }
+
   dout(0) << d_opts << dendl;
 
   while (!all_stop) {
@@ -726,7 +732,7 @@ int make_crawling_daemon(const po::variables_map &opts)
 	  shard_end,
 	  sample_dedup_global,
 	  snap,
-	  d_opts.load_checkpoint_info(i),
+	  run_once ? string() : d_opts.load_checkpoint_info(i),
 	  i == 0 ? true : false,
 	  d_opts);
 	threads.back().create("sample_dedup");
@@ -748,6 +754,10 @@ int make_crawling_daemon(const po::variables_map &opts)
     {
       lock_guard lock(glock);
       threads.clear();
+      if (run_once) {
+	all_stop = true;
+	break;
+      }
     }
     sleep(d_opts.get_wakeup_period());
 
