@@ -3291,6 +3291,13 @@ will start to track new ops received afterwards.";
       st.dump(f);
       f->close_section();
     }
+  } else if (prefix == "dump_osd_pg_stats") {
+    lock_guard l(osd_lock);
+
+    MPGStats* m = collect_pg_stats();
+    ceph_assert(m);
+    m->dump_stats(f);
+    m->put();
   } else {
     ceph_abort_msg("broken asok registration");
   }
@@ -4166,6 +4173,11 @@ void OSD::final_init()
   r = admin_socket->register_command(
     "dump_pool_statfs name=poolid,type=CephInt,req=true", asok_hook,
     "Dump store's statistics for the given pool");
+  ceph_assert(r == 0);
+
+  r = admin_socket->register_command(
+    "dump_osd_pg_stats ", asok_hook,
+    "Dump OSD PGs' statistics");
   ceph_assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store.get());

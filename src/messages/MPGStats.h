@@ -44,6 +44,31 @@ public:
   void print(std::ostream& out) const override {
     out << "pg_stats(" << pg_stat.size() << " pgs seq " << osd_stat.seq << " v " << version << ")";
   }
+  void dump_stats(ceph::Formatter *f) const {
+    f->open_object_section("stats");
+    {
+      f->open_array_section("pg_stat");
+      for(const auto& [_pg, _stat] : pg_stat) {
+        f->open_object_section("pg_stat");
+        _pg.dump(f);
+        _stat.dump(f);
+        f->close_section();
+      }
+      f->close_section();
+
+      f->dump_object("osd_stat", osd_stat);
+
+      f->open_array_section("pool_stat");
+      for(const auto& [_id, _stat] : pool_stat) {
+        f->open_object_section("pool");
+        f->dump_int("poolid", _id);
+        _stat.dump(f);
+        f->close_section();
+      }
+      f->close_section();
+    }
+    f->close_section();
+  }
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
