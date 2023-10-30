@@ -70,8 +70,8 @@ struct io_handler_state {
  */
 class HandshakeListener {
 public:
-  using crosscore_ordering_t = smp_crosscore_ordering_t<crosscore_type_t::ONE>;
-  using cc_seq_t = crosscore_ordering_t::seq_t;
+  using proto_crosscore_ordering_t = smp_crosscore_ordering_t<crosscore_type_t::ONE>;
+  using cc_seq_t = proto_crosscore_ordering_t::seq_t;
 
   virtual ~HandshakeListener() = default;
 
@@ -105,8 +105,9 @@ protected:
  */
 class IOHandler final : public ConnectionHandler {
 public:
-  using crosscore_ordering_t = smp_crosscore_ordering_t<crosscore_type_t::ONE>;
-  using cc_seq_t = crosscore_ordering_t::seq_t;
+  using io_crosscore_ordering_t = smp_crosscore_ordering_t<crosscore_type_t::N_ONE>;
+  using proto_crosscore_ordering_t = smp_crosscore_ordering_t<crosscore_type_t::ONE>;
+  using cc_seq_t = proto_crosscore_ordering_t::seq_t;
 
   IOHandler(ChainedDispatchers &,
             SocketConnection &);
@@ -131,7 +132,7 @@ public:
     return protocol_is_connected;
   }
 
-  seastar::future<> send(MessageFRef msg) final;
+  seastar::future<> send(MessageURef msg) final;
 
   seastar::future<> send_keepalive() final;
 
@@ -398,13 +399,13 @@ public:
 
   void assign_frame_assembler(FrameAssemblerV2Ref);
 
-  seastar::future<> send_redirected(MessageFRef msg);
+  seastar::future<> send_recheck_shard(cc_seq_t, core_id_t, MessageFRef);
 
-  seastar::future<> do_send(MessageFRef msg);
+  seastar::future<> do_send(cc_seq_t, core_id_t, MessageFRef);
 
-  seastar::future<> send_keepalive_redirected();
+  seastar::future<> send_keepalive_recheck_shard(cc_seq_t, core_id_t);
 
-  seastar::future<> do_send_keepalive();
+  seastar::future<> do_send_keepalive(cc_seq_t, core_id_t);
 
   seastar::future<> to_new_sid(
       cc_seq_t cc_seq,
@@ -467,7 +468,9 @@ public:
 private:
   shard_states_ref_t shard_states;
 
-  crosscore_ordering_t crosscore;
+  proto_crosscore_ordering_t proto_crosscore;
+
+  io_crosscore_ordering_t io_crosscore;
 
   // drop was happening in the previous sid
   std::optional<seastar::shard_id> maybe_dropped_sid;

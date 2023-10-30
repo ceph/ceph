@@ -98,6 +98,7 @@ auto sharded_map_seq(T &t, F &&f) {
 enum class crosscore_type_t {
   ONE,   // from 1 to 1 core
   ONE_N, // from 1 to n cores
+  N_ONE, // from n to 1 core
 };
 
 /**
@@ -109,7 +110,8 @@ template <crosscore_type_t CTypeValue>
 class smp_crosscore_ordering_t {
   static constexpr bool IS_ONE = (CTypeValue == crosscore_type_t::ONE);
   static constexpr bool IS_ONE_N = (CTypeValue == crosscore_type_t::ONE_N);
-  static_assert(IS_ONE || IS_ONE_N);
+  static constexpr bool IS_N_ONE = (CTypeValue == crosscore_type_t::N_ONE);
+  static_assert(IS_ONE || IS_ONE_N || IS_N_ONE);
 
 public:
   using seq_t = uint64_t;
@@ -117,7 +119,7 @@ public:
   smp_crosscore_ordering_t() requires IS_ONE
     : out_seqs(0) { }
 
-  smp_crosscore_ordering_t() requires IS_ONE_N
+  smp_crosscore_ordering_t() requires (!IS_ONE)
     : out_seqs(seastar::smp::count, 0),
       in_controls(seastar::smp::count) {}
 
@@ -135,6 +137,10 @@ public:
     return do_prepare_submit(out_seqs[target_core]);
   }
 
+  seq_t prepare_submit() requires IS_N_ONE {
+    return do_prepare_submit(out_seqs[seastar::this_shard_id()]);
+  }
+
   /*
    * Called by the target core to preserve the ordering
    */
@@ -147,12 +153,20 @@ public:
     return in_controls[seastar::this_shard_id()].seq;
   }
 
+  seq_t get_in_seq(core_id_t source_core) const requires IS_N_ONE {
+    return in_controls[source_core].seq;
+  }
+
   bool proceed_or_wait(seq_t seq) requires IS_ONE {
     return in_controls.proceed_or_wait(seq);
   }
 
   bool proceed_or_wait(seq_t seq) requires IS_ONE_N {
     return in_controls[seastar::this_shard_id()].proceed_or_wait(seq);
+  }
+
+  bool proceed_or_wait(seq_t seq, core_id_t source_core) requires IS_N_ONE {
+    return in_controls[source_core].proceed_or_wait(seq);
   }
 
   seastar::future<> wait(seq_t seq) requires IS_ONE {
@@ -163,6 +177,16 @@ public:
     return in_controls[seastar::this_shard_id()].wait(seq);
   }
 
+  seastar::future<> wait(seq_t seq, core_id_t source_core) requires IS_N_ONE {
+    return in_controls[source_core].wait(seq);
+  }
+
+  void reset_wait() requires IS_N_ONE {
+    for (auto &in_control : in_controls) {
+      in_control.reset_wait();
+    }
+  }
+
 private:
   struct in_control_t {
     seq_t seq = 0;
@@ -171,10 +195,7 @@ private:
     bool proceed_or_wait(seq_t in_seq) {
       if (in_seq == seq + 1) {
         ++seq;
-        if (unlikely(pr_wait.has_value())) {
-          pr_wait->set_value();
-          pr_wait = std::nullopt;
-        }
+        reset_wait();
         return true;
       } else {
         return false;
@@ -187,6 +208,13 @@ private:
         pr_wait = seastar::shared_promise<>();
       }
       return pr_wait->get_shared_future();
+    }
+
+    void reset_wait() {
+      if (unlikely(pr_wait.has_value())) {
+        pr_wait->set_value();
+        pr_wait = std::nullopt;
+      }
     }
   };
 
