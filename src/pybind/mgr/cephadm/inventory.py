@@ -1499,8 +1499,43 @@ class NodeProxyCache:
 
         return {host: self.data[host]['firmwares'] for host in hosts}
 
-    def criticals(self, **kw):
-        return {}
+    def get_critical_from_host(self, hostname: str) -> Dict[str, Any]:
+        results: Dict[str, Any] = {}
+        for component, data_component in self.data[hostname]['status'].items():
+            if component not in results.keys():
+                results[component] = {}
+            for member, data_member in data_component.items():
+                if component == 'power':
+                    data_member['status']['health'] = 'critical'
+                    data_member['status']['state'] = 'unplugged'
+                if component == 'memory':
+                    data_member['status']['health'] = 'critical'
+                    data_member['status']['state'] = 'errors detected'
+                if data_member['status']['health'].lower() != 'ok':
+                    results[component][member] = data_member
+        return results
+
+    def criticals(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves critical information for a specific hostname or all hosts.
+
+        If a 'hostname' is provided in the keyword arguments, retrieves critical
+        information for that specific host. Otherwise, retrieves critical
+        information for all available hosts.
+
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: A dictionary containing critical information for each host.
+        :rtype: List[Dict[str, Any]]
+        """
+        hostname = kw.get('hostname')
+        results: Dict[str, Any] = {}
+
+        hosts = [hostname] if hostname else self.data.keys()
+        for host in hosts:
+            results[host] = self.get_critical_from_host(host)
+        return results
 
 
 class AgentCache():
