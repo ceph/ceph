@@ -251,7 +251,7 @@ private:
   // asynchronously populated from io_handler
   io_handler_state io_states;
 
-  crosscore_ordering_t crosscore;
+  proto_crosscore_ordering_t crosscore;
 
   bool has_socket = false;
 
