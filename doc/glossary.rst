@@ -15,10 +15,12 @@
                 introduced in the Ceph Kraken release. The Luminous release of
                 Ceph promoted BlueStore to the default OSD back end,
                 supplanting FileStore. As of the Reef release, FileStore is no
-                longer available as a storage backend.
+                longer available as a storage back end.
                 
-                BlueStore stores objects directly on Ceph block devices without
-                a mounted file system.  
+                BlueStore stores objects directly on raw block devices or
+                partitions, and does not interact with mounted file systems.
+                BlueStore uses RocksDB's key/value database to map object names
+                to block locations on disk.
 
         Bucket
                 In the context of :term:`RGW`, a bucket is a group of objects.
