@@ -1918,7 +1918,7 @@ int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
  * @returns zero on success, other returns a negative error code.
  */
 int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
-                            const struct ceph_fscrypt_key_identifier *kid);
+                            struct fscrypt_remove_key_arg *kid);
 
 /**
  * Set encryption policy on a directory.

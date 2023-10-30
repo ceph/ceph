@@ -1008,7 +1008,8 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
         break;
       }
 
-      int r = cfuse->client->add_fscrypt_key((const char *)arg->raw, arg->raw_size, nullptr);
+      const struct fuse_ctx *ctx = fuse_req_ctx(req);
+      int r = cfuse->client->add_fscrypt_key((const char *)arg->raw, arg->raw_size, nullptr, ctx->uid);
       if (r < 0) {
         generic_dout(0) << __FILE__ << ":" << __LINE__ << ": failed to create a new key: r=" << r << dendl;
         fuse_reply_err(req, -r);
@@ -1042,13 +1043,13 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
       }
 
       /* FIXME: handle busy cases */
-      r = cfuse->client->remove_fscrypt_key(kid);
+      const struct fuse_ctx *ctx = fuse_req_ctx(req);
+      r = cfuse->client->remove_fscrypt_key(arg, ctx->uid);
       if (r < 0) {
         fuse_reply_err(req, -r);
         break;
       }
 
-      arg->removal_status_flags = 0; /* FIXME */
       fuse_reply_ioctl(req, 0, arg, sizeof(*arg));
       break;
     }
@@ -1133,7 +1134,8 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino,
 
       /* TODO: return correct info */
       arg->status = (found ? FSCRYPT_KEY_STATUS_PRESENT : FSCRYPT_KEY_STATUS_ABSENT);
-      arg->status_flags = (found ? 0x1 : 0); /* FIXME */
+      arg->status_flags = 0;//(found ? 0x1 : 0); /* FIXME */
+      //arg->status_flags = (found ? 0x1 : 0); /* FIXME */
       arg->user_count = !!found; /* FIXME */
 
       fuse_reply_ioctl(req, 0, arg, sizeof(*arg));

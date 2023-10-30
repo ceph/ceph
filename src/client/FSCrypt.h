@@ -90,7 +90,6 @@ std::ostream& operator<<(std::ostream& out, const ceph_fscrypt_key_identifier& k
 class FSCryptKey {
   bufferlist key;
   ceph_fscrypt_key_identifier identifier;
-
 public:
   int init(const char *k, int klen);
 
@@ -299,6 +298,7 @@ class FSCryptKeyHandler {
   ceph::shared_mutex lock = ceph::make_shared_mutex("FSCryptKeyHandler");
   int64_t epoch = -1;
   FSCryptKeyRef key;
+  std::list<int> users;
 public:
   FSCryptKeyHandler() {}
   FSCryptKeyHandler(int64_t epoch, FSCryptKeyRef k) : epoch(epoch), key(k) {}
@@ -306,6 +306,7 @@ public:
   void reset(int64_t epoch, FSCryptKeyRef k);
 
   int64_t get_epoch();
+  std::list<int>& get_users() { return users; }
   FSCryptKeyRef& get_key();
 };
 
@@ -322,9 +323,13 @@ class FSCryptKeyStore {
 public:
   FSCryptKeyStore(CephContext *_cct) : cct(_cct) {}
 
-  int create(const char *k, int klen, FSCryptKeyHandlerRef& key);
+  bool valid_key_spec(const struct fscrypt_key_specifier& k);
+  int master_key_spec_len(const struct fscrypt_key_specifier& spec);
+  int maybe_add_user(std::list<int>* users, int user);
+  int maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::list<int>* users, int user);
+  int create(const char *k, int klen, FSCryptKeyHandlerRef& key, int user);
   int find(const struct ceph_fscrypt_key_identifier& id, FSCryptKeyHandlerRef& key);
-  int invalidate(const struct ceph_fscrypt_key_identifier& id);
+  int invalidate(struct fscrypt_remove_key_arg* id, int user);
 };
 
 struct FSCryptKeyValidator {

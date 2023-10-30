@@ -376,7 +376,76 @@ FSCryptKeyRef& FSCryptKeyHandler::get_key()
   return key;
 }
 
-int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_handler)
+//taken from fs/crypto/keyring.h
+bool FSCryptKeyStore::valid_key_spec(const struct fscrypt_key_specifier& k)
+{
+  if (k.__reserved)
+    return false;
+  return master_key_spec_len(k) != 0;
+}
+
+//taken from fs/crypto/fscrypt_private.h
+int FSCryptKeyStore::master_key_spec_len(const struct fscrypt_key_specifier& spec)
+{
+        switch (spec.type) {
+        case FSCRYPT_KEY_SPEC_TYPE_DESCRIPTOR:
+                return FSCRYPT_KEY_DESCRIPTOR_SIZE;
+        case FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER:
+                return FSCRYPT_KEY_IDENTIFIER_SIZE;
+        }
+        return 0;
+}
+
+
+
+int FSCryptKeyStore::maybe_add_user(std::list<int>* users, int user)
+{
+  ldout(cct, 10) << __FILE__ << ":" << __LINE__ << " user=" << user << dendl;
+
+  auto it = std::find(users->begin(), users->end(), user);
+  if (it != users->end()) {
+    ldout(cct, 10) << "maybe_add_user user already added!" << dendl;
+    return -EEXIST;
+  }
+  
+  ldout(cct, 10) << "maybe_add_user is not found!, adding" << dendl;
+  users->push_back(user);
+  ldout(cct, 10) << "maybe_add_user size is now=" << users->size() << dendl;
+  return 0;
+}
+
+int FSCryptKeyStore::maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::list<int>* users, int user)
+{
+  ldout(cct, 10) << __FILE__ << ":" << __LINE__ << " user=" << user << dendl;
+  uint32_t status_flags = 0;
+  int err = 0;
+  bool removed = false;
+  if (!valid_key_spec(arg->key_spec)) {
+    return -EINVAL;
+  }
+
+  auto it = std::find(users->begin(), users->end(), user);
+  if (it != users->end()) {
+    ldout(cct, 10) << "maybe_remove_user, user found removing!" << dendl;
+    removed = true;
+    users->erase(it);
+  } else {
+    return -ENOKEY;
+  }
+  ldout(cct, 10) << "maybe_add_user size is now=" << users->size() << dendl;
+
+  if (users->size() != 0 && removed) {
+
+    //set bits for removed for requested user
+    status_flags |= FSCRYPT_KEY_REMOVAL_STATUS_FLAG_OTHER_USERS;
+    err = -EBUSY;
+  }
+
+  arg->removal_status_flags = status_flags;
+  return err;
+}
+
+int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_handler, int user)
 {
   auto key = std::make_shared<FSCryptKey>();
 
@@ -384,21 +453,30 @@ int FSCryptKeyStore::create(const char *k, int klen, FSCryptKeyHandlerRef& key_h
   if (r < 0) {
     return r;
   }
-
   std::unique_lock wl{lock};
 
   const auto& id = key->get_identifier();
-  
   auto iter = m.find(id);
   if (iter != m.end()) {
     /* found a key handler entry, check that there is a key there */
     key_handler = iter->second;
-    if (key_handler->get_key()) {
-      return -EEXIST;
+
+    auto& users = key_handler->get_users();
+    r = maybe_add_user(&users, user);
+
+    if (r == -EEXIST) {
+      return 0; //returns 0 regardless
     }
     key_handler->reset(++epoch, key);
   } else {
     key_handler = std::make_shared<FSCryptKeyHandler>(++epoch, key);
+
+    auto& users = key_handler->get_users();
+    r = maybe_add_user(&users, user);
+    if (r == -EEXIST) {
+      return 0; //returns 0 regardless
+    }
+
     m[id] = key_handler;
   }
 
@@ -409,7 +487,7 @@ int FSCryptKeyStore::_find(const struct ceph_fscrypt_key_identifier& id, FSCrypt
 {
   auto iter = m.find(id);
   if (iter == m.end()) {
-    return -ENOENT;
+    return -ENOKEY;
   }
 
   kh = iter->second;
@@ -424,15 +502,25 @@ int FSCryptKeyStore::find(const struct ceph_fscrypt_key_identifier& id, FSCryptK
   return _find(id, kh);
 }
 
-int FSCryptKeyStore::invalidate(const struct ceph_fscrypt_key_identifier& id)
+int FSCryptKeyStore::invalidate(struct fscrypt_remove_key_arg* arg, int user)
 {
   std::unique_lock rl{lock};
 
+  ceph_fscrypt_key_identifier id;
+  int r = id.init(arg->key_spec);
+  if (r < 0) {
+    return r;
+  }
+
   FSCryptKeyHandlerRef kh;
-  int r = _find(id, kh);
-  if (r == -ENOENT) {
-    return 0;
-  } else if (r < 0) {
+  r = _find(id, kh);
+  if (r < 0) {
+    return r;
+  }
+
+  auto& users = kh->get_users();
+  r = maybe_remove_user(arg, &users, user);
+  if (r < 0) {
     return r;
   }
 

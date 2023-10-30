@@ -2327,12 +2327,12 @@ extern "C" int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
 }
 
 extern "C" int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
-                                       const struct ceph_fscrypt_key_identifier *kid)
+                                       struct fscrypt_remove_key_arg *kid)
 {
   if (!cmount->is_mounted())
     return -CEPHFS_ENOTCONN;
 
-  return cmount->get_client()->remove_fscrypt_key(*kid);
+  return cmount->get_client()->remove_fscrypt_key(kid);
 }
 
 extern "C" int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,

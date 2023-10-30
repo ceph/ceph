@@ -335,8 +335,8 @@ public:
   }
 
   /* fscrypt */
-  int add_fscrypt_key(const char *key_data, int key_len, ceph_fscrypt_key_identifier *kid);
-  int remove_fscrypt_key(const ceph_fscrypt_key_identifier& kid);
+  int add_fscrypt_key(const char *key_data, int key_len, ceph_fscrypt_key_identifier *kid, int user = 0);
+  int remove_fscrypt_key(fscrypt_remove_key_arg* kid, int user = 0);
   int set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy);
 
   int mds_command(
