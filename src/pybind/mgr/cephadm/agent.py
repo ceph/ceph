@@ -142,23 +142,16 @@ class NodeProxy:
         except AttributeError:
             raise cherrypy.HTTPError(400, 'Malformed data received.')
 
+    # TODO(guits): refactor this
+    # TODO(guits): use self.node_proxy.get_critical_from_host() ?
     def get_nok_members(self,
-                        component: str,
                         data: Dict[str, Any]) -> List[Dict[str, str]]:
         nok_members: List[Dict[str, str]] = []
 
         for member in data.keys():
-            # Force a fake error for testing purpose
-            if component == 'storage':
-                _status = 'critical'
-                state = "[Fake error] device is faulty."
-            elif component == 'power':
-                _status = 'critical'
-                state = "[Fake error] power supply unplugged."
-            else:
-                _status = data[member]['status']['health'].lower()
+            _status = data[member]['status']['health'].lower()
             if _status.lower() != 'ok':
-                # state = data[member]['status']['state']
+                state = data[member]['status']['state']
                 _member = dict(
                     member=member,
                     status=_status,
@@ -179,13 +172,14 @@ class NodeProxy:
         }
 
         for component in data['patch']['status'].keys():
-            self.mgr.remove_health_warning(mapping[component])
-            nok_members = self.get_nok_members(component, data['patch']['status'][component])
+            alert_name = f"HARDWARE_{component.upper()}"
+            self.mgr.remove_health_warning(alert_name)
+            nok_members = self.get_nok_members(data['patch']['status'][component])
 
             if nok_members:
                 count = len(nok_members)
                 self.mgr.set_health_warning(
-                    mapping[component],
+                    alert_name,
                     summary=f'{count} {component} member{"s" if count > 1 else ""} {"are" if count > 1 else "is"} not ok',
                     count=count,
                     detail=[f"{member['member']} is {member['status']}: {member['state']}" for member in nok_members],
@@ -285,7 +279,7 @@ class NodeProxy:
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def criticals(self, **kw: Any) -> Dict[str, Any]:
-        return self.mgr.node_proxy.criticals()
+        return self.mgr.node_proxy.criticals(**kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
