@@ -69,6 +69,10 @@ Notable Changes
   recovery procedure, the recovered files under `lost+found` directory can now
   be deleted.
 
+* Dashboard: There is a new Dashboard page with an improved layout. Active alerts
+  and some important charts are now displayed inside cards. This new dashboard can
+  be disabled and the older layout brought back by setting ``ceph dashboard feature disable dashboard``.
+
 Changelog
 ---------
 
