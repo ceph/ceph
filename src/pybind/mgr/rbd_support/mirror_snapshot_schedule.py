@@ -42,9 +42,6 @@ class CreateSnapshotRequests:
         self.queue: List[ImageSpec] = []
         self.ioctxs: Dict[Tuple[str, str], Tuple[rados.Ioctx, Set[ImageSpec]]] = {}
 
-    def __del__(self) -> None:
-        self.wait_for_pending()
-
     def wait_for_pending(self) -> None:
         with self.lock:
             while self.pending:
