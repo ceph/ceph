@@ -97,9 +97,10 @@ def threaded(f: Callable[..., None]) -> Callable[..., threading.Thread]:
 
 
 class DefaultFetcher():
-    def __init__(self, storage_class: str, coreV1_api: 'client.CoreV1Api'):
+    def __init__(self, storage_class: str, coreV1_api: 'client.CoreV1Api', rook_env: 'RookEnv'):
         self.storage_class = storage_class
         self.coreV1_api = coreV1_api
+        self.rook_env = rook_env
 
     def fetch(self) -> None:
         self.inventory: KubernetesResource[client.V1PersistentVolumeList] = KubernetesResource(self.coreV1_api.list_persistent_volume)
@@ -151,8 +152,8 @@ class DefaultFetcher():
         
 
 class LSOFetcher(DefaultFetcher):
-    def __init__(self, storage_class: 'str', coreV1_api: 'client.CoreV1Api', customObjects_api: 'client.CustomObjectsApi', nodenames: 'Optional[List[str]]' = None):
-        super().__init__(storage_class, coreV1_api)
+    def __init__(self, storage_class: 'str', coreV1_api: 'client.CoreV1Api', rook_env: 'RookEnv', customObjects_api: 'client.CustomObjectsApi', nodenames: 'Optional[List[str]]' = None):
+        super().__init__(storage_class, coreV1_api, rook_env)
         self.customObjects_api = customObjects_api
         self.nodenames = nodenames
 
@@ -219,13 +220,13 @@ class LSOFetcher(DefaultFetcher):
 
 class PDFetcher(DefaultFetcher):
     """ Physical Devices Fetcher"""
-    def __init__(self, coreV1_api: 'client.CoreV1Api'):
-        self.coreV1_api = coreV1_api
+    def __init__(self, coreV1_api: 'client.CoreV1Api', rook_env: 'RookEnv'):
+        super().__init__('', coreV1_api, rook_env)
 
     def fetch(self) -> None:
         """ Collect the devices information from k8s configmaps"""
         self.dev_cms: KubernetesResource = KubernetesResource(self.coreV1_api.list_namespaced_config_map,
-                                                              namespace='rook-ceph',
+                                                              namespace=self.rook_env.operator_namespace,
                                                               label_selector='app=rook-discover')
 
     def devices(self) -> Dict[str, List[Device]]:
@@ -759,15 +760,15 @@ class RookCluster(object):
 
     def get_discovered_devices(self, nodenames: Optional[List[str]] = None) -> Dict[str, List[Device]]:
         self.fetcher: Optional[DefaultFetcher] = None
-        op_settings = self.coreV1_api.read_namespaced_config_map(name="rook-ceph-operator-config", namespace='rook-ceph').data
+        op_settings = self.coreV1_api.read_namespaced_config_map(name="rook-ceph-operator-config", namespace=self.rook_env.operator_namespace).data
         if op_settings.get('ROOK_ENABLE_DISCOVERY_DAEMON', 'false').lower() == 'true':
-            self.fetcher = PDFetcher(self.coreV1_api)
+            self.fetcher = PDFetcher(self.coreV1_api, self.rook_env)
         else:
             storage_class = self.get_storage_class()
             if storage_class.metadata.labels and ('local.storage.openshift.io/owner-name' in storage_class.metadata.labels):
                 self.fetcher = LSOFetcher(self.storage_class, self.coreV1_api, self.customObjects_api, nodenames)
             else:
-                self.fetcher = DefaultFetcher(self.storage_class, self.coreV1_api)
+                self.fetcher = DefaultFetcher(self.storage_class, self.coreV1_api, self.rook_env)
 
         self.fetcher.fetch()
         return self.fetcher.devices()
