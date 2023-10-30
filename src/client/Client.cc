@@ -18271,13 +18271,13 @@ void Client::set_uuid(const std::string& uuid)
 }
 
 int Client::add_fscrypt_key(const char *key_data, int key_len,
-                            ceph_fscrypt_key_identifier *kid)
+                            ceph_fscrypt_key_identifier *kid, int user)
 {
   auto& key_store = fscrypt->get_key_store();
 
   FSCryptKeyHandlerRef kh;
 
-  int r = key_store.create((const char *)key_data, key_len, kh);
+  int r = key_store.create((const char *)key_data, key_len, kh, user);
   if (r < 0) {
     ldout(cct, 0) << __func__ << "(): failed to create a new key: r=" << r << dendl;
     return r;
@@ -18292,11 +18292,11 @@ int Client::add_fscrypt_key(const char *key_data, int key_len,
   return 0;
 }
 
-int Client::remove_fscrypt_key(const ceph_fscrypt_key_identifier& kid)
+int Client::remove_fscrypt_key(fscrypt_remove_key_arg* kid, int user)
 {
   auto& key_store = fscrypt->get_key_store();
 
-  return key_store.invalidate(kid);
+  return key_store.invalidate(kid, user);
 }
 
 int Client::set_fscrypt_policy_v2(int fd, const struct fscrypt_policy_v2& policy)
