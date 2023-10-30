@@ -103,15 +103,15 @@ NOTE: if for some reason the build has to be restarted (for example if one distr
 
 4. Use https://docs.ceph.com/en/latest/start/os-recommendations/?highlight=debian#platforms to determine the ``DISTROS`` parameter.  For example,
 
-    +-------------------+-------------------------------------------+
-    | Release           | Distro Codemap                            |
-    +===================+===========================================+
-    | octopus (15.X.X)  | ``focal bionic centos7 centos8 buster``   |
-    +-------------------+-------------------------------------------+
-    | pacific (16.X.X)  | ``focal bionic centos8 buster bullseye``  |
-    +-------------------+-------------------------------------------+
-    | quincy (17.X.X)   | ``focal centos8 centos9 bullseye``        |
-    +-------------------+-------------------------------------------+
+    +-------------------+--------------------------------------------------+
+    | Release           | Distro Codemap                                   |
+    +===================+==================================================+
+    | pacific (16.X.X)  | ``focal bionic centos8 buster bullseye``         |
+    +-------------------+--------------------------------------------------+
+    | quincy (17.X.X)   | ``focal centos8 centos9 bullseye``               |
+    +-------------------+--------------------------------------------------+
+    | reef (18.X.X)     | ``jammy focal centos8 centos9 windows bookworm`` |
+    +-------------------+--------------------------------------------------+
 
 5. Click ``Build``.
 
