@@ -35,9 +35,6 @@ class CreateSnapshotRequests:
         self.queue = []
         self.ioctxs = {}
 
-    def __del__(self):
-        self.wait_for_pending()
-
     def wait_for_pending(self):
         with self.lock:
             while self.pending:
