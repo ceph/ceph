@@ -96,29 +96,6 @@ TEST_F(TestClient, LlreadvLlwritev) {
     {in_empty_buf_1, sizeof(in_empty_buf_1)}
   }
 
-  struct iovec iov_out_null_context[2] = {
-	{out0, sizeof(out0)},
-	{out1, sizeof(out1)}
-  };
-  
-  struct iovec iov_in_null_context[2] = {
-	{in0, sizeof(in0)},
-	{in1, sizeof(in1)}
-  };
-
-  struct iovec iov_out_dataonly_fysnc[2] = {
-    {out0, sizeof(out0)},
-    {out1, sizeof(out1)}
-  };
-
-  struct iovec iov_in_dataonly_fysnc[2] = {
-    {in0, sizeof(in0)},
-    {in1, sizeof(in1)}
-  };
-
-  struct iovec iov_out_empty[0];
-  struct iovec iov_in_empty[0];
-
   ssize_t nwritten = iov_out[0].iov_len + iov_out[1].iov_len;
 
   std::unique_ptr<C_SaferCond> writefinish = nullptr;
