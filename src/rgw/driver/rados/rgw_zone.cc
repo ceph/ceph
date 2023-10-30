@@ -741,6 +741,10 @@ int commit_period(const DoutPrefixProvider* dpp, optional_yield y,
         "and try again." << std::endl;
     return -EINVAL;
   }
+  // did the realm change?
+  if (info.realm_name != realm.name) {
+    info.realm_name = realm.name;
+  }
   // did the master zone change?
   if (info.master_zone != current_period.master_zone) {
     // store the current metadata sync status in the period
