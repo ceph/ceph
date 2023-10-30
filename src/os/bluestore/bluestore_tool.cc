@@ -801,7 +801,9 @@ int main(int argc, char **argv)
       r = ::stat(rlpath, &st);
     }
     // check if we need additional size specification
-    if (r == -1 || (r == 0 && S_ISREG(st.st_mode) && st.st_size == 0)) {
+    if (r == -1 ||
+         (r == 0 && st.st_size == 0 &&
+           !S_ISBLK(st.st_mode) && S_ISREG(st.st_mode))) {
       r = 0;
       if (need_db && cct->_conf->bluestore_block_db_size == 0) {
 	cerr << "Might need DB size specification, "
