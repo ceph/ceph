@@ -39,8 +39,9 @@ class TestSnapSchedulesHelper(CephFSTestCase):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
 
     def fs_snap_schedule_cmd(self, *args, **kwargs):
-        fs = kwargs.pop('fs', self.volname)
-        args += ('--fs', fs)
+        if 'fs' in kwargs:
+            fs = kwargs.pop('fs')
+            args += ('--fs', fs)
         if 'format' in kwargs:
             fmt = kwargs.pop('format')
             args += ('--format', fmt)
@@ -562,3 +563,45 @@ class TestSnapSchedulesSnapdir(TestSnapSchedulesHelper):
         self.remove_snapshots(TestSnapSchedulesSnapdir.TEST_DIRECTORY, sdn)
 
         self.mount_a.run_shell(['rmdir', TestSnapSchedulesSnapdir.TEST_DIRECTORY])
+
+
+"""
+Note that the class TestSnapSchedulesMandatoryFSArgument tests snap-schedule
+commands only for multi-fs scenario. Commands for a single default fs should
+pass for tests defined above or elsewhere.
+"""
+
+
+class TestSnapSchedulesMandatoryFSArgument(TestSnapSchedulesHelper):
+    REQUIRE_BACKUP_FILESYSTEM = True
+    TEST_DIRECTORY = 'mandatory_fs_argument_test_dir'
+
+    def test_snap_schedule_without_fs_argument(self):
+        """Test command fails without --fs argument in presence of multiple fs"""
+        test_path = TestSnapSchedulesMandatoryFSArgument.TEST_DIRECTORY
+        self.mount_a.run_shell(['mkdir', '-p', test_path])
+
+        # try setting a schedule on the dir; this should fail now that we are
+        # working with mutliple fs; we need the --fs argument if there are more
+        # than one fs hosted by the same cluster
+        with self.assertRaises(CommandFailedError):
+            self.fs_snap_schedule_cmd('add', test_path, snap_schedule='1M')
+
+        self.mount_a.run_shell(['rmdir', test_path])
+
+    def test_snap_schedule_for_non_default_fs(self):
+        """Test command succes with --fs argument for non-default fs"""
+        test_path = TestSnapSchedulesMandatoryFSArgument.TEST_DIRECTORY
+        self.mount_a.run_shell(['mkdir', '-p', test_path])
+
+        # use the backup fs as the second fs; all these commands must pass
+        self.fs_snap_schedule_cmd('add', test_path, snap_schedule='1M', fs='backup_fs')
+        self.fs_snap_schedule_cmd('activate', test_path, snap_schedule='1M', fs='backup_fs')
+        self.fs_snap_schedule_cmd('retention', 'add', test_path, retention_spec_or_period='1M', fs='backup_fs')
+        self.fs_snap_schedule_cmd('list', test_path, fs='backup_fs', format='json')
+        self.fs_snap_schedule_cmd('status', test_path, fs='backup_fs', format='json')
+        self.fs_snap_schedule_cmd('retention', 'remove', test_path, retention_spec_or_period='1M', fs='backup_fs')
+        self.fs_snap_schedule_cmd('deactivate', test_path, snap_schedule='1M', fs='backup_fs')
+        self.fs_snap_schedule_cmd('remove', test_path, snap_schedule='1M', fs='backup_fs')
+
+        self.mount_a.run_shell(['rmdir', test_path])
