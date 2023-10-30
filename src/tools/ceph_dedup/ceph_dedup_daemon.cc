@@ -29,6 +29,7 @@ po::options_description make_usage() {
     ("sampling-ratio", po::value<int>(), ": set the sampling ratio (percentile)")
     ("wakeup-period", po::value<int>(), ": set the wakeup period of crawler thread (sec)")
     ("fpstore-threshold", po::value<size_t>()->default_value(100_M), ": set max size of in-memory fingerprint store (bytes)")
+    ("run-once", ": do a single iteration for debug")
   ;
   desc.add(op_desc);
   return desc;
@@ -581,6 +582,7 @@ int make_crawling_daemon(const po::variables_map &opts)
   string chunk_pool_name = get_opts_chunk_pool(opts);
   unsigned max_thread = get_opts_max_thread(opts);
   uint32_t report_period = get_opts_report_period(opts);
+  bool run_once = false; // for debug
 
   int sampling_ratio = -1;
   if (opts.count("sampling-ratio")) {
@@ -643,6 +645,10 @@ int make_crawling_daemon(const po::variables_map &opts)
       << chunk_pool_name << ": "
       << cpp_strerror(ret) << dendl;
     return -EINVAL;
+  }
+
+  if (opts.count("run-once")) {
+    run_once = true;
   }
 
   dout(0) << "ceph-dedup-daemon starts ( " 
@@ -719,6 +725,10 @@ int make_crawling_daemon(const po::variables_map &opts)
     }
 
     l.lock();
+    if (run_once) {
+      all_stop = true;
+      break;
+    }
   }
   l.unlock();
 
