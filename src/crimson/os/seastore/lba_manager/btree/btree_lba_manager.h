@@ -220,7 +220,7 @@ public:
       nullptr);
   }
 
-  alloc_extent_ret clone_extent(
+  alloc_extent_ret clone_mapping(
     Transaction &t,
     laddr_t hint,
     extent_len_t len,
