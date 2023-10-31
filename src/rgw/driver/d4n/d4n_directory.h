@@ -7,7 +7,6 @@
 #include <boost/redis/connection.hpp>
 
 #define dout_subsys ceph_subsys_rgw
-#define dout_context g_ceph_context
 
 namespace rgw { namespace d4n {
 
@@ -59,7 +58,7 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
       cfg.clientname = "D4N.ObjectDir";
 
       if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Object directory endpoint was not configured correctly" << dendl;
+	ldpp_dout(dpp, 10) << "ObjectDirectory::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
 	return -EDESTADDRREQ;
       }
       
@@ -99,7 +98,7 @@ class BlockDirectory: public Directory {
       cfg.clientname = "D4N.BlockDir";
 
       if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-	ldpp_dout(dpp, 10) << "D4N Directory " << __func__ << ": Block directory endpoint was not configured correctly" << dendl;
+	ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
 	return -EDESTADDRREQ;
       }
 
