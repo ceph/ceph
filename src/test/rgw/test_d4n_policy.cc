@@ -58,7 +58,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	.hostsList = { env->redisHost }
       };
 
-      rgw::cache::Partition partition_info{ .location = "RedisCache" };
+      rgw::cache::Partition partition_info{ .location = "RedisCache", .size = 1000 };
       cacheDriver = new rgw::cache::RedisDriver{io, partition_info};
       policyDriver = new rgw::d4n::PolicyDriver(io, cacheDriver, "lfuda");
       dir = new rgw::d4n::BlockDirectory{io};
@@ -129,7 +129,6 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	  }
 	} else if (!exists) { /* No remote copy */
 	  block->hostsList.push_back(dir->cct->_conf->rgw_local_cache_address);
-	  block->cacheObj.hostsList.push_back(dir->cct->_conf->rgw_local_cache_address);
 	  if (dir->set(block, y) < 0)
 	    return -1;
 

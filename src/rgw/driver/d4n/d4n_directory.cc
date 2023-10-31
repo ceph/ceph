@@ -65,7 +65,7 @@ int ObjectDirectory::exist_key(CacheObj* object, optional_yield y) {
   return std::get<0>(resp).value();
 }
 
-void ObjectDirectory::shutdown() // generalize -Sam
+void ObjectDirectory::shutdown()
 {
   // call cancel() on the connection's executor
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });

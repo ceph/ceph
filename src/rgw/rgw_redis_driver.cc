@@ -109,7 +109,7 @@ int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
   cfg.addr.port = address.substr(address.find(":") + 1, address.length());
 
   if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-    ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
+    ldpp_dout(dpp, 10) << "RedisDriver::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
     return -EDESTADDRREQ;
   }
 
@@ -238,8 +238,27 @@ int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, opti
 
 int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) 
 {
+  response<int> exists;
   std::string value;
   std::string entry = partition_info.location + key;
+
+  try {
+    boost::system::error_code ec;
+    request req;
+    req.push("HEXISTS", entry, "data");
+
+    redis_exec(conn, ec, req, exists, y);
+
+    if (ec)
+      return -1;
+  } catch(std::exception &e) {
+    return -1;
+  }
+
+  if (!std::get<0>(exists).value()) {
+    ldpp_dout(dpp, 10) << "RedisDriver::" << __func__ << "(): Data field was not found." << dendl;
+    return -1;
+  }
 
   try {
     boost::system::error_code ec;
@@ -257,7 +276,7 @@ int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& 
     return -1;
   }
 
-  try { // do we want key check here? -Sam
+  try {
     /* Append to existing value or set as new value */
     boost::system::error_code ec;
     response<std::string> resp;
@@ -462,7 +481,7 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
   }
   
   if (!std::get<0>(resp).value()) {
-    ldpp_dout(dpp, 20) << "RGW Redis Cache: Attribute was not set." << dendl;
+    ldpp_dout(dpp, 10) << "RedisDriver::" << __func__ << "(): Attribute was not found." << dendl;
     return {};
   }
 
