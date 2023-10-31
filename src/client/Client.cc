@@ -7223,7 +7223,9 @@ void Client::renew_caps(MetaSession *session)
   ldout(cct, 10) << "renew_caps mds." << session->mds_num << dendl;
   session->last_cap_renew_request = ceph_clock_now();
   uint64_t seq = ++session->cap_renew_seq;
-  session->con->send_message2(make_message<MClientSession>(CEPH_SESSION_REQUEST_RENEWCAPS, seq));
+  auto m = make_message<MClientSession>(CEPH_SESSION_REQUEST_RENEWCAPS, seq);
+  m->oldest_client_tid = oldest_tid;
+  session->con->send_message2(std::move(m));
 }
 
 

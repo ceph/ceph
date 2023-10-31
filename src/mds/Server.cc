@@ -789,6 +789,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	mds->locker->resume_stale_caps(session);
 	mds->sessionmap.touch_session(session);
       }
+      trim_completed_request_list(m->oldest_client_tid, session);
       auto reply = make_message<MClientSession>(CEPH_SESSION_RENEWCAPS, m->get_seq());
       mds->send_message_client(reply, session);
     } else {
