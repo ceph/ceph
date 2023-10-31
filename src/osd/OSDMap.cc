@@ -2179,8 +2179,8 @@ bool OSDMap::check_pg_upmaps(
                        << j->first << " " << j->second
                        << dendl;
         to_cancel->push_back(pg);
-      } else {
-        //Josh--check partial no-op here.
+      } else if (newmap != j->second) {
+        // check partial no-op here.
         ldout(cct, 10) << __func__ << " simplifying partially no-op pg_upmap_items "
                        << j->first << " " << j->second
                        << " -> " << newmap
