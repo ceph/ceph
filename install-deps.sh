@@ -216,7 +216,9 @@ function install_boost_on_ubuntu {
         ceph-libboost-system${boost_ver}-dev \
         ceph-libboost-test${boost_ver}-dev \
         ceph-libboost-thread${boost_ver}-dev \
-        ceph-libboost-timer${boost_ver}-dev
+        ceph-libboost-timer${boost_ver}-dev \
+	|| ci_debug "ceph-libboost package unavailable, you can build the submodule"
+
 }
 
 function install_libzbd_on_ubuntu {
