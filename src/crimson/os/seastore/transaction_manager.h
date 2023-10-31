@@ -485,12 +485,12 @@ public:
   }
 
   /*
-   * clone_pin
+   * clone_mapping
    *
    * create an indirect lba mapping pointing to the physical
    * lba mapping whose key is intermediate_key. Resort to btree_lba_manager.h
-   * for the definition of "indirect lba mapping" and "physical lba mapping"
-   *
+   * for the definition of "indirect lba mapping" and "physical lba mapping".
+   * Note that the cloned extent must be stable
    */
   using clone_extent_iertr = alloc_extent_iertr;
   using clone_extent_ret = clone_extent_iertr::future<LBAMappingRef>;
@@ -507,7 +507,7 @@ public:
     SUBDEBUGT(seastore_tm, "len={}, laddr_hint={}, clone_offset {}",
       t, mapping.get_length(), hint, intermediate_key);
     ceph_assert(is_aligned(hint, epm->get_block_size()));
-    return lba_manager->clone_extent(
+    return lba_manager->clone_mapping(
       t,
       hint,
       mapping.get_length(),
@@ -887,7 +887,7 @@ private:
       fut = lba_manager->alloc_extent(
 	t, remap_laddr, remap_length, remap_paddr, *ext);
     } else {
-      fut = lba_manager->clone_extent(
+      fut = lba_manager->clone_mapping(
 	t,
 	remap_laddr,
 	remap_length,
