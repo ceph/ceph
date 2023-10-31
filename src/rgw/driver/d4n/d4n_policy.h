@@ -1,13 +1,11 @@
 #pragma once
 
 #include <boost/heap/fibonacci_heap.hpp>
-#include "rgw_common.h"
 #include "d4n_directory.h"
 #include "rgw_sal_d4n.h"
 #include "rgw_cache_driver.h"
 
 #define dout_subsys ceph_subsys_rgw
-#define dout_context g_ceph_context
 
 namespace rgw::sal {
   class D4NFilterObject;
@@ -68,6 +66,7 @@ class LFUDAPolicy : public CachePolicy {
     using Heap = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>;
     Heap entries_heap;
     std::unordered_map<std::string, LFUDAEntry*> entries_map;
+    std::mutex lfuda_lock;
 
     net::io_context& io;
     std::shared_ptr<connection> conn;
@@ -99,7 +98,7 @@ class LFUDAPolicy : public CachePolicy {
       cfg.clientname = "D4N.Policy";
 
       if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-	ldpp_dout(dpp, 10) << "RGW Redis Cache: Redis cache endpoint was not configured correctly" << dendl;
+	ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
 	return -EDESTADDRREQ;
       }
 
