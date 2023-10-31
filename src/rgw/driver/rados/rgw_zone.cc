@@ -516,7 +516,6 @@ int create_realm(const DoutPrefixProvider* dpp, optional_yield y,
     period->period_map.id = period->id;
     period->epoch = FIRST_EPOCH;
     period->realm_id = info.id;
-    period->realm_name = info.name;
 
     r = cfgstore->create_period(dpp, y, true, *period);
     if (r < 0) {
