@@ -21,7 +21,7 @@
 
 class MClientSession final : public SafeMessage {
 private:
-  static constexpr int HEAD_VERSION = 6;
+  static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 1;
 
 public:
@@ -33,6 +33,7 @@ public:
   feature_bitset_t supported_features;
   metric_spec_t metric_spec;
   std::vector<MDSCapAuth> cap_auths;
+  ceph_tid_t oldest_client_tid = UINT64_MAX;
 
   int get_op() const { return head.op; }
   version_t get_seq() const { return head.seq; }
@@ -88,6 +89,9 @@ public:
     if (header.version >= 6) {
       decode(cap_auths, p);
     }
+    if (header.version >= 7) {
+      decode(oldest_client_tid, p);
+    }
   }
   void encode_payload(uint64_t features) override { 
     using ceph::encode;
@@ -104,6 +108,7 @@ public:
       encode(metric_spec, payload);
       encode(flags, payload);
       encode(cap_auths, payload);
+      encode(oldest_client_tid, payload);
     }
   }
 private:
