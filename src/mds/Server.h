@@ -158,6 +158,7 @@ public:
   void force_clients_readonly();
 
   // -- requests --
+  void trim_completed_request_list(ceph_tid_t tid, Session *session);
   void handle_client_request(const cref_t<MClientRequest> &m);
   void handle_client_reply(const cref_t<MClientReply> &m);
 
