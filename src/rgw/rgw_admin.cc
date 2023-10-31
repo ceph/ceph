@@ -6,7 +6,6 @@
 #include <sstream>
 #include <string>
 
-#include <boost/asio.hpp>
 #include <boost/optional.hpp>
 
 extern "C" {

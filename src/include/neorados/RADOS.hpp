@@ -24,7 +24,8 @@
 #include <type_traits>
 #include <variant>
 
-#include <boost/asio.hpp>
+#include <boost/asio/async_result.hpp>
+#include <boost/asio/io_context.hpp>
 
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
