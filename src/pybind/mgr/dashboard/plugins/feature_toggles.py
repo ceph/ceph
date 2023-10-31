@@ -28,7 +28,7 @@ class Features(Enum):
     DASHBOARD = 'dashboard'
 
 
-PREDISABLED_FEATURES = set()  # type: Set[str]
+PREDISABLED_FEATURES = set([])  # type: Set[str]
 
 Feature2Controller = {
     Features.RBD: [Rbd, RbdSnapshot, RbdTrash],
@@ -68,7 +68,7 @@ class FeatureToggles(I.CanMgr, I.Setupable, I.HasOptions,
     def get_options(self):
         return [Option(
             name=self.OPTION_FMT.format(feature),
-            default=(feature not in PREDISABLED_FEATURES),
+            default=(feature.value not in PREDISABLED_FEATURES),
             type='bool',) for feature in Features]
 
     @PM.add_hook
