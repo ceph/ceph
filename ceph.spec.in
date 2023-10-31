@@ -2228,12 +2228,6 @@ fi
 %dir %{_localstatedir}/lib/ceph/radosgw
 %{_unitdir}/ceph-radosgw@.service
 %{_unitdir}/ceph-radosgw.target
-%exclude %{_includedir}/cpp_redis
-%exclude %{_includedir}/tacopie
-%exclude /usr/lib/libcpp_redis.a
-%exclude /usr/lib/libtacopie.a
-%exclude /usr/lib/pkgconfig/cpp_redis.pc
-%exclude /usr/lib/pkgconfig/tacopie.pc
 
 %post radosgw
 %if 0%{?suse_version}

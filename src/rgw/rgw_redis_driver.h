@@ -34,7 +34,7 @@ class RedisDriver : public CacheDriver {
 
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
-    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; } // how to get this from redis server? -Sam
+    virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; }
     static std::optional<Partition> get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type);
     static std::vector<Partition> list_partitions(const DoutPrefixProvider* dpp);
 
