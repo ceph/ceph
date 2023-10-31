@@ -810,8 +810,10 @@ int main(int argc, const char **argv)
     global_init_postfork_start(g_ceph_context);
   }
   common_init_finish(g_ceph_context);
-  global_init_postfork_finish(g_ceph_context);
-  forker.daemonize();
+  if (g_conf()->daemonize) {
+    global_init_postfork_finish(g_ceph_context);
+    forker.daemonize();
+  }
 
   init_async_signal_handler();
   register_async_signal_handler_oneshot(SIGINT, handle_signal);
