@@ -61,7 +61,7 @@ target_link_libraries(crimson-osd
   crimson-common
   crimson-os
   crimson
-  fmt::fmt
+  ${FMT_LIB}
   Boost::MPL
   dmclock::dmclock)
 set_target_properties(crimson-osd PROPERTIES
