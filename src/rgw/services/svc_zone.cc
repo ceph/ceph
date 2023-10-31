@@ -146,8 +146,7 @@ int RGWSI_Zone::do_start(optional_yield y, const DoutPrefixProvider *dpp)
   }
 
   ldpp_dout(dpp, 20) << "realm  " << realm->get_name() << " " << realm->get_id() << dendl;
-  ret = current_period->init(dpp, cct, sysobj_svc, realm->get_id(), y,
-                             realm->get_name());
+  ret = current_period->init(dpp, cct, sysobj_svc, realm->get_id(), y);
   if (ret < 0 && ret != -ENOENT) {
     ldpp_dout(dpp, 0) << "failed reading current period info: " << " " << cpp_strerror(-ret) << dendl;
     return ret;

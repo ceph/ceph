@@ -729,8 +729,8 @@ bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore*
 	<< __PRETTY_FUNCTION__ << ":" << __LINE__
 	<< " WARNING: Cluster is is misconfigured! "
 	<< " Zonegroup " << zonegroup.get_name()
-	<< " (" << zonegroup.get_id() << ") in Realm "
-	<< period.get_realm_name() << " ( " << period.get_realm() << ") "
+	<< " (" << zonegroup.get_id() << ") in Realm id ( "
+  << period.get_realm() << ") "
 	<< " has no endpoints!" << dendl;
     }
     for (const auto& [_, zone] : zonegroup.zones) {
@@ -740,8 +740,7 @@ bool sanity_check_endpoints(const DoutPrefixProvider *dpp, rgw::sal::RadosStore*
 	  << " ERROR: Cluster is is misconfigured! "
 	  << " Zone " << zone.name << " (" << zone.id << ") in Zonegroup "
 	  << zonegroup.get_name() << " ( " << zonegroup.get_id()
-	  << ") in Realm " << period.get_realm_name()
-	  << " ( " << period.get_realm() << ") "
+	  << ") in Realm id ( " << period.get_realm() << ") "
 	  << " has no endpoints! Trimming is impossible." << dendl;
 	retval = false;
       }

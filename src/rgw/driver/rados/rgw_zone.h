@@ -642,7 +642,6 @@ public:
   rgw_zone_id master_zone;
 
   std::string realm_id;
-  std::string realm_name;
   epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
   CephContext *cct{nullptr};
@@ -678,7 +677,6 @@ public:
   const rgw_zone_id& get_master_zone() const { return master_zone; }
   const std::string& get_master_zonegroup() const { return master_zonegroup; }
   const std::string& get_realm() const { return realm_id; }
-  const std::string& get_realm_name() const { return realm_name; }
   const RGWPeriodMap& get_map() const { return period_map; }
   RGWPeriodConfig& get_config() { return period_config; }
   const RGWPeriodConfig& get_config() const { return period_config; }
@@ -750,7 +748,7 @@ public:
   int update_latest_epoch(const DoutPrefixProvider *dpp, epoch_t epoch, optional_yield y);
 
   int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const std::string &period_realm_id, optional_yield y,
-	   const std::string &period_realm_name = "", bool setup_obj = true);
+	    bool setup_obj = true);
   int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y, bool setup_obj = true);  
 
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true);
@@ -780,7 +778,6 @@ public:
     encode(master_zonegroup, bl);
     encode(period_config, bl);
     encode(realm_id, bl);
-    encode(realm_name, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -796,7 +793,6 @@ public:
     decode(master_zonegroup, bl);
     decode(period_config, bl);
     decode(realm_id, bl);
-    decode(realm_name, bl);
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;
