@@ -54,13 +54,17 @@ int librgw_create(librgw_t* rgw, int argc, char **argv)
   if (! g_ceph_context) {
     std::lock_guard<std::mutex> lg(librgw_mtx);
     if (! g_ceph_context) {
+      std::vector<const char*> args;
       std::vector<std::string> spl_args;
       // last non-0 argument will be split and consumed
       if (argc > 1) {
 	const std::string spl_arg{argv[(--argc)]};
 	get_str_vec(spl_arg, " \t", spl_args);
       }
-      auto args = argv_to_vec(argc, argv);
+      for (auto ix = 1; ix < argc; ++ix) {
+	args.push_back(argv[ix]);
+      }
+      //auto args = argv_to_vec(argc, nargv.argv);
       // append split args, if any
       for (const auto& elt : spl_args) {
 	args.push_back(elt.c_str());
