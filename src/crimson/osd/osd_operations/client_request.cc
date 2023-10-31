@@ -204,7 +204,8 @@ ClientRequest::process_pg_op(
   return pg->do_pg_ops(
     m
   ).then_interruptible([this, pg=std::move(pg)](MURef<MOSDOpReply> reply) {
-    return conn->send(std::move(reply));
+    // TODO: gate the crosscore sending
+    return conn->send_with_throttling(std::move(reply));
   });
 }
 
@@ -218,7 +219,8 @@ auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
     !m->has_flag(CEPH_OSD_FLAG_RETURNVEC));
   reply->set_reply_versions(eversion_t(), 0);
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
-  return conn->send(std::move(reply));
+  // TODO: gate the crosscore sending
+  return conn->send_with_throttling(std::move(reply));
 }
 
 ClientRequest::interruptible_future<>
@@ -246,7 +248,8 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
           m.get(), completed->err, pg->get_osdmap_epoch(),
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
 	reply->set_reply_versions(completed->version, completed->user_version);
-        return conn->send(std::move(reply));
+        // TODO: gate the crosscore sending
+        return conn->send_with_throttling(std::move(reply));
       } else {
         return ihref.enter_stage<interruptor>(client_pp(*pg).get_obc, *this
 	).then_interruptible(
@@ -319,13 +322,13 @@ ClientRequest::do_process(
 
   SnapContext snapc = get_snapc(pg,obc);
 
-  if ((m->has_flag(CEPH_OSD_FLAG_ORDERSNAP)) &&
-       snapc.seq < obc->ssc->snapset.seq) {
-        DEBUGI("{} ORDERSNAP flag set and snapc seq {}",
-                       " < snapset seq {} on {}",
-                       __func__, snapc.seq, obc->ssc->snapset.seq,
-                       obc->obs.oi.soid);
-     return reply_op_error(pg, -EOLDSNAPC);
+  if (m->has_flag(CEPH_OSD_FLAG_ORDERSNAP) &&
+      snapc.seq < obc->ssc->snapset.seq) {
+    DEBUGI("{} ORDERSNAP flag set and snapc seq {}",
+           " < snapset seq {} on {}",
+           __func__, snapc.seq, obc->ssc->snapset.seq,
+           obc->obs.oi.soid);
+    return reply_op_error(pg, -EOLDSNAPC);
   }
 
   if (!pg->is_primary()) {
@@ -357,8 +360,10 @@ ClientRequest::do_process(
 		[this, reply=std::move(reply)]() mutable {
                   LOG_PREFIX(ClientRequest::do_process);
 		  DEBUGI("{}: sending response", *this);
-		  return conn->send(std::move(reply));
-		});
+		  // TODO: gate the crosscore sending
+		  return conn->send_with_throttling(std::move(reply));
+		}
+	      );
 	    }, crimson::ct_error::eagain::handle([this, pg, &ihref]() mutable {
 	      return process_op(ihref, pg);
 	    }));
