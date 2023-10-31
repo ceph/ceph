@@ -6157,6 +6157,7 @@ int BlueStore::_open_collections()
   collections_had_errors = false;
   ceph_assert(coll_map.empty());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
+  size_t load_cnt = 0;
   for (it->upper_bound(string());
        it->valid();
        it->next()) {
@@ -6180,12 +6181,14 @@ int BlueStore::_open_collections()
 	       << " " << c->cnode << dendl;
       _osr_attach(c.get());
       coll_map[cid] = c;
-
+      load_cnt++;
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
       collections_had_errors = true;
     }
   }
+  dout(10) << __func__ << " collections loaded: " << load_cnt
+           <<  dendl;
   return 0;
 }
 
