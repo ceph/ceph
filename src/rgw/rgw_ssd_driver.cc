@@ -1,4 +1,5 @@
 #include "common/async/completion.h"
+#include "common/errno.h"
 #include "rgw_ssd_driver.h"
 #if defined(__linux__)
 #include <features.h>
@@ -399,11 +400,18 @@ int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& ke
 
     for (auto& it : attrs) {
         std::string attr_name, attr_val;
-        ceph::decode(attr_val, it.second);
         attr_name = it.first;
-        auto ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), XATTR_REPLACE);
+        attr_val = it.second.c_str();
+        std::string old_attr_val = get_attr(dpp, key, attr_name, y);
+        int ret;
+        if (old_attr_val.empty()) {
+            ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), XATTR_CREATE);
+        } else {
+            ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), XATTR_REPLACE);
+        }
         if (ret < 0) {
-            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not modify attr value for attr name: " << attr_name << " key: " << key << dendl;
+            auto e = errno;
+            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not modify attr value for attr name: " << attr_name << " key: " << key << " ERROR: " << cpp_strerror(e) <<dendl;
             return ret;
         }
     }
@@ -480,13 +488,23 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
 std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y)
 {
     std::string location = partition_info.location + key;
+    std::string attr_val;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): get_attr: key: " << attr_name << dendl;
 
     int attr_size = getxattr(location.c_str(), attr_name.c_str(), nullptr, 0);
+    if (attr_size < 0) {
+      auto ret = errno;
+      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << attr_name << ": " << cpp_strerror(ret) << dendl;
+      return attr_val;
+    }
 
-    std::string attr_val;
+    if (attr_size == 0) {
+      ldpp_dout(dpp, 0) << "ERROR: no attribute value found for attr_name: " << attr_name << dendl;
+      return attr_val;
+    }
+
     attr_val.reserve(attr_size + 1);
     char* attr_val_ptr =  &attr_val[0];
 
