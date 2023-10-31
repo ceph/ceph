@@ -31,6 +31,7 @@
 #include "crimson/net/Messenger.h"
 #include "crimson/os/cyanstore/cyan_store.h"
 #include "crimson/os/futurized_collection.h"
+#include "crimson/osd/ec_backend.h"
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/pg_backend.h"
@@ -1223,6 +1224,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
   std::vector<pg_log_entry_t> log_entries;
   decode(log_entries, p);
   log_operation(std::move(log_entries),
+                std::nullopt,
                 req->pg_trim_to,
                 req->version,
                 req->min_last_complete_ondisk,
@@ -1245,6 +1247,7 @@ PG::interruptible_future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
 
 void PG::log_operation(
   std::vector<pg_log_entry_t>&& logv,
+  const std::optional<pg_hit_set_history_t> &hset_history,
   const eversion_t &trim_to,
   const eversion_t &roll_forward_to,
   const eversion_t &min_last_complete_ondisk,
@@ -1254,6 +1257,9 @@ void PG::log_operation(
   logger().debug("{}", __func__);
   if (is_primary()) {
     ceph_assert(trim_to <= peering_state.get_last_update_ondisk());
+  }
+  if (hset_history) {
+    peering_state.update_hset(*hset_history);
   }
   /* TODO: when we add snap mapper and projected log support,
    * we'll likely want to update them here.
@@ -1304,6 +1310,47 @@ void PG::handle_rep_op_reply(const MOSDRepOpReply& m)
   if (!can_discard_replica_op(m)) {
     backend->got_rep_op_reply(m);
   }
+}
+
+PG::interruptible_future<> PG::handle_rep_write_op(Ref<MOSDECSubOpWrite> m)
+{
+  logger().debug("{}", __func__);
+  if (!is_primary()) {
+    peering_state.update_stats([&new_stats=m->op.stats](auto&, auto &stats) {
+      stats = new_stats;
+      return false;
+    });
+  }
+  auto* ec_backend=dynamic_cast<::ECBackend*>(&get_backend());
+  assert(ec_backend);
+  const auto tid = m->op.tid;
+  return ec_backend->handle_rep_write_op(
+    std::move(m),
+    *this
+  ).si_then([this, then_lcod=peering_state.get_info().last_complete, tid] {
+    logger().debug("{} sending response", "handle_rep_write_op");
+    peering_state.update_last_complete_ondisk(then_lcod);
+    auto r = crimson::make_message<MOSDECSubOpWriteReply>();
+    r->pgid = spg_t(peering_state.get_info().pgid.pgid, get_primary().shard);
+    r->map_epoch = get_osdmap_epoch();
+    r->min_epoch = peering_state.get_info().history.same_interval_since;
+    r->op.tid = tid;
+    r->op.last_complete = then_lcod;
+    r->op.committed = true;
+    r->op.applied = true;
+    r->op.from = pg_whoami;
+    r->set_priority(CEPH_MSG_PRIO_HIGH);
+    return shard_services.send_to_osd(get_primary().osd, std::move(r), get_osdmap_epoch());
+  }).handle_error_interruptible(crimson::ct_error::assert_all{});
+}
+
+PG::interruptible_future<> PG::handle_rep_read_op(Ref<MOSDECSubOpRead> m)
+{
+  auto* ec_backend=dynamic_cast<::ECBackend*>(&get_backend());
+  assert(ec_backend);
+  return ec_backend->handle_rep_read_op(
+    std::move(m)
+  ).handle_error_interruptible(crimson::ct_error::assert_all{});
 }
 
 PG::interruptible_future<> PG::do_update_log_missing(
@@ -1517,6 +1564,22 @@ bool PG::is_degraded_or_backfilling_object(const hobject_t& soid) const {
     }
   }
   return false;
+}
+
+void PG::op_applied(const eversion_t &applied_version)
+{
+  logger().info("{}: op_applied version {}", __func__, applied_version);
+  assert(applied_version != eversion_t());
+  assert(applied_version <= peering_state.get_info().last_update);
+  peering_state.local_write_applied(applied_version);
+
+#if 0
+  if (is_primary() && m_scrubber) {
+    // if there's a scrub operation waiting for the selected chunk to be fully updated -
+    // allow it to continue
+    m_scrubber->on_applied_when_primary(recovery_state.get_last_update_applied());
+  }
+#endif
 }
 
 PG::interruptible_future<std::optional<PG::complete_op_t>>

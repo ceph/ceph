@@ -17,6 +17,7 @@ add_executable(crimson-osd
   object_context_loader.cc
   ops_executer.cc
   osd_operation.cc
+  osd_operations/ecrep_request.cc
   osd_operations/client_request.cc
   osd_operations/client_request_common.cc
   osd_operations/internal_client_request.cc
@@ -61,6 +62,7 @@ target_link_libraries(crimson-osd
   crimson-common
   crimson-os
   crimson
+  erasure_code
   fmt::fmt
   Boost::MPL
   dmclock::dmclock)

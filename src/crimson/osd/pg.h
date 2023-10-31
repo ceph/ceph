@@ -43,6 +43,7 @@
 class MQuery;
 class OSDMap;
 class PGBackend;
+class ECBackend;
 class PGPeeringEvent;
 class osd_op_params_t;
 
@@ -514,6 +515,7 @@ public:
   interruptible_future<> handle_rep_op(Ref<MOSDRepOp> m);
   void log_operation(
     std::vector<pg_log_entry_t>&& logv,
+    const std::optional<pg_hit_set_history_t> &hset_history,
     const eversion_t &trim_to,
     const eversion_t &roll_forward_to,
     const eversion_t &min_last_complete_ondisk,
@@ -539,6 +541,9 @@ public:
     const std::error_code e,
     ceph_tid_t rep_tid,
     eversion_t &version);
+
+  interruptible_future<> handle_rep_write_op(Ref<MOSDECSubOpWrite>);
+  interruptible_future<> handle_rep_read_op(Ref<MOSDECSubOpRead>);
 
 private:
 
@@ -727,6 +732,7 @@ private:
   PGActivationBlocker wait_for_active_blocker;
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
+  friend class ECRepRequest;
   friend class ClientRequest;
   friend struct CommonClientRequest;
   friend class PGAdvanceMap;
@@ -741,6 +747,7 @@ private:
   friend class WatchTimeoutRequest;
   friend class SnapTrimEvent;
   friend class SnapTrimObjSubEvent;
+  friend ECBackend;
 private:
   seastar::future<bool> find_unfound() {
     return seastar::make_ready_future<bool>(true);
@@ -762,6 +769,10 @@ private:
   const std::set<pg_shard_t> &get_actingset() const {
     return peering_state.get_actingset();
   }
+  void add_local_next_event(const pg_log_entry_t& e) {
+    peering_state.add_local_next_event(e);
+  }
+  void op_applied(const eversion_t &applied_version);
 
 private:
   friend class IOInterruptCondition;

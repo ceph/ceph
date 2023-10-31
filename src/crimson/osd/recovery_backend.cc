@@ -32,6 +32,16 @@ hobject_t RecoveryBackend::get_temp_recovery_object(
   return hoid;
 }
 
+void RecoveryBackend::add_temp_obj(const hobject_t &oid)
+{
+  backend->add_temp_obj(oid);
+}
+
+void RecoveryBackend::clear_temp_obj(const hobject_t &oid)
+{
+  backend->clear_temp_obj(oid);
+}
+
 void RecoveryBackend::clean_up(ceph::os::Transaction& t,
 			       std::string_view why)
 {

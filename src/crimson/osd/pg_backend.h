@@ -63,12 +63,12 @@ public:
   using rep_op_fut_t =
     std::tuple<interruptible_future<>,
 	       interruptible_future<crimson::osd::acked_peers_t>>;
-  PGBackend(shard_id_t shard, CollectionRef coll,
+  PGBackend(pg_shard_t whoami, CollectionRef coll,
             crimson::osd::ShardServices &shard_services,
             DoutPrefixProvider &dpp);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(pg_t pgid,
-					   const pg_shard_t pg_shard,
+					   const pg_shard_t whoami,
 					   const pg_pool_t& pool,
 					   crimson::os::CollectionRef coll,
 					   crimson::osd::ShardServices& shard_services,
@@ -385,7 +385,7 @@ public:
   virtual seastar::future<> stop() = 0;
   virtual void on_actingset_changed(bool same_primary) = 0;
 protected:
-  const shard_id_t shard;
+  const pg_shard_t whoami;
   CollectionRef coll;
   crimson::osd::ShardServices &shard_services;
   DoutPrefixProvider &dpp; ///< provides log prefix context
@@ -393,6 +393,9 @@ protected:
   virtual seastar::future<> request_committed(
     const osd_reqid_t& reqid,
     const eversion_t& at_version) = 0;
+  const shard_id_t& get_shard() const {
+    return whoami.shard;
+  }
 public:
   struct loaded_object_md_t {
     ObjectState os;
@@ -445,4 +448,22 @@ private:
 		      std::vector<pg_log_entry_t>&& log_entries) = 0;
   friend class ReplicatedRecoveryBackend;
   friend class ::crimson::osd::PG;
+
+protected:
+  boost::container::flat_set<hobject_t> temp_contents;
+
+  template <class... Args>
+  void add_temp_obj(Args&&... args) {
+    temp_contents.insert(std::forward<Args>(args)...);
+  }
+  void clear_temp_obj(const hobject_t &oid) {
+    temp_contents.erase(oid);
+  }
+  template <class T>
+  void clear_temp_objs(const T &cont) {
+    for (const auto& oid : cont) {
+      clear_temp_obj(oid);
+    }
+  }
+  friend class RecoveryBackend;
 };

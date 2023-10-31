@@ -58,6 +58,9 @@ static ostream& _prefix(std::ostream *_dout, ECBackend *pgb) {
 static ostream& _prefix(std::ostream *_dout, ECBackend::RMWPipeline *rmw_pipeline) {
   return rmw_pipeline->get_parent()->gen_dbg_prefix(*_dout);
 }
+static ostream& _prefix(std::ostream *_dout, ECBackend::ReadPipeline *read_pipeline) {
+  return read_pipeline->get_parent()->gen_dbg_prefix(*_dout);
+}
 
 struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
   list<ECBackend::RecoveryOp> ops;
@@ -221,6 +224,7 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
+    read_pipeline(cct, ec_impl, this->sinfo, get_parent(), *this),
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent(), *this),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
@@ -233,10 +237,8 @@ PGBackend::RecoveryHandle *ECBackend::open_recovery_op()
   return new ECRecoveryHandle;
 }
 
-void ECBackend::_failed_push(const hobject_t &hoid,
-  pair<RecoveryMessages *, ECBackend::read_result_t &> &in)
+void ECBackend::_failed_push(const hobject_t &hoid, ECBackend::read_result_t &res)
 {
-  ECBackend::read_result_t &res = in.second;
   dout(10) << __func__ << ": Read error " << hoid << " r="
 	   << res.r << " errors=" << res.errors << dendl;
   dout(10) << __func__ << ": canceling recovery op for obj " << hoid
@@ -252,58 +254,33 @@ void ECBackend::_failed_push(const hobject_t &hoid,
   get_parent()->on_failed_pull(fl, hoid, v);
 }
 
-struct OnRecoveryReadComplete :
-  public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
-  ECBackend *pg;
-  hobject_t hoid;
-  OnRecoveryReadComplete(ECBackend *pg, const hobject_t &hoid)
-    : pg(pg), hoid(hoid) {}
-  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
-    ECBackend::read_result_t &res = in.second;
-    if (!(res.r == 0 && res.errors.empty())) {
-        pg->_failed_push(hoid, in);
-        return;
-    }
-    ceph_assert(res.returned.size() == 1);
-    pg->handle_recovery_read_complete(
-      hoid,
-      res.returned.back(),
-      res.attrs,
-      in.first);
-  }
-};
-
 struct RecoveryMessages {
   map<hobject_t,
-      ECBackend::read_request_t> reads;
+      ECBackend::read_request_t> recovery_reads;
   map<hobject_t, set<int>> want_to_read;
-  void read(
-    ECBackend *ec,
+
+  void recovery_read(
     const hobject_t &hoid, uint64_t off, uint64_t len,
     set<int> &&_want_to_read,
     const map<pg_shard_t, vector<pair<int, int>>> &need,
-    bool attrs) {
+    bool attrs)
+  {
     list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     to_read.push_back(boost::make_tuple(off, len, 0));
-    ceph_assert(!reads.count(hoid));
+    ceph_assert(!recovery_reads.count(hoid));
     want_to_read.insert(make_pair(hoid, std::move(_want_to_read)));
-    reads.insert(
+    recovery_reads.insert(
       make_pair(
 	hoid,
 	ECBackend::read_request_t(
 	  to_read,
 	  need,
-	  attrs,
-	  new OnRecoveryReadComplete(
-	    ec,
-	    hoid))));
+	  attrs)));
   }
 
   map<pg_shard_t, vector<PushOp> > pushes;
   map<pg_shard_t, vector<PushReplyOp> > push_replies;
   ObjectStore::Transaction t;
-  RecoveryMessages() {}
-  ~RecoveryMessages() {}
 };
 
 void ECBackend::handle_recovery_push(
@@ -538,6 +515,36 @@ struct SendPushReplies : public Context {
   }
 };
 
+struct RecoveryReadCompleter : ECBackend::ReadCompleter {
+  RecoveryReadCompleter(ECBackend& backend)
+    : backend(backend) {}
+
+  void finish_single_request(
+    const hobject_t &hoid,
+    ECBackend::read_result_t &res,
+    list<boost::tuple<uint64_t, uint64_t, uint32_t> >) override
+  {
+    if (!(res.r == 0 && res.errors.empty())) {
+      backend._failed_push(hoid, res);
+      return;
+    }
+    ceph_assert(res.returned.size() == 1);
+    backend.handle_recovery_read_complete(
+      hoid,
+      res.returned.back(),
+      res.attrs,
+      &rm);
+  }
+
+  void finish(int priority) && override
+  {
+    backend.dispatch_recovery_messages(rm, priority);
+  }
+
+  ECBackend& backend;
+  RecoveryMessages rm;
+};
+
 void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
 {
   for (map<pg_shard_t, vector<PushOp> >::iterator i = m.pushes.begin();
@@ -582,14 +589,16 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     get_parent()->queue_transaction(std::move(m.t));
   } 
 
-  if (m.reads.empty())
+  if (m.recovery_reads.empty())
     return;
-  start_read_op(
+  read_pipeline.start_read_op(
     priority,
     m.want_to_read,
-    m.reads,
+    m.recovery_reads,
     OpRequestRef(),
-    false, true);
+    false,
+    true,
+    std::make_unique<RecoveryReadCompleter>(*this));
 }
 
 void ECBackend::continue_recovery_op(
@@ -636,8 +645,7 @@ void ECBackend::continue_recovery_op(
 	recovery_ops.erase(op.hoid);
 	return;
       }
-      m->read(
-	this,
+      m->recovery_read(
 	op.hoid,
 	op.recovery_progress.data_recovered_to,
 	amount,
@@ -858,9 +866,9 @@ bool ECBackend::_handle_message(
     // buffers.  It does not conflict with ECSubReadReply operator<<.
     MOSDECSubOpReadReply *op = static_cast<MOSDECSubOpReadReply*>(
       _op->get_nonconst_req());
-    RecoveryMessages rm;
-    handle_sub_read_reply(op->op.from, op->op, &rm, _op->pg_trace);
-    dispatch_recovery_messages(rm, priority);
+    handle_sub_read_reply(op->op.from, op->op, _op->pg_trace);
+    // dispatch_recovery_messages() in the case of recovery_reads
+    // is called via the `on_complete` callback
     return true;
   }
   case MSG_OSD_PG_PUSH: {
@@ -1195,13 +1203,12 @@ void ECBackend::handle_sub_write_reply(
 void ECBackend::handle_sub_read_reply(
   pg_shard_t from,
   ECSubReadReply &op,
-  RecoveryMessages *m,
   const ZTracer::Trace &trace)
 {
   trace.event("ec sub read reply");
   dout(10) << __func__ << ": reply " << op << dendl;
-  map<ceph_tid_t, ReadOp>::iterator iter = tid_to_read_map.find(op.tid);
-  if (iter == tid_to_read_map.end()) {
+  map<ceph_tid_t, ReadOp>::iterator iter = read_pipeline.tid_to_read_map.find(op.tid);
+  if (iter == read_pipeline.tid_to_read_map.end()) {
     //canceled
     dout(20) << __func__ << ": dropped " << op << dendl;
     return;
@@ -1257,8 +1264,8 @@ void ECBackend::handle_sub_read_reply(
   }
 
   map<pg_shard_t, set<ceph_tid_t> >::iterator siter =
-					shard_to_read_map.find(from);
-  ceph_assert(siter != shard_to_read_map.end());
+					read_pipeline.shard_to_read_map.find(from);
+  ceph_assert(siter != read_pipeline.shard_to_read_map.end());
   ceph_assert(siter->second.count(op.tid));
   siter->second.erase(op.tid);
 
@@ -1290,7 +1297,7 @@ void ECBackend::handle_sub_read_reply(
 	  // During recovery there may be multiple osds with copies of the same shard,
 	  // so getting EIO from one may result in multiple passes through this code path.
 	  if (!rop.do_redundant_reads) {
-	    int r = send_all_remaining_reads(iter->first, rop);
+	    int r = read_pipeline.send_all_remaining_reads(iter->first, rop);
 	    if (r == 0) {
 	      // We changed the rop's to_read and not incrementing is_complete
 	      need_resend = true;
@@ -1329,18 +1336,18 @@ void ECBackend::handle_sub_read_reply(
     }
   }
   if (need_resend) {
-    do_read_op(rop);
+    read_pipeline.do_read_op(rop);
   } else if (rop.in_progress.empty() || 
              is_complete == rop.complete.size()) {
     dout(20) << __func__ << " Complete: " << rop << dendl;
     rop.trace.event("ec read complete");
-    complete_read_op(rop, m);
+    read_pipeline.complete_read_op(rop);
   } else {
     dout(10) << __func__ << " readop not complete: " << rop << dendl;
   }
 }
 
-void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
+void ECBackend::ReadPipeline::complete_read_op(ReadOp &rop)
 {
   map<hobject_t, read_request_t>::iterator reqiter =
     rop.to_read.begin();
@@ -1348,13 +1355,14 @@ void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
     rop.complete.begin();
   ceph_assert(rop.to_read.size() == rop.complete.size());
   for (; reqiter != rop.to_read.end(); ++reqiter, ++resiter) {
-    if (reqiter->second.cb) {
-      pair<RecoveryMessages *, read_result_t &> arg(
-	m, resiter->second);
-      reqiter->second.cb->complete(arg);
-      reqiter->second.cb = nullptr;
-    }
+    rop.on_complete->finish_single_request(
+      reqiter->first,
+      resiter->second,
+      reqiter->second.to_read);
   }
+  ceph_assert(rop.on_complete);
+  std::move(*rop.on_complete).finish(rop.priority);
+  rop.on_complete = nullptr;
   // if the read op is over. clean all the data of this tid.
   for (set<pg_shard_t>::iterator iter = rop.in_progress.begin();
     iter != rop.in_progress.end();
@@ -1366,22 +1374,22 @@ void ECBackend::complete_read_op(ReadOp &rop, RecoveryMessages *m)
 }
 
 struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
-  ECBackend *ec;
+  ECBackend::ReadPipeline& read_pipeline;
   ceph_tid_t tid;
-  FinishReadOp(ECBackend *ec, ceph_tid_t tid) : ec(ec), tid(tid) {}
-  void finish(ThreadPool::TPHandle &handle) override {
-    auto ropiter = ec->tid_to_read_map.find(tid);
-    ceph_assert(ropiter != ec->tid_to_read_map.end());
-    int priority = ropiter->second.priority;
-    RecoveryMessages rm;
-    ec->complete_read_op(ropiter->second, &rm);
-    ec->dispatch_recovery_messages(rm, priority);
+  FinishReadOp(ECBackend::ReadPipeline& read_pipeline, ceph_tid_t tid)
+    : read_pipeline(read_pipeline), tid(tid) {}
+  void finish(ThreadPool::TPHandle&) override {
+    auto ropiter = read_pipeline.tid_to_read_map.find(tid);
+    ceph_assert(ropiter != read_pipeline.tid_to_read_map.end());
+    read_pipeline.complete_read_op(ropiter->second);
   }
 };
 
-void ECBackend::filter_read_op(
+template <class F>
+void ECBackend::ReadPipeline::filter_read_op(
   const OSDMapRef& osdmap,
-  ReadOp &op)
+  ReadOp &op,
+  F&& on_erase)
 {
   set<hobject_t> to_cancel;
   for (map<pg_shard_t, set<hobject_t> >::iterator i = op.source_to_obj.begin();
@@ -1425,13 +1433,9 @@ void ECBackend::filter_read_op(
     read_request_t &req = op.to_read.find(*i)->second;
     dout(10) << __func__ << ": canceling " << req
 	     << "  for obj " << *i << dendl;
-    ceph_assert(req.cb);
-    delete req.cb;
-    req.cb = nullptr;
-
     op.to_read.erase(*i);
     op.complete.erase(*i);
-    recovery_ops.erase(*i);
+    on_erase(*i);
   }
 
   if (op.in_progress.empty()) {
@@ -1452,12 +1456,15 @@ void ECBackend::filter_read_op(
      */
     get_parent()->schedule_recovery_work(
       get_parent()->bless_unlocked_gencontext(
-        new FinishReadOp(this, op.tid)),
+        new FinishReadOp(*this, op.tid)),
       1);
   }
 }
 
-void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
+template <class F>
+void ECBackend::ReadPipeline::check_recovery_sources(
+  const OSDMapRef& osdmap,
+  F&& on_erase)
 {
   set<ceph_tid_t> tids_to_filter;
   for (map<pg_shard_t, set<ceph_tid_t> >::iterator 
@@ -1476,8 +1483,27 @@ void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
        ++i) {
     map<ceph_tid_t, ReadOp>::iterator j = tid_to_read_map.find(*i);
     ceph_assert(j != tid_to_read_map.end());
-    filter_read_op(osdmap, j->second);
+    filter_read_op(osdmap, j->second, on_erase);
   }
+}
+
+void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
+{
+  read_pipeline.check_recovery_sources(osdmap, [this] (const hobject_t& obj) {
+    recovery_ops.erase(obj);
+  });
+}
+
+void ECBackend::ReadPipeline::on_change()
+{
+  for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
+       i != tid_to_read_map.end();
+       ++i) {
+    dout(10) << __func__ << ": cancelling " << i->second << dendl;
+  }
+  tid_to_read_map.clear();
+  shard_to_read_map.clear();
+  in_progress_client_reads.clear();
 }
 
 void ECBackend::RMWPipeline::on_change()
@@ -1499,21 +1525,7 @@ void ECBackend::RMWPipeline::on_change()
 void ECBackend::on_change()
 {
   rmw_pipeline.on_change();
-  for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
-       i != tid_to_read_map.end();
-       ++i) {
-    dout(10) << __func__ << ": cancelling " << i->second << dendl;
-    for (map<hobject_t, read_request_t>::iterator j =
-	   i->second.to_read.begin();
-	 j != i->second.to_read.end();
-	 ++j) {
-      delete j->second.cb;
-      j->second.cb = nullptr;
-    }
-  }
-  tid_to_read_map.clear();
-  shard_to_read_map.clear();
-  in_progress_client_reads.clear();
+  read_pipeline.on_change();
   clear_recovery_state();
 }
 
@@ -1534,8 +1546,8 @@ void ECBackend::dump_recovery_info(Formatter *f) const
   }
   f->close_section();
   f->open_array_section("read_ops");
-  for (map<ceph_tid_t, ReadOp>::const_iterator i = tid_to_read_map.begin();
-       i != tid_to_read_map.end();
+  for (map<ceph_tid_t, ReadOp>::const_iterator i = read_pipeline.tid_to_read_map.begin();
+       i != read_pipeline.tid_to_read_map.end();
        ++i) {
     f->open_object_section("read_op");
     i->second.dump(f);
@@ -1651,7 +1663,7 @@ void ECBackend::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) 
   }
 }
 
-void ECBackend::get_all_avail_shards(
+void ECBackend::ReadPipeline::get_all_avail_shards(
   const hobject_t &hoid,
   const set<pg_shard_t> &error_shards,
   set<int> &have,
@@ -1730,7 +1742,7 @@ int ECBackend::get_min_avail_to_read_shards(
   map<shard_id_t, pg_shard_t> shards;
   set<pg_shard_t> error_shards;
 
-  get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
+  read_pipeline.get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
 
   map<int, vector<pair<int, int>>> need;
   int r = ec_impl->minimum_to_decode(want, have, &need);
@@ -1755,7 +1767,7 @@ int ECBackend::get_min_avail_to_read_shards(
   return 0;
 }
 
-int ECBackend::get_remaining_shards(
+int ECBackend::ReadPipeline::get_remaining_shards(
   const hobject_t &hoid,
   const set<int> &avail,
   const set<int> &want,
@@ -1801,13 +1813,14 @@ int ECBackend::get_remaining_shards(
   return 0;
 }
 
-void ECBackend::start_read_op(
+void ECBackend::ReadPipeline::start_read_op(
   int priority,
   map<hobject_t, set<int>> &want_to_read,
   map<hobject_t, read_request_t> &to_read,
   OpRequestRef _op,
   bool do_redundant_reads,
-  bool for_recovery)
+  bool for_recovery,
+  std::unique_ptr<ECBackend::ReadCompleter> on_complete)
 {
   ceph_tid_t tid = get_parent()->get_tid();
   ceph_assert(!tid_to_read_map.count(tid));
@@ -1818,6 +1831,7 @@ void ECBackend::start_read_op(
       tid,
       do_redundant_reads,
       for_recovery,
+      std::move(on_complete),
       _op,
       std::move(want_to_read),
       std::move(to_read))).first->second;
@@ -1829,7 +1843,7 @@ void ECBackend::start_read_op(
   do_read_op(op);
 }
 
-void ECBackend::do_read_op(ReadOp &op)
+void ECBackend::ReadPipeline::do_read_op(ReadOp &op)
 {
   int priority = op.priority;
   ceph_tid_t tid = op.tid;
@@ -2392,20 +2406,17 @@ void ECBackend::objects_read_async(
 	   on_complete)));
 }
 
-struct CallClientContexts :
-  public GenContext<pair<RecoveryMessages*, ECBackend::read_result_t& > &> {
-  hobject_t hoid;
-  ECBackend *ec;
-  ECBackend::ClientAsyncReadStatus *status;
-  list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
-  CallClientContexts(
-    hobject_t hoid,
-    ECBackend *ec,
-    ECBackend::ClientAsyncReadStatus *status,
-    const list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read)
-    : hoid(hoid), ec(ec), status(status), to_read(to_read) {}
-  void finish(pair<RecoveryMessages *, ECBackend::read_result_t &> &in) override {
-    ECBackend::read_result_t &res = in.second;
+struct ClientReadCompleter : ECBackend::ReadCompleter {
+  ClientReadCompleter(ECBackend::ReadPipeline &read_pipeline,
+                      ECBackend::ClientAsyncReadStatus *status)
+    : read_pipeline(read_pipeline),
+      status(status) {}
+
+  void finish_single_request(
+    const hobject_t &hoid,
+    ECBackend::read_result_t &res,
+    list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read) override
+  {
     extent_map result;
     if (res.r != 0)
       goto out;
@@ -2413,7 +2424,7 @@ struct CallClientContexts :
     ceph_assert(res.errors.empty());
     for (auto &&read: to_read) {
       pair<uint64_t, uint64_t> adjusted =
-	ec->sinfo.offset_len_to_stripe_bounds(
+	read_pipeline.sinfo.offset_len_to_stripe_bounds(
 	  make_pair(read.get<0>(), read.get<1>()));
       ceph_assert(res.returned.front().get<0>() == adjusted.first);
       ceph_assert(res.returned.front().get<1>() == adjusted.second);
@@ -2426,8 +2437,8 @@ struct CallClientContexts :
 	to_decode[j->first.shard] = std::move(j->second);
       }
       int r = ECUtil::decode(
-	ec->sinfo,
-	ec->ec_impl,
+	read_pipeline.sinfo,
+	read_pipeline.ec_impl,
 	to_decode,
 	&bl);
       if (r < 0) {
@@ -2446,9 +2457,18 @@ struct CallClientContexts :
     }
 out:
     status->complete_object(hoid, res.r, std::move(result));
-    ec->kick_reads();
+    read_pipeline.kick_reads();
   }
+
+  void finish(int priority) && override
+  {
+    // NOP
+  }
+
+  ECBackend::ReadPipeline &read_pipeline;
+  ECBackend::ClientAsyncReadStatus *status;
 };
+
 
 void ECBackend::objects_read_and_reconstruct(
   const map<hobject_t,
@@ -2457,6 +2477,32 @@ void ECBackend::objects_read_and_reconstruct(
   bool fast_read,
   GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func)
 {
+  return read_pipeline.objects_read_and_reconstruct(
+    *this, reads, fast_read, std::move(func));
+}
+
+void ECBackend::ReadPipeline::objects_read_and_reconstruct(
+  ECBackend& ecbackend,
+  const map<hobject_t,
+    std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
+  > &reads,
+  bool fast_read,
+  GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func)
+{
+  return [this,
+    kick_reads=[this] (auto...) { return this->kick_reads();},
+    get_want_to_read_shards=[&ecbackend] (auto&&... args) {
+      return ecbackend.get_want_to_read_shards(std::forward<decltype(args)>(args)...);
+    },
+    get_min_avail_to_read_shards=[&ecbackend] (auto&&... args) {
+      return ecbackend.get_min_avail_to_read_shards(std::forward<decltype(args)>(args)...);
+    },
+    cct=(CephContext*)nullptr,
+    // params
+    &reads,
+    fast_read,
+    func=std::move(func)
+  ]() mutable {
   in_progress_client_reads.emplace_back(
     reads.size(), std::move(func));
   if (!reads.size()) {
@@ -2479,19 +2525,13 @@ void ECBackend::objects_read_and_reconstruct(
       &shards);
     ceph_assert(r == 0);
 
-    CallClientContexts *c = new CallClientContexts(
-      to_read.first,
-      this,
-      &(in_progress_client_reads.back()),
-      to_read.second);
     for_read_op.insert(
       make_pair(
 	to_read.first,
 	read_request_t(
 	  to_read.second,
 	  shards,
-	  false,
-	  c)));
+	  false)));
     obj_want_to_read.insert(make_pair(to_read.first, want_to_read));
   }
 
@@ -2500,12 +2540,15 @@ void ECBackend::objects_read_and_reconstruct(
     obj_want_to_read,
     for_read_op,
     OpRequestRef(),
-    fast_read, false);
+    fast_read,
+    false,
+    std::make_unique<ClientReadCompleter>(*this, &(in_progress_client_reads.back())));
+  }();
   return;
 }
 
 
-int ECBackend::send_all_remaining_reads(
+int ECBackend::ReadPipeline::send_all_remaining_reads(
   const hobject_t &hoid,
   ReadOp &rop)
 {
@@ -2522,8 +2565,6 @@ int ECBackend::send_all_remaining_reads(
 
   list<boost::tuple<uint64_t, uint64_t, uint32_t> > offsets =
     rop.to_read.find(hoid)->second.to_read;
-  GenContext<pair<RecoveryMessages *, read_result_t& > &> *c =
-    rop.to_read.find(hoid)->second.cb;
 
   // (Note cuixf) If we need to read attrs and we read failed, try to read again.
   bool want_attrs =
@@ -2539,10 +2580,23 @@ int ECBackend::send_all_remaining_reads(
       read_request_t(
 	offsets,
 	shards,
-	want_attrs,
-	c)));
+	want_attrs)));
   return 0;
 }
+
+void ECBackend::ReadPipeline::kick_reads()
+{
+  while (in_progress_client_reads.size() &&
+         in_progress_client_reads.front().is_complete()) {
+    in_progress_client_reads.front().run();
+    in_progress_client_reads.pop_front();
+  }
+}
+
+void ECBackend::kick_reads() {
+  read_pipeline.kick_reads();
+}
+
 
 int ECBackend::objects_get_attrs(
   const hobject_t &hoid,

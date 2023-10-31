@@ -16,6 +16,8 @@
 #include "os/Transaction.h"
 #include "common/Checksummer.h"
 #include "common/Clock.h"
+#include "erasure-code/ErasureCodeInterface.h"
+#include "erasure-code/ErasureCodePlugin.h"
 
 #include "crimson/common/exception.h"
 #include "crimson/common/tmap_helpers.h"
@@ -41,7 +43,7 @@ using crimson::common::local_conf;
 
 std::unique_ptr<PGBackend>
 PGBackend::create(pg_t pgid,
-		  const pg_shard_t pg_shard,
+		  const pg_shard_t whoami,
 		  const pg_pool_t& pool,
 		  crimson::os::CollectionRef coll,
 		  crimson::osd::ShardServices& shard_services,
@@ -50,13 +52,15 @@ PGBackend::create(pg_t pgid,
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
-    return std::make_unique<ReplicatedBackend>(pgid, pg_shard,
+    return std::make_unique<ReplicatedBackend>(pgid, whoami,
 					       coll, shard_services,
 					       dpp);
   case pg_pool_t::TYPE_ERASURE:
-    return std::make_unique<ECBackend>(pg_shard.shard, coll, shard_services,
+    return std::make_unique<ECBackend>(whoami, coll, shard_services,
                                        std::move(ec_profile),
                                        pool.stripe_width,
+				       pool.fast_read,
+				       pool.allows_ecoverwrites(),
 				       dpp);
   default:
     throw runtime_error(seastar::format("unsupported pool type '{}'",
@@ -64,16 +68,18 @@ PGBackend::create(pg_t pgid,
   }
 }
 
-PGBackend::PGBackend(shard_id_t shard,
+PGBackend::PGBackend(pg_shard_t whoami,
                      CollectionRef coll,
                      crimson::osd::ShardServices &shard_services,
 		     DoutPrefixProvider &dpp)
-  : shard{shard},
+  : whoami{whoami},
     coll{coll},
     shard_services{shard_services},
     dpp{dpp},
     store{&shard_services.get_store()}
-{}
+{
+  logger().info("initialized PGBackend::store with {}", (void*)this->store);
+}
 
 PGBackend::load_metadata_iertr::future
   <PGBackend::loaded_object_md_t::ref>
@@ -81,7 +87,7 @@ PGBackend::load_metadata(const hobject_t& oid)
 {
   return interruptor::make_interruptible(store->get_attrs(
     coll,
-    ghobject_t{oid, ghobject_t::NO_GEN, shard})).safe_then_interruptible(
+    ghobject_t{oid, ghobject_t::NO_GEN, get_shard()})).safe_then_interruptible(
       [oid](auto &&attrs) -> load_metadata_ertr::future<loaded_object_md_t::ref>{
         loaded_object_md_t::ref ret(new loaded_object_md_t());
         if (auto oiiter = attrs.find(OI_ATTR); oiiter != attrs.end()) {
@@ -176,7 +182,7 @@ PGBackend::mutate_object(
     // object_info_t
     {
       ceph::bufferlist osv;
-      obc->obs.oi.encode_no_oid(osv, CEPH_FEATURES_ALL);
+      obc->obs.oi.encode(osv, CEPH_FEATURES_ALL);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
       txn.setattr(coll->get_cid(), ghobject_t{obc->obs.oi.soid}, OI_ATTR, osv);
     }
@@ -809,7 +815,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     // 1) Delete current head
     if (os.exists) {
       txn.remove(coll->get_cid(), ghobject_t{os.oi.soid,
-                                  ghobject_t::NO_GEN, shard});
+                                  ghobject_t::NO_GEN, get_shard()});
     }
     // 2) Clone correct snapshot into head
     txn.clone(coll->get_cid(), ghobject_t{resolved_obc->obs.oi.soid},
@@ -951,7 +957,7 @@ PGBackend::create_iertr::future<> PGBackend::create(
   }
   maybe_create_new_object(os, txn, delta_stats);
   txn.create(coll->get_cid(),
-             ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+             ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
   return seastar::now();
 }
 
@@ -960,7 +966,7 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn)
 {
   // todo: snapset
   txn.remove(coll->get_cid(),
-	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
   os.oi.size = 0;
   os.oi.new_object();
   os.exists = false;
@@ -988,7 +994,7 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
     return seastar::now();
   }
   txn.remove(coll->get_cid(),
-	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
   delta_stats.num_bytes -= os.oi.size;
   os.oi.size = 0;
   os.oi.new_object();
@@ -999,7 +1005,7 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
     os.oi.set_flag(object_info_t::FLAG_WHITEOUT);
     delta_stats.num_whiteouts++;
     txn.create(coll->get_cid(),
-               ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+               ghobject_t{os.oi.soid, ghobject_t::NO_GEN, get_shard()});
     return seastar::now();
   }
   // todo: update watchers
@@ -1015,7 +1021,7 @@ PGBackend::remove(ObjectState& os, ceph::os::Transaction& txn,
 PGBackend::interruptible_future<std::tuple<std::vector<hobject_t>, hobject_t>>
 PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 {
-  auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
+  auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, get_shard()};
   return interruptor::make_interruptible(store->list_objects(coll,
 					 gstart,
 					 ghobject_t::get_max(),
@@ -1273,7 +1279,7 @@ void PGBackend::clone(
   txn.clone(coll->get_cid(), ghobject_t{os.oi.soid}, ghobject_t{d_os.oi.soid});
   {
     ceph::bufferlist bv;
-    snap_oi.encode_no_oid(bv, CEPH_FEATURES_ALL);
+    snap_oi.encode(bv, CEPH_FEATURES_ALL);
     txn.setattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, OI_ATTR, bv);
   }
   txn.rmattr(coll->get_cid(), ghobject_t{d_os.oi.soid}, SS_ATTR);

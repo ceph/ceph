@@ -82,7 +82,6 @@ public:
   void handle_sub_read_reply(
     pg_shard_t from,
     ECSubReadReply &op,
-    RecoveryMessages *m,
     const ZTracer::Trace &trace
     );
 
@@ -169,7 +168,6 @@ public:
       func.release()->complete(std::move(results));
     }
   };
-  std::list<ClientAsyncReadStatus> in_progress_client_reads;
   void objects_read_async(
     const hobject_t &hoid,
     const std::list<std::pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
@@ -177,13 +175,7 @@ public:
     Context *on_complete,
     bool fast_read = false) override;
 
-  void kick_reads() {
-    while (in_progress_client_reads.size() &&
-	   in_progress_client_reads.front().is_complete()) {
-      in_progress_client_reads.front().run();
-      in_progress_client_reads.pop_front();
-    }
-  }
+  void kick_reads();
 
 private:
   friend struct ECRecoveryHandle;
@@ -277,8 +269,10 @@ private:
   void continue_recovery_op(
     RecoveryOp &op,
     RecoveryMessages *m);
+  friend struct RecoveryMessages;
   void dispatch_recovery_messages(RecoveryMessages &m, int priority);
   friend struct OnRecoveryReadComplete;
+  friend struct RecoveryReadCompleter;
   void handle_recovery_read_complete(
     const hobject_t &hoid,
     boost::tuple<uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > &to_read,
@@ -292,12 +286,6 @@ private:
     const PushReplyOp &op,
     pg_shard_t from,
     RecoveryMessages *m);
-  void get_all_avail_shards(
-    const hobject_t &hoid,
-    const std::set<pg_shard_t> &error_shards,
-    std::set<int> &have,
-    std::map<shard_id_t, pg_shard_t> &shards,
-    bool for_recovery);
 
 public:
   /**
@@ -334,16 +322,24 @@ public:
     const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> need;
     bool want_attrs;
-    GenContext<std::pair<RecoveryMessages *, read_result_t& > &> *cb;
     read_request_t(
       const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > &to_read,
       const std::map<pg_shard_t, std::vector<std::pair<int, int>>> &need,
-      bool want_attrs,
-      GenContext<std::pair<RecoveryMessages *, read_result_t& > &> *cb)
-      : to_read(to_read), need(need), want_attrs(want_attrs),
-	cb(cb) {}
+      bool want_attrs)
+      : to_read(to_read), need(need), want_attrs(want_attrs) {}
   };
   friend ostream &operator<<(ostream &lhs, const read_request_t &rhs);
+
+  struct ReadCompleter {
+    virtual void finish_single_request(
+      const hobject_t &hoid,
+      ECBackend::read_result_t &res,
+      std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read) = 0;
+
+    virtual void finish(int priority) && = 0;
+
+    virtual ~ReadCompleter() = default;
+  };
 
   struct ReadOp {
     int priority;
@@ -356,6 +352,7 @@ public:
     // True if reading for recovery which could possibly reading only a subset
     // of the available shards.
     bool for_recovery;
+    std::unique_ptr<ReadCompleter> on_complete;
 
     ZTracer::Trace trace;
 
@@ -375,11 +372,17 @@ public:
       ceph_tid_t tid,
       bool do_redundant_reads,
       bool for_recovery,
+      std::unique_ptr<ReadCompleter> _on_complete,
       OpRequestRef op,
       std::map<hobject_t, std::set<int>> &&_want_to_read,
       std::map<hobject_t, read_request_t> &&_to_read)
-      : priority(priority), tid(tid), op(op), do_redundant_reads(do_redundant_reads),
-	for_recovery(for_recovery), want_to_read(std::move(_want_to_read)),
+      : priority(priority),
+        tid(tid),
+        op(op),
+        do_redundant_reads(do_redundant_reads),
+        for_recovery(for_recovery),
+        on_complete(std::move(_on_complete)),
+        want_to_read(std::move(_want_to_read)),
 	to_read(std::move(_to_read)) {
       for (auto &&hpair: to_read) {
 	auto &returned = complete[hpair.first].returned;
@@ -396,25 +399,91 @@ public:
     ReadOp(const ReadOp &) = default;
     ReadOp(ReadOp &&) = default;
   };
-  friend struct FinishReadOp;
-  void filter_read_op(
-    const OSDMapRef& osdmap,
-    ReadOp &op);
-  void complete_read_op(ReadOp &rop, RecoveryMessages *m);
-  friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);
-  std::map<ceph_tid_t, ReadOp> tid_to_read_map;
-  std::map<pg_shard_t, std::set<ceph_tid_t> > shard_to_read_map;
-  void start_read_op(
-    int priority,
-    std::map<hobject_t, std::set<int>> &want_to_read,
-    std::map<hobject_t, read_request_t> &to_read,
-    OpRequestRef op,
-    bool do_redundant_reads, bool for_recovery);
 
-  void do_read_op(ReadOp &rop);
-  int send_all_remaining_reads(
-    const hobject_t &hoid,
-    ReadOp &rop);
+  struct ReadPipeline {
+    void objects_read_and_reconstruct(
+      ECBackend& ecbackend,
+      const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
+      > &reads,
+      bool fast_read,
+      GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func);
+
+    template <class F>
+    void filter_read_op(
+      const OSDMapRef& osdmap,
+      ReadOp &op,
+      F&& on_erase);
+
+    template <class F>
+    void check_recovery_sources(const OSDMapRef& osdmap, F&& on_erase);
+
+    void complete_read_op(ReadOp &rop);
+
+    void start_read_op(
+      int priority,
+      std::map<hobject_t, std::set<int>> &want_to_read,
+      std::map<hobject_t, read_request_t> &to_read,
+      OpRequestRef op,
+      bool do_redundant_reads,
+      bool for_recovery,
+      std::unique_ptr<ReadCompleter> on_complete);
+
+    void do_read_op(ReadOp &rop);
+
+    int send_all_remaining_reads(
+      const hobject_t &hoid,
+      ReadOp &rop);
+
+    void on_change();
+
+    void kick_reads();
+
+    std::map<ceph_tid_t, ReadOp> tid_to_read_map;
+    std::map<pg_shard_t, std::set<ceph_tid_t> > shard_to_read_map;
+    std::list<ClientAsyncReadStatus> in_progress_client_reads;
+
+    CephContext* cct;
+    ceph::ErasureCodeInterfaceRef ec_impl;
+    const ECUtil::stripe_info_t& sinfo;
+    PGBackend::Listener* parent;
+    // TODO: lay an interface down here
+    ECBackend& ec_backend;
+
+    PGBackend::Listener *get_parent() const { return parent; }
+    const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+    epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
+    const pg_info_t &get_info() { return get_parent()->get_info(); }
+
+    ReadPipeline(CephContext* cct,
+                ceph::ErasureCodeInterfaceRef ec_impl,
+                const ECUtil::stripe_info_t& sinfo,
+                PGBackend::Listener* parent,
+                ECBackend& ec_backend)
+      : cct(cct),
+        ec_impl(std::move(ec_impl)),
+        sinfo(sinfo),
+        parent(parent),
+        ec_backend(ec_backend) {
+    }
+
+    int get_remaining_shards(
+      const hobject_t &hoid,
+      const std::set<int> &avail,
+      const std::set<int> &want,
+      const read_result_t &result,
+      std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read,
+      bool for_recovery);
+
+    void get_all_avail_shards(
+      const hobject_t &hoid,
+      const std::set<pg_shard_t> &error_shards,
+      std::set<int> &have,
+      std::map<shard_id_t, pg_shard_t> &shards,
+      bool for_recovery);
+
+    friend ostream &operator<<(ostream &lhs, const ReadOp &rhs);
+    friend struct FinishReadOp;
+  } read_pipeline;
 
 
   /**
@@ -711,14 +780,6 @@ public:
     std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read   ///< [out] shards, corresponding subchunks to read
     ); ///< @return error code, 0 on success
 
-  int get_remaining_shards(
-    const hobject_t &hoid,
-    const std::set<int> &avail,
-    const std::set<int> &want,
-    const read_result_t &result,
-    std::map<pg_shard_t, std::vector<std::pair<int, int>>> *to_read,
-    bool for_recovery);
-
   int objects_get_attrs(
     const hobject_t &hoid,
     std::map<std::string, ceph::buffer::list, std::less<>> *out) override;
@@ -739,8 +800,7 @@ public:
   uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
-  void _failed_push(const hobject_t &hoid,
-    std::pair<RecoveryMessages *, ECBackend::read_result_t &> &in);
+  void _failed_push(const hobject_t &hoid, ECBackend::read_result_t &res);
 };
 ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
 
