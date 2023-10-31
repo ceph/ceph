@@ -836,6 +836,15 @@ class ExportMgr:
             new_export_dict
         )
 
+        if new_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[0]:
+            # Ensure cmount_path is present in CephFS FSAL block
+            if not new_export.fsal.cmount_path:
+                if old_export:
+                    new_export.fsal.cmount_path = old_export.fsal.cmount_path
+                else:
+                    new_export.fsal.cmount_path = '/'
+            self._ensure_cephfs_export_user(new_export)
+
         if not old_export:
             if new_export.fsal.name == NFS_GANESHA_SUPPORTED_FSALS[1]:  # only for RGW
                 self._create_export_user(new_export)

@@ -941,6 +941,39 @@ NFS_CORE_PARAM {
         assert export.clients[0].access_type is None
         assert export.cluster_id == self.cluster_id
 
+    def _do_test_update_export_cephfs(self):
+        nfs_mod = Module('nfs', '', '')
+        conf = ExportMgr(nfs_mod)
+        r = conf.apply_export(self.cluster_id, json.dumps({
+            'export_id': 3,
+            'path': '/',
+            'cluster_id': self.cluster_id,
+            'pseudo': '/cephfs_c',
+            'access_type': 'RW',
+            'squash': 'root_squash',
+            'security_label': True,
+            'protocols': [4],
+            'transports': ['TCP', 'UDP'],
+            'fsal': {
+                'name': 'CEPH',
+                'fs_name': 'c',
+            }
+        }))
+        assert len(r.changes) == 1
+
+        export = conf._fetch_export('foo', '/cephfs_c')
+        assert export.export_id == 3
+        assert export.path == "/"
+        assert export.pseudo == "/cephfs_c"
+        assert export.access_type == "RW"
+        assert export.squash == "root_squash"
+        assert export.protocols == [4]
+        assert export.transports == ["TCP", "UDP"]
+        assert export.fsal.name == "CEPH"
+        assert export.fsal.cmount_path == "/"
+        assert export.fsal.user_id == "nfs.foo.c"
+        assert export.cluster_id == self.cluster_id
+    
     def test_remove_export(self) -> None:
         self._do_mock_test(self._do_test_remove_export)
 
