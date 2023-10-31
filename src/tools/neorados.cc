@@ -23,7 +23,6 @@
 #include <tuple>
 #include <vector>
 
-#include <boost/asio.hpp>
 #include <boost/io/ios_state.hpp>
 #include <boost/program_options.hpp>
 #include <boost/system/system_error.hpp>

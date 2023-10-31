@@ -1,6 +1,10 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <boost/asio/error.hpp>
+#include <boost/asio/placeholders.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
 #include <boost/bind/bind.hpp>
 #include "CacheClient.h"
 #include "common/Cond.h"
@@ -25,8 +29,8 @@ namespace immutable_obj_cache {
         "immutable_object_cache_client_dedicated_thread_num");
 
     if (m_worker_thread_num != 0) {
-      m_worker = new boost::asio::io_service();
-      m_worker_io_service_work = new boost::asio::io_service::work(*m_worker);
+      m_worker = new boost::asio::io_context();
+      m_worker_io_service_work = new boost::asio::io_context::work(*m_worker);
       for (uint64_t i = 0; i < m_worker_thread_num; i++) {
         std::thread* thd = new std::thread([this](){m_worker->run();});
         m_worker_threads.push_back(thd);

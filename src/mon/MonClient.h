@@ -22,6 +22,10 @@
 #include <string>
 #include <vector>
 
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/io_context_strand.hpp>
+#include <boost/asio/steady_timer.hpp>
+
 #include "msg/Messenger.h"
 
 #include "MonMap.h"

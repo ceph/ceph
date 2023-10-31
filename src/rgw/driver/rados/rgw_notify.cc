@@ -6,6 +6,9 @@
 #include "cls/lock/cls_lock_client.h"
 #include <memory>
 #include <boost/algorithm/hex.hpp>
+#include <boost/asio/basic_waitable_timer.hpp>
+#include <boost/asio/executor_work_guard.hpp>
+#include <boost/asio/io_context.hpp>
 #include <boost/context/protected_fixedsize_stack.hpp>
 #include <spawn/spawn.hpp>
 #include "rgw_sal_rados.h"
