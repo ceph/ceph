@@ -17,7 +17,7 @@
     "noImplicitReturns": true,
     "noImplicitAny": true,
     "suppressImplicitAnyIndexErrors": true,
-    "target": "ES2022",
+    "target": "ES2020",
     "module": "es2020",
     "baseUrl": "./",
     "resolveJsonModule": true,
