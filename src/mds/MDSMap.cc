@@ -52,6 +52,8 @@ CompatSet MDSMap::get_compat_set_all() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_MINORLOGSEGMENTS);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_QUIESCE_SUBVOLUMES);
 
   return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
@@ -69,6 +71,8 @@ CompatSet MDSMap::get_compat_set_default() {
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_NOANCHOR);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2);
   feature_incompat.insert(MDS_FEATURE_INCOMPAT_SNAPREALM_V2);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_MINORLOGSEGMENTS);
+  feature_incompat.insert(MDS_FEATURE_INCOMPAT_QUIESCE_SUBVOLUMES);
 
   return CompatSet(feature_compat, feature_ro_compat, feature_incompat);
 }
