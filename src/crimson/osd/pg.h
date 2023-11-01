@@ -576,6 +576,9 @@ private:
   using do_osd_ops_failure_func_t =
     std::function<do_osd_ops_iertr::future<>(const std::error_code&)>;
   struct do_osd_ops_params_t;
+  do_osd_ops_iertr::future<MURef<MOSDOpReply>> log_reply(
+    Ref<MOSDOp> m,
+    const std::error_code& e);
   do_osd_ops_iertr::future<pg_rep_op_fut_t<>> do_osd_ops(
     ObjectContextRef obc,
     std::vector<OSDOp>& ops,
