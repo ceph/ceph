@@ -185,6 +185,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
+  RESTArgs::get_string(s, "account-id", "", &op_state.account_id);
 
   if (!s->user->get_info().system && system) {
     ldpp_dout(this, 0) << "cannot set system flag by non-system user" << dendl;
@@ -324,6 +325,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_string(s, "op-mask", op_mask_str, &op_mask_str);
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
+  RESTArgs::get_string(s, "account-id", "", &op_state.account_id);
 
   if (!s->user->get_info().system && system) {
     ldpp_dout(this, 0) << "cannot set system flag by non-system user" << dendl;

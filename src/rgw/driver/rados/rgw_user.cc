@@ -5,6 +5,7 @@
 
 #include "rgw_user.h"
 
+#include "rgw_account.h"
 #include "rgw_bucket.h"
 #include "rgw_quota.h"
 
@@ -1614,6 +1615,30 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   return update(dpp, op_state, err_msg, y);
 }
 
+// when setting RGWUserInfo::account_id, verify that the account metadata
+// exists and matches the user's tenant
+static int validate_account_tenant(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   rgw::sal::Driver* driver,
+                                   std::string_view account_id,
+                                   std::string_view tenant,
+                                   std::string& err)
+{
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+  int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+  if (r < 0) {
+    err = "Failed to load account by id";
+    return r;
+  }
+  if (info.tenant != tenant) {
+    err = "User tenant does not match account tenant";
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 			 optional_yield y)
 {
@@ -1672,6 +1697,22 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
 
   if (op_state.placement_tags_specified) {
     user_info.placement_tags = op_state.placement_tags;
+  }
+
+  if (!op_state.account_id.empty()) {
+    if (!rgw::account::validate_id(op_state.account_id, err_msg)) {
+      return -EINVAL;
+    }
+    // tenant must match account.tenant
+    std::string err;
+    int ret = validate_account_tenant(dpp, y, driver, op_state.account_id,
+                                      user_info.user_id.tenant, err);
+    if (ret < 0) {
+      set_err_msg(err_msg, err);
+      return ret;
+    }
+    user_info.account_id = op_state.account_id;
+    // TODO: change account on user's buckets
   }
 
   // update the request
@@ -1959,6 +2000,25 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   if (op_state.placement_tags_specified) {
     user_info.placement_tags = op_state.placement_tags;
+  }
+
+  if (!op_state.account_id.empty()) {
+    if (!rgw::account::validate_id(op_state.account_id, err_msg)) {
+      return -EINVAL;
+    }
+    if (user_info.account_id != op_state.account_id) {
+      user_info.account_id = op_state.account_id;
+
+      // tenant must match new account.tenant
+      std::string err;
+      ret = validate_account_tenant(dpp, y, driver, op_state.account_id,
+                                    user_info.user_id.tenant, err);
+      if (ret < 0) {
+        set_err_msg(err_msg, err);
+        return ret;
+      }
+      // TODO: change account on user's buckets
+    }
   }
 
   op_state.set_user_info(user_info);
