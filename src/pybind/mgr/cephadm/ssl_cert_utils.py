@@ -46,7 +46,7 @@ class SSLCerts:
         root_builder = root_builder.public_key(root_public_key)
         root_builder = root_builder.add_extension(
             x509.SubjectAlternativeName(
-                [x509.IPAddress(ipaddress.IPv4Address(addr))]
+                [x509.IPAddress(ipaddress.ip_address(addr))]
             ),
             critical=False
         )
@@ -70,12 +70,9 @@ class SSLCerts:
     def generate_cert(self, host: str, addr: str) -> Tuple[str, str]:
         have_ip = True
         try:
-            ip = x509.IPAddress(ipaddress.IPv4Address(addr))
+            ip = x509.IPAddress(ipaddress.ip_address(addr))
         except Exception:
-            try:
-                ip = x509.IPAddress(ipaddress.IPv6Address(addr))
-            except Exception:
-                have_ip = False
+            have_ip = False
 
         private_key = rsa.generate_private_key(
             public_exponent=65537, key_size=4096, backend=default_backend())
