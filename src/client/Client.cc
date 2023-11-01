@@ -4817,7 +4817,7 @@ void Client::flush_caps_sync()
 {
   ldout(cct, 10) << __func__ << dendl;
   for (auto &q : mds_sessions) {
-    auto s = q.second;
+    auto &s = q.second;
     xlist<Inode*>::iterator p = s.dirty_list.begin();
     while (!p.end()) {
       unsigned flags = CHECK_CAPS_NODELAY;
@@ -6662,7 +6662,7 @@ void Client::_unmount(bool abort)
 
   if (abort || blocklisted) {
     for (auto &q : mds_sessions) {
-      auto s = q.second;
+      auto &s = q.second;
       for (auto p = s.dirty_list.begin(); !p.end(); ) {
         Inode *in = *p;
         ++p;
