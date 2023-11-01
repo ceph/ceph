@@ -268,6 +268,54 @@ class Driver {
     virtual int get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) = 0;
     /** Lookup a User by swift username.  Queries driver for user info. */
     virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) = 0;
+
+    /** Lookup RGWAccountInfo by id */
+    virtual int load_account_by_id(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view id,
+                                   RGWAccountInfo& info,
+                                   Attrs& attrs,
+                                   RGWObjVersionTracker& objv) = 0;
+    /** Lookup RGWAccountInfo by name */
+    virtual int load_account_by_name(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view tenant,
+                                     std::string_view name,
+                                     RGWAccountInfo& info,
+                                     Attrs& attrs,
+                                     RGWObjVersionTracker& objv) = 0;
+    /** Lookup RGWAccountInfo by email address */
+    virtual int load_account_by_email(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view email,
+                                      RGWAccountInfo& info,
+                                      Attrs& attrs,
+                                      RGWObjVersionTracker& objv) = 0;
+    /** Write or overwrite an account */
+    virtual int store_account(const DoutPrefixProvider* dpp,
+                              optional_yield y, bool exclusive,
+                              const RGWAccountInfo& info,
+                              const RGWAccountInfo* old_info,
+                              const Attrs& attrs,
+                              RGWObjVersionTracker& objv) = 0;
+    /** Delete an account */
+    virtual int delete_account(const DoutPrefixProvider* dpp,
+                               optional_yield y,
+                               const RGWAccountInfo& info,
+                               RGWObjVersionTracker& objv) = 0;
+
+    /** Load account storage stats */
+    virtual int load_account_stats(const DoutPrefixProvider* dpp,
+                                   optional_yield y, std::string_view id,
+                                   RGWStorageStats& stats,
+                                   ceph::real_time& last_synced,
+                                   ceph::real_time& last_updated) = 0;
+    /** Load account storage stats asynchronously */
+    virtual int load_account_stats_async(const DoutPrefixProvider* dpp,
+                                         std::string_view id,
+                                         boost::intrusive_ptr<ReadStatsCB> cb) = 0;
+
+
     /** Get a basic Object.  This Object is not looked up, and is incomplete, since is
      * does not have a bucket.  This should only be used when an Object is needed before
      * there is a Bucket, otherwise use the get_object() in the Bucket class. */
