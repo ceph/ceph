@@ -155,6 +155,71 @@ int FilterDriver::get_user_by_swift(const DoutPrefixProvider* dpp, const std::st
   return 0;
 }
 
+int FilterDriver::load_account_by_id(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view id,
+                                     RGWAccountInfo& info,
+                                     Attrs& attrs,
+                                     RGWObjVersionTracker& objv)
+{
+  return next->load_account_by_id(dpp, y, id, info, attrs, objv);
+}
+
+int FilterDriver::load_account_by_name(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       std::string_view tenant,
+                                       std::string_view name,
+                                       RGWAccountInfo& info,
+                                       Attrs& attrs,
+                                       RGWObjVersionTracker& objv)
+{
+  return next->load_account_by_name(dpp, y, tenant, name, info, attrs, objv);
+}
+
+int FilterDriver::load_account_by_email(const DoutPrefixProvider* dpp,
+                                        optional_yield y,
+                                        std::string_view email,
+                                        RGWAccountInfo& info,
+                                        Attrs& attrs,
+                                        RGWObjVersionTracker& objv)
+{
+  return next->load_account_by_email(dpp, y, email, info, attrs, objv);
+}
+
+int FilterDriver::store_account(const DoutPrefixProvider* dpp,
+                                optional_yield y, bool exclusive,
+                                const RGWAccountInfo& info,
+                                const RGWAccountInfo* old_info,
+                                const Attrs& attrs,
+                                RGWObjVersionTracker& objv)
+{
+  return next->store_account(dpp, y, exclusive, info, old_info, attrs, objv);
+}
+
+int FilterDriver::delete_account(const DoutPrefixProvider* dpp,
+                                 optional_yield y,
+                                 const RGWAccountInfo& info,
+                                 RGWObjVersionTracker& objv)
+{
+  return next->delete_account(dpp, y, info, objv);
+}
+
+int FilterDriver::load_account_stats(const DoutPrefixProvider* dpp,
+                                     optional_yield y, std::string_view id,
+                                     RGWStorageStats& stats,
+                                     ceph::real_time& last_synced,
+                                     ceph::real_time& last_updated)
+{
+  return next->load_account_stats(dpp, y, id, stats, last_synced, last_updated);
+}
+
+int FilterDriver::load_account_stats_async(const DoutPrefixProvider* dpp,
+                                           std::string_view id,
+                                           boost::intrusive_ptr<ReadStatsCB> cb)
+{
+  return next->load_account_stats_async(dpp, id, std::move(cb));
+}
+
 std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
