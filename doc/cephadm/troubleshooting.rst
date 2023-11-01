@@ -1,60 +1,56 @@
 Troubleshooting
 ===============
 
-You may wish to investigate why a cephadm command failed
-or why a certain service no longer runs properly.
+This section explains how to investigate why a cephadm command failed or why a
+certain service no longer runs properly.
 
-Cephadm deploys daemons within containers. This means that
-troubleshooting those containerized daemons will require
-a different process than traditional package-install daemons.
+Cephadm deploys daemons within containers. Troubleshooting containerized
+daemons requires a different process than does troubleshooting traditional
+daemons that were installed by means of packages.
 
-Here are some tools and commands to help you troubleshoot
-your Ceph environment.
+Here are some tools and commands to help you troubleshoot your Ceph
+environment.
 
 .. _cephadm-pause:
 
 Pausing or Disabling cephadm
 ----------------------------
 
-If something goes wrong and cephadm is behaving badly, you can
-pause most of the Ceph cluster's background activity by running
-the following command: 
+If something goes wrong and cephadm is behaving badly, pause most of the Ceph
+cluster's background activity by running the following command: 
 
 .. prompt:: bash #
 
   ceph orch pause
 
-This stops all changes in the Ceph cluster, but cephadm will
-still periodically check hosts to refresh its inventory of
-daemons and devices.  You can disable cephadm completely by
-running the following commands:
+This stops all changes in the Ceph cluster, but cephadm will still periodically
+check hosts to refresh its inventory of daemons and devices. Disable cephadm
+completely by running the following commands:
 
 .. prompt:: bash #
 
   ceph orch set backend ''
   ceph mgr module disable cephadm
 
-These commands disable all of the ``ceph orch ...`` CLI commands.
-All previously deployed daemon containers continue to exist and
-will start as they did before you ran these commands.
+These commands disable all of the ``ceph orch ...`` CLI commands. All
+previously deployed daemon containers continue to run and will start just as
+they were before you ran these commands.
 
-See :ref:`cephadm-spec-unmanaged` for information on disabling
-individual services.
+See :ref:`cephadm-spec-unmanaged` for more on disabling individual services.
 
 
 Per-service and Per-daemon Events
 ---------------------------------
 
-In order to facilitate debugging failed daemons,
-cephadm stores events per service and per daemon.
-These events often contain information relevant to
-troubleshooting your Ceph cluster. 
+To make it easier to debug failed daemons, cephadm stores events per service
+and per daemon. These events often contain information relevant to
+the troubleshooting of your Ceph cluster. 
 
 Listing Service Events
 ~~~~~~~~~~~~~~~~~~~~~~
 
-To see the events associated with a certain service, run a
-command of the and following form:
+To see the events associated with a certain service, run a command of the 
+following form:
 
 .. prompt:: bash #
 
@@ -81,8 +77,8 @@ This will return something in the following form:
 Listing Daemon Events
 ~~~~~~~~~~~~~~~~~~~~~
 
-To see the events associated with a certain daemon, run a
-command of the and following form:
+To see the events associated with a certain daemon, run a command of the
+following form:
 
 .. prompt:: bash #
 
@@ -105,32 +101,41 @@ This will return something in the following form:
 Checking Cephadm Logs
 ---------------------
 
-To learn how to monitor cephadm logs as they are generated, read :ref:`watching_cephadm_logs`.
+To learn how to monitor cephadm logs as they are generated, read
+:ref:`watching_cephadm_logs`.
 
-If your Ceph cluster has been configured to log events to files, there will be a
-``ceph.cephadm.log`` file on all monitor hosts (see
-:ref:`cephadm-logs` for a more complete explanation).
+If your Ceph cluster has been configured to log events to files, there will be
+a ``ceph.cephadm.log`` file on all monitor hosts. See :ref:`cephadm-logs` for a
+more complete explanation.
 
 Gathering Log Files
 -------------------
 
-Use journalctl to gather the log files of all daemons:
+Use ``journalctl`` to gather the log files of all daemons:
 
 .. note:: By default cephadm now stores logs in journald. This means
    that you will no longer find daemon logs in ``/var/log/ceph/``.
 
-To read the log file of one specific daemon, run::
+To read the log file of one specific daemon, run a command of the following
+form:
 
-    cephadm logs --name <name-of-daemon>
+.. prompt:: bash
 
-Note: this only works when run on the same host where the daemon is running. To
-get logs of a daemon running on a different host, give the ``--fsid`` option::
+   cephadm logs --name <name-of-daemon>
 
-    cephadm logs --fsid <fsid> --name <name-of-daemon>
+.. Note:: This works only when run on the same host that is running the daemon.
+   To get the logs of a daemon that is running on a different host, add the
+   ``--fsid`` option to the command, as in the following example:
 
-where the ``<fsid>`` corresponds to the cluster ID printed by ``ceph status``.
+   .. prompt:: bash
 
-To fetch all log files of all daemons on a given host, run::
+      cephadm logs --fsid <fsid> --name <name-of-daemon>
+
+   In this example, ``<fsid>`` corresponds to the cluster ID returned by the
+   ``ceph status`` command.
+
+To fetch all log files of all daemons on a given host, run the following
+for-loop::
 
     for name in $(cephadm ls | jq -r '.[].name') ; do
       cephadm logs --fsid <fsid> --name "$name" > $name;
@@ -139,39 +144,41 @@ To fetch all log files of all daemons on a given host, run::
 Collecting Systemd Status
 -------------------------
 
-To print the state of a systemd unit, run::
+To print the state of a systemd unit, run a command of the following form: 
 
-      systemctl status "ceph-$(cephadm shell ceph fsid)@<service name>.service";
+.. prompt:: bash
+
+   systemctl status "ceph-$(cephadm shell ceph fsid)@<service name>.service";
 
 
-To fetch all state of all daemons of a given host, run::
+To fetch the state of all daemons of a given host, run the following shell
+script::
 
-    fsid="$(cephadm shell ceph fsid)"
-    for name in $(cephadm ls | jq -r '.[].name') ; do
-      systemctl status "ceph-$fsid@$name.service" > $name;
-    done
+   fsid="$(cephadm shell ceph fsid)"
+   for name in $(cephadm ls | jq -r '.[].name') ; do
+     systemctl status "ceph-$fsid@$name.service" > $name;
+   done
 
 
 List all Downloaded Container Images
 ------------------------------------
 
-To list all container images that are downloaded on a host:
+To list all container images that are downloaded on a host, run the following
+commands:
 
-.. note:: ``Image`` might also be called `ImageID`
+.. prompt:: bash #
 
-::
+   podman ps -a --format json | jq '.[].Image' "docker.io/library/centos:8" "registry.opensuse.org/opensuse/leap:15.2"
 
-    podman ps -a --format json | jq '.[].Image'
-    "docker.io/library/centos:8"
-    "registry.opensuse.org/opensuse/leap:15.2"
+.. note:: ``Image`` might also be called ``ImageID``.
 
 
 Manually Running Containers
 ---------------------------
 
 Cephadm uses small wrappers when running containers. Refer to
-``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the
-container execution command.
+``/var/lib/ceph/<cluster-fsid>/<service-name>/unit.run`` for the container
+execution command.
 
 .. _cephadm-ssh-errors:
 
@@ -187,9 +194,10 @@ Error message::
   Please make sure that the host is reachable and accepts connections using the cephadm SSH key
   ...
 
-Things Ceph administrators can do:
+If you receive the above error message, try the following things to
+troubleshoot the SSH connection between ``cephadm`` and the monitor:
 
-1. Ensure cephadm has an SSH identity key::
+1. Ensure that ``cephadm`` has an SSH identity key::
 
      [root@mon1~]# cephadm shell -- ceph config-key get mgr/cephadm/ssh_identity_key > ~/cephadm_private_key
      INFO:cephadm:Inferring fsid f8edc08a-7f17-11ea-8707-000c2915dd98
@@ -208,14 +216,15 @@ Things Ceph administrators can do:
 
      [root@mon1 ~]# cephadm shell -- ceph cephadm get-ssh-config > config
 
-3. Verify that we can connect to the host::
+3. Verify that it is possible to connect to the host::
 
      [root@mon1 ~]# ssh -F config -i ~/cephadm_private_key root@mon1
 
 Verifying that the Public Key is Listed in the authorized_keys file
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-To verify that the public key is in the authorized_keys file, run the following commands::
+To verify that the public key is in the ``authorized_keys`` file, run the
+following commands::
 
      [root@mon1 ~]# cephadm shell -- ceph cephadm get-pub-key > ~/ceph.pub
      [root@mon1 ~]# grep "`cat ~/ceph.pub`"  /root/.ssh/authorized_keys
@@ -231,22 +240,28 @@ Or this error::
 
    Must set public_network config option or specify a CIDR network, ceph addrvec, or plain IP
 
-This means that you must run a command of this form::
+This means that you must run a command of this form:
 
-  ceph config set mon public_network <mon_network>
+.. prompt:: bash
 
-For more detail on operations of this kind, see :ref:`deploy_additional_monitors`
+   ceph config set mon public_network <mon_network>
+
+For more detail on operations of this kind, see
+:ref:`deploy_additional_monitors`.
 
 Accessing the Admin Socket
 --------------------------
 
-Each Ceph daemon provides an admin socket that bypasses the
-MONs (See :ref:`rados-monitoring-using-admin-socket`).
+Each Ceph daemon provides an admin socket that bypasses the MONs (See
+:ref:`rados-monitoring-using-admin-socket`).
 
-To access the admin socket, first enter the daemon container on the host::
+#. To access the admin socket, enter the daemon container on the host::
 
-    [root@mon1 ~]# cephadm enter --name <daemon-name>
-    [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
+   [root@mon1 ~]# cephadm enter --name <daemon-name>
+
+#. Run a command of the following form to see the admin socket's configuration::
+  
+   [ceph: root@mon1 /]# ceph --admin-daemon /var/run/ceph/ceph-<daemon-name>.asok config show
 
 Running Various Ceph Tools
 --------------------------------
