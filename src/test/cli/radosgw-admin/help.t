@@ -18,6 +18,12 @@
     subuser rm                       remove subuser
     key create                       create access key
     key rm                           remove access key
+    account create                   create a new account
+    account modify                   modify an existing account
+    account get                      get account info
+    account stats                    dump account storage stats
+    account rm                       remove an account
+    account list                     list all account ids
     bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)
     bucket limit check               show bucket sharding stats
     bucket link                      link bucket to specified user
@@ -198,6 +204,12 @@
      --uid=<id>                        user id
      --new-uid=<id>                    new user id
      --subuser=<name>                  subuser name
+     --account-name=<name>             account name
+     --account-id=<id>                 account id
+     --max-users                       max number of users for an account
+     --max-roles                       max number of roles for an account
+     --max-groups                      max number of groups for an account
+     --max-access-keys                 max number of keys per user for an account
      --access-key=<key>                S3 access key
      --email=<email>                   user's email address
      --secret/--secret-key=<key>       specify secret key
