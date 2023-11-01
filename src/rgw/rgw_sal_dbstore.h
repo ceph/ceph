@@ -748,6 +748,45 @@ public:
       virtual int get_user_by_access_key(const DoutPrefixProvider *dpp, const std::string& key, optional_yield y, std::unique_ptr<User>* user) override;
       virtual int get_user_by_email(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) override;
       virtual int get_user_by_swift(const DoutPrefixProvider *dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) override;
+
+      int load_account_by_id(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             std::string_view id,
+                             RGWAccountInfo& info,
+                             Attrs& attrs,
+                             RGWObjVersionTracker& objv) override;
+      int load_account_by_name(const DoutPrefixProvider* dpp,
+                               optional_yield y,
+                               std::string_view tenant,
+                               std::string_view name,
+                               RGWAccountInfo& info,
+                               Attrs& attrs,
+                               RGWObjVersionTracker& objv) override;
+      int load_account_by_email(const DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                std::string_view email,
+                                RGWAccountInfo& info,
+                                Attrs& attrs,
+                                RGWObjVersionTracker& objv) override;
+      int store_account(const DoutPrefixProvider* dpp,
+                        optional_yield y, bool exclusive,
+                        const RGWAccountInfo& info,
+                        const RGWAccountInfo* old_info,
+                        const Attrs& attrs,
+                        RGWObjVersionTracker& objv) override;
+      int delete_account(const DoutPrefixProvider* dpp,
+                         optional_yield y,
+                         const RGWAccountInfo& info,
+                         RGWObjVersionTracker& objv) override;
+      int load_account_stats(const DoutPrefixProvider* dpp,
+                             optional_yield y, std::string_view id,
+                             RGWStorageStats& stats,
+                             ceph::real_time& last_synced,
+                             ceph::real_time& last_updated) override;
+      int load_account_stats_async(const DoutPrefixProvider* dpp,
+                                   std::string_view id,
+                                   boost::intrusive_ptr<ReadStatsCB> cb) override;
+
       virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
       virtual std::string get_cluster_id(const DoutPrefixProvider* dpp, optional_yield y);
       std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
