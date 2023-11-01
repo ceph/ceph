@@ -6555,6 +6555,8 @@ int main(int argc, const char **argv)
     user_op.set_placement_tags(tags);
   }
 
+  user_op.account_id = account_id;
+
   // RGWUser to use for user operations
   RGWUser ruser;
   int ret = 0;
