@@ -2971,6 +2971,51 @@ void RGWAccessKey::decode_json(JSONObj *obj, bool swift) {
   JSONDecoder::decode_json("active", active, obj);
 }
 
+
+void RGWAccountInfo::dump(Formatter * const f) const
+{
+  encode_json("id", id, f);
+  encode_json("tenant", tenant, f);
+  encode_json("name", name, f);
+  encode_json("email", email, f);
+  encode_json("quota", quota, f);
+  encode_json("max_users", max_users, f);
+  encode_json("max_roles", max_roles, f);
+  encode_json("max_groups", max_groups, f);
+  encode_json("max_buckets", max_buckets, f);
+  encode_json("max_access_keys", max_access_keys, f);
+}
+
+void RGWAccountInfo::decode_json(JSONObj* obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("tenant", tenant, obj);
+  JSONDecoder::decode_json("name", name, obj);
+  JSONDecoder::decode_json("email", email, obj);
+  JSONDecoder::decode_json("quota", quota, obj);
+  JSONDecoder::decode_json("max_users", max_users, obj);
+  JSONDecoder::decode_json("max_roles", max_roles, obj);
+  JSONDecoder::decode_json("max_groups", max_groups, obj);
+  JSONDecoder::decode_json("max_buckets", max_buckets, obj);
+  JSONDecoder::decode_json("max_access_keys", max_access_keys, obj);
+}
+
+void RGWAccountInfo::generate_test_instances(std::list<RGWAccountInfo*>& o)
+{
+  o.push_back(new RGWAccountInfo);
+  auto p = new RGWAccountInfo;
+  p->id = "account1";
+  p->tenant = "tenant1";
+  p->name = "name1";
+  p->email = "email@example.com";
+  p->max_users = 10;
+  p->max_roles = 10;
+  p->max_groups = 10;
+  p->max_buckets = 10;
+  p->max_access_keys = 10;
+  o.push_back(p);
+}
+
 void RGWStorageStats::dump(Formatter *f) const
 {
   encode_json("size", size, f);
