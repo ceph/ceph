@@ -1380,7 +1380,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   MOSDMap *m = new MOSDMap(monc->get_fsid(),
 			   osdmap->get_encoding_features());
   m->cluster_osdmap_trim_lower_bound = sblock.cluster_osdmap_trim_lower_bound;
-  m->newest_map = sblock.newest_map;
+  m->newest_map = sblock.get_newest_map();
 
   int max = cct->_conf->osd_map_message_max;
   ssize_t max_bytes = cct->_conf->osd_map_message_max_bytes;
@@ -1459,12 +1459,12 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
   MOSDMap *m = NULL;
   while (!m) {
     OSDSuperblock sblock(get_superblock());
-    if (since < sblock.oldest_map) {
+    if (since < sblock.get_oldest_map()) {
       // just send latest full map
       MOSDMap *m = new MOSDMap(monc->get_fsid(),
 			       osdmap->get_encoding_features());
       m->cluster_osdmap_trim_lower_bound = sblock.cluster_osdmap_trim_lower_bound;
-      m->newest_map = sblock.newest_map;
+      m->newest_map = sblock.get_newest_map();
       get_map_bl(to, m->maps[to]);
       send_map(m, con);
       return;
@@ -1650,7 +1650,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
        * splitting.  The simplest thing is to detect such cases here and drop
        * them without an error (the client will resend anyway).
        */
-    ceph_assert(m->get_map_epoch() <= superblock.newest_map);
+    ceph_assert(m->get_map_epoch() <= superblock.get_newest_map());
     OSDMapRef opmap = try_get_map(m->get_map_epoch());
     if (!opmap) {
       dout(7) << __func__ << ": " << *pg << " no longer have map for "
@@ -2705,10 +2705,9 @@ void OSD::asok_command(
     f->dump_stream("osd_fsid") << superblock.osd_fsid;
     f->dump_unsigned("whoami", superblock.whoami);
     f->dump_string("state", get_state_name(get_state()));
-    f->dump_unsigned("oldest_map", superblock.oldest_map);
+    f->dump_stream("maps") << superblock.maps;
     f->dump_unsigned("cluster_osdmap_trim_lower_bound",
                      superblock.cluster_osdmap_trim_lower_bound);
-    f->dump_unsigned("newest_map", superblock.newest_map);
     f->dump_unsigned("num_pgs", num_pgs);
     f->close_section();
   } else if (prefix == "flush_journal") {
@@ -3783,7 +3782,7 @@ int OSD::init()
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
 
     if (!superblock.cluster_osdmap_trim_lower_bound) {
-      superblock.cluster_osdmap_trim_lower_bound = superblock.oldest_map;
+      superblock.cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
     }
 
     ObjectStore::Transaction t;
@@ -6307,7 +6306,7 @@ void OSD::tick_without_osd_lock()
     if (max_waiting_epoch > get_osdmap()->get_epoch()) {
       dout(20) << __func__ << " max_waiting_epoch " << max_waiting_epoch
 	       << ", requesting new map" << dendl;
-      osdmap_subscribe(superblock.newest_map + 1, false);
+      osdmap_subscribe(superblock.get_newest_map() + 1, false);
     }
   }
 
@@ -6666,8 +6665,7 @@ void OSD::start_boot()
   }
   dout(1) << __func__ << dendl;
   set_state(STATE_PREBOOT);
-  dout(10) << "start_boot - have maps " << superblock.oldest_map
-	   << ".." << superblock.newest_map << dendl;
+  dout(10) << "start_boot - have maps " << superblock.maps << dendl;
   monc->get_version("osdmap", CB_OSD_GetVersion(this));
 }
 
@@ -7846,57 +7844,32 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
   }
 }
 
-void OSD::trim_maps(epoch_t oldest, bool skip_maps)
+void OSD::trim_maps(epoch_t oldest)
 {
-  /* There's a possible leak here. skip_maps is set to true if the received
-   * MOSDMap message indicates that there's a discontinuity between
-   * the Monitor cluster's stored set of maps and our set of stored
-   * maps such that there is a "gap". This happens generally when an OSD
-   * is down for a while and the cluster has trimmed maps in the mean time.
-   *
-   * Because the superblock cannot represent two discontinuous sets of maps,
-   * OSD::handle_osd_map unconditionally sets superblock.oldest_map to the first
-   * map in the message. OSD::trim_maps here, however, will only trim up to
-   * service.map_cache.cached_key_lower_bound() resulting in the maps between
-   * service.map_cache.cached_key_lower_bound() and MOSDMap::get_first() being
-   * leaked. Note, trimming past service.map_cache.cached_key_lower_bound()
-   * here won't work as there may still be PGs with those map epochs recorded.
-   *
-   * Fixing this is future work: https://tracker.ceph.com/issues/61962
-   */
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
   dout(20) <<  __func__ << ": min=" << min << " oldest_map="
-           << superblock.oldest_map << " skip_maps=" << skip_maps
-           << dendl;
-  if (min <= superblock.oldest_map)
+           << superblock.get_oldest_map() << dendl;
+  if (min <= superblock.get_oldest_map())
     return;
 
   // Trim from the superblock's oldest_map up to `min`.
   // Break if we have exceeded the txn target size.
-  // If skip_maps is true, we will trim up `min` unconditionally.
   ObjectStore::Transaction t;
-  while (superblock.oldest_map < min) {
-    dout(20) << " removing old osdmap epoch " << superblock.oldest_map << dendl;
-    t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.oldest_map));
-    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.oldest_map));
-    ++superblock.oldest_map;
-    if (t.get_num_ops() > cct->_conf->osd_target_transaction_size) {
-      service.publish_superblock(superblock);
-      write_superblock(cct, superblock, t);
-      int tr = store->queue_transaction(service.meta_ch, t.claim_and_reset(), nullptr);
-      ceph_assert(tr == 0);
-      if (skip_maps == false) {
-        break;
-      }
-    }
+  while (superblock.get_oldest_map() < min &&
+         t.get_num_ops() < cct->_conf->osd_target_transaction_size) {
+    dout(20) << " removing old osdmap epoch " << superblock.get_oldest_map() << dendl;
+    t.remove(coll_t::meta(), get_osdmap_pobject_name(superblock.get_oldest_map()));
+    t.remove(coll_t::meta(), get_inc_osdmap_pobject_name(superblock.get_oldest_map()));
+    superblock.maps.erase(superblock.get_oldest_map());
   }
-  if (t.get_num_ops() > 0) {
-    service.publish_superblock(superblock);
-    write_superblock(cct, superblock, t);
-    int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
-    ceph_assert(tr == 0);
-  }
-  // we should not remove the cached maps
+
+  service.publish_superblock(superblock);
+  write_superblock(cct, superblock, t);
+  int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+  ceph_assert(tr == 0);
+
+  // we should not trim past service.map_cache.cached_key_lower_bound() 
+  // as there may still be PGs with those map epochs recorded.
   ceph_assert(min <= service.map_cache.cached_key_lower_bound());
 }
 
@@ -7971,15 +7944,15 @@ void OSD::handle_osd_map(MOSDMap *m)
   epoch_t first = m->get_first();
   epoch_t last = m->get_last();
   dout(3) << "handle_osd_map epochs [" << first << "," << last << "], i have "
-	  << superblock.newest_map
+	  << superblock.get_newest_map()
 	  << ", src has [" << m->cluster_osdmap_trim_lower_bound
           << "," << m->newest_map << "]"
 	  << dendl;
 
   logger->inc(l_osd_map);
   logger->inc(l_osd_mape, last - first + 1);
-  if (first <= superblock.newest_map)
-    logger->inc(l_osd_mape_dup, superblock.newest_map - first + 1);
+  if (first <= superblock.get_newest_map())
+    logger->inc(l_osd_mape_dup, superblock.get_newest_map() - first + 1);
 
   if (superblock.cluster_osdmap_trim_lower_bound <
       m->cluster_osdmap_trim_lower_bound) {
@@ -7988,24 +7961,22 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(10) << " superblock cluster_osdmap_trim_lower_bound new epoch is: "
              << superblock.cluster_osdmap_trim_lower_bound << dendl;
     ceph_assert(
-      superblock.cluster_osdmap_trim_lower_bound >= superblock.oldest_map);
+      superblock.cluster_osdmap_trim_lower_bound >= superblock.get_oldest_map());
   }
 
   // make sure there is something new, here, before we bother flushing
   // the queues and such
-  if (last <= superblock.newest_map) {
+  if (last <= superblock.get_newest_map()) {
     dout(10) << " no new maps here, dropping" << dendl;
     m->put();
     return;
   }
 
-  // missing some?
-  bool skip_maps = false;
-  if (first > superblock.newest_map + 1) {
+  if (first > superblock.get_newest_map() + 1) {
     dout(10) << "handle_osd_map message skips epochs "
-	     << superblock.newest_map + 1 << ".." << (first-1) << dendl;
-    if (m->cluster_osdmap_trim_lower_bound <= superblock.newest_map + 1) {
-      osdmap_subscribe(superblock.newest_map + 1, false);
+	     << superblock.get_newest_map() + 1 << ".." << (first-1) << dendl;
+    if (m->cluster_osdmap_trim_lower_bound <= superblock.get_newest_map() + 1) {
+      osdmap_subscribe(superblock.get_newest_map() + 1, false);
       m->put();
       return;
     }
@@ -8018,10 +7989,6 @@ void OSD::handle_osd_map(MOSDMap *m)
       m->put();
       return;
     }
-    // The superblock's oldest_map should be moved forward (skipped)
-    // to the `first` osdmap of the incoming MOSDMap message.
-    // Trim all of the skipped osdmaps before updating the oldest_map.
-    skip_maps = true;
   }
 
   ObjectStore::Transaction t;
@@ -8030,7 +7997,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
 
   // store new maps: queue for disk and put in the osdmap cache
-  epoch_t start = std::max(superblock.newest_map + 1, first);
+  epoch_t start = std::max(superblock.get_newest_map() + 1, first);
   for (epoch_t e = start; e <= last; e++) {
     if (txn_size >= t.get_num_bytes()) {
       derr << __func__ << " transaction size overflowed" << dendl;
@@ -8141,14 +8108,14 @@ void OSD::handle_osd_map(MOSDMap *m)
     rerequest_full_maps();
   }
 
-  if (superblock.oldest_map) {
-    trim_maps(m->cluster_osdmap_trim_lower_bound, skip_maps);
-    pg_num_history.prune(superblock.oldest_map);
+  if (!superblock.maps.empty()) {
+    trim_maps(m->cluster_osdmap_trim_lower_bound);
+    pg_num_history.prune(superblock.get_oldest_map());
   }
-
-  if (!superblock.oldest_map || skip_maps)
-    superblock.oldest_map = first;
-  superblock.newest_map = last;
+  superblock.insert_osdmap_epochs(first, last);
+  if (superblock.maps.num_intervals() > 1) {
+    dout(10) << __func__ << " osd map gap " << superblock.maps << dendl;
+  }
   superblock.current_epoch = last;
 
   // note in the superblock that we were clean thru the prior epoch
@@ -8274,7 +8241,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
   for (epoch_t cur = first; cur <= last; cur++) {
     dout(10) << " advance to epoch " << cur
 	     << " (<= last " << last
-	     << " <= newest_map " << superblock.newest_map
+	     << " <= newest_map " << superblock.get_newest_map()
 	     << ")" << dendl;
 
     OSDMapRef newmap = get_map(cur);

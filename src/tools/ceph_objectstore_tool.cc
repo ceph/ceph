@@ -1630,9 +1630,9 @@ int get_pg_metadata(ObjectStore *store, bufferlist &bl, metadata_section &ms,
     return -EINVAL;
   }
 
-  if (ms.osdmap.get_epoch() < sb.oldest_map) {
+  if (ms.osdmap.get_epoch() < sb.get_oldest_map()) {
     cerr << "PG export's map " << ms.osdmap.get_epoch()
-	 << " is older than OSD's oldest_map " << sb.oldest_map << std::endl;
+	 << " is older than OSD's oldest_map " << sb.get_oldest_map() << std::endl;
     if (!force) {
       cerr << " pass --force to proceed anyway (with incomplete PastIntervals)"
 	   << std::endl;
