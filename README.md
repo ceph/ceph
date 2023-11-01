@@ -40,7 +40,7 @@ following commands to move into the cloned `ceph/ceph` repository and to check
 out the git submodules associated with it:
 
     cd ceph
-	git submodule update --init --recursive
+	git submodule update --init --recursive --progress
 
 
 ## Build Prerequisites
