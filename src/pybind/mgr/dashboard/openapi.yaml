@@ -9357,6 +9357,8 @@ paths:
                   type: string
                 bucket_policy:
                   type: string
+                canned_acl:
+                  type: string
                 daemon_name:
                   type: string
                 encryption_state:
@@ -9671,6 +9673,8 @@ paths:
                 bucket_id:
                   type: string
                 bucket_policy:
+                  type: string
+                canned_acl:
                   type: string
                 daemon_name:
                   type: string

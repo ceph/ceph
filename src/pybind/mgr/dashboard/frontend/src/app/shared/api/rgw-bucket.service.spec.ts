@@ -61,11 +61,12 @@ describe('RgwBucketService', () => {
         'aws:kms',
         'qwerty1',
         null,
-        null
+        null,
+        'private'
       )
       .subscribe();
     const req = httpTesting.expectOne(
-      `api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=5&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&tags=null&bucket_policy=null&${RgwHelper.DAEMON_QUERY_PARAM}`
+      `api/rgw/bucket?bucket=foo&uid=bar&zonegroup=default&placement_target=default-placement&lock_enabled=false&lock_mode=COMPLIANCE&lock_retention_period_days=5&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&tags=null&bucket_policy=null&canned_acl=private&${RgwHelper.DAEMON_QUERY_PARAM}`
     );
     expect(req.request.method).toBe('POST');
   });
@@ -86,11 +87,12 @@ describe('RgwBucketService', () => {
         'GOVERNANCE',
         '10',
         null,
-        null
+        null,
+        'private'
       )
       .subscribe();
     const req = httpTesting.expectOne(
-      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&bucket_id=bar&uid=baz&versioning_state=Enabled&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=10&tags=null&bucket_policy=null`
+      `api/rgw/bucket/foo?${RgwHelper.DAEMON_QUERY_PARAM}&bucket_id=bar&uid=baz&versioning_state=Enabled&encryption_state=true&encryption_type=aws%253Akms&key_id=qwerty1&mfa_delete=Enabled&mfa_token_serial=1&mfa_token_pin=223344&lock_mode=GOVERNANCE&lock_retention_period_days=10&tags=null&bucket_policy=null&canned_acl=private`
     );
     expect(req.request.method).toBe('PUT');
   });
