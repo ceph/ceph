@@ -116,6 +116,9 @@ TEST_F(TestClient, LlreadvLlwritev) {
     {in1, sizeof(in1)}
   };
 
+  struct iovec iov_out_empty[0];
+  struct iovec iov_in_empty[0];
+
   ssize_t nwritten = iov_out[0].iov_len + iov_out[1].iov_len;
 
   std::unique_ptr<C_SaferCond> writefinish = nullptr;
@@ -260,6 +263,22 @@ TEST_F(TestClient, LlreadvLlwritev) {
   ASSERT_EQ(0, strncmp((const char*)iov_in_dataonly_fysnc[1].iov_base,
             (const char*)iov_out_dataonly_fysnc[1].iov_base,
             iov_out_dataonly_fysnc[1].iov_len));
+
+  // test async I/O with empty read/write buffer
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-empty-write-buffer"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-empty-read-buffer"));
+
+  rc = client->ll_preadv_pwritev(fh, iov_out_empty, 2, 0, true,
+                                 writefinish.get(), nullptr);
+  ASSERT_EQ(0, rc);
+  rc = writefinish->wait();
+  ASSERT_EQ(0, rc);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in_empty, 2, 0, false,
+                                 readfinish.get(), &bl);
+  ASSERT_EQ(0, rc);
+  rc = readfinish->wait();
+  ASSERT_EQ(0, rc);
 
   client->ll_release(fh);
   ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
