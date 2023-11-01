@@ -487,7 +487,7 @@ struct AWSSyncConfig {
   }
 
   bool do_find_profile(const rgw_bucket bucket, std::shared_ptr<AWSSyncConfig_Profile> *result) {
-    const string& name = bucket.name;
+    const string& name = bucket.get_namespaced_name();
     auto iter = explicit_profiles.upper_bound(name);
     if (iter == explicit_profiles.begin()) {
       return false;
