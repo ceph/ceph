@@ -13,3 +13,5 @@ overrides:
   workunit:
     env:
       CRIMSON_COMPAT: '1'
+  thrashosds:
+    chance_reset_purged_snaps_last: 0
