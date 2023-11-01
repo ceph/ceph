@@ -10,6 +10,7 @@ import os
 import io
 import string
 import boto
+from botocore.exceptions import ClientError
 from http import server as http_server
 from random import randint
 import hashlib
