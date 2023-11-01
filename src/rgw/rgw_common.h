@@ -747,6 +747,65 @@ struct RGWUserInfo
 };
 WRITE_CLASS_ENCODER(RGWUserInfo)
 
+// user account metadata
+struct RGWAccountInfo {
+  rgw_account_id id;
+  std::string tenant;
+  std::string name;
+  std::string email;
+  RGWQuotaInfo quota;
+
+  static constexpr int32_t DEFAULT_USER_LIMIT = 1000;
+  int32_t max_users = DEFAULT_USER_LIMIT;
+
+  static constexpr int32_t DEFAULT_ROLE_LIMIT = 1000;
+  int32_t max_roles = DEFAULT_ROLE_LIMIT;
+
+  static constexpr int32_t DEFAULT_GROUP_LIMIT = 1000;
+  int32_t max_groups = DEFAULT_GROUP_LIMIT;
+
+  static constexpr int32_t DEFAULT_BUCKET_LIMIT = 1000;
+  int32_t max_buckets = DEFAULT_BUCKET_LIMIT;
+
+  static constexpr int32_t DEFAULT_ACCESS_KEY_LIMIT = 4;
+  int32_t max_access_keys = DEFAULT_ACCESS_KEY_LIMIT;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(tenant, bl);
+    encode(name, bl);
+    encode(email, bl);
+    encode(quota, bl);
+    encode(max_users, bl);
+    encode(max_roles, bl);
+    encode(max_groups, bl);
+    encode(max_buckets, bl);
+    encode(max_access_keys, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(id, bl);
+    decode(tenant, bl);
+    decode(name, bl);
+    decode(email, bl);
+    decode(quota, bl);
+    decode(max_users, bl);
+    decode(max_roles, bl);
+    decode(max_groups, bl);
+    decode(max_buckets, bl);
+    decode(max_access_keys, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(Formatter* f) const;
+  void decode_json(JSONObj* obj);
+  static void generate_test_instances(std::list<RGWAccountInfo*>& o);
+};
+WRITE_CLASS_ENCODER(RGWAccountInfo)
+
 /// `RGWObjVersionTracker`
 /// ======================
 ///
