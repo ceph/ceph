@@ -65,6 +65,7 @@ extern "C" {
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
 #include "rgw_data_access.h"
+#include "rgw_account.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -150,6 +151,12 @@ void usage()
   cout << "  subuser rm                       remove subuser\n";
   cout << "  key create                       create access key\n";
   cout << "  key rm                           remove access key\n";
+  cout << "  account create                   create a new account\n";
+  cout << "  account modify                   modify an existing account\n";
+  cout << "  account get                      get account info\n";
+  cout << "  account stats                    dump account storage stats\n";
+  cout << "  account rm                       remove an account\n";
+  cout << "  account list                     list all account ids\n";
   cout << "  bucket list                      list buckets (specify --allow-unordered for faster, unsorted listing)\n";
   cout << "  bucket limit check               show bucket sharding stats\n";
   cout << "  bucket link                      link bucket to specified user\n";
@@ -330,6 +337,12 @@ void usage()
   cout << "   --uid=<id>                        user id\n";
   cout << "   --new-uid=<id>                    new user id\n";
   cout << "   --subuser=<name>                  subuser name\n";
+  cout << "   --account-name=<name>             account name\n";
+  cout << "   --account-id=<id>                 account id\n";
+  cout << "   --max-users                       max number of users for an account\n";
+  cout << "   --max-roles                       max number of roles for an account\n";
+  cout << "   --max-groups                      max number of groups for an account\n";
+  cout << "   --max-access-keys                 max number of keys per user for an account\n";
   cout << "   --access-key=<key>                S3 access key\n";
   cout << "   --email=<email>                   user's email address\n";
   cout << "   --secret/--secret-key=<key>       specify secret key\n";
@@ -846,7 +859,13 @@ enum class OPT {
   SCRIPT_PACKAGE_ADD,
   SCRIPT_PACKAGE_RM,
   SCRIPT_PACKAGE_LIST,
-  SCRIPT_PACKAGE_RELOAD
+  SCRIPT_PACKAGE_RELOAD,
+  ACCOUNT_CREATE,
+  ACCOUNT_MODIFY,
+  ACCOUNT_GET,
+  ACCOUNT_STATS,
+  ACCOUNT_RM,
+  ACCOUNT_LIST,
 };
 
 }
@@ -1083,6 +1102,12 @@ static SimpleCmd::Commands all_cmds = {
   { "script-package rm", OPT::SCRIPT_PACKAGE_RM },
   { "script-package list", OPT::SCRIPT_PACKAGE_LIST },
   { "script-package reload", OPT::SCRIPT_PACKAGE_RELOAD },
+  { "account create", OPT::ACCOUNT_CREATE },
+  { "account modify", OPT::ACCOUNT_MODIFY },
+  { "account get", OPT::ACCOUNT_GET },
+  { "account stats", OPT::ACCOUNT_STATS },
+  { "account rm", OPT::ACCOUNT_RM },
+  { "account list", OPT::ACCOUNT_LIST },
 };
 
 static SimpleCmd::Aliases cmd_aliases = {
@@ -3336,6 +3361,8 @@ int main(int argc, const char **argv)
   std::unique_ptr<rgw::sal::User> user;
   string tenant;
   string user_ns;
+  string account_name;
+  string account_id;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -3398,8 +3425,11 @@ int main(int argc, const char **argv)
   int fix = false;
   int remove_bad = false;
   int check_head_obj_locator = false;
-  int max_buckets = -1;
-  bool max_buckets_specified = false;
+  std::optional<int> max_buckets;
+  std::optional<int> max_users;
+  std::optional<int> max_roles;
+  std::optional<int> max_groups;
+  std::optional<int> max_access_keys;
   map<string, bool> categories;
   string caps;
   int check_objects = false;
@@ -3589,6 +3619,34 @@ int main(int argc, const char **argv)
       opt_tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--user_ns", (char*)NULL)) {
       user_ns = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--account-name", (char*)NULL)) {
+      account_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--account-id", (char*)NULL)) {
+      account_id = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-users", (char*)NULL)) {
+      max_users = ceph::parse<int>(val);
+      if (!max_users) {
+        cerr << "ERROR: failed to parse --max-users" << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-roles", (char*)NULL)) {
+      max_roles = ceph::parse<int>(val);
+      if (!max_roles) {
+        cerr << "ERROR: failed to parse --max-roles" << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-groups", (char*)NULL)) {
+      max_groups = ceph::parse<int>(val);
+      if (!max_groups) {
+        cerr << "ERROR: failed to parse --max-groups" << std::endl;
+        return EINVAL;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--max-access-keys", (char*)NULL)) {
+      max_access_keys = ceph::parse<int>(val);
+      if (!max_access_keys) {
+        cerr << "ERROR: failed to parse --max-access-keys" << std::endl;
+        return EINVAL;
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
       access_key = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--subuser", (char*)NULL)) {
@@ -3658,12 +3716,11 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--min-rewrite-stripe-size", (char*)NULL)) {
       min_rewrite_stripe_size = (uint64_t)atoll(val.c_str());
     } else if (ceph_argparse_witharg(args, i, &val, "--max-buckets", (char*)NULL)) {
-      max_buckets = (int)strict_strtol(val.c_str(), 10, &err);
-      if (!err.empty()) {
-        cerr << "ERROR: failed to parse max buckets: " << err << std::endl;
+      max_buckets = ceph::parse<int>(val);
+      if (!max_buckets) {
+        cerr << "ERROR: failed to parse max buckets" << std::endl;
         return EINVAL;
       }
-      max_buckets_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-entries", (char*)NULL)) {
       max_entries = (int)strict_strtol(val.c_str(), 10, &err);
       max_entries_specified = true;
@@ -4186,6 +4243,9 @@ int main(int argc, const char **argv)
     std::set<OPT> readonly_ops_list = {
                          OPT::USER_INFO,
 			 OPT::USER_STATS,
+			 OPT::ACCOUNT_GET,
+			 OPT::ACCOUNT_STATS,
+			 OPT::ACCOUNT_LIST,
 			 OPT::BUCKETS_LIST,
 			 OPT::BUCKET_LIMIT_CHECK,
 			 OPT::BUCKET_LAYOUT,
@@ -4350,7 +4410,13 @@ int main(int argc, const char **argv)
                           && opt_cmd != OPT::PUBSUB_TOPIC_STATS
 			  && opt_cmd != OPT::SCRIPT_PUT
 			  && opt_cmd != OPT::SCRIPT_GET
-			  && opt_cmd != OPT::SCRIPT_RM) {
+			  && opt_cmd != OPT::SCRIPT_RM
+                          && opt_cmd != OPT::ACCOUNT_CREATE
+                          && opt_cmd != OPT::ACCOUNT_MODIFY
+                          && opt_cmd != OPT::ACCOUNT_GET
+                          && opt_cmd != OPT::ACCOUNT_STATS
+                          && opt_cmd != OPT::ACCOUNT_RM
+                          && opt_cmd != OPT::ACCOUNT_LIST) {
         cerr << "ERROR: --tenant is set, but there's no user ID" << std::endl;
         return EINVAL;
       }
@@ -6369,7 +6435,9 @@ int main(int argc, const char **argv)
   resolve_zone_ids_opt(opt_dest_zone_names, opt_dest_zone_ids);
 
   bool non_master_cmd = (!driver->is_meta_master() && !yes_i_really_mean_it);
-  std::set<OPT> non_master_ops_list = {OPT::USER_CREATE, OPT::USER_RM, 
+  std::set<OPT> non_master_ops_list = {OPT::ACCOUNT_CREATE,
+                                        OPT::ACCOUNT_MODIFY, OPT::ACCOUNT_RM,
+                                        OPT::USER_CREATE, OPT::USER_RM,
                                         OPT::USER_MODIFY, OPT::USER_ENABLE,
                                         OPT::USER_SUSPEND, OPT::SUBUSER_CREATE,
                                         OPT::SUBUSER_MODIFY, OPT::SUBUSER_RM,
@@ -6429,8 +6497,8 @@ int main(int argc, const char **argv)
   if (gen_secret_key)
     user_op.set_gen_secret(); // assume that a key pair should be created
 
-  if (max_buckets_specified)
-    user_op.set_max_buckets(max_buckets);
+  if (max_buckets)
+    user_op.set_max_buckets(*max_buckets);
 
   if (admin_specified)
      user_op.set_admin(admin);
@@ -8898,9 +8966,13 @@ next:
     }
   }
 
-  if (opt_cmd == OPT::METADATA_LIST || opt_cmd == OPT::USER_LIST) {
+  if (opt_cmd == OPT::METADATA_LIST ||
+      opt_cmd == OPT::USER_LIST ||
+      opt_cmd == OPT::ACCOUNT_LIST) {
     if (opt_cmd == OPT::USER_LIST) {
       metadata_key = "user";
+    } else if (opt_cmd == OPT::ACCOUNT_LIST) {
+      metadata_key = "account";
     }
     void *handle;
     int max = 1000;
@@ -11011,6 +11083,77 @@ next:
     return EPERM;
 #endif
   }
+
+  if (opt_cmd == OPT::ACCOUNT_CREATE ||
+      opt_cmd == OPT::ACCOUNT_MODIFY ||
+      opt_cmd == OPT::ACCOUNT_GET ||
+      opt_cmd == OPT::ACCOUNT_STATS ||
+      opt_cmd == OPT::ACCOUNT_RM)
+  {
+    auto op_state = rgw::account::AdminOpState{
+      .account_id = account_id,
+      .tenant = tenant,
+      .account_name = account_name,
+      .email = user_email,
+      .max_users = max_users,
+      .max_roles = max_roles,
+      .max_groups = max_groups,
+      .max_access_keys = max_access_keys,
+      .max_buckets = max_buckets,
+    };
+
+    std::string err_msg;
+    if (opt_cmd == OPT::ACCOUNT_CREATE) {
+      ret = rgw::account::create(dpp(), driver, op_state, err_msg,
+                                 stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to create account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_MODIFY) {
+      ret = rgw::account::modify(dpp(), driver, op_state, err_msg,
+                                 stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to modify account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_GET) {
+      ret = rgw::account::info(dpp(), driver, op_state, err_msg,
+                               stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_STATS) {
+      ret = rgw::account::stats(dpp(), driver, op_state, err_msg,
+                                stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to read account stats with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+
+    if (opt_cmd == OPT::ACCOUNT_RM) {
+      ret = rgw::account::remove(dpp(), driver, op_state, err_msg,
+                                 stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to remove account with " << cpp_strerror(-ret)
+            << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    }
+  }
+
   return 0;
 }
 
