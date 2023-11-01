@@ -136,6 +136,13 @@ struct rgw_bucket {
     DECODE_FINISH(bl);
   }
 
+  std::string get_namespaced_name() const {
+    if (tenant.empty()) {
+      return name;
+    }
+    return tenant + std::string("/") + name;
+  }
+
   void update_bucket_id(const std::string& new_bucket_id) {
     bucket_id = new_bucket_id;
   }
