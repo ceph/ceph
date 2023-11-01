@@ -65,9 +65,6 @@ class Templater:
 # be used to provide a simple set of methods
 defaultTemplater = Templater()
 
-# (temporary alias) template_str is currently used by the cephadm code
-template_str = defaultTemplater.render_str
-
 # alias methods as module level functions for convenience. most callers do
 # not need to care that these are implemented via a class
 render_str = defaultTemplater.render_str
