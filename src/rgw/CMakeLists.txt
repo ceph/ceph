@@ -104,6 +104,7 @@ set(librgw_common_srcs
   rgw_quota.cc
   rgw_resolve.cc
   rgw_rest.cc
+  rgw_rest_account.cc
   rgw_rest_client.cc
   rgw_rest_config.cc
   rgw_rest_conn.cc
