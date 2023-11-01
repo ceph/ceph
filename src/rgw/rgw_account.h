@@ -15,8 +15,17 @@
 
 #pragma once
 
+#include <cstdint>
+#include <optional>
 #include <string>
+
 #include "include/common_fwd.h"
+
+#include "rgw_sal_fwd.h"
+
+class DoutPrefixProvider;
+class RGWFormatterFlusher;
+class optional_yield;
 
 namespace rgw::account {
 
@@ -28,5 +37,43 @@ bool validate_id(std::string_view id, std::string* err_msg = nullptr);
 
 /// check an account name for any invalid characters
 bool validate_name(std::string_view name, std::string* err_msg = nullptr);
+
+
+struct AdminOpState {
+  std::string account_id;
+  std::string tenant;
+  std::string account_name;
+  std::string email;
+  std::optional<int32_t> max_users;
+  std::optional<int32_t> max_roles;
+  std::optional<int32_t> max_groups;
+  std::optional<int32_t> max_access_keys;
+  std::optional<int32_t> max_buckets;
+};
+
+/// create an account
+int create(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+           AdminOpState& op_state, std::string& err_msg,
+           RGWFormatterFlusher& flusher, optional_yield y);
+
+/// modify an existing account
+int modify(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+           AdminOpState& op_state, std::string& err_msg,
+           RGWFormatterFlusher& flusher, optional_yield y);
+
+/// remove an existing account
+int remove(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+           AdminOpState& op_state, std::string& err_msg,
+           RGWFormatterFlusher& flusher, optional_yield y);
+
+/// dump RGWAccountInfo
+int info(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+         AdminOpState& op_state, std::string& err_msg,
+         RGWFormatterFlusher& flusher, optional_yield y);
+
+/// dump account storage stats
+int stats(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+          AdminOpState& op_state, std::string& err_msg,
+          RGWFormatterFlusher& flusher, optional_yield y);
 
 } // namespace rgw::account
