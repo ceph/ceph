@@ -76,8 +76,11 @@
     "ngx-toastr": "17.0.2",
     "rxjs": "6.6.3",
     "simplebar-angular": "2.3.6",
+    "stream-browserify": "3.0.0",
     "swagger-ui": "4.12.0",
+    "timers-browserify": "2.0.12",
     "tslib": "2.3.1",
+    "xml2js": "0.6.2",
     "zone.js": "0.11.8"
   },
   "devDependencies": {
@@ -99,6 +102,7 @@
     "@types/lodash": "4.14.161",
     "@types/node": "18.17.12",
     "@types/swagger-ui": "3.52.0",
+    "@types/xml2js": "0.4.14",
     "@typescript-eslint/eslint-plugin": "5.27.1",
     "@typescript-eslint/parser": "5.27.1",
     "axe-core": "4.4.3",

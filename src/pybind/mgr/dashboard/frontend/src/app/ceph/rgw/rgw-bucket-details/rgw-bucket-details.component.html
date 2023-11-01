@@ -130,6 +130,34 @@
                   class="bold w-25">Bucket policy</td>
               <td><pre>{{ selection.bucket_policy | json}}</pre></td>
             </tr>
+            <tr>
+              <td i18n
+                  class="bold w-25">ACL</td>
+              <td>
+                <table class="table">
+                  <thead>
+                    <tr i18n>
+                      <th>Grantee</th>
+                      <th>Permissions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr i18n>
+                      <td>Bucket Owner</td>
+                      <td>{{ aclPermissions.Owner || '-'}}</td>
+                    </tr>
+                    <tr i18n>
+                      <td>Everyone</td>
+                      <td>{{ aclPermissions.AllUsers || '-'}}</td>
+                    </tr>
+                    <tr i18n>
+                      <td>Authenticated users group</td>
+                      <td>{{ aclPermissions.AuthenticatedUsers || '-'}}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </td>
+            </tr>
           </tbody>
         </table>
       </ng-template>

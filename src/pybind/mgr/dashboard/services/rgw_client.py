@@ -658,6 +658,30 @@ class RgwClient(RestClient):
                                      http_status_code=error.status_code,
                                      component='rgw')
 
+    @RestClient.api_get('/{bucket_name}?acl')
+    def get_acl(self, bucket_name, request=None):
+        # pylint: disable=unused-argument
+        try:
+            result = request(raw_content=True)  # type: ignore
+            return result.decode("utf-8")
+        except RequestException as error:
+            msg = 'Error getting ACLs'
+            if error.status_code == 404:
+                msg = '{}: {}'.format(msg, str(error))
+            raise DashboardException(msg=msg,
+                                     http_status_code=error.status_code,
+                                     component='rgw')
+
+    @RestClient.api_put('/{bucket_name}?acl')
+    def set_acl(self, bucket_name, acl, request=None):
+        # pylint: disable=unused-argument
+        headers = {'x-amz-acl': acl}
+        try:
+            result = request(headers=headers)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
     @RestClient.api_get('/{bucket_name}?encryption')
     def get_bucket_encryption(self, bucket_name, request=None):
         # pylint: disable=unused-argument
