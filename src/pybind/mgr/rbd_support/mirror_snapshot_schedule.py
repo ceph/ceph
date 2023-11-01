@@ -33,19 +33,15 @@ class ImageSpec(NamedTuple):
 
 class CreateSnapshotRequests:
 
-    lock = Lock()
-    condition = Condition(lock)
-
     def __init__(self, handler: Any) -> None:
+        self.lock = Lock()
+        self.condition = Condition(self.lock)
         self.handler = handler
         self.rados = handler.module.rados
         self.log = handler.log
         self.pending: Set[ImageSpec] = set()
         self.queue: List[ImageSpec] = []
         self.ioctxs: Dict[Tuple[str, str], Tuple[rados.Ioctx, Set[ImageSpec]]] = {}
-
-    def __del__(self) -> None:
-        self.wait_for_pending()
 
     def wait_for_pending(self) -> None:
         with self.lock:
@@ -331,10 +327,9 @@ class MirrorSnapshotScheduleHandler:
     SCHEDULE_OID = "rbd_mirror_snapshot_schedule"
     REFRESH_DELAY_SECONDS = 60.0
 
-    lock = Lock()
-    condition = Condition(lock)
-
     def __init__(self, module: Any) -> None:
+        self.lock = Lock()
+        self.condition = Condition(self.lock)
         self.module = module
         self.log = module.log
         self.last_refresh_images = datetime(1970, 1, 1)
