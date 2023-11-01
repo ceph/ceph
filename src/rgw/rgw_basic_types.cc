@@ -178,3 +178,14 @@ ostream& operator <<(ostream& m, const Principal& p) {
 }
 }
 }
+
+// rgw_account_id
+void encode_json_impl(const char* name, const rgw_account_id& id, Formatter* f)
+{
+  f->dump_string(name, id);
+}
+
+void decode_json_obj(rgw_account_id& id, JSONObj* obj)
+{
+  decode_json_obj(static_cast<std::string&>(id), obj);
+}

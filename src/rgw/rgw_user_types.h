@@ -19,11 +19,20 @@
 
 #pragma once
 
-#include <string_view>
+#include <string>
 #include <fmt/format.h>
 
 #include "common/dout.h"
 #include "common/Formatter.h"
+
+// strong typedef to std::string
+struct rgw_account_id : std::string {
+  using std::string::string;
+  using std::string::operator=;
+  explicit rgw_account_id(const std::string& s) : std::string(s) {}
+};
+void encode_json_impl(const char* name, const rgw_account_id& id, Formatter* f);
+void decode_json_obj(rgw_account_id& id, JSONObj* obj);
 
 struct rgw_user {
   // note: order of member variables matches the sort order of operator<=>
