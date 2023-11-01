@@ -1281,6 +1281,14 @@ class RenameFilesystemHandler : public FileSystemCommandHandler
       return -EPERM;
     }
 
+    // Check that refuse_client_session is set.
+    if (!fs->get_mds_map().test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION)) {
+      ss << "CephFS '" << fs_name << "' doesn't refuse clients. Before "
+	 << "renaming a CephFS, flag 'refuse_client_session' must be set. "
+	 << "See `ceph fs set`.";
+      return -EPERM;
+    }
+
     for (const auto p : fs->mds_map.get_data_pools()) {
       mon->osdmon()->do_application_enable(p, APP_NAME_CEPHFS, "data",
 					   new_fs_name, true);
