@@ -5705,12 +5705,12 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
 
 void OSDSuperblock::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(10, 5, bl);
+  ENCODE_START(11, 5, bl);
   encode(cluster_fsid, bl);
   encode(whoami, bl);
   encode(current_epoch, bl);
-  encode(oldest_map, bl);
-  encode(newest_map, bl);
+  encode((epoch_t)0, bl); // oldest_map
+  encode((epoch_t)0, bl); // newest_map
   encode(weight, bl);
   compat_features.encode(bl);
   encode(clean_thru, bl);
@@ -5721,12 +5721,13 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode(purged_snaps_last, bl);
   encode(last_purged_snaps_scrub, bl);
   encode(cluster_osdmap_trim_lower_bound, bl);
+  encode(maps, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     decode(magic, bl);
@@ -5734,6 +5735,7 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
   decode(cluster_fsid, bl);
   decode(whoami, bl);
   decode(current_epoch, bl);
+  epoch_t oldest_map, newest_map;
   decode(oldest_map, bl);
   decode(newest_map, bl);
   decode(weight, bl);
@@ -5765,6 +5767,11 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     cluster_osdmap_trim_lower_bound = 0;
   }
+  if (struct_v >= 11) {
+    decode(maps, bl);
+  } else {
+    insert_osdmap_epochs(oldest_map, newest_map);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5774,8 +5781,6 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_stream("osd_fsid") << osd_fsid;
   f->dump_int("whoami", whoami);
   f->dump_int("current_epoch", current_epoch);
-  f->dump_int("oldest_map", oldest_map);
-  f->dump_int("newest_map", newest_map);
   f->dump_float("weight", weight);
   f->open_object_section("compat");
   compat_features.dump(f);
@@ -5786,6 +5791,7 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
   f->dump_int("cluster_osdmap_trim_lower_bound",
               cluster_osdmap_trim_lower_bound);
+  f->dump_stream("maps") << maps;
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
@@ -5796,8 +5802,7 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
   z.osd_fsid.parse("02020202-0202-0202-0202-020202020202");
   z.whoami = 3;
   z.current_epoch = 4;
-  z.oldest_map = 5;
-  z.newest_map = 9;
+  z.insert_osdmap_epochs(5, 9);
   z.mounted = 8;
   z.clean_thru = 7;
   o.push_back(new OSDSuperblock(z));

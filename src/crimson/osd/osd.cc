@@ -708,19 +708,17 @@ void OSD::dump_status(Formatter* f) const
   f->dump_stream("osd_fsid") << superblock.osd_fsid;
   f->dump_unsigned("whoami", superblock.whoami);
   f->dump_string("state", pg_shard_manager.get_osd_state_string());
-  f->dump_unsigned("oldest_map", superblock.oldest_map);
+  f->dump_stream("maps") << superblock.maps;
   f->dump_unsigned("cluster_osdmap_trim_lower_bound",
                    superblock.cluster_osdmap_trim_lower_bound);
-  f->dump_unsigned("newest_map", superblock.newest_map);
   f->dump_unsigned("num_pgs", pg_shard_manager.get_num_pgs());
 }
 
 void OSD::print(std::ostream& out) const
 {
   out << "{osd." << superblock.whoami << " "
-      << superblock.osd_fsid << " [" << superblock.oldest_map
-      << "," << superblock.newest_map << "] "
-      << "tlb:" << superblock.cluster_osdmap_trim_lower_bound
+      << superblock.osd_fsid << " maps " << superblock.maps
+      << " tlb:" << superblock.cluster_osdmap_trim_lower_bound
       << " pgs:" << pg_shard_manager.get_num_pgs()
       << "}";
 }
@@ -934,16 +932,15 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
   const auto first = m->get_first();
   const auto last = m->get_last();
   logger().info("handle_osd_map epochs [{}..{}], i have {}, src has [{}..{}]",
-                first, last, superblock.newest_map,
+                first, last, superblock.get_newest_map(),
                 m->cluster_osdmap_trim_lower_bound, m->newest_map);
   // make sure there is something new, here, before we bother flushing
   // the queues and such
-  if (last <= superblock.newest_map) {
+  if (last <= superblock.get_newest_map()) {
     return seastar::now();
   }
   // missing some?
-  bool skip_maps = false;
-  epoch_t start = superblock.newest_map + 1;
+  epoch_t start = superblock.get_newest_map() + 1;
   if (first > start) {
     logger().info("handle_osd_map message skips epochs {}..{}",
                   start, first - 1);
@@ -958,8 +955,6 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
       return get_shard_services().osdmap_subscribe(
         m->cluster_osdmap_trim_lower_bound - 1, true);
     }
-    skip_maps = true;
-    start = first;
   }
 
   return seastar::do_with(ceph::os::Transaction{},
@@ -967,10 +962,13 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
     return pg_shard_manager.store_maps(t, start, m).then([=, this, &t] {
       // even if this map isn't from a mon, we may have satisfied our subscription
       monc->sub_got("osdmap", last);
-      if (!superblock.oldest_map || skip_maps) {
-        superblock.oldest_map = first;
+
+      if (!superblock.maps.empty()) {
+        // TODO: support osdmap trimming
+        // See: <tracker>
       }
-      superblock.newest_map = last;
+
+      superblock.insert_osdmap_epochs(first, last);
       superblock.current_epoch = last;
 
       // note in the superblock that we were clean thru the prior epoch

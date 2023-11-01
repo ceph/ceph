@@ -5454,7 +5454,31 @@ public:
   uuid_d cluster_fsid, osd_fsid;
   int32_t whoami = -1;    // my role in this fs.
   epoch_t current_epoch = 0;             // most recent epoch
-  epoch_t oldest_map = 0, newest_map = 0;    // oldest/newest maps we have.
+  interval_set<epoch_t> maps; // oldest/newest maps we have.
+
+  epoch_t get_oldest_map() const {
+    if (!maps.empty()) {
+      return maps.range_start();
+    }
+    return 0;
+  }
+
+  epoch_t get_newest_map() const {
+    if (!maps.empty()) {
+      // maps stores [oldest_map, newest_map) (exclusive)
+      return maps.range_end() - 1;
+    }
+    return 0;
+  }
+
+  void insert_osdmap_epochs(epoch_t first, epoch_t last) {
+    ceph_assert(std::cmp_less_equal(first, last));
+    interval_set<epoch_t> message_epochs;
+    message_epochs.insert(first, last - first + 1);
+    maps.union_of(message_epochs);
+    ceph_assert(last == get_newest_map());
+  }
+
   double weight = 0.0;
 
   CompatSet compat_features;
@@ -5481,7 +5505,7 @@ inline std::ostream& operator<<(std::ostream& out, const OSDSuperblock& sb)
              << " osd." << sb.whoami
 	     << " " << sb.osd_fsid
              << " e" << sb.current_epoch
-             << " [" << sb.oldest_map << "," << sb.newest_map << "]"
+             << " maps " << sb.maps
 	     << " lci=[" << sb.mounted << "," << sb.clean_thru << "]"
              << " tlb=" << sb.cluster_osdmap_trim_lower_bound
              << ")";
