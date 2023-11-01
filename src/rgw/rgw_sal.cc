@@ -162,7 +162,7 @@ rgw::sal::Driver* DriverManager::read_dbstore_config(const DoutPrefixProvider* d
       delete driver;
       return nullptr;
     }
-
+    return driver;
 }
 
 // to be moved out of DriverManager
