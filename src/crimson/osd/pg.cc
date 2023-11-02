@@ -946,10 +946,10 @@ seastar::future<> PG::submit_error_log(
     log_entries.back().set_op_returns(m->ops);
   }
   ceph_assert(is_primary());
-  if (!log_entries.empty()) {
-    ceph_assert(log_entries.rbegin()->version >= projected_last_update);
-    version = projected_last_update = log_entries.rbegin()->version;
-  }
+  ceph_assert(!log_entries.empty());
+  ceph_assert(log_entries.rbegin()->version >= projected_last_update);
+  version = projected_last_update = log_entries.rbegin()->version;
+
   ceph::os::Transaction t;
   peering_state.merge_new_log_entries(
     log_entries, t, peering_state.get_pg_trim_to(),
@@ -1059,6 +1059,7 @@ PG::do_osd_ops(
       return error_log_fut.then([m, e, epoch, &op_info, rep_tid, &version, last_complete, this] {
         auto fut = seastar::now();
         if (!peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
+          ceph_assert(version != eversion_t());
           auto it = log_entry_update_waiting_on.find(rep_tid);
           ceph_assert(it != log_entry_update_waiting_on.end());
           auto it2 = it->second.waiting_on.find(pg_whoami);
@@ -1066,15 +1067,11 @@ PG::do_osd_ops(
           it->second.waiting_on.erase(it2);
           if (it->second.waiting_on.empty()) {
             log_entry_update_waiting_on.erase(it);
-            if (version != eversion_t()) {
-              peering_state.complete_write(version, last_complete);
-            }
+            peering_state.complete_write(version, last_complete);
           } else {
             fut = it->second.all_committed.get_shared_future().then(
               [this, &version, last_complete] {
-              if (version != eversion_t()) {
-                peering_state.complete_write(version, last_complete);
-              }
+              peering_state.complete_write(version, last_complete);
               return seastar::now();
             });
           }
