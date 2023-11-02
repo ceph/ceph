@@ -190,7 +190,6 @@ private:
   void maybe_ready(int32_t osd_id);
 
   SafeTimer timer;
-  bool shutting_down;
   Context *tick_event;
   void tick();
   void schedule_tick_locked(double delay_sec);
@@ -255,7 +254,6 @@ private:
 
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
-  void shutdown();
 
   entity_addrvec_t get_myaddrs() const;
 
