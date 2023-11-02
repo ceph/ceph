@@ -191,7 +191,7 @@ def bulk_copy(fs_handle, source_path, dst_path, should_cancel):
 def set_quota_on_clone(fs_handle, clone_volumes_pair):
     src_path = clone_volumes_pair[1].snapshot_data_path(clone_volumes_pair[2])
     dst_path = clone_volumes_pair[0].path
-    quota = None # type: Optional[int]
+    quota: Optional[int] = None
     try:
         quota = int(fs_handle.getxattr(src_path, 'ceph.quota.max_bytes').decode('utf-8'))
     except cephfs.NoData:
@@ -205,7 +205,7 @@ def set_quota_on_clone(fs_handle, clone_volumes_pair):
         except cephfs.Error as e:
              raise VolumeException(-e.args[0], e.args[1])
 
-    quota_files = None # type: Optional[int]
+    quota_files: Optional[int] = None
     try:
         quota_files = int(fs_handle.getxattr(src_path, 'ceph.quota.max_files').decode('utf-8'))
     except cephfs.NoData:

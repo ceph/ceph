@@ -41,7 +41,7 @@ def get_pool_names(mgr, volname):
     """
     fs_map = mgr.get("fs_map")
     metadata_pool_id = None
-    data_pool_ids = [] # type: List[int]
+    data_pool_ids: List[int] = []
     for f in fs_map['filesystems']:
         if volname == f['mdsmap']['fs_name']:
             metadata_pool_id = f['mdsmap']['metadata_pool']
@@ -62,7 +62,7 @@ def get_pool_ids(mgr, volname):
     """
     fs_map = mgr.get("fs_map")
     metadata_pool_id = None
-    data_pool_ids = [] # type: List[int]
+    data_pool_ids: List[int] = []
     for f in fs_map['filesystems']:
         if volname == f['mdsmap']['fs_name']:
             metadata_pool_id = f['mdsmap']['metadata_pool']
