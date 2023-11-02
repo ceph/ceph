@@ -1799,18 +1799,6 @@ void OSDService::queue_for_rep_scrub_resched(PG* pg,
 					   act_token);
 }
 
-void OSDService::queue_for_scrub_granted(PG* pg, Scrub::scrub_prio_t with_priority)
-{
-  // Resulting scrub event: 'RemotesReserved'
-  queue_scrub_event_msg<PGScrubResourcesOK>(pg, with_priority);
-}
-
-void OSDService::queue_for_scrub_denied(PG* pg, Scrub::scrub_prio_t with_priority)
-{
-  // Resulting scrub event: 'ReservationFailure'
-  queue_scrub_event_msg<PGScrubDenied>(pg, with_priority);
-}
-
 void OSDService::queue_for_scrub_resched(PG* pg, Scrub::scrub_prio_t with_priority)
 {
   // Resulting scrub event: 'InternalSchedScrub'

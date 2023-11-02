@@ -359,7 +359,7 @@ void PG::clear_primary_state()
   release_pg_backoffs();
 
   if (m_scrubber) {
-    m_scrubber->discard_replica_reservations();
+    m_scrubber->on_new_interval();
   }
   scrub_after_recovery = false;
 
