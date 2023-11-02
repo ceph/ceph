@@ -266,7 +266,7 @@ Each Ceph daemon provides an admin socket that bypasses the MONs (See
 Running Various Ceph Tools
 --------------------------------
 
-To run Ceph tools like ``ceph-objectstore-tool`` or 
+To run Ceph tools such as ``ceph-objectstore-tool`` or 
 ``ceph-monstore-tool``, invoke the cephadm CLI with
 ``cephadm shell --name <daemon-name>``.  For example::
 
@@ -283,98 +283,114 @@ To run Ceph tools like ``ceph-objectstore-tool`` or
     election_strategy: 1
     0: [v2:127.0.0.1:3300/0,v1:127.0.0.1:6789/0] mon.myhostname
 
-The cephadm shell sets up the environment in a way that is suitable
-for extended daemon maintenance and running daemons interactively. 
+The cephadm shell sets up the environment in a way that is suitable for
+extended daemon maintenance and for the interactive running of daemons. 
 
 .. _cephadm-restore-quorum:
 
 Restoring the Monitor Quorum
 ----------------------------
 
-If the Ceph monitor daemons (mons) cannot form a quorum, cephadm will not be
-able to manage the cluster until quorum is restored.
+If the Ceph Monitor daemons (mons) cannot form a quorum, ``cephadm`` will not
+be able to manage the cluster until quorum is restored.
 
 In order to restore the quorum, remove unhealthy monitors
 form the monmap by following these steps:
 
-1. Stop all mons. For each mon host::
+1. Stop all Monitors. Use ``ssh`` to connect to each Monitor's host, and then
+   while connected to the Monitor's host use ``cephadm`` to stop the Monitor
+   daemon:
 
-    ssh {mon-host}
-    cephadm unit --name mon.`hostname` stop
+   .. prompt:: bash
+
+      ssh {mon-host}
+      cephadm unit --name {mon.hostname} stop
 
 
-2. Identify a surviving monitor and log in to that host::
+2. Identify a surviving Monitor and log in to its host:
 
-    ssh {mon-host}
-    cephadm enter --name mon.`hostname`
+   .. prompt:: bash
 
-3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`
+      ssh {mon-host}
+      cephadm enter --name {mon.hostname}
+
+3. Follow the steps in :ref:`rados-mon-remove-from-unhealthy`.
 
 .. _cephadm-manually-deploy-mgr:
 
 Manually Deploying a Manager Daemon
 -----------------------------------
-At least one manager (mgr) daemon is required by cephadm in order to manage the
-cluster. If the last mgr in a cluster has been removed, follow these steps in
-order to deploy a manager called (for example)
-``mgr.hostname.smfvfd`` on a random host of your cluster manually. 
+At least one Manager (``mgr``) daemon is required by cephadm in order to manage
+the cluster. If the last remaining Manager has been removed from the Ceph
+cluster, follow these steps in order to deploy a fresh Manager on an arbitrary
+host in your cluster. In this example, the freshly-deployed Manager daemon is
+called ``mgr.hostname.smfvfd``.
 
-Disable the cephadm scheduler, in order to prevent cephadm from removing the new 
-manager. See :ref:`cephadm-enable-cli`::
+#. Disable the cephadm scheduler, in order to prevent ``cephadm`` from removing
+   the new Manager. See :ref:`cephadm-enable-cli`:
 
-  ceph config-key set mgr/cephadm/pause true
+   .. prompt:: bash #
 
-Then get or create the auth entry for the new manager::
+      ceph config-key set mgr/cephadm/pause true
 
-  ceph auth get-or-create mgr.hostname.smfvfd mon "profile mgr" osd "allow *" mds "allow *"
+#. Retrieve or create the "auth entry" for the new Manager:
 
-Get the ceph.conf::
+   .. prompt:: bash #
 
-  ceph config generate-minimal-conf
+      ceph auth get-or-create mgr.hostname.smfvfd mon "profile mgr" osd "allow *" mds "allow *"
 
-Get the container image::
+#. Retrieve the Monitor's configuration:
 
-  ceph config get "mgr.hostname.smfvfd" container_image
+   .. prompt:: bash #
 
-Create a file ``config-json.json`` which contains the information necessary to deploy
-the daemon:
+      ceph config generate-minimal-conf
 
-.. code-block:: json
+#. Retrieve the container image:
 
-  {
-    "config": "# minimal ceph.conf for 8255263a-a97e-4934-822c-00bfe029b28f\n[global]\n\tfsid = 8255263a-a97e-4934-822c-00bfe029b28f\n\tmon_host = [v2:192.168.0.1:40483/0,v1:192.168.0.1:40484/0]\n",
-    "keyring": "[mgr.hostname.smfvfd]\n\tkey = V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4=\n"
-  }
+   .. prompt:: bash #
 
-Deploy the daemon::
+      ceph config get "mgr.hostname.smfvfd" container_image
 
-  cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
+#. Create a file called ``config-json.json``, which contains the information
+   necessary to deploy the daemon:
+
+   .. code-block:: json
+
+     {
+       "config": "# minimal ceph.conf for 8255263a-a97e-4934-822c-00bfe029b28f\n[global]\n\tfsid = 8255263a-a97e-4934-822c-00bfe029b28f\n\tmon_host = [v2:192.168.0.1:40483/0,v1:192.168.0.1:40484/0]\n",
+       "keyring": "[mgr.hostname.smfvfd]\n\tkey = V2VyIGRhcyBsaWVzdCBpc3QgZG9vZi4=\n"
+     }
+
+#. Deploy the Manager daemon:
+
+   .. prompt:: bash #
+
+      cephadm --image <container-image> deploy --fsid <fsid> --name mgr.hostname.smfvfd --config-json config-json.json
 
 Capturing Core Dumps
 ---------------------
 
-A Ceph cluster that uses cephadm can be configured to capture core dumps.
-Initial capture and processing of the coredump is performed by
-`systemd-coredump <https://www.man7.org/linux/man-pages/man8/systemd-coredump.8.html>`_.
+A Ceph cluster that uses ``cephadm`` can be configured to capture core dumps.
+The initial capture and processing of the coredump is performed by
+`systemd-coredump
+<https://www.man7.org/linux/man-pages/man8/systemd-coredump.8.html>`_.
 
 
-To enable coredump handling, run:
+To enable coredump handling, run the following command
 
 .. prompt:: bash #
 
-  ulimit -c unlimited
+   ulimit -c unlimited
 
-Core dumps will be written to ``/var/lib/systemd/coredump``.
-This will persist until the system is rebooted.
 
 .. note::
 
-  Core dumps are not namespaced by the kernel, which means
-  they will be written to ``/var/lib/systemd/coredump`` on
-  the container host. 
+  Core dumps are not namespaced by the kernel. This means that core dumps are
+  written to ``/var/lib/systemd/coredump`` on the container host. The ``ulimit
+  -c unlimited`` setting  will persist  only until the system is rebooted.
 
-Now, wait for the crash to happen again. To simulate the crash of a daemon, run
-e.g. ``killall -3 ceph-mon``.
+Wait for the crash to happen again. To simulate the crash of a daemon, run for
+example ``killall -3 ceph-mon``.
 
 
 Running the Debugger with cephadm
@@ -383,45 +399,58 @@ Running the Debugger with cephadm
 Running a single debugging session
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-One can initiate a debugging session using the ``cephadm shell`` command.
+Initiate a debugging session by using the ``cephadm shell`` command.
 From within the shell container we need to install the debugger and debuginfo
 packages. To debug a core file captured by systemd, run the following:
 
-.. prompt:: bash #
 
-    # start the shell session
-    cephadm shell --mount /var/lib/system/coredump
-    # within the shell:
-    dnf install ceph-debuginfo gdb zstd
+#. Start the shell session:
+
+   .. prompt:: bash #
+
+      cephadm shell --mount /var/lib/system/coredump
+
+#. From within the shell session, run the following commands:
+
+   .. prompt:: bash #
+
+      dnf install ceph-debuginfo gdb zstd
+
+   .. prompt:: bash #
+      
     unzstd /var/lib/systemd/coredump/core.ceph-*.zst
+
+   .. prompt:: bash #
+
     gdb /usr/bin/ceph-mon /mnt/coredump/core.ceph-*.zst
 
-You can then run debugger commands at gdb's prompt.
+#. Run debugger commands at gdb's prompt:
 
-.. prompt::
+   .. prompt:: bash (gdb)
 
-    (gdb) bt
-    #0  0x00007fa9117383fc in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
-    #1  0x00007fa910d7f8f0 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib64/libstdc++.so.6
-    #2  0x00007fa913d3f48f in AsyncMessenger::wait() () from /usr/lib64/ceph/libceph-common.so.2
-    #3  0x0000563085ca3d7e in main ()
+      bt
+      
+   ::
+
+      #0  0x00007fa9117383fc in pthread_cond_wait@@GLIBC_2.3.2 () from /lib64/libpthread.so.0
+      #1  0x00007fa910d7f8f0 in std::condition_variable::wait(std::unique_lock<std::mutex>&) () from /lib64/libstdc++.so.6
+      #2  0x00007fa913d3f48f in AsyncMessenger::wait() () from /usr/lib64/ceph/libceph-common.so.2
+      #3  0x0000563085ca3d7e in main ()
 
 
 Running repeated debugging sessions
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-When using ``cephadm shell``, like in the example above, the changes made to
-the container the shell command spawned are ephemeral. Once the shell session
-exits all of the files that were downloaded and installed are no longer
-available. One can simply re-run the same commands every time ``cephadm shell``
-is invoked, but in order to save time and resources one can create a new
-container image and use it for repeated debugging sessions.
+When using ``cephadm shell``, as in the example above, any changes made to the
+container that is spawned by the shell command are ephemeral. After the shell
+session exits, the files that were downloaded and installed cease to be
+available. You can simply re-run the same commands every time ``cephadm
+shell`` is invoked, but in order to save time and resources one can create a
+new container image and use it for repeated debugging sessions.
 
-In the following example we create a simple file for constructing the
-container image. The command below uses podman but it should work correctly
-if ``podman`` is replaced with ``docker``.
-
-.. prompt:: bash
+In the following example, we create a simple file that will construct the
+container image. The command below uses podman but it is expected to work
+correctly even if ``podman`` is replaced with ``docker``::
 
   cat >Containerfile <<EOF
   ARG BASE_IMG=quay.io/ceph/ceph:v18
@@ -432,16 +461,17 @@ if ``podman`` is replaced with ``docker``.
   podman build -t ceph:debugging -f Containerfile .
   # pass --build-arg=BASE_IMG=<your image> to customize the base image
 
-The result should be a new local image named ``ceph:debugging``. This image can
-be used on the same machine that built it. Later, the image could be pushed to
-a container repository, or saved and copied to a node runing other ceph
-containers. Please consult the documentation for ``podman`` or ``docker`` for
-more details on the general container workflow.
+The above file creates a new local image named ``ceph:debugging``. This image
+can be used on the same machine that built it. The image can also be pushed to
+a container repository or saved and copied to a node runing other Ceph
+containers. Consult the ``podman`` or ``docker`` documentation for more
+information about the container workflow.
 
-Once the image has been built it can be used to initiate repeat debugging
-sessions without having to re-install the debug tools and debuginfo packages.
-To debug a core file using this image, in the same way as previously described,
-run:
+After the image has been built, it can be used to initiate repeat debugging
+sessions. By using an image in this way, you avoid the trouble of having to
+re-install the debug tools and debuginfo packages every time you need to run a
+debug session. To debug a core file using this image, in the same way as
+previously described, run:
 
 .. prompt:: bash #
 
@@ -451,29 +481,31 @@ run:
 Debugging live processes
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-The gdb debugger has the ability to attach to running processes to debug them.
-For a containerized process this can be accomplished by using the debug image
-and attaching it to the same PID namespace as the process to be debugged.
+The gdb debugger can attach to running processes to debug them. This can be
+achieved with a containerized process by using the debug image and attaching it
+to the same PID namespace in which the process to be debugged resides.
 
-This requires running a container command with some custom arguments. We can generate a script that can debug a process in a running container.
+This requires running a container command with some custom arguments. We can
+generate a script that can debug a process in a running container.
 
 .. prompt:: bash #
 
    cephadm --image ceph:debugging shell --dry-run > /tmp/debug.sh
 
-This creates a script with the container command cephadm would use to create a
-shell. Now, modify the script by removing the ``--init`` argument and replace
-that with the argument to join to the namespace used for a running running
-container.  For example, let's assume we want to debug the MGR, and have
-determnined that the MGR is running in a container named
-``ceph-bc615290-685b-11ee-84a6-525400220000-mgr-ceph0-sluwsk``. The new
-argument
+This creates a script that includes the container command that ``cephadm``
+would use to create a shell. Modify the script by removing the ``--init``
+argument and replace it with the argument that joins to the namespace used for
+a running running container. For example, assume we want to debug the Manager
+and have determnined that the Manager is running in a container named
+``ceph-bc615290-685b-11ee-84a6-525400220000-mgr-ceph0-sluwsk``. In this case,
+the argument
 ``--pid=container:ceph-bc615290-685b-11ee-84a6-525400220000-mgr-ceph0-sluwsk``
 should be used.
 
-Now, we can run our debugging container with ``sh /tmp/debug.sh``. Within the shell
-we can run commands such as ``ps`` to get the PID of the MGR process. In the following
-example this will be ``2``. Running gdb, we can now attach to the running process:
+We can run our debugging container with ``sh /tmp/debug.sh``. Within the shell,
+we can run commands such as ``ps`` to get the PID of the Manager process. In
+the following example this is ``2``. While running gdb, we can attach to the
+running process:
 
 .. prompt:: bash (gdb)
 
