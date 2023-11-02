@@ -1,7 +1,6 @@
 import os
 import errno
 import logging
-import sys
 import threading
 import configparser
 import re
