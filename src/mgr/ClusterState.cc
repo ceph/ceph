@@ -225,14 +225,6 @@ void ClusterState::final_init()
   ceph_assert(r == 0);
 }
 
-void ClusterState::shutdown()
-{
-  // unregister commands
-  g_ceph_context->get_admin_socket()->unregister_commands(asok_hook);
-  delete asok_hook;
-  asok_hook = NULL;
-}
-
 bool ClusterState::asok_command(
   std::string_view admin_command,
   const cmdmap_t& cmdmap,

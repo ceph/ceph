@@ -214,12 +214,6 @@ std::map<std::string, std::string> Mgr::load_store()
   return loaded;
 }
 
-void Mgr::handle_signal(int signum)
-{
-  ceph_assert(signum == SIGINT || signum == SIGTERM);
-  shutdown();
-}
-
 static void handle_mgr_signal(int signum)
 {
   derr << " *** Got signal " << sig_str(signum) << " ***" << dendl;
@@ -488,27 +482,6 @@ void Mgr::load_all_metadata()
 
     daemon_state.insert(dm);
   }
-}
-
-
-void Mgr::shutdown()
-{
-  dout(10) << "mgr shutdown init" << dendl;
-  finisher.queue(new LambdaContext([&](int) {
-    {
-      std::lock_guard l(lock);
-      // First stop the server so that we're not taking any more incoming
-      // requests
-      server.shutdown();
-    }
-    // after the messenger is stopped, signal modules to shutdown via finisher
-    py_module_registry->active_shutdown();
-  }));
-
-  // Then stop the finisher to ensure its enqueued contexts aren't going
-  // to touch references to the things we're about to tear down
-  finisher.wait_for_empty();
-  finisher.stop();
 }
 
 void Mgr::handle_osd_map()
