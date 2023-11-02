@@ -345,7 +345,7 @@ namespace rgw {
     int rc = g_rgwlib->get_fe()->execute_req(&req);
     if ((rc == 0) &&
         ((rc = req.get_ret()) == 0)) {
-      lock_guard(rgw_fh->mtx);
+      lock_guard guard(rgw_fh->mtx);
       rgw_fh->set_atime(real_clock::to_timespec(real_clock::now()));
       *bytes_read = req.nread;
     }
