@@ -565,6 +565,11 @@ class TestIoctx(object):
             eq(ret, 0)
             with pytest.raises(ObjectNotFound):
                 self.ioctx.operate_read_op(read_op, "no_such")
+        with ReadOpCtx() as read_op:
+            iter, ret = self.ioctx.get_omap_keys(read_op,"2",2)
+            eq(ret, 0)
+            self.ioctx.operate_read_op(read_op, "hw")
+            eq(list(iter), [("3", None)])
 
     def test_clear_omap(self):
         keys = ("1", "2", "3")
