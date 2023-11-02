@@ -502,13 +502,13 @@ class CephPgid(CephArgtype):
         try:
             poolid = int(poolid_s)
         except ValueError:
-            raise ArgumentFormat('pool {0} not integer'.format(poolid))
+            raise ArgumentFormat('pool {0} not integer'.format(poolid_s))
         if poolid < 0:
             raise ArgumentFormat('pool {0} < 0'.format(poolid))
         try:
             pgnum = int(pgnum_s, 16)
         except ValueError:
-            raise ArgumentFormat('pgnum {0} not hex integer'.format(pgnum))
+            raise ArgumentFormat('pgnum {0} not hex integer'.format(pgnum_s))
         self.val = s
 
     def __str__(self):
