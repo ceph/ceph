@@ -44,6 +44,7 @@ import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone/rgw-sync-primary-zone.component';
 import { RgwSyncMetadataInfoComponent } from './rgw-sync-metadata-info/rgw-sync-metadata-info.component';
 import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-info.component';
+import { BucketTagModalComponent } from './bucket-tag-modal/bucket-tag-modal.component';
 
 @NgModule({
   imports: [
@@ -100,7 +101,8 @@ import { RgwSyncDataInfoComponent } from './rgw-sync-data-info/rgw-sync-data-inf
     RgwOverviewDashboardComponent,
     RgwSyncPrimaryZoneComponent,
     RgwSyncMetadataInfoComponent,
-    RgwSyncDataInfoComponent
+    RgwSyncDataInfoComponent,
+    BucketTagModalComponent
   ]
 })
 export class RgwModule {}

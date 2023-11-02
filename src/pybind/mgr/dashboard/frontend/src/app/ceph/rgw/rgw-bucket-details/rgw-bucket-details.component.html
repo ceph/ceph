@@ -100,6 +100,21 @@
             </ng-container>
           </tbody>
         </table>
+
+      <!-- Tags -->
+      <ng-container *ngIf="selection.tagset">
+        <legend i18n>Tags</legend>
+        <table class="table table-striped table-bordered">
+          <tbody>
+            <tr *ngFor="let tag of selection.tagset | keyvalue">
+              <td i18n
+                  class="bold w-25">{{tag.key}}</td>
+              <td class="w-75">{{ tag.value }}</td>
+            </tr>
+          </tbody>
+        </table>
+      </ng-container>
+
       </ng-template>
     </ng-container>
 
