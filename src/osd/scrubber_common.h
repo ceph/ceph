@@ -20,7 +20,7 @@ namespace Scrub {
   class ReplicaReservations;
 }
 
-/// Facilitating scrub-realated object access to private PG data
+/// Facilitating scrub-related object access to private PG data
 class ScrubberPasskey {
 private:
   friend class Scrub::ReplicaReservations;
@@ -356,18 +356,6 @@ struct ScrubPgIF {
    */
   virtual void clear_pgscrub_state() = 0;
 
-  /**
-   *  triggers the 'RemotesReserved' (all replicas granted scrub resources)
-   *  state-machine event
-   */
-  virtual void send_remotes_reserved(epoch_t epoch_queued) = 0;
-
-  /**
-   * triggers the 'ReservationFailure' (at least one replica denied us the
-   * requested resources) state-machine event
-   */
-  virtual void send_reservation_failure(epoch_t epoch_queued) = 0;
-
   virtual void cleanup_store(ObjectStore::Transaction* t) = 0;
 
   virtual bool get_store_errors(const scrub_ls_arg_t& arg,
@@ -381,25 +369,6 @@ struct ScrubPgIF {
     ceph::coarse_real_clock::time_point now_is) = 0;
 
   // --------------- reservations -----------------------------------
-
-  /**
-   *  message all replicas with a request to "unreserve" scrub
-   */
-  virtual void unreserve_replicas() = 0;
-
-  /**
-   *  "forget" all replica reservations. No messages are sent to the
-   *  previously-reserved.
-   *
-   *  Used upon interval change. The replicas' state is guaranteed to
-   *  be reset separately by the interval-change event.
-   */
-  virtual void discard_replica_reservations() = 0;
-
-  /**
-   * clear both local and OSD-managed resource reservation flags
-   */
-  virtual void clear_scrub_reservations() = 0;
 
   /**
    * Reserve local scrub resources (managed by the OSD)
@@ -423,14 +392,13 @@ struct ScrubPgIF {
    */
   virtual void update_scrub_job(const requested_scrub_t& request_flags) = 0;
 
-  // on the replica:
-  virtual void handle_scrub_reserve_request(OpRequestRef op) = 0;
-  virtual void handle_scrub_reserve_release(OpRequestRef op) = 0;
-
-  // and on the primary:
-  virtual void handle_scrub_reserve_grant(OpRequestRef op, pg_shard_t from) = 0;
-  virtual void handle_scrub_reserve_reject(OpRequestRef op,
-					   pg_shard_t from) = 0;
+  /**
+   * route incoming replica-reservations requests/responses to the
+   * appropriate handler.
+   * As the ReplicaReservations object is to be owned by the ScrubMachine, we
+   * send all relevant messages to the ScrubMachine.
+   */
+  virtual void handle_scrub_reserve_msgs(OpRequestRef op) = 0;
 
   virtual void rm_from_osd_scrubbing() = 0;
 

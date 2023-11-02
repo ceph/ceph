@@ -15,10 +15,16 @@
 #include <boost/statechart/transition.hpp>
 
 #include "common/version.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDRepScrub.h"
+#include "messages/MOSDRepScrubMap.h"
+#include "messages/MOSDScrubReserve.h"
+
 #include "include/Context.h"
 #include "osd/scrubber_common.h"
 
 #include "scrub_machine_lstnr.h"
+#include "scrub_reservations.h"
 
 /// a wrapper that sets the FSM state description used by the
 /// PgScrubber
@@ -42,6 +48,40 @@ namespace mpl = ::boost::mpl;
 void on_event_creation(std::string_view nm);
 void on_event_discard(std::string_view nm);
 
+// reservation grant/reject events carry the peer's response:
+
+/// a replica has granted our reservation request
+struct ReplicaGrant : sc::event<ReplicaGrant> {
+  OpRequestRef m_op;
+  pg_shard_t m_from;
+  ReplicaGrant(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
+  {
+    on_event_creation("ReplicaGrant");
+  }
+  void print(std::ostream* out) const
+  {
+    *out << fmt::format("ReplicaGrant(from: {})", m_from);
+  }
+  std::string_view print() const { return "ReplicaGrant"; }
+  ~ReplicaGrant() { on_event_discard("ReplicaGrant"); }
+};
+
+/// a replica has denied our reservation request
+struct ReplicaReject : sc::event<ReplicaReject> {
+  OpRequestRef m_op;
+  pg_shard_t m_from;
+  ReplicaReject(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
+  {
+    on_event_creation("ReplicaReject");
+  }
+  void print(std::ostream* out) const
+  {
+    *out << fmt::format("ReplicaReject(from: {})", m_from);
+  }
+  std::string_view print() const { return "ReplicaReject"; }
+  ~ReplicaReject() { on_event_discard("ReplicaReject"); }
+};
+
 #define MEV(E)                                          \
   struct E : sc::event<E> {                             \
     inline static int actv{0};                          \
@@ -61,9 +101,6 @@ void on_event_discard(std::string_view nm);
 
 /// all replicas have granted our reserve request
 MEV(RemotesReserved)
-
-/// a reservation request has failed
-MEV(ReservationFailure)
 
 /// reservations have timed out
 MEV(ReservationTimeout)
@@ -127,6 +164,21 @@ MEV(SchedReplica)
 /// that is in-flight to the local ObjectStore
 MEV(ReplicaPushesUpd)
 
+/**
+ * IntervalChanged
+ *
+ * This event notifies the ScrubMachine that it is no longer responsible for
+ * releasing replica state.  It will generally be submitted upon a PG interval
+ * change.
+ *
+ * This event is distinct from FullReset because replicas are always responsible
+ * for releasing any interval specific state (including but certainly not limited to
+ * scrub reservations) upon interval change, without coordination from the
+ * Primary.  This event notifies the ScrubMachine that it can forget about
+ * such remote state.
+ */
+MEV(IntervalChanged)
+
 /// guarantee that the FSM is in the quiescent state (i.e. NotActive)
 MEV(FullReset)
 
@@ -141,6 +193,7 @@ MEV(ScrubFinished)
 //
 
 struct NotActive;	    ///< the quiescent state. No active scrubbing.
+struct Session;            ///< either reserving or actively scrubbing
 struct ReservingReplicas;   ///< securing scrub resources from replicas' OSDs
 struct ActiveScrubbing;	    ///< the active state for a Primary. A sub-machine.
 struct ReplicaIdle;         ///< Initial reserved replica state
@@ -163,13 +216,17 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   [[nodiscard]] bool is_reserving() const;
   [[nodiscard]] bool is_accepting_updates() const;
 
+
+// ///////////////// aux declarations & functions //////////////////////// //
+
+
 private:
   /**
    * scheduled_event_state_t
    *
    * Heap allocated, ref-counted state shared between scheduled event callback
    * and timer_event_token_t.  Ensures that callback and timer_event_token_t
-   * can be safetly destroyed in either order while still allowing for
+   * can be safely destroyed in either order while still allowing for
    * cancellation.
    */
   struct scheduled_event_state_t {
@@ -183,7 +240,7 @@ private:
     ~scheduled_event_state_t() {
       /* For the moment, this assert encodes an assumption that we always
        * retain the token until the event either fires or is canceled.
-       * If a user needs/wants to relaxt that requirement, this assert can
+       * If a user needs/wants to relax that requirement, this assert can
        * be removed */
       assert(!cb_token);
     }
@@ -197,7 +254,7 @@ public:
    * from being delivered.  The intended usage is to invoke
    * schedule_timer_event_after in the constructor of the state machine state
    * intended to handle the event and assign the returned timer_event_token_t
-   * to a member of that state. That way, exiting the state will implicitely
+   * to a member of that state. That way, exiting the state will implicitly
    * cancel the event.  See RangedBlocked::m_timeout_token and
    * RangeBlockedAlarm for an example usage.
    */
@@ -259,7 +316,7 @@ public:
    * schedule_timer_event_after
    *
    * Schedules event EventT{Args...} to be delivered duration in the future.
-   * The implementation implicitely drops the event on interval change.  The
+   * The implementation implicitly drops the event on interval change.  The
    * returned timer_event_token_t can be used to cancel the event prior to
    * its delivery -- it should generally be embedded as a member in the state
    * intended to handle the event.  See the comment on timer_event_token_t
@@ -283,6 +340,10 @@ public:
     return timer_event_token_t{this, token};
   }
 };
+
+
+// ///////////////// the states //////////////////////// //
+
 
 /**
  *  The Scrubber's base (quiescent) state.
@@ -314,29 +375,56 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
   sc::result react(const AfterRepairScrub&);
 };
 
-struct ReservingReplicas : sc::state<ReservingReplicas, ScrubMachine>,
+
+/**
+ *  Session
+ *
+ *  This state encompasses the two main "active" states: ReservingReplicas and
+ *  ActiveScrubbing.
+ *  'Session' is the owner of all the resources that are allocated for a
+ *  scrub session performed as a Primary.
+ *
+ *  Exit from this state is either following an interval change, or with
+ *  'FullReset' (that would cover all other completion/termination paths).
+ *  Note that if terminating the session following an interval change - no
+ *  reservations are released. This is because we know that the replicas are
+ *  also resetting their reservations.
+ */
+struct Session : sc::state<Session, ScrubMachine, ReservingReplicas>,
+                 NamedSimply {
+  explicit Session(my_context ctx);
+  ~Session();
+
+  using reactions = mpl::list<sc::transition<FullReset, NotActive>,
+                              sc::custom_reaction<IntervalChanged>>;
+
+  sc::result react(const IntervalChanged&);
+
+  /// managing the scrub session's reservations (optional, as
+  /// it's an RAII wrapper around the state of 'holding reservations')
+  std::optional<ReplicaReservations> m_reservations{std::nullopt};
+};
+
+struct ReservingReplicas : sc::state<ReservingReplicas, Session>,
 			   NamedSimply {
   explicit ReservingReplicas(my_context ctx);
   ~ReservingReplicas();
-  using reactions = mpl::list<sc::custom_reaction<FullReset>,
-			      // all replicas granted our resources request
+  using reactions = mpl::list<sc::custom_reaction<ReplicaGrant>,
+			      sc::custom_reaction<ReplicaReject>,
 			      sc::transition<RemotesReserved, ActiveScrubbing>,
-			      sc::custom_reaction<ReservationTimeout>,
-			      sc::custom_reaction<ReservationFailure>>;
+			      sc::custom_reaction<ReservationTimeout>>;
 
   ceph::coarse_real_clock::time_point entered_at =
     ceph::coarse_real_clock::now();
   ScrubMachine::timer_event_token_t m_timeout_token;
 
-  /// if true - we must 'clear_reserving_now()' upon exit
-  bool m_holding_isreserving_flag{false};
+  /// a "raw" event carrying a peer's grant response
+  sc::result react(const ReplicaGrant&);
 
-  sc::result react(const FullReset&);
+  /// a "raw" event carrying a peer's denial response
+  sc::result react(const ReplicaReject&);
 
   sc::result react(const ReservationTimeout&);
-
-  /// at least one replica denied us the scrub resources we've requested
-  sc::result react(const ReservationFailure&);
 };
 
 
@@ -364,15 +452,13 @@ struct WaitReplicas;
 struct WaitDigestUpdate;
 
 struct ActiveScrubbing
-    : sc::state<ActiveScrubbing, ScrubMachine, PendingTimer>, NamedSimply {
+    : sc::state<ActiveScrubbing, Session, PendingTimer>, NamedSimply {
 
   explicit ActiveScrubbing(my_context ctx);
   ~ActiveScrubbing();
 
-  using reactions = mpl::list<sc::custom_reaction<InternalError>,
-			      sc::custom_reaction<FullReset>>;
+  using reactions = mpl::list<sc::custom_reaction<InternalError>>;
 
-  sc::result react(const FullReset&);
   sc::result react(const InternalError&);
 };
 

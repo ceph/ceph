@@ -246,8 +246,13 @@ class ScrubQueue {
    * (which is a possible result of a race between the check in OsdScrub and
    * the initiation of a scrub by some other PG)
    */
-  bool set_reserving_now();
-  void clear_reserving_now();
+  bool set_reserving_now(spg_t reserving_id, utime_t now_is);
+
+  /**
+   * silently ignore attempts to clear the flag if it was not set by
+   * the named pg.
+   */
+  void clear_reserving_now(spg_t reserving_id);
   bool is_reserving_now() const;
 
   /// counting the number of PGs stuck while scrubbing, waiting for objects
@@ -331,9 +336,11 @@ class ScrubQueue {
    * trying to secure its replicas' resources. We will refrain from initiating
    * any other scrub sessions until this one is done.
    *
-   * \todo keep the ID of the reserving PG; possibly also the time it started.
+   * \todo replace the local lock with regular osd-service locking
    */
-  std::atomic_bool a_pg_is_reserving{false};
+  ceph::mutex reserving_lock = ceph::make_mutex("ScrubQueue::reserving_lock");
+  std::optional<spg_t> reserving_pg;
+  utime_t reserving_since;
 
   /**
    * If the scrub job was not explicitly requested, we postpone it by some
