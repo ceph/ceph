@@ -3,6 +3,7 @@
 # these should not be run automatically as they require the use of podman,
 # which should not be assumed to exist on a typical test node
 
+import json
 import os
 import pathlib
 import pytest
@@ -92,5 +93,34 @@ def source_dir():
 )
 def test_cephadm_build(env, source_dir, tmp_path):
     build_in(env, source_dir, tmp_path, [])
-    assert (tmp_path / 'cephadm').is_file()
-    # TODO: verify contents of zip
+    binary = tmp_path / 'cephadm'
+    assert binary.is_file()
+    res = subprocess.run(
+        [sys.executable, str(binary), 'version'],
+        stdout=subprocess.PIPE,
+    )
+    out = res.stdout.decode('utf8')
+    assert 'version' in out
+    assert 'UNKNOWN' in out
+    assert res.returncode != 0
+    res = subprocess.run(
+        [sys.executable, str(binary), 'version', '--verbose'],
+        stdout=subprocess.PIPE,
+    )
+    data = json.loads(res.stdout)
+    assert isinstance(data, dict)
+    assert 'bundled_packages' in data
+    assert all(v['package_source'] == 'pip' for v in data['bundled_packages'])
+    assert all(
+        v['name'] in ('Jinja2', 'MarkupSafe')
+        for v in data['bundled_packages']
+    )
+    assert all('requirements_entry' in v for v in data['bundled_packages'])
+    assert 'zip_root_entries' in data
+    zre = data['zip_root_entries']
+    assert any(e.startswith('Jinja2') for e in zre)
+    assert any(e.startswith('MarkupSafe') for e in zre)
+    assert any(e.startswith('jinja2') for e in zre)
+    assert any(e.startswith('markupsafe') for e in zre)
+    assert any(e.startswith('cephadmlib') for e in zre)
+    assert any(e.startswith('_cephadmmeta') for e in zre)
