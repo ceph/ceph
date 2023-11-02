@@ -262,7 +262,7 @@ void CreatePrimaryRequest<I>::handle_unlink_peer(int r) {
     return;
   }
 
-  unlink_peer();
+  refresh_image();
 }
 
 template <typename I>
