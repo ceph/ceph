@@ -537,8 +537,7 @@ public:
     const OpInfo &op_info,
     ObjectContextRef obc,
     const std::error_code e,
-    ceph_tid_t rep_tid,
-    eversion_t &version);
+    ceph_tid_t rep_tid);
 
 private:
 
@@ -769,6 +768,7 @@ private:
   };
 
   std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
+  std::map<ceph_tid_t, eversion_t> log_entry_version;
   // snap trimming
   interval_set<snapid_t> snap_trimq;
 };
