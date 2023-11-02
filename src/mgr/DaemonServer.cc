@@ -98,7 +98,6 @@ DaemonServer::DaemonServer(MonClient *monc_,
       audit_clog(audit_clog_),
       pgmap_ready(false),
       timer(g_ceph_context, lock),
-      shutting_down(false),
       tick_event(nullptr),
       osd_perf_metric_collector_listener(this),
       osd_perf_metric_collector(osd_perf_metric_collector_listener),
@@ -348,11 +347,6 @@ void DaemonServer::schedule_tick_locked(double delay_sec)
     tick_event = nullptr;
   }
 
-  // on shutdown start rejecting explicit requests to send reports that may
-  // originate from python land which may still be running.
-  if (shutting_down)
-    return;
-
   tick_event = timer.add_event_after(delay_sec,
     new LambdaContext([this](int r) {
       tick();
@@ -395,19 +389,6 @@ void DaemonServer::handle_mds_perf_metric_query_updated()
           }
         }
       }));
-}
-
-void DaemonServer::shutdown()
-{
-  dout(10) << "begin" << dendl;
-  msgr->shutdown();
-  msgr->wait();
-  cluster_state.shutdown();
-  dout(10) << "done" << dendl;
-
-  std::lock_guard l(lock);
-  shutting_down = true;
-  timer.shutdown();
 }
 
 static DaemonKey key_from_service(

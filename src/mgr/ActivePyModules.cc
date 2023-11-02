@@ -555,42 +555,6 @@ void ActivePyModules::start_one(PyModuleRef py_module)
   }));
 }
 
-void ActivePyModules::shutdown()
-{
-  std::lock_guard locker(lock);
-
-  // Stop per active module finisher thread
-  for (auto& [name, module] : modules) {
-      dout(4) << "Stopping active module " << name << " finisher thread" << dendl;
-      module->finisher.wait_for_empty();
-      module->finisher.stop();
-  }
-
-  // Signal modules to drop out of serve() and/or tear down resources
-  for (auto& [name, module] : modules) {
-    lock.unlock();
-    dout(10) << "calling module " << name << " shutdown()" << dendl;
-    module->shutdown();
-    dout(10) << "module " << name << " shutdown() returned" << dendl;
-    lock.lock();
-  }
-
-  // For modules implementing serve(), finish the threads where we
-  // were running that.
-  for (auto& [name, module] : modules) {
-    lock.unlock();
-    dout(10) << "joining module " << name << dendl;
-    module->thread.join();
-    dout(10) << "joined module " << name << dendl;
-    lock.lock();
-  }
-
-  cmd_finisher.wait_for_empty();
-  cmd_finisher.stop();
-
-  modules.clear();
-}
-
 void ActivePyModules::notify_all(const std::string &notify_type,
                      const std::string &notify_id)
 {

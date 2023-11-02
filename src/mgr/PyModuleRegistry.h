@@ -122,9 +122,6 @@ public:
     return standby_modules != nullptr;
   }
 
-  void active_shutdown();
-  void shutdown();
-
   std::vector<MonCommand> get_commands() const;
   std::vector<ModuleCommand> get_py_commands() const;
 

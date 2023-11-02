@@ -217,53 +217,6 @@ void PyModuleRegistry::active_start(
   }
 }
 
-void PyModuleRegistry::active_shutdown()
-{
-  std::lock_guard locker(lock);
-
-  if (active_modules != nullptr) {
-    active_modules->shutdown();
-    active_modules.reset();
-  }
-}
-
-void PyModuleRegistry::shutdown()
-{
-  std::lock_guard locker(lock);
-
-  if (standby_modules != nullptr) {
-    standby_modules->shutdown();
-    standby_modules.reset();
-  }
-
-  // Ideally, now, we'd be able to do this for all modules:
-  //
-  //    Py_EndInterpreter(pMyThreadState);
-  //    PyThreadState_Swap(pMainThreadState);
-  //
-  // Unfortunately, if the module has any other *python* threads active
-  // at this point, Py_EndInterpreter() will abort with:
-  //
-  //    Fatal Python error: Py_EndInterpreter: not the last thread
-  //
-  // This can happen when using CherryPy in a module, becuase CherryPy
-  // runs an extra thread as a timeout monitor, which spends most of its
-  // life inside a time.sleep(60).  Unless you are very, very lucky with
-  // the timing calling this destructor, that thread will still be stuck
-  // in a sleep, and Py_EndInterpreter() will abort.
-  //
-  // This could of course also happen with a poorly written module which
-  // made no attempt to clean up any additional threads it created.
-  //
-  // The safest thing to do is just not call Py_EndInterpreter(), and
-  // let Py_Finalize() kill everything after all modules are shut down.
-
-  modules.clear();
-
-  PyEval_RestoreThread(pMainThreadState);
-  Py_Finalize();
-}
-
 std::vector<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
 {
   const auto opt = g_conf().get_val<std::string>("mgr_disabled_modules");
