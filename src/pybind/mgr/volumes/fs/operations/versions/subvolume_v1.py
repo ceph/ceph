@@ -55,7 +55,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             # no need to stat the path -- open() does that
             return self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_PATH).encode('utf-8')
-        except MetadataMgrException as me:
+        except MetadataMgrException:
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
 
     @property
@@ -68,7 +68,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         try:
             # MDS treats this as a noop for already marked subvolume
             self.fs.setxattr(self.path, 'ceph.dir.subvolume', b'1', 0)
-        except cephfs.InvalidValue as e:
+        except cephfs.InvalidValue:
             raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
@@ -89,7 +89,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
-        except OpSmException as oe:
+        except OpSmException:
             raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
 
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
@@ -156,7 +156,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
-        except OpSmException as oe:
+        except OpSmException:
             raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
         subvol_path = os.path.join(self.base_path, str(uuid.uuid4()).encode('utf-8'))
@@ -596,7 +596,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
         """
         with self.auth_mdata_mgr.subvol_metadata_lock(self.group.groupname, self.subvolname):
             meta = self.auth_mdata_mgr.subvol_metadata_get(self.group.groupname, self.subvolname)
-            auths = [] # type: List[Dict[str,str]]
+            auths: List[Dict[str,str]] = []
             if not meta or not meta['auths']:
                 return auths
 
@@ -669,7 +669,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                     pass
                 else:
                     raise
-        except MetadataMgrException as me:
+        except MetadataMgrException:
             raise VolumeException(-errno.EINVAL, "error fetching subvolume metadata")
         return clone_source
 
@@ -744,7 +744,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise
 
     def get_pending_clones(self, snapname):
-        pending_clones_info = {"has_pending_clones": "no"}  # type: Dict[str, Any]
+        pending_clones_info: Dict[str, Any] = {"has_pending_clones": "no"}
         pending_track_id_list = []
         pending_clone_list = []
         index_path = ""
@@ -777,7 +777,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                         # If clone is completed between 'list_all_keys_with_specified_values_from_section'
                         # and readlink(track_id_path) call then readlink will fail with error ENOENT (2)
                         # Hence we double check whether track_id is exist in .meta file or not.
-                        value = self.metadata_mgr.get_option('clone snaps', track_id)
                         # Edge case scenario.
                         # If track_id for clone exist but path /volumes/_index/clone/{track_id} not found
                         # then clone is orphan.
@@ -790,7 +789,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             path = Path(link_path.decode('utf-8'))
             clone_name = os.path.basename(link_path).decode('utf-8')
             group_name = os.path.basename(path.parent.absolute())
-            details = {"name": clone_name}  # type: Dict[str, str]
+            details = {"name": clone_name}
             if group_name != Group.NO_GROUP_NAME:
                 details["target_group"] = group_name
             pending_clone_list.append(details)
@@ -839,7 +838,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
                 snap_info[key] = self.fs.getxattr(snappath, val)
             pending_clones_info = self.get_pending_clones(snapname)
             info_dict = {'created_at': str(datetime.fromtimestamp(float(snap_info['created_at']))),
-                    'data_pool': snap_info['data_pool'].decode('utf-8')}  # type: Dict[str, Any]
+                    'data_pool': snap_info['data_pool'].decode('utf-8')}
             info_dict.update(pending_clones_info);
             return info_dict
         except cephfs.Error as e:

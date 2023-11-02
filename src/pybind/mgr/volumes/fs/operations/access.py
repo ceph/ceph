@@ -4,7 +4,7 @@ from typing import List
 
 
 def prepare_updated_caps_list(existing_caps, mds_cap_str, osd_cap_str, authorize=True):
-    caps_list = []  # type: List[str]
+    caps_list: List[str]  = []
     for k, v in existing_caps['caps'].items():
         if k == 'mds' or k == 'osd':
             continue
