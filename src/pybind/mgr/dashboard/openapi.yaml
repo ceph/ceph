@@ -8817,6 +8817,8 @@ paths:
                   type: string
                 placement_target:
                   type: string
+                tags:
+                  type: string
                 uid:
                   type: string
                 zonegroup:
@@ -9128,6 +9130,8 @@ paths:
                 mfa_token_pin:
                   type: string
                 mfa_token_serial:
+                  type: string
+                tags:
                   type: string
                 uid:
                   type: string
