@@ -15,10 +15,9 @@ To print a list of devices discovered by ``cephadm``, run this command:
 
 .. prompt:: bash #
 
-    ceph orch device ls [--hostname=...] [--wide] [--refresh]
+  ceph orch device ls [--hostname=...] [--wide] [--refresh]
 
-Example
-::
+Example::
 
   Hostname  Path      Type  Serial              Size   Health   Ident  Fault  Available
   srv-01    /dev/sdb  hdd   15P0A0YFFRD6         300G  Unknown  N/A    N/A    No
@@ -44,7 +43,7 @@ enable cephadm's "enhanced device scan" option as follows;
 
 .. prompt:: bash #
 
-    ceph config set mgr mgr/cephadm/device_enhanced_scan true
+  ceph config set mgr mgr/cephadm/device_enhanced_scan true
 
 .. warning::
     Although the libstoragemgmt library performs standard SCSI inquiry calls,
@@ -175,16 +174,16 @@ will happen without actually creating the OSDs.
 
 For example:
 
-   .. prompt:: bash #
+.. prompt:: bash #
 
-     ceph orch apply osd --all-available-devices --dry-run
+  ceph orch apply osd --all-available-devices --dry-run
 
-   ::
+::
 
-     NAME                  HOST  DATA      DB  WAL
-     all-available-devices node1 /dev/vdb  -   -
-     all-available-devices node2 /dev/vdc  -   -
-     all-available-devices node3 /dev/vdd  -   -
+  NAME                  HOST  DATA      DB  WAL
+  all-available-devices node1 /dev/vdb  -   -
+  all-available-devices node2 /dev/vdc  -   -
+  all-available-devices node3 /dev/vdd  -   -
 
 .. _cephadm-osd-declarative:
 
@@ -199,9 +198,9 @@ command completes will be automatically found and added to the cluster.
 
 We will examine the effects of the following command:
 
-   .. prompt:: bash #
+.. prompt:: bash #
 
-     ceph orch apply osd --all-available-devices
+  ceph orch apply osd --all-available-devices
 
 After running the above command: 
 
@@ -214,17 +213,17 @@ If you want to avoid this behavior (disable automatic creation of OSD on availab
 
 .. prompt:: bash #
 
-   ceph orch apply osd --all-available-devices --unmanaged=true
+  ceph orch apply osd --all-available-devices --unmanaged=true
 
 .. note::
 
-  Keep these three facts in mind:
+    Keep these three facts in mind:
 
-  - The default behavior of ``ceph orch apply`` causes cephadm constantly to reconcile. This means that cephadm creates OSDs as soon as new drives are detected.
+    - The default behavior of ``ceph orch apply`` causes cephadm constantly to reconcile. This means that cephadm creates OSDs as soon as new drives are detected.
 
-  - Setting ``unmanaged: True`` disables the creation of OSDs. If ``unmanaged: True`` is set, nothing will happen even if you apply a new OSD service.
+    - Setting ``unmanaged: True`` disables the creation of OSDs. If ``unmanaged: True`` is set, nothing will happen even if you apply a new OSD service.
 
-  - ``ceph orch daemon add`` creates OSDs, but does not add an OSD service.
+    - ``ceph orch daemon add`` creates OSDs, but does not add an OSD service.
 
 * For cephadm, see also :ref:`cephadm-spec-unmanaged`.
 
@@ -252,7 +251,7 @@ Example:
 
 Expected output::
 
-   Scheduled OSD(s) for removal
+  Scheduled OSD(s) for removal
 
 OSDs that are not safe to destroy will be rejected.
 
@@ -275,14 +274,14 @@ You can query the state of OSD operation with the following command:
 
 .. prompt:: bash #
 
-   ceph orch osd rm status
+  ceph orch osd rm status
 
 Expected output::
 
-    OSD_ID  HOST         STATE                    PG_COUNT  REPLACE  FORCE  STARTED_AT
-    2       cephadm-dev  done, waiting for purge  0         True     False  2020-07-17 13:01:43.147684
-    3       cephadm-dev  draining                 17        False    True   2020-07-17 13:01:45.162158
-    4       cephadm-dev  started                  42        False    True   2020-07-17 13:01:45.162158
+  OSD_ID  HOST         STATE                    PG_COUNT  REPLACE  FORCE  STARTED_AT
+  2       cephadm-dev  done, waiting for purge  0         True     False  2020-07-17 13:01:43.147684
+  3       cephadm-dev  draining                 17        False    True   2020-07-17 13:01:45.162158
+  4       cephadm-dev  started                  42        False    True   2020-07-17 13:01:45.162158
 
 
 When no PGs are left on the OSD, it will be decommissioned and removed from the cluster.
@@ -304,11 +303,11 @@ Example:
 
 .. prompt:: bash #
 
-    ceph orch osd rm stop 4
+  ceph orch osd rm stop 4
 
 Expected output::
 
-    Stopped OSD(s) removal
+  Stopped OSD(s) removal
 
 This resets the initial state of the OSD and takes it off the removal queue.
 
@@ -329,7 +328,7 @@ Example:
 
 Expected output::
 
-   Scheduled OSD(s) for replacement
+  Scheduled OSD(s) for replacement
 
 This follows the same procedure as the procedure in the "Remove OSD" section, with
 one exception: the OSD is not permanently removed from the CRUSH hierarchy, but is
@@ -436,10 +435,10 @@ the ``ceph orch ps`` output in the ``MEM LIMIT`` column::
 To exclude an OSD from memory autotuning, disable the autotune option
 for that OSD and also set a specific memory target.  For example,
 
-  .. prompt:: bash #
+.. prompt:: bash #
 
-    ceph config set osd.123 osd_memory_target_autotune false
-    ceph config set osd.123 osd_memory_target 16G
+  ceph config set osd.123 osd_memory_target_autotune false
+  ceph config set osd.123 osd_memory_target 16G
 
 
 .. _drivegroups:
@@ -502,7 +501,7 @@ Example
 
 .. prompt:: bash [monitor.1]#
 
-   ceph orch apply -i /path/to/osd_spec.yml --dry-run
+  ceph orch apply -i /path/to/osd_spec.yml --dry-run
 
 
 
@@ -512,9 +511,9 @@ Filters
 -------
 
 .. note::
-   Filters are applied using an `AND` gate by default. This means that a drive
-   must fulfill all filter criteria in order to get selected. This behavior can
-   be adjusted by setting ``filter_logic: OR`` in the OSD specification. 
+    Filters are applied using an `AND` gate by default. This means that a drive
+    must fulfill all filter criteria in order to get selected. This behavior can
+    be adjusted by setting ``filter_logic: OR`` in the OSD specification. 
 
 Filters are used to assign disks to groups, using their attributes to group
 them. 
@@ -524,7 +523,7 @@ information about the attributes with this command:
 
 .. code-block:: bash
 
-  ceph-volume inventory </path/to/disk>
+    ceph-volume inventory </path/to/disk>
 
 Vendor or Model
 ^^^^^^^^^^^^^^^
@@ -633,9 +632,9 @@ but want to use only the first two, you could use `limit`:
 
 .. code-block:: yaml
 
-  data_devices:
-    vendor: VendorA
-    limit: 2
+    data_devices:
+      vendor: VendorA
+      limit: 2
 
 .. note:: `limit` is a last resort and shouldn't be used if it can be avoided.
 
@@ -858,8 +857,8 @@ See :ref:`orchestrator-cli-placement-spec`
 
 .. note::
 
-   Assuming each host has a unique disk layout, each OSD 
-   spec needs to have a different service id
+    Assuming each host has a unique disk layout, each OSD 
+    spec needs to have a different service id
 
 
 Dedicated wal + db
@@ -989,7 +988,7 @@ activates all existing OSDs on a host.
 
 .. prompt:: bash #
 
-   ceph cephadm osd activate <host>...
+  ceph cephadm osd activate <host>...
 
 This will scan all existing disks for OSDs and deploy corresponding daemons.
 
