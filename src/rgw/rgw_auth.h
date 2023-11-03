@@ -48,15 +48,13 @@ public:
    * applier that is being used. */
   virtual uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const = 0;
 
-  /* Verify whether a given identity *can be treated as* an admin of rgw_user
-  * (account in Swift's terminology) specified in @uid. On error throws
-  * rgw::auth::Exception storing the reason. */
-  virtual bool is_admin_of(const rgw_user& uid) const = 0;
+  /* Verify whether a given identity *can be treated as* an admin of rgw_owner
+  * specified in @o. On error throws rgw::auth::Exception storing the reason. */
+  virtual bool is_admin_of(const rgw_owner& o) const = 0;
 
-  /* Verify whether a given identity *is* the owner of the rgw_user (account
-   * in the Swift's terminology) specified in @uid. On internal error throws
-   * rgw::auth::Exception storing the reason. */
-  virtual bool is_owner_of(const rgw_user& uid) const = 0;
+  /* Verify whether a given identity is the rgw_owner specified in @o.
+   * On internal error throws rgw::auth::Exception storing the reason. */
+  virtual bool is_owner_of(const rgw_owner& o) const = 0;
 
   /* Return the permission mask that is used to narrow down the set of
    * operations allowed for a given identity. This method reflects the idea
@@ -104,6 +102,7 @@ std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
                        const std::string& display_name,
+                       const rgw_account_id& account_id,
                        const int perm_mask,
                        const bool is_admin,
                        const uint32_t type);
@@ -459,15 +458,13 @@ public:
     return RGW_PERM_NONE;
   }
 
-  bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin_of(const rgw_owner& o) const override {
     return false;
   }
 
-  bool is_owner_of(const rgw_user& uid) const override {
-    if (uid.id == this->sub && uid.tenant == role_tenant && uid.ns == "oidc") {
-      return true;
-    }
-    return false;
+  bool is_owner_of(const rgw_owner& o) const override {
+    auto* uid = std::get_if<rgw_user>(&o);
+    return uid && uid->id == sub && uid->tenant == role_tenant && uid->ns == "oidc";
   }
 
   uint32_t get_perm_mask() const override {
@@ -631,8 +628,8 @@ public:
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_user& uid) const override;
-  bool is_owner_of(const rgw_user& uid) const override;
+  bool is_admin_of(const rgw_owner& o) const override;
+  bool is_owner_of(const rgw_owner& o) const override;
   bool is_identity(const idset_t& ids) const override;
 
   uint32_t get_perm_mask() const override { return info.perm_mask; }
@@ -692,8 +689,8 @@ public:
 
   ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_user& uid) const override;
-  bool is_owner_of(const rgw_user& uid) const override;
+  bool is_admin_of(const rgw_owner& o) const override;
+  bool is_owner_of(const rgw_owner& o) const override;
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
     if (this->perm_mask == RGW_PERM_INVALID) {
@@ -756,11 +753,13 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   }
-  bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin_of(const rgw_owner& o) const override {
     return false;
   }
-  bool is_owner_of(const rgw_user& uid) const override {
-    return (this->token_attrs.user_id.id == uid.id && this->token_attrs.user_id.tenant == uid.tenant && this->token_attrs.user_id.ns == uid.ns);
+  bool is_owner_of(const rgw_owner& o) const override {
+    auto* uid = std::get_if<rgw_user>(&o);
+    // TODO: handle account roles
+    return uid && *uid == token_attrs.user_id;
   }
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
