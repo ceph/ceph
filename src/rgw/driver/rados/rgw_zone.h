@@ -900,6 +900,9 @@ int add_zone_to_group(const DoutPrefixProvider* dpp,
                       const rgw::zone_features::set& enable_features,
                       const rgw::zone_features::set& disable_features);
 
+void add_zone_pools(const RGWZoneParams& info,
+                    std::set<rgw_pool>& pools);
+
 /// Remove a zone by id from its zonegroup, promoting a new master zone if
 /// necessary.
 int remove_zone_from_group(const DoutPrefixProvider* dpp,
@@ -916,20 +919,11 @@ int read_zone(const DoutPrefixProvider* dpp, optional_yield y,
               RGWZoneParams& info,
               std::unique_ptr<sal::ZoneWriter>* writer = nullptr);
 
-/// Initialize and create a new zone. If the given info.id is empty, a random
-/// uuid will be generated. Pool names are initialized with the zone name as a
-/// prefix. If any pool names conflict with existing zones, a random suffix is
-/// added.
-int create_zone(const DoutPrefixProvider* dpp, optional_yield y,
-                sal::ConfigStore* cfgstore, bool exclusive,
-                RGWZoneParams& info,
-                std::unique_ptr<sal::ZoneWriter>* writer = nullptr);
-
+// TODO: move this and others out of this file and into rgw/
 /// Initialize the zone's pool names using the zone name as a prefix. If a pool
 /// name conflicts with an existing zone's pool, add a unique suffix.
 int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
                          const std::set<rgw_pool>& pools, RGWZoneParams& info);
-
 /// Set the given zone as its realm's default zone.
 int set_default_zone(const DoutPrefixProvider* dpp, optional_yield y,
                       sal::ConfigStore* cfgstore, const RGWZoneParams& info,

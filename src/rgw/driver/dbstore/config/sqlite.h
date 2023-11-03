@@ -130,7 +130,7 @@ class SQLiteConfigStore : public sal::ConfigStore {
 
   int create_zone(const DoutPrefixProvider* dpp,
                   optional_yield y, bool exclusive,
-                  const RGWZoneParams& info,
+                  RGWZoneParams& info,
                   std::unique_ptr<sal::ZoneWriter>* writer) override;
   int read_zone_by_id(const DoutPrefixProvider* dpp,
                       optional_yield y,

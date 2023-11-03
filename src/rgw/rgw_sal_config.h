@@ -189,7 +189,7 @@ class ConfigStore {
   /// Create a zone
   virtual int create_zone(const DoutPrefixProvider* dpp,
                           optional_yield y, bool exclusive,
-                          const RGWZoneParams& info,
+                          RGWZoneParams& info,
                           std::unique_ptr<ZoneWriter>* writer) = 0;
   /// Read a zone by id
   virtual int read_zone_by_id(const DoutPrefixProvider* dpp,

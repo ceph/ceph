@@ -5791,8 +5791,7 @@ int main(int argc, const char **argv)
         }
 
         constexpr bool exclusive = true;
-        int ret = rgw::create_zone(dpp(), null_yield, cfgstore.get(),
-                                   exclusive, zone_params);
+        int ret = cfgstore->create_zone(dpp(), null_yield, exclusive, zone_params, nullptr);
 	if (ret < 0) {
 	  cerr << "failed to create zone " << zone_name << ": " << cpp_strerror(-ret) << std::endl;
 	  return -ret;
@@ -5962,8 +5961,7 @@ int main(int argc, const char **argv)
         }
 
         constexpr bool exclusive = false;
-        ret = rgw::create_zone(dpp(), null_yield, cfgstore.get(),
-                               exclusive, zone);
+        ret = cfgstore->create_zone(dpp(), null_yield, exclusive, zone, nullptr);
 	if (ret < 0) {
 	  cerr << "ERROR: couldn't create zone: " << cpp_strerror(-ret) << std::endl;
 	  return -ret;

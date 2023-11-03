@@ -1018,61 +1018,6 @@ int read_zone(const DoutPrefixProvider* dpp, optional_yield y,
   return cfgstore->read_default_zone(dpp, y, realm_id, info, writer);
 }
 
-extern int get_zones_pool_set(const DoutPrefixProvider *dpp, optional_yield y,
-                              rgw::sal::ConfigStore* cfgstore,
-                              std::string_view my_zone_id,
-                              std::set<rgw_pool>& pools);
-
-int create_zone(const DoutPrefixProvider* dpp, optional_yield y,
-                sal::ConfigStore* cfgstore, bool exclusive,
-                RGWZoneParams& info, std::unique_ptr<sal::ZoneWriter>* writer)
-{
-  if (info.name.empty()) {
-    ldpp_dout(dpp, -1) << __func__ << " requires a zone name" << dendl;
-    return -EINVAL;
-  }
-  if (info.id.empty()) {
-    info.id = gen_random_uuid();
-  }
-
-  // add default placement with empty pool name
-  rgw_pool pool;
-  auto& placement = info.placement_pools["default-placement"];
-  placement.storage_classes.set_storage_class(
-      RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
-
-  // build a set of all pool names used by other zones
-  std::set<rgw_pool> pools;
-  int r = get_zones_pool_set(dpp, y, cfgstore, info.id, pools);
-  if (r < 0) {
-    return r;
-  }
-
-  // initialize pool names with the zone name prefix
-  r = init_zone_pool_names(dpp, y, pools, info);
-  if (r < 0) {
-    return r;
-  }
-
-  r = cfgstore->create_zone(dpp, y, exclusive, info, nullptr);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "failed to create zone with "
-        << cpp_strerror(r) << dendl;
-    return r;
-  }
-
-  // try to set as default. may race with another create, so pass exclusive=true
-  // so we don't override an existing default
-  r = set_default_zone(dpp, y, cfgstore, info, true);
-  if (r < 0 && r != -EEXIST) {
-    ldpp_dout(dpp, 0) << "WARNING: failed to set zone as default: "
-        << cpp_strerror(r) << dendl;
-  }
-
-  return 0;
-
-}
-
 int set_default_zone(const DoutPrefixProvider* dpp, optional_yield y,
                      sal::ConfigStore* cfgstore, const RGWZoneParams& info,
                      bool exclusive)
@@ -1104,7 +1049,7 @@ static int read_or_create_default_zone(const DoutPrefixProvider* dpp,
   if (r == -ENOENT) {
     info.name = default_zone_name;
     constexpr bool exclusive = true;
-    r = create_zone(dpp, y, cfgstore, exclusive, info, nullptr);
+    r = cfgstore->create_zone(dpp, y, exclusive, info, nullptr);
     if (r == -EEXIST) {
       r = cfgstore->read_zone_by_name(dpp, y, default_zone_name, info, nullptr);
     }

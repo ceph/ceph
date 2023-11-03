@@ -1675,7 +1675,7 @@ int SQLiteConfigStore::delete_default_zone_id(const DoutPrefixProvider* dpp,
 
 int SQLiteConfigStore::create_zone(const DoutPrefixProvider* dpp,
                                    optional_yield y, bool exclusive,
-                                   const RGWZoneParams& info,
+                                   RGWZoneParams& info,
                                    std::unique_ptr<sal::ZoneWriter>* writer)
 {
   Prefix prefix{*dpp, "dbconfig:sqlite:create_zone "}; dpp = &prefix;

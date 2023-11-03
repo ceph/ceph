@@ -136,9 +136,13 @@ class RadosConfigStore : public sal::ConfigStore {
                                      optional_yield y,
                                      std::string_view realm_id) override;
 
+  /// Initialize and create a new zone. If the given info.id is empty, a random
+  /// uuid will be generated. Pool names are initialized with the zone name as a
+  /// prefix. If any pool names conflict with existing zones, a random suffix is
+  /// added.
   virtual int create_zone(const DoutPrefixProvider* dpp,
                           optional_yield y, bool exclusive,
-                          const RGWZoneParams& info,
+                          RGWZoneParams& info,
                           std::unique_ptr<sal::ZoneWriter>* writer) override;
   virtual int read_zone_by_id(const DoutPrefixProvider* dpp,
                               optional_yield y,
@@ -159,6 +163,10 @@ class RadosConfigStore : public sal::ConfigStore {
                               optional_yield y, const std::string& marker,
                               std::span<std::string> entries,
                               sal::ListResult<std::string>& result) override;
+
+  int get_zones_pool_set(const DoutPrefixProvider *dpp, optional_yield y,
+                         std::string_view my_zone_id,
+                         std::set<rgw_pool>& pools);
 
   // PeriodConfig
   virtual int read_period_config(const DoutPrefixProvider* dpp,

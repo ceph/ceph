@@ -471,73 +471,6 @@ rgw_pool fix_zone_pool_dup(const set<rgw_pool>& pools,
   return pool;
 }
 
-void add_zone_pools(const RGWZoneParams& info,
-                    std::set<rgw_pool>& pools)
-{
-  pools.insert(info.domain_root);
-  pools.insert(info.control_pool);
-  pools.insert(info.gc_pool);
-  pools.insert(info.log_pool);
-  pools.insert(info.intent_log_pool);
-  pools.insert(info.usage_log_pool);
-  pools.insert(info.user_keys_pool);
-  pools.insert(info.user_email_pool);
-  pools.insert(info.user_swift_pool);
-  pools.insert(info.user_uid_pool);
-  pools.insert(info.otp_pool);
-  pools.insert(info.roles_pool);
-  pools.insert(info.reshard_pool);
-  pools.insert(info.oidc_pool);
-  pools.insert(info.notif_pool);
-
-  for (const auto& [pname, placement] : info.placement_pools) {
-    pools.insert(placement.index_pool);
-    for (const auto& [sname, sc] : placement.storage_classes.get_all()) {
-      if (sc.data_pool) {
-        pools.insert(sc.data_pool.get());
-      }
-    }
-    pools.insert(placement.data_extra_pool);
-  }
-}
-
-namespace rgw {
-
-int get_zones_pool_set(const DoutPrefixProvider *dpp,
-                       optional_yield y,
-                       rgw::sal::ConfigStore* cfgstore,
-                       std::string_view my_zone_id,
-                       std::set<rgw_pool>& pools)
-{
-  std::array<std::string, 128> zone_names;
-  rgw::sal::ListResult<std::string> listing;
-  do {
-    int r = cfgstore->list_zone_names(dpp, y, listing.next,
-                                      zone_names, listing);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "failed to list zones with " << cpp_strerror(r) << dendl;
-      return r;
-    }
-
-    for (const auto& name : listing.entries) {
-      RGWZoneParams info;
-      r = cfgstore->read_zone_by_name(dpp, y, name, info, nullptr);
-      if (r < 0) {
-        ldpp_dout(dpp, 0) << "failed to load zone " << name
-            << " with " << cpp_strerror(r) << dendl;
-        return r;
-      }
-      if (info.get_id() != my_zone_id) {
-        add_zone_pools(info, pools);
-      }
-    }
-  } while (!listing.next.empty());
-
-  return 0;
-}
-
-}
-
 static int get_zones_pool_set(const DoutPrefixProvider *dpp,
                               CephContext* cct,
                               RGWSI_SysObj* sysobj_svc,
@@ -555,7 +488,7 @@ static int get_zones_pool_set(const DoutPrefixProvider *dpp,
       return r;
     }
     if (zone.get_id() != my_zone_id) {
-      add_zone_pools(zone, pool_names);
+      rgw::add_zone_pools(zone, pool_names);
     }
   }
   return 0;
@@ -1234,6 +1167,37 @@ int RGWSystemMetaObj::write(const DoutPrefixProvider *dpp, bool exclusive, optio
 }
 
 namespace rgw {
+
+void add_zone_pools(const RGWZoneParams& info,
+                    std::set<rgw_pool>& pools)
+{
+  pools.insert(info.domain_root);
+  pools.insert(info.control_pool);
+  pools.insert(info.gc_pool);
+  pools.insert(info.log_pool);
+  pools.insert(info.intent_log_pool);
+  pools.insert(info.usage_log_pool);
+  pools.insert(info.user_keys_pool);
+  pools.insert(info.user_email_pool);
+  pools.insert(info.user_swift_pool);
+  pools.insert(info.user_uid_pool);
+  pools.insert(info.otp_pool);
+  pools.insert(info.roles_pool);
+  pools.insert(info.reshard_pool);
+  pools.insert(info.oidc_pool);
+  pools.insert(info.notif_pool);
+
+  for (const auto& [pname, placement] : info.placement_pools) {
+    pools.insert(placement.index_pool);
+    for (const auto& [sname, sc] : placement.storage_classes.get_all()) {
+      if (sc.data_pool) {
+        pools.insert(sc.data_pool.get());
+      }
+    }
+    pools.insert(placement.data_extra_pool);
+  }
+}
+
 
 int init_zone_pool_names(const DoutPrefixProvider *dpp, optional_yield y,
                          const std::set<rgw_pool>& pools, RGWZoneParams& info)
