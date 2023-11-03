@@ -1634,7 +1634,7 @@ class CephFSShell(Cmd):
         """
         try:
             poutput('{}'.format(cephfs.getxattr(args.path,
-                                to_bytes(args.name)).decode('utf-8')))
+                                to_bytes(args.name), size=65536).decode('utf-8')))
         except libcephfs.Error as e:
             set_exit_code_msg(msg=e)
 
