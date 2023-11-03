@@ -19,7 +19,9 @@
 
 #pragma once
 
+#include <iosfwd>
 #include <string>
+#include <variant>
 #include <fmt/format.h>
 
 #include "common/dout.h"
@@ -134,3 +136,19 @@ struct rgw_user {
   static void generate_test_instances(std::list<rgw_user*>& o);
 };
 WRITE_CLASS_ENCODER(rgw_user)
+
+
+/// Resources are either owned by accounts, or by users or roles (represented as
+/// rgw_user) that don't belong to an account.
+///
+/// This variant is present in binary encoding formats, so existing types cannot
+/// be changed or removed. New types can only be added to the end.
+using rgw_owner = std::variant<rgw_user, rgw_account_id>;
+
+rgw_owner parse_owner(const std::string& str);
+std::string to_string(const rgw_owner& o);
+
+std::ostream& operator<<(std::ostream& out, const rgw_owner& o);
+
+void encode_json_impl(const char *name, const rgw_owner& o, ceph::Formatter *f);
+void decode_json_obj(rgw_owner& o, JSONObj *obj);
