@@ -323,7 +323,7 @@ overwrite_ops_t prepare_ops_list(
 	  [&region, &to_remap](auto &r) {
 	    interval_set<uint64_t> range;
 	    range.insert(r->get_key(), r->get_length());
-	    if (range.contains(region.addr, region.len)) {
+	    if (range.contains(region.addr, region.len) && !r->is_clone()) {
 	      to_remap.push_back(extent_to_remap_t::create_overwrite(
 		0, region.len, std::move(r), *region.to_write));
 	      return true;
@@ -339,7 +339,7 @@ overwrite_ops_t prepare_ops_list(
 	  [&region, &to_remap](auto &r) {
 	    interval_set<uint64_t> range;
 	    range.insert(r.pin->get_key(), r.pin->get_length());
-	    if (range.contains(region.addr, region.len)) {
+	    if (range.contains(region.addr, region.len) && !r.pin->is_clone()) {
 	      to_remap.push_back(extent_to_remap_t::create_overwrite(
 		region.addr - range.begin().get_start(), region.len,
 		std::move(r.pin), *region.to_write));
