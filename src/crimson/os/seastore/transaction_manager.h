@@ -433,8 +433,7 @@ public:
     ceph_assert(total_remap_len < original_len);
 #endif
 
-    // FIXME: paddr can be absolute and pending
-    ceph_assert(pin->get_val().is_absolute());
+    // The according extent might be stable or pending.
     return cache->get_extent_if_cached(
       t, pin->get_val(), T::TYPE
     ).si_then([this, &t, remaps,
