@@ -137,6 +137,10 @@ public:
     return intermediate_length;
   }
 
+  bool is_clone() const final {
+    return get_map_val().refcount > 1;
+  }
+
 protected:
   std::unique_ptr<BtreeNodeMapping<laddr_t, paddr_t>> _duplicate(
     op_context_t<laddr_t> ctx) const final {
