@@ -189,15 +189,14 @@ class XFSTestsDev(CephFSTestCase):
                                                    # number
         log.info(f'distro and version detected is "{distro}" and "{version}".')
 
-        # we keep fedora here so that right deps are installed when this test
-        # is run locally by a dev.
-        if distro in ('redhatenterpriseserver', 'redhatenterprise', 'fedora',
-                      'centos', 'centosstream', 'rhel'):
-            deps = """acl attr automake bc dbench dump e2fsprogs fio \
-            gawk gcc indent libtool lvm2 make psmisc quota sed \
-            xfsdump xfsprogs \
-            libacl-devel libattr-devel libaio-devel libuuid-devel \
-            xfsprogs-devel btrfs-progs-devel python3 sqlite""".split()
+        if distro in ('redhatenterpriseserver', 'redhatenterprise', 'centos',
+                      'centosstream', 'rhel'):
+            deps = """\
+                    acl attr automake bc dbench dump e2fsprogs fio gawk gcc \
+                    gdbm-devel git indent kernel-devel libacl-devel \
+                    libaio-devel libcap-devel libtool libuuid-devel lvm2 \
+                    make psmisc python3 quota sed sqlite udftools \
+                    xfsprogs""".split()
 
             if self.install_xfsprogs:
                 if distro == 'centosstream' and major_ver_num == 8:
@@ -206,25 +205,46 @@ class XFSTestsDev(CephFSTestCase):
                          'gettext', 'libedit-devel', 'libattr-devel',
                          'device-mapper-devel', 'libicu-devel']
 
-            deps_old_distros = ['xfsprogs-qa-devel']
+            args = ['sudo', 'yum', 'install', '-y'] + deps
+        elif distro == 'fedora':
+            deps = """\
+                   acl attr automake bc dbench dump e2fsprogs fio gawk gcc \
+                   gdbm-devel git indent kernel-devel libacl-devel \
+                   libaio-devel libcap-devel libtool liburing-devel \
+                   libuuid-devel lvm2 make psmisc python3 quota sed sqlite \
+                   udftools xfsprogs \
+                   \
+                   btrfs-progs exfatprogs f2fs-tools ocfs2-tools xfsdump \
+                   xfsprogs-devel""".split()
 
-            if distro != 'fedora' and major_ver_num > 7:
-                    deps.remove('btrfs-progs-devel')
-
-            args = ['sudo', 'yum', 'install', '-y'] + deps + deps_old_distros
+            args = ['sudo', 'yum', 'install', '-y'] + deps
         elif distro == 'ubuntu':
-            deps = """xfslibs-dev uuid-dev libtool-bin \
-            e2fsprogs automake gcc libuuid1 quota attr libattr1-dev make \
-            libacl1-dev libaio-dev xfsprogs libgdbm-dev gawk fio dbench \
-            uuid-runtime python sqlite3""".split()
+            deps = """\
+                   acl attr automake bc dbench dump e2fsprogs fio gawk \
+                   gcc git indent libacl1-dev libaio-dev libcap-dev \
+                   libgdbm-dev libtool libtool-bin liburing-dev libuuid1 \
+                   lvm2 make psmisc python3 quota sed uuid-dev uuid-runtime \
+                   xfsprogs sqlite3 \
+                   \
+                   exfatprogs f2fs-tools ocfs2-tools udftools xfsdump \
+                   xfslibs-dev""".split()
+                   # NOTE: Acc to xfstests-dev project's README we need the
+                   # following package, but it is not available for machines
+                   # where CephFS tests are run, since a custom version of
+                   # kernel is installed for testing. The default version of
+                   # kernel that comes with OS. Since all tests in generic
+                   # test-suite are running fine without this packages, no
+                   # effort is being made to build and install this package
+                   # before running tests from xfstests-dev.
+                   #
+                   # + [f'linux-headers-{k_rel}']
+                   # k_rel stands for kernel release number.
 
             if self.install_xfsprogs:
                 deps += ['libinih-dev', 'liburcu-dev', 'libblkid-dev',
                          'gettext', 'libedit-dev', 'libattr1-dev',
                          'libdevmapper-dev', 'libicu-dev', 'pkg-config']
 
-            if major_ver_num >= 19:
-                deps[deps.index('python')] ='python2'
             args = ['sudo', 'apt-get', 'install', '-y'] + deps
         else:
             raise RuntimeError('expected a yum based or a apt based system')
