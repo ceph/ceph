@@ -505,7 +505,9 @@ public:
           i->get_val().maybe_relative_to(node->get_paddr()),
           &child_node);
       } else {
-        assert(i->get_val().pladdr.is_paddr());
+        if (i->get_val().pladdr.is_laddr()) {
+          continue;
+        }
         ret = c.trans.get_extent(
           i->get_val().pladdr.get_paddr().maybe_relative_to(node->get_paddr()),
           &child_node);

@@ -595,7 +595,7 @@ public:
 
   // a rewrite extent has an invalid prior_instance,
   // and a mutation_pending extent has a valid prior_instance
-  CachedExtentRef get_prior_instance() {
+  CachedExtentRef get_prior_instance() const {
     return prior_instance;
   }
 
@@ -1045,6 +1045,8 @@ public:
     ceph_assert(child_pos);
     child_pos->link_child(c);
   }
+
+  virtual bool is_stable() const = 0;
 
   virtual ~PhysicalNodeMapping() {}
 protected:
