@@ -641,6 +641,8 @@ struct overwrite_plan_t {
 
   // helper member
   extent_len_t block_size;
+  bool is_left_stable;
+  bool is_right_stable;
 
 public:
   extent_len_t get_left_size() const {
@@ -690,14 +692,15 @@ public:
 	       << ", left_operation=" << overwrite_plan.left_operation
 	       << ", right_operation=" << overwrite_plan.right_operation
 	       << ", block_size=" << overwrite_plan.block_size
+	       << ", is_left_stable=" << overwrite_plan.is_left_stable
+	       << ", is_right_stable=" << overwrite_plan.is_right_stable
 	       << ")";
   }
 
   overwrite_plan_t(laddr_t offset,
 		   extent_len_t len,
 		   const lba_pin_list_t& pins,
-		   extent_len_t block_size,
-		   Transaction& t) :
+		   extent_len_t block_size) :
       pin_begin(pins.front()->get_key()),
       pin_end(pins.back()->get_key() + pins.back()->get_length()),
       left_paddr(pins.front()->get_val()),
@@ -708,9 +711,11 @@ public:
       aligned_data_end(p2roundup((uint64_t)data_end, (uint64_t)block_size)),
       left_operation(overwrite_operation_t::UNKNOWN),
       right_operation(overwrite_operation_t::UNKNOWN),
-      block_size(block_size) {
+      block_size(block_size),
+      is_left_stable(pins.front()->is_stable()),
+      is_right_stable(pins.back()->is_stable()) {
     validate();
-    evaluate_operations(t);
+    evaluate_operations();
     assert(left_operation != overwrite_operation_t::UNKNOWN);
     assert(right_operation != overwrite_operation_t::UNKNOWN);
   }
@@ -738,31 +743,17 @@ private:
    * original extent into at most three parts: origin-left, part-to-be-modified
    * and origin-right.
    */
-  void evaluate_operations(Transaction& t) {
+  void evaluate_operations() {
     auto actual_write_size = get_pins_size();
     auto aligned_data_size = get_aligned_data_size();
     auto left_ext_size = get_left_extent_size();
     auto right_ext_size = get_right_extent_size();
 
-    auto can_merge = [](Transaction& t, paddr_t paddr) {
-      CachedExtentRef ext;
-      if (paddr.is_relative() || paddr.is_delayed()) {
-	  return true;
-      } else if (t.get_extent(paddr, &ext) ==
-	Transaction::get_extent_ret::PRESENT) {
-	// FIXME: there is no need to lookup the cache if the pin can 
-	// be associated with the extent state
-	if (ext->is_mutable()) {
-	  return true;
-	}
-      }
-      return false;
-    };
     if (left_paddr.is_zero()) {
       actual_write_size -= left_ext_size;
       left_ext_size = 0;
       left_operation = overwrite_operation_t::OVERWRITE_ZERO;
-    } else if (can_merge(t, left_paddr)) {
+    } else if (!is_left_stable) {
       aligned_data_size += left_ext_size;
       left_ext_size = 0;
       left_operation = overwrite_operation_t::MERGE_EXISTING;
@@ -772,7 +763,7 @@ private:
       actual_write_size -= right_ext_size;
       right_ext_size = 0;
       right_operation = overwrite_operation_t::OVERWRITE_ZERO;
-    } else if (can_merge(t, right_paddr)) {
+    } else if (!is_right_stable) {
       aligned_data_size += right_ext_size;
       right_ext_size = 0;
       right_operation = overwrite_operation_t::MERGE_EXISTING;
@@ -1282,7 +1273,7 @@ ObjectDataHandler::write_ret ObjectDataHandler::overwrite(
   if (bl.has_value()) {
     assert(bl->length() == len);
   }
-  overwrite_plan_t overwrite_plan(offset, len, _pins, ctx.tm.get_block_size(), ctx.t);
+  overwrite_plan_t overwrite_plan(offset, len, _pins, ctx.tm.get_block_size());
   return seastar::do_with(
     std::move(_pins),
     extent_to_write_list_t(),
