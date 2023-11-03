@@ -173,22 +173,23 @@ int LFUDAPolicy::get_min_avg_weight(optional_yield y) {
   }
 }
 
-CacheBlock LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, optional_yield y) {
+CacheBlock* LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, optional_yield y) {
+  const std::lock_guard l(lfuda_lock);
   if (entries_heap.empty())
-    return {};
+    return nullptr;
 
   /* Get victim cache block */
   std::string key = entries_heap.top()->key;
-  CacheBlock victim;
+  CacheBlock* victim = new CacheBlock();
 
-  victim.cacheObj.bucketName = key.substr(0, key.find('_')); 
+  victim->cacheObj.bucketName = key.substr(0, key.find('_')); 
   key.erase(0, key.find('_') + 1);
-  victim.cacheObj.objName = key.substr(0, key.find('_'));
-  victim.blockID = entries_heap.top()->offset;
-  victim.size = entries_heap.top()->len;
+  victim->cacheObj.objName = key.substr(0, key.find('_'));
+  victim->blockID = entries_heap.top()->offset;
+  victim->size = entries_heap.top()->len;
 
-  if (dir->get(&victim, y) < 0) {
-    return {};
+  if (dir->get(victim, y) < 0) {
+    return nullptr;
   }
 
   return victim;
@@ -254,27 +255,31 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
   uint64_t freeSpace = cacheDriver->get_free_space(dpp);
 
   while (freeSpace < size) { // possible infinite loop? -Sam
-    CacheBlock victim = find_victim(dpp, y);
+    CacheBlock* victim = find_victim(dpp, y);
 
-    if (victim.cacheObj.objName.empty()) {
+    if (victim == nullptr) {
       ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Could not retrieve victim block." << dendl;
+      delete victim;
       return -1;
     }
 
-    std::string key = victim.cacheObj.bucketName + "_" + victim.cacheObj.objName + "_" + std::to_string(victim.blockID) + "_" + std::to_string(victim.size);
+    std::string key = victim->cacheObj.bucketName + "_" + victim->cacheObj.objName + "_" + std::to_string(victim->blockID) + "_" + std::to_string(victim->size);
     auto it = entries_map.find(key);
     if (it == entries_map.end()) {
+      delete victim;
       return -1;
     }
 
     int avgWeight = get_min_avg_weight(y);
     if (avgWeight < 0) {
+      delete victim;
       return -1;
     }
 
-    if (victim.hostsList.size() == 1 && victim.hostsList[0] == dir->cct->_conf->rgw_local_cache_address) { /* Last copy */
-      if (victim.globalWeight) {
-	it->second->localWeight += victim.globalWeight;
+    if (victim->hostsList.size() == 1 && victim->hostsList[0] == dir->cct->_conf->rgw_local_cache_address) { /* Last copy */
+      if (victim->globalWeight) {
+	const std::lock_guard l(lfuda_lock);
+	it->second->localWeight += victim->globalWeight;
 
 	for (auto& entry : entries_heap) {
 	  if (entry->key == key) {
@@ -286,9 +291,11 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 	if (cacheDriver->set_attr(dpp, key, "user.rgw.localWeight", std::to_string(it->second->localWeight), y) < 0) 
 	  return -1;
 
-	victim.globalWeight = 0;
-	if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) 
+	victim->globalWeight = 0;
+	if (dir->update_field(victim, "globalWeight", std::to_string(victim->globalWeight), y) < 0) {
+	  delete victim;
 	  return -1;
+        }
       }
 
       if (it->second->localWeight > avgWeight) {
@@ -297,12 +304,18 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       }
     }
 
-    victim.globalWeight += it->second->localWeight;
-    if (dir->update_field(&victim, "globalWeight", std::to_string(victim.globalWeight), y) < 0) 
+    victim->globalWeight += it->second->localWeight;
+    if (dir->update_field(victim, "globalWeight", std::to_string(victim->globalWeight), y) < 0) {
+      delete victim;
       return -1;
+    }
 
-    if (dir->remove_host(&victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) 
+    if (dir->remove_host(victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) {
+      delete victim;
       return -1;
+    }
+
+    delete victim;
 
     if (cacheDriver->del(dpp, key, y) < 0) 
       return -1;
@@ -394,16 +407,6 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
   }
 
   return 0;
-}
-
-uint64_t LRUPolicy::eviction(const DoutPrefixProvider* dpp, rgw::cache::CacheDriver* cacheNode, optional_yield y)
-{
-  const std::lock_guard l(lru_lock);
-  auto p = entries_lru_list.front();
-  entries_map.erase(entries_map.find(p.key));
-  entries_lru_list.pop_front_and_dispose(Entry_delete_disposer());
-  cacheNode->delete_data(dpp, p.key, null_yield);
-  return cacheNode->get_free_space(dpp);
 }
 
 void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y)

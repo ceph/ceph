@@ -651,13 +651,14 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     block.cacheObj.creationTime = 0;
     block.cacheObj.dirty = false;// update hostsList since may overwrite existing hosts -Sam
     block.cacheObj.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); // Is the entire object getting stored in the local cache as well or only blocks? -Sam
+    Attrs attrs; // empty attrs for block sets
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       block.blockID = ofs; // TODO: fill out block correctly
       block.size = bl.length();
       if (filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y) == 0) {
-        if (filter->get_cache_driver()->put_async(dpp, oid, bl, bl.length(), source->get_attrs()) == 0) {
+        if (filter->get_cache_driver()->put_async(dpp, oid, bl, bl.length(), attrs) == 0) {
 	  filter->get_policy_driver()->get_cache_policy()->update(dpp, oid, ofs, bl.length(), "", *y);
 
 	  /* Store block in directory */
@@ -675,8 +676,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       ofs += bl_len;
       block.blockID = ofs;
       block.size = bl.length();
-      if (filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y) == 0) { // only block size because attributes are stored for entire obj? -Sam
-        if (filter->get_cache_driver()->put_async(dpp, oid, bl, bl.length(), source->get_attrs()) == 0) {
+      if (filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y) == 0) {
+        if (filter->get_cache_driver()->put_async(dpp, oid, bl, bl.length(), attrs) == 0) {
 	  filter->get_policy_driver()->get_cache_policy()->update(dpp, oid, ofs, bl.length(), "", *y);
 
           /* Store block in directory */
@@ -703,7 +704,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 	block.blockID = ofs; // TODO: fill out block correctly
 	block.size = bl_rem.length();
         if (filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y) == 0) {
-          if (filter->get_cache_driver()->put_async(dpp, oid, bl_rem, bl_rem.length(), source->get_attrs()) == 0) {
+          if (filter->get_cache_driver()->put_async(dpp, oid, bl_rem, bl_rem.length(), attrs) == 0) {
 	    filter->get_policy_driver()->get_cache_policy()->update(dpp, oid, ofs, bl_rem.length(), "", *y);
 
 	    /* Store block in directory */
