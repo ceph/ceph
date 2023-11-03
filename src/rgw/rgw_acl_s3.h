@@ -25,7 +25,7 @@ public:
   void to_xml(std::ostream& out);
 };
 
-class ACLGrantee_S3 : public ACLGrantee, public XMLObj
+class ACLGrantee_S3 : public XMLObj
 {
 public:
   ACLGrantee_S3() {}

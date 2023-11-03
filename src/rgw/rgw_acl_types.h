@@ -204,10 +204,3 @@ public:
   friend bool operator!=(const ACLGranteeType& lhs, const ACLGranteeType& rhs);
 };
 WRITE_CLASS_ENCODER(ACLGranteeType)
-
-class ACLGrantee
-{
-public:
-  ACLGrantee() {}
-  ~ACLGrantee() {}
-};
