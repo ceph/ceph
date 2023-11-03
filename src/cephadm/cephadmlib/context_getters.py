@@ -6,7 +6,6 @@ import os
 
 from typing import Any, Dict, List, Optional, Tuple, Union
 
-from .constants import CGROUPS_SPLIT_PODMAN_VERSION
 from .container_engines import Podman
 from .context import CephadmContext
 from .exceptions import Error
@@ -186,5 +185,5 @@ def should_log_to_journald(ctx: CephadmContext) -> bool:
         return ctx.log_to_journald
     return (
         isinstance(ctx.container_engine, Podman)
-        and ctx.container_engine.version >= CGROUPS_SPLIT_PODMAN_VERSION
+        and ctx.container_engine.supports_split_cgroups
     )

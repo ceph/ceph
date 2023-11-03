@@ -7,7 +7,11 @@ from typing import Tuple, List, Optional
 from .call_wrappers import call_throws, CallVerbosity
 from .context import CephadmContext
 from .container_engine_base import ContainerEngine
-from .constants import DEFAULT_MODE, MIN_PODMAN_VERSION
+from .constants import (
+    CGROUPS_SPLIT_PODMAN_VERSION,
+    DEFAULT_MODE,
+    MIN_PODMAN_VERSION,
+)
 from .exceptions import Error
 
 
@@ -35,6 +39,44 @@ class Podman(ContainerEngine):
     def __str__(self) -> str:
         version = '.'.join(map(str, self.version))
         return f'{self.EXE} ({self.path}) version {version}'
+
+    @property
+    def supports_split_cgroups(self) -> bool:
+        """Return true if this version of podman supports split cgroups."""
+        return self.version >= CGROUPS_SPLIT_PODMAN_VERSION
+
+    def service_args(
+        self, ctx: CephadmContext, service_name: str
+    ) -> List[str]:
+        """Return a list of arguments that should be added to the engine's run
+        command when starting a long-term service (aka daemon) container.
+        """
+        args = []
+        # if using podman, set -d, --conmon-pidfile & --cidfile flags
+        # so service can have Type=Forking
+        runtime_dir = '/run'
+        args.extend(
+            [
+                '-d',
+                '--log-driver',
+                'journald',
+                '--conmon-pidfile',
+                f'{runtime_dir}/{service_name}-pid',
+                '--cidfile',
+                f'{runtime_dir}/{service_name}-cid',
+            ]
+        )
+        if self.supports_split_cgroups and not ctx.no_cgroups_split:
+            args.append('--cgroups=split')
+        # if /etc/hosts doesn't exist, we can be confident
+        # users aren't using it for host name resolution
+        # and adding --no-hosts avoids bugs created in certain daemons
+        # by modifications podman makes to /etc/hosts
+        # https://tracker.ceph.com/issues/58532
+        # https://tracker.ceph.com/issues/57018
+        if not os.path.exists('/etc/hosts'):
+            args.append('--no-hosts')
+        return args
 
 
 class Docker(ContainerEngine):
