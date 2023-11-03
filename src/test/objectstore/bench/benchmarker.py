@@ -33,18 +33,20 @@ def main():
                         epilog='Text at the bottom of help')
 
     parser.add_argument('--period', type=int)
+    parser.add_argument('--new-cluster', '-n', action='store_true', help="Set this flag if you want to create a new cluster with available parameters.")
     parser.add_argument('--osds', type=int, default=1)
     parser.add_argument('--pgs', type=int, default=128)
     parser.add_argument('--freq', type=int, default=0.1, help="Frequency of sampling")
     parser.add_argument('--rados_bench_args', type=str, default="write --no-cleanup 5")
     args = parser.parse_args()
 
-    subprocess.run(f'../src/stop.sh'.split(' '))
-    subprocess.run(f'../src/vstart.sh -n -x'.split(' '), env={"MON": "1", "OSD": str(args.osds), "MGR": "0", "MDS": "0"})
+    if args.new_cluster:
+        subprocess.run(f'../src/stop.sh'.split(' '))
+        subprocess.run(f'../src/vstart.sh -n -x'.split(' '), env={"MON": "1", "OSD": str(args.osds), "MGR": "0", "MDS": "0"})
 
-    subprocess.run('bin/ceph osd pool create test'.split(' '))
-    subprocess.run('bin/ceph osd pool set test pg_autoscale_mode off'.split(' '))
-    subprocess.run(f'bin/ceph osd pool set test pg_num {args.pgs}'.split(' '))
+        subprocess.run('bin/ceph osd pool create test'.split(' '))
+        subprocess.run('bin/ceph osd pool set test pg_autoscale_mode off'.split(' '))
+        subprocess.run(f'bin/ceph osd pool set test pg_num {args.pgs}'.split(' '))
 
     samples_per_process: Dict[int, List[ProcessSample]] = {}
     processes: List[psutil.Process] = []
