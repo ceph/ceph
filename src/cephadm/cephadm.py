@@ -5503,6 +5503,24 @@ def command_ceph_volume(ctx):
 ##################################
 
 
+def command_unit_install(ctx):
+    # type: (CephadmContext) -> int
+    if not ctx.fsid:
+        raise Error('must pass --fsid to specify cluster')
+
+    fsid = ctx.fsid
+    install_base_units(ctx, fsid)
+    unit = get_unit_file(ctx, fsid)
+    unit_file = 'ceph-%s@.service' % (fsid)
+    with open(ctx.unit_dir + '/' + unit_file + '.new', 'w') as f:
+        f.write(unit)
+        os.rename(ctx.unit_dir + '/' + unit_file + '.new',
+                  ctx.unit_dir + '/' + unit_file)
+    call_throws(ctx, ['systemctl', 'daemon-reload'])
+
+    return 0
+
+
 @infer_fsid
 def command_unit(ctx):
     # type: (CephadmContext) -> int
@@ -7236,6 +7254,10 @@ def _get_parser():
         '--name', '-n',
         required=True,
         help='daemon name (type.id)')
+
+    parser_unit_install = subparsers.add_parser(
+        'unit-install', help="Install the daemon's systemd unit")
+    parser_unit_install.set_defaults(func=command_unit_install)
 
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
