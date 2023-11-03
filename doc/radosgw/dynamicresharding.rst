@@ -122,7 +122,7 @@ For example, the output at different Dynamic Resharding stages is shown below:
     }
   ]
 
-``3, After resharding completed:``
+``3. After resharding completed:``
 ::
 
   [
