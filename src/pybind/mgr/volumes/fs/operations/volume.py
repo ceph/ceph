@@ -135,10 +135,46 @@ def delete_volume(mgr, volname, metadata_pool, data_pools):
     result_str = "metadata pool: {0} data pool: {1} removed".format(metadata_pool, str(data_pools))
     return r, result_str, ""
 
+def _can_renaming_be_done(mgr, volname, newvolname):
+    '''
+    It is futile to attempt renaming unless current name existis and new name
+    doesn't exist.
+    '''
+    if oldname == newvolname:
+        errmsg = ('New volume name must be different from the current volume '
+                  'name.')
+        return -errrno.EINVAL, '', errmsg
+
+    # cur = current
+    cur_volname_exists = volume_exists(mgr, volname)
+    new_volname_exists = volume_exists(mgr, newvolname)
+
+    r, msg, errmsg = 0, '', ''
+    if cur_volname_exists:
+        if new_volname_exists:
+            r = -errno.EINVAL
+            errmsg = f"Desired volume name '{newvolname}' is already in use."
+        # ideal case when renaming can be done
+        else:
+            pass
+    else:
+        if new_volname_exists:
+            msg = (f"Volume named '{volname}' doesn't exist but volume "
+                   f"named '{newvolname}' already exists.")
+        else:
+            r = -errno.ENOENT
+            errmsg = f"Volume named '{volname}' does not exist."
+
+    return r, msg, errmsg
+
 def rename_volume(mgr, volname: str, newvolname: str) -> Tuple[int, str, str]:
     """
     rename volume (orch MDS service, file system, pools)
     """
+    r, msg, errmsg = _can_renaming_be_done(mgr, volname, newvolname)
+    if msg or errmsg:
+        return r, msg, errmsg
+
     # To allow volume rename to be idempotent, check whether orch managed MDS
     # service is already renamed. If so, skip renaming MDS service.
     completion = None

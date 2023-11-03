@@ -637,7 +637,7 @@ class TestVolumes(TestVolumesHelper):
                          " of subvolumegroup")
 
 
-class TestRenameCmd(TestVolumesHelper):
+class TestRename(TestVolumesHelper):
 
     def test_volume_rename(self):
         """
@@ -692,6 +692,60 @@ class TestRenameCmd(TestVolumesHelper):
         self.fs.get_pool_names(refresh=True)
         self.assertEqual(new_metadata_pool, self.fs.get_metadata_pool_name())
         self.assertEqual(new_data_pool, self.fs.get_data_pool_name())
+
+    def test_rename_when_new_name_exists(self):
+        '''
+        Test that "ceph fs volume rename" fails when a volume with new name
+        already exists.
+        '''
+        for m in self.mounts:
+            m.umount_wait()
+        oldvolname = self.volname
+        newvolname = self._generate_random_volume_name()
+        self.run_ceph_cmd(f'fs volume create {newvolname}')
+
+        self.negtest_ceph_cmd(
+            args=(f'volume rename {oldvolname} {newvolname} '
+                   '--yes-i-really-mean-it'),
+            errmsgs=f"Desired volume name '{newvolname}' is already in use",
+            errno=-errno.EINVAL)
+
+        volumels = json.loads(self._fs_cmd('volume', 'ls'))
+        volnames = [volume['name'] for volume in volumels]
+        self.assertIn(newvolname, volnames)
+        self.asserttIn(oldvolname, volnames)
+
+    def test_rename_when_both_names_dont_exist(self):
+        '''
+        Test that "ceph fs volume rename" fails no volume by given names
+        exist.
+        '''
+        for m in self.mounts:
+            m.umount_wait()
+        oldvolname = self.volname
+        newvolname = self._generate_random_volume_name()
+        self.run_ceph_cmd(f'fs volume rm {oldvolname} --yes-i-really-mean-it')
+
+        self.negtest_ceph_cmd(
+            args=(f'volume rename {oldvolname} {newvolname} '
+                   '--yes-i-really-mean-it'),
+            errmsgs=f"Volume named '{oldvolname}' does not exist",
+            retval=-errno.ENOENT)
+
+    def test_rename_when_curname_and_newname_are_same(self):
+        '''
+        Test that "ceph fs volume rename" fails when current volume name and
+        new volume name are same.
+        '''
+        for m in self.mounts:
+            m.umount_wait()
+
+        self.negtest_ceph_cmd(
+            args=(f'volume rename {self.volname} {self.volname} '
+                   '--yes-i-really-mean-it'),
+            errmsgs=(f'New volume name must be different from the current volume '
+                      'name.'),
+            retval=-errno.EINVAL)
 
     def test_volume_rename_fails_without_confirmation_flag(self):
         """
@@ -774,6 +828,7 @@ class TestRenameCmd(TestVolumesHelper):
                       "'refuse_client_session' must be set. See "
                       "`ceph fs set`."),
             retval=errno.EPERM)
+
 
 class TestSubvolumeGroups(TestVolumesHelper):
     """Tests for FS subvolume group operations."""
