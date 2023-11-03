@@ -51,8 +51,7 @@ int SSDDriver::remove_partition_info(Partition& info)
     return partitions.erase(key);
 }
 
-SSDDriver::SSDDriver(Partition& partition_info) : partition_info(partition_info),
-                                                    free_space(partition_info.size)
+SSDDriver::SSDDriver(Partition& partition_info) : partition_info(partition_info)
 {
     add_partition_info(partition_info);
 }
@@ -96,6 +95,10 @@ int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     aio_init(&ainit);
     #endif
 
+    efs::space_info space = efs::space(partition_info.location);
+    //currently partition_info.size is unused
+    this->free_space = space.available;
+
     return 0;
 }
 
@@ -126,9 +129,6 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buffer
         return -errno;
     }
 
-    efs::space_info space = efs::space(partition_info.location);
-    this->free_space = space.available;
-
     if (attrs.size() > 0) {
         r = set_attrs(dpp, key, attrs, y);
         if (r < 0) {
@@ -136,6 +136,9 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buffer
             return r;
         }
     }
+
+    efs::space_info space = efs::space(partition_info.location);
+    this->free_space = space.available;
 
     return 0;
 }
@@ -410,11 +413,12 @@ int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& ke
             ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), XATTR_REPLACE);
         }
         if (ret < 0) {
-            auto e = errno;
-            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not modify attr value for attr name: " << attr_name << " key: " << key << " ERROR: " << cpp_strerror(e) <<dendl;
+            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not modify attr value for attr name: " << attr_name << " key: " << key << " ERROR: " << cpp_strerror(errno) <<dendl;
             return ret;
         }
     }
+    efs::space_info space = efs::space(partition_info.location);
+    this->free_space = space.available;
     return 0;
 }
 
@@ -426,10 +430,14 @@ int SSDDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& ke
     for (auto& it : del_attrs) {
         auto ret = delete_attr(dpp, key, it.first);
         if (ret < 0) {
-            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not remove attr value for attr name: " << it.first << " key: " << key << dendl;
+            ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not remove attr value for attr name: " << it.first << " key: " << key << cpp_strerror(errno) << dendl;
             return ret;
         }
     }
+
+    efs::space_info space = efs::space(partition_info.location);
+    this->free_space = space.available;
+
     return 0;
 }
 
@@ -477,11 +485,15 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
         if (attr_val_bl.length() != 0) {
             auto ret = set_attr(dpp, key, attr_name, attr_val_bl.c_str(), y);
             if (ret < 0) {
-                ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << attr_name << " key: " << key << dendl;
+                ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << attr_name << " key: " << key << cpp_strerror(errno) << dendl;
                 return ret;
             }
         }
     }
+
+    efs::space_info space = efs::space(partition_info.location);
+    this->free_space = space.available;
+
     return 0;
 }
 
@@ -518,19 +530,21 @@ std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string
 
 int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y)
 {
-    int e;
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): set_attr: key: " << attr_name << " val: " << attr_val << dendl;
 
-    int ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), 0);
+    auto ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), 0);
     if (ret < 0) {
-      e = errno; 
-      ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): ERROR: " << cpp_strerror(e) << dendl;
+        ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << attr_name << " key: " << key << cpp_strerror(errno) << dendl;
+        return ret;
     }
 
-    return ret;
+    efs::space_info space = efs::space(partition_info.location);
+    this->free_space = space.available;
+
+    return 0;
 }
 
 int SSDDriver::delete_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name)
@@ -538,7 +552,17 @@ int SSDDriver::delete_attr(const DoutPrefixProvider* dpp, const std::string& key
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
-    return removexattr(location.c_str(), attr_name.c_str());
+    auto attr_val = get_attr(dpp, key, attr_name, null_yield); //need this for free space calculation.
+    auto ret = removexattr(location.c_str(), attr_name.c_str());
+    if (ret < 0) {
+        ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not remove attr value for attr name: " << attr_name << " key: " << key << cpp_strerror(errno) << dendl;
+        return ret;
+    }
+
+    efs::space_info space = efs::space(partition_info.location);
+    this->free_space = space.available;
+
+    return 0;
 }
 
 } } // namespace rgw::cache
