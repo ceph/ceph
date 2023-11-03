@@ -3,6 +3,7 @@
 
 #include <array>
 #include <string>
+#include <variant>
 
 #include "rgw_common.h"
 #include "rgw_auth.h"
@@ -13,6 +14,7 @@
 #include "rgw_sal.h"
 #include "rgw_log.h"
 
+#include "include/function2.hpp"
 #include "include/str_list.h"
 
 #define dout_context g_ceph_context
@@ -23,10 +25,20 @@ using namespace std;
 namespace rgw {
 namespace auth {
 
+static bool match_owner(const rgw_owner& owner, const rgw_user& uid,
+                        std::string_view account_id)
+{
+  return std::visit(fu2::overload(
+      [&uid] (const rgw_user& u) { return u == uid; },
+      [&account_id] (const rgw_account_id& a) { return a == account_id; }
+      ), owner);
+}
+
 std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
                        const std::string& display_name,
+                       const rgw_account_id& account_id,
                        const int perm_mask,
                        const bool is_admin,
                        const uint32_t type)
@@ -42,6 +54,7 @@ transform_old_authinfo(CephContext* const cct,
      * new auth. */
     const rgw_user id;
     const std::string display_name;
+    const rgw_account_id account_id;
     const int perm_mask;
     const bool is_admin;
     const uint32_t type;
@@ -49,12 +62,14 @@ transform_old_authinfo(CephContext* const cct,
     DummyIdentityApplier(CephContext* const cct,
                          const rgw_user& auth_id,
                          const std::string display_name,
+                         const rgw_account_id& account_id,
                          const int perm_mask,
                          const bool is_admin,
                          const uint32_t type)
       : cct(cct),
         id(auth_id),
         display_name(display_name),
+        account_id(account_id),
         perm_mask(perm_mask),
         is_admin(is_admin),
         type(type) {
@@ -71,12 +86,12 @@ transform_old_authinfo(CephContext* const cct,
       return rgw_perms_from_aclspec_default_strategy(id.to_str(), aclspec, dpp);
     }
 
-    bool is_admin_of(const rgw_user& acct_id) const override {
+    bool is_admin_of(const rgw_owner& o) const override {
       return is_admin;
     }
 
-    bool is_owner_of(const rgw_user& acct_id) const override {
-      return id == acct_id;
+    bool is_owner_of(const rgw_owner& o) const override {
+      return match_owner(o, id, account_id);
     }
 
     bool is_identity(const idset_t& ids) const override {
@@ -120,26 +135,24 @@ transform_old_authinfo(CephContext* const cct,
     }
   };
 
-  return std::unique_ptr<rgw::auth::Identity>(
-        new DummyIdentityApplier(cct,
-                                 auth_id,
-                                 display_name,
-                                 perm_mask,
-                                 is_admin,
-                                 type));
+  return std::make_unique<DummyIdentityApplier>(
+      cct, auth_id, display_name, account_id,
+      perm_mask, is_admin, type);
 }
 
 std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(const req_state* const s)
 {
+  const RGWUserInfo& info = s->user->get_info();
   return transform_old_authinfo(s->cct,
-                                s->user->get_id(),
-                                s->user->get_display_name(),
+                                info.user_id,
+                                info.display_name,
+                                info.account_id,
                                 s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
                                 s->system_request,
-                                s->user->get_type());
+                                info.type);
 }
 
 } /* namespace auth */
@@ -582,22 +595,27 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
   return perm;
 }
 
-bool rgw::auth::RemoteApplier::is_admin_of(const rgw_user& uid) const
+bool rgw::auth::RemoteApplier::is_admin_of(const rgw_owner& o) const
 {
   return info.is_admin;
 }
 
-bool rgw::auth::RemoteApplier::is_owner_of(const rgw_user& uid) const
+bool rgw::auth::RemoteApplier::is_owner_of(const rgw_owner& o) const
 {
+  auto* uid = std::get_if<rgw_user>(&o);
+  if (!uid) {
+    return false;
+  }
+
   if (info.acct_user.tenant.empty()) {
     const rgw_user tenanted_acct_user(info.acct_user.id, info.acct_user.id);
 
-    if (tenanted_acct_user == uid) {
+    if (tenanted_acct_user == *uid) {
       return true;
     }
   }
 
-  return info.acct_user == uid;
+  return info.acct_user == *uid;
 }
 
 bool rgw::auth::RemoteApplier::is_identity(const idset_t& ids) const {
@@ -797,14 +815,14 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
   return mask;
 }
 
-bool rgw::auth::LocalApplier::is_admin_of(const rgw_user& uid) const
+bool rgw::auth::LocalApplier::is_admin_of(const rgw_owner& o) const
 {
   return user_info.admin || user_info.system;
 }
 
-bool rgw::auth::LocalApplier::is_owner_of(const rgw_user& uid) const
+bool rgw::auth::LocalApplier::is_owner_of(const rgw_owner& o) const
 {
-  return uid == user_info.user_id;
+  return match_owner(o, user_info.user_id, user_info.account_id);
 }
 
 bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {

@@ -41,11 +41,11 @@ public:
     return 0;
   };
 
-  bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin_of(const rgw_owner& o) const override {
     return false;
   }
 
-  bool is_owner_of(const rgw_user& uid) const override {
+  bool is_owner_of(const rgw_owner& uid) const override {
     return false;
   }
 
