@@ -65,7 +65,9 @@ class OsdScrub {
   // ---------------------------------------------------------------
 
   // updating the resource counters
-  bool inc_scrubs_local();
+
+  std::unique_ptr<Scrub::LocalResourceWrapper> inc_scrubs_local(
+    bool is_high_priority);
   void dec_scrubs_local();
   bool inc_scrubs_remote();
   void dec_scrubs_remote();

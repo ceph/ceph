@@ -83,24 +83,12 @@ Main Scrubber interfaces:
 #include "scrub_backend.h"
 #include "scrub_machine_lstnr.h"
 #include "scrub_reservations.h"
+#include "scrub_resources.h"
 
 namespace Scrub {
 class ScrubMachine;
 struct BuildMap;
 
-
-/**
- *  wraps the local OSD scrub resource reservation in an RAII wrapper
- */
-class LocalReservation {
-  OSDService* m_osds;
-  bool m_holding_local_reservation{false};
-
- public:
-  explicit LocalReservation(OSDService* osds);
-  ~LocalReservation();
-  bool is_reserved() const { return m_holding_local_reservation; }
-};
 
 /**
  * Once all replicas' scrub maps are received, we go on to compare the maps.
@@ -282,10 +270,13 @@ class PgScrubber : public ScrubPgIF,
   /**
    * Reserve local scrub resources (managed by the OSD)
    *
-   * Fails if OSD's local-scrubs budget was exhausted
-   * \returns were local resources reserved?
+   * High priority scrubs are always allowed to proceed, even if the OSD's
+   * scrub budget is exhausted. But they are counted towards the budget,
+   * and once that budget is exhausted - no periodic scrubs will be allowed to
+   * start.
+   * \returns were local resources reserved, and we are allowed to proceed?
    */
-  bool reserve_local() final;
+  bool reserve_local(bool is_high_priority) final;
 
   void handle_query_state(ceph::Formatter* f) final;
 
@@ -622,9 +613,11 @@ class PgScrubber : public ScrubPgIF,
 
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
 
-  // 'optional', as 'LocalReservation' is
-  // 'RAII-designed' to guarantee un-reserving when deleted.
-  std::optional<Scrub::LocalReservation> m_local_osd_resource;
+  /**
+   * once we acquire the local OSD resource, this is set to a wrapper that
+   * guarantees that the resource will be released when the scrub is done
+   */
+  std::unique_ptr<Scrub::LocalResourceWrapper> m_local_osd_resource;
 
   void cleanup_on_finish();  // scrub_clear_state() as called for a Primary when
 			     // Active->NotActive

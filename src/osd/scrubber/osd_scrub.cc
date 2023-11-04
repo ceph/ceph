@@ -84,11 +84,7 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 	<< dendl;
   }
 
-  // fail fast if no resources are available
-  if (!m_resource_bookkeeper.can_inc_scrubs()) {
-    dout(20) << "too many scrubs already running on this OSD" << dendl;
-    return;
-  }
+  /// \todo restore the preliminary check for local scrub resources
 
   // if there is a PG that is just now trying to reserve scrub replica resources -
   // we should wait and not initiate a new scrub
@@ -161,12 +157,6 @@ std::optional<Scrub::OSDRestrictions> OsdScrub::restrictions_on_scrubbing(
     bool is_recovery_active,
     utime_t scrub_clock_now) const
 {
-  // our local OSD may already be running too many scrubs
-  if (!m_resource_bookkeeper.can_inc_scrubs()) {
-    dout(10) << "OSD cannot inc scrubs" << dendl;
-    return std::nullopt;
-  }
-
   // if there is a PG that is just now trying to reserve scrub replica resources
   // - we should wait and not initiate a new scrub
   if (m_queue.is_reserving_now()) {
@@ -431,9 +421,10 @@ void OsdScrub::remove_from_osd_queue(Scrub::ScrubJobRef sjob)
   m_queue.remove_from_osd_queue(sjob);
 }
 
-bool OsdScrub::inc_scrubs_local()
+std::unique_ptr<Scrub::LocalResourceWrapper> OsdScrub::inc_scrubs_local(
+    bool is_high_priority)
 {
-  return m_resource_bookkeeper.inc_scrubs_local();
+  return m_resource_bookkeeper.inc_scrubs_local(is_high_priority);
 }
 
 void OsdScrub::dec_scrubs_local()

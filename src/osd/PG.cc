@@ -1366,7 +1366,7 @@ Scrub::schedule_result_t PG::sched_scrub()
     return schedule_result_t::target_specific_failure;
   }
 
-  // analyse the combination of the requested scrub flags, the osd/pool configuration
+  // analyze the combination of the requested scrub flags, the osd/pool configuration
   // and the PG status to determine whether we should scrub now, and what type of scrub
   // should that be.
   auto updated_flags = validate_scrub_mode();
@@ -1380,11 +1380,18 @@ Scrub::schedule_result_t PG::sched_scrub()
 
   // try to reserve the local OSD resources. If failing: no harm. We will
   // be retried by the OSD later on.
-  if (!m_scrubber->reserve_local()) {
-    dout(10) << __func__ << ": failed to reserve locally" << dendl;
-    return schedule_result_t::osd_wide_failure;
-  }
+  // Note that high-priority scrubs are always granted the local resources.
+  {
+    // a temporary implementation of the 'is high priority?' check. Will be
+    // replaced by the attributes of the specific scrub target in the refactored
+    // scheduling code.
+    const bool is_high_priority =
+	updated_flags->req_scrub || updated_flags->must_scrub;
 
+    if (!m_scrubber->reserve_local(is_high_priority)) {
+      return schedule_result_t::osd_wide_failure;
+    }
+  }
   // can commit to the updated flags now, as nothing will stop the scrub
   m_planned_scrub = *updated_flags;
 

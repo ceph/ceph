@@ -373,10 +373,13 @@ struct ScrubPgIF {
   /**
    * Reserve local scrub resources (managed by the OSD)
    *
-   * Fails if OSD's local-scrubs budget was exhausted
-   * \returns were local resources reserved?
+   * High priority scrubs are always allowed to proceed, even if the OSD's
+   * scrub budget is exhausted. But they are counted towards the budget,
+   * and once that budget is exhausted - no periodic scrubs will be allowed to
+   * start.
+   * \returns were local resources reserved, and we are allowed to proceed?
    */
-  virtual bool reserve_local() = 0;
+  virtual bool reserve_local(bool is_high_priority) = 0;
 
   /**
    * if activated as a Primary - register the scrub job with the OSD

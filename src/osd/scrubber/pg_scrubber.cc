@@ -586,23 +586,23 @@ void PgScrubber::request_rescrubbing(requested_scrub_t& request_flags)
   update_scrub_job(request_flags);
 }
 
-bool PgScrubber::reserve_local()
+bool PgScrubber::reserve_local(bool high_priority)
 {
   // try to create the reservation object (which translates into asking the
-  // OSD for the local scrub resource). If failing - undo it immediately
-
-  m_local_osd_resource.emplace(m_osds);
-  if (m_local_osd_resource->is_reserved()) {
+  // OSD for a local scrub resource). The object returned is a
+  // a wrapper around the actual reservation, and that object releases
+  // the local resource automatically when reset.
+  m_local_osd_resource =
+      m_osds->get_scrub_services().inc_scrubs_local(high_priority);
+  if (m_local_osd_resource) {
     dout(15) << __func__ << ": local resources reserved" << dendl;
     return true;
   }
 
-  dout(10) << __func__ << ": failed to reserve local scrub resources" << dendl;
-  m_local_osd_resource.reset();
+  dout(15) << __func__ << ": failed to reserve local scrub resources" << dendl;
   return false;
 }
 
-// ----------------------------------------------------------------------------
 
 bool PgScrubber::has_pg_marked_new_updates() const
 {
@@ -2378,26 +2378,7 @@ void PgScrubber::preemption_data_t::reset()
 }
 
 
-// ///////////////////// LocalReservation //////////////////////////////////
-
 namespace Scrub {
-
-// note: no dout()s in LocalReservation functions. Client logs interactions.
-LocalReservation::LocalReservation(OSDService* osds) : m_osds{osds}
-{
-  if (m_osds->get_scrub_services().inc_scrubs_local()) {
-    // a failure is signalled by not having m_holding_local_reservation set
-    m_holding_local_reservation = true;
-  }
-}
-
-LocalReservation::~LocalReservation()
-{
-  if (m_holding_local_reservation) {
-    m_holding_local_reservation = false;
-    m_osds->get_scrub_services().dec_scrubs_local();
-  }
-}
 
 // ///////////////////// MapsCollectionStatus ////////////////////////////////
 
