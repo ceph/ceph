@@ -2708,36 +2708,14 @@ def get_container_mounts(
 
     assert ident.fsid
     assert ident.daemon_id
+    # Ceph daemon types are special cased here beacause of the no_config
+    # option which JJM thinks is *only* used by cephadm shell
     if daemon_type in ceph_daemons():
         mounts = Ceph.get_ceph_mounts(ctx, ident, no_config=no_config)
-
-    if daemon_type in Monitoring.components:
-        monitoring = Monitoring.create(ctx, ident)
-        monitoring.customize_container_mounts(ctx, mounts)
-
-    if daemon_type == NFSGanesha.daemon_type:
-        nfs_ganesha = NFSGanesha.create(ctx, ident)
-        nfs_ganesha.customize_container_mounts(ctx, mounts)
-
-    if daemon_type == HAproxy.daemon_type:
-        haproxy = HAproxy.create(ctx, ident)
-        haproxy.customize_container_mounts(ctx, mounts)
-
-    if daemon_type == CephNvmeof.daemon_type:
-        nvmeof = CephNvmeof.create(ctx, ident)
-        nvmeof.customize_container_mounts(ctx, mounts)
-
-    if daemon_type == CephIscsi.daemon_type:
-        iscsi = CephIscsi.create(ctx, ident)
-        iscsi.customize_container_mounts(ctx, mounts)
-
-    if daemon_type == Keepalived.daemon_type:
-        keepalive = Keepalived.create(ctx, ident)
-        keepalive.customize_container_mounts(ctx, mounts)
-
-    if daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.create(ctx, ident)
-        cc.customize_container_mounts(ctx, mounts)
+    else:
+        daemon = daemon_form_create(ctx, ident)
+        assert isinstance(daemon, ContainerDaemonForm)
+        daemon.customize_container_mounts(ctx, mounts)
 
     _update_podman_mounts(ctx, mounts)
     return mounts
