@@ -7109,7 +7109,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
   vector<rgw_obj_key>::iterator iter;
   RGWMultiDelXMLParser parser;
   uint32_t aio_count = 0;
-  const uint32_t max_aio = s->cct->_conf->rgw_multi_obj_del_max_aio;
+  const uint32_t max_aio = std::max<uint32_t>(1, s->cct->_conf->rgw_multi_obj_del_max_aio);
   char* buf;
   std::optional<boost::asio::deadline_timer> formatter_flush_cond;
   if (y) {
@@ -7176,7 +7176,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         iter != multi_delete->objects.end();
         ++iter) {
     rgw_obj_key obj_key = *iter;
-    if (y && max_aio > 1) {
+    if (y) {
       wait_flush(y, &*formatter_flush_cond, [&aio_count, max_aio] {
         return aio_count < max_aio;
       });
@@ -7186,7 +7186,7 @@ void RGWDeleteMultiObj::execute(optional_yield y)
         aio_count--;
       }); 
     } else {
-      handle_individual_object(obj_key, y, &*formatter_flush_cond);
+      handle_individual_object(obj_key, y, nullptr);
     }
   }
   if (formatter_flush_cond) {
