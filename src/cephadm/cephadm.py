@@ -1087,16 +1087,16 @@ class CephIscsi(ContainerDaemonForm):
         mounts['/dev'] = '/dev'
         return mounts
 
-    @staticmethod
-    def get_container_binds():
-        # type: () -> List[List[str]]
-        binds = []
-        lib_modules = ['type=bind',
-                       'source=/lib/modules',
-                       'destination=/lib/modules',
-                       'ro=true']
+    def customize_container_binds(
+        self, ctx: CephadmContext, binds: List[List[str]]
+    ) -> None:
+        lib_modules = [
+            'type=bind',
+            'source=/lib/modules',
+            'destination=/lib/modules',
+            'ro=true',
+        ]
         binds.append(lib_modules)
-        return binds
 
     @staticmethod
     def get_version(ctx, container_id):
@@ -2554,10 +2554,11 @@ def _write_custom_conf_files(
 def get_container_binds(
     ctx: CephadmContext, ident: 'DaemonIdentity'
 ) -> List[List[str]]:
-    binds = list()
+    binds: List[List[str]] = list()
 
     if ident.daemon_type == CephIscsi.daemon_type:
-        binds.extend(CephIscsi.get_container_binds())
+        iscsi = CephIscsi.create(ctx, ident)
+        iscsi.customize_container_binds(ctx, binds)
     if ident.daemon_type == CephNvmeof.daemon_type:
         binds.extend(CephNvmeof.get_container_binds())
     elif ident.daemon_type == CustomContainer.daemon_type:
