@@ -79,7 +79,10 @@ class TestCustomContainer(unittest.TestCase):
         })
 
     def test_get_container_binds(self):
-        result = self.cc.get_container_binds('/xyz')
+        # TODO: get_container_binds was made private. test the private func for
+        # now. in the future update to test base class fune
+        # customize_container_binds
+        result = self.cc._get_container_binds('/xyz')
         self.assertEqual(result, [
             [
                 'type=bind',
