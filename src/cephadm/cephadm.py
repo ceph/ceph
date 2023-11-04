@@ -810,7 +810,7 @@ class Monitoring(ContainerDaemonForm):
                   '--path.rootfs=/rootfs']
         return r
 
-    def get_container_mounts(self, data_dir: str) -> Dict[str, str]:
+    def _get_container_mounts(self, data_dir: str) -> Dict[str, str]:
         ctx = self.ctx
         daemon_type = self.identity.daemon_type
         mounts: Dict[str, str] = {}
@@ -852,6 +852,12 @@ class Monitoring(ContainerDaemonForm):
                 os.path.join(data_dir, 'etc/alertmanager')
             ] = '/etc/alertmanager:Z'
         return mounts
+
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        mounts.update(self._get_container_mounts(data_dir))
 
 ##################################
 
@@ -2700,9 +2706,8 @@ def get_container_mounts(
         mounts = Ceph.get_ceph_mounts(ctx, ident, no_config=no_config)
 
     if daemon_type in Monitoring.components:
-        data_dir = ident.data_dir(ctx.data_dir)
         monitoring = Monitoring.create(ctx, ident)
-        mounts.update(monitoring.get_container_mounts(data_dir))
+        monitoring.customize_container_mounts(ctx, mounts)
 
     if daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.create(ctx, ident)
