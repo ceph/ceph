@@ -1832,7 +1832,7 @@ class CustomContainer(ContainerDaemonForm):
     def get_container_envs(self) -> List[str]:
         return self.envs
 
-    def get_container_mounts(self, data_dir: str) -> Dict[str, str]:
+    def _get_container_mounts(self, data_dir: str) -> Dict[str, str]:
         """
         Get the volume mounts. Relative source paths will be located below
         `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
@@ -1853,6 +1853,12 @@ class CustomContainer(ContainerDaemonForm):
             source = os.path.join(data_dir, source)
             mounts[source] = destination
         return mounts
+
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        mounts.update(self._get_container_mounts(data_dir))
 
     def _get_container_binds(self, data_dir: str) -> List[List[str]]:
         """
@@ -2691,9 +2697,8 @@ def get_container_mounts(
         mounts.update(Keepalived.get_container_mounts(data_dir))
 
     if daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, fsid, ident.daemon_id)
-        data_dir = ident.data_dir(ctx.data_dir)
-        mounts.update(cc.get_container_mounts(data_dir))
+        cc = CustomContainer.create(ctx, ident)
+        cc.customize_container_mounts(ctx, mounts)
 
     _update_podman_mounts(ctx, mounts)
     return mounts
