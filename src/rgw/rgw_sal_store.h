@@ -104,7 +104,6 @@ class StoreBucket : public Bucket {
     virtual User* get_owner(void) override { return owner; };
     /* Make sure to call get_bucket_info() if you need it first */
     virtual bool is_owner(User* user) override { return (info.owner.compare(user->get_id()) == 0); }
-    virtual ACLOwner get_acl_owner(void) override { return ACLOwner(info.owner); };
     virtual bool empty() const override { return info.bucket.name.empty(); }
     virtual const std::string& get_name() const override { return info.bucket.name; }
     virtual const std::string& get_tenant() const override { return info.bucket.tenant; }

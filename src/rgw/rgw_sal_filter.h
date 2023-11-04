@@ -413,7 +413,6 @@ public:
 		       ceph::real_time mtime, optional_yield y) override;
   virtual bool is_owner(User* user) override;
   virtual User* get_owner(void) override { return user; }
-  virtual ACLOwner get_acl_owner(void) override { return next->get_acl_owner(); }
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota,
 			  uint64_t obj_size, optional_yield y,
