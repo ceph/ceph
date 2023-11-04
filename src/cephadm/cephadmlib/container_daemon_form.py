@@ -2,7 +2,7 @@
 
 import abc
 
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 
 from .container_types import CephContainer, InitContainer
 from .context import CephadmContext
@@ -39,13 +39,17 @@ class ContainerDaemonForm(DaemonForm):
         """
         return []
 
-    def customize_container_binds(self, binds: List[List[str]]) -> None:
+    def customize_container_binds(
+        self, ctx: CephadmContext, binds: List[List[str]]
+    ) -> None:
         """Given a list of container binds this function can update, delete,
         or otherwise mutate the binds that the container will use.
         """
         pass
 
-    def customize_container_mounts(self, mounts: List[str]) -> None:
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
         """Given a list of container mounts this function can update, delete,
         or otherwise mutate the mounts that the container will use.
         """
