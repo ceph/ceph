@@ -133,12 +133,11 @@ protected:
   }
 
   void send_object_requests(const LightweightObjectExtents &object_extents,
-                            IOContext io_context, uint64_t journal_tid);
+                            IOContext io_context);
   virtual ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, IOContext io_context,
-      uint64_t journal_tid, bool single_extent, Context *on_finish) = 0;
+      bool journaling, bool single_extent, Context *on_finish) = 0;
 
-  virtual uint64_t append_journal_event() = 0;
   virtual void update_stats(size_t length) = 0;
 };
 
@@ -169,9 +168,8 @@ protected:
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, IOContext io_context,
-      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
+      bool journaling, bool single_extent, Context *on_finish) override;
 
-  uint64_t append_journal_event() override;
   void update_stats(size_t length) override;
 
 private:
@@ -204,9 +202,8 @@ protected:
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, IOContext io_context,
-      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
+      bool journaling, bool single_extent, Context *on_finish) override;
 
-  uint64_t append_journal_event() override;
   void update_stats(size_t length) override;
 
   int prune_object_extents(
@@ -272,9 +269,8 @@ protected:
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, IOContext io_context,
-      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
+      bool journaling, bool single_extent, Context *on_finish) override;
 
-  uint64_t append_journal_event() override;
   void update_stats(size_t length) override;
 private:
   bufferlist m_data_bl;
@@ -304,9 +300,8 @@ protected:
 
   ObjectDispatchSpec *create_object_request(
       const LightweightObjectExtent &object_extent, IOContext io_context,
-      uint64_t journal_tid, bool single_extent, Context *on_finish) override;
+      bool journaling, bool single_extent, Context *on_finish) override;
 
-  uint64_t append_journal_event() override;
   void update_stats(size_t length) override;
 
   aio_type_t get_aio_type() const override {

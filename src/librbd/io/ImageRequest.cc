@@ -424,16 +424,7 @@ template <typename I>
 void AbstractImageWriteRequest<I>::send_request() {
   I &image_ctx = this->m_image_ctx;
 
-  bool journaling = false;
-
   AioCompletion *aio_comp = this->m_aio_comp;
-  {
-    // prevent image size from changing between computing clip and recording
-    // pending async operation
-    std::shared_lock image_locker{image_ctx.image_lock};
-    journaling = (image_ctx.journal != nullptr &&
-                  image_ctx.journal->is_journal_appending());
-  }
 
   uint64_t clip_len = 0;
   LightweightObjectExtents object_extents;
@@ -469,18 +460,10 @@ void AbstractImageWriteRequest<I>::send_request() {
 
   aio_comp->set_request_count(object_extents.size());
   if (!object_extents.empty()) {
-    uint64_t journal_tid = 0;
-    if (journaling) {
-      // in-flight ops are flushed prior to closing the journal
-      ceph_assert(image_ctx.journal != NULL);
-      journal_tid = append_journal_event();
-    }
-
     // it's very important that IOContext is captured here instead of
     // e.g. at the API layer so that an up-to-date snap context is used
     // when owning the exclusive lock
-    send_object_requests(object_extents, image_ctx.get_data_io_context(),
-                         journal_tid);
+    send_object_requests(object_extents, image_ctx.get_data_io_context());
   }
 
   update_stats(clip_len);
@@ -488,10 +471,18 @@ void AbstractImageWriteRequest<I>::send_request() {
 
 template <typename I>
 void AbstractImageWriteRequest<I>::send_object_requests(
-    const LightweightObjectExtents &object_extents, IOContext io_context,
-    uint64_t journal_tid) {
+    const LightweightObjectExtents &object_extents, IOContext io_context) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
+
+  bool journaling = false;
+  {
+    // prevent image size from changing between computing clip and recording
+    // pending async operation
+    std::shared_lock image_locker{image_ctx.image_lock};
+    journaling = (image_ctx.journal != nullptr &&
+                  image_ctx.journal->is_journal_appending());
+  }
 
   AioCompletion *aio_comp = this->m_aio_comp;
   bool single_extent = (object_extents.size() == 1);
@@ -499,8 +490,9 @@ void AbstractImageWriteRequest<I>::send_object_requests(
     ldout(cct, 20) << data_object_name(&image_ctx, oe.object_no) << " "
                    << oe.offset << "~" << oe.length << " from "
                    << oe.buffer_extents << dendl;
+
     C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    auto request = create_object_request(oe, io_context, journal_tid,
+    auto request = create_object_request(oe, io_context, journaling,
                                          single_extent, req_comp);
     request->send();
   }
@@ -518,28 +510,9 @@ void ImageWriteRequest<I>::assemble_extent(
 }
 
 template <typename I>
-uint64_t ImageWriteRequest<I>::append_journal_event() {
-  I &image_ctx = this->m_image_ctx;
-
-  uint64_t tid = 0;
-  uint64_t buffer_offset = 0;
-  ceph_assert(!this->m_image_extents.empty());
-  for (auto &extent : this->m_image_extents) {
-    bufferlist sub_bl;
-    sub_bl.substr_of(m_bl, buffer_offset, extent.second);
-    buffer_offset += extent.second;
-
-    tid = image_ctx.journal->append_write_event(extent.first, extent.second,
-                                                sub_bl, false);
-  }
-
-  return tid;
-}
-
-template <typename I>
 ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
     const LightweightObjectExtent &object_extent, IOContext io_context,
-    uint64_t journal_tid, bool single_extent, Context *on_finish) {
+    bool journaling, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
   bufferlist bl;
@@ -549,6 +522,14 @@ ObjectDispatchSpec *ImageWriteRequest<I>::create_object_request(
     bl = std::move(m_bl);
   } else {
     assemble_extent(object_extent, &bl);
+  }
+
+  uint64_t journal_tid = 0;
+  if (journaling) {
+    // in-flight ops are flushed prior to closing the journal
+    ceph_assert(image_ctx.journal != NULL);
+    journal_tid = image_ctx.journal->append_write_event(
+      object_extent.offset, object_extent.length, bl, false);
   }
 
   auto req = ObjectDispatchSpec::create_write(
@@ -566,29 +547,25 @@ void ImageWriteRequest<I>::update_stats(size_t length) {
 }
 
 template <typename I>
-uint64_t ImageDiscardRequest<I>::append_journal_event() {
-  I &image_ctx = this->m_image_ctx;
-
-  uint64_t tid = 0;
-  ceph_assert(!this->m_image_extents.empty());
-  for (auto &extent : this->m_image_extents) {
-    journal::EventEntry event_entry(
-      journal::AioDiscardEvent(extent.first,
-                               extent.second,
-                               this->m_discard_granularity_bytes));
-    tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                             extent.first, extent.second,
-                                             false, 0);
-  }
-
-  return tid;
-}
-
-template <typename I>
 ObjectDispatchSpec *ImageDiscardRequest<I>::create_object_request(
     const LightweightObjectExtent &object_extent, IOContext io_context,
-    uint64_t journal_tid, bool single_extent, Context *on_finish) {
+    bool journaling, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
+
+  uint64_t journal_tid = 0;
+  if (journaling) {
+    // in-flight ops are flushed prior to closing the journal
+    ceph_assert(image_ctx.journal != NULL);
+    journal::EventEntry event_entry(
+      journal::AioDiscardEvent(object_extent.offset,
+                               object_extent.length,
+                               this->m_discard_granularity_bytes));
+    journal_tid = image_ctx.journal->append_io_event(std::move(event_entry),
+                                                     object_extent.offset,
+                                                     object_extent.length,
+                                                     false, 0);
+  }
+
   auto req = ObjectDispatchSpec::create_discard(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, object_extent.object_no,
     object_extent.offset, object_extent.length, io_context,
@@ -717,31 +694,25 @@ void ImageFlushRequest<I>::send_request() {
 }
 
 template <typename I>
-uint64_t ImageWriteSameRequest<I>::append_journal_event() {
-  I &image_ctx = this->m_image_ctx;
-
-  uint64_t tid = 0;
-  ceph_assert(!this->m_image_extents.empty());
-  for (auto &extent : this->m_image_extents) {
-    journal::EventEntry event_entry(journal::AioWriteSameEvent(extent.first,
-                                                               extent.second,
-                                                               m_data_bl));
-    tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                             extent.first, extent.second,
-                                             false, 0);
-  }
-
-  return tid;
-}
-
-template <typename I>
 ObjectDispatchSpec *ImageWriteSameRequest<I>::create_object_request(
     const LightweightObjectExtent &object_extent, IOContext io_context,
-    uint64_t journal_tid, bool single_extent, Context *on_finish) {
+    bool journaling, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
 
   bufferlist bl;
   ObjectDispatchSpec *req;
+
+  uint64_t journal_tid = 0;
+  if (journaling) {
+    // in-flight ops are flushed prior to closing the journal
+    ceph_assert(image_ctx.journal != NULL);
+    journal::EventEntry event_entry(journal::AioWriteSameEvent(
+        object_extent.offset, object_extent.length, m_data_bl));
+    journal_tid = image_ctx.journal->append_io_event(std::move(event_entry),
+                                                     object_extent.offset,
+                                                     object_extent.length,
+                                                     false, 0);
+  }
 
   if (util::assemble_write_same_extent(object_extent, m_data_bl, &bl, false)) {
     auto buffer_extents{object_extent.buffer_extents};
@@ -768,22 +739,6 @@ void ImageWriteSameRequest<I>::update_stats(size_t length) {
 }
 
 template <typename I>
-uint64_t ImageCompareAndWriteRequest<I>::append_journal_event() {
-  I &image_ctx = this->m_image_ctx;
-
-  uint64_t tid = 0;
-  ceph_assert(this->m_image_extents.size() == 1);
-  auto &extent = this->m_image_extents.front();
-  tid = image_ctx.journal->append_compare_and_write_event(extent.first,
-                                                          extent.second,
-                                                          m_cmp_bl,
-                                                          m_bl,
-                                                          false);
-
-  return tid;
-}
-
-template <typename I>
 void ImageCompareAndWriteRequest<I>::assemble_extent(
     const LightweightObjectExtent &object_extent, bufferlist *bl,
     bufferlist *cmp_bl) {
@@ -802,8 +757,18 @@ void ImageCompareAndWriteRequest<I>::assemble_extent(
 template <typename I>
 ObjectDispatchSpec *ImageCompareAndWriteRequest<I>::create_object_request(
     const LightweightObjectExtent &object_extent, IOContext io_context,
-    uint64_t journal_tid, bool single_extent, Context *on_finish) {
+    bool journaling, bool single_extent, Context *on_finish) {
   I &image_ctx = this->m_image_ctx;
+
+  ceph_assert(this->m_image_extents.size() == 1);
+
+  uint64_t journal_tid = 0;
+  if (journaling) {
+    // in-flight ops are flushed prior to closing the journal
+    ceph_assert(image_ctx.journal != NULL);
+    journal_tid = image_ctx.journal->append_compare_and_write_event(
+      object_extent.offset, object_extent.length, m_cmp_bl, m_bl, false);
+  }
 
   bufferlist bl;
   bufferlist cmp_bl;
