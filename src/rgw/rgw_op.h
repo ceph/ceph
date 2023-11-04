@@ -35,6 +35,7 @@
 #include "common/ceph_time.h"
 
 #include "rgw_common.h"
+#include "rgw_user_global.h"
 #include "rgw_dmclock.h"
 #include "rgw_sal.h"
 #include "rgw_user.h"

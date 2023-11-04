@@ -22,6 +22,8 @@
 
 #include "rgw_common.h"
 #include "rgw_sal.h"
+#include "rgw_user_global.h"
+
 #include "rgw_sal_rados.h"
 #include "rgw_quota.h"
 #include "rgw_bucket.h"

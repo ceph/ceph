@@ -23,6 +23,7 @@
 #include "common/static_ptr.h"
 #include "common/perf_counters_key.h"
 #include "rgw_tracer.h"
+#include "rgw_user_global.h"
 
 #include "rgw_rados.h"
 #include "rgw_zone.h"

@@ -34,6 +34,7 @@ extern "C" {
 #include "include/utime.h"
 #include "include/str_list.h"
 
+#include "rgw_user_global.h"
 #include "rgw_user.h"
 #include "rgw_otp.h"
 #include "rgw_rados.h"

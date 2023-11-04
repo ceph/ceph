@@ -37,6 +37,7 @@
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
+#include "rgw_user_global.h"
 #include "rgw_user.h"
 #include "rgw_cors.h"
 #include "rgw_cors_s3.h"

@@ -4,7 +4,7 @@
 #include "rgw_sal_rados.h"
 
 #include "include/types.h"
-#include "rgw_user.h"
+#include "rgw_user_global.h"
 
 // until everything is moved from rgw_common
 #include "rgw_common.h"

@@ -121,7 +121,7 @@ set(librgw_common_srcs
   rgw_tag.cc
   rgw_tag_s3.cc
   rgw_tools.cc
-  rgw_user.cc
+  rgw_user_global.cc
   rgw_website.cc
   rgw_xml.cc
   rgw_torrent.cc

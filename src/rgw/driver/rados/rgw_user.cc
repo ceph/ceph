@@ -3,6 +3,7 @@
 
 #include "common/errno.h"
 
+#include "rgw_user_global.h"
 #include "rgw_user.h"
 
 #include "rgw_bucket.h"

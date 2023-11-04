@@ -7,6 +7,7 @@
 #include "rgw_common.h"
 #include "rgw_auth.h"
 #include "rgw_quota.h"
+#include "rgw_user_global.h"
 #include "rgw_user.h"
 #include "rgw_http_client.h"
 #include "rgw_keystone.h"

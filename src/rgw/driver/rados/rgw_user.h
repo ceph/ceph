@@ -62,28 +62,9 @@ struct RGWUID
 };
 WRITE_CLASS_ENCODER(RGWUID)
 
-/** Entry for bucket metadata collection */
-struct bucket_meta_entry {
-  size_t size;
-  size_t size_rounded;
-  ceph::real_time creation_time;
-  uint64_t count;
-};
-
-extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::User* user, optional_yield y);
-extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
-  rgw::sal::Driver* driver, rgw::sal::User* user,
-  std::map<std::string, bucket_meta_entry>& buckets_usage_map, optional_yield y);
-
-/**
- * Get the anonymous (ie, unauthenticated) user info.
- */
-extern void rgw_get_anon_user(RGWUserInfo& info);
 
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
-
-extern int rgw_validate_tenant_name(const std::string& t);
 
 enum ObjectKeyType {
   KEY_TYPE_SWIFT,
