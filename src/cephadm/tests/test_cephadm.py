@@ -1773,6 +1773,11 @@ if ! grep -qs /var/lib/ceph/9b9d7609-f4d5-4aba-94c8-effa764d96c9/iscsi.daemon_id
         """
         fsid = '9b9d7609-f4d5-4aba-94c8-effa764d96c9'
         with with_cephadm_ctx(['--image=ceph/ceph'], list_networks={}) as ctx:
+            ctx.config_blobs = {
+                'files': {
+                    'iscsi-gateway.cfg': 'portal',
+                },
+            }
             ctx.fsid = fsid
             c = _cephadm.get_container(
                 ctx, _cephadm.DaemonIdentity(fsid, 'iscsi', 'something')
