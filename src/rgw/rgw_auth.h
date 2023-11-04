@@ -813,6 +813,6 @@ protected:
 
 
 uint32_t rgw_perms_from_aclspec_default_strategy(
-  const rgw_user& uid,
+  const std::string& uid,
   const rgw::auth::Identity::aclspec_t& aclspec,
   const DoutPrefixProvider *dpp);
