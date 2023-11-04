@@ -699,8 +699,6 @@ class Bucket {
     virtual bool is_owner(User* user) = 0;
     /** Get the owner of this bucket */
     virtual User* get_owner(void) = 0;
-    /** Get the owner of this bucket in the form of an ACLOwner object */
-    virtual ACLOwner get_acl_owner(void) = 0;
     /** Check in the backing store if this bucket is empty */
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Chec k if the given size fits within the quota */
