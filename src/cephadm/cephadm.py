@@ -1854,7 +1854,7 @@ class CustomContainer(ContainerDaemonForm):
             mounts[source] = destination
         return mounts
 
-    def get_container_binds(self, data_dir: str) -> List[List[str]]:
+    def _get_container_binds(self, data_dir: str) -> List[List[str]]:
         """
         Get the bind mounts. Relative `source=...` paths will be located below
         `/var/lib/ceph/<cluster-fsid>/<daemon-name>`.
@@ -1881,6 +1881,12 @@ class CustomContainer(ContainerDaemonForm):
                     bind[index] = 'source={}'.format(os.path.join(
                         data_dir, match.group(1)))
         return binds
+
+    def customize_container_binds(
+        self, ctx: CephadmContext, binds: List[List[str]]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        binds.extend(self._get_container_binds(data_dir))
 
     # Cache the container so we don't need to rebuild it again when calling
     # into init_containers
@@ -2563,9 +2569,8 @@ def get_container_binds(
         nvmeof = CephNvmeof.create(ctx, ident)
         nvmeof.customize_container_binds(ctx, binds)
     elif ident.daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
-        data_dir = ident.data_dir(ctx.data_dir)
-        binds.extend(cc.get_container_binds(data_dir))
+        cc = CustomContainer.create(ctx, ident)
+        cc.customize_container_binds(ctx, binds)
 
     return binds
 
