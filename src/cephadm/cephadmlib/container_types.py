@@ -2,7 +2,7 @@
 
 import os
 
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Union, Tuple
 
 from .call_wrappers import call, call_throws, CallVerbosity
 from .constants import DEFAULT_TIMEOUT
@@ -485,3 +485,34 @@ def get_running_container_name(
         if out.strip() == 'running':
             return name
     return None
+
+
+def extract_uid_gid(
+    ctx: CephadmContext,
+    img: str = '',
+    file_path: Union[str, List[str]] = '/var/lib/ceph',
+) -> Tuple[int, int]:
+
+    if not img:
+        img = ctx.image
+
+    if isinstance(file_path, str):
+        paths = [file_path]
+    else:
+        paths = file_path
+
+    ex: Optional[Tuple[str, RuntimeError]] = None
+
+    for fp in paths:
+        try:
+            out = CephContainer(
+                ctx, image=img, entrypoint='stat', args=['-c', '%u %g', fp]
+            ).run(verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
+            uid, gid = out.split(' ')
+            return int(uid), int(gid)
+        except RuntimeError as e:
+            ex = (fp, e)
+    if ex:
+        raise Error(f'Failed to extract uid/gid for path {ex[0]}: {ex[1]}')
+
+    raise RuntimeError('uid/gid not found')
