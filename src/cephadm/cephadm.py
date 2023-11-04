@@ -2566,11 +2566,12 @@ def get_container_mounts(
     """
     # unpack fsid and daemon_type from ident because they're used very frequently
     fsid, daemon_type = ident.fsid, ident.daemon_type
-    mounts = _get_container_mounts_for_type(ctx, fsid, daemon_type)
+    mounts: Dict[str, str] = {}
 
     assert ident.fsid
     assert ident.daemon_id
     if daemon_type in ceph_daemons():
+        mounts = _get_container_mounts_for_type(ctx, fsid, daemon_type)
         data_dir = ident.data_dir(ctx.data_dir)
         if daemon_type == 'rgw':
             cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (ident.daemon_id)
