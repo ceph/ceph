@@ -910,7 +910,7 @@ class NFSGanesha(ContainerDaemonForm):
     def identity(self) -> DaemonIdentity:
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
-    def get_container_mounts(self, data_dir):
+    def _get_container_mounts(self, data_dir):
         # type: (str) -> Dict[str, str]
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
@@ -922,6 +922,12 @@ class NFSGanesha(ContainerDaemonForm):
             mounts[os.path.join(data_dir, 'keyring.rgw')] = \
                 '/var/lib/ceph/radosgw/%s-%s/keyring:z' % (cluster, rgw_user)
         return mounts
+
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        mounts.update(self._get_container_mounts(data_dir))
 
     @staticmethod
     def get_container_envs():
@@ -2684,8 +2690,8 @@ def get_container_mounts(
     paths given a daemon identity.
     Setting `no_config` will skip mapping a daemon specific ceph.conf file.
     """
-    # unpack fsid and daemon_type from ident because they're used very frequently
-    fsid, daemon_type = ident.fsid, ident.daemon_type
+    # unpack daemon_type from ident because they're used very frequently
+    daemon_type = ident.daemon_type
     mounts: Dict[str, str] = {}
 
     assert ident.fsid
@@ -2699,9 +2705,8 @@ def get_container_mounts(
         mounts.update(monitoring.get_container_mounts(data_dir))
 
     if daemon_type == NFSGanesha.daemon_type:
-        data_dir = ident.data_dir(ctx.data_dir)
-        nfs_ganesha = NFSGanesha.init(ctx, fsid, ident.daemon_id)
-        mounts.update(nfs_ganesha.get_container_mounts(data_dir))
+        nfs_ganesha = NFSGanesha.create(ctx, ident)
+        nfs_ganesha.customize_container_mounts(ctx, mounts)
 
     if daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.create(ctx, ident)
