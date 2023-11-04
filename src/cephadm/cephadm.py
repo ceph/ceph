@@ -1298,16 +1298,16 @@ class CephNvmeof(ContainerDaemonForm):
         mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
         return mounts
 
-    @staticmethod
-    def get_container_binds():
-        # type: () -> List[List[str]]
-        binds = []
-        lib_modules = ['type=bind',
-                       'source=/lib/modules',
-                       'destination=/lib/modules',
-                       'ro=true']
+    def customize_container_binds(
+        self, ctx: CephadmContext, binds: List[List[str]]
+    ) -> None:
+        lib_modules = [
+            'type=bind',
+            'source=/lib/modules',
+            'destination=/lib/modules',
+            'ro=true',
+        ]
         binds.append(lib_modules)
-        return binds
 
     @staticmethod
     def get_version(ctx: CephadmContext, container_id: str) -> Optional[str]:
@@ -2560,7 +2560,8 @@ def get_container_binds(
         iscsi = CephIscsi.create(ctx, ident)
         iscsi.customize_container_binds(ctx, binds)
     if ident.daemon_type == CephNvmeof.daemon_type:
-        binds.extend(CephNvmeof.get_container_binds())
+        nvmeof = CephNvmeof.create(ctx, ident)
+        nvmeof.customize_container_binds(ctx, binds)
     elif ident.daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
         data_dir = ident.data_dir(ctx.data_dir)
