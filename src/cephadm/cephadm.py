@@ -341,12 +341,15 @@ class Ceph(ContainerDaemonForm):
             )
         return mounts
 
-    def get_container_mounts(self) -> Dict[str, str]:
-        return self.get_ceph_mounts(
-            self.ctx,
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        cm = self.get_ceph_mounts(
+            ctx,
             self.identity,
             no_config=self.ctx.config and self.user_supplied_config,
         )
+        mounts.update(cm)
 
 ##################################
 
@@ -1496,8 +1499,11 @@ class CephExporter(ContainerDaemonForm):
     ) -> Tuple[Optional[str], Optional[str]]:
         return get_config_and_keyring(ctx)
 
-    def get_container_mounts(self) -> Dict[str, str]:
-        return Ceph.get_ceph_mounts(self.ctx, self.identity)
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        cm = Ceph.get_ceph_mounts(ctx, self.identity)
+        mounts.update(cm)
 
 
 ##################################
