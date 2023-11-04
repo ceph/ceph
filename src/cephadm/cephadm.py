@@ -1576,10 +1576,16 @@ class HAproxy(ContainerDaemonForm):
         return extract_uid_gid(self.ctx, file_path='/var/lib')
 
     @staticmethod
-    def get_container_mounts(data_dir: str) -> Dict[str, str]:
+    def _get_container_mounts(data_dir: str) -> Dict[str, str]:
         mounts = dict()
         mounts[os.path.join(data_dir, 'haproxy')] = '/var/lib/haproxy'
         return mounts
+
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        mounts.update(self._get_container_mounts(data_dir))
 
     @staticmethod
     def get_sysctl_settings() -> List[str]:
@@ -2698,8 +2704,8 @@ def get_container_mounts(
         mounts.update(nfs_ganesha.get_container_mounts(data_dir))
 
     if daemon_type == HAproxy.daemon_type:
-        data_dir = ident.data_dir(ctx.data_dir)
-        mounts.update(HAproxy.get_container_mounts(data_dir))
+        haproxy = HAproxy.create(ctx, ident)
+        haproxy.customize_container_mounts(ctx, mounts)
 
     if daemon_type == CephNvmeof.daemon_type:
         nvmeof = CephNvmeof.create(ctx, ident)
