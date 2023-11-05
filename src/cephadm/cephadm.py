@@ -169,7 +169,10 @@ from cephadmlib.daemon_form import (
     register as register_daemon_form,
 )
 from cephadmlib.deploy import DeploymentType
-from cephadmlib.container_daemon_form import ContainerDaemonForm
+from cephadmlib.container_daemon_form import (
+    ContainerDaemonForm,
+    daemon_to_container,
+)
 from cephadmlib.sysctl import install_sysctl, migrate_sysctl_dir
 from cephadmlib.firewalld import Firewalld, update_firewalld
 from cephadmlib import templating
@@ -246,7 +249,9 @@ class Ceph(ContainerDaemonForm):
         uid, gid = self.uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
-        ctr = get_container(ctx, self.identity)
+        # mon and osd need privileged in order for libudev to query devices
+        privileged = self.identity.daemon_type in ['mon', 'osd']
+        ctr = daemon_to_container(ctx, self, privileged=privileged)
         ctr = to_deployment_container(ctx, ctr)
         config_json = fetch_configs(ctx)
         if self.identity.daemon_type == 'mon' and config_json is not None:
