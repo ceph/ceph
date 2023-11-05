@@ -344,10 +344,13 @@ class Ceph(ContainerDaemonForm):
     def customize_container_mounts(
         self, ctx: CephadmContext, mounts: Dict[str, str]
     ) -> None:
+        no_config = bool(
+            getattr(ctx, 'config', None) and self.user_supplied_config
+        )
         cm = self.get_ceph_mounts(
             ctx,
             self.identity,
-            no_config=self.ctx.config and self.user_supplied_config,
+            no_config=no_config,
         )
         mounts.update(cm)
 
