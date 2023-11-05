@@ -367,7 +367,9 @@ class Ceph(ContainerDaemonForm):
             name = ident.daemon_name
         else:
             raise ValueError(ident)
-        args.extend(['-n', name, '-f'])
+        args.extend(['-n', name])
+        if ident.daemon_type != 'crash':
+            args.append('-f')
         args.extend(self.get_daemon_args())
 
     def customize_container_envs(
@@ -2960,8 +2962,6 @@ def get_container(
     container_args: Optional[List[str]] = None,
 ) -> 'CephContainer':
     entrypoint: str = ''
-    name: str = ''
-    ceph_args: List[str] = []
     d_args: List[str] = []
     envs: List[str] = []
     host_network: bool = True
@@ -2969,39 +2969,21 @@ def get_container(
     mounts: Dict[str, str] = {}
 
     daemon_type = ident.daemon_type
-    if daemon_type in ceph_daemons():
-        envs.append('TCMALLOC_MAX_TOTAL_THREAD_CACHE_BYTES=134217728')
-        mounts = get_container_mounts(ctx, ident)
     if container_args is None:
         container_args = []
     _update_pids_limit(ctx, daemon_type, container_args)
     if Ceph.for_daemon_type(daemon_type) or OSD.for_daemon_type(daemon_type):
-        ceph_daemon = Ceph.create(ctx, ident)
-        d_args.extend(ceph_daemon.get_daemon_args())
+        ceph_daemon = daemon_form_create(ctx, ident)
+        assert isinstance(ceph_daemon, ContainerDaemonForm)
+        entrypoint = ceph_daemon.default_entrypoint()
+        ceph_daemon.customize_container_envs(ctx, envs)
+        ceph_daemon.customize_container_args(ctx, container_args)
+        ceph_daemon.customize_process_args(ctx, d_args)
+        mounts = get_container_mounts(ctx, ident)
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
         privileged = True
-    if daemon_type == 'rgw':
-        entrypoint = '/usr/bin/radosgw'
-        name = 'client.rgw.%s' % ident.daemon_id
-        ceph_args = ['-n', name, '-f']
-    elif daemon_type == 'rbd-mirror':
-        entrypoint = '/usr/bin/rbd-mirror'
-        name = 'client.rbd-mirror.%s' % ident.daemon_id
-        ceph_args = ['-n', name, '-f']
-    elif daemon_type == 'cephfs-mirror':
-        entrypoint = '/usr/bin/cephfs-mirror'
-        name = 'client.cephfs-mirror.%s' % ident.daemon_id
-        ceph_args = ['-n', name, '-f']
-    elif daemon_type == 'crash':
-        entrypoint = '/usr/bin/ceph-crash'
-        name = 'client.crash.%s' % ident.daemon_id
-        ceph_args = ['-n', name]
-    elif daemon_type in ['mon', 'mgr', 'mds', 'osd']:
-        entrypoint = '/usr/bin/ceph-' + daemon_type
-        name = ident.daemon_name
-        ceph_args = ['-n', name, '-f']
-    elif daemon_type in Monitoring.components:
+    if daemon_type in Monitoring.components:
         monitoring = Monitoring.create(ctx, ident)
         entrypoint = monitoring.default_entrypoint()
         monitoring.customize_container_args(ctx, container_args)
@@ -3021,7 +3003,9 @@ def get_container(
     elif daemon_type == CephExporter.daemon_type:
         ceph_exporter = CephExporter.create(ctx, ident)
         entrypoint = ceph_exporter.default_entrypoint()
+        ceph_exporter.customize_container_envs(ctx, envs)
         ceph_exporter.customize_process_args(ctx, d_args)
+        mounts = get_container_mounts(ctx, ident)
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.create(ctx, ident)
         haproxy.customize_container_args(ctx, container_args)
@@ -3064,7 +3048,7 @@ def get_container(
         ctx,
         ident=ident,
         entrypoint=entrypoint,
-        args=ceph_args + d_args,
+        args=d_args,
         container_args=container_args,
         volume_mounts=mounts,
         bind_mounts=binds,
