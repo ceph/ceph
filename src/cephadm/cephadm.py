@@ -1637,6 +1637,19 @@ class HAproxy(ContainerDaemonForm):
         ctr = get_container(ctx, self.identity)
         return to_deployment_container(ctx, ctr)
 
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(
+            ['--user=root']
+        )  # haproxy 2.4 defaults to a different user
+
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(self.get_daemon_args())
+
+
 ##################################
 
 
@@ -2909,10 +2922,9 @@ def get_container(
         ceph_exporter = CephExporter.init(ctx, ident.fsid, ident.daemon_id)
         d_args.extend(ceph_exporter.get_daemon_args())
     elif daemon_type == HAproxy.daemon_type:
-        name = ident.daemon_name
-        container_args.extend(['--user=root'])  # haproxy 2.4 defaults to a different user
-        haproxy = HAproxy.init(ctx, ident.fsid, ident.daemon_id)
-        d_args.extend(haproxy.get_daemon_args())
+        haproxy = HAproxy.create(ctx, ident)
+        haproxy.customize_container_args(ctx, container_args)
+        haproxy.customize_process_args(ctx, d_args)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == Keepalived.daemon_type:
         keepalived = Keepalived.create(ctx, ident)
