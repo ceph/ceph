@@ -2985,7 +2985,7 @@ def get_container(
         ceph_daemon.customize_container_envs(ctx, envs)
         ceph_daemon.customize_container_args(ctx, container_args)
         ceph_daemon.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
+        ceph_daemon.customize_container_mounts(ctx, mounts)
     if daemon_type in ['mon', 'osd']:
         # mon and osd need privileged in order for libudev to query devices
         privileged = True
@@ -2994,7 +2994,7 @@ def get_container(
         entrypoint = monitoring.default_entrypoint()
         monitoring.customize_container_args(ctx, container_args)
         monitoring.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
+        monitoring.customize_container_mounts(ctx, mounts)
     elif daemon_type in Tracing.components:
         tracing = Tracing.create(ctx, ident)
         entrypoint = tracing.default_entrypoint()
@@ -3006,29 +3006,29 @@ def get_container(
         nfs_ganesha.customize_container_envs(ctx, envs)
         nfs_ganesha.customize_container_args(ctx, container_args)
         nfs_ganesha.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
+        nfs_ganesha.customize_container_mounts(ctx, mounts)
     elif daemon_type == CephExporter.daemon_type:
         ceph_exporter = CephExporter.create(ctx, ident)
         entrypoint = ceph_exporter.default_entrypoint()
         ceph_exporter.customize_container_envs(ctx, envs)
         ceph_exporter.customize_container_args(ctx, container_args)
         ceph_exporter.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
+        ceph_exporter.customize_container_mounts(ctx, mounts)
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.create(ctx, ident)
         haproxy.customize_container_args(ctx, container_args)
         haproxy.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
+        haproxy.customize_container_mounts(ctx, mounts)
     elif daemon_type == Keepalived.daemon_type:
         keepalived = Keepalived.create(ctx, ident)
         keepalived.customize_container_envs(ctx, envs)
         keepalived.customize_container_args(ctx, container_args)
-        mounts = get_container_mounts(ctx, ident)
+        keepalived.customize_container_mounts(ctx, mounts)
     elif daemon_type == CephNvmeof.daemon_type:
         nvmeof = CephNvmeof.create(ctx, ident)
         nvmeof.customize_container_args(ctx, container_args)
-        binds = get_container_binds(ctx, ident)
-        mounts = get_container_mounts(ctx, ident)
+        nvmeof.customize_container_binds(ctx, binds)
+        nvmeof.customize_container_mounts(ctx, mounts)
     elif daemon_type == CephIscsi.daemon_type:
         iscsi = CephIscsi.create(ctx, ident)
         entrypoint = iscsi.default_entrypoint()
@@ -3036,8 +3036,8 @@ def get_container(
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
         privileged = True
-        binds = get_container_binds(ctx, ident)
-        mounts = get_container_mounts(ctx, ident)
+        iscsi.customize_container_binds(ctx, binds)
+        iscsi.customize_container_mounts(ctx, mounts)
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.create(ctx, ident)
         entrypoint = cc.default_entrypoint()
@@ -3045,14 +3045,15 @@ def get_container(
         cc.customize_container_envs(ctx, envs)
         cc.customize_container_args(ctx, container_args)
         cc.customize_process_args(ctx, d_args)
-        binds = get_container_binds(ctx, ident)
-        mounts = get_container_mounts(ctx, ident)
+        cc.customize_container_binds(ctx, binds)
+        cc.customize_container_mounts(ctx, mounts)
     elif daemon_type == SNMPGateway.daemon_type:
         sg = SNMPGateway.create(ctx, ident)
         sg.customize_container_args(ctx, container_args)
         sg.customize_process_args(ctx, d_args)
 
     _update_container_args_for_podman(ctx, ident, container_args)
+    _update_podman_mounts(ctx, mounts)
     return CephContainer.for_daemon(
         ctx,
         ident=ident,
