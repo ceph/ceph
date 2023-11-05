@@ -351,6 +351,11 @@ class Ceph(ContainerDaemonForm):
         )
         mounts.update(cm)
 
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.append(ctx.container_engine.unlimited_pids_option)
+
     def customize_process_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
@@ -1121,6 +1126,11 @@ class NFSGanesha(ContainerDaemonForm):
     ) -> None:
         args.extend(self.get_daemon_args())
 
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.append(ctx.container_engine.unlimited_pids_option)
+
     def default_entrypoint(self) -> str:
         return self.entrypoint
 
@@ -1351,6 +1361,11 @@ done
     def default_entrypoint(self) -> str:
         return self.entrypoint
 
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.append(ctx.container_engine.unlimited_pids_option)
+
 ##################################
 
 
@@ -1509,6 +1524,7 @@ class CephNvmeof(ContainerDaemonForm):
     def customize_container_args(
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
+        args.append(ctx.container_engine.unlimited_pids_option)
         args.extend(['--ulimit', 'memlock=-1:-1'])
         args.extend(['--ulimit', 'nofile=10240'])
         args.extend(['--cap-add=SYS_ADMIN', '--cap-add=CAP_SYS_NICE'])
@@ -1604,6 +1620,11 @@ class CephExporter(ContainerDaemonForm):
         name = 'client.ceph-exporter.%s' % self.identity.daemon_id
         args.extend(['-n', name, '-f'])
         args.extend(self.get_daemon_args())
+
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.append(ctx.container_engine.unlimited_pids_option)
 
     def customize_container_envs(
         self, ctx: CephadmContext, envs: List[str]
@@ -2937,23 +2958,6 @@ def get_ceph_volume_container(ctx: CephadmContext,
     )
 
 
-def _update_pids_limit(ctx: CephadmContext, daemon_type: str, container_args: List[str]) -> None:
-    """Update container_args to contain a pids limit option if the daemon_type
-    is of a suitable match.
-    """
-    # set container's pids-limit to unlimited rather than default (Docker 4096 / Podman 2048)
-    # Useful for daemons like iscsi where the default pids-limit limits the number of luns
-    # per iscsi target or rgw where increasing the rgw_thread_pool_size to a value near
-    # the default pids-limit may cause the container to crash.
-    unlimited_daemons = set(ceph_daemons())
-    unlimited_daemons.add(CephIscsi.daemon_type)
-    unlimited_daemons.add(CephNvmeof.daemon_type)
-    unlimited_daemons.add(NFSGanesha.daemon_type)
-    if daemon_type not in unlimited_daemons:
-        return
-    container_args.append(ctx.container_engine.unlimited_pids_option)
-
-
 def get_container(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
@@ -2971,7 +2975,6 @@ def get_container(
     daemon_type = ident.daemon_type
     if container_args is None:
         container_args = []
-    _update_pids_limit(ctx, daemon_type, container_args)
     if Ceph.for_daemon_type(daemon_type) or OSD.for_daemon_type(daemon_type):
         ceph_daemon = daemon_form_create(ctx, ident)
         assert isinstance(ceph_daemon, ContainerDaemonForm)
@@ -2998,12 +3001,14 @@ def get_container(
         nfs_ganesha = NFSGanesha.create(ctx, ident)
         entrypoint = nfs_ganesha.default_entrypoint()
         nfs_ganesha.customize_container_envs(ctx, envs)
+        nfs_ganesha.customize_container_args(ctx, container_args)
         nfs_ganesha.customize_process_args(ctx, d_args)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephExporter.daemon_type:
         ceph_exporter = CephExporter.create(ctx, ident)
         entrypoint = ceph_exporter.default_entrypoint()
         ceph_exporter.customize_container_envs(ctx, envs)
+        ceph_exporter.customize_container_args(ctx, container_args)
         ceph_exporter.customize_process_args(ctx, d_args)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == HAproxy.daemon_type:
@@ -3024,6 +3029,7 @@ def get_container(
     elif daemon_type == CephIscsi.daemon_type:
         iscsi = CephIscsi.create(ctx, ident)
         entrypoint = iscsi.default_entrypoint()
+        iscsi.customize_container_args(ctx, container_args)
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
         privileged = True
