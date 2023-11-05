@@ -1051,6 +1051,19 @@ class NFSGanesha(ContainerDaemonForm):
     ) -> Tuple[Optional[str], Optional[str]]:
         return get_config_and_keyring(ctx)
 
+    def customize_container_envs(
+        self, ctx: CephadmContext, envs: List[str]
+    ) -> None:
+        envs.extend(self.get_container_envs())
+
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(self.get_daemon_args())
+
+    def default_entrypoint(self) -> str:
+        return self.entrypoint
+
 ##################################
 
 
@@ -2919,11 +2932,10 @@ def get_container(
             tracing = Tracing.create(ctx, ident)
             d_args.extend(tracing.get_daemon_args())
     elif daemon_type == NFSGanesha.daemon_type:
-        entrypoint = NFSGanesha.entrypoint
-        name = ident.daemon_name
-        envs.extend(NFSGanesha.get_container_envs())
-        nfs_ganesha = NFSGanesha.init(ctx, ident.fsid, ident.daemon_id)
-        d_args.extend(nfs_ganesha.get_daemon_args())
+        nfs_ganesha = NFSGanesha.create(ctx, ident)
+        entrypoint = nfs_ganesha.default_entrypoint()
+        nfs_ganesha.customize_container_envs(ctx, envs)
+        nfs_ganesha.customize_process_args(ctx, d_args)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephExporter.daemon_type:
         ceph_exporter = CephExporter.create(ctx, ident)
