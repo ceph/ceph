@@ -1433,6 +1433,13 @@ class CephNvmeof(ContainerDaemonForm):
     ) -> Tuple[Optional[str], Optional[str]]:
         return get_config_and_keyring(ctx)
 
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(['--ulimit', 'memlock=-1:-1'])
+        args.extend(['--ulimit', 'nofile=10240'])
+        args.extend(['--cap-add=SYS_ADMIN', '--cap-add=CAP_SYS_NICE'])
+
 
 ##################################
 
@@ -2903,10 +2910,8 @@ def get_container(
         container_args.extend(['--cap-add=NET_ADMIN', '--cap-add=NET_RAW'])
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephNvmeof.daemon_type:
-        name = ident.daemon_name
-        container_args.extend(['--ulimit', 'memlock=-1:-1'])
-        container_args.extend(['--ulimit', 'nofile=10240'])
-        container_args.extend(['--cap-add=SYS_ADMIN', '--cap-add=CAP_SYS_NICE'])
+        nvmeof = CephNvmeof.create(ctx, ident)
+        nvmeof.customize_container_args(ctx, container_args)
         binds = get_container_binds(ctx, ident)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephIscsi.daemon_type:
