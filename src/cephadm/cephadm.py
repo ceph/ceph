@@ -351,6 +351,34 @@ class Ceph(ContainerDaemonForm):
         )
         mounts.update(cm)
 
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        ident = self.identity
+        if ident.daemon_type == 'rgw':
+            name = 'client.rgw.%s' % ident.daemon_id
+        elif ident.daemon_type == 'rbd-mirror':
+            name = 'client.rbd-mirror.%s' % ident.daemon_id
+        elif ident.daemon_type == 'cephfs-mirror':
+            name = 'client.cephfs-mirror.%s' % ident.daemon_id
+        elif ident.daemon_type == 'crash':
+            name = 'client.crash.%s' % ident.daemon_id
+        elif ident.daemon_type in ['mon', 'mgr', 'mds', 'osd']:
+            name = ident.daemon_name
+        else:
+            raise ValueError(ident)
+        args.extend(['-n', name, '-f'])
+        args.extend(self.get_daemon_args())
+
+    def default_entrypoint(self) -> str:
+        ep = {
+            'rgw': '/usr/bin/radosgw',
+            'rbd-mirror': '/usr/bin/rbd-mirror',
+            'cephfs-mirror': '/usr/bin/cephfs-mirror',
+        }
+        daemon_type = self.identity.daemon_type
+        return ep.get(daemon_type) or f'/usr/bin/ceph-{daemon_type}'
+
 ##################################
 
 
