@@ -1981,6 +1981,24 @@ class CustomContainer(ContainerDaemonForm):
         if deployment_type == DeploymentType.DEFAULT:
             endpoints.extend([EndPoint('0.0.0.0', p) for p in self.ports])
 
+    def customize_container_envs(
+        self, ctx: CephadmContext, envs: List[str]
+    ) -> None:
+        envs.extend(self.get_container_envs())
+
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(self.get_container_args())
+
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(self.get_daemon_args())
+
+    def default_entrypoint(self) -> str:
+        return self.entrypoint or ''
+
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return self.uid, self.gid
 
@@ -2898,11 +2916,11 @@ def get_container(
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CustomContainer.daemon_type:
         cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
-        entrypoint = cc.entrypoint or ''
+        entrypoint = cc.default_entrypoint()
         host_network = False
-        envs.extend(cc.get_container_envs())
-        container_args.extend(cc.get_container_args())
-        d_args.extend(cc.get_daemon_args())
+        cc.customize_container_envs(ctx, envs)
+        cc.customize_container_args(ctx, container_args)
+        cc.customize_process_args(ctx, d_args)
         binds = get_container_binds(ctx, ident)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == SNMPGateway.daemon_type:
