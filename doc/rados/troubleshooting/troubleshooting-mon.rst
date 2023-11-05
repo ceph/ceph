@@ -350,12 +350,13 @@ Inject a monmap into the monitor
 Clock Skews
 -----------
 
-The Paxos consensus algorithm requires tight time alignment. For this reason,
-clock skew among the monitors in the quorum can have a serious effect on
-monitor operation. The resulting behavior can be very puzzling. To avoid
-this kind of issue, run a clock synchronization tool on your monitor nodes:
-for example, ``Chrony`` or the legacy ``ntpd`` utility. Be sure to configure
-the monitor nodes with the `iburst` option and multiple peers:
+The Paxos consensus algorithm requires close time synchroniziation, which means
+that clock skew among the monitors in the quorum can have a serious effect on
+monitor operation. The resulting behavior can be puzzling. To avoid this issue,
+run a clock synchronization tool on your monitor nodes: for example, use
+``Chrony`` or the legacy ``ntpd`` utility. Configure each monitor nodes so that
+the `iburst` option is in effect and so that each monitor has multiple peers,
+including the following: 
 
 * Each other
 * Internal ``NTP`` servers
@@ -366,12 +367,12 @@ the monitor nodes with the `iburst` option and multiple peers:
    into initial synchronization.
 
 Furthermore, it is advisable to synchronize *all* nodes in your cluster against
-internal and external servers, and perhaps even against your monitors. ``NTP``
-servers should run on bare metal; VM virtualized clocks are not suitable for
-steady timekeeping. For more information, visit `https://www.ntp.org
-<https://www.ntp.org>`_.  Your organization might already have quality internal
-``NTP`` servers available.  Sources for ``NTP`` server appliances include the
-following:
+internal and external servers, and perhaps even against your monitors. Run
+``NTP`` servers on bare metal: VM-virtualized clocks are not suitable for
+steady timekeeping. See `https://www.ntp.org <https://www.ntp.org>`_ for more
+information about the Network Time Protocol (NTP). Your organization might
+already have quality internal ``NTP`` servers available.  Sources for ``NTP``
+server appliances include the following:
 
 * Microsemi (formerly Symmetricom) `https://microsemi.com <https://www.microsemi.com/product-directory/3425-timing-synchronization>`_
 * EndRun `https://endruntechnologies.com <https://endruntechnologies.com/products/ntp-time-servers>`_
