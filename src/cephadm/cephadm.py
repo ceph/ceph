@@ -1525,6 +1525,16 @@ class CephExporter(ContainerDaemonForm):
         cm = Ceph.get_ceph_mounts(ctx, self.identity)
         mounts.update(cm)
 
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        name = 'client.ceph-exporter.%s' % self.identity.daemon_id
+        args.extend(['-n', name, '-f'])
+        args.extend(self.get_daemon_args())
+
+    def default_entrypoint(self) -> str:
+        return self.entrypoint
+
 
 ##################################
 
@@ -2916,11 +2926,9 @@ def get_container(
         d_args.extend(nfs_ganesha.get_daemon_args())
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephExporter.daemon_type:
-        entrypoint = CephExporter.entrypoint
-        name = 'client.ceph-exporter.%s' % ident.daemon_id
-        ceph_args = ['-n', name, '-f']
-        ceph_exporter = CephExporter.init(ctx, ident.fsid, ident.daemon_id)
-        d_args.extend(ceph_exporter.get_daemon_args())
+        ceph_exporter = CephExporter.create(ctx, ident)
+        entrypoint = ceph_exporter.default_entrypoint()
+        ceph_exporter.customize_process_args(ctx, d_args)
     elif daemon_type == HAproxy.daemon_type:
         haproxy = HAproxy.create(ctx, ident)
         haproxy.customize_container_args(ctx, container_args)
