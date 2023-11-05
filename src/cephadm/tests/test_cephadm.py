@@ -318,13 +318,17 @@ class TestCephAdm(object):
         with pytest.raises(Exception):
             _cephadm.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
 
-    @mock.patch('cephadm.logger')
-    @mock.patch('cephadm.fetch_custom_config_files')
-    @mock.patch('cephadm.get_container')
-    def test_to_deployment_container(self, _get_container, _get_config, _logger):
+    def test_to_deployment_container(self, funkypatch):
         """
         test to_deployment_container properly makes use of extra container args and custom conf files
         """
+        from cephadmlib.deployment_utils import to_deployment_container
+
+        funkypatch.patch('cephadm.logger')
+        _get_config = funkypatch.patch(
+            'cephadmlib.deployment_utils.fetch_custom_config_files'
+        )
+        _get_container = funkypatch.patch('cephadm.get_container')
 
         ctx = _cephadm.CephadmContext()
         ctx.config_json = '-'
@@ -358,7 +362,7 @@ class TestCephAdm(object):
             host_network=True,
         )
         c = _cephadm.get_container(ctx, ident)
-        c = _cephadm.to_deployment_container(ctx, c)
+        c = to_deployment_container(ctx, c)
 
         assert '--pids-limit=12345' in c.container_args
         assert '--something' in c.container_args
