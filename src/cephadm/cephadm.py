@@ -872,6 +872,31 @@ class Monitoring(ContainerDaemonForm):
         data_dir = self.identity.data_dir(ctx.data_dir)
         mounts.update(self._get_container_mounts(data_dir))
 
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        uid, _ = self.uid_gid(ctx)
+        monitoring_args = [
+            '--user',
+            str(uid),
+            # FIXME: disable cpu/memory limits for the time being (not supported
+            # by ubuntu 18.04 kernel!)
+        ]
+        args.extend(monitoring_args)
+        if self.identity.daemon_type == 'node-exporter':
+            # in order to support setting '--path.procfs=/host/proc','--path.sysfs=/host/sys',
+            # '--path.rootfs=/rootfs' for node-exporter we need to disable selinux separation
+            # between the node-exporter container and the host to avoid selinux denials
+            args.extend(['--security-opt', 'label=disable'])
+
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(self.get_daemon_args())
+
+    def default_entrypoint(self) -> str:
+        return ''
+
 ##################################
 
 
@@ -2939,22 +2964,10 @@ def get_container(
         name = ident.daemon_name
         ceph_args = ['-n', name, '-f']
     elif daemon_type in Monitoring.components:
-        entrypoint = ''
-        uid, gid = Monitoring.extract_uid_gid(ctx, daemon_type)
-        monitoring_args = [
-            '--user',
-            str(uid),
-            # FIXME: disable cpu/memory limits for the time being (not supported
-            # by ubuntu 18.04 kernel!)
-        ]
-        container_args.extend(monitoring_args)
-        if daemon_type == 'node-exporter':
-            # in order to support setting '--path.procfs=/host/proc','--path.sysfs=/host/sys',
-            # '--path.rootfs=/rootfs' for node-exporter we need to disable selinux separation
-            # between the node-exporter container and the host to avoid selinux denials
-            container_args.extend(['--security-opt', 'label=disable'])
         monitoring = Monitoring.create(ctx, ident)
-        d_args.extend(monitoring.get_daemon_args())
+        entrypoint = monitoring.default_entrypoint()
+        monitoring.customize_container_args(ctx, container_args)
+        monitoring.customize_process_args(ctx, d_args)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type in Tracing.components:
         tracing = Tracing.create(ctx, ident)
