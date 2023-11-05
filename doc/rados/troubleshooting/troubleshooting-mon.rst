@@ -377,12 +377,15 @@ following:
 * EndRun `https://endruntechnologies.com <https://endruntechnologies.com/products/ntp-time-servers>`_
 * Netburner `https://www.netburner.com <https://www.netburner.com/products/network-time-server/pk70-ex-ntp-network-time-server>`_
 
-What's the maximum tolerated clock skew?
+Clock Skew Questions and Answers
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+**What's the maximum tolerated clock skew?**
 
   By default, monitors allow clocks to drift up to a maximum of 0.05 seconds
   (50 milliseconds).
 
-Can I increase the maximum tolerated clock skew?
+**Can I increase the maximum tolerated clock skew?**
 
   Yes, but we strongly recommend against doing so. The maximum tolerated clock
   skew is configurable via the ``mon-clock-drift-allowed`` option, but it is
@@ -393,7 +396,7 @@ Can I increase the maximum tolerated clock skew?
   unforeseen effects on the stability of the monitors and overall cluster
   health.
 
-How do I know whether there is a clock skew?
+**How do I know whether there is a clock skew?**
 
   The monitors will warn you via the cluster status ``HEALTH_WARN``. When clock
   skew is present, the ``ceph health detail`` and ``ceph status`` commands
@@ -410,7 +413,7 @@ How do I know whether there is a clock skew?
   the reported offsets of other monitors are relative to the lead monitor, not
   to any external reference source.
 
-What should I do if there is a clock skew?
+**What should I do if there is a clock skew?**
 
   Synchronize your clocks. Using an NTP client might help. However, if you
   are already using an NTP client and you still encounter clock skew problems,
