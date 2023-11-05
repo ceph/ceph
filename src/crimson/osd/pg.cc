@@ -1053,6 +1053,8 @@ PG::do_osd_ops(
     return error_log_fut.then([m, e, epoch, &op_info, rep_tid, last_complete, this] {
       auto fut = seastar::now();
       if (!peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
+        logger().debug("do_osd_ops_execute::failure_func finding rep_tid {}",
+                       rep_tid);
         ceph_assert(log_entry_version.contains(rep_tid));
         auto it = log_entry_update_waiting_on.find(rep_tid);
         ceph_assert(it != log_entry_update_waiting_on.end());
@@ -1063,10 +1065,15 @@ PG::do_osd_ops(
           log_entry_update_waiting_on.erase(it);
           peering_state.complete_write(log_entry_version[rep_tid], last_complete);
           log_entry_version.erase(rep_tid);
+          logger().debug("do_osd_ops_execute::failure_func write complete,"
+                         " erasing rep_tid {}", rep_tid);
+
         } else {
           fut = it->second.all_committed.get_shared_future().then(
             [this, last_complete, rep_tid] {
+            logger().debug("do_osd_ops_execute::failure_func awaited {}", rep_tid);
             peering_state.complete_write(log_entry_version[rep_tid], last_complete);
+            ceph_assert(!log_entry_update_waiting_on.contains(rep_tid));
             return seastar::now();
           });
         }
@@ -1394,6 +1401,8 @@ PG::interruptible_future<> PG::do_update_log_missing_reply(
     if (it->second.waiting_on.empty()) {
       it->second.all_committed.set_value();
       it->second.all_committed = {};
+      logger().debug("{}: erasing rep_tid {}",
+                     __func__, m->get_tid());
       log_entry_update_waiting_on.erase(it);
       log_entry_version.erase(m->get_tid());
     }
