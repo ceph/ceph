@@ -1275,6 +1275,9 @@ done
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return extract_uid_gid(ctx)
 
+    def default_entrypoint(self) -> str:
+        return self.entrypoint
+
 ##################################
 
 
@@ -2907,8 +2910,8 @@ def get_container(
         binds = get_container_binds(ctx, ident)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CephIscsi.daemon_type:
-        entrypoint = CephIscsi.entrypoint
-        name = ident.daemon_name
+        iscsi = CephIscsi.create(ctx, ident)
+        entrypoint = iscsi.default_entrypoint()
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
         privileged = True
