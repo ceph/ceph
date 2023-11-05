@@ -1355,7 +1355,9 @@ done
         return tcmu_container
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        # So the container can modprobe iscsi_target_mod and have write perms
+        # to configfs we need to make this a privileged container.
+        ctr = daemon_to_container(ctx, self, privileged=True)
         return to_deployment_container(ctx, ctr)
 
     def config_and_keyring(
