@@ -3036,7 +3036,7 @@ def get_container(
         binds = get_container_binds(ctx, ident)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
+        cc = CustomContainer.create(ctx, ident)
         entrypoint = cc.default_entrypoint()
         host_network = False
         cc.customize_container_envs(ctx, envs)
