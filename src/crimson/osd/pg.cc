@@ -923,6 +923,7 @@ PG::do_osd_ops_execute(
     );
   }));
 }
+
 seastar::future<> PG::submit_error_log(
   Ref<MOSDOp> m,
   const OpInfo &op_info,
@@ -931,6 +932,8 @@ seastar::future<> PG::submit_error_log(
   ceph_tid_t rep_tid,
   eversion_t &version)
 {
+  logger().debug("{}: {} rep_tid: {} error: {}",
+                 __func__, *m, rep_tid, e);
   const osd_reqid_t &reqid = m->get_reqid();
   mempool::osd_pglog::list<pg_log_entry_t> log_entries;
   log_entries.push_back(pg_log_entry_t(pg_log_entry_t::ERROR,
@@ -967,10 +970,14 @@ seastar::future<> PG::submit_error_log(
                    rep_tid,
                    peering_state.get_pg_trim_to(),
                    peering_state.get_min_last_complete_ondisk());
+      logger().debug("submit_error_log: sending log"
+        "missing_request (rep_tid: {} entries: {})"
+        " to osd {}", rep_tid, log_entries, peer.osd);
       send_cluster_message(peer.osd, std::move(log_m), get_osdmap_epoch());
       waiting_on.insert(peer);
     }
     waiting_on.insert(pg_whoami);
+    logger().debug("submit_error_log: inserting rep_tid {}", rep_tid);
     log_entry_update_waiting_on.insert(
       std::make_pair(rep_tid, log_update_t{std::move(waiting_on)}));
     return shard_services.get_store().do_transaction(
@@ -1038,6 +1045,7 @@ PG::do_osd_ops(
     // failure_func
     [m, &op_info, obc, this] (const std::error_code& e) {
     return seastar::do_with(eversion_t(), [m, &op_info, obc, e, this](auto &version) {
+      logger().error("do_osd_ops_execute::failure_func {} got error: {}", *m, e);
       auto error_log_fut = seastar::now();
       epoch_t epoch = get_osdmap_epoch();
       ceph_tid_t rep_tid = shard_services.get_tid();
