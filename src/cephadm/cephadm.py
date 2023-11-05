@@ -1753,7 +1753,7 @@ class HAproxy(ContainerDaemonForm):
         ]
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def customize_container_args(
