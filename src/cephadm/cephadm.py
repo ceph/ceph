@@ -2142,9 +2142,10 @@ class CustomContainer(ContainerDaemonForm):
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         if self._container is None:
-            ctr = get_container(
+            ctr = daemon_to_container(
                 ctx,
-                self.identity,
+                self,
+                host_network=False,
                 privileged=self.privileged,
                 ptrace=ctx.allow_ptrace,
             )
