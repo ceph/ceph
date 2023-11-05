@@ -1846,6 +1846,18 @@ class Tracing(ContainerDaemonForm):
 
     def __init__(self, ident: DaemonIdentity) -> None:
         self._identity = ident
+        self._configured = False
+
+    def _configure(self, ctx: CephadmContext) -> None:
+        if self._configured:
+            return
+        config = fetch_configs(ctx)
+        # Currently, this method side-effects the class attribute, and that
+        # is unpleasant. In the future it would be nice to move all of
+        # set_configuration into _confiure and only modify each classes data
+        # independently
+        self.set_configuration(config, self.identity.daemon_type)
+        self._configured = True
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Tracing':
@@ -1866,6 +1878,28 @@ class Tracing(ContainerDaemonForm):
         return self.components[self.identity.daemon_type].get(
             'daemon_args', []
         )
+
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        self._configure(ctx)
+        # earlier code did an explicit check if the daemon type was jaeger-agent
+        # and would only call get_daemon_args if that was true. However, since
+        # the function only returns a non-empty list in the case of jaeger-agent
+        # that check is unnecessary and is not brought over.
+        args.extend(self.get_daemon_args())
+
+    def customize_container_envs(
+        self, ctx: CephadmContext, envs: List[str]
+    ) -> None:
+        self._configure(ctx)
+        envs.extend(
+            self.components[self.identity.daemon_type].get('envs', [])
+        )
+
+    def default_entrypoint(self) -> str:
+        return ''
+
 
 ##################################
 
@@ -2923,14 +2957,10 @@ def get_container(
         d_args.extend(monitoring.get_daemon_args())
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type in Tracing.components:
-        entrypoint = ''
-        name = ident.daemon_name
-        config = fetch_configs(ctx)
-        Tracing.set_configuration(config, daemon_type)
-        envs.extend(Tracing.components[daemon_type].get('envs', []))
-        if daemon_type == 'jaeger-agent':
-            tracing = Tracing.create(ctx, ident)
-            d_args.extend(tracing.get_daemon_args())
+        tracing = Tracing.create(ctx, ident)
+        entrypoint = tracing.default_entrypoint()
+        tracing.customize_container_envs(ctx, envs)
+        tracing.customize_process_args(ctx, d_args)
     elif daemon_type == NFSGanesha.daemon_type:
         nfs_ganesha = NFSGanesha.create(ctx, ident)
         entrypoint = nfs_ganesha.default_entrypoint()
