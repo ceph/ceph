@@ -316,6 +316,21 @@ struct ScrubPgIF {
 
   virtual pg_scrubbing_status_t get_schedule() const = 0;
 
+
+  // // perform 'scrub'/'deep_scrub' asok commands
+
+  /// ... by faking the "last scrub" stamps
+  virtual void on_operator_periodic_cmd(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    int64_t offset) = 0;
+
+  /// ... by requesting an "operator initiated" scrub
+  virtual void on_operator_forced_scrub(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    requested_scrub_t& request_flags) = 0;
+
   virtual void dump_scrubber(ceph::Formatter* f,
 			     const requested_scrub_t& request_flags) const = 0;
 
