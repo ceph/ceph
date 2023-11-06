@@ -51,6 +51,9 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
   LOG_PREFIX(BlockRBManager::alloc_extent);
   assert(allocator);
   auto alloc = allocator->alloc_extent(size);
+  if (!alloc) {
+    return P_ADDR_NULL;
+  }
   ceph_assert((*alloc).num_intervals() == 1);
   auto extent = (*alloc).begin();
   ceph_assert(size == extent.get_len());

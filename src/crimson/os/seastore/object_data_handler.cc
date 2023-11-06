@@ -543,7 +543,10 @@ ObjectDataHandler::write_ret do_insertions(
 	  auto iter = region.bl->cbegin();
 	  iter.copy(region.len, extent->get_bptr().c_str());
 	  return ObjectDataHandler::write_iertr::now();
-	});
+	}).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  ObjectDataHandler::write_iertr::pass_further{}
+	);
       } else if (region.is_zero()) {
 	DEBUGT("reserving: {}~{}",
 	       ctx.t,
@@ -564,7 +567,10 @@ ObjectDataHandler::write_ret do_insertions(
 	  }
 	  ceph_assert(pin->get_key() == region.addr);
 	  return ObjectDataHandler::write_iertr::now();
-	});
+	}).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  ObjectDataHandler::write_iertr::pass_further{}
+	);
       } else {
 	ceph_abort("impossible");
 	return ObjectDataHandler::write_iertr::now();
@@ -1057,7 +1063,10 @@ ObjectDataHandler::write_ret ObjectDataHandler::prepare_data_reservation(
 	pin->get_key(),
 	pin->get_length());
       return write_iertr::now();
-    });
+    }).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      write_iertr::pass_further{}
+    );
   }
 }
 
@@ -1677,12 +1686,12 @@ ObjectDataHandler::clone_ret ObjectDataHandler::clone_extents(
 	  return TransactionManager::reserve_extent_iertr::now();
 	});
       });
-    },
+    }
+  ).handle_error_interruptible(
     ObjectDataHandler::write_iertr::pass_further{},
     crimson::ct_error::assert_all{
       "object_data_handler::clone invalid error"
-    }
-  );
+  });
 }
 
 ObjectDataHandler::clone_ret ObjectDataHandler::clone(

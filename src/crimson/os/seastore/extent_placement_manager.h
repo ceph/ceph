@@ -279,7 +279,7 @@ public:
     bufferptr bp;
     rewrite_gen_t gen;
   };
-  alloc_result_t alloc_new_non_data_extent(
+  std::optional<alloc_result_t> alloc_new_non_data_extent(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
@@ -298,11 +298,6 @@ public:
     data_category_t category = get_extent_category(type);
     gen = adjust_generation(category, type, hint, gen);
 
-    // XXX: bp might be extended to point to different memory (e.g. PMem)
-    // according to the allocator.
-    auto bp = ceph::bufferptr(
-      buffer::create_page_aligned(length));
-    bp.zero();
     paddr_t addr;
 #ifdef UNIT_TESTS_BUILT
     if (unlikely(external_paddr.has_value())) {
@@ -320,7 +315,18 @@ public:
 	  generation_to_writer(gen)]->alloc_paddr(length);
     }
     assert(!(category == data_category_t::DATA));
-    return {addr, std::move(bp), gen};
+
+    if (addr.is_null()) {
+      return std::nullopt;
+    }
+
+    // XXX: bp might be extended to point to different memory (e.g. PMem)
+    // according to the allocator.
+    auto bp = ceph::bufferptr(
+      buffer::create_page_aligned(length));
+    bp.zero();
+
+    return alloc_result_t{addr, std::move(bp), gen};
   }
 
   std::list<alloc_result_t> alloc_new_data_extents(

@@ -284,7 +284,8 @@ public:
    * Allocates a new block of type T with the minimum lba range of size len
    * greater than laddr_hint.
    */
-  using alloc_extent_iertr = LBAManager::alloc_extent_iertr;
+  using alloc_extent_iertr = LBAManager::alloc_extent_iertr::extend<
+    crimson::ct_error::enospc>;
   template <typename T>
   using alloc_extent_ret = alloc_extent_iertr::future<TCachedExtentRef<T>>;
   template <typename T>
@@ -302,6 +303,9 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
+    if (!ext) {
+      return crimson::ct_error::enospc::make();
+    }
     return lba_manager->alloc_extent(
       t,
       laddr_hint,
@@ -341,6 +345,9 @@ public:
       len,
       placement_hint,
       INIT_GENERATION);
+    if (exts.empty()) {
+      return crimson::ct_error::enospc::make();
+    }
     return seastar::do_with(
       std::move(exts),
       laddr_hint,
