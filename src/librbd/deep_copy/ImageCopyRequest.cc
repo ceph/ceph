@@ -39,6 +39,13 @@ ImageCopyRequest<I>::ImageCopyRequest(I *src_image_ctx, I *dst_image_ctx,
     m_flatten(flatten), m_object_number(object_number), m_snap_seqs(snap_seqs),
     m_handler(handler), m_on_finish(on_finish), m_cct(dst_image_ctx->cct),
     m_lock(ceph::make_mutex(unique_lock_name("ImageCopyRequest::m_lock", this))) {
+
+    ldout(m_cct, 20) << "src_image_id=" << m_src_image_ctx->id
+		     << ", dst_image_id=" << m_dst_image_ctx->id
+	             << ", src_snap_id_start=" << m_src_snap_id_start
+                     << ", src_snap_id_end=" << m_src_snap_id_end
+		     << ", dst_snap_id_start=" << m_dst_snap_id_start
+		     << dendl;
 }
 
 template <typename I>
