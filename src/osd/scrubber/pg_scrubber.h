@@ -20,7 +20,7 @@ Main Scrubber interfaces:
 └────────────────────────────────┬──────────────────┘
                                  │
                                  │
-                                 │ ownes & uses
+                                 │ owns & uses
                                  │
                                  │
                                  │
@@ -43,7 +43,7 @@ Main Scrubber interfaces:
 │         PrimaryLogScrub                           │       │
 └─────┬───────────────────┬─────────────────────────┘       │
       │                   │                         implements
-      │    ownes & uses   │                                 │
+      │    owns & uses    │                                 │
       │                   │       ┌─────────────────────────▼──────┐
       │                   │       │    <<ScrubMachineListener>>    │
       │                   │       └─────────▲──────────────────────┘
