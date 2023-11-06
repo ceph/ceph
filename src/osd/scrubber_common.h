@@ -402,9 +402,10 @@ struct ScrubPgIF {
 
   virtual void rm_from_osd_scrubbing() = 0;
 
-  virtual void scrub_requested(scrub_level_t scrub_level,
-			       scrub_type_t scrub_type,
-			       requested_scrub_t& req_flags) = 0;
+  virtual scrub_level_t scrub_requested(
+      scrub_level_t scrub_level,
+      scrub_type_t scrub_type,
+      requested_scrub_t& req_flags) = 0;
 
   // --------------- debugging via the asok ------------------------------
 
