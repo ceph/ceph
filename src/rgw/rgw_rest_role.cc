@@ -1005,12 +1005,12 @@ void RGWUpdateRole::execute(optional_yield y)
     }
   }
 
+  _role->update_max_session_duration(max_session_duration);
   if (!_role->validate_max_session_duration(this)) {
     op_ret = -EINVAL;
     return;
   }
 
-  _role->update_max_session_duration(max_session_duration);
   op_ret = _role->update(this, y);
 
   s->formatter->open_object_section("UpdateRoleResponse");
