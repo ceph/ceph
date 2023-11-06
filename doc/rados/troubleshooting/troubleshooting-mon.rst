@@ -190,7 +190,7 @@ you should be seeing something similar to::
       [snip]
       mon.a (rank 0) addr 127.0.0.1:6789/0 is down (out of quorum)
 
-How to troubleshoot this?
+**How to troubleshoot this?**
 
   First, make sure ``mon.a`` is running.
 
@@ -213,7 +213,7 @@ How to troubleshoot this?
   troubleshooting the monitor, so check you ``ceph status`` again just to make
   sure. Proceed if the monitor is not yet in the quorum.
 
-What if the state is ``probing``?
+**What if the state is ``probing``?**
 
   This means the monitor is still looking for the other monitors. Every time
   you start a monitor, the monitor will stay in this state for some time while
@@ -240,7 +240,7 @@ What if the state is ``probing``?
   to `Preparing your logs`_ on how to best prepare your logs).
 
 
-What if state is ``electing``?
+**What if state is ``electing``?**
 
   This means the monitor is in the middle of an election. With recent Ceph
   releases these typically complete quickly, but at times the monitors can
@@ -253,7 +253,7 @@ What if state is ``electing``?
   why this would happen.  Worst case, if there are enough surviving mons,
   down the problematic one while you investigate.
 
-What if state is ``synchronizing``?
+**What if state is ``synchronizing``?**
 
   This means the monitor is catching up with the rest of the cluster in
   order to join the quorum. Time to synchronize is a function of the size
@@ -269,7 +269,7 @@ What if state is ``synchronizing``?
   this in later versions please let us know via a bug tracker. And bring some logs
   (see `Preparing your logs`_).
 
-What if state is ``leader`` or ``peon``?
+**What if state is ``leader`` or ``peon``?**
 
   This should not happen:  famous last words.  If it does, however, it likely
   has a lot to do with clock skew -- see `Clock Skews`_. If you are not
