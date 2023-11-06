@@ -30,6 +30,10 @@ MetadataCopyRequest<I>::MetadataCopyRequest(I *src_image_ctx, I *dst_image_ctx,
                                             Context *on_finish)
   : m_src_image_ctx(src_image_ctx), m_dst_image_ctx(dst_image_ctx),
     m_on_finish(on_finish), m_cct(dst_image_ctx->cct) {
+
+  ldout(m_cct, 20) << "src_image_id=" << m_src_image_ctx->id
+                   << ", dst_image_id=" << m_dst_image_ctx->id
+		   << dendl;
 }
 
 template <typename I>
