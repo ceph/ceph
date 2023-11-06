@@ -992,16 +992,13 @@ struct FixedKVLeafNode
   }
 
   // children are considered stable if any of the following case is true:
-  // 1. Not in memory
-  // 2. being stable
-  // 3. being mutation pending and under-io
+  // 1. The child extent is absent in cache
+  // 2. The child extent is stable
   bool is_child_stable(uint16_t pos) const final {
     auto child = this->children[pos];
     if (is_valid_child_ptr(child)) {
       ceph_assert(child->is_logical());
-      return child->is_stable() ||
-	(child->is_mutation_pending() &&
-	 child->is_pending_io());
+      return child->is_stable();
     } else if (this->is_pending()) {
       auto key = this->iter_idx(pos).get_key();
       auto &sparent = this->get_stable_for_key(key);
@@ -1009,9 +1006,7 @@ struct FixedKVLeafNode
       auto child = sparent.children[spos];
       if (is_valid_child_ptr(child)) {
 	ceph_assert(child->is_logical());
-	return child->is_stable() ||
-	  (child->is_mutation_pending() &&
-	   child->is_pending_io());
+	return child->is_stable();
       } else {
 	return true;
       }
