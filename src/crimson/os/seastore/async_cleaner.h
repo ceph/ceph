@@ -1156,6 +1156,10 @@ public:
 
   virtual std::size_t get_reclaim_size_per_cycle() const = 0;
 
+#ifdef UNIT_TESTS_BUILT
+  virtual void prefill_fragmented_devices() {}
+#endif
+
   // test only
   virtual bool check_usage() = 0;
 
@@ -1676,6 +1680,17 @@ public:
   std::size_t get_reclaim_size_per_cycle() const final {
     return 0;
   }
+
+#ifdef UNIT_TESTS_BUILT
+  void prefill_fragmented_devices() final {
+    LOG_PREFIX(RBMCleaner::prefill_fragmented_devices);
+    SUBDEBUG(seastore_cleaner, "");
+    auto rbs = rb_group->get_rb_managers();
+    for (auto p : rbs) {
+      p->prefill_fragmented_device();
+    }
+  }
+#endif
 
   RandomBlockManager* get_rbm(paddr_t paddr) {
     auto rbs = rb_group->get_rb_managers();

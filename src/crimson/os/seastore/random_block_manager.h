@@ -149,6 +149,9 @@ public:
   virtual rbm_extent_state_t get_extent_state(paddr_t addr, size_t size) = 0;
   virtual size_t get_journal_size() const = 0;
   virtual ~RandomBlockManager() {}
+#ifdef UNIT_TESTS_BUILT
+  virtual void prefill_fragmented_device() = 0;
+#endif
 };
 using RandomBlockManagerRef = std::unique_ptr<RandomBlockManager>;
 
