@@ -238,6 +238,7 @@ public:
 
   void execute(optional_yield y) override;
   void send_response() override;
+  static void list_bulk_delete(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
   static void list_swift_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
   static void list_tempauth_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);
   static void list_tempurl_data(Formatter& formatter, const ConfigProxy& config, rgw::sal::Driver* driver);

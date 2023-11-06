@@ -1818,7 +1818,7 @@ void RGWGetHealthCheck_ObjStore_SWIFT::send_response()
 
 const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT::swift_info =
 {
-    {"bulk_delete", {false, nullptr}},
+    {"bulk_delete", {false, RGWInfo_ObjStore_SWIFT::list_bulk_delete}},
     {"container_quotas", {false, nullptr}},
     {"swift", {false, RGWInfo_ObjStore_SWIFT::list_swift_data}},
     {"tempurl", { false, RGWInfo_ObjStore_SWIFT::list_tempurl_data}},
@@ -1868,6 +1868,16 @@ void RGWInfo_ObjStore_SWIFT::send_response()
   dump_errno(s);
   end_header(s, this);
   rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWInfo_ObjStore_SWIFT::list_bulk_delete(Formatter& formatter,
+                                                const ConfigProxy& config,
+                                                rgw::sal::Driver* driver)
+{
+  formatter.open_object_section("bulk_delete");
+  formatter.dump_int("max_deletes_per_request", config->rgw_delete_multi_obj_max_num); 
+  formatter.close_section();
+
 }
 
 void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
