@@ -4,7 +4,7 @@ needed to implement an orchestrator module.  While the orchestrator
 module exposes an async API, this module simply exposes blocking API
 call methods.
 
-This module is runnable outside of ceph-mgr, useful for testing.
+This module is runnable outside of ceph-mgr, very useful for testing.
 """
 import datetime
 import threading
