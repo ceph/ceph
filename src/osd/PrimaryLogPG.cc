@@ -999,7 +999,7 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
 // ==========================================================
 
 void PrimaryLogPG::do_command(
-  const string_view& orig_prefix,
+  string_view orig_prefix,
   const cmdmap_t& cmdmap,
   const bufferlist& idata,
   std::function<void(int,const std::string&,bufferlist&)> on_finish)

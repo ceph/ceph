@@ -1478,7 +1478,7 @@ public:
   ~PrimaryLogPG() override;
 
   void do_command(
-    const std::string_view& prefix,
+    std::string_view prefix,
     const cmdmap_t& cmdmap,
     const ceph::buffer::list& idata,
     std::function<void(int,const std::string&,ceph::buffer::list&)> on_finish) override;
