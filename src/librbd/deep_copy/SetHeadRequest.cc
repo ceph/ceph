@@ -30,6 +30,12 @@ SetHeadRequest<I>::SetHeadRequest(I *image_ctx, uint64_t size,
     m_parent_overlap(parent_overlap), m_on_finish(on_finish),
     m_cct(image_ctx->cct) {
   ceph_assert(m_parent_overlap <= m_size);
+
+  ldout(m_cct, 20) << "image_id=" << m_image_ctx->id
+                   << ", size=" << m_size
+                   << ", parent_spec=" << m_parent_spec
+                   << ", parent_overlap=" << m_parent_overlap
+                   << dendl;
 }
 
 template <typename I>
