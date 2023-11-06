@@ -1,0 +1,62 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+  - osd.1
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.2
+  - osd.3
+- - host.c
+  - mon.c
+  - osd.4
+  - osd.5
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - |
+        set -ex
+        HOSTNAMES=$(ceph orch host ls --format json | jq -r '.[] | .hostname')
+        for host in $HOSTNAMES; do
+          # find the hostname for "host.c" which will have no mgr
+          HAS_MGRS=$(ceph orch ps --hostname ${host} --format json | jq 'any(.daemon_type == "mgr")')
+          if [ "$HAS_MGRS" == "false" ]; then
+            HOST_C="${host}"
+          fi
+        done
+        # now drain that host
+        ceph orch host drain $HOST_C --zap-osd-devices
+        # wait for drain to complete
+        HOST_C_DAEMONS=$(ceph orch ps --hostname $HOST_C)
+        while [ "$HOST_C_DAEMONS" != "No daemons reported" ]; do
+          sleep 15
+          HOST_C_DAEMONS=$(ceph orch ps --hostname $HOST_C)
+        done
+        # we want to check the ability to remove the host from
+        # the CRUSH map, so we should first verify the host is in
+        # the CRUSH map.
+        ceph osd getcrushmap -o compiled-crushmap
+        crushtool -d compiled-crushmap -o crushmap.txt
+        CRUSH_MAP=$(cat crushmap.txt)
+        if ! grep -q "$HOST_C" <<< "$CRUSH_MAP"; then
+          printf "Expected to see $HOST_C in CRUSH map. Saw:\n\n$CRUSH_MAP"
+          exit 1
+        fi
+        # If the drain was successful, we should be able to remove the
+        # host without force with no issues. If there are still daemons
+        # we will get a response telling us to drain the host and a
+        # non-zero return code
+        ceph orch host rm $HOST_C --rm-crush-entry
+        # verify we've successfully removed the host from the CRUSH map
+        sleep 30
+        ceph osd getcrushmap -o compiled-crushmap
+        crushtool -d compiled-crushmap -o crushmap.txt
+        CRUSH_MAP=$(cat crushmap.txt)
+        if grep -q "$HOST_C" <<< "$CRUSH_MAP"; then
+          printf "Saw $HOST_C in CRUSH map after it should have been removed.\n\n$CRUSH_MAP"
+          exit 1
+        fi
