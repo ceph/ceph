@@ -21,6 +21,7 @@ def mock_docker():
 
     docker = mock.Mock(Docker)
     docker.path = '/usr/bin/docker'
+    type(docker).unlimited_pids_option = Docker.unlimited_pids_option
     return docker
 
 
@@ -37,6 +38,7 @@ def mock_podman():
     # https://docs.python.org/3/library/unittest.mock.html#unittest.mock.Mock
     type(podman).supports_split_cgroups = Podman.supports_split_cgroups
     type(podman).service_args = Podman.service_args
+    type(podman).unlimited_pids_option = Podman.unlimited_pids_option
     return podman
 
 
