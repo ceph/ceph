@@ -398,6 +398,40 @@ struct transaction_manager_test_t :
     return extent;
   }
 
+  std::vector<TestBlockRef> alloc_extents(
+    test_transaction_t &t,
+    laddr_t hint,
+    extent_len_t len,
+    char contents) {
+    auto extents = with_trans_intr(*(t.t), [&](auto& trans) {
+      return tm->alloc_data_extents<TestBlock>(trans, hint, len);
+    }).unsafe_get0();
+    size_t length = 0;
+    for (auto &extent : extents) {
+      extent->set_contents(contents);
+      length += extent->get_length();
+      EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
+      test_mappings.alloced(hint, *extent, t.mapping_delta);
+    }
+    EXPECT_EQ(len, length);
+    return extents;
+  }
+
+  void alloc_extents_deemed_fail(
+    test_transaction_t &t,
+    laddr_t hint,
+    extent_len_t len,
+    char contents)
+  {
+    std::cout << __func__ << std::endl;
+    auto fut = with_trans_intr(*(t.t), [&](auto& trans) {
+      return tm->alloc_data_extents<TestBlock>(trans, hint, len);
+    });
+    fut.unsafe_wait();
+    assert(fut.failed());
+    (void)fut.get_exception();
+  }
+
   TestBlockRef alloc_extent(
     test_transaction_t &t,
     laddr_t hint,
@@ -1675,6 +1709,30 @@ struct tm_multi_tier_device_test_t :
   tm_multi_tier_device_test_t() : transaction_manager_test_t(1, 2) {}
 };
 
+struct tm_random_block_device_test_t :
+  public transaction_manager_test_t {
+
+  tm_random_block_device_test_t() : transaction_manager_test_t(1, 0) {}
+};
+
+TEST_P(tm_random_block_device_test_t, scatter_allocation)
+{
+  run_async([this] {
+    constexpr laddr_t ADDR = 0xFF * 4096;
+    epm->prefill_fragmented_devices();
+    auto t = create_transaction();
+    for (int i = 0; i < 1991; i++) {
+      auto extents = alloc_extents(t, ADDR + i * 16384, 16384, 'a');
+      std::cout << "num of extents: " << extents.size() << std::endl;
+    }
+    alloc_extents_deemed_fail(t, ADDR + 1991 * 16384, 16384, 'a');
+    check_mappings(t);
+    check();
+    submit_transaction(std::move(t));
+    check();
+  });
+}
+
 TEST_P(tm_single_device_test_t, basic)
 {
   constexpr laddr_t SIZE = 4096;
@@ -2131,5 +2189,13 @@ INSTANTIATE_TEST_SUITE_P(
   tm_multi_tier_device_test_t,
   ::testing::Values (
     "segmented"
+  )
+);
+
+INSTANTIATE_TEST_SUITE_P(
+  transaction_manager_test,
+  tm_random_block_device_test_t,
+  ::testing::Values (
+    "circularbounded"
   )
 );

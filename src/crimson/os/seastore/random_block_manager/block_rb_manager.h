@@ -127,6 +127,10 @@ public:
     return device->get_journal_size();
   }
 
+#ifdef UNIT_TESTS_BUILT
+  void prefill_fragmented_device() final;
+#endif
+
 private:
   /*
    * this contains the number of bitmap blocks, free blocks and

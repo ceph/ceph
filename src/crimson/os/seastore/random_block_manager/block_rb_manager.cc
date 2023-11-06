@@ -182,6 +182,25 @@ BlockRBManager::write_ertr::future<> BlockRBManager::write(
     std::move(bptr));
 }
 
+#ifdef UNIT_TESTS_BUILT
+void BlockRBManager::prefill_fragmented_device()
+{
+  LOG_PREFIX(BlockRBManager::prefill_fragmented_device);
+  // the first 2 blocks must be allocated to lba root
+  // and backref root during mkfs
+  for (size_t block = get_block_size() * 2;
+      block <= get_size() - get_block_size() * 2;
+      block += get_block_size() * 2) {
+    DEBUG("marking {}~{} used",
+      get_start_rbm_addr() + block,
+      get_block_size());
+    allocator->mark_extent_used(
+      get_start_rbm_addr() + block,
+      get_block_size());
+  }
+}
+#endif
+
 std::ostream &operator<<(std::ostream &out, const rbm_metadata_header_t &header)
 {
   out << " rbm_metadata_header_t(size=" << header.size

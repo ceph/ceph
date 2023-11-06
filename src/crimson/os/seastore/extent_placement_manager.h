@@ -48,6 +48,10 @@ public:
 
   virtual bool can_inplace_rewrite(Transaction& t,
     CachedExtentRef extent) = 0;
+
+#ifdef UNIT_TESTS_BUILT
+  virtual void prefill_fragmented_devices() {}
+#endif
 };
 using ExtentOolWriterRef = std::unique_ptr<ExtentOolWriter>;
 
@@ -152,6 +156,13 @@ public:
     return crimson::os::seastore::can_inplace_rewrite(extent->get_type());
   }
 
+#ifdef UNIT_TESTS_BUILT
+  void prefill_fragmented_devices() final {
+    LOG_PREFIX(RandomBlockOolWriter::prefill_fragmented_devices);
+    SUBDEBUG(seastore_epm, "");
+    return rb_cleaner->prefill_fragmented_devices();
+  }
+#endif
 private:
   alloc_write_iertr::future<> do_write(
     Transaction& t,
@@ -376,6 +387,16 @@ public:
     }
     return allocs;
   }
+
+#ifdef UNIT_TESTS_BUILT
+  void prefill_fragmented_devices() {
+    LOG_PREFIX(ExtentPlacementManager::prefill_fragmented_devices);
+    SUBDEBUG(seastore_epm, "");
+    for (auto &writer : writer_refs) {
+      writer->prefill_fragmented_devices();
+    }
+  }
+#endif
 
   /**
    * dispatch_result_t

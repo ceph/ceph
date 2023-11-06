@@ -11,6 +11,8 @@
 #include "crimson/common/utility.h"
 #include "include/ceph_assert.h"
 
+class transaction_manager_test_t;
+
 namespace crimson::interruptible {
 
 template <typename, typename>
@@ -528,6 +530,7 @@ private:
 
   protected:
     using base_t::get_exception;
+    friend class ::transaction_manager_test_t;
   public:
     using errorator_type = ::crimson::errorator<AllowedErrors...>;
     using promise_type = seastar::promise<ValueT>;
@@ -707,6 +710,9 @@ private:
     }
     auto unsafe_get0() {
       return seastar::future<ValueT>::get0();
+    }
+    void unsafe_wait() {
+      seastar::future<ValueT>::wait();
     }
 
     template <class FuncT>
