@@ -91,7 +91,7 @@ Event Types
 +--------------------------------------------------------+-----------------------------------------+
 | ``s3:ObjectLifecycle:Expiration:DeleteMarker``         | Ceph extension                          |
 +--------------------------------------------------------+-----------------------------------------+
-| ``s3:ObjectLifecycle:Expiration:AbortMultipartUpload`` | Defined, Ceph extension (not generated) |
+| ``s3:ObjectLifecycle:Expiration:AbortMultipartUpload`` | Ceph extension                          |
 +--------------------------------------------------------+-----------------------------------------+
 | ``s3:ObjectLifecycle:Transition:Current``              | Ceph extension                          |
 +--------------------------------------------------------+-----------------------------------------+
