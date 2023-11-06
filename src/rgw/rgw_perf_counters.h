@@ -83,6 +83,15 @@ enum {
   l_rgw_op_last
 };
 
+enum {
+  l_rgw_topic_first = 17000,
+
+  l_rgw_persistent_topic_len,
+  l_rgw_persistent_topic_size,
+
+  l_rgw_topic_last
+};
+
 namespace rgw::op_counters {
 
 struct CountersContainer {
@@ -99,3 +108,20 @@ void tinc(const CountersContainer &counters, int idx, utime_t);
 void tinc(const CountersContainer &counters, int idx, ceph::timespan amt);
 
 } // namespace rgw::op_counters
+
+namespace rgw::persistent_topic_counters {
+
+class CountersManager {
+  std::unique_ptr<PerfCounters> topic_counters;
+  CephContext *cct;
+
+public:
+  CountersManager(const std::string& name, CephContext *cct);
+
+  void set(int idx, uint64_t v);
+
+  ~CountersManager();
+
+};
+
+} // namespace rgw::persistent_topic_counters
