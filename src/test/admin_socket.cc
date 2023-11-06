@@ -239,7 +239,11 @@ TEST(AdminSocketClient, Ping) {
     ASSERT_FALSE(ok);
   }
   // file exists but does not allow connections (no process, wrong type...)
+  #ifdef _WIN32
+  int fd = ::creat(path.c_str(), _S_IREAD | _S_IWRITE);
+  #else
   int fd = ::creat(path.c_str(), 0777);
+  #endif
   ASSERT_TRUE(fd);
   // On Windows, we won't be able to remove the file unless we close it
   // first.
@@ -307,7 +311,11 @@ TEST(AdminSocket, bind_and_listen) {
   {
     int fd = 0;
     string message;
+    #ifdef _WIN32
+    int fd2 = ::creat(path.c_str(), _S_IREAD | _S_IWRITE);
+    #else
     int fd2 = ::creat(path.c_str(), 0777);
+    #endif
     ASSERT_TRUE(fd2);
     // On Windows, we won't be able to remove the file unless we close it
     // first.
