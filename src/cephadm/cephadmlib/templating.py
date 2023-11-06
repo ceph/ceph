@@ -17,6 +17,8 @@ class Templates(str, enum.Enum):
 
     ceph_service = 'ceph.service.j2'
     agent_service = 'agent.service.j2'
+    cluster_logrotate_config = 'cluster.logrotate.config.j2'
+    cephadm_logrotate_config = 'cephadm.logrotate.config.j2'
 
     def __str__(self) -> str:
         return self.value
