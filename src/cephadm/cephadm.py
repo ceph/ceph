@@ -70,7 +70,6 @@ from cephadmlib.constants import (
     LOGROTATE_DIR,
     LOG_DIR,
     LOG_DIR_MODE,
-    PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
     SYSCTL_DIR,
     UNIT_DIR,
 )
@@ -104,6 +103,7 @@ from cephadmlib.container_engines import (
     Podman,
     check_container_engine,
     find_container_engine,
+    pull_command,
     registry_login,
 )
 from cephadmlib.data_utils import (
@@ -2647,17 +2647,8 @@ def get_container_mounts(
 
 def _update_podman_mounts(ctx: CephadmContext, mounts: Dict[str, str]) -> None:
     """Update the given mounts dict with mounts specific to podman."""
-    # Modifications podman makes to /etc/hosts causes issues with
-    # certain daemons (specifically referencing "host.containers.internal" entry
-    # being added to /etc/hosts in this case). To avoid that, but still
-    # allow users to use /etc/hosts for hostname resolution, we can
-    # mount the host's /etc/hosts file.
-    # https://tracker.ceph.com/issues/58532
-    # https://tracker.ceph.com/issues/57018
     if isinstance(ctx.container_engine, Podman):
-        if os.path.exists('/etc/hosts'):
-            if '/etc/hosts' not in mounts:
-                mounts['/etc/hosts'] = '/etc/hosts:ro'
+        ctx.container_engine.update_mounts(ctx, mounts)
 
 
 def get_ceph_volume_container(ctx: CephadmContext,
@@ -2701,13 +2692,7 @@ def _update_pids_limit(ctx: CephadmContext, daemon_type: str, container_args: Li
     unlimited_daemons.add(NFSGanesha.daemon_type)
     if daemon_type not in unlimited_daemons:
         return
-    if (
-        isinstance(ctx.container_engine, Podman)
-        and ctx.container_engine.version >= PIDS_LIMIT_UNLIMITED_PODMAN_VERSION
-    ):
-        container_args.append('--pids-limit=-1')
-    else:
-        container_args.append('--pids-limit=0')
+    container_args.append(ctx.container_engine.unlimited_pids_option)
 
 
 def get_container(
@@ -3942,14 +3927,7 @@ def _pull_image(ctx, image, insecure=False):
         'Digest did not match, expected',
     ]
 
-    cmd = [ctx.container_engine.path, 'pull', image]
-    if isinstance(ctx.container_engine, Podman):
-        if insecure:
-            cmd.append('--tls-verify=false')
-
-        if os.path.exists('/etc/ceph/podman-auth.json'):
-            cmd.append('--authfile=/etc/ceph/podman-auth.json')
-    cmd_str = ' '.join(cmd)
+    cmd = pull_command(ctx, image, insecure=insecure)
 
     for sleep_secs in [1, 4, 25]:
         out, err, ret = call(ctx, cmd, verbosity=CallVerbosity.QUIET_UNLESS_ERROR)
@@ -3959,6 +3937,7 @@ def _pull_image(ctx, image, insecure=False):
         if 'unauthorized' in err:
             raise UnauthorizedRegistryError()
 
+        cmd_str = ' '.join(cmd)
         if not any(pattern in err for pattern in ignorelist):
             raise Error('Failed command: %s' % cmd_str)
 

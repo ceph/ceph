@@ -2,7 +2,7 @@
 
 import os
 
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict
 
 from .call_wrappers import call_throws, CallVerbosity
 from .context import CephadmContext
@@ -11,6 +11,7 @@ from .constants import (
     CGROUPS_SPLIT_PODMAN_VERSION,
     DEFAULT_MODE,
     MIN_PODMAN_VERSION,
+    PIDS_LIMIT_UNLIMITED_PODMAN_VERSION,
 )
 from .exceptions import Error
 
@@ -45,6 +46,15 @@ class Podman(ContainerEngine):
         """Return true if this version of podman supports split cgroups."""
         return self.version >= CGROUPS_SPLIT_PODMAN_VERSION
 
+    @property
+    def unlimited_pids_option(self) -> str:
+        """The option to pass to the container engine for allowing unlimited
+        pids (processes).
+        """
+        if self.version >= PIDS_LIMIT_UNLIMITED_PODMAN_VERSION:
+            return '--pids-limit=-1'
+        return '--pids-limit=0'
+
     def service_args(
         self, ctx: CephadmContext, service_name: str
     ) -> List[str]:
@@ -77,6 +87,21 @@ class Podman(ContainerEngine):
         if not os.path.exists('/etc/hosts'):
             args.append('--no-hosts')
         return args
+
+    def update_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        """Update mounts adding entries that are specific to podman."""
+        # Modifications podman makes to /etc/hosts causes issues with certain
+        # daemons (specifically referencing "host.containers.internal" entry
+        # being added to /etc/hosts in this case). To avoid that, but still
+        # allow users to use /etc/hosts for hostname resolution, we can mount
+        # the host's /etc/hosts file.
+        # https://tracker.ceph.com/issues/58532
+        # https://tracker.ceph.com/issues/57018
+        if os.path.exists('/etc/hosts'):
+            if '/etc/hosts' not in mounts:
+                mounts['/etc/hosts'] = '/etc/hosts:ro'
 
 
 class Docker(ContainerEngine):
@@ -150,3 +175,17 @@ def registry_login(
             'Failed to login to custom registry @ %s as %s with given password'
             % (ctx.registry_url, ctx.registry_username)
         )
+
+
+def pull_command(
+    ctx: CephadmContext, image: str, insecure: bool = False
+) -> List[str]:
+    """Return a command that can be run to pull an image."""
+    cmd = [ctx.container_engine.path, 'pull', image]
+    if isinstance(ctx.container_engine, Podman):
+        if insecure:
+            cmd.append('--tls-verify=false')
+
+        if os.path.exists('/etc/ceph/podman-auth.json'):
+            cmd.append('--authfile=/etc/ceph/podman-auth.json')
+    return cmd
