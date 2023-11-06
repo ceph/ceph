@@ -769,6 +769,12 @@ class PgScrubber : public ScrubPgIF,
    */
   void request_rescrubbing(requested_scrub_t& req_flags);
 
+  /**
+   * combine cluster & pool configuration options into a single struct
+   * of scrub-related parameters.
+   */
+  Scrub::sched_conf_t populate_config_params() const;
+
   /*
    * Select a range of objects to scrub.
    *

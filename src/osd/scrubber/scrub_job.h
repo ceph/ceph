@@ -142,6 +142,59 @@ class ScrubJob final : public RefCountedObject {
 
 using ScrubJobRef = ceph::ref_t<ScrubJob>;
 using ScrubQContainer = std::vector<ScrubJobRef>;
+
+/**
+ *  A collection of the configuration parameters (pool & OSD) that affect
+ *  scrub scheduling.
+ */
+struct sched_conf_t {
+  /// the desired interval between shallow scrubs
+  double shallow_interval{0.0};
+
+  /// the desired interval between deep scrubs
+  double deep_interval{0.0};
+
+  /**
+   * the maximum interval between shallow scrubs, as determined by either the
+   * OSD or the pool configuration. Empty if no limit is configured.
+   */
+  std::optional<double> max_shallow;
+
+  /**
+   * the maximum interval between deep scrubs.
+   * For deep scrubs - there is no equivalent of scrub_max_interval. Per the
+   * documentation, once deep_scrub_interval has passed, we are already
+   * "overdue", at least as far as the "ignore allowed load" window is
+   * concerned. \todo based on users complaints (and the fact that the
+   * interaction between the configuration parameters is clear to no one),
+   * this will be revised shortly.
+   */
+  double max_deep{0.0};
+
+  /**
+   * interval_randomize_ratio
+   *
+   * We add an extra random duration to the configured times when doing
+   * scheduling. An event configured with an interval of <interval> will
+   * actually be scheduled at a time selected uniformly from
+   * [<interval>, (1+<interval_randomize_ratio>) * <interval>)
+   */
+  double interval_randomize_ratio{0.0};
+
+  /**
+   * a randomization factor aimed at preventing 'thundering herd' problems
+   * upon deep-scrubs common intervals. If polling a random number smaller
+   * than that percentage, the next shallow scrub is upgraded to deep.
+   */
+  double deep_randomize_ratio{0.0};
+
+  /**
+   * must we schedule a scrub with high urgency if we do not have a valid
+   * last scrub stamp?
+   */
+  bool mandatory_on_invalid{true};
+};
+
 }  // namespace Scrub
 
 namespace std {
@@ -176,6 +229,21 @@ struct formatter<Scrub::ScrubJob> {
 	sjob.pgid, sjob.schedule.scheduled_at, sjob.schedule.deadline,
 	sjob.registration_state(), sjob.resources_failure, sjob.penalty_timeout,
 	sjob.state.load(std::memory_order_relaxed));
+  }
+};
+
+template <>
+struct formatter<Scrub::sched_conf_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const Scrub::sched_conf_t& cf, FormatContext& ctx)
+  {
+    return format_to(
+	ctx.out(),
+	"periods: s:{}/{} d:{}/{} iv-ratio:{} deep-rand:{} on-inv:{}",
+	cf.shallow_interval, cf.max_shallow.value_or(-1.0), cf.deep_interval,
+	cf.max_deep, cf.interval_randomize_ratio, cf.deep_randomize_ratio,
+	cf.mandatory_on_invalid);
   }
 };
 }  // namespace fmt
