@@ -7,7 +7,7 @@ KUBECTL="minikube kubectl --"
 
 # We build a local ceph image that contains the latest code
 # plus changes from the PR. This image will be used by the docker
-# running inside the minikube to start the different ceph pods
+# running inside the minikube to start the different ceph pods.
 LOCAL_CEPH_IMG="local/ceph"
 
 on_error() {
