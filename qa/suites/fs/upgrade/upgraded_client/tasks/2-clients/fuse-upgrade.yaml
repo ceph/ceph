@@ -19,6 +19,7 @@ tasks:
     client.0:
       branch: []
 - print: "**** done install.upgrade on client.0"
+- ceph.healthy:
 - ceph-fuse:
     client.0:
 - print: "**** done remount client.0"
