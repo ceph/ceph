@@ -61,20 +61,24 @@ class PrometheusRESTController(RESTController):
         user = None
         password = None
         cert_file = None
-        secure_monitoring_stack = bool(mgr.get_module_option_ex('cephadm',
-                                                                'secure_monitoring_stack',
-                                                                'false'))
-        if secure_monitoring_stack:
-            cmd = {'prefix': f'orch {module_name} get-credentials'}
-            ret, out, _ = mgr.mon_command(cmd)
-            if ret == 0 and out is not None:
-                access_info = json.loads(out)
-                user = access_info['user']
-                password = access_info['password']
-                certificate = access_info['certificate']
-                cert_file = tempfile.NamedTemporaryFile(delete=False)
-                cert_file.write(certificate.encode('utf-8'))
-                cert_file.flush()
+
+        orch_backend = mgr.get_module_option_ex('orchestrator', 'orchestrator')
+        if orch_backend == 'cephadm':
+            secure_monitoring_stack = mgr.get_module_option_ex('cephadm',
+                                                               'secure_monitoring_stack',
+                                                               False)
+            if secure_monitoring_stack:
+                cmd = {'prefix': f'orch {module_name} get-credentials'}
+                ret, out, _ = mgr.mon_command(cmd)
+                if ret == 0 and out is not None:
+                    access_info = json.loads(out)
+                    user = access_info['user']
+                    password = access_info['password']
+                    certificate = access_info['certificate']
+                    cert_file = tempfile.NamedTemporaryFile(delete=False)
+                    cert_file.write(certificate.encode('utf-8'))
+                    cert_file.flush()
+
         return user, password, cert_file
 
     def _get_api_url(self, host):
