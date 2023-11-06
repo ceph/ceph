@@ -338,7 +338,10 @@ OMapInnerNode:: make_split_children(omap_context_t oc)
       return split_children_ret(
              interruptible::ready_future_marker{},
              std::make_tuple(left, right, split_into(*left, *right)));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    split_children_iertr::pass_further{}
+  );
 }
 
 OMapInnerNode::full_merge_ret
@@ -353,7 +356,10 @@ OMapInnerNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
       return full_merge_ret(
         interruptible::ready_future_marker{},
         std::move(replacement));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    full_merge_iertr::pass_further{}
+  );
 }
 
 OMapInnerNode::make_balanced_ret
@@ -373,7 +379,10 @@ OMapInnerNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
              std::make_tuple(replacement_left, replacement_right,
                              balance_into_new_nodes(*this, right,
                                *replacement_left, *replacement_right)));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    make_balanced_iertr::pass_further{}
+  );
 }
 
 OMapInnerNode::merge_entry_ret
@@ -670,7 +679,10 @@ OMapLeafNode::make_split_children(omap_context_t oc)
       return split_children_ret(
              interruptible::ready_future_marker{},
              std::make_tuple(left, right, split_into(*left, *right)));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    split_children_iertr::pass_further{}
+  );
 }
 
 OMapLeafNode::full_merge_ret
@@ -685,7 +697,10 @@ OMapLeafNode::make_full_merge(omap_context_t oc, OMapNodeRef right)
       return full_merge_ret(
         interruptible::ready_future_marker{},
         std::move(replacement));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    full_merge_iertr::pass_further{}
+  );
 }
 
 OMapLeafNode::make_balanced_ret
@@ -706,7 +721,10 @@ OMapLeafNode::make_balanced(omap_context_t oc, OMapNodeRef _right)
                balance_into_new_nodes(
                  *this, right,
                  *replacement_left, *replacement_right)));
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    make_balanced_iertr::pass_further{}
+  );
 }
 
 

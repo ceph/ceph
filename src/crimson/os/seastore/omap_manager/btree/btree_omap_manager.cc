@@ -32,7 +32,10 @@ BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint)
       t.get_omap_tree_stats().depth = 1u;
       t.get_omap_tree_stats().extents_num_delta++;
       return initialize_omap_iertr::make_ready_future<omap_root_t>(omap_root);
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    TransactionManager::alloc_extent_iertr::pass_further{}
+  );
 }
 
 BtreeOMapManager::get_root_ret
@@ -65,7 +68,10 @@ BtreeOMapManager::handle_root_split(
     oc.t.get_omap_tree_stats().depth = omap_root.depth;
     ++(oc.t.get_omap_tree_stats().extents_num_delta);
     return seastar::now();
-  });
+  }).handle_error_interruptible(
+    crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+    TransactionManager::alloc_extent_iertr::pass_further{}
+  );
 }
 
 BtreeOMapManager::handle_root_merge_ret

@@ -88,7 +88,10 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 	  }).si_then([] (auto) {
             return create_iertr::make_ready_future<>();
           });
-        });
+        }).handle_error_interruptible(
+	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+	  create_iertr::pass_further{}
+	);
       }
       case CollectionNode::create_result_t::SUCCESS: {
         return create_iertr::make_ready_future<>();

@@ -145,7 +145,10 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
       assert(extent->get_length() == len);
       std::ignore = len;
       return NodeExtentRef(extent);
-    });
+    }).handle_error_interruptible(
+      crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
+      alloc_iertr::pass_further{}
+    );
   }
 
   retire_iertr::future<> retire_extent(

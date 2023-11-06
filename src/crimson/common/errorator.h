@@ -200,6 +200,23 @@ struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
     }
   };
 
+  class assert_failure {
+    const char* const msg = nullptr;
+  public:
+    template <std::size_t N>
+    assert_failure(const char (&msg)[N])
+      : msg(msg) {
+    }
+    assert_failure() = default;
+
+    void operator()(const unthrowable_wrapper&) {
+      if (msg) {
+        ceph_abort(msg);
+      } else {
+        ceph_abort();
+      }
+    }
+  };
 
 private:
   // can be used only to initialize the `instance` member

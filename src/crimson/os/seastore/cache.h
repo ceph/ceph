@@ -884,17 +884,20 @@ public:
 #else
     auto result = epm.alloc_new_non_data_extent(t, T::TYPE, length, hint, gen);
 #endif
-    auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result.bp));
+    if (!result) {
+      return nullptr;
+    }
+    auto ret = CachedExtent::make_cached_extent_ref<T>(std::move(result->bp));
     ret->init(CachedExtent::extent_state_t::INITIAL_WRITE_PENDING,
-              result.paddr,
+              result->paddr,
               hint,
-              result.gen,
+              result->gen,
 	      t.get_trans_id());
     t.add_fresh_extent(ret);
     SUBDEBUGT(seastore_cache,
               "allocated {} {}B extent at {}, hint={}, gen={} -- {}",
-              t, T::TYPE, length, result.paddr,
-              hint, rewrite_gen_printer_t{result.gen}, *ret);
+              t, T::TYPE, length, result->paddr,
+              hint, rewrite_gen_printer_t{result->gen}, *ret);
     return ret;
   }
   /**
