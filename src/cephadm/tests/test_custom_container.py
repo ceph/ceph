@@ -115,6 +115,9 @@ def test_deploy_custom_container(cephadm_fs):
             '--servers',
             '192.168.8.42,192.168.8.43,192.168.12.11',
         ]
+        ctx.config_blobs = {
+            'envs': ['FOO=1', 'BAR=77'],
+        }
 
         _cephadm._common_deploy(ctx)
 
@@ -132,6 +135,8 @@ def test_deploy_custom_container(cephadm_fs):
             ' --cgroups=split --no-hosts'
             ' -e CONTAINER_IMAGE=quay.io/foobar/quux:latest'
             ' -e NODE_NAME=host1'
+            ' -e FOO=1'
+            ' -e BAR=77'
             ' quay.io/foobar/quux:latest'
             ' --label frobnicationist --servers 192.168.8.42,192.168.8.43,192.168.12.11'
         )
