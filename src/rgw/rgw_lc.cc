@@ -522,15 +522,19 @@ static int remove_expired_obj(
   auto& version_id = obj_key.instance;
   std::unique_ptr<rgw::sal::Notification> notify;
 
+  std::unique_ptr<rgw::sal::User> user;
+  user = driver->get_user(bucket_info.owner);
+
+  /* per discussion w/Daniel, Casey,and Eric, we *do need*
+   * a new sal object handle, based on the following decision
+   * to clear obj_key.instance--which happens in the case
+   * where a delete marker should be created */
   if (!remove_indeed) {
     obj_key.instance.clear();
   } else if (obj_key.instance.empty()) {
     obj_key.instance = "null";
   }
-
-  auto& obj = oc.obj;
-  std::unique_ptr<rgw::sal::User> user;
-  user = driver->get_user(bucket_info.owner);
+  auto obj = oc.bucket->get_object(obj_key);
 
   RGWObjState* obj_state{nullptr};
   ret = obj->get_obj_state(dpp, &obj_state, null_yield, true);
