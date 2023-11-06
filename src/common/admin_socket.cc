@@ -866,7 +866,7 @@ class RaiseHook: public AdminSocketHook {
           errss << "signal number should be an integer in the range [1..64]" << std::endl;
           return -EINVAL;
         }
-      } catch (std::invalid_argument) {
+      } catch (const std::invalid_argument&) {
         auto sig_it = known_signals.find(sigdesc);
         if (sig_it == known_signals.end()) {
           errss << "unknown signal name; use -l to see recognized names" << std::endl;
