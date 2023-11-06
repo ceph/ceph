@@ -298,6 +298,7 @@ TEST(ClsLock, TestLockDuration) {
     ASSERT_EQ(-EEXIST, r);
   }
 
+  // coverity[store_truncates_time_t:SUPPRESS]
   sleep(dur.sec());
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
 

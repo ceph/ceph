@@ -3039,19 +3039,20 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
   uint32_t max_skew = MAX_TOTP_SKEW_HOURS * 3600;
 
   while (time_ofs_abs < max_skew) {
+    // coverity supression: oath_totp_validate2 is an external library function, cannot fix internally
+    // Further, step_size is a small number and unlikely to overflow
     int rc = oath_totp_validate2(totp.seed_bin.c_str(), totp.seed_bin.length(),
                              start_time, 
+                             // coverity[store_truncates_time_t:SUPPRESS]
                              step_size,
                              time_ofs,
                              1,
                              nullptr,
                              pins[0].c_str());
     if (rc != OATH_INVALID_OTP) {
-      // oath_totp_validate2 is an external library function, cannot fix internally
-      // Further, step_size is a small number and unlikely to overflow
-      // coverity[store_truncates_time_t:SUPPRESS]
       rc = oath_totp_validate2(totp.seed_bin.c_str(), totp.seed_bin.length(),
                                start_time, 
+                               // coverity[store_truncates_time_t:SUPPRESS]
                                step_size,
                                time_ofs - step_size, /* smaller time_ofs moves time forward */
                                1,
