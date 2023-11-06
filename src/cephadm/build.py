@@ -7,12 +7,14 @@
 
 import argparse
 import compileall
+import enum
 import logging
 import os
 import pathlib
 import shutil
 import subprocess
 import tempfile
+import shlex
 import sys
 
 HAS_ZIPAPP = False
@@ -27,6 +29,20 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
+PY36_REQUIREMENTS = [
+    'MarkupSafe >= 2.0.1, <2.2',
+    'Jinja2 >= 3.0.2, <3.2',
+]
+PY_REQUIREMENTS = [
+    'MarkupSafe >= 2.1.3, <2.2',
+    'Jinja2 >= 3.1.2, <3.2',
+]
+# IMPORTANT to be fully compatible with all the distros ceph is built for we
+# need to work around various old versions of python/pip. As such it's easier
+# to repeat our requirements in this script than it is to parse zipapp-reqs.txt.
+# You *must* keep the PY_REQUIREMENTS list in sync with the contents of
+# zipapp-reqs.txt manually.
+
 _VALID_VERS_VARS = [
     "CEPH_GIT_VER",
     "CEPH_GIT_NICE_VER",
@@ -34,6 +50,35 @@ _VALID_VERS_VARS = [
     "CEPH_RELEASE_NAME",
     "CEPH_RELEASE_TYPE",
 ]
+
+
+class PipEnv(enum.Enum):
+    never = enum.auto()
+    auto = enum.auto()
+    required = enum.auto()
+
+    @property
+    def enabled(self):
+        return self == self.auto or self == self.required
+
+
+class Config:
+    def __init__(self, cli_args):
+        self.cli_args = cli_args
+        self._maj_min = sys.version_info[0:2]
+        self.install_dependencies = True
+        if self._maj_min == (3, 6):
+            self.pip_split = True
+            self.requirements = PY36_REQUIREMENTS
+        else:
+            self.pip_split = False
+            self.requirements = PY_REQUIREMENTS
+        self.pip_venv = PipEnv[cli_args.pip_use_venv]
+
+
+def _run(command, *args, **kwargs):
+    log.info('Running cmd: %s', ' '.join(shlex.quote(str(c)) for c in command))
+    return subprocess.run(command, *args, **kwargs)
 
 
 def _reexec(python):
@@ -54,14 +99,14 @@ def _did_rexec():
     return bool(os.environ.get("_BUILD_PYTHON_SET", ""))
 
 
-def _build(dest, src, versioning_vars=None):
+def _build(dest, src, config):
     """Build the binary."""
     os.chdir(src)
     tempdir = pathlib.Path(tempfile.mkdtemp(suffix=".cephadm.build"))
     log.debug("working in %s", tempdir)
     try:
-        if os.path.isfile("requirements.txt"):
-            _install_deps(tempdir)
+        if config.install_dependencies:
+            _install_deps(tempdir, config)
         log.info("Copying contents")
         # cephadmlib is cephadm's private library of modules
         shutil.copytree(
@@ -70,6 +115,7 @@ def _build(dest, src, versioning_vars=None):
         # cephadm.py is cephadm's main script for the "binary"
         # this must be renamed to __main__.py for the zipapp
         shutil.copy("cephadm.py", tempdir / "__main__.py")
+        versioning_vars = config.cli_args.version_vars
         if versioning_vars:
             generate_version_file(versioning_vars, tempdir / "_version.py")
         _compile(dest, tempdir)
@@ -116,23 +162,77 @@ def _compile(dest, tempdir):
         log.info("Zipapp created without compression")
 
 
-def _install_deps(tempdir):
+def _install_deps(tempdir, config):
     """Install dependencies with pip."""
     # TODO we could explicitly pass a python version here
     log.info("Installing dependencies")
-    # apparently pip doesn't have an API, just a cli.
-    subprocess.check_call(
-        [
-            sys.executable,
-            "-m",
-            "pip",
-            "install",
-            "--requirement",
-            "requirements.txt",
-            "--target",
-            tempdir,
-        ]
+
+    executable = sys.executable
+    venv = config.pip_venv
+    has_venv = _has_python_venv(sys.executable) if venv.enabled else False
+    venv = None
+    if venv == PipEnv.required and not has_venv:
+        raise RuntimeError('venv (virtual environment) module not found')
+    if has_venv:
+        log.info('Attempting to create a virtualenv')
+        venv = tempdir / "_venv_"
+        _run([sys.executable, '-m', 'venv', str(venv)])
+        executable = str(venv / "bin" / pathlib.Path(executable).name)
+        # try to upgrade pip in the virtualenv. if it fails ignore the error
+        _run([executable, '-m', 'pip', 'install', '-U', 'pip'])
+    else:
+        log.info('Continuing without a virtualenv...')
+    if not _has_python_pip(executable):
+        raise RuntimeError('pip module not found')
+
+    # best effort to disable compilers, packages in the zipapp
+    # must be pure python.
+    env = os.environ.copy()
+    env['CC'] = '/bin/false'
+    env['CXX'] = '/bin/false'
+    if env.get('PYTHONPATH'):
+        env['PYTHONPATH'] = env['PYTHONPATH'] + f':{tempdir}'
+    else:
+        env['PYTHONPATH'] = f'{tempdir}'
+    if config.pip_split:
+        # a list of single item lists; so that pip run once for each
+        # requirement
+        req_batches = [[r] for r in config.requirements]
+    else:
+        # a list containing another list of the requirements, so we only
+        # need to run pip once
+        req_batches = [list(config.requirements)]
+    for batch in req_batches:
+        _run(
+            [
+                executable,
+                "-m",
+                "pip",
+                "install",
+                "--no-binary",
+                ":all:",
+                "--target",
+                tempdir,
+            ] + batch,
+            env=env,
+            check=True,
+        )
+    if venv:
+        shutil.rmtree(venv)
+
+
+def _has_python_venv(executable):
+    res = _run(
+        [executable, '-m', 'venv', '--help'], stdout=subprocess.DEVNULL
     )
+    return res.returncode == 0
+
+
+def _has_python_pip(executable):
+    res = _run(
+        [executable, '-m', 'venv', '--help'], stdout=subprocess.DEVNULL
+    )
+    return res.returncode == 0
 
 
 def generate_version_file(versioning_vars, dest):
@@ -178,6 +278,12 @@ def main():
         action="append",
         help="Set a key=value pair in the generated version info file",
     )
+    parser.add_argument(
+        '--pip-use-venv',
+        choices=[e.name for e in PipEnv],
+        default=PipEnv.auto.name,
+        help='Configure pip to use a virtual environment when bundling dependencies',
+    )
     args = parser.parse_args()
 
     if not _did_rexec() and args.python:
@@ -188,7 +294,8 @@ def main():
             v=sys.version_info
         )
     )
-    log.info("Args: %s", vars(args))
+    for argkey, argval in vars(args).items():
+        log.info("Argument: %s=%r", argkey, argval)
     if not HAS_ZIPAPP:
         # Unconditionally display an error that the version of python
         # lacks zipapp (probably too old).
@@ -206,7 +313,7 @@ def main():
     dest = pathlib.Path(args.dest).absolute()
     log.info("Source Dir: %s", source)
     log.info("Destination Path: %s", dest)
-    _build(dest, source, versioning_vars=args.version_vars)
+    _build(dest, source, Config(args))
 
 
 if __name__ == "__main__":
