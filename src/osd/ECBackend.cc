@@ -609,7 +609,7 @@ void ECBackend::continue_recovery_op(
 
       if (op.recovery_progress.first && op.obc) {
 	/* We've got the attrs and the hinfo, might as well use them */
-	op.hinfo = get_hash_info(op.hoid, false, &op.obc->attr_cache);
+	op.hinfo = get_hash_info(op.hoid, false, op.obc->attr_cache);
 	if (!op.hinfo) {
           derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
                << dendl;
@@ -1106,7 +1106,7 @@ void ECBackend::handle_sub_read(
         map<string, bufferlist, less<>> attrs;
         int r = PGBackend::objects_get_attrs(i->first, &attrs);
         if (r >= 0) {
-          hinfo = get_hash_info(i->first, false, &attrs);
+          hinfo = get_hash_info(i->first, false, attrs);
 	} else {
           derr << "get_hash_info" << ": stat " << i->first << " failed: "
                << cpp_strerror(r) << dendl;
@@ -1632,7 +1632,7 @@ void ECBackend::submit_transaction(
     sinfo,
     *(op->t),
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = get_hash_info(i, true, &op->t->obc_map[hoid]->attr_cache);
+      ECUtil::HashInfoRef ref = get_hash_info(i, true, op->t->obc_map[hoid]->attr_cache);
       if (!ref) {
 	derr << __func__ << ": get_hash_info(" << i << ")"
 	     << " returned a null pointer and there is no "
@@ -1912,7 +1912,7 @@ void ECBackend::do_read_op(ReadOp &op)
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool create, const map<string,bufferlist,less<>> *attrs)
+  const hobject_t &hoid, bool create, const map<string,bufferlist,less<>>& attrs)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -1927,9 +1927,8 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     if (r >= 0) {
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
-      ceph_assert(attrs);
-      map<string, bufferlist>::const_iterator k = attrs->find(ECUtil::get_hinfo_key());
-      if (k == attrs->end()) {
+      map<string, bufferlist>::const_iterator k = attrs.find(ECUtil::get_hinfo_key());
+      if (k == attrs.end()) {
         dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
       } else {
         bl = k->second;
@@ -2629,7 +2628,7 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, &o.attrs);
+  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, o.attrs);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;

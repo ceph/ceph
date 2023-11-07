@@ -684,7 +684,7 @@ public:
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
   ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool create,
-				    const std::map<std::string, ceph::buffer::list, std::less<>> *attr);
+				    const std::map<std::string, ceph::buffer::list, std::less<>>& attr);
 
 public:
   ECBackend(
