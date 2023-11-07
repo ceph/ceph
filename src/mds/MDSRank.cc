@@ -2958,6 +2958,11 @@ void MDSRankDispatcher::evict_clients(
 
   std::vector<Session*> victims;
   const auto& sessions = sessionmap.get_sessions();
+  if (sessions.empty()) {
+    on_finish(-CEPHFS_ENODATA, "No sessions available", outbl);
+    return;
+  }
+
   for (const auto& p : sessions)  {
     if (!p.first.is_client()) {
       continue;
@@ -2974,7 +2979,7 @@ void MDSRankDispatcher::evict_clients(
   dout(20) << __func__ << " matched " << victims.size() << " sessions" << dendl;
 
   if (victims.empty()) {
-    on_finish(0, {}, outbl);
+    on_finish(-CEPHFS_EINVAL, "Invalid Value", outbl);
     return;
   }
 
