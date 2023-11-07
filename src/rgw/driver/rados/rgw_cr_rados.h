@@ -1026,6 +1026,66 @@ public:
   }
 };
 
+class RGWAsyncRemoveBucketInstanceInfo : public RGWAsyncRadosRequest {
+  rgw::sal::RadosStore* store;
+  rgw_bucket bucket;
+  RGWBucketInfo& bucket_info;
+  const DoutPrefixProvider *dpp;
+
+protected:
+  int _send_request(const DoutPrefixProvider *dpp) override;
+public:
+  RGWAsyncRemoveBucketInstanceInfo(RGWCoroutine* caller,
+				RGWAioCompletionNotifier* cn,
+                                rgw::sal::RadosStore* store,
+        const rgw_bucket& bucket,
+				RGWBucketInfo& bucket_info,
+				const DoutPrefixProvider* dpp)
+    : RGWAsyncRadosRequest(caller, cn), store(store), bucket(bucket), bucket_info(bucket_info),
+      dpp(dpp) {}
+};
+
+class RGWRemoveBucketInstanceInfoCR : public RGWSimpleCoroutine {
+  RGWAsyncRadosProcessor *async_rados;
+  rgw::sal::RadosStore* store;
+  rgw_bucket bucket;
+  RGWBucketInfo& bucket_info;
+  const DoutPrefixProvider *dpp;
+
+  RGWAsyncRemoveBucketInstanceInfo* req = nullptr;
+
+public:
+  // rgw_bucket constructor
+  RGWRemoveBucketInstanceInfoCR(RGWAsyncRadosProcessor *async_rados,
+			     rgw::sal::RadosStore* store,
+           const rgw_bucket& bucket,
+			     RGWBucketInfo& bucket_info,
+			     std::map<std::string, ceph::bufferlist>* attrs,
+           const DoutPrefixProvider *dpp)
+    : RGWSimpleCoroutine(store->ctx()), async_rados(async_rados), store(store),
+      bucket(bucket), bucket_info(bucket_info), dpp(dpp) {}
+  ~RGWRemoveBucketInstanceInfoCR() override {
+    request_cleanup();
+  }
+  void request_cleanup() override {
+    if (req) {
+      req->finish();
+      req = nullptr;
+    }
+  }
+
+  int send_request(const DoutPrefixProvider *dpp) override {
+    req = new RGWAsyncRemoveBucketInstanceInfo(this,
+					    stack->create_completion_notifier(),
+					    store, bucket, bucket_info, dpp);
+    async_rados->queue(req);
+    return 0;
+  }
+  int request_complete() override {
+    return req->get_ret_status();
+  }
+};
+
 class RGWRadosBILogTrimCR : public RGWSimpleCoroutine {
   const RGWBucketInfo& bucket_info;
   int shard_id;
