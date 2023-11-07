@@ -8,7 +8,7 @@
 using namespace ScrubGenerator;
 
 // ref: PGLogTestRebuildMissing()
-bufferptr create_object_info(const ScrubGenerator::RealObj& objver)
+bufferlist create_object_info(const ScrubGenerator::RealObj& objver)
 {
   object_info_t oi{};
   oi.soid = objver.ghobj.hobj;
@@ -18,25 +18,23 @@ bufferptr create_object_info(const ScrubGenerator::RealObj& objver)
   bufferlist bl;
   oi.encode(bl,
 	    0 /*get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr)*/);
-  bufferptr bp(bl.c_str(), bl.length());
-  return bp;
+  return bl;
 }
 
-std::pair<bufferptr, std::vector<snapid_t>> create_object_snapset(
+std::pair<bufferlist, std::vector<snapid_t>> create_object_snapset(
   const ScrubGenerator::RealObj& robj,
   const SnapsetMockData* snapset_mock_data)
 {
   if (!snapset_mock_data) {
-    return {bufferptr(), {}};
+    return {bufferlist(), {}};
   }
   /// \todo fill in missing version/osd details from the robj
   auto sns = snapset_mock_data->make_snapset();
   bufferlist bl;
   encode(sns, bl);
-  bufferptr bp = bufferptr(bl.c_str(), bl.length());
 
   // extract the set of object snaps
-  return {bp, sns.snaps};
+  return {bl, sns.snaps};
 }
 
 RealObjsConfList ScrubGenerator::make_real_objs_conf(
@@ -70,9 +68,9 @@ ScrubGenerator::SmapEntry ScrubGenerator::make_smobject(
   ret.ghobj = blueprint.ghobj;
   ret.smobj.attrs[OI_ATTR] = create_object_info(blueprint);
   if (blueprint.snapset_mock_data) {
-    auto [bp, snaps] =
+    auto [bl, snaps] =
       create_object_snapset(blueprint, blueprint.snapset_mock_data);
-    ret.smobj.attrs[SS_ATTR] = bp;
+    ret.smobj.attrs[SS_ATTR] = bl;
     std::cout << fmt::format("{}: ({}) osd:{} snaps:{}",
 			     __func__,
 			     ret.ghobj.hobj,
@@ -82,12 +80,12 @@ ScrubGenerator::SmapEntry ScrubGenerator::make_smobject(
   }
 
   for (const auto& [at_k, at_v] : blueprint.data.attrs) {
-    ret.smobj.attrs[at_k] = ceph::buffer::copy(at_v.c_str(), at_v.size());
+    // deep copy assignment
+    ret.smobj.attrs[at_k].clear();
+    ret.smobj.attrs[at_k].append(at_v.c_str(), at_v.size());
     {
       // verifying (to be removed after dev phase)
-      auto bk = ret.smobj.attrs[at_k].begin_deep().get_ptr(
-	ret.smobj.attrs[at_k].length());
-      std::string bkstr{bk.raw_c_str(), bk.raw_length()};
+      std::string bkstr = ret.smobj.attrs[at_k].to_str();
       std::cout << fmt::format("{}: verification: {}", __func__, bkstr)
 		<< std::endl;
     }
