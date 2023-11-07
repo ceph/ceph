@@ -523,6 +523,37 @@ class TestMisc(CephFSTestCase):
 
     def test_client_ls(self):
         self._session_client_ls(['client', 'ls'])
+
+
+class TestSessionClientEvict(CephFSTestCase):
+    CLIENTS_REQUIRED = 3
+
+    def _session_client_evict(self, cmd):
+        mount_a_client_id = self.mount_a.get_global_id()
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 3)
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_tell(cmd + ['evict'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        with self.assertRaises(CommandFailedError) as ce:
+            self.fs.rank_tell(cmd + ['evict', 'id=0'])
+        self.assertEqual(ce.exception.exitstatus, errno.EINVAL)
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 3)
+        self.fs.rank_asok(cmd + ['evict', f'id={mount_a_client_id}'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 2)
+        self.assertNotIn(mount_a_client_id, [val['id'] for val in info])
+        self.fs.rank_asok(cmd + ['evict', 'id=*'])
+        info = self.fs.rank_asok(cmd + ['ls'])
+        self.assertEqual(len(info), 0) # multiple clients are evicted
+
+    def test_session_evict(self):
+        self._session_client_evict(['session'])
+
+    def test_client_evict(self):
+        self._session_client_evict(['client'])
+
         
 class TestCacheDrop(CephFSTestCase):
     CLIENTS_REQUIRED = 1
