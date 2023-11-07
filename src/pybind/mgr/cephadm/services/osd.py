@@ -664,6 +664,7 @@ class OSD:
             return None
         self.started = True
         self.stopped = False
+        self.original_weight = self.rm_util.get_weight(self)
 
     def start_draining(self) -> bool:
         if self.stopped:
@@ -672,7 +673,6 @@ class OSD:
         if self.replace:
             self.rm_util.set_osd_flag([self], 'out')
         else:
-            self.original_weight = self.rm_util.get_weight(self)
             self.rm_util.reweight_osd(self, 0.0)
         self.drain_started_at = datetime.utcnow()
         self.draining = True
@@ -761,6 +761,7 @@ class OSD:
         out['force'] = self.force
         out['zap'] = self.zap
         out['hostname'] = self.hostname  # type: ignore
+        out['original_weight'] = self.original_weight
 
         for k in ['drain_started_at', 'drain_stopped_at', 'drain_done_at', 'process_started_at']:
             if getattr(self, k):
@@ -952,6 +953,16 @@ class OSDRemovalQueue(object):
         with self.lock:
             self.osds.add(osd)
         osd.start()
+
+    def rm_by_osd_id(self, osd_id: int) -> None:
+        osd: Optional["OSD"] = None
+        for o in self.osds:
+            if o.osd_id == osd_id:
+                osd = o
+        if not osd:
+            logger.debug(f"Could not find osd with id {osd_id} in queue.")
+            raise KeyError(f'No osd with id {osd_id} in removal queue')
+        self.rm(osd)
 
     def rm(self, osd: "OSD") -> None:
         if not osd.exists:
