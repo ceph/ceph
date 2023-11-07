@@ -19,6 +19,7 @@
 #include "common/ceph_argparse.h"
 #include "json_spirit/json_spirit.h"
 #include "gtest/gtest.h"
+#include "fmt/format.h"
 
 #include <stdint.h>
 #include <string.h>
