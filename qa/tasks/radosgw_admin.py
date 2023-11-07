@@ -23,6 +23,7 @@ from queue import Queue
 import boto.exception
 import boto.s3.connection
 import boto.s3.acl
+import boto.s3.bucket
 
 import httplib2
 
@@ -709,7 +710,6 @@ def task(ctx, config):
     key = boto.s3.key.Key(bucket, object_name)
     key.set_contents_from_string(object_name)
     rl.log_and_clear("put_obj", bucket_name, user1)
-
     # fetch it too (for usage stats presently)
     s = key.get_contents_as_string(encoding='ascii')
     rl.log_and_clear("get_obj", bucket_name, user1)
@@ -1047,16 +1047,6 @@ def task(ctx, config):
 
     time.sleep(5)
 
-    # should be all through with connection. (anything using connection
-    #  should be BEFORE the usage stuff above.)
-    rl.log_and_clear("(before-close)", '-', '-', ignore_this_entry)
-    connection.close()
-    connection = None
-
-    # the usage flush interval is 30 seconds, wait that much an then some
-    # to make sure everything has been flushed
-    time.sleep(35)
-
     # TESTCASE 'usage-trim' 'usage' 'trim' 'user usage' 'succeeds, usage removed'
     (err, out) = rgwadmin(ctx, client, ['usage', 'trim', '--uid', user1],
         check_status=True)
@@ -1106,6 +1096,84 @@ def task(ctx, config):
 
     # TESTCASE 'zonegroup-info', 'zonegroup', 'get', 'get zonegroup info', 'succeeds'
     (err, out) = rgwadmin(ctx, client, ['zonegroup', 'get'], check_status=True)
+
+    # TESTCASE 'add-storage-class', 'zonegroup', 'add', 'add storage class', 'succeeds'
+    storage_class = "GLACIER"
+    (err, out) = rgwadmin(ctx, client, ['zonegroup', 'placement', 'add', '--rgw-zonegroup', 'default', '--placement-id', 'default-placement', '--storage-class', storage_class], check_status=True)
+
+    # TESTCASE 'add-storage-class', 'zone', 'add', 'add storage class', 'succeeds'
+    data_pool = '.rgw.buckets.2'
+    (err, out) = rgwadmin(ctx, client, ['zone', 'placement', 'add', '--rgw-zone', 'default', '--placement-id', 'default-placement', '--storage-class', storage_class, '--data-pool', data_pool], check_status=True)
+
+    # TESTCASE 'create two users: user2,user3'
+    (err, out) = rgwadmin(ctx, client, [
+        'user', 'create',
+        '--uid', user2,
+        '--display-name', display_name2,
+        '--access-key', access_key2,
+        '--secret', secret_key2,
+        '--max-buckets', '4'
+        ],
+        check_status=True)
+
+    (err, out) = rgwadmin(ctx, client, [
+        'user', 'create',
+        '--uid', user3,
+        '--display-name', display_name3,
+        '--access-key', access_key3,
+        '--secret', secret_key3,
+        '--max-buckets', '4'
+        ],
+        check_status=True)
+
+    time.sleep(5)
+
+    # TESTCASE 'create bucket', 'put object with storage class', 'succeeds'
+    bucket = connection2.create_bucket(bucket_name)
+    objectname15 = "fifteen"
+    rl.log_and_clear("create_bucket", bucket_name, user2)
+    key = boto.s3.key.Key(bucket, objectname15)
+    key.storage_class = storage_class
+    key.set_contents_from_string(objectname15)
+    rl.log_and_clear("put_obj", bucket_name, user2)
+
+    # TESTCASE 'list objects', 'check the storage class', 'succeeds'
+    key15 = bucket.get_key(objectname15)
+    assert key15.storage_class == storage_class
+
+    # TESTCASE 'change owner', 'change the owner of the bucket', 'check the storage class', 'succeeds'
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'chown', '--bucket', bucket_name, '--uid', user3], check_status=True)
+    key15 = bucket.get_key(objectname15)
+    assert key15.storage_class == storage_class
+
+    # TESTCASE 'delete object', 'delete the object', 'succeeds'
+    bucket.delete_key('fifteen')
+    rl.log_and_clear("delete_obj", bucket_name, user3)
+
+    # TESTCASE 'delete bucket', 'delete the bucket', 'succeeds'
+    bucket.delete()
+    rl.log_and_clear("delete_bucket", bucket_name, user3)
+
+    # TESTCASE 'delete users'
+    (err, out) = rgwadmin(ctx, client,
+    ['user', 'rm', '--uid', user3, '--purge-data' ],
+    check_status=True)
+
+    (err, out) = rgwadmin(ctx, client,
+    ['user', 'rm', '--uid', user2, '--purge-data' ],
+    check_status=True)
+
+    time.sleep(5)
+
+    # should be all through with connection. (anything using connection
+    #  should be BEFORE the usage stuff above.)
+    rl.log_and_clear("(before-close)", '-', '-', ignore_this_entry)
+    connection.close()
+    connection = None
+
+    # the usage flush interval is 30 seconds, wait that much an then some
+    # to make sure everything has been flushed
+    time.sleep(35)
 
 from teuthology.config import config
 from teuthology.orchestra import cluster, remote

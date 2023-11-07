@@ -6532,18 +6532,27 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       bufferlist acl_bl;
       if (iter = attrs.find(RGW_ATTR_ACL); iter != attrs.end()) {
         acl_bl = iter->second;
+      } else if (auto i = state->attrset.find(RGW_ATTR_ACL);
+                 i != state->attrset.end()) {
+        acl_bl = i->second;
       }
       std::string etag;
       if (iter = attrs.find(RGW_ATTR_ETAG); iter != attrs.end()) {
         etag = rgw_bl_str(iter->second);
+      } else if (state->attrset.find(RGW_ATTR_ETAG) != state->attrset.end()) {
+        etag = rgw_bl_str(state->attrset.find(RGW_ATTR_ETAG)->second);
       }
       std::string content_type;
       if (iter = attrs.find(RGW_ATTR_CONTENT_TYPE); iter != attrs.end()) {
         content_type = rgw_bl_str(iter->second);
+      } else if (state->attrset.find(RGW_ATTR_CONTENT_TYPE) != state->attrset.end()) {
+        content_type = rgw_bl_str(state->attrset.find(RGW_ATTR_CONTENT_TYPE)->second);
       }
       string storage_class;
       if (iter = attrs.find(RGW_ATTR_STORAGE_CLASS); iter != attrs.end()) {
         storage_class = rgw_bl_str(iter->second);
+      } else if (state->attrset.find(RGW_ATTR_STORAGE_CLASS) != state->attrset.end()) {
+       storage_class = rgw_bl_str(state->attrset.find(RGW_ATTR_STORAGE_CLASS)->second);
       }
       uint64_t epoch = ioctx.get_last_version();
       int64_t poolid = ioctx.get_id();
