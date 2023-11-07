@@ -609,7 +609,7 @@ void ECBackend::continue_recovery_op(
 
       if (op.recovery_progress.first && op.obc) {
 	/* We've got the attrs and the hinfo, might as well use them */
-	op.hinfo = get_hash_info(op.hoid);
+	op.hinfo = get_hash_info(op.hoid, false, &op.obc->attr_cache);
 	if (!op.hinfo) {
           derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
                << dendl;
@@ -1103,7 +1103,14 @@ void ECBackend::handle_sub_read(
 	// Do NOT check osd_read_eio_on_bad_digest here.  We need to report
 	// the state of our chunk in case other chunks could substitute.
         ECUtil::HashInfoRef hinfo;
-        hinfo = get_hash_info(i->first);
+        map<string, bufferlist, less<>> attrs;
+        int r = PGBackend::objects_get_attrs(i->first, &attrs);
+        if (r >= 0) {
+          hinfo = get_hash_info(i->first, false, &attrs);
+	} else {
+          derr << "get_hash_info" << ": stat " << i->first << " failed: "
+               << cpp_strerror(r) << dendl;
+	}
         if (!hinfo) {
           r = -EIO;
           get_parent()->clog_error() << "Corruption detected: object "
@@ -1625,7 +1632,7 @@ void ECBackend::submit_transaction(
     sinfo,
     *(op->t),
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = get_hash_info(i, true);
+      ECUtil::HashInfoRef ref = get_hash_info(i, true, &op->t->obc_map[hoid]->attr_cache);
       if (!ref) {
 	derr << __func__ << ": get_hash_info(" << i << ")"
 	     << " returned a null pointer and there is no "
@@ -1905,7 +1912,7 @@ void ECBackend::do_read_op(ReadOp &op)
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool create, const map<string,bufferptr,less<>> *attrs)
+  const hobject_t &hoid, bool create, const map<string,bufferlist,less<>> *attrs)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
@@ -1920,23 +1927,12 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
     if (r >= 0) {
       dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
       bufferlist bl;
-      if (attrs) {
-	map<string, bufferptr>::const_iterator k = attrs->find(ECUtil::get_hinfo_key());
-	if (k == attrs->end()) {
-	  dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
-	} else {
-	  bl.push_back(k->second);
-	}
+      ceph_assert(attrs);
+      map<string, bufferlist>::const_iterator k = attrs->find(ECUtil::get_hinfo_key());
+      if (k == attrs->end()) {
+        dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
       } else {
-	r = store->getattr(
-	  ch,
-	  ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-	  ECUtil::get_hinfo_key(),
-	  bl);
-	if (r < 0) {
-	  dout(5) << __func__ << ": getattr failed: " << cpp_strerror(r) << dendl;
-	  bl.clear(); // just in case
-	}
+        bl = k->second;
       }
       if (bl.length() > 0) {
 	auto bp = bl.cbegin();
@@ -2548,10 +2544,8 @@ int ECBackend::objects_get_attrs(
   const hobject_t &hoid,
   map<string, bufferlist, less<>> *out)
 {
-  int r = store->getattrs(
-    ch,
-    ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-    *out);
+  // call from parents -- get raw attrs, without any filtering for hinfo
+  int r = PGBackend::objects_get_attrs(hoid, out);
   if (r < 0)
     return r;
 
