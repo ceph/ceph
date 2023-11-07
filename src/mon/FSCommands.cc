@@ -1234,6 +1234,22 @@ class RenameFilesystemHandler : public FileSystemCommandHandler
       mon->osdmon()->wait_for_writeable(op, new PaxosService::C_RetryMessage(mon->mdsmon(), op));
       return -EAGAIN;
     }
+
+    // Check that no MDS daemons is up for this CephFS.
+    if (fsp->get_mds_map().get_num_up_mds() > 0) {
+      ss << "CephFS '" << fs_name << "' is not offline. Before renaming "
+	 << "a CephFS, it must be marked as down. See `ceph fs fail`.";
+      return -EPERM;
+    }
+
+    // Check that refuse_client_session is set.
+    if (!fsp->get_mds_map().test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION)) {
+      ss << "CephFS '" << fs_name << "' doesn't refuse clients. Before "
+	 << "renaming a CephFS, flag 'refuse_client_session' must be set. "
+	 << "See `ceph fs set`.";
+      return -EPERM;
+    }
+
     for (const auto p : fsp->get_mds_map().get_data_pools()) {
       mon->osdmon()->do_application_enable(p,
 					   pg_pool_t::APPLICATION_NAME_CEPHFS,
