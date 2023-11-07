@@ -1,0 +1,36 @@
+.health-indicators {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin-bottom: 20px;
+  }
+  
+  .indicator {
+    text-align: center;
+  }
+  
+  .status {
+    font-weight: bold;
+    margin-bottom: 5px;
+  }
+  
+  .healthy {
+    color: green;
+  }
+  
+  .warning {
+    color: orange;
+  }
+  
+  .error {
+    color: red;
+  }
+
+  .align-cards {
+    margin-bottom: 1.5em;
+  }
+
+  .value {
+    font-size: 4.5em;
+  }
+  

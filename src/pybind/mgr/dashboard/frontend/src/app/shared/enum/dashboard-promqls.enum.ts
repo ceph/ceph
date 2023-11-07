@@ -16,3 +16,21 @@ export enum RgwPromqls {
   GET_BANDWIDTH = 'sum(rate(ceph_rgw_get_b[1m]))',
   PUT_BANDWIDTH = 'sum(rate(ceph_rgw_put_b[1m]))'
 }
+
+export enum MultiClusterPromqls {
+  ALERTS_COUNT = 'count(ALERTS{alertstate=\"firing\"}) or vector(0)',
+  CLUSTER_COUNT = 'count(ceph_health_status) or vector(0)',
+  HEALTH_OK_COUNT = 'count(ceph_health_status==0) or vector(0)',
+  HEALTH_WARNING_COUNT = 'count(ceph_health_status==1) or vector(0)',
+  HEALTH_ERROR_COUNT = 'count(ceph_health_status==2) or vector(0)',
+  TOTAL_CLUSTERS_CAPACITY = 'sum(ceph_cluster_total_bytes) or vector(0)',
+  TOTAL_USED_CAPACITY = 'sum(ceph_cluster_by_class_total_used_bytes) or vector(0)',
+  HEALTH_STATUS = 'ceph_health_status',
+  TOTAL_CAPACITY = 'ceph_cluster_total_bytes',
+  USED_CAPACITY = 'ceph_cluster_total_used_bytes',
+  POOLS = 'count by (cluster) (ceph_pool_metadata) or vector(0)',
+  OSDS = 'count by (cluster) (ceph_osd_metadata) or vector(0)',
+  CRITICAL_ALERTS_COUNT = 'count(ALERTS{alertstate=\"firing\",severity=\"critical\"}) or vector(0)',
+  WARNING_ALERTS_COUNT = 'count(ALERTS{alertstate=\"firing\",severity=\"warning\"}) or vector(0)',
+  ALERTS = 'ALERTS'
+}

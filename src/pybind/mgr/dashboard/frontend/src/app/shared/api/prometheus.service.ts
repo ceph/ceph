@@ -1,7 +1,7 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import { Observable, Subscription, timer } from 'rxjs';
+import { Observable, Subscription, forkJoin, timer } from 'rxjs';
 import { map } from 'rxjs/operators';
 
 import { AlertmanagerSilence } from '../models/alertmanager-silence';
@@ -41,6 +41,12 @@ export class PrometheusService {
   getPrometheusData(params: any): any {
     return this.http.get<any>(`${this.baseURL}/data`, { params });
   }
+
+  getMultiClusterData(params: any): any {
+    return this.http.get<any>(`${this.baseURL}/multi_cluster_data`, { params });
+  }
+
+  
 
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
     this.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
@@ -152,6 +158,8 @@ export class PrometheusService {
               end: selectedTime['end'],
               step: selectedTime['step']
             }).subscribe((data: any) => {
+              console.log(data);
+              
               if (data.result.length) {
                 queriesResults[queryName] = data.result[0].values;
               }
@@ -175,6 +183,70 @@ export class PrometheusService {
       });
     });
     return queriesResults;
+  }
+
+
+  getMultiClusterQueriesData(
+    selectedTime: any,
+    queries: any,
+    queriesResults: any,
+    checkNan?: boolean
+  ) {
+    return new Observable(observer => {
+      this.ifPrometheusConfigured(() => {
+        if (this.timerGetPrometheusDataSub) {
+          this.timerGetPrometheusDataSub.unsubscribe();
+        }
+        
+        const requests = [];
+        for (const queryName in queries) {
+          if (queries.hasOwnProperty(queryName)) {
+            const query = queries[queryName];
+            const request = this.getMultiClusterData({
+              params: encodeURIComponent(query),
+              start: selectedTime['start'],
+              end: selectedTime['end'],
+              step: selectedTime['step']
+            });
+            requests.push(request);
+          }
+        }
+  
+        forkJoin(requests).subscribe(
+          (responses: any[]) => {
+            for (let i = 0; i < responses.length; i++) {
+              const data = responses[i];
+              const queryName = Object.keys(queries)[i];
+              const validQueries = ['ALERTS', 'HEALTH_STATUS', 'TOTAL_CAPACITY', 'USED_CAPACITY', 'POOLS', 'OSDS'];
+              if (validQueries.includes(queryName) && data.result.length > 0) {
+                queriesResults[queryName] = data.result;
+              }
+              else {
+                if (data.result.length) {                
+                  queriesResults[queryName] = data.result.map((result: { value: any; }) => result.value);
+                }
+              }
+              if (queriesResults[queryName] !== undefined && queriesResults[queryName] !== '' && checkNan) {
+                queriesResults[queryName].forEach((valueArray: string[]) => {
+                  if (valueArray.includes('NaN')) {
+                    const index = valueArray.indexOf('NaN');
+                    if (index !== -1) {
+                      valueArray[index] = '0';
+                    }
+                  }
+                });
+              }
+            }
+            
+            observer.next(queriesResults);
+            observer.complete();
+          },
+          error => {
+            observer.error(error);
+          }
+        );
+      });
+    });
   }
 
   private updateTimeStamp(selectedTime: any): any {
