@@ -892,11 +892,11 @@ PG::do_osd_ops_execute(
         });
       });
     }), OpsExecuter::osd_op_errorator::all_same_way(
-        [rollbacker, failure_func_ptr]
+        [this, rollbacker, failure_func_ptr]
         (const std::error_code& e) mutable {
           return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-          [e, failure_func_ptr] {
-            return (*failure_func_ptr)(e);
+          [this, e, failure_func_ptr] {
+            return (*failure_func_ptr)(e , shard_services.get_tid());
           });
     }));
 
@@ -905,16 +905,17 @@ PG::do_osd_ops_execute(
       std::move(all_completed_fut)
     );
   }, OpsExecuter::osd_op_errorator::all_same_way(
-    [rollbacker, failure_func_ptr]
+    [this, rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
 
     auto submitted_fut = seastar::now();
+    ceph_tid_t rep_tid = shard_services.get_tid();
 
     auto all_completed_fut = e.value() == ENOENT ?
-      (*failure_func_ptr)(e) :
+      (*failure_func_ptr)(e, rep_tid) :
       rollbacker.rollback_obc_if_modified(e).then_interruptible(
-      [e, failure_func_ptr] {
-          return (*failure_func_ptr)(e);
+      [e, failure_func_ptr, rep_tid] {
+          return (*failure_func_ptr)(e, rep_tid);
       });
 
     return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
@@ -1041,11 +1042,10 @@ PG::do_osd_ops(
         std::move(reply));
     },
     // failure_func
-    [m, &op_info, obc, this] (const std::error_code& e) {
+    [m, &op_info, obc, this] (const std::error_code& e, const ceph_tid_t& rep_tid) {
     logger().error("do_osd_ops_execute::failure_func {} got error: {}", *m, e);
     auto error_log_fut = seastar::now();
     epoch_t epoch = get_osdmap_epoch();
-    ceph_tid_t rep_tid = shard_services.get_tid();
     auto last_complete = peering_state.get_info().last_complete;
     if (op_info.may_write()) {
       error_log_fut = submit_error_log(m, op_info, obc, e, rep_tid);
@@ -1142,7 +1142,7 @@ PG::do_osd_ops(
         return do_osd_ops_iertr::now();
       },
       // failure_func
-      [] (const std::error_code& e) {
+      [] (const std::error_code& e, const ceph_tid_t& rep_tid) {
         return do_osd_ops_iertr::now();
       });
   });
