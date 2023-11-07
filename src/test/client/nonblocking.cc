@@ -18,8 +18,17 @@
 #include <string>
 
 #include <fmt/format.h>
+#include <signal.h>
+#include <unistd.h>
 
 #include "test/client/TestClient.h"
+#include "global/global_context.h"
+
+#define dout_subsys ceph_subsys_client
+
+void signal_handler(int sig) {
+  ldout(10, cct) << "Interrupted system call received: " << sig << dendl;
+}
 
 TEST_F(TestClient, LlreadvLlwritev) {
   int mypid = getpid();
