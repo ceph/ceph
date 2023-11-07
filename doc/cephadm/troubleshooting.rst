@@ -210,7 +210,7 @@ troubleshoot the SSH connection between ``cephadm`` and the monitor:
 
  or::
 
-     [root@mon1 ~]# cat ~/cephadm_private_key | cephadm shell -- ceph cephadm set-ssk-key -i -
+     [root@mon1 ~]# cat ~/cephadm_private_key | cephadm shell -- ceph cephadm set-ssh-key -i -
 
 2. Ensure that the SSH config is correct::
 
