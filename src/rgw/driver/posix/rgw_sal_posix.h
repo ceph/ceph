@@ -52,10 +52,9 @@ public:
 				std::string& user_str, optional_yield y,
 				std::unique_ptr<User>* user) override;
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
-  virtual std::unique_ptr<Bucket> get_bucket(User* u, const RGWBucketInfo& i)  override;
-  virtual int load_bucket(const DoutPrefixProvider* dpp, User* u, const
-			  rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
-			  optional_yield y) override;
+  virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
+  virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                          std::unique_ptr<Bucket>* bucket, optional_yield y) override;
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
 
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
@@ -143,16 +142,16 @@ private:
   std::optional<std::string> ns;
 
 public:
-  POSIXBucket(POSIXDriver *_dr, int _p_fd, const rgw_bucket& _b, User* _u, std::optional<std::string> _ns = std::nullopt)
-    : StoreBucket(_b, _u),
+  POSIXBucket(POSIXDriver *_dr, int _p_fd, const rgw_bucket& _b, std::optional<std::string> _ns = std::nullopt)
+    : StoreBucket(_b),
     driver(_dr),
     parent_fd(_p_fd),
     acls(),
     ns(_ns)
     { }
 
-  POSIXBucket(POSIXDriver *_dr, int _p_fd, const RGWBucketInfo& _i, User* _u)
-    : StoreBucket(_i, _u),
+  POSIXBucket(POSIXDriver *_dr, int _p_fd, const RGWBucketInfo& _i)
+    : StoreBucket(_i),
     driver(_dr),
     parent_fd(_p_fd),
     acls()
@@ -201,7 +200,7 @@ public:
                               RGWBucketEnt* ent) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp,
                                   uint64_t num_objs, optional_yield y) override;
-  virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) override;
+  virtual int chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
 		       ceph::real_time mtime, optional_yield y) override;
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;

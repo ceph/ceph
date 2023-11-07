@@ -348,16 +348,16 @@ std::unique_ptr<Object> POSIXDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<POSIXObject>(this, k);
 }
 
-int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  *bucket = std::make_unique<POSIXBucket>(this, root_fd, b, u);
+  *bucket = std::make_unique<POSIXBucket>(this, root_fd, b);
   return (*bucket)->load_bucket(dpp, y);
 }
 
-std::unique_ptr<Bucket> POSIXDriver::get_bucket(User* u, const RGWBucketInfo& i)
+std::unique_ptr<Bucket> POSIXDriver::get_bucket(const RGWBucketInfo& i)
 {
   /* Don't need to fetch the bucket info, use the provided one */
-  return std::make_unique<POSIXBucket>(this, root_fd, i, u);
+  return std::make_unique<POSIXBucket>(this, root_fd, i);
 }
 
 std::string POSIXDriver::zone_unique_trans_id(const uint64_t unique_num)
@@ -525,8 +525,7 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp,
 			const CreateParams& params,
 			optional_yield y)
 {
-  ceph_assert(owner);
-  info.owner = owner->get_id();
+  info.owner = params.owner;
 
   info.bucket.marker = params.marker;
   info.bucket.bucket_id = params.bucket_id;
@@ -632,7 +631,7 @@ int POSIXDriver::mint_listing_entry(const std::string &bname,
     POSIXObject *pobj;
     int ret;
 
-    ret = load_bucket(nullptr, nullptr, rgw_bucket(std::string(), bname),
+    ret = load_bucket(nullptr, rgw_bucket(std::string(), bname),
                       &b, null_yield);
     if (ret < 0)
       return ret;
@@ -883,10 +882,6 @@ int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
   mtime = ceph::real_clock::from_time_t(stx.stx_mtime.tv_sec);
   info.creation_time = ceph::real_clock::from_time_t(stx.stx_btime.tv_sec);
 
-  if (owner) {
-    info.owner = owner->get_id();
-  }
-
   ret = open(dpp);
   if (ret < 0) {
     return ret;
@@ -981,7 +976,7 @@ int POSIXBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int POSIXBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
+int POSIXBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
 {
   /* TODO map user to UID/GID, and change it */
   return 0;
@@ -1204,7 +1199,7 @@ int POSIXBucket::get_shadow_bucket(const DoutPrefixProvider* dpp, optional_yield
 
   open(dpp);
 
-  bp = new POSIXBucket(driver, dir_fd, b, owner, ons);
+  bp = new POSIXBucket(driver, dir_fd, b, ons);
   ret = bp->load_bucket(dpp, y);
   if (ret == -ENOENT && create) {
     /* Create it if it doesn't exist */
