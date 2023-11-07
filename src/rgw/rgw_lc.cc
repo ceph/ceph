@@ -1331,16 +1331,7 @@ public:
 
     /* notifications */
     auto& bucket = oc.bucket;
-    auto& bucket_info = oc.bucket->get_info();
     std::string version_id;
-
-    std::unique_ptr<rgw::sal::User> user;
-    user = oc.driver->get_user(bucket_info.owner);
-    if (! bucket->get_owner()) {
-      if (user) {
-	bucket->set_owner(user.get());
-      }
-    }
 
     auto& obj = oc.obj;
 
@@ -1619,18 +1610,10 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     return 0;
   }
 
-  int ret = driver->load_bucket(this, nullptr,
-                                rgw_bucket(bucket_tenant, bucket_name),
+  int ret = driver->load_bucket(this, rgw_bucket(bucket_tenant, bucket_name),
                                 &bucket, null_yield);
   if (ret < 0) {
     ldpp_dout(this, 0) << "LC:get_bucket for " << bucket_name
-		       << " failed" << dendl;
-    return ret;
-  }
-
-  ret = bucket->load_bucket(this, null_yield);
-  if (ret < 0) {
-    ldpp_dout(this, 0) << "LC:load_bucket for " << bucket_name
 		       << " failed" << dendl;
     return ret;
   }
@@ -1755,15 +1738,6 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       }
     }
     worker->workpool->drain();
-  }
-
-  std::unique_ptr<rgw::sal::User> user;
-  if (! bucket->get_owner()) {
-    auto& bucket_info = bucket->get_info();
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(bucket_info.owner);
-      if (user) {
-	bucket->set_owner(user.get());
-      }
   }
 
   ret = handle_multipart_expiration(bucket.get(), prefix_map, worker, stop_at, once);

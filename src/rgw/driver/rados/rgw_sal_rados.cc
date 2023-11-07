@@ -124,15 +124,12 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
                         const CreateParams& params,
                         optional_yield y)
 {
-  ceph_assert(owner);
-  const rgw_user& owner_id = owner->get_id();
-
   rgw_bucket key = get_key();
   key.marker = params.marker;
   key.bucket_id = params.bucket_id;
 
   int ret = store->getRados()->create_bucket(
-      dpp, y, key, owner_id, params.zonegroup_id,
+      dpp, y, key, params.owner, params.zonegroup_id,
       params.placement_rule, params.zone_placement, params.attrs,
       params.obj_lock_enabled, params.swift_ver_location,
       params.quota, params.creation_time, &bucket_version, info);
@@ -146,7 +143,7 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
      * If all is ok then update the user's list of buckets.  Otherwise inform
      * client about a name conflict.
      */
-    if (info.owner != owner_id) {
+    if (info.owner != params.owner) {
       return -ERR_BUCKET_EXISTS;
     }
     ret = 0;
@@ -154,10 +151,10 @@ int RadosBucket::create(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  ret = link(dpp, owner, y, false);
+  ret = link(dpp, params.owner, y, false);
   if (ret && !existed && ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    ret = unlink(dpp, owner, y);
+    ret = unlink(dpp, params.owner, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << ret
 		       << dendl;
@@ -542,7 +539,7 @@ int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
 int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
                                  RGWBucketEnt* ent)
 {
-  return store->ctl()->bucket->sync_user_stats(dpp, owner->get_id(), info, y, ent);
+  return store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y, ent);
 }
 
 int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
@@ -551,17 +548,17 @@ int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return store->getRados()->check_bucket_shards(info, num_objs, dpp, y);
 }
 
-int RadosBucket::link(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv)
+int RadosBucket::link(const DoutPrefixProvider* dpp, const rgw_user& new_user, optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv)
 {
   RGWBucketEntryPoint ep;
   ep.bucket = info.bucket;
-  ep.owner = new_user->get_id();
+  ep.owner = new_user;
   ep.creation_time = get_creation_time();
   ep.linked = true;
   Attrs ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
 
-  int r = store->ctl()->bucket->link_bucket(new_user->get_id(), info.bucket,
+  int r = store->ctl()->bucket->link_bucket(new_user, info.bucket,
 					    get_creation_time(), y, dpp, update_entrypoint,
 					    &ep_data);
   if (r < 0)
@@ -573,27 +570,20 @@ int RadosBucket::link(const DoutPrefixProvider* dpp, User* new_user, optional_yi
   return r;
 }
 
-int RadosBucket::unlink(const DoutPrefixProvider* dpp, User* new_user, optional_yield y, bool update_entrypoint)
+int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_user& owner, optional_yield y, bool update_entrypoint)
 {
-  return store->ctl()->bucket->unlink_bucket(new_user->get_id(), info.bucket, y, dpp, update_entrypoint);
+  return store->ctl()->bucket->unlink_bucket(owner, info.bucket, y, dpp, update_entrypoint);
 }
 
-int RadosBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
+int RadosBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
 {
   std::string obj_marker;
-  int r;
-
-  if (!owner) {
-      ldpp_dout(dpp, 0) << __func__ << " Cannot chown without an owner " << dendl;
-      return -EINVAL;
-  }
-
-  r = this->unlink(dpp, owner, y);
+  int r = this->unlink(dpp, info.owner, y);
   if (r < 0) {
     return r;
   }
 
-  return this->link(dpp, &new_user, y);
+  return this->link(dpp, new_owner, y);
 }
 
 int RadosBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time _mtime, optional_yield y)
@@ -633,14 +623,14 @@ int RadosBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			       RGWUsageIter& usage_iter,
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage)
 {
-  return store->getRados()->read_usage(dpp, owner->get_id(), get_name(), start_epoch,
+  return store->getRados()->read_usage(dpp, info.owner, get_name(), start_epoch,
 				       end_epoch, max_entries, is_truncated,
 				       usage_iter, usage);
 }
 
 int RadosBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
 {
-  return store->getRados()->trim_usage(dpp, owner->get_id(), get_name(), start_epoch, end_epoch, y);
+  return store->getRados()->trim_usage(dpp, info.owner, get_name(), start_epoch, end_epoch, y);
 }
 
 int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
@@ -987,16 +977,16 @@ std::unique_ptr<Object> RadosStore::get_object(const rgw_obj_key& k)
   return std::make_unique<RadosObject>(this, k);
 }
 
-std::unique_ptr<Bucket> RadosStore::get_bucket(User* u, const RGWBucketInfo& i)
+std::unique_ptr<Bucket> RadosStore::get_bucket(const RGWBucketInfo& i)
 {
   /* Don't need to fetch the bucket info, use the provided one */
-  return std::make_unique<RadosBucket>(this, i, u);
+  return std::make_unique<RadosBucket>(this, i);
 }
 
-int RadosStore::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b,
+int RadosStore::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                             std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  *bucket = std::make_unique<RadosBucket>(this, b, u);
+  *bucket = std::make_unique<RadosBucket>(this, b);
   return (*bucket)->load_bucket(dpp, y);
 }
 
@@ -2102,7 +2092,7 @@ int RadosObject::swift_versioning_restore(bool& restored,
 {
   rgw_obj obj = get_obj();
   return store->getRados()->swift_versioning_restore(*rados_ctx,
-						     bucket->get_owner()->get_id(),
+						     bucket->get_owner(),
 						     bucket->get_info(),
 						     obj,
 						     restored,

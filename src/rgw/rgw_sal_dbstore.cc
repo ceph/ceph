@@ -62,15 +62,12 @@ namespace rgw::sal {
                        const CreateParams& params,
                        optional_yield y)
   {
-    ceph_assert(owner);
-    const rgw_user& owner_id = owner->get_id();
-
     rgw_bucket key = get_key();
     key.marker = params.marker;
     key.bucket_id = params.bucket_id;
 
     /* XXX: We may not need to send all these params. Cleanup the unused ones */
-    return store->getDB()->create_bucket(dpp, owner_id, key,
+    return store->getDB()->create_bucket(dpp, params.owner, key,
         params.zonegroup_id, params.placement_rule, params.attrs,
         params.swift_ver_location, params.quota, params.creation_time,
         &bucket_version, info, y);
@@ -241,11 +238,11 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y)
+  int DBBucket::chown(const DoutPrefixProvider *dpp, const rgw_user& new_owner, optional_yield y)
   {
     int ret;
 
-    ret = store->getDB()->update_bucket(dpp, "owner", info, false, &(new_user.get_id()), nullptr, nullptr, nullptr);
+    ret = store->getDB()->update_bucket(dpp, "owner", info, false, &new_owner, nullptr, nullptr, nullptr);
     return ret;
   }
 
@@ -1552,16 +1549,16 @@ namespace rgw::sal {
   }
 
 
-  std::unique_ptr<Bucket> DBStore::get_bucket(User* u, const RGWBucketInfo& i)
+  std::unique_ptr<Bucket> DBStore::get_bucket(const RGWBucketInfo& i)
   {
     /* Don't need to fetch the bucket info, use the provided one */
-    return std::make_unique<DBBucket>(this, i, u);
+    return std::make_unique<DBBucket>(this, i);
   }
 
-  int DBStore::load_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b,
+  int DBStore::load_bucket(const DoutPrefixProvider *dpp, const rgw_bucket& b,
                            std::unique_ptr<Bucket>* bucket, optional_yield y)
   {
-    *bucket = std::make_unique<DBBucket>(this, b, u);
+    *bucket = std::make_unique<DBBucket>(this, b);
     return (*bucket)->load_bucket(dpp, y);
   }
 

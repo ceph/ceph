@@ -80,7 +80,6 @@ class StoreUser : public User {
 class StoreBucket : public Bucket {
   protected:
     RGWBucketInfo info;
-    User* owner = nullptr;
     Attrs attrs;
     obj_version bucket_version;
     ceph::real_time mtime;
@@ -88,22 +87,13 @@ class StoreBucket : public Bucket {
   public:
 
     StoreBucket() = default;
-    StoreBucket(User* u) : owner(u) { }
     StoreBucket(const rgw_bucket& b) { info.bucket = b; }
     StoreBucket(const RGWBucketInfo& i) : info(i) {}
-    StoreBucket(const rgw_bucket& b, User* u) : owner(u) { info.bucket = b; }
-    StoreBucket(const RGWBucketInfo& i, User* u) : info(i), owner(u) {}
     virtual ~StoreBucket() = default;
 
     virtual Attrs& get_attrs(void) override { return attrs; }
     virtual int set_attrs(Attrs a) override { attrs = a; return 0; }
-    virtual void set_owner(rgw::sal::User* _owner) override {
-      owner = _owner;
-      info.owner = owner->get_id();
-    }
-    virtual User* get_owner(void) override { return owner; };
-    /* Make sure to call get_bucket_info() if you need it first */
-    virtual bool is_owner(User* user) override { return (info.owner.compare(user->get_id()) == 0); }
+    virtual const rgw_user& get_owner() const override { return info.owner; };
     virtual bool empty() const override { return info.bucket.name.empty(); }
     virtual const std::string& get_name() const override { return info.bucket.name; }
     virtual const std::string& get_tenant() const override { return info.bucket.tenant; }

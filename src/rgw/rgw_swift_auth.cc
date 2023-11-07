@@ -119,7 +119,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   b.tenant = std::move(bucket_tenant);
   b.name = std::move(bucket_name);
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = driver->load_bucket(dpp, nullptr, b, &bucket, s->yield);
+  int ret = driver->load_bucket(dpp, b, &bucket, s->yield);
   if (ret < 0) {
     throw ret;
   }

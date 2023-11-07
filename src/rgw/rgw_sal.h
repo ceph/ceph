@@ -291,10 +291,10 @@ class Driver {
      * there is a Bucket, otherwise use the get_object() in the Bucket class. */
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) = 0;
     /** Get a Bucket by info.  Does not query the driver, just uses the give bucket info. */
-    virtual std::unique_ptr<Bucket> get_bucket(User* u, const RGWBucketInfo& i) = 0;
+    virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) = 0;
     /** Load a Bucket by key.  Queries driver for bucket info.  On -ENOENT, the
      * bucket must still be allocated to support bucket->create(). */
-    virtual int load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b,
+    virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                             std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
     /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;
@@ -647,11 +647,9 @@ class Bucket {
     /** Set the ACL for this bucket */
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) = 0;
 
-    // XXXX hack
-    virtual void set_owner(rgw::sal::User* _owner) = 0;
-
     /// Input parameters for create().
     struct CreateParams {
+      rgw_user owner;
       std::string zonegroup_id;
       rgw_placement_rule placement_rule;
       // zone placement is optional on buckets created for another zonegroup
@@ -692,13 +690,11 @@ class Bucket {
                                     uint64_t num_objs, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
      * change ownership of the objects in the bucket. */
-    virtual int chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y) = 0;
+    virtual int chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y) = 0;
     /** Store the cached bucket info into the backing store */
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) = 0;
-    /** Check to see if the given user is the owner of this bucket */
-    virtual bool is_owner(User* user) = 0;
     /** Get the owner of this bucket */
-    virtual User* get_owner(void) = 0;
+    virtual const rgw_user& get_owner() const = 0;
     /** Check in the backing store if this bucket is empty */
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Chec k if the given size fits within the quota */

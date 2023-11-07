@@ -30,18 +30,19 @@ void RGWOp_Usage_Get::execute(optional_yield y) {
 
   string uid_str;
   string bucket_name;
+  string tenant;
   uint64_t start, end;
   bool show_entries;
   bool show_summary;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
+  RESTArgs::get_string(s, "tenant", "", &tenant);
   std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(uid_str));
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (!bucket_name.empty()) {
-    op_ret = driver->load_bucket(nullptr, user.get(),
-                                 rgw_bucket(std::string(), bucket_name),
+    op_ret = driver->load_bucket(this, rgw_bucket(tenant, bucket_name),
                                  &bucket, null_yield);
     if (op_ret < 0) {
       return;
@@ -84,16 +85,17 @@ public:
 void RGWOp_Usage_Delete::execute(optional_yield y) {
   string uid_str;
   string bucket_name;
+  string tenant;
   uint64_t start, end;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "bucket", bucket_name, &bucket_name);
+  RESTArgs::get_string(s, "tenant", "", &tenant);
   std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(uid_str));
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (!bucket_name.empty()) {
-    op_ret = driver->load_bucket(nullptr, user.get(),
-                                 rgw_bucket(std::string(), bucket_name),
+    op_ret = driver->load_bucket(this, rgw_bucket(tenant, bucket_name),
                                  &bucket, null_yield);
     if (op_ret < 0) {
       return;
