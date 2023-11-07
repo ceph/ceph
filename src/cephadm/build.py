@@ -190,6 +190,7 @@ def _install_deps(tempdir, config):
     env = os.environ.copy()
     env['CC'] = '/bin/false'
     env['CXX'] = '/bin/false'
+    env['LC_ALL'] = 'C.UTF-8'  # work around some env issues with pip
     if env.get('PYTHONPATH'):
         env['PYTHONPATH'] = env['PYTHONPATH'] + f':{tempdir}'
     else:
