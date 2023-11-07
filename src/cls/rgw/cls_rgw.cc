@@ -1710,7 +1710,7 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       mtime.tv_nsec = 0;
       unmod.tv_nsec = 0;
     }
-    if (mtime >= unmod) {
+    if (mtime > unmod) {
       return 0; /* no need tof set error, we just return 0 and avoid
 		 * writing to the bi log */
     }
