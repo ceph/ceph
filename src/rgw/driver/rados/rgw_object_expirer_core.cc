@@ -201,7 +201,7 @@ int RGWObjectExpirer::garbage_single_object(const DoutPrefixProvider *dpp, objex
   RGWBucketInfo bucket_info;
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
-  int ret = driver->load_bucket(dpp, nullptr, rgw_bucket(hint.tenant, hint.bucket_name, hint.bucket_id), &bucket, null_yield);
+  int ret = driver->load_bucket(dpp, rgw_bucket(hint.tenant, hint.bucket_name, hint.bucket_id), &bucket, null_yield);
   if (-ENOENT == ret) {
     ldpp_dout(dpp, 15) << "NOTICE: cannot find bucket = " \
         << hint.bucket_name << ". The object must be already removed" << dendl;
