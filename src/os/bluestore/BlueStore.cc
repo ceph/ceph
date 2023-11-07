@@ -1585,7 +1585,7 @@ public:
 #ifdef DEBUG_CACHE
   void _audit(const char *when) override
   {
-    dout(10) << __func__ << " " << when << " start" << dendl;
+    dout(10) << __func__ << " start" << dendl;
     uint64_t s = 0;
     for (auto i = hot.begin(); i != hot.end(); ++i) {
       ceph_assert(i->cache_private == BUFFER_HOT);
