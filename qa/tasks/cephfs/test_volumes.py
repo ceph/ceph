@@ -3736,14 +3736,6 @@ class TestSubvolumes(TestVolumesHelper):
         # verify trash dir is clean
         self._wait_for_trash_empty()
 
-    def test_subvolume_rm_force(self):
-        # test removing non-existing subvolume with --force
-        subvolume = self._gen_subvol_name()
-        try:
-            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--force")
-        except CommandFailedError:
-            self.fail("expected the 'fs subvolume rm --force' command to succeed")
-
     def test_subvolume_exists_with_subvolumegroup_and_subvolume(self):
         """Test the presence of any subvolume by specifying the name of subvolumegroup"""
 
@@ -4344,6 +4336,46 @@ class TestSubvolumes(TestVolumesHelper):
 
         # verify trash dir is clean.
         self._wait_for_trash_empty()
+
+
+class TestSubVolumeRm(TestVolumesHelper):
+
+    def test_subvolume_rm_force(self):
+        # test removing non-existing subvolume with --force
+        subvolume = self._gen_subvol_name()
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--force")
+        except CommandFailedError:
+            self.fail("expected the 'fs subvolume rm --force' command to succeed")
+
+    def test_subvolume_rm_with_snapshots(self):
+        subvolume = self._gen_subvol_name()
+        snapshot = self._gen_subvol_snap_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # snapshot subvolume
+        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
+
+        # remove subvolume -- should fail with ENOTEMPTY since it has snapshots
+        try:
+            self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.ENOTEMPTY:
+                raise RuntimeError("invalid error code returned when deleting subvolume with snapshots")
+        else:
+            raise RuntimeError("expected subvolume deletion to fail")
+
+        # remove snapshot
+        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
 
 class TestSubvolumeGroupSnapshots(TestVolumesHelper):
     """Tests for FS subvolume group snapshot operations."""
@@ -5103,34 +5135,6 @@ class TestSubvolumeSnapshots(TestVolumesHelper):
 
         # recreate subvolume
         self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # remove snapshot
-        self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
-
-        # remove subvolume
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
-
-        # verify trash dir is clean
-        self._wait_for_trash_empty()
-
-    def test_subvolume_rm_with_snapshots(self):
-        subvolume = self._gen_subvol_name()
-        snapshot = self._gen_subvol_snap_name()
-
-        # create subvolume
-        self._fs_cmd("subvolume", "create", self.volname, subvolume)
-
-        # snapshot subvolume
-        self._fs_cmd("subvolume", "snapshot", "create", self.volname, subvolume, snapshot)
-
-        # remove subvolume -- should fail with ENOTEMPTY since it has snapshots
-        try:
-            self._fs_cmd("subvolume", "rm", self.volname, subvolume)
-        except CommandFailedError as ce:
-            if ce.exitstatus != errno.ENOTEMPTY:
-                raise RuntimeError("invalid error code returned when deleting subvolume with snapshots")
-        else:
-            raise RuntimeError("expected subvolume deletion to fail")
 
         # remove snapshot
         self._fs_cmd("subvolume", "snapshot", "rm", self.volname, subvolume, snapshot)
