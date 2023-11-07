@@ -18,8 +18,7 @@ import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
-// import { MultiClusterService } from '../api/multi-cluster.service';
-// import { SummaryService } from './summary.service';
+import { MultiClusterService } from '../api/multi-cluster.service';
 // import { SummaryService } from './summary.service';
 
 export class CdHttpErrorResponse extends HttpErrorResponse {
@@ -32,57 +31,31 @@ export class CdHttpErrorResponse extends HttpErrorResponse {
 })
 export class ApiInterceptorService implements HttpInterceptor {
   // private URL: string;
-  // private apiUrl: string;
-  // private token: string;
+  private apiUrl: string;
+  private token: string;
   constructor(
     private router: Router,
     private authStorageService: AuthStorageService,
-    public notificationService: NotificationService
-  ) // private multiClusterService: MultiClusterService,
-  // private summaryservice: SummaryService
-  {
-    // this.multiClusterService.getCluster().subscribe((cluster: any) => {
-    //   console.log(cluster['config']);
-    //   this.token = cluster['config'].filter((item: any) =>
-    //     item['token'] ? item['url'] === this.apiUrl : null
-    //   );
-    //   console.log('here', this.token);
-    // });
-    // this.summaryservice.subscribe((summary) => {
-    //   this.URL = summary.current_url;
-    // });
+    public notificationService: NotificationService,
+    private multiClusterService: MultiClusterService // private summaryservice: SummaryService
+  ) {
+    this.multiClusterService.subscribe((resp: string) => {
+      // assign urls from resp['config ] array to clusters array
+      // console.log(resp['current_url']);
+      this.apiUrl = resp['current_url'];
+      resp['config']?.forEach((config: any) => {
+        if (config['url'] === this.apiUrl) {
+          this.token = config['token'];
+        }
+      });
+    });
   }
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     const acceptHeader = request.headers.get('Accept');
     let reqWithVersion: HttpRequest<any>;
-    // let params = new HttpParams();
-    // if request.body doesn't contain a key called stack
-    // we add the stack to the request body
-    // this is needed to identify the request on the backend
-    // let body = '';
-    // if (!request.body?.stack && request.body !== null) {
-    //   body = JSON.stringify(request.body);
-    // }
+
     const origin = window.location.origin;
-    // if (body !== null || body !== undefined) {
-    //   params = params.appendAll({
-    //     path: `${request.url}`,
-    //     method: `${request.method}`,
-    //     payload: `${body}`
-    //   });
-    // } else {
-    //   params = params.appendAll({
-    //     path: `${request.url}`,
-    //     method: `${request.method}`
-    //   });
-    // }
-    // if(request.url.includes('api/prometheus')) {
-    //   params = params.appendAll({
-    //     api_name: 'prometheus'
-    //   })
-    // }
-    // console.log(this.URL, this.apiUrl);
     if (acceptHeader && acceptHeader.startsWith('application/vnd.ceph.api.v')) {
       reqWithVersion = request.clone();
     } else {
@@ -92,10 +65,11 @@ export class ApiInterceptorService implements HttpInterceptor {
         }
       });
     }
-    const apiUrl = localStorage.getItem('cluster_api_url');
+    const apiUrl =
+      this.apiUrl !== undefined ? this.apiUrl : localStorage.getItem('cluster_api_url');
     const currentRoute = this.router.url.split('?')[0];
 
-    const API_TO_AVOID = [
+    const ALWAYS_TO_HUB_APIs = [
       'api/auth/login',
       'api/auth/logout',
       'api/multicluster/get_config',
@@ -103,15 +77,15 @@ export class ApiInterceptorService implements HttpInterceptor {
       'api/multicluster/auth'
     ];
 
-    const token = localStorage.getItem('token_of_selected_cluster');
+    const token =
+      this.token !== undefined ? this.token : localStorage.getItem('token_of_selected_cluster');
 
     if (
       !currentRoute.includes('login') &&
-      !API_TO_AVOID.includes(request.url) &&
+      !ALWAYS_TO_HUB_APIs.includes(request.url) &&
       apiUrl &&
       !apiUrl.includes(origin)
     ) {
-      console.log('i am heree', request.url);
       reqWithVersion = reqWithVersion.clone({
         url: `${apiUrl}${reqWithVersion.url}`,
         setHeaders: {

@@ -90,10 +90,10 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
     this.interval = this.refreshIntervalService.intervalData$.subscribe(() => {
       this.getHealth();
       this.getCapacityCardData();
+      this.getDetailsCardData();
+      this.getTelemetryReport();
     });
     this.getPrometheusData(this.prometheusService.lastHourDateObject);
-    this.getDetailsCardData();
-    this.getTelemetryReport();
   }
 
   getTelemetryText(): string {

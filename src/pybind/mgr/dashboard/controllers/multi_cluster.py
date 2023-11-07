@@ -5,6 +5,8 @@ from ..exceptions import DashboardException
 from ..settings import Settings
 from ..security import Scope
 
+from ..tools import configure_cors 
+
 import logging
 
 import json
@@ -62,6 +64,7 @@ class MultiClusterRoute(RESTController):
         except KeyError:
             copy_config = {'current_url': url, 'config': [{'name': name, 'url': url, 'token': response['token']}]}
         Settings.MULTICLUSTER_CONFIG = copy_config
+        self._proxy('PUT', url, path='api/multicluster/update_cors', payload=json.dumps({'url': 'https://127.0.0.1:4200/'}))
 
     @Endpoint('PUT')
     @UpdatePermission
@@ -84,3 +87,8 @@ class MultiClusterRoute(RESTController):
     @CreatePermission
     def add_clusters(self, config: str):   
         Settings.MULTICLUSTER_CONFIG = config
+    
+    @Endpoint('PUT')
+    @UpdatePermission
+    def update_cors(self, url: str):
+        configure_cors(url)
