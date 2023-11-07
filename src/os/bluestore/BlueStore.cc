@@ -1654,18 +1654,64 @@ BlueStore::BufferCacheShard *BlueStore::BufferCacheShard::create(
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.BufferSpace(" << this << " in " << cache << ") "
 
-bool BlueStore::BufferSpace::_dup_writing(TransContext* txc, BufferCacheShard* cache, OnodeRef onode)
+bool BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collection, OnodeRef onode, uint64_t offset, uint64_t length)
 {
   bool copied = false;
+  uint64_t end = offset + length;
+  BufferSpace &to = onode->bc;
+  BufferCacheShard *cache = collection->cache;
+  ldout(cache->cct, 20) << __func__ << " offset=" << std::hex << offset << " length=" << std::hex << length << dendl; 
   if (!writing.empty()) {
     copied = true;
     for (auto it = writing.begin(); it != writing.end(); ++it) {
       Buffer& b = *it;
-      Buffer to_b(&onode->bc, b.state, b.seq, b.offset, b.data, b.flags);
-      BufferSpace& to = onode->bc;
+      // If no overlap is found between buffer and range to dup then continue
+      if (std::max((uint64_t)b.end(), offset+length) - std::min((uint64_t)b.offset, offset) > length + (uint64_t)b.length) {
+        continue;
+      }
+
+      bufferlist buffer_to_copy;
+      uint32_t offset_to_copy = 0;
+      if (b.offset >= offset) {
+        if (b.end() > end) {
+          // take head
+          uint64_t tail = b.end() - end;
+          auto new_length = b.data.length() - tail;
+          buffer_to_copy.substr_of(b.data, 0, new_length);
+          buffer_to_copy = b.offset;
+        } else {
+          // take whole buffer
+          buffer_to_copy = b.data;
+          buffer_to_copy = b.offset;
+        }
+      } else {
+        if (b.end() > end) {
+          uint64_t front = offset - b.offset;
+          uint64_t tail = b.end() - end;
+          // take middle
+          uint64_t new_length = b.data.length() - front - tail;
+          buffer_to_copy.substr_of(b.data, front, new_length);
+          offset_to_copy = b.offset + front;
+        } else {
+          // take tail
+          uint64_t front = offset - b.offset;
+          uint64_t new_length = b.data.length() - front;
+          buffer_to_copy.substr_of(b.data, front, new_length);
+          offset_to_copy = b.offset + front;
+        }
+      }
+      Buffer to_b(&onode->bc, b.state, b.seq, offset_to_copy, 
+                               std::move(buffer_to_copy), b.flags);
+      ldout(cache->cct, 20) << __func__ << " offset=" << std::hex << offset
+                            << " length=" << std::hex << length << " buffer=" << to_b << dendl;
       ceph_assert(to_b.is_writing());
-      to._add_buffer(cache, &to, std::move(to_b), b.cache_private, 0, nullptr);
+      if (collection->is_deferred_seq(to_b.seq)) {
+        collection->add_deferred_dependency(to_b.seq, onode);
+      } else {
       txc->buffers_written.insert({onode.get(), b.offset, b.seq});
+    }
+      to._discard(collection->cache, to_b.offset, to_b.length);
+      to._add_buffer(collection->cache, &to, std::move(to_b), to_b.cache_private, 0, nullptr);
     }
   }
   return copied;
@@ -1829,6 +1875,7 @@ void BlueStore::BufferSpace::read(
 
 void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache, uint32_t offset, uint64_t seq)
 {
+  std::lock_guard l(cache->lock);
   auto i = writing.begin();
   while (i != writing.end()) {
     if (i->seq > seq) {
@@ -3205,7 +3252,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
   // By default do not copy buffers to clones, and let them read data by
   // themselves. The exception are 'writing' buffers, which are not yet
   // stable on device.
-  oldo->bc._dup_writing(txc, onode->c->cache, newo);
+  oldo->bc._dup_writing(txc, newo->c, newo, dstoff, length);
 
   if (src_dirty) {
     oldo->extent_map.dirty_range(dirty_range_begin,
@@ -3334,7 +3381,7 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
   // By default do not copy buffers to clones, and let them read data by
   // themselves. The exception are 'writing' buffers, which are not yet
   // stable on device.
-  oldo->bc._dup_writing(txc, onode->c->cache, newo);
+  oldo->bc._dup_writing(txc, newo->c, newo, dstoff, length);
 
   if (src_dirty) {
     dirty_range(dirty_range_begin, dirty_range_end - dirty_range_begin);
@@ -5140,6 +5187,22 @@ void BlueStore::Collection::split_cache(
   dest->cache->_trim();
 }
 
+bool BlueStore::Collection::is_deferred_seq(uint64_t seq) {
+  auto it = deferred_seq_dependencies.find(seq);
+  return it != deferred_seq_dependencies.end();
+
+}
+
+void BlueStore::Collection::add_deferred_dependency(uint64_t seq, OnodeRef onode) {
+  BufferCacheShard* cache = onode->c->cache;
+  ldout(cache->cct, 20) << __func__ << " seq=" << seq << " onode=" << onode << dendl;
+  auto it = deferred_seq_dependencies.find(seq);
+  if (it == deferred_seq_dependencies.end()) {
+    deferred_seq_dependencies.insert({seq, {onode}});
+  } else {
+    it->second.insert(onode);
+  }
+}
 // =======================================================
 
 // MempoolThread
@@ -13733,7 +13796,16 @@ void BlueStore::_txc_finish(TransContext *txc)
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
 
-  for (auto& [onode, offset, seq] : txc->buffers_written) {
+  for (auto &[onode, offset, seq] : txc->buffers_written) {
+    if (txc->deferred_txn && txc->deferred_txn->txc_seq == seq) {
+      auto it = onode->c->deferred_seq_dependencies.find(seq);
+      if (it != onode->c->deferred_seq_dependencies.end()) {
+        for (auto &dependent_onode : it->second) {
+          dependent_onode->bc._finish_write(onode->c->cache, offset, seq);
+        }
+        onode->c->deferred_seq_dependencies.erase(it);
+      }
+    }
     onode->bc._finish_write(onode->c->cache, offset, seq);
   }
   txc->buffers_written.clear();
@@ -14381,6 +14453,7 @@ bluestore_deferred_op_t *BlueStore::_get_deferred_op(
 {
   if (!txc->deferred_txn) {
     txc->deferred_txn = new bluestore_deferred_transaction_t;
+    txc->deferred_txn->txc_seq = txc->seq;
   }
   txc->deferred_txn->ops.push_back(bluestore_deferred_op_t());
   logger->inc(l_bluestore_issued_deferred_writes);
@@ -15432,6 +15505,7 @@ void BlueStore::_do_write_small(
                                   return 0;
                                 });
               op->data = bl;
+              o->c->add_deferred_dependency(txc->seq, o);
           } else {
               b->get_blob().map_bl(
                   b_off, bl,
@@ -15523,9 +15597,10 @@ void BlueStore::_do_write_small(
               });
           ceph_assert(r == 0);
           op->data = std::move(bl);
-          dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off << "~"
-		     << b_len << std::dec << " of mutable " << *b
-		     << " at " << op->extents << dendl;
+          o->c->add_deferred_dependency(txc->seq, o);
+          dout(20) << __func__ << "  deferred write 0x" << std::hex << b_off
+                   << "~" << b_len << std::dec << " of mutable " << *b << " at "
+                   << op->extents << dendl;
           }
 
           Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
@@ -15813,6 +15888,7 @@ void BlueStore::_do_write_big_apply_deferred(
     op->op = bluestore_deferred_op_t::OP_WRITE;
     op->extents.swap(dctx.res_extents);
     op->data = std::move(bl);
+    o->c->add_deferred_dependency(txc->seq, o);
   }
 }
 
@@ -16353,7 +16429,8 @@ int BlueStore::_do_alloc_write(
 	    return 0;
 	  });
         ceph_assert(r == 0);
-	op->data = *l;
+        op->data = *l;
+        o->c->add_deferred_dependency(txc->seq, o);
       } else {
 	wi.b->get_blob().map_bl(
 	  b_off, *l,
@@ -18088,6 +18165,14 @@ void BlueStore::_shutdown_cache()
     ceph_assert(i->empty());
   }
   for (auto& p : coll_map) {
+    // Clear deferred write buffers before clearing up Onodes
+    for (auto &[seq, onodes] : p.second->deferred_seq_dependencies) {
+      for (auto &onode : onodes) {
+        onode->bc._finish_write(onode->c->cache, 0, seq);
+      }
+    }
+    p.second->deferred_seq_dependencies.clear();
+
     p.second->onode_space.clear();
     if (!p.second->shared_blob_set.empty()) {
       derr << __func__ << " stray shared blobs on " << p.first << dendl;

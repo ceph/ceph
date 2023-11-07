@@ -521,7 +521,7 @@ public:
       discard(cache, offset, (uint32_t)-1 - offset);
     }
 
-    bool _dup_writing(TransContext* txc, BufferCacheShard* cache, OnodeRef onode);
+    bool _dup_writing(TransContext* txc, Collection* collection, OnodeRef onode, uint64_t offset, uint64_t length);
     void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
     void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
@@ -1644,6 +1644,10 @@ private:
     pool_opts_t pool_opts;
     ContextQueue *commit_queue;
 
+    // Deferred write dependencies. Buffers of deferred writes than get cloned must be marked as clean
+    // on all cloned Onodes after the main deferred txc is completed.
+    std::map<uint64_t, std::set<OnodeRef>> deferred_seq_dependencies;
+
     OnodeCacheShard* get_onode_cache() const {
       return onode_space.cache;
     }
@@ -1691,6 +1695,9 @@ private:
     bool flush_commit(Context *c) override;
     void flush() override;
     void flush_all_but_last();
+
+    bool is_deferred_seq(uint64_t seq);
+    void add_deferred_dependency(uint64_t seq, OnodeRef onode);
 
     Collection(BlueStore *ns, OnodeCacheShard *oc, BufferCacheShard *bc, coll_t c);
   };
