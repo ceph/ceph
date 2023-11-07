@@ -39,7 +39,7 @@ class CachePolicy {
     virtual int exist_key(std::string key) = 0;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) = 0;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) = 0;
-    virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key) = 0;
+    virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) = 0;
     virtual void shutdown() = 0;
 };
 
@@ -75,8 +75,8 @@ class LFUDAPolicy : public CachePolicy {
 
     int set_age(int age, optional_yield y);
     int get_age(optional_yield y);
-    int set_min_avg_weight(size_t weight, std::string cacheLocation, optional_yield y);
-    int get_min_avg_weight(optional_yield y);
+    int set_local_weight_sum(size_t weight, optional_yield y);
+    int get_local_weight_sum(optional_yield y);
     CacheBlock* find_victim(const DoutPrefixProvider* dpp, optional_yield y);
 
   public:
@@ -111,7 +111,7 @@ class LFUDAPolicy : public CachePolicy {
     //virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) override;
-    virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key) override;
+    virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual void shutdown() override;
 
     void set_local_weight(std::string& key, int localWeight);
@@ -138,7 +138,7 @@ class LRUPolicy : public CachePolicy {
     virtual int exist_key(std::string key) override;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) override;
-    virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key) override;
+    virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
     virtual void shutdown() override {}
 };
 
