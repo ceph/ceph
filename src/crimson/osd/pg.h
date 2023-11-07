@@ -583,6 +583,9 @@ private:
   template <class Ret, class SuccessFunc, class FailureFunc>
   do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
     seastar::lw_shared_ptr<OpsExecuter> ox,
+    ObjectContextRef obc,
+    const OpInfo &op_info,
+    Ref<MOSDOp> m,
     std::vector<OSDOp>& ops,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
