@@ -5578,10 +5578,17 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
 				       cct->_conf->rgw_bucket_index_max_aio)();
   } else {
     bucket_info.deleted = true;
+    ldpp_dout(dpp, 0) << "setting deleted to: " << bucket_info.deleted << dendl;
     map<string, bufferlist> attrs;
-    r = put_bucket_instance_info(bucket_info, false, real_time(), &attrs, dpp, y);
+
+    r = ctl.bucket->store_bucket_instance_info(bucket, bucket_info, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
+                                                                    .set_exclusive(false)
+                                                                    .set_mtime(real_time())
+                                                                    .set_attrs(&attrs)
+                                                                    .set_orig_info(&bucket_info));
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: put_bucket_info on bucket=" << bucket_info.bucket.name << " returned err=" << r << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: failed to store bucket instance info for bucket=" << bucket.name << " ret=" << r << dendl;
+      return r;
     }
   }
 
