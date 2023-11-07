@@ -558,6 +558,16 @@ class SNMPGateway(ContainerDaemonForm):
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return self.uid, self.gid
 
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.append(f'--env-file={self.conf_file_path}')
+
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        args.extend(self.get_daemon_args())
+
 
 ##################################
 @register_daemon_form
@@ -2896,11 +2906,9 @@ def get_container(
         binds = get_container_binds(ctx, ident)
         mounts = get_container_mounts(ctx, ident)
     elif daemon_type == SNMPGateway.daemon_type:
-        sg = SNMPGateway.init(ctx, ident.fsid, ident.daemon_id)
-        container_args.append(
-            f'--env-file={sg.conf_file_path}'
-        )
-        d_args.extend(sg.get_daemon_args())
+        sg = SNMPGateway.create(ctx, ident)
+        sg.customize_container_args(ctx, container_args)
+        sg.customize_process_args(ctx, d_args)
 
     _update_container_args_for_podman(ctx, ident, container_args)
     return CephContainer.for_daemon(
