@@ -70,6 +70,10 @@ class PerShardState {
   OSDState &osd_state;
   OSD_OSDMapGate osdmap_gate;
 
+  PerShardPipeline client_request_pipeline;
+  PerShardPipeline peering_request_pipeline;
+  PerShardPipeline replicated_request_pipeline;
+
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
 
@@ -451,6 +455,18 @@ public:
   seastar::future<> dispatch_context(
     PeeringCtx &&ctx) {
     return dispatch_context({}, std::move(ctx));
+  }
+
+  PerShardPipeline &get_client_request_pipeline() {
+    return local_state.client_request_pipeline;
+  }
+
+  PerShardPipeline &get_peering_request_pipeline() {
+    return local_state.peering_request_pipeline;
+  }
+
+  PerShardPipeline &get_replicated_request_pipeline() {
+    return local_state.replicated_request_pipeline;
   }
 
   /// Return per-core tid

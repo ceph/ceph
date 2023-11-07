@@ -49,6 +49,12 @@ ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
 }
 
+PerShardPipeline &LogMissingRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_replicated_request_pipeline();
+}
+
 ClientRequest::PGPipeline &LogMissingRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
@@ -72,8 +78,16 @@ seastar::future<> LogMissingRequest::with_pg(
       });
     }).then_interruptible([this, pg](auto) {
       return pg->do_update_log_missing(req, conn);
+    }).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
     });
-  }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
+  }, [](std::exception_ptr) {
+    return seastar::now();
+  }, pg).finally([this, ref] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

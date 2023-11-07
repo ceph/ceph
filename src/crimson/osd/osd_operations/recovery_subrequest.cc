@@ -30,17 +30,29 @@ seastar::future<> RecoverySubRequest::with_pg(
   track_event<StartEvent>();
   IRef opref = this;
   return interruptor::with_interruption([this, pgref] {
-    return pgref->get_recovery_backend()->handle_recovery_op(m, conn);
+    return pgref->get_recovery_backend()->handle_recovery_op(m, conn
+    ).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
+    });
   }, [](std::exception_ptr) {
     return seastar::now();
-  }, pgref).finally([this, opref, pgref] {
+  }, pgref).finally([this, opref=std::move(opref), pgref] {
+    logger().debug("{}: exit", *this);
     track_event<CompletionEvent>();
+    handle.exit();
   });
 }
 
 ConnectionPipeline &RecoverySubRequest::get_connection_pipeline()
 {
   return get_osd_priv(conn.get()).peering_request_conn_pipeline;
+}
+
+PerShardPipeline &RecoverySubRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_peering_request_pipeline();
 }
 
 }

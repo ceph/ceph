@@ -49,6 +49,12 @@ ConnectionPipeline &RepRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
 }
 
+PerShardPipeline &RepRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_replicated_request_pipeline();
+}
+
 ClientRequest::PGPipeline &RepRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
@@ -71,10 +77,16 @@ seastar::future<> RepRequest::with_pg(
       });
     }).then_interruptible([this, pg] (auto) {
       return pg->handle_rep_op(req);
+    }).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
     });
-  }, [ref](std::exception_ptr) {
+  }, [](std::exception_ptr) {
     return seastar::now();
-  }, pg);
+  }, pg).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

@@ -81,13 +81,13 @@ public:
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
-    ConnectionPipeline::GetPG::BlockingEvent,
+    ConnectionPipeline::GetPGMapping::BlockingEvent,
+    PerShardPipeline::CreateOrWaitPG::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
     CompletionEvent
   > tracking_events;
 
-  class instance_handle_t : public boost::intrusive_ref_counter<
-    instance_handle_t, boost::thread_unsafe_counter> {
+  class instance_handle_t : public boost::intrusive_ref_counter<instance_handle_t> {
   public:
     // intrusive_ptr because seastar::lw_shared_ptr includes a cpu debug check
     // that we will fail since the core on which we allocate the request may not
@@ -206,6 +206,14 @@ public:
   epoch_t get_epoch() const { return m->get_min_epoch(); }
 
   ConnectionPipeline &get_connection_pipeline();
+
+  PerShardPipeline &get_pershard_pipeline(ShardServices &);
+
+  crimson::net::Connection &get_connection() {
+    assert(conn);
+    return *conn;
+  };
+
   seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
     assert(conn);
     return conn.get_foreign(
