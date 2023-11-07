@@ -196,7 +196,11 @@ BackfillRecovery::do_recovery()
     peering_pp(*pg).process
   ).then_interruptible([this] {
     pg->get_recovery_handler()->dispatch_backfill_event(std::move(evt));
+    return handle.complete();
+  }).then_interruptible([] {
     return seastar::make_ready_future<bool>(false);
+  }).finally([this] {
+    handle.exit();
   });
 }
 

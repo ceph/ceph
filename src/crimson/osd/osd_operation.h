@@ -27,10 +27,17 @@ struct ConnectionPipeline {
       "ConnectionPipeline::await_map";
   } await_map;
 
-  struct GetPG : OrderedExclusivePhaseT<GetPG> {
+  struct GetPGMapping : OrderedExclusivePhaseT<GetPGMapping> {
     static constexpr auto type_name =
-      "ConnectionPipeline::get_pg";
-  } get_pg;
+      "ConnectionPipeline::get_pg_mapping";
+  } get_pg_mapping;
+};
+
+struct PerShardPipeline {
+  struct CreateOrWaitPG : OrderedExclusivePhaseT<CreateOrWaitPG> {
+    static constexpr auto type_name =
+      "PerShardPipeline::create_or_wait_pg";
+  } create_or_wait_pg;
 };
 
 enum class OperationTypeCode {

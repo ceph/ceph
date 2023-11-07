@@ -81,6 +81,12 @@ ConnectionPipeline &ClientRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).client_request_conn_pipeline;
 }
 
+PerShardPipeline &ClientRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_client_request_pipeline();
+}
+
 ClientRequest::PGPipeline &ClientRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
@@ -143,6 +149,9 @@ seastar::future<> ClientRequest::with_pg_int(
 	} else {
 	  return process_op(ihref, pgref);
 	}
+      }).then_interruptible([this, this_instance_id, &ihref] {
+        logger().debug("{}.{}: complete", *this, this_instance_id);
+        return ihref.handle.complete();
       }).then_interruptible([this, this_instance_id, pgref] {
 	logger().debug("{}.{}: after process*", *this, this_instance_id);
 	pgref->client_request_orderer.remove_request(*this);
@@ -151,11 +160,15 @@ seastar::future<> ClientRequest::with_pg_int(
     }, [this, this_instance_id, pgref](std::exception_ptr eptr) {
       // TODO: better debug output
       logger().debug("{}.{}: interrupted {}", *this, this_instance_id, eptr);
-    }, pgref).finally(
-      [opref=std::move(opref), pgref=std::move(pgref),
-       instance_handle=std::move(instance_handle), &ihref] {
-      ihref.handle.exit();
-    });
+    },
+    pgref
+  ).finally(
+    [opref=std::move(opref), pgref,
+     instance_handle=std::move(instance_handle), &ihref,
+     this_instance_id, this] {
+    logger().debug("{}.{}: exit", *this, this_instance_id);
+    ihref.handle.exit();
+  });
 }
 
 seastar::future<> ClientRequest::with_pg(
