@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# version 2023-07-06
+# version 2023-10-30
 
 # rgw-restore-bucket-index is an EXPERIMENTAL tool to use in case
 # bucket index entries for objects in the bucket are somehow lost. It
@@ -37,13 +37,18 @@ export obj_reindex_script=/tmp/rgwrbi-object-list-script.$$
 export zone_info=/tmp/rgwrbi-zone-info.$$
 export olh_info_enc=/tmp/rgwrbi-olh-info-enc.$$
 export olh_info_json=/tmp/rgwrbi-olh-info-json.$$
+export debug_log=/tmp/rgwrbi-debug-log.$$
 
 export clean_temps=1
 
+# make explicit tabs easier to see in code
+export TAB="	"
+
 
 clean() {
-  if [ -n "$clean_temps" ] ;then
-    rm -f $bkt_entry $bkt_inst $marker_ls $obj_list $obj_list_ver $obj_reindex_script $zone_info $olh_info_enc $olh_info_json
+  if [ "$clean_temps" == 1 ] ;then
+    rm -f $bkt_entry $bkt_inst $marker_ls $obj_list $obj_list_ver \
+       $obj_reindex_script $zone_info $olh_info_enc $olh_info_json
   fi
 }
 
@@ -178,8 +183,9 @@ while getopts "b:l:p:r:g:z:yd" o; do
 	    proceed=1
 	    ;;
 	d)
-	    echo setting debug to 1
+	    echo Debugging On
 	    debug=1
+	    clean_temps=0
 	    ;;
 	*)
 	    echo
@@ -217,15 +223,24 @@ handle_versioned() {
 	    filter_out_last_instance="$last_instance"
 	fi
 
+	if [ "$debug" == 1 ] ;then
+	    echo "working on versioned $o"
+	    echo "last instance is $last_instance"
+	    echo "filter_out_last_instance is $filter_out_last_instance"
+	fi >>$debug_log
+
 	# we currently don't need the delete marker, but we can have access to it
 	# delete_marker=$(jq -r ".removed" $olh_info_json) # true or false
 
 	IFS='\t' grep -E "(__:.*[^_])?_$o(\t.*)?$" $marker_ls | # versioned head objects
 	    while read obj loc ;do
+		if [ "$debug" == 1 ] ;then
+		    echo "obj=$obj ; loc=$loc" >>$debug_log
+		fi
 		rados -p $pool stat2 $obj --object-locator "$loc"
 	    done | # output of stat2, which includes mtime
 	    sort -k 3 | # stat2 but sorted by mtime earlier to later
-	    grep -v "$filter_out_last_instance" | # remove the final instance in case it's not last
+	    grep -v -e "$filter_out_last_instance" | # remove the final instance in case it's not last
 
 	    # sed 1) removes pool and marker, 2) removes indicator of
 	    # version id, 3) removes obj name including escaped
@@ -238,9 +253,9 @@ handle_versioned() {
 		-e 's/^__://' \
 		-e "s/_+${o}.*//" \
 		-e "s/^/${o}\t/"
-	echo "$o	$last_instance" # now add the final instance; could be delete marker; note TAB
+	echo "${o}${TAB}$last_instance" # now add the final instance; could be delete marker
     done <$obj_list 2>/dev/null | sed 's/\t$//' >$obj_list_ver
-}
+} # handle_versioned
 
 if [ -z "$bucket" ]; then
   echo
