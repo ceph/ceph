@@ -234,6 +234,10 @@ const routes: Routes = [
         data: { breadcrumbs: 'Observability/Logs' }
       },
       {
+        path: 'multi-cluster',
+        component: MulticlusterDashboardComponent
+      },
+      {
         path: 'telemetry',
         component: TelemetryComponent,
         data: { breadcrumbs: 'Telemetry configuration' }
