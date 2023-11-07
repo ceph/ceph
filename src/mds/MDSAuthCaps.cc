@@ -145,7 +145,7 @@ bool MDSCapMatch::match(string_view target_path,
       bool gid_matched = false;
       if (std::find(gids.begin(), gids.end(), caller_gid) != gids.end())
 	gid_matched = true;
-      if (caller_gid_list) {
+      else if (caller_gid_list) {
 	for (auto i = caller_gid_list->begin(); i != caller_gid_list->end(); ++i) {
 	  if (std::find(gids.begin(), gids.end(), *i) != gids.end()) {
 	    gid_matched = true;
