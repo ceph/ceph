@@ -674,6 +674,18 @@ int RGWAsyncPutBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
   return 0;
 }
 
+int RGWAsyncRemoveBucketInstanceInfo::_send_request(const DoutPrefixProvider *dpp)
+{
+  auto r = store->ctl()->bucket->remove_bucket_instance_info(bucket, bucket_info,
+						       null_yield, dpp);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to remove bucket instance info for "
+		      << bucket_info.bucket << dendl;
+    return r;
+  }
+  return 0;
+}
+
 RGWRadosBILogTrimCR::RGWRadosBILogTrimCR(
   const DoutPrefixProvider *dpp,
   rgw::sal::RadosStore* store,
