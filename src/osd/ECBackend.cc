@@ -609,7 +609,7 @@ void ECBackend::continue_recovery_op(
 
       if (op.recovery_progress.first && op.obc) {
 	/* We've got the attrs and the hinfo, might as well use them */
-	op.hinfo = get_hash_info(op.hoid, false, op.obc->attr_cache);
+	op.hinfo = get_hash_info(op.hoid, false, op.obc->attr_cache, op.obc->obs.oi.size);
 	if (!op.hinfo) {
           derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
                << dendl;
@@ -1104,12 +1104,17 @@ void ECBackend::handle_sub_read(
 	// the state of our chunk in case other chunks could substitute.
         ECUtil::HashInfoRef hinfo;
         map<string, bufferlist, less<>> attrs;
-        int r = PGBackend::objects_get_attrs(i->first, &attrs);
+	struct stat st;
+	int r = object_stat(i->first, &st);
         if (r >= 0) {
-          hinfo = get_hash_info(i->first, false, attrs);
+	  dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
+	  r = PGBackend::objects_get_attrs(i->first, &attrs);
+	}
+	if (r >= 0) {
+	  hinfo = get_hash_info(i->first, false, attrs, st.st_size);
 	} else {
-          derr << "get_hash_info" << ": stat " << i->first << " failed: "
-               << cpp_strerror(r) << dendl;
+	  derr << __func__ << ": access (attrs) on " << i->first << " failed: "
+	       << cpp_strerror(r) << dendl;
 	}
         if (!hinfo) {
           r = -EIO;
@@ -1632,7 +1637,11 @@ void ECBackend::submit_transaction(
     sinfo,
     *(op->t),
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = get_hash_info(i, true, op->t->obc_map[hoid]->attr_cache);
+      ECUtil::HashInfoRef ref = get_hash_info(
+	i,
+	true,
+	op->t->obc_map[hoid]->attr_cache,
+	op->t->obc_map[hoid]->obs.oi.size);
       if (!ref) {
 	derr << __func__ << ": get_hash_info(" << i << ")"
 	     << " returned a null pointer and there is no "
@@ -1912,49 +1921,42 @@ void ECBackend::do_read_op(ReadOp &op)
 }
 
 ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid, bool create, const map<string,bufferlist,less<>>& attrs)
+  const hobject_t &hoid,
+  bool create,
+  const map<string, bufferlist, less<>>& attrs,
+  uint64_t size)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
   ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
   if (!ref) {
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
-    struct stat st;
-    int r = store->stat(
-      ch,
-      ghobject_t(hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard),
-      &st);
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-    if (r >= 0) {
-      dout(10) << __func__ << ": found on disk, size " << st.st_size << dendl;
-      bufferlist bl;
-      map<string, bufferlist>::const_iterator k = attrs.find(ECUtil::get_hinfo_key());
-      if (k == attrs.end()) {
-        dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
-      } else {
-        bl = k->second;
-      }
-      if (bl.length() > 0) {
-	auto bp = bl.cbegin();
-        try {
-	  decode(hinfo, bp);
-        } catch(...) {
-	  dout(0) << __func__ << ": Can't decode hinfo for " << hoid << dendl;
-	  return ECUtil::HashInfoRef();
-        }
-	if (hinfo.get_total_chunk_size() != (uint64_t)st.st_size) {
-	  dout(0) << __func__ << ": Mismatch of total_chunk_size "
-			       << hinfo.get_total_chunk_size() << dendl;
-	  return ECUtil::HashInfoRef();
-	}
-      } else if (st.st_size > 0) { // If empty object and no hinfo, create it
-	return ECUtil::HashInfoRef();
-      }
-    } else if (r != -ENOENT || !create) {
-      derr << __func__ << ": stat " << hoid << " failed: " << cpp_strerror(r)
-           << dendl;
-      return ECUtil::HashInfoRef();
+    bufferlist bl;
+    map<string, bufferlist>::const_iterator k = attrs.find(ECUtil::get_hinfo_key());
+    if (k == attrs.end()) {
+      dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
+    } else {
+      bl = k->second;
     }
-    ref = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
+    if (bl.length() > 0) {
+      auto bp = bl.cbegin();
+      try {
+        decode(hinfo, bp);
+      } catch(...) {
+        dout(0) << __func__ << ": Can't decode hinfo for " << hoid << dendl;
+        return ECUtil::HashInfoRef();
+      }
+      if (hinfo.get_total_chunk_size() != size) {
+        dout(0) << __func__ << ": Mismatch of total_chunk_size "
+      		       << hinfo.get_total_chunk_size() << dendl;
+        return ECUtil::HashInfoRef();
+      }
+    } else if (size == 0) { // If empty object and no hinfo, create it
+      create = true;
+    }
+    if (create) {
+      ref = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
+    }
   }
   return ref;
 }
@@ -2539,6 +2541,17 @@ int ECBackend::send_all_remaining_reads(
   return 0;
 }
 
+int ECBackend::object_stat(
+  const hobject_t &hoid,
+  struct stat* st)
+{
+  int r = store->stat(
+    ch,
+    ghobject_t{hoid, ghobject_t::NO_GEN, get_parent()->whoami_shard().shard},
+    st);
+  return r;
+}
+
 int ECBackend::objects_get_attrs(
   const hobject_t &hoid,
   map<string, bufferlist, less<>> *out)
@@ -2628,7 +2641,7 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, o.attrs);
+  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, o.attrs, o.size);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
