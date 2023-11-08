@@ -688,8 +688,8 @@ arw::Status FlightServer::DoGet(const flt::ServerCallContext &context,
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
-  ret = driver->get_bucket(&dp, &(*user), fd.tenant_name, fd.bucket_name,
-			   &bucket, null_yield);
+  ret = driver->load_bucket(&dp, &(*user), fd.tenant_name, fd.bucket_name,
+                            &bucket, null_yield);
   if (ret < 0) {
     ERROR << "get_bucket returned " << ret << dendl;
     // TODO return something

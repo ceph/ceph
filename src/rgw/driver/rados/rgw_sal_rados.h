@@ -55,8 +55,6 @@ public:
   virtual int equals(const std::string& other_zonegroup) const override {
     return group.equals(other_zonegroup);
   };
-  /** Get the endpoint from zonegroup, or from master zone if not set */
-  virtual const std::string& get_endpoint() const override;
   virtual bool placement_target_exists(std::string& target) const override;
   virtual bool is_master_zonegroup() const override {
     return group.is_master_zonegroup();
@@ -137,17 +135,10 @@ class RadosStore : public StoreDriver {
     virtual int get_user_by_email(const DoutPrefixProvider* dpp, const std::string& email, optional_yield y, std::unique_ptr<User>* user) override;
     virtual int get_user_by_swift(const DoutPrefixProvider* dpp, const std::string& user_str, optional_yield y, std::unique_ptr<User>* user) override;
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
-    virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y) override;
-    virtual int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket) override;
-    virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string&name, std::unique_ptr<Bucket>* bucket, optional_yield y) override;
+    std::unique_ptr<Bucket> get_bucket(User* u, const RGWBucketInfo& i) override;
+    int load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b,
+                    std::unique_ptr<Bucket>* bucket, optional_yield y) override;
     virtual bool is_meta_master() override;
-    virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
-					  bufferlist& in_data, JSONParser* jp, req_info& info,
-					  optional_yield y) override;
-    virtual int forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
-					     bufferlist& in_data,
-					     RGWXMLDecoder::XMLParser* parser, req_info& info,
-					     optional_yield y) override;
     virtual Zone* get_zone() { return zone.get(); }
     virtual std::string zone_unique_id(uint64_t unique_num) override;
     virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
@@ -274,22 +265,6 @@ class RadosUser : public StoreUser {
     int list_buckets(const DoutPrefixProvider* dpp, const std::string& marker, const std::string& end_marker,
 		     uint64_t max, bool need_stats, BucketList& buckets,
 		     optional_yield y) override;
-    virtual int create_bucket(const DoutPrefixProvider* dpp,
-                            const rgw_bucket& b,
-                            const std::string& zonegroup_id,
-                            rgw_placement_rule& placement_rule,
-                            std::string& swift_ver_location,
-                            const RGWQuotaInfo * pquota_info,
-                            const RGWAccessControlPolicy& policy,
-			    Attrs& attrs,
-                            RGWBucketInfo& info,
-                            obj_version& ep_objv,
-			    bool exclusive,
-			    bool obj_lock_enabled,
-			    bool* existed,
-			    req_info& req_info,
-			    std::unique_ptr<Bucket>* bucket,
-			    optional_yield y) override;
     virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) override;
     virtual int read_stats(const DoutPrefixProvider *dpp,
@@ -537,13 +512,15 @@ class RadosBucket : public StoreBucket {
     virtual ~RadosBucket();
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     virtual int list(const DoutPrefixProvider* dpp, ListParams&, int, ListResults&, optional_yield y) override;
-    virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y) override;
-    virtual int remove_bucket_bypass_gc(int concurrent_max, bool
-					keep_index_consistent,
-					optional_yield y, const
-					DoutPrefixProvider *dpp) override;
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) override;
+    virtual int remove_bypass_gc(int concurrent_max, bool
+				 keep_index_consistent,
+				 optional_yield y, const
+				 DoutPrefixProvider *dpp) override;
     virtual RGWAccessControlPolicy& get_acl(void) override { return acls; }
     virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl, optional_yield y) override;
+    int create(const DoutPrefixProvider* dpp, const CreateParams& params,
+               optional_yield y) override;
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int read_stats(const DoutPrefixProvider *dpp,
                            const bucket_index_layout_generation& idx_layout,

@@ -265,7 +265,7 @@ int BucketAsyncRefreshHandler::init_fetch()
   std::unique_ptr<rgw::sal::Bucket> rbucket;
 
   const DoutPrefix dp(driver->ctx(), dout_subsys, "rgw bucket async refresh handler: ");
-  int r = driver->get_bucket(&dp, nullptr, bucket, &rbucket, null_yield);
+  int r = driver->load_bucket(&dp, nullptr, bucket, &rbucket, null_yield);
   if (r < 0) {
     ldpp_dout(&dp, 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
@@ -340,7 +340,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
   std::unique_ptr<rgw::sal::User> user = driver->get_user(_u);
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
-  int r = driver->get_bucket(dpp, user.get(), _b, &bucket, y);
+  int r = driver->load_bucket(dpp, user.get(), _b, &bucket, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << _b << " r=" << r << dendl;
     return r;
@@ -613,7 +613,7 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& _u, rgw_bucket& _b, optional_
   std::unique_ptr<rgw::sal::User> user = driver->get_user(_u);
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
-  int r = driver->get_bucket(dpp, user.get(), _b, &bucket, y);
+  int r = driver->load_bucket(dpp, user.get(), _b, &bucket, y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << _b << " r=" << r << dendl;
     return r;

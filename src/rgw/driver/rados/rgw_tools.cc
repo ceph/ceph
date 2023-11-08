@@ -102,7 +102,7 @@ map<string, bufferlist>* no_change_attrs() {
 
 int rgw_put_system_obj(const DoutPrefixProvider *dpp, RGWSI_SysObj* svc_sysobj,
                        const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, const map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs) {
@@ -285,7 +285,7 @@ int RGWDataAccess::Bucket::finish_init()
 int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = sd->driver->get_bucket(dpp, nullptr, tenant, name, &bucket, y);
+  int ret = sd->driver->load_bucket(dpp, nullptr, rgw_bucket(tenant, name), &bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -327,8 +327,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   rgw::BlockingAioThrottle aio(driver->ctx()->_conf->rgw_put_obj_min_window_size);
 
-  std::unique_ptr<rgw::sal::Bucket> b;
-  driver->get_bucket(NULL, bucket_info, &b);
+  std::unique_ptr<rgw::sal::Bucket> b = driver->get_bucket(nullptr, bucket_info);
   std::unique_ptr<rgw::sal::Object> obj = b->get_object(key);
 
   auto& owner = bucket->policy.get_owner();

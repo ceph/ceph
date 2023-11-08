@@ -1073,7 +1073,7 @@ struct req_info {
   std::string storage_class;
 
   req_info(CephContext *cct, const RGWEnv *env);
-  void rebuild_from(req_info& src);
+  void rebuild_from(const req_info& src);
   void init_meta_info(const DoutPrefixProvider *dpp, bool *found_bad_meta);
 };
 

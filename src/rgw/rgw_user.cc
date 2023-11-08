@@ -30,7 +30,7 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* dri
 
     for (auto& ent : listing.buckets) {
       std::unique_ptr<rgw::sal::Bucket> bucket;
-      ret = driver->get_bucket(dpp, user, ent.bucket, &bucket, y);
+      ret = driver->load_bucket(dpp, user, ent.bucket, &bucket, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;

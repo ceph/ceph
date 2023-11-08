@@ -39,6 +39,7 @@ typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;
 class RGWCompressionInfo;
 struct rgw_pubsub_topics;
 struct rgw_pubsub_bucket_topics;
+class RGWZonePlacementInfo;
 
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
@@ -290,21 +291,13 @@ class Driver {
      * there is a Bucket, otherwise use the get_object() in the Bucket class. */
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) = 0;
     /** Get a Bucket by info.  Does not query the driver, just uses the give bucket info. */
-    virtual int get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket) = 0;
-    /** Lookup a Bucket by key.  Queries driver for bucket info. */
-    virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
-    /** Lookup a Bucket by name.  Queries driver for bucket info. */
-    virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
+    virtual std::unique_ptr<Bucket> get_bucket(User* u, const RGWBucketInfo& i) = 0;
+    /** Load a Bucket by key.  Queries driver for bucket info.  On -ENOENT, the
+     * bucket must still be allocated to support bucket->create(). */
+    virtual int load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b,
+                            std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
     /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;
-    /** For multisite, forward an OP to the zone's master */
-    virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
-					  bufferlist& in_data, JSONParser* jp, req_info& info,
-					  optional_yield y) = 0;
-    virtual int forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
-					     bufferlist& in_data,
-					     RGWXMLDecoder::XMLParser* parser, req_info& info,
-					     optional_yield y) = 0;
     /** Get zone info for this driver */
     virtual Zone* get_zone() = 0;
     /** Get a unique ID specific to this zone. */
@@ -487,23 +480,6 @@ class User {
 			     const std::string& marker, const std::string& end_marker,
 			     uint64_t max, bool need_stats, BucketList& buckets,
 			     optional_yield y) = 0;
-    /** Create a new bucket owned by this user.  Creates in the backing store, not just the instantiation. */
-    virtual int create_bucket(const DoutPrefixProvider* dpp,
-                            const rgw_bucket& b,
-                            const std::string& zonegroup_id,
-                            rgw_placement_rule& placement_rule,
-                            std::string& swift_ver_location,
-                            const RGWQuotaInfo* pquota_info,
-                            const RGWAccessControlPolicy& policy,
-			    Attrs& attrs,
-                            RGWBucketInfo& info,
-                            obj_version& ep_objv,
-			    bool exclusive,
-			    bool obj_lock_enabled,
-			    bool* existed,
-			    req_info& req_info,
-			    std::unique_ptr<Bucket>* bucket,
-			    optional_yield y) = 0;
 
     /** Get the display name for this User */
     virtual std::string& get_display_name() = 0;
@@ -660,12 +636,12 @@ class Bucket {
     /** Set the cached attributes on this bucket */
     virtual int set_attrs(Attrs a) = 0;
     /** Remove this bucket from the backing store */
-    virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y) = 0;
+    virtual int remove(const DoutPrefixProvider* dpp, bool delete_children, optional_yield y) = 0;
     /** Remove this bucket, bypassing garbage collection.  May be removed */
-    virtual int remove_bucket_bypass_gc(int concurrent_max, bool
-					keep_index_consistent,
-					optional_yield y, const
-					DoutPrefixProvider *dpp) = 0;
+    virtual int remove_bypass_gc(int concurrent_max, bool
+				 keep_index_consistent,
+				 optional_yield y, const
+				 DoutPrefixProvider *dpp) = 0;
     /** Get then ACL for this bucket */
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
     /** Set the ACL for this bucket */
@@ -673,6 +649,27 @@ class Bucket {
 
     // XXXX hack
     virtual void set_owner(rgw::sal::User* _owner) = 0;
+
+    /// Input parameters for create().
+    struct CreateParams {
+      std::string zonegroup_id;
+      rgw_placement_rule placement_rule;
+      // zone placement is optional on buckets created for another zonegroup
+      const RGWZonePlacementInfo* zone_placement;
+      RGWAccessControlPolicy policy;
+      Attrs attrs;
+      bool obj_lock_enabled = false;
+      std::string marker;
+      std::string bucket_id;
+      std::optional<std::string> swift_ver_location;
+      std::optional<RGWQuotaInfo> quota;
+      std::optional<ceph::real_time> creation_time;
+    };
+
+    /// Create this bucket in the backing store.
+    virtual int create(const DoutPrefixProvider* dpp,
+                       const CreateParams& params,
+                       optional_yield y) = 0;
 
     /** Load this bucket from the backing store.  Requires the key to be set, fills other fields. */
     virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) = 0;
@@ -1426,8 +1423,6 @@ public:
   virtual const std::string& get_name() const = 0;
   /** Determine if two zonegroups are the same */
   virtual int equals(const std::string& other_zonegroup) const = 0;
-  /** Get the endpoint from zonegroup, or from master zone if not set */
-  virtual const std::string& get_endpoint() const = 0;
   /** Check if a placement target (by name) exists in this zonegroup */
   virtual bool placement_target_exists(std::string& target) const = 0;
   /** Check if this is the master zonegroup */

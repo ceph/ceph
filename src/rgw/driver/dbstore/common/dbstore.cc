@@ -474,20 +474,16 @@ out:
 }
 
 int DB::create_bucket(const DoutPrefixProvider *dpp,
-    const RGWUserInfo& owner, rgw_bucket& bucket,
-    const string& zonegroup_id,
+    const rgw_user& owner, const rgw_bucket& bucket,
+    const std::string& zonegroup_id,
     const rgw_placement_rule& placement_rule,
-    const string& swift_ver_location,
-    const RGWQuotaInfo * pquota_info,
-    map<std::string, bufferlist>& attrs,
-    RGWBucketInfo& info,
-    obj_version *pobjv,
+    const std::map<std::string, bufferlist>& attrs,
+    const std::optional<std::string>& swift_ver_location,
+    const std::optional<RGWQuotaInfo>& quota,
+    std::optional<ceph::real_time> creation_time,
     obj_version *pep_objv,
-    real_time creation_time,
-    rgw_bucket *pmaster_bucket,
-    uint32_t *pmaster_num_shards,
-    optional_yield y,
-    bool exclusive)
+    RGWBucketInfo& info,
+    optional_yield y)
 {
   /*
    * XXX: Simple creation for now.
@@ -506,50 +502,48 @@ int DB::create_bucket(const DoutPrefixProvider *dpp,
   orig_info.bucket.name = bucket.name;
   ret = get_bucket_info(dpp, string("name"), "", orig_info, nullptr, nullptr, nullptr);
 
-  if (!ret && !orig_info.owner.id.empty() && exclusive) {
+  if (!ret && !orig_info.owner.id.empty()) {
     /* already exists. Return the old info */
-
     info = std::move(orig_info);
     return ret;
   }
 
   RGWObjVersionTracker& objv_tracker = info.objv_tracker;
-
   objv_tracker.read_version.clear();
+  objv_tracker.generate_new_write_ver(cct);
 
-  if (pobjv) {
-    objv_tracker.write_version = *pobjv;
-  } else {
-    objv_tracker.generate_new_write_ver(cct);
-  }
   params.op.bucket.bucket_version = objv_tracker.write_version;
   objv_tracker.read_version = params.op.bucket.bucket_version;
 
-  uint64_t bid = next_bucket_id();
-  string s = getDBname() + "." + std::to_string(bid);
-  bucket.marker = bucket.bucket_id = s;
-
   info.bucket = bucket;
-  info.owner = owner.user_id;
+  if (info.bucket.marker.empty()) {
+    uint64_t bid = next_bucket_id();
+    string s = getDBname() + "." + std::to_string(bid);
+    info.bucket.marker = info.bucket.bucket_id = s;
+  }
+
+  info.owner = owner;
   info.zonegroup = zonegroup_id;
   info.placement_rule = placement_rule;
-  info.swift_ver_location = swift_ver_location;
-  info.swift_versioning = (!swift_ver_location.empty());
+  if (swift_ver_location) {
+    info.swift_ver_location = *swift_ver_location;
+  }
+  info.swift_versioning = swift_ver_location.has_value();
 
   info.requester_pays = false;
-  if (real_clock::is_zero(creation_time)) {
-    info.creation_time = ceph::real_clock::now();
+  if (creation_time) {
+    info.creation_time = *creation_time;
   } else {
-    info.creation_time = creation_time;
+    info.creation_time = ceph::real_clock::now();
   }
-  if (pquota_info) {
-    info.quota = *pquota_info;
+  if (quota) {
+    info.quota = *quota;
   }
 
   params.op.bucket.info = info;
   params.op.bucket.bucket_attrs = attrs;
   params.op.bucket.mtime = ceph::real_time();
-  params.op.user.uinfo.user_id.id = owner.user_id.id;
+  params.op.user.uinfo.user_id.id = owner.id;
 
   ret = ProcessOp(dpp, "InsertBucket", &params);
 

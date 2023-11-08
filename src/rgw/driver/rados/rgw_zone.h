@@ -881,6 +881,9 @@ int set_default_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
                           sal::ConfigStore* cfgstore, const RGWZoneGroup& info,
                           bool exclusive = false);
 
+/// Return an endpoint from the zonegroup or its master zone.
+std::string get_zonegroup_endpoint(const RGWZoneGroup& info);
+
 /// Add a zone to the zonegroup, or update an existing zone entry.
 int add_zone_to_group(const DoutPrefixProvider* dpp,
                       RGWZoneGroup& zonegroup,
@@ -936,6 +939,12 @@ int delete_zone(const DoutPrefixProvider* dpp, optional_yield y,
                 sal::ConfigStore* cfgstore, const RGWZoneParams& info,
                 sal::ZoneWriter& writer);
 
+/// Return the zone placement corresponding to the given rule, or nullptr.
+auto find_zone_placement(const DoutPrefixProvider* dpp,
+                         const RGWZoneParams& info,
+                         const rgw_placement_rule& rule)
+    -> const RGWZonePlacementInfo*;
+
 
 /// Global state about the site configuration. Initialized once during
 /// startup and may be reinitialized by RGWRealmReloader, but is otherwise
@@ -952,6 +961,10 @@ class SiteConfig {
   const RGWZoneGroup& get_zonegroup() const { return *zonegroup; }
   /// Return the public zone configuration.
   const RGWZone& get_zone() const { return *zone; }
+  /// Return true if the local zone can write metadata.
+  bool is_meta_master() const {
+    return zonegroup->is_master && zonegroup->master_zone == zone->id;
+  }
 
   /// Load or reload the multisite configuration from storage. This is not
   /// thread-safe, so requires careful coordination with the RGWRealmReloader.

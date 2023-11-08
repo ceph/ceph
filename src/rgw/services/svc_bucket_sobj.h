@@ -118,7 +118,7 @@ public:
                                    RGWBucketEntryPoint& info,
                                    bool exclusive,
                                    real_time mtime,
-                                   std::map<std::string, bufferlist> *pattrs,
+                                   const std::map<std::string, bufferlist> *pattrs,
                                    RGWObjVersionTracker *objv_tracker,
                                    optional_yield y,
                                    const DoutPrefixProvider *dpp) override;
@@ -155,7 +155,7 @@ public:
                                                                               nullptr: orig_info was not found (new bucket instance */
                                  bool exclusive,
                                  real_time mtime,
-                                 std::map<std::string, bufferlist> *pattrs,
+                                 const std::map<std::string, bufferlist> *pattrs,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) override;
 

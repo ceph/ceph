@@ -77,51 +77,6 @@ namespace rgw::sal {
 static constexpr size_t listing_max_entries = 1000;
 static std::string pubsub_oid_prefix = "pubsub.";
 
-static int decode_policy(CephContext* cct,
-                         bufferlist& bl,
-                         RGWAccessControlPolicy* policy)
-{
-  auto iter = bl.cbegin();
-  try {
-    policy->decode(iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-    return -EIO;
-  }
-  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
-    ldout(cct, 15) << __func__ << " Read AccessControlPolicy";
-    RGWAccessControlPolicy_S3* s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    s3policy->to_xml(*_dout);
-    *_dout << dendl;
-  }
-  return 0;
-}
-
-static int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider* dpp,
-					      RadosStore* store,
-					      User* user,
-					      Attrs& bucket_attrs,
-					      RGWAccessControlPolicy* policy,
-					      optional_yield y)
-{
-  auto aiter = bucket_attrs.find(RGW_ATTR_ACL);
-
-  if (aiter != bucket_attrs.end()) {
-    int ret = decode_policy(store->ctx(), aiter->second, policy);
-    if (ret < 0)
-      return ret;
-  } else {
-    ldout(store->ctx(), 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
-    /* object exists, but policy is broken */
-    int r = user->load_user(dpp, y);
-    if (r < 0)
-      return r;
-
-    policy->create_default(user->get_id(), user->get_display_name());
-  }
-  return 0;
-}
-
 static int drain_aio(std::list<librados::AioCompletion*>& handles)
 {
   int ret = 0;
@@ -165,141 +120,51 @@ int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
   return 0;
 }
 
-int RadosUser::create_bucket(const DoutPrefixProvider* dpp,
-				 const rgw_bucket& b,
-				 const std::string& zonegroup_id,
-				 rgw_placement_rule& placement_rule,
-				 std::string& swift_ver_location,
-				 const RGWQuotaInfo * pquota_info,
-				 const RGWAccessControlPolicy& policy,
-				 Attrs& attrs,
-				 RGWBucketInfo& info,
-				 obj_version& ep_objv,
-				 bool exclusive,
-				 bool obj_lock_enabled,
-				 bool* existed,
-				 req_info& req_info,
-				 std::unique_ptr<Bucket>* bucket_out,
-				 optional_yield y)
+int RadosBucket::create(const DoutPrefixProvider* dpp,
+                        const CreateParams& params,
+                        optional_yield y)
 {
-  int ret;
-  bufferlist in_data;
-  RGWBucketInfo master_info;
-  rgw_bucket* pmaster_bucket;
-  uint32_t* pmaster_num_shards;
-  real_time creation_time;
-  std::unique_ptr<Bucket> bucket;
-  obj_version objv,* pobjv = NULL;
+  ceph_assert(owner);
+  const rgw_user& owner_id = owner->get_id();
 
-  /* If it exists, look it up; otherwise create it */
-  ret = store->get_bucket(dpp, this, b, &bucket, y);
-  if (ret < 0 && ret != -ENOENT)
+  rgw_bucket key = get_key();
+  key.marker = params.marker;
+  key.bucket_id = params.bucket_id;
+
+  int ret = store->getRados()->create_bucket(
+      dpp, y, key, owner_id, params.zonegroup_id,
+      params.placement_rule, params.zone_placement, params.attrs,
+      params.obj_lock_enabled, params.swift_ver_location,
+      params.quota, params.creation_time, &bucket_version, info);
+
+  bool existed = false;
+  if (ret == -EEXIST) {
+    existed = true;
+    /* bucket already existed, might have raced with another bucket creation,
+     * or might be partial bucket creation that never completed. Read existing
+     * bucket info, verify that the reported bucket owner is the current user.
+     * If all is ok then update the user's list of buckets.  Otherwise inform
+     * client about a name conflict.
+     */
+    if (info.owner != owner_id) {
+      return -ERR_BUCKET_EXISTS;
+    }
+    ret = 0;
+  } else if (ret != 0) {
     return ret;
-
-  if (ret != -ENOENT) {
-    RGWAccessControlPolicy old_policy(store->ctx());
-    *existed = true;
-    if (swift_ver_location.empty()) {
-      swift_ver_location = bucket->get_info().swift_ver_location;
-    }
-    placement_rule.inherit_from(bucket->get_info().placement_rule);
-
-    // don't allow changes to the acl policy
-    int r = rgw_op_get_bucket_policy_from_attr(dpp, store, this, bucket->get_attrs(),
-					       &old_policy, y);
-    if (r >= 0 && old_policy != policy) {
-      bucket_out->swap(bucket);
-      return -EEXIST;
-    }
-  } else {
-    bucket = std::unique_ptr<Bucket>(new RadosBucket(store, b, this));
-    *existed = false;
-    bucket->set_attrs(attrs);
   }
 
-  if (!store->svc()->zone->is_meta_master()) {
-    JSONParser jp;
-    ret = store->forward_request_to_master(dpp, this, NULL, in_data, &jp, req_info, y);
-    if (ret < 0) {
-      return ret;
-    }
-
-    JSONDecoder::decode_json("entry_point_object_ver", ep_objv, &jp);
-    JSONDecoder::decode_json("object_ver", objv, &jp);
-    JSONDecoder::decode_json("bucket_info", master_info, &jp);
-    ldpp_dout(dpp, 20) << "parsed: objv.tag=" << objv.tag << " objv.ver=" << objv.ver << dendl;
-    std::time_t ctime = ceph::real_clock::to_time_t(master_info.creation_time);
-    ldpp_dout(dpp, 20) << "got creation time: << " << std::put_time(std::localtime(&ctime), "%F %T") << dendl;
-    pmaster_bucket= &master_info.bucket;
-    creation_time = master_info.creation_time;
-    pmaster_num_shards = &master_info.layout.current_index.layout.normal.num_shards;
-    pobjv = &objv;
-    if (master_info.obj_lock_enabled()) {
-      info.flags = BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
-    }
-  } else {
-    pmaster_bucket = NULL;
-    pmaster_num_shards = NULL;
-    if (obj_lock_enabled)
-      info.flags = BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
-  }
-
-  std::string zid = zonegroup_id;
-  if (zid.empty()) {
-    zid = store->svc()->zone->get_zonegroup().get_id();
-  }
-
-  if (*existed) {
-    rgw_placement_rule selected_placement_rule;
-    ret = store->svc()->zone->select_bucket_placement(dpp, this->get_info(),
-					       zid, placement_rule,
-					       &selected_placement_rule, nullptr, y);
-    if (selected_placement_rule != info.placement_rule) {
-      ret = -EEXIST;
-      bucket_out->swap(bucket);
-      return ret;
-    }
-  } else {
-
-    ret = store->getRados()->create_bucket(this->get_info(), bucket->get_key(),
-				    zid, placement_rule, swift_ver_location, pquota_info,
-				    attrs, info, pobjv, &ep_objv, creation_time,
-				    pmaster_bucket, pmaster_num_shards, y, dpp,
-				    exclusive);
-    if (ret == -EEXIST) {
-      *existed = true;
-      /* bucket already existed, might have raced with another bucket creation,
-       * or might be partial bucket creation that never completed. Read existing
-       * bucket info, verify that the reported bucket owner is the current user.
-       * If all is ok then update the user's list of buckets.  Otherwise inform
-       * client about a name conflict.
-       */
-      if (info.owner.compare(this->get_id()) != 0) {
-	return -EEXIST;
-      }
-      ret = 0;
-    } else if (ret != 0) {
-      return ret;
-    }
-  }
-
-  bucket->set_version(ep_objv);
-  bucket->get_info() = info;
-
-  RadosBucket* rbucket = static_cast<RadosBucket*>(bucket.get());
-  ret = rbucket->link(dpp, this, y, false);
-  if (ret && !*existed && ret != -EEXIST) {
+  ret = link(dpp, owner, y, false);
+  if (ret && !existed && ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    ret = rbucket->unlink(dpp, this, y);
+    ret = unlink(dpp, owner, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "WARNING: failed to unlink bucket: ret=" << ret
 		       << dendl;
     }
-  } else if (ret == -EEXIST || (ret == 0 && *existed)) {
+  } else if (ret == -EEXIST || (ret == 0 && existed)) {
     ret = -ERR_BUCKET_EXISTS;
   }
-
-  bucket_out->swap(bucket);
 
   return ret;
 }
@@ -406,11 +271,9 @@ int RadosUser::verify_mfa(const std::string& mfa_str, bool* verified,
 
 RadosBucket::~RadosBucket() {}
 
-int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
-			       bool delete_children,
-			       bool forward_to_master,
-			       req_info* req_info,
-			       optional_yield y)
+int RadosBucket::remove(const DoutPrefixProvider* dpp,
+			bool delete_children,
+			optional_yield y)
 {
   int ret;
 
@@ -492,26 +355,13 @@ int RadosBucket::remove_bucket(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, -1) << "ERROR: unable to remove user bucket information" << dendl;
   }
 
-  if (forward_to_master) {
-    bufferlist in_data;
-    ret = store->forward_request_to_master(dpp, owner, &ot.read_version, in_data, nullptr, *req_info, y);
-    if (ret < 0) {
-      if (ret == -ENOENT) {
-	/* adjust error, we want to return with NoSuchBucket and not
-	 * NoSuchKey */
-	ret = -ERR_NO_SUCH_BUCKET;
-      }
-      return ret;
-    }
-  }
-
   return ret;
 }
 
-int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
-					 keep_index_consistent,
-					 optional_yield y, const
-					 DoutPrefixProvider *dpp)
+int RadosBucket::remove_bypass_gc(int concurrent_max, bool
+				  keep_index_consistent,
+				  optional_yield y, const
+				  DoutPrefixProvider *dpp)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -635,7 +485,7 @@ int RadosBucket::remove_bucket_bypass_gc(int concurrent_max, bool
   // this function can only be run if caller wanted children to be
   // deleted, so we can ignore the check for children as any that
   // remain are detritus from a prior bug
-  ret = remove_bucket(dpp, true, false, nullptr, y);
+  ret = remove(dpp, true, y);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: could not remove bucket " << this << dendl;
     return ret;
@@ -1137,118 +987,22 @@ std::unique_ptr<Object> RadosStore::get_object(const rgw_obj_key& k)
   return std::make_unique<RadosObject>(this, k);
 }
 
-int RadosStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+std::unique_ptr<Bucket> RadosStore::get_bucket(User* u, const RGWBucketInfo& i)
 {
-  int ret;
-  Bucket* bp;
-
-  bp = new RadosBucket(this, b, u);
-  ret = bp->load_bucket(dpp, y);
-  if (ret < 0) {
-    delete bp;
-    return ret;
-  }
-
-  bucket->reset(bp);
-  return 0;
-}
-
-int RadosStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
-{
-  Bucket* bp;
-
-  bp = new RadosBucket(this, i, u);
   /* Don't need to fetch the bucket info, use the provided one */
-
-  bucket->reset(bp);
-  return 0;
+  return std::make_unique<RadosBucket>(this, i, u);
 }
 
-int RadosStore::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int RadosStore::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b,
+                            std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  rgw_bucket b;
-
-  b.tenant = tenant;
-  b.name = name;
-
-  return get_bucket(dpp, u, b, bucket, y);
+  *bucket = std::make_unique<RadosBucket>(this, b, u);
+  return (*bucket)->load_bucket(dpp, y);
 }
 
 bool RadosStore::is_meta_master()
 {
   return svc()->zone->is_meta_master();
-}
-
-int RadosStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version* objv,
-					     bufferlist& in_data,
-					     JSONParser* jp, req_info& info,
-					     optional_yield y)
-{
-  if (is_meta_master()) {
-    /* We're master, don't forward */
-    return 0;
-  }
-
-  if (!svc()->zone->get_master_conn()) {
-    ldpp_dout(dpp, 0) << "rest connection is invalid" << dendl;
-    return -EINVAL;
-  }
-  ldpp_dout(dpp, 0) << "sending request to master zonegroup" << dendl;
-  bufferlist response;
-  std::string uid_str = user->get_id().to_str();
-#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = svc()->zone->get_master_conn()->forward(dpp, rgw_user(uid_str), info,
-                                                    objv, MAX_REST_RESPONSE,
-						    &in_data, &response, y);
-  if (ret < 0)
-    return ret;
-
-  ldpp_dout(dpp, 20) << "response: " << response.c_str() << dendl;
-  if (jp && !jp->parse(response.c_str(), response.length())) {
-    ldpp_dout(dpp, 0) << "failed parsing response from master zonegroup" << dendl;
-    return -EINVAL;
-  }
-
-  return 0;
-}
-
-int RadosStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
-					     bufferlist& in_data,
-					     RGWXMLDecoder::XMLParser* parser, req_info& info,
-					     optional_yield y)
-{
-  if (is_meta_master()) {
-    /* We're master, don't forward */
-    return 0;
-  }
-
-  if (!svc()->zone->get_master_conn()) {
-    ldpp_dout(dpp, 0) << "rest connection is invalid" << dendl;
-    return -EINVAL;
-  }
-  ldpp_dout(dpp, 0) << "sending request to master zonegroup" << dendl;
-  bufferlist response;
-#define MAX_REST_RESPONSE (128 * 1024) // we expect a very small response
-  int ret = svc()->zone->get_master_conn()->forward_iam_request(dpp, key, info,
-                                                    objv, MAX_REST_RESPONSE,
-						                                        &in_data, &response, y);
-  if (ret < 0)
-    return ret;
-
-  ldpp_dout(dpp, 20) << "response: " << response.c_str() << dendl;
-
-  std::string r = response.c_str();
-  std::string str_to_search = "&quot;";
-  std::string str_to_replace = "\"";
-  boost::replace_all(r, str_to_search, str_to_replace);
-  ldpp_dout(dpp, 20) << "r: " << r.c_str() << dendl;
-
-  if (parser && !parser->parse(r.c_str(), r.length(), 1)) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to parse response from master zonegroup" << dendl;
-    return -EIO;
-  }
-
-  return 0;
 }
 
 std::string RadosStore::zone_unique_id(uint64_t unique_num)
@@ -3152,20 +2906,6 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
 			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx);
-}
-
-const std::string& RadosZoneGroup::get_endpoint() const
-{
-  if (!group.endpoints.empty()) {
-      return group.endpoints.front();
-  } else {
-    // use zonegroup's master zone endpoints
-    auto z = group.zones.find(group.master_zone);
-    if (z != group.zones.end() && !z->second.endpoints.empty()) {
-      return z->second.endpoints.front();
-    }
-  }
-  return empty;
 }
 
 bool RadosZoneGroup::placement_target_exists(std::string& target) const

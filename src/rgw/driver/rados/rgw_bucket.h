@@ -45,7 +45,6 @@ extern bool rgw_bucket_object_check_filter(const std::string& oid);
 
 void init_default_bucket_layout(CephContext *cct, rgw::BucketLayout& layout,
 				const RGWZone& zone,
-				std::optional<uint32_t> shards,
 				std::optional<rgw::BucketIndexType> type);
 
 struct RGWBucketCompleteInfo {
@@ -499,7 +498,7 @@ public:
       RGWObjVersionTracker *objv_tracker{nullptr};
       ceph::real_time mtime;
       bool exclusive{false};
-      std::map<std::string, bufferlist> *attrs{nullptr};
+      const std::map<std::string, bufferlist> *attrs{nullptr};
 
       PutParams() {}
 
@@ -518,7 +517,7 @@ public:
         return *this;
       }
 
-      PutParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
+      PutParams& set_attrs(const std::map<std::string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
@@ -583,7 +582,7 @@ public:
                                                    nullptr: orig_info was not found (new bucket instance */
       ceph::real_time mtime;
       bool exclusive{false};
-      std::map<std::string, bufferlist> *attrs{nullptr};
+      const std::map<std::string, bufferlist> *attrs{nullptr};
       RGWObjVersionTracker *objv_tracker{nullptr};
 
       PutParams() {}
@@ -603,7 +602,7 @@ public:
         return *this;
       }
 
-      PutParams& set_attrs(std::map<std::string, bufferlist> *_attrs) {
+      PutParams& set_attrs(const std::map<std::string, bufferlist> *_attrs) {
         attrs = _attrs;
         return *this;
       }
