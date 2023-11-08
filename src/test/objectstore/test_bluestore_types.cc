@@ -2298,6 +2298,171 @@ TEST(bluestore_blob_t, wrong_map_bl_in_51682) {
     ASSERT_EQ(expected_pos, num_expected_entries);
   }
 }
+class bluestore_blob_t_test :
+  public ::testing::Test,
+  public ::testing::WithParamInterface<std::vector<int>>
+{
+};
+
+TEST_P(bluestore_blob_t_test, release_extents)
+{
+  // how to construct valid release input
+  // 1. pre-release area (might be empty)
+  // 2. release area (cannot be empty anywhere), likely to continue extents
+  // 3. post-release area (might be empty)
+  // result:
+  // pre-release + empty_region + post-release
+  // +
+  // release area
+
+  std::vector<int> param = GetParam();
+  ASSERT_EQ(param.size(), 8);
+  uint32_t alloc_unit =         param[0];
+  uint32_t test_region_range =  param[1];
+  uint32_t test_is_empty_nom =  param[2];
+  uint32_t test_is_empty_denom = param[3];
+  uint32_t test_pmp_range =     param[4];
+  uint32_t test_pmp_iszero =    param[5];
+  uint32_t test_pmp_cont_nom =  param[6];
+  uint32_t test_pmp_cont_denom = param[7];
+
+  auto generate = [&](PExtentVector* cont, PExtentVector& v, uint32_t num_aus) {
+    bool prev_is_empty = false;
+    uint32_t illegal_pos = (uint32_t)-1;
+    while (num_aus > 0) {
+      uint32_t a = (rand() % test_region_range) + 1;
+      if (a > num_aus) a = num_aus;
+      if (prev_is_empty) {
+        prev_is_empty = false;
+      } else {
+        prev_is_empty = (rand() % test_is_empty_denom) < test_is_empty_nom;
+      }
+      if (prev_is_empty) {
+        v.emplace_back(bluestore_pextent_t::INVALID_OFFSET, a * alloc_unit);
+      } else {
+        if (cont && cont->size() > 0 && cont->back().is_valid()) {
+          v.emplace_back(cont->back().end(), a * alloc_unit);
+          cont = nullptr;
+        } else {
+          uint32_t pos;
+          do {
+            pos = (rand() % 1000000) * alloc_unit;
+          } while (pos == illegal_pos);
+          v.emplace_back(pos, a * alloc_unit);
+          illegal_pos = pos + a * alloc_unit;
+        }
+      }
+      num_aus -= a;
+    }
+  };
+  auto generate_nonempty = [&](PExtentVector* cont, PExtentVector& v, uint32_t num_aus) {
+    uint32_t illegal_pos = (uint32_t)-1;
+    while (num_aus > 0) {
+      uint32_t a = (rand() % test_region_range) + 1;
+      if (a > num_aus) a = num_aus;
+      if (cont && cont->size() > 0 && cont->back().is_valid()) {
+        v.emplace_back(cont->back().end(), a * alloc_unit);
+        cont = nullptr;
+      } else {
+        uint32_t pos;
+        do {
+          pos = (rand() % 1000000) * alloc_unit;
+        } while (pos == illegal_pos);
+        v.emplace_back(pos, a * alloc_unit);
+        illegal_pos = pos + a * alloc_unit;
+      }
+      num_aus -= a;
+    }
+  };
+  auto append = [&](PExtentVector& dest, const PExtentVector& src) {
+    for (auto s: src) {
+      if (dest.size() > 0 &&
+        ((dest.back().is_valid() && dest.back().end() == s.offset) ||
+        (!dest.back().is_valid() && !s.is_valid()) ) ) {
+        dest.back().length += s.length;
+      } else {
+        dest.push_back(s);
+      }
+    }
+  };
+
+  for (int i = 0; i < 10000; i++) {
+    PExtentVector pre;
+    PExtentVector mid;
+    PExtentVector post;
+
+    uint32_t aus1 = std::rand() % (test_pmp_range + test_pmp_iszero);
+    uint32_t punch_offset = 0;
+    if (aus1 > test_pmp_iszero) {
+      aus1 -= test_pmp_iszero;
+      generate(nullptr, pre, aus1);
+      punch_offset = aus1 * alloc_unit;
+    } else {
+      aus1 = 0;
+    }
+    uint32_t aus2 = (std::rand() % test_pmp_range) + 1;
+    uint32_t punch_length = aus2 * alloc_unit;
+    bool cont2 = std::rand() % test_pmp_cont_denom < test_pmp_cont_nom;
+    generate_nonempty(cont2 ? &pre: nullptr, mid, aus2);
+    uint32_t aus3 = std::rand() % (test_pmp_range + test_pmp_iszero);
+    bool cont3 = std::rand() % test_pmp_cont_denom < test_pmp_cont_nom;
+    if (aus3 > test_pmp_iszero) {
+      aus3 -= test_pmp_iszero;
+      generate(cont3 ? &mid: nullptr, post, aus3);
+    } else {
+      aus3 = 0;
+    }
+    uint32_t total_length = (aus1 + aus2 + aus3) * alloc_unit;
+
+    PExtentVector input;
+    input.insert(input.end(), pre.begin(), pre.end());
+    append(input, mid);
+    append(input, post);
+    PExtentVector output;
+    output.insert(output.end(), pre.begin(), pre.end());
+    PExtentVector empty;
+    empty.emplace_back(bluestore_pextent_t::INVALID_OFFSET, punch_length);
+    append(output, empty);
+    append(output, post);
+
+    bluestore_blob_t blob;
+    blob.allocated(0, total_length, input);
+    PExtentVector result;
+//    std::cout << "inp=" << blob.get_extents() << std::endl;
+//    std::cout << "punch=0x" << std::hex << punch_offset << "~" << punch_length
+//              << std::dec << std::endl;
+    //PExtentVector punch;
+    //punch.emplace_back(punch_offset, punch_length);
+    //blob.release_extents(false, punch, &result);
+    blob.release_extents(punch_offset, punch_length, &result);
+//    std::cout << "rel=" << result << std::endl;
+//    std::cout << "out=" << blob.get_extents() << std::endl;
+//    std::cout << std::endl;
+    ASSERT_EQ(result, mid);
+    ASSERT_EQ(blob.get_extents(), output);
+  }
+}
+
+/*
+  uint32_t alloc_unit = 4096;
+  uint32_t test_region_range = 5;
+  uint32_t test_is_empty_nom = 1;
+  uint32_t test_is_empty_denom = 3;
+  uint32_t test_pmp_range = 10;
+  uint32_t test_pmp_iszero = 3;
+  uint32_t test_pmp_cont_nom = 2;
+  uint32_t test_pmp_cont_denom = 4;
+  */
+INSTANTIATE_TEST_SUITE_P(
+  ObjectStore,
+  bluestore_blob_t_test,
+  ::testing::Values(
+    std::vector<int>({4096, 5, 1, 3, 10, 3, 2, 4}),
+    std::vector<int>({4096, 10, 2, 3, 30, 10, 3, 5}),
+    std::vector<int>({8192, 10, 2, 5, 30, 10, 4, 5}),
+    std::vector<int>({32768, 15, 1, 6, 60, 30, 3, 4})
+    )
+);
 
 //---------------------------------------------------------------------------------
 static int verify_extent(const extent_t &ext, const extent_t *ext_arr,
