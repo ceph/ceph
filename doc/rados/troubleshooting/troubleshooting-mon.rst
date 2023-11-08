@@ -6,14 +6,13 @@
 
 .. index:: monitor, high availability
 
-If a cluster encounters monitor-related problems, this does not necessarily
-mean that the cluster is in danger of going down. Even if multiple monitors are
-lost, the cluster can still be up and running, as long as there are enough
-surviving monitors to form a quorum.
-
-However serious your cluster's monitor-related problems might be, we recommend
-that you take the following troubleshooting steps.
-
+Even if a cluster experiences monitor-related problems, the cluster is not
+necessarily in danger of going down. If a cluster has lost multiple monitors,
+it can still remain up and running as long as there are enough surviving
+monitors to form a quorum.
+   
+If your cluster is having monitor-related problems, we recommend that you
+consult the following troubleshooting information.
 
 Initial Troubleshooting
 =======================
