@@ -73,6 +73,7 @@ int RedisDriver::initialize(const DoutPrefixProvider* dpp)
   config cfg;
   cfg.addr.host = address.substr(0, address.find(":"));
   cfg.addr.port = address.substr(address.find(":") + 1, address.length());
+  cfg.clientname = "RedisDriver";
 
   if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
     ldpp_dout(dpp, 10) << "RedisDriver::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
@@ -552,18 +553,43 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
 Aio::OpFunc RedisDriver::redis_read_op(optional_yield y, std::shared_ptr<connection> conn,
                                  off_t read_ofs, off_t read_len, const std::string& key)
 {
-  return [y, conn, key] (Aio* aio, AioResult& r) mutable {
+  return [y, conn, &key] (Aio* aio, AioResult& r) mutable {
     using namespace boost::asio;
     spawn::yield_context yield = y.get_yield_context();
     async_completion<spawn::yield_context, void()> init(yield);
     auto ex = get_associated_executor(init.completion_handler);
 
-    boost::redis::request req;
+    // TODO: Make unique pointer once support is added
+    auto s = std::make_shared<RedisDriver::redis_response>();
+    auto& resp = s->resp;
+    auto& req = s->req;
     req.push("HGET", key, "data");
+
+    conn->async_exec(req, resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, s}));
+  };
+}
+
+Aio::OpFunc RedisDriver::redis_write_op(optional_yield y, std::shared_ptr<connection> conn,
+                                 const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, const std::string& key)
+{
+  return [y, conn, &bl, &len, &attrs, &key] (Aio* aio, AioResult& r) mutable {
+    using namespace boost::asio;
+    spawn::yield_context yield = y.get_yield_context();
+    async_completion<spawn::yield_context, void()> init(yield);
+    auto ex = get_associated_executor(init.completion_handler);
+
+    auto redisAttrs = build_attrs(attrs);
+
+    if (bl.length()) {
+      redisAttrs.push_back("data");
+      redisAttrs.push_back(bl.to_str());
+    }
 
     // TODO: Make unique pointer once support is added
     auto s = std::make_shared<RedisDriver::redis_response>();
     auto& resp = s->resp;
+    auto& req = s->req;
+    req.push_range("HMSET", key, redisAttrs);
 
     conn->async_exec(req, resp, bind_executor(ex, RedisDriver::redis_aio_handler{aio, r, s}));
   };
@@ -579,9 +605,11 @@ rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optiona
 }
 
 rgw::AioResultList RedisDriver::put_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, uint64_t cost, uint64_t id) {
-  // TODO: implement
-  rgw::AioResultList aio_result_list;
-  return aio_result_list;
+  std::string entry = partition_info.location + key;
+  rgw_raw_obj r_obj;
+  r_obj.oid = key;
+
+  return aio->get(r_obj, redis_write_op(y, conn, bl, len, attrs, entry), cost, id);
 } 
 
 void RedisDriver::shutdown()

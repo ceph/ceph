@@ -140,7 +140,7 @@ class D4NFilterObject : public FilterObject {
 										   source(_source) 
         {
           cb = std::make_unique<D4NFilterGetCB>(source->driver, source);
-	      }
+	}
 	virtual ~D4NFilterReadOp() = default;
 
 	virtual int prepare(optional_yield y, const DoutPrefixProvider* dpp) override;
