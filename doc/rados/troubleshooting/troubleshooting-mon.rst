@@ -218,31 +218,38 @@ detail`` returns a message similar to the following::
   the documentation.
   
 
-**What if the state is ``probing``?**
+**What does it mean if  a Monitor's state is ``probing``?**
 
-  This means the monitor is still looking for the other monitors. Every time
-  you start a monitor, the monitor will stay in this state for some time while
-  trying to connect the rest of the monitors specified in the ``monmap``.  The
-  time a monitor will spend in this state can vary. For instance, when on a
-  single-monitor cluster (never do this in production), the monitor will pass
-  through the probing state almost instantaneously.  In a multi-monitor
-  cluster, the monitors will stay in this state until they find enough monitors
-  to form a quorum |---| this means that if you have 2 out of 3 monitors down, the
-  one remaining monitor will stay in this state indefinitely until you bring
-  one of the other monitors up.
+  If ``ceph health detail`` shows that a Monitor's state is
+  ``probing``, then the Monitor is still looking for the other Monitors. Every
+  Monitor remains in this state for some time when it is started. When a
+  Monitor has connected to the other Monitors specified in the ``monmap``, it
+  ceases to be in the ``probing`` state. The amount of time that a Monitor is
+  in the ``probing`` state depends upon the parameters of the cluster of which
+  it is a part. For example, when a Monitor is a part of a single-monitor
+  cluster (never do this in production), the monitor passes through the probing
+  state almost instantaneously. In a multi-monitor cluster, the Monitors stay
+  in the ``probing`` state until they find enough monitors to form a quorum
+  |---| this means that if two out of three Monitors in the cluster are
+  ``down``, the one remaining Monitor stays in the ``probing``  state
+  indefinitely until you bring one of the other monitors up.
 
-  If you have a quorum the starting daemon should be able to find the
-  other monitors quickly, as long as they can be reached. If your
-  monitor is stuck probing and you have gone through with all the communication
-  troubleshooting, then there is a fair chance that the monitor is trying
-  to reach the other monitors on a wrong address. ``mon_status`` outputs the
-  ``monmap`` known to the monitor: check if the other monitor's locations
-  match reality. If they don't, jump to
-  `Recovering a Monitor's Broken monmap`_; if they do, then it may be related
-  to severe clock skews amongst the monitor nodes and you should refer to
-  `Clock Skews`_ first, but if that doesn't solve your problem then it is
-  the time to prepare some logs and reach out to the community (please refer
-  to `Preparing your logs`_ on how to best prepare your logs).
+  If quorum has been established, then the Monitor daemon should be able to
+  find the other Monitors quickly, as long as they can be reached. If a Monitor
+  is stuck in the ``probing`` state and you have exhausted the procedures above
+  that describe the troubleshooting of communications between the Monitors,
+  then it is possible that the problem Monitor is trying to reach the other
+  Monitors at a wrong address. ``mon_status`` outputs the ``monmap`` that is
+  known to the monitor: determine whether the other Monitors' locations as
+  specified in the ``monmap`` match the locations of the Monitors in the
+  network. If they do not, see `Recovering a Monitor's Broken monmap`_.
+  If the locations of the Monitors as specified in the ``monmap`` match the
+  locations of the Monitors in the network, then the persistent
+  ``probing`` state could  be related to severe clock skews amongst the monitor
+  nodes.  See `Clock Skews`_.  If the information in `Clock Skews`_ does not
+  bring the Monitor out of the ``probing`` state, then prepare your system logs
+  and ask the Ceph community for help. See `Preparing your logs`_ for
+  information about the proper preparation of logs.
 
 
 **What if state is ``electing``?**
