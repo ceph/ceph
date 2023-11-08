@@ -45,8 +45,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   clusters: string[] = [];
-  clustersMap: Map<string, string> = new Map<string, string>();
-  selectedCluster = '';
+  clustersMap: Map<string, any> = new Map<string, any>();
+  selectedCluster: any;
 
   constructor(
     // private authService: AuthService,
@@ -67,7 +67,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.multiClusterService.subscribe((resp: string) => {
         resp['config']?.forEach((config: any) => {
-          this.clustersMap.set(config['url'], config['name']);
+          this.clustersMap.set(config['url'], { name: config['name'] , helperText: config['helper_text']});
         });
 
         this.selectedCluster =
@@ -151,7 +151,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
         localStorage.setItem('cluster_api_url', url);
         this.selectedCluster = this.clustersMap.get(url);
         resp['config'].forEach((config: any) => {
-          if (config['name'] === this.selectedCluster) {
+          if (config['name'] === this.selectedCluster.name) {
             localStorage.setItem('token_of_selected_cluster', config['token']);
           }
         });

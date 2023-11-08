@@ -8,9 +8,8 @@ describe('MultiClusterComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ MultiClusterComponent ]
-    })
-    .compileComponents();
+      declarations: [MultiClusterComponent]
+    }).compileComponents();
 
     fixture = TestBed.createComponent(MultiClusterComponent);
     component = fixture.componentInstance;

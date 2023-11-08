@@ -145,7 +145,14 @@
   }
 
   .cd-context-bar {
-    color: white;
+    background-color: vv.$white;
+    color: vv.$secondary;
+  }
+
+  .dropdown-text {
+    font-weight: 600;
+    font-size: small;
+    max-width: 30rem;
   }
 }
 

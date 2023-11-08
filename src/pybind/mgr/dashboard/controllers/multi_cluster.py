@@ -67,7 +67,7 @@ class MultiClusterRoute(RESTController):
     @Endpoint('POST')
     @ReadPermission
     @EndpointDoc("Which route you want to go")
-    def auth(self, url: str, name: str, username = '', password = '', token = None, origin=None):
+    def auth(self, url: str, helper_text: str, name: str, username = '', password = '', token = None, origin=None):
         if isinstance(Settings.MULTICLUSTER_CONFIG, str):
             item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
             copy_config = item_to_dict.copy()
@@ -75,17 +75,17 @@ class MultiClusterRoute(RESTController):
             copy_config = Settings.MULTICLUSTER_CONFIG.copy()
         if token:
             try:
-                copy_config['config'].append({'name': name, 'url': url, 'token': token})
+                copy_config['config'].append({'name': name, 'url': url, 'token': token, 'helper_text': helper_text})
             except KeyError:
-                copy_config = {'current_url': url, 'config': [{'name': name, 'url': url, 'token': token}]}
+                copy_config = {'current_url': url, 'config': [{'name': name, 'url': url, 'token': token, 'helper_text': helper_text}]}
             Settings.MULTICLUSTER_CONFIG = copy_config
             return
         params = { "username": username, "password": password }
         response = self._proxy('POST', url, path='api/auth', payload=json.dumps(params), origin=origin)
         try:
-            copy_config['config'].append({'name': response['fsid'], 'url': url, 'token': response['token']})
+            copy_config['config'].append({'name': response['fsid'], 'url': url, 'token': response['token'], 'helper_text': helper_text})
         except KeyError:
-            copy_config = {'current_url': url, 'config': [{'name': response['fsid'], 'url': url, 'token': response['token']}]}
+            copy_config = {'current_url': url, 'config': [{'name': response['fsid'], 'url': url, 'token': response['token'], 'helper_text': helper_text}]}
         Settings.MULTICLUSTER_CONFIG = copy_config
 
     @Endpoint('PUT')

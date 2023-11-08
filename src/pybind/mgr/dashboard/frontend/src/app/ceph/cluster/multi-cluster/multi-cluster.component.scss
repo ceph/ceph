@@ -1,36 +1,39 @@
+@use '../../../../styles/vendor/variables' as vv;
+
 .health-indicators {
-    display: flex;
-    justify-content: space-around;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-  
-  .indicator {
-    text-align: center;
-  }
-  
-  .status {
-    font-weight: bold;
-    margin-bottom: 5px;
-  }
-  
-  .healthy {
-    color: green;
-  }
-  
-  .warning {
-    color: orange;
-  }
-  
-  .error {
-    color: red;
-  }
+  align-items: center;
+  display: flex;
+  justify-content: space-around;
+  margin-bottom: 20px;
+}
 
-  .align-cards {
-    margin-bottom: 1.5em;
-  }
+.indicator {
+  text-align: center;
+}
 
-  .value {
-    font-size: 4.5em;
-  }
-  
+.status {
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.healthy {
+  color: vv.$health-color-healthy;
+}
+
+.warning {
+  color: vv.$health-color-warning;
+}
+
+.error {
+  color: vv.$health-color-error;
+}
+
+.value {
+  font-size: 6.5em;
+}
+
+.fa-wrench {
+  color: vv.$info;
+  font-size: 6em;
+  margin-top: 200px;
+}

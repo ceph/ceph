@@ -3,25 +3,31 @@
     <br>
     <b class="chartTitle pb-2"
        i18n>{{ chartTitle }}</b>
-    <div
+    <div class="row"
          i18n>
       <div class="d-inline-flex align-items-center gap-1">
         <div *ngIf="!maxValue"
              class="blue-box">
       </div>
-        <div *ngIf="label2">{{ label }}:
+        <div class="label-overflow"
+             *ngIf="label2">{{ label }}
         </div>
-        {{ currentData || 'N/A' }} {{ currentDataUnits }}
+        <span *ngIf="label2">:</span>
+        <div>{{ currentData || 'N/A' }} {{ currentDataUnits }} </div>
         <div *ngIf="maxValue && currentData"> used of
           {{ maxConvertedValue }} {{ maxConvertedValueUnits }}
         </div>
       </div>
     </div>
     <div *ngIf="label2"
+         class="row"
          i18n>
       <div class="d-inline-flex align-items-center gap-1">
         <div class="yellow-box"></div>
-        <div *ngIf="label2 !== chartTitle" >{{ label2 }}: </div>
+        <div class="label-overflow"
+             *ngIf="label2 !== chartTitle">{{ label2 }}
+        </div>
+        <span *ngIf="label2 !== chartTitle">:</span>
         <div>{{ currentData2 || 'N/A' }} {{ currentDataUnits2 }}</div>
       </div>
     </div>

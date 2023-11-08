@@ -17,3 +17,10 @@
   height: 13px;
   width: 13px;
 }
+
+.label-overflow {
+  max-width: 7rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

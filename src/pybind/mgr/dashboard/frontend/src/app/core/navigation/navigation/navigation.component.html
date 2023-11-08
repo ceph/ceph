@@ -30,25 +30,27 @@
 
       <div class="collapse navbar-collapse"
            [ngClass]="{'show': rightSidebarOpen}">
-        
+
       <ng-container *ngIf="clustersMap?.size > 1">
         <ng-container>
-          <div class="cd-context-bar">
+          <div>
             <div ngbDropdown
                  placement="bottom-left"
-                 class="d-inline-block ms-2">
+                 class="d-inline-block ms-5">
               <button ngbDropdownToggle
-                      class="btn btn-outline-light ctx-bar-selected-rgw-daemon"
+                      class="btn btn-outline-light cd-context-bar"
                       i18n-title
-                      title="Selected Remote Cluster:">
-                {{ selectedCluster }}
+                      title="Selected Cluster:">
+                <span class="dropdown-text"> {{ selectedCluster.name }} </span>
+                <span>- {{ selectedCluster.helperText }}</span>
               </button>
               <div ngbDropdownMenu>
                 <ng-container *ngFor="let cluster of clustersMap | keyvalue">
                   <button ngbDropdownItem
-                          class="ctx-bar-available-rgw-daemon"
                           (click)="onClusterSelection(cluster.key)">
-                    {{ cluster.value }}
+                    <div class="dropdown-text">{{ cluster.value.name }}</div>
+                    <div *ngIf="cluster.value.helperText"
+                         class="text-secondary">{{ cluster.value.helperText }}</div>
                   </button>
                 </ng-container>
               </div>
@@ -117,7 +119,13 @@
           </i>
         </a>
       </li>
-
+      <!-- Multi-cluster Dashboard -->
+      <li routerLinkActive="active"
+          class="nav-item tc_menuitem_multi_cluster">
+        <a i18n
+           class="nav-link"
+           routerLink="/multi-cluster">Multi-Cluster</a>
+      </li>
       <!-- Cluster -->
       <li routerLinkActive="active"
           class="nav-item tc_menuitem_cluster"
@@ -395,12 +403,6 @@
                routerLink="/configuration">Configuration</a>
           </li>
         </ul>
-      </li>
-      <li routerLinkActive="active"
-          class="nav-item tc_menuitem_multi_cluster">
-        <a i18n
-           class="nav-link"
-           routerLink="/multi-cluster">Multi-Cluster</a>
       </li>
     </ng-container>
   </ng-template>

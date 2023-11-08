@@ -1,17 +1,17 @@
 <cd-modal [modalRef]="activeModal">
-    <ng-container i18n="form title"
-                  class="modal-title">Add Cluster</ng-container>
-
-    <ng-container class="modal-content">
-      <form name="remoteClusterForm"
-            #frm="ngForm"
-            [formGroup]="remoteClusterForm">
+  <ng-container i18n="form title"
+                class="modal-title">Add Cluster
+  </ng-container>
+  <ng-container class="modal-content">
+    <form name="remoteClusterForm"
+          #frm="ngForm"
+          [formGroup]="remoteClusterForm">
       <div class="modal-body">
-        
         <div class="form-group row">
           <label class="cd-col-form-label required"
                  for="remoteClusterUrl"
-                 i18n>Cluster API URL</label>
+                 i18n>Cluster API URL
+          </label>
           <div class="cd-col-form-input">
             <input class="form-control"
                    type="text"
@@ -21,98 +21,122 @@
                    formControlName="remoteClusterUrl">
             <span class="invalid-feedback"
                   *ngIf="remoteClusterForm.showError('remoteClusterUrl', frm, 'required')"
-                  i18n>This field is required.</span>
+                  i18n>This field is required.
+            </span>
           </div>
         </div>
         <div class="form-group row">
-            <label class="cd-col-form-label"
-                   for="name"
-                   i18n>Name
-            </label>
-            <div class="cd-col-form-input">
-              <input id="name"
-                     name="name"
-                     class="form-control"
-                     type="text"
-                     formControlName="name">
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('name', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+          <label class="cd-col-form-label required"
+                 for="helperText"
+                 i18n>Description
+          </label>
+          <div class="cd-col-form-input">
+            <input id="helperText"
+                   name="helperText"
+                   class="form-control"
+                   type="text"
+                   placeholder="Name/Text to uniquely identify cluster"
+                   formControlName="helperText">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('helperText', frm, 'required')"
+                  i18n>This field is required.
+            </span>
           </div>
-        <div class="form-group row" *ngIf="!showToken">
-            <label class="cd-col-form-label required"
-                   for="apiToken"
-                   i18n>Username
-            </label>
-            <div class="cd-col-form-input">
-              <input id="username"
-                     name="username"
-                     class="form-control"
-                     type="text"
-                     formControlName="username">
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('username', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+        </div>
+        <!-- <div class="form-group row">
+          <label class="cd-col-form-label"
+                 for="name"
+                 i18n>Name
+          </label>
+          <div class="cd-col-form-input">
+            <input id="name"
+                   name="name"
+                   class="form-control"
+                   type="text"
+                   formControlName="name">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('name', frm, 'required')"
+                  i18n>This field is required.
+            </span>
           </div>
-          <div class="form-group row" *ngIf="!showToken">
-            <label class="cd-col-form-label required"
-                   for="password"
-                   i18n>Password
-            </label>
-            <div class="cd-col-form-input">
-              <input id="password"
-                     name="password"
-                     class="form-control"
-                     type="text"
-                     formControlName="password">
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('password', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+        </div> -->
+        <div class="form-group row"
+             *ngIf="!showToken">
+          <label class="cd-col-form-label required"
+                 for="apiToken"
+                 i18n>Username
+          </label>
+          <div class="cd-col-form-input">
+            <input id="username"
+                   name="username"
+                   class="form-control"
+                   type="text"
+                   formControlName="username">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('username', frm, 'required')"
+                  i18n>This field is required.
+            </span>
           </div>
+        </div>
+        <div class="form-group row"
+             *ngIf="!showToken">
+          <label class="cd-col-form-label required"
+                 for="password"
+                 i18n>Password
+          </label>
+          <div class="cd-col-form-input">
+            <input id="password"
+                   name="password"
+                   class="form-control"
+                   type="password"
+                   formControlName="password">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('password', frm, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
 
-          <!-- Show Tenant -->
-          <div class="form-group row">
-            <div class="cd-col-form-offset">
-              <div class="custom-control custom-checkbox">
-                <input class="custom-control-input"
-                       id="showToken"
-                       type="checkbox"
-                       (click)="showToken = !showToken"
-                       formControlName="showToken"
-                       [readonly]="true">
-                <label class="custom-control-label"
-                       for="showToken"
-                       i18n>Auth with token</label>
-              </div>
+        <!-- Show Tenant -->
+        <div class="form-group row">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="showToken"
+                     type="checkbox"
+                     (click)="showToken = !showToken"
+                     formControlName="showToken"
+                     [readonly]="true">
+              <label class="custom-control-label"
+                     for="showToken"
+                     i18n>Auth with token</label>
             </div>
           </div>
+        </div>
 
-          <div class="form-group row"
-               *ngIf="showToken">
-            <label class="cd-col-form-label required"
-                   for="apiToken"
-                   i18n>Token
-            </label>
-            <div class="cd-col-form-input">
-              <input id="apiToken"
-                     name="apiToken"
-                     class="form-control"
-                     type="text"
-                     formControlName="apiToken">
-              <span class="invalid-feedback"
-                    *ngIf="remoteClusterForm.showError('apiToken', frm, 'required')"
-                    i18n>This field is required.</span>
-            </div>
+        <div class="form-group row"
+             *ngIf="showToken">
+          <label class="cd-col-form-label required"
+                 for="apiToken"
+                 i18n>Token
+          </label>
+          <div class="cd-col-form-input">
+            <input id="apiToken"
+                   name="apiToken"
+                   class="form-control"
+                   type="text"
+                   formControlName="apiToken">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('apiToken', frm, 'required')"
+                  i18n>This field is required.</span>
           </div>
+        </div>
       </div>
       <div class="modal-footer">
         <cd-form-button-panel (submitActionEvent)="onSubmit()"
                               [submitText]="actionLabels.ADD"
-                              [form]="remoteClusterForm"></cd-form-button-panel>
+                              [form]="remoteClusterForm">
+        </cd-form-button-panel>
       </div>
-      </form>
-    </ng-container>
-  </cd-modal>
+    </form>
+  </ng-container>
+</cd-modal>

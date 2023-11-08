@@ -8,9 +8,8 @@ describe('MultiClusterFormComponent', () => {
 
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      declarations: [ MultiClusterFormComponent ]
-    })
-    .compileComponents();
+      declarations: [MultiClusterFormComponent]
+    }).compileComponents();
 
     fixture = TestBed.createComponent(MultiClusterFormComponent);
     component = fixture.componentInstance;

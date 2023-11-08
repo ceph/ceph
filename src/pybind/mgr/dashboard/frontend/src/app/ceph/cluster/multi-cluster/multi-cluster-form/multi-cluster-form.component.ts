@@ -30,10 +30,10 @@ export class MultiClusterFormComponent {
   createForm() {
     this.remoteClusterForm = new CdFormGroup({
       username: new FormControl('', {
-        // validators: [Validators.required]
+        validators: [Validators.required]
       }),
       password: new FormControl('', {
-        // validators: [Validators.required]
+        validators: [Validators.required]
       }),
       remoteClusterUrl: new FormControl(null, {
         validators: [Validators.required]
@@ -47,19 +47,23 @@ export class MultiClusterFormComponent {
         {
           validators: []
         }
-      )
+      ),
+      helperText: new FormControl('', {
+        validators: [Validators.required]
+      }),
     });
   }
 
   onSubmit() {
     const url = this.remoteClusterForm.getValue('remoteClusterUrl');
     const name = this.remoteClusterForm.getValue('name');
+    const helperText = this.remoteClusterForm.getValue('helperText');
     const username = this.remoteClusterForm.getValue('username');
     const password = this.remoteClusterForm.getValue('password');
     const token = this.remoteClusterForm.getValue('apiToken');
 
     this.multiClusterService
-      .addCluster(url, name, username, password, token, window.location.origin)
+      .addCluster(url, name, helperText, username, password, token, window.location.origin)
       .subscribe({
         error: () => this.remoteClusterForm.setErrors({ cdSubmitButton: true }),
         complete: () => {

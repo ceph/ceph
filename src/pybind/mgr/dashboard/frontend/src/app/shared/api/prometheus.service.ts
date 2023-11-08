@@ -50,8 +50,6 @@ export class PrometheusService {
     return this.http.get<any>(`${this.baseURL}/multi_cluster_query_range_data`, { params });
   }
 
-  
-
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
     this.ifSettingConfigured(this.settingsKey.alertmanager, fn, elseFn);
   }
@@ -163,7 +161,7 @@ export class PrometheusService {
               step: selectedTime['step']
             }).subscribe((data: any) => {
               console.log(data);
-              
+
               if (data.result.length) {
                 queriesResults[queryName] = data.result[0].values;
               }
@@ -189,92 +187,117 @@ export class PrometheusService {
     return queriesResults;
   }
 
-
   getMultiClusterQueriesData(
     selectedTime: any,
     queries: any,
     queriesResults: any,
     checkNan?: boolean
   ) {
-    return new Observable(observer => {
+    return new Observable((observer) => {
       this.ifPrometheusConfigured(() => {
         if (this.timerGetPrometheusDataSub) {
           this.timerGetPrometheusDataSub.unsubscribe();
         }
 
-
         this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
           selectedTime = this.updateTimeStamp(selectedTime);
-        
-        const requests = [];
-        for (const queryName in queries) {
-          if (queries.hasOwnProperty(queryName)) {
-            const validRangeQueries1 = ['CLUSTER_CAPACITY_UTILIZATION', 'CLUSTER_IOPS_UTILIZATION', 'CLUSTER_THROUGHPUT_UTILIZATION', 'POOL_CAPACITY_UTILIZATION', 'POOL_IOPS_UTILIZATION', 'POOL_THROUGHPUT_UTILIZATION'];
-            if (validRangeQueries1.includes(queryName)) {
+
+          const requests = [];
+          for (const queryName in queries) {
+            if (queries.hasOwnProperty(queryName)) {
+              const validRangeQueries1 = [
+                'CLUSTER_CAPACITY_UTILIZATION',
+                'CLUSTER_IOPS_UTILIZATION',
+                'CLUSTER_THROUGHPUT_UTILIZATION',
+                'POOL_CAPACITY_UTILIZATION',
+                'POOL_IOPS_UTILIZATION',
+                'POOL_THROUGHPUT_UTILIZATION'
+              ];
+              if (validRangeQueries1.includes(queryName)) {
                 const query = queries[queryName];
                 const request = this.getMultiClusterQueryRangeData({
-                params: encodeURIComponent(query),
-                start: selectedTime['start'],
-                end: selectedTime['end'],
-                step: selectedTime['step'],
-              });
-              requests.push(request); 
-            }
-            else {
-              const query = queries[queryName];
-              const request = this.getMultiClusterData({
-              params: encodeURIComponent(query),
-              start: selectedTime['start'],
-              end: selectedTime['end'],
-              step: selectedTime['step'],
-            });
-              requests.push(request); 
+                  params: encodeURIComponent(query),
+                  start: selectedTime['start'],
+                  end: selectedTime['end'],
+                  step: selectedTime['step']
+                });
+                requests.push(request);
+              } else {
+                const query = queries[queryName];
+                const request = this.getMultiClusterData({
+                  params: encodeURIComponent(query),
+                  start: selectedTime['start'],
+                  end: selectedTime['end'],
+                  step: selectedTime['step']
+                });
+                requests.push(request);
+              }
             }
           }
-        }
-  
-        forkJoin(requests).subscribe(
-          (responses: any[]) => {
-            for (let i = 0; i < responses.length; i++) {
-              const data = responses[i];
-              const queryName = Object.keys(queries)[i];
-              const validQueries = ['ALERTS', 'HEALTH_STATUS', 'TOTAL_CAPACITY', 'USED_CAPACITY', 'POOLS', 'OSDS'];
-              if (validQueries.includes(queryName) && data.result.length > 0) {
-                queriesResults[queryName] = data.result;
-              }
-              else {
-                if (data.result.length) {     
-                  console.log(queryName, data);
-                  const validRangeQueries = ['CLUSTER_CAPACITY_UTILIZATION', 'CLUSTER_IOPS_UTILIZATION', 'CLUSTER_THROUGHPUT_UTILIZATION', 'POOL_CAPACITY_UTILIZATION', 'POOL_IOPS_UTILIZATION', 'POOL_THROUGHPUT_UTILIZATION'];
-                  if (validRangeQueries.includes(queryName)) {
-                    queriesResults[queryName] = data.result.map((result: { values: any; }) => result.values);
-                  }
-                  else {
-                    queriesResults[queryName] = data.result.map((result: { value: any; }) => result.value);
-                  }
-                }
-              }
-              if (queriesResults[queryName] !== undefined && queriesResults[queryName] !== '' && checkNan) {
-                queriesResults[queryName].forEach((valueArray: string[]) => {
-                  if (valueArray.includes('NaN')) {
-                    const index = valueArray.indexOf('NaN');
-                    if (index !== -1) {
-                      valueArray[index] = '0';
+
+          forkJoin(requests).subscribe(
+            (responses: any[]) => {
+              for (let i = 0; i < responses.length; i++) {
+                const data = responses[i];
+                const queryName = Object.keys(queries)[i];
+                const validQueries = [
+                  'ALERTS',
+                  'CLUSTER_ALERTS',
+                  'HEALTH_STATUS',
+                  'TOTAL_CAPACITY',
+                  'USED_CAPACITY',
+                  'POOLS',
+                  'OSDS',
+                  'HOSTS'
+                ];
+                if (validQueries.includes(queryName) && data.result.length > 0) {
+                  queriesResults[queryName] = data.result;
+                } else {
+                  if (data.result.length) {
+                    console.log(queryName, data);
+                    const validRangeQueries = [
+                      'CLUSTER_CAPACITY_UTILIZATION',
+                      'CLUSTER_IOPS_UTILIZATION',
+                      'CLUSTER_THROUGHPUT_UTILIZATION',
+                      'POOL_CAPACITY_UTILIZATION',
+                      'POOL_IOPS_UTILIZATION',
+                      'POOL_THROUGHPUT_UTILIZATION'
+                    ];
+                    if (validRangeQueries.includes(queryName)) {
+                      queriesResults[queryName] = data.result.map(
+                        (result: { values: any }) => result.values
+                      );
+                    } else {
+                      queriesResults[queryName] = data.result.map(
+                        (result: { value: any }) => result.value
+                      );
                     }
                   }
-                });
+                }
+                if (
+                  queriesResults[queryName] !== undefined &&
+                  queriesResults[queryName] !== '' &&
+                  checkNan
+                ) {
+                  queriesResults[queryName].forEach((valueArray: string[]) => {
+                    if (valueArray.includes('NaN')) {
+                      const index = valueArray.indexOf('NaN');
+                      if (index !== -1) {
+                        valueArray[index] = '0';
+                      }
+                    }
+                  });
+                }
               }
+              console.log(queriesResults);
+
+              observer.next(queriesResults);
+              observer.complete();
+            },
+            (error) => {
+              observer.error(error);
             }
-            console.log(queriesResults);
-            
-            
-            observer.next(queriesResults);
-            observer.complete();
-          },
-          error => {
-            observer.error(error);
-          }
-        );
+          );
         });
       });
     });

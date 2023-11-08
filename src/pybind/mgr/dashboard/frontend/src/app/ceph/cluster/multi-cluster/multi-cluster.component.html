@@ -1,87 +1,130 @@
-<div class="container-fluid p-4">
+<ng-template #emptyCluster>
+  <div class="container h-75">
+    <div class="row h-100 justify-content-center align-items-center">
+      <div class="blank-page">
+        <i class="mx-auto d-block"
+           [ngClass]="icons.wrench">
+        </i>
+        <div class="mt-4 text-center">
+          <h3><b>Add Cluster </b></h3>
+          <h4 class="mt-3">You can now convert a your existing cluster to multi-cluster.
+                            Please click on "Add Cluster" button to get started.</h4>
+        </div>
+        <div class="mt-4">
+          <div class="text-center">
+            <button class="btn btn-primary"
+                    (click)="openRemoteClusterInfoModal()">
+              <i class="mx-auto"
+                 [ngClass]="icons.add">
+              </i> Add Cluster
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</ng-template>
+
+
+<div class="container-fluid h-100 p-4">
+
+  <ng-template #nametpl>
+    <div class="datatable-body-cell-label" style="margin-left: 0px;">
+      <span title="{{clusterName}}">
+        <a href="#">
+          {{clusterName}}
+        </a>
+      </span>
+    </div>
+  </ng-template>
+
+  <div *ngIf="dashboardClustersMap?.size <= 1">
+    <ng-container *ngTemplateOutlet="emptyCluster"></ng-container>
+  </div>
+  <div *ngIf="dashboardClustersMap?.size > 1">
   <span *ngIf="loading"
-            class="d-flex justify-content-center">
+        class="d-flex justify-content-center">
     <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
   </span>
   <div *ngIf="!loading">
   <div class="row">
     <div class="col-lg-12">
-      <div>
-        <cd-table-actions class="btn-group mb-4 me-2"
-                          [permission]="permission"
-                          [selection]="selection"
-                          [tableActions]="addRemoteClusterAction">
-        </cd-table-actions>
+      <cd-table-actions class="btn-group mb-4 me-2"
+                        [permission]="permission"
+                        [selection]="selection"
+                        [tableActions]="addRemoteClusterAction">
+      </cd-table-actions>
+    </div>
+    <div class="d-flex mb-4">
+      <div class="col-lg-2 pe-3"
+           *ngIf="queriesResults.CLUSTER_COUNT[0]">
+        <cd-card cardTitle="Clusters"
+                 i18n-title
+                 class="col-sm-6 pb-3"
+                 aria-label="Clusters">
+          <span  class="text-center">
+            <h1>{{ queriesResults.CLUSTER_COUNT[0][1] }}</h1>
+          </span>
+        </cd-card>
+      </div>
+      <div class="col-lg-2 pe-3">
+        <cd-card cardTitle="Alerts"
+                 i18n-title
+                 class="col-sm-6"
+                 aria-label="Alerts">
+          <span class="text-center">
+            <h1>{{ queriesResults['ALERTS_COUNT'][0][1] }}</h1>
+          </span>
+        </cd-card>
+      </div>
+      <div class="col-lg-2 pe-3"
+           *ngIf="queriesResults['TOTAL_USED_CAPACITY'][0]">
+        <cd-card cardTitle="Connection Errors"
+                 i18n-title
+                 class="col-sm-6 pb-3"
+                 aria-label="Connection Errors">
+          <span class="text-center">
+            <h1>0</h1>
+          </span>
+        </cd-card>
+      </div>
+      <div class="col-lg-2 pe-3"
+           *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'][0]">
+        <cd-card cardTitle="Total Capacity"
+                 i18n-title
+                 class="col-sm-6 pb-3"
+                 aria-label="Total Capacity">
+          <span class="text-center">
+            <h1>{{ queriesResults['TOTAL_CLUSTERS_CAPACITY'][0][1] | dimlessBinary }}</h1>
+          </span>
+        </cd-card>
+      </div>
+      <div class="col-lg-2 pe-3"
+           *ngIf="queriesResults['TOTAL_USED_CAPACITY'][0]">
+        <cd-card cardTitle="Total Used Capacity"
+                 i18n-title
+                 class="col-sm-6 pb-3"
+                 aria-label="Total Used Capacity">
+          <span class="text-center">
+            <h1>{{ queriesResults['TOTAL_USED_CAPACITY'][0][1] | dimlessBinary }}</h1>
+          </span>
+        </cd-card>
+      </div>
+      <div class="col-lg-2"
+           *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'][0] && queriesResults['TOTAL_USED_CAPACITY'][0]">
+        <cd-card cardTitle="Total Available Capacity"
+                 i18n-title
+                 class="col-sm-6 pb-3"
+                 aria-label="Total Available Capacity">
+          <span class="text-center">
+            <h1>{{ ((queriesResults['TOTAL_CLUSTERS_CAPACITY'][0][1]) - (queriesResults['TOTAL_USED_CAPACITY'][0][1])) | dimlessBinary }}</h1>
+          </span>
+        </cd-card>
       </div>
     </div>
-    <div class="col-lg-2"
-         *ngIf="queriesResults.CLUSTER_COUNT[0]">
-      <cd-card cardTitle="Cluster Count"
-               i18n-title
-               class="col-sm-6 pb-3"
-               aria-label="Cluster Count">
-        <span class="text-center">
-          <h1>{{ queriesResults.CLUSTER_COUNT[0][1] }}</h1>
-        </span>
-      </cd-card>
-    </div>
-    <div class="col-lg-2 align-cards">
-      <cd-card cardTitle="Alerts Count"
-               i18n-title
-               class="col-sm-6"
-               aria-label="Alerts Count">
-        <span class="text-center">
-          <h1>{{ queriesResults['ALERTS_COUNT'][0][1] }}</h1>
-        </span>
-      </cd-card>
-    </div>
-    <div class="col-lg-2 align-cards"
-         *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'][0]">
-      <cd-card cardTitle="Total Capacity"
-               i18n-title
-               class="col-sm-6 pb-3"
-               aria-label="Total Capacity">
-        <span class="text-center">
-          <h1>{{ queriesResults['TOTAL_CLUSTERS_CAPACITY'][0][1] | dimlessBinary }}</h1>
-        </span>
-      </cd-card>
-    </div>
-    <div class="col-lg-2 align-cards"
-         *ngIf="queriesResults['TOTAL_USED_CAPACITY'][0]">
-      <cd-card cardTitle="Total Used Capacity"
-               i18n-title
-               class="col-sm-6 pb-3"
-               aria-label="Total Used Capacity">
-        <span class="text-center">
-          <h1>{{ queriesResults['TOTAL_USED_CAPACITY'][0][1] | dimlessBinary }}</h1>
-        </span>
-      </cd-card>
-    </div>
-    <div class="col-lg-2 align-cards"
-         *ngIf="queriesResults['TOTAL_USED_CAPACITY'][0]">
-      <cd-card cardTitle="Total Used Capacity"
-               i18n-title
-               class="col-sm-6 pb-3"
-               aria-label="Total Used Capacity">
-        <span class="text-center">
-          <h1>{{ queriesResults['TOTAL_USED_CAPACITY'][0][1] | dimlessBinary }}</h1>
-        </span>
-      </cd-card>
-    </div>
-    <div class="col-lg-2 align-cards"
-         *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'][0] && queriesResults['TOTAL_USED_CAPACITY'][0]">
-      <cd-card cardTitle="Total Available Capacity"
-               i18n-title
-               class="col-sm-6 pb-3"
-               aria-label="Total Available Capacity">
-        <span class="text-center">
-          <h1>{{ ((queriesResults['TOTAL_CLUSTERS_CAPACITY'][0][1]) - (queriesResults['TOTAL_USED_CAPACITY'][0][1])) | dimlessBinary }}</h1>
-        </span>
-      </cd-card>
-    </div>
   </div>
-  <div class="row">
-    <div class="col-lg-3"
+  <div class="row mb-4 d-flex">
+    <div class="col-lg-3 pe-0"
          *ngIf="queriesResults['HEALTH_OK_COUNT'][0] && queriesResults['HEALTH_WARNING_COUNT'][0]">
       <cd-card cardTitle="Status"
                i18n-title
@@ -89,41 +132,40 @@
                [justifyContentCenter]="true"
                [alignItemsCenter]="true"
                aria-label="Status">
-          <div class="health-indicators">
-            <div class="indicator me-4">
-              <h3 class="status healthy">Healthy</h3>
-              <span class="value pt-4"
-                    *ngIf="queriesResults['HEALTH_OK_COUNT'][0]">{{ queriesResults['HEALTH_OK_COUNT'][0][1] }}</span>
-            </div>
-            <div class="indicator me-4">
-              <h3 class="status warning">Warning</h3>
-              <span class="value pt-4"
-                    *ngIf="queriesResults['HEALTH_WARNING_COUNT'][0]">{{ queriesResults['HEALTH_WARNING_COUNT'][0][1] }}</span>
-            </div>
-            <div class="indicator me-4">
-              <h3 class="status error">Error</h3>
-              <span class="value pt-4">{{ queriesResults['HEALTH_ERROR_COUNT'][0][1] }}</span>
-            </div>
-        </div>   
-      </cd-card>
-    </div>
-    <div class="col-lg-9">
-      <cd-card  cardTitle="Cluster Details"
-                i18n-title
-                class="d-flex h-100"
-                aria-label="Cluster Details">
-        <div>
-          <cd-table [data]="clusters"
-                    [columns]="columns"
-                    [limit]="4">
-          </cd-table>
+        <div class="health-indicators">
+          <div class="indicator me-5"
+               *ngIf="queriesResults['HEALTH_OK_COUNT'][0][1] > 0">
+            <h3 class="status">Healthy</h3>
+            <span class="healthy value pt-4"
+                  *ngIf="queriesResults['HEALTH_OK_COUNT'][0]">{{ queriesResults['HEALTH_OK_COUNT'][0][1] }}</span>
+          </div>
+          <div class="indicator me-5"
+               *ngIf="queriesResults['HEALTH_WARNING_COUNT'][0][1] > 0">
+            <h3 class="status">Warning</h3>
+            <span class="warning value pt-4"
+                  *ngIf="queriesResults['HEALTH_WARNING_COUNT'][0]">{{ queriesResults['HEALTH_WARNING_COUNT'][0][1] }}</span>
+          </div>
+          <div class="indicator me-5"
+               *ngIf="queriesResults['HEALTH_ERROR_COUNT'][0][1] > 0">
+            <h3 class="status">Error</h3>
+            <span class="error value pt-4"
+                  *ngIf="queriesResults['HEALTH_ERROR_COUNT'][0]">{{ queriesResults['HEALTH_ERROR_COUNT'][0][1] }}</span>
+          </div>
         </div>
       </cd-card>
     </div>
+    <div class="col-lg-9">
+      <div>
+        <cd-table [data]="clusters"
+                  [columns]="columns"
+                  [limit]="4">
+        </cd-table>
+      </div>
+    </div>
   </div>
 
-  <div class="row pt-4">
-    <div class="col-lg-3"
+  <div class="row">
+    <div class="col-lg-3 pe-0 mb-4"
          *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0] && queriesResults['WARNING_ALERTS_COUNT'][0]">
       <cd-card cardTitle="Alert Status"
                i18n-title
@@ -131,38 +173,33 @@
                [alignItemsCenter]="true"
                [justifyContentCenter]="true"
                aria-label="Alert Status">
-          <div class="health-indicators">
-            <div class="indicator me-4">
-              <h3 class="status warning">Warning</h3>
-              <span class="value pt-4"
-                   *ngIf="queriesResults['WARNING_ALERTS_COUNT'][0]">{{ queriesResults['WARNING_ALERTS_COUNT'][0][1] }}</span>
-            </div>
-            <div class="indicator me-4">
-              <h3 class="status error">Critical</h3>
-              <span class="value pt-4"
-                   *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0]">{{ queriesResults['CRITICAL_ALERTS_COUNT'][0][1] }}</span>
-            </div>
-        </div>   
-      </cd-card>
-    </div>
-    <div class="col-lg-9">
-      <cd-card  cardTitle="Alert Details"
-                i18n-title
-                class="d-flex h-100"
-                aria-label="Alert Details">
-        <div>
-          <cd-table [data]="alerts"
-                    [columns]="alertColumns"
-                    [limit]="4">
-          </cd-table>
+        <div class="health-indicators">
+          <div class="indicator me-5"
+               *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0][1] > 0">
+            <h3 class="status ">Critical</h3>
+            <span class="error value pt-4"
+                  *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0]">{{ queriesResults['CRITICAL_ALERTS_COUNT'][0][1] }}</span>
+          </div>
+          <div class="indicator me-5"
+               *ngIf="queriesResults['WARNING_ALERTS_COUNT'][0][1] > 0">
+            <h3 class="status">Warning</h3>
+            <span class="warning value pt-4"
+                  *ngIf="queriesResults['WARNING_ALERTS_COUNT'][0]">{{ queriesResults['WARNING_ALERTS_COUNT'][0][1] }}</span>
+          </div>
         </div>
       </cd-card>
     </div>
+    <div class="col-lg-9 mb-4">
+      <cd-table [data]="alerts"
+                [columns]="alertColumns"
+                [limit]="4">
+      </cd-table>
+    </div>
   </div>
 
-  <div class="row pt-4">
-    <div class="col-lg-6">
-      <cd-card cardTitle="Cluster Utilization"
+  <div class="row mb-4">
+    <div class="col-lg-6 pe-0">
+      <cd-card cardTitle="Top 2 Cluster Utilization"
                i18n-title
                aria-label="Cluster Utilization card">
       <div class="ms-4 me-4 mt-0">
@@ -172,20 +209,21 @@
                                   [label]="clusters[0].cluster"
                                   [label2]="clusters[1].cluster"
                                   dataUnits="B"
+                                  decimals="2"
                                   [data]="queriesResults.CLUSTER_CAPACITY_UTILIZATION[0]"
                                   [data2]="queriesResults.CLUSTER_CAPACITY_UTILIZATION[1]">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="IOPS"
-                                [label]="clusters[0].cluster"
-                                [label2]="clusters[1].cluster"
+                                 [label]="clusters[0].cluster"
+                                 [label2]="clusters[1].cluster"
                                  dataUnits=""
                                  decimals="0"
                                  [data]="queriesResults.CLUSTER_IOPS_UTILIZATION[0]"
                                  [data2]="queriesResults.CLUSTER_IOPS_UTILIZATION[1]">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="Client Throughput"
-                                [label]="clusters[0].cluster"
-                                [label2]="clusters[1].cluster"
+                                 [label]="clusters[0].cluster"
+                                 [label2]="clusters[1].cluster"
                                  dataUnits="B/s"
                                  decimals="2"
                                  [data]="queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0]"
@@ -197,7 +235,7 @@
 
 
   <div class="col-lg-6">
-    <cd-card cardTitle="Pools Utilization"
+    <cd-card cardTitle="Top 2 Pools Utilization"
              i18n-title
              aria-label="Pools Utilization card">
     <div class="ms-4 me-4 mt-0">
@@ -211,16 +249,16 @@
                                 [data2]="queriesResults.POOL_CAPACITY_UTILIZATION[1]">
       </cd-dashboard-area-chart>
       <cd-dashboard-area-chart chartTitle="IOPS"
-                              [label]="clusters[0].cluster"
-                              [label2]="clusters[1].cluster"
+                               [label]="clusters[0].cluster"
+                               [label2]="clusters[1].cluster"
                                dataUnits=""
                                decimals="0"
                                [data]="queriesResults.POOL_IOPS_UTILIZATION[0]"
                                [data2]="queriesResults.POOL_IOPS_UTILIZATION[1]">
       </cd-dashboard-area-chart>
       <cd-dashboard-area-chart chartTitle="Client Throughput"
-                              [label]="clusters[0].cluster"
-                              [label2]="clusters[1].cluster"
+                               [label]="clusters[0].cluster"
+                               [label2]="clusters[1].cluster"
                                dataUnits="B/s"
                                decimals="2"
                                [data]="queriesResults.POOL_THROUGHPUT_UTILIZATION[0]"
@@ -232,4 +270,5 @@
 </div>
 </div>
 </div>
- 
+</div>
+
