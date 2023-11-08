@@ -22,7 +22,7 @@ namespace {
   class CheckTextTable : public TextTable {
   public:
     explicit CheckTextTable(bool verbose) {
-      for (int i = 0; i < 5; i++) {
+      for (int i = 0; i < 6; i++) {
         define_column("", TextTable::LEFT, TextTable::LEFT);
       }
       if (verbose) {
@@ -81,8 +81,14 @@ TEST(pgmap, dump_object_stat_sum_0)
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
   pool.tier_of = 0;
+  int64_t max_used_osd = 123;
+  float max_used_rate = 0.75;
+  stringstream max_used;
+  max_used << "OSD." << max_used_osd << "/" << percentify(max_used_rate * 100) << "%";
+
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-			      pool.get_size(), verbose, true, true, &pool);
+			      pool.get_size(), max_used_osd, max_used_rate,
+			      verbose, true, true, &pool);
   float copies_rate =
     (static_cast<float>(sum.num_object_copies - sum.num_objects_degraded) /
       sum.num_object_copies) * pool.get_size();
@@ -99,6 +105,7 @@ TEST(pgmap, dump_object_stat_sum_0)
   ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(used_percent), tbl.get(0, col++));
+  ASSERT_EQ(max_used.str(), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/copies_rate)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(pool.quota_max_objects)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(pool.quota_max_bytes)), tbl.get(0, col++));
@@ -123,8 +130,13 @@ TEST(pgmap, dump_object_stat_sum_1)
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
   pool.tier_of = 0;
+  int64_t max_used_osd = 123;
+  float max_used_rate = 0.75;
+  stringstream max_used;
+  max_used << "OSD." << max_used_osd << "/" << percentify(max_used_rate * 100) << "%";
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-			      pool.get_size(), verbose, true, true, &pool);
+			      pool.get_size(), max_used_osd, max_used_rate,
+                              verbose, true, true, &pool);
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
@@ -134,6 +146,7 @@ TEST(pgmap, dump_object_stat_sum_1)
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
+  ASSERT_EQ(max_used.str(), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(pool.quota_max_objects)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(pool.quota_max_bytes)), tbl.get(0, col++));
@@ -157,13 +170,16 @@ TEST(pgmap, dump_object_stat_sum_2)
   pool.quota_max_bytes = 2000 * 1024 * 1024;
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
-
+  int64_t max_used_osd = -1; // causes N/A in MAX RAW USED col
+  float max_used_rate = 0.75;
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-			      pool.get_size(), verbose, true, true, &pool);  
+			      pool.get_size(), max_used_osd, max_used_rate,
+                              verbose, true, true, &pool);
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
+  ASSERT_EQ("N/A", tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
 }

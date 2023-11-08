@@ -2,6 +2,14 @@
 
 * The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
   python dependencies are now available in EPEL9.
+* ceph df [detail] output (POOLS section) has been modified in plain
+  format:
+  * new 'MAX RAW USED' column shows the most used OSD for a pool and
+    it's utilization ratio (matching $USE column from 'ceph osd df' output)
+* ceph df [detail] output (POOLS section) has been modified in json format:
+  * new 'max_raw_used_osd' field shows the most used OSD for a given pool
+  * new 'max_raw_used_rate' field shows the utilization ratio for the most
+    used OSD. The value matches the 'utilization' one from 'ceph osd df' output.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
   multi-site. Previously, the replicas of such objects were corrupted on decryption.
   A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to

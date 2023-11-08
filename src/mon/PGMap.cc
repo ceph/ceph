@@ -30,6 +30,7 @@ using std::set;
 using std::string;
 using std::stringstream;
 using std::vector;
+using std::tuple;
 
 using ceph::bufferlist;
 using ceph::fixed_u_to_string;
@@ -48,7 +49,7 @@ MEMPOOL_DEFINE_OBJECT_FACTORY(PGMap::Incremental, pgmap_inc, pgmap);
 void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
 {
   // NOTE: see PGMap::encode_digest
-  uint8_t v = 4;
+  uint8_t v = 5;
   assert(HAVE_FEATURE(features, SERVER_NAUTILUS));
   ENCODE_START(v, 1, bl);
   encode(num_pg, bl);
@@ -69,6 +70,7 @@ void PGMapDigest::encode(bufferlist& bl, uint64_t features) const
   encode(avail_space_by_rule, bl);
   encode(purged_snaps, bl);
   encode(osd_sum_by_class, bl, features);
+  encode(max_raw_used_by_rule, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -94,6 +96,10 @@ void PGMapDigest::decode(bufferlist::const_iterator& p)
   decode(avail_space_by_rule, p);
   decode(purged_snaps, p);
   decode(osd_sum_by_class, p);
+  max_raw_used_by_rule.clear();
+  if (struct_v > 4) {
+    decode(max_raw_used_by_rule, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -748,6 +754,7 @@ void PGMapDigest::dump_pool_stats_full(
       tbl.define_column("(OMAP)", TextTable::RIGHT, TextTable::RIGHT);
     }
     tbl.define_column("%USED", TextTable::RIGHT, TextTable::RIGHT);
+    tbl.define_column("MAX RAW USED", TextTable::RIGHT, TextTable::RIGHT);
     tbl.define_column("MAX AVAIL", TextTable::RIGHT, TextTable::RIGHT);
 
     if (verbose) {
@@ -787,7 +794,17 @@ void PGMapDigest::dump_pool_stats_full(
     float raw_used_rate = osd_map.pool_raw_used_rate(pool_id);
     bool per_pool = use_per_pool_stats();
     bool per_pool_omap = use_per_pool_omap_stats();
-    dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, per_pool,
+    int64_t max_used_osd = -1;
+    float max_used_rate = 0.0;
+    auto it = max_raw_used_by_rule.find(pool->get_crush_rule());
+    if (it != max_raw_used_by_rule.end()) {
+      max_used_osd = it->second.first;
+      max_used_rate = it->second.second;;
+    }
+
+    dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate,
+                         max_used_osd, max_used_rate,
+                         verbose, per_pool,
 			 per_pool_omap, pool);
     if (f) {
       f->close_section();  // stats
@@ -867,8 +884,9 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
 
 void PGMapDigest::dump_object_stat_sum(
   TextTable &tbl, ceph::Formatter *f,
-  const pool_stat_t &pool_stat, uint64_t avail,
-  float raw_used_rate, bool verbose, bool per_pool, bool per_pool_omap,
+  const pool_stat_t &pool_stat, uint64_t avail, float raw_used_rate,
+  int64_t max_raw_used_osd, float max_raw_used_rate,
+  bool verbose, bool per_pool, bool per_pool_omap,
   const pg_pool_t *pool)
 {
   const object_stat_sum_t &sum = pool_stat.stats.sum;
@@ -899,6 +917,7 @@ void PGMapDigest::dump_object_stat_sum(
   auto stored_normalized = stored_data_normalized + stored_omap_normalized;
   // same, amplied by replication or EC
   auto stored_raw = stored_normalized * raw_used_rate;
+
   if (f) {
     f->dump_int("stored", stored_normalized);
     if (verbose) {
@@ -913,6 +932,8 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("omap_bytes_used", used_omap_bytes);
     }
     f->dump_float("percent_used", used);
+    f->dump_int("max_raw_used_osd", max_raw_used_osd);
+    f->dump_float("max_raw_used_rate", max_raw_used_rate);
     f->dump_unsigned("max_avail", avail_res);
     if (verbose) {
       f->dump_int("quota_objects", pool->quota_max_objects);
@@ -933,6 +954,13 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_unsigned("avail_raw", avail);
     }
   } else {
+    stringstream max_raw_used;
+    if (max_raw_used_osd >= 0) {
+      max_raw_used << "OSD." << max_raw_used_osd << "/" << percentify(max_raw_used_rate * 100) << "%";
+    } else {
+      max_raw_used << "N/A";
+    }
+
     tbl << stringify(byte_u_t(stored_normalized));
     if (verbose) {
       tbl << stringify(byte_u_t(stored_data_normalized));
@@ -945,6 +973,7 @@ void PGMapDigest::dump_object_stat_sum(
       tbl << stringify(byte_u_t(used_omap_bytes));
     }
     tbl << percentify(used*100);
+    tbl << max_raw_used.str();
     tbl << stringify(byte_u_t(avail_res));
     if (verbose) {
       if (pool->quota_max_objects == 0)
@@ -967,7 +996,7 @@ void PGMapDigest::dump_object_stat_sum(
 }
 
 int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
-					 int64_t poolid) const
+                                         int64_t poolid) const
 {
   const pg_pool_t *pool = osd_map.get_pg_pool(poolid);
   int ruleno = pool->get_crush_rule();
@@ -979,20 +1008,22 @@ int64_t PGMapDigest::get_pool_free_space(const OSDMap &osd_map,
   return avail / osd_map.pool_raw_used_rate(poolid);
 }
 
-int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
+tuple<int64_t, int64_t, double> PGMap::get_rule_stats(const OSDMap& osdmap,
+                                                      int ruleno) const
 {
   map<int,float> wm;
   int r = osdmap.crush->get_rule_weight_osd_map(ruleno, &wm);
   if (r < 0) {
-    return r;
+    return std::make_tuple(r, -1, 0.0);
   }
   if (wm.empty()) {
-    return 0;
+    return std::make_tuple(0, -1, 0.0);
   }
-
   float fratio = osdmap.get_full_ratio();
 
   int64_t min = -1;
+  int64_t max_raw_used_osd = -1;
+  double max_raw_used_rate = 0.0;
   for (auto p = wm.begin(); p != wm.end(); ++p) {
     auto osd_info = osd_stat.find(p->first);
     if (osd_info != osd_stat.end()) {
@@ -1004,13 +1035,19 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
 	// calculate proj below.
 	continue;
       }
-      double unusable = (double)osd_info->second.statfs.kb() *
+      auto& statfs = osd_info->second.statfs;
+      double unusable = (double)statfs.kb() *
 	(1.0 - fratio);
-      double avail = std::max(0.0, (double)osd_info->second.statfs.kb_avail() - unusable);
+      double avail = std::max(0.0, (double)statfs.kb_avail() - unusable);
       avail *= 1024.0;
       int64_t proj = (int64_t)(avail / (double)p->second);
       if (min < 0 || proj < min) {
 	min = proj;
+      }
+      double raw_used_rate = (double)statfs.kb_used() / statfs.kb();
+      if (raw_used_rate > max_raw_used_rate || max_raw_used_osd < 0) {
+        max_raw_used_osd = p->first;
+        max_raw_used_rate = raw_used_rate;
       }
     } else {
       if (osdmap.is_up(p->first)) {
@@ -1020,21 +1057,23 @@ int64_t PGMap::get_rule_avail(const OSDMap& osdmap, int ruleno) const
       }
     }
   }
-  return min;
+  return std::make_tuple(min, max_raw_used_osd, max_raw_used_rate);
 }
 
-void PGMap::get_rules_avail(const OSDMap& osdmap,
-			    std::map<int,int64_t> *avail_map) const
+void PGMap::update_by_rules_stats(const OSDMap& osdmap)
 {
-  avail_map->clear();
+  avail_space_by_rule.clear();
   for (auto p : osdmap.get_pools()) {
     int64_t pool_id = p.first;
     if ((pool_id < 0) || (pg_pool_sum.count(pool_id) == 0))
       continue;
     const pg_pool_t *pool = osdmap.get_pg_pool(pool_id);
     int ruleno = pool->get_crush_rule();
-    if (avail_map->count(ruleno) == 0)
-      (*avail_map)[ruleno] = get_rule_avail(osdmap, ruleno);
+    if (avail_space_by_rule.count(ruleno) == 0) {
+      auto [avail, max_used_osd, max_used_rate] = get_rule_stats(osdmap, ruleno);
+      avail_space_by_rule[ruleno] = avail;
+      max_raw_used_by_rule[ruleno] = std::make_pair(max_used_osd, max_used_rate);
+    }
   }
 }
 
@@ -1473,7 +1512,7 @@ void PGMap::stat_osd_sub(int osd, const osd_stat_t &s)
 void PGMap::encode_digest(const OSDMap& osdmap,
 			  bufferlist& bl, uint64_t features)
 {
-  get_rules_avail(osdmap, &avail_space_by_rule);
+  update_by_rules_stats(osdmap);
   calc_osd_sum_by_class(osdmap);
   calc_purged_snaps();
   PGMapDigest::encode(bl, features);

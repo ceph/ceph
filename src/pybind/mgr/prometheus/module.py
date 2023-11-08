@@ -76,7 +76,8 @@ OSD_BLOCKLIST = ['osd_blocklist_count']
 
 DF_POOL = ['max_avail', 'avail_raw', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes',
-           'compress_bytes_used', 'compress_under_bytes', 'bytes_used', 'percent_used']
+           'compress_bytes_used', 'compress_under_bytes', 'bytes_used', 'percent_used',
+           'max_raw_used_osd', 'max_raw_used_rate']
 
 OSD_POOL_STATS = ('recovering_objects_per_sec', 'recovering_bytes_per_sec',
                   'recovering_keys_per_sec', 'num_objects_recovered',

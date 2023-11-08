@@ -156,6 +156,8 @@ class HealthTest(DashboardTestCase):
                         'data_bytes_used': int,
                         'omap_bytes_used': int,
                         'percent_used': float,
+                        'max_raw_used_osd': int,
+                        'max_raw_used_rate': float,
                         'max_avail': int,
                         'quota_objects': int,
                         'quota_bytes': int,
