@@ -1080,6 +1080,149 @@ bool bluestore_blob_t::release_extents(bool all,
   return false;
 }
 
+// Erases allocations from blob's extents and
+// appends them to released_disk extents.
+// For non-shared blobs it directly represents AUs to release.
+// For shared blobs AUs need to be processed by SharesBlob's bluestore_extent_ref_map_t.
+// (SharedBlob->persistent->ref_map)
+// returns
+//   disk space size to release
+uint32_t bluestore_blob_t::release_extents(
+  uint32_t offset,
+  uint32_t length,
+	PExtentVector* released_disk)
+{
+  uint32_t released_length = 0;
+  constexpr auto EMPTY = bluestore_pextent_t::INVALID_OFFSET;
+  if (offset == 0 && length == get_logical_length()) {
+    released_length = get_ondisk_length();
+    released_disk->insert(released_disk->end(), extents.begin(), extents.end());
+    extents.resize(1);
+    extents[0].offset = EMPTY;
+    extents[0].length = released_length;
+    return released_length;
+  }
+  bluestore_pextent_t* begin = &*extents.begin();
+  bluestore_pextent_t* p = &*extents.begin();
+  bluestore_pextent_t* end = &*extents.end(); //beware - it is fixed in place
+
+  bluestore_pextent_t* empty = nullptr;
+  //skip offset
+  while (p->length <= offset) {
+    offset -= p->length;
+    empty = p->is_valid() ? nullptr : p;
+    ++p;
+    ceph_assert(p != end); // we assume that length > 0
+  }
+  bluestore_pextent_t hold[2]; // by default initialized to zeros
+  uint32_t hold_size = 0;
+  uint32_t rem = length;
+  bluestore_pextent_t* anchor = p;
+  // copy_to_release
+  if (/*offset >= 0 &&*/ offset + length < p->length) {
+    //special case when in same extent
+    uint64_t p_offset = p->offset;
+    uint32_t p_length = p->length;
+    auto anchor_it = extents.begin() + (anchor - begin);
+    if (offset > 0) {
+      //anchor_it->offset = p_offset; //it is already there
+      anchor_it->length = offset;
+      ++anchor_it;
+      released_disk->emplace_back(p->offset + offset, length);
+      released_length += length;
+      anchor_it = extents.insert(anchor_it, 2, bluestore_pextent_t(EMPTY, length));
+      ++anchor_it;
+      anchor_it->offset = p_offset + offset + length;
+      anchor_it->length = p_length - offset - length;
+    } else {
+      released_disk->emplace_back(p->offset, length);
+      released_length += length;
+      if (empty) {
+        empty->length += length;
+      } else {
+        anchor_it = extents.insert(anchor_it, 1, bluestore_pextent_t(EMPTY, length));
+        ++anchor_it;
+      }
+      anchor_it->offset = p_offset + length;
+      anchor_it->length = p_length - length;
+    }
+  } else {
+    // p->length > offset
+    // offset + length >= p->length
+    if (offset > 0) {
+      //activate hold, put pextent that we need; put new empty
+      ceph_assert(p->is_valid());
+      hold[0].offset = p->offset;
+      hold[0].length = offset;
+      hold[1].offset = EMPTY;
+      hold[1].length = 0;
+      empty = &hold[1];
+      hold_size = 2;
+    } else {
+      // offset == 0
+      if (empty == nullptr) {
+        //we need empty, activate hold
+        hold[0].offset = EMPTY;
+        hold[0].length = 0;
+        empty = &hold[0];
+        hold_size = 1;
+      }
+    }
+    // starts copying remainder
+    if (p->length - offset) {
+      released_disk->emplace_back(p->offset + offset, p->length - offset);
+    }
+    released_length += p->length - offset;
+    empty->length += p->length - offset;
+    rem -= (p->length - offset);
+    ++p;
+    while (rem > 0 && p->length <= rem) {
+      ceph_assert(p->is_valid());
+      released_disk->emplace_back(p->offset, p->length);
+      released_length += p->length;
+      empty->length += p->length;
+      rem -= p->length;
+      ++p;
+    }
+    if (rem > 0) {
+      ceph_assert(p->is_valid());
+      // this we release
+      released_disk->emplace_back(p->offset, rem);
+      released_length += rem;
+      empty->length += rem;
+      // this much remains
+      p->offset = p->offset + rem;
+      p->length = p->length - rem;
+      //no ++p here; we need this modified p remain part of PExtentVector
+    } else {
+      //amazing, clean cut
+      //if the extent here is empty, we try to meld it
+      if (p != end && !p->is_valid()) {
+        empty->length += p->length;
+        ++p;
+      }
+    }
+    // we erase <anchor, p)
+    // and insert hold in this place
+    int32_t insert_element_cnt = hold_size - (p - anchor);
+    auto anchor_it = extents.begin() + (anchor - begin);
+    if (insert_element_cnt != 0) {
+      if (insert_element_cnt > 0) {
+        anchor_it = extents.insert(anchor_it, insert_element_cnt, bluestore_pextent_t(0, 0));
+      } else {
+        anchor_it = extents.erase(anchor_it, anchor_it + (-insert_element_cnt));
+      }
+    }
+    for (uint32_t i = 0; i < hold_size; i++) {
+      anchor_it->offset = hold[i].offset;
+      anchor_it->length = hold[i].length;
+      ++anchor_it;
+    }
+  }
+  return released_length;
+}
+
+
 void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
 {
   size_t left = blob_offset;
