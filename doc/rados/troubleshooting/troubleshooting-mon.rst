@@ -180,38 +180,43 @@ the quorum is formed by only two monitors, and *c* is in the quorum as a
 Most Common Monitor Issues
 ===========================
 
-Have Quorum but at least one Monitor is down
----------------------------------------------
+The Cluster Has Quorum but at Least One Monitor is Down
+-------------------------------------------------------
 
-When this happens, depending on the version of Ceph you are running,
-you should be seeing something similar to::
+When the cluster has quorum but at least one monitor is down, ``ceph health
+detail`` returns a message similar to the following::
 
       $ ceph health detail
       [snip]
       mon.a (rank 0) addr 127.0.0.1:6789/0 is down (out of quorum)
 
-**How to troubleshoot this?**
+**How do I troubleshoot a Ceph cluster that has quorum but also has at least one monitor down?**
 
-  First, make sure ``mon.a`` is running.
+  #. Make sure that ``mon.a`` is running.
 
-  Second, make sure you are able to connect to ``mon.a``'s node from the
-  other mon nodes. Check the TCP ports as well. Check ``iptables`` and
-  ``nf_conntrack`` on all nodes and ensure that you are not
-  dropping/rejecting connections.
+  #. Make sure that you can connect to ``mon.a``'s node from the
+     other Monitor nodes. Check the TCP ports as well. Check ``iptables`` and
+     ``nf_conntrack`` on all nodes and make sure that you are not
+     dropping/rejecting connections.
 
-  If this initial troubleshooting doesn't solve your problems, then it's
-  time to go deeper.
+  If this initial troubleshooting doesn't solve your problem, then further
+  investigation is necessary.
 
   First, check the problematic monitor's ``mon_status`` via the admin
   socket as explained in `Using the monitor's admin socket`_ and
   `Understanding mon_status`_.
 
-  If the monitor is out of the quorum, its state should be one of ``probing``,
-  ``electing`` or ``synchronizing``. If it happens to be either ``leader`` or
-  ``peon``, then the monitor believes to be in quorum, while the remaining
-  cluster is sure it is not; or maybe it got into the quorum while we were
-  troubleshooting the monitor, so check you ``ceph status`` again just to make
-  sure. Proceed if the monitor is not yet in the quorum.
+  If the Monitor is out of the quorum, then its state will be one of the
+  following: ``probing``, ``electing`` or ``synchronizing``. If the state of
+  the Monitor is ``leader`` or ``peon``, then the Monitor believes itself to be
+  in quorum but the rest of the cluster believes that it is not in quorum. It
+  is possible that a Monitor that is in one of the ``probing``, ``electing``,
+  or ``synchronizing`` states has entered the quorum during the process of
+  troubleshooting. Check ``ceph status`` again to determine whether the Monitor
+  has entered quorum during your troubleshooting. If the Monitor remains out of
+  the quorum, then proceed with the investigations described in this section of
+  the documentation.
+  
 
 **What if the state is ``probing``?**
 
