@@ -155,31 +155,33 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
 
     cache_file = fopen(location.c_str(), "r+");
     if (cache_file == nullptr) {
-        ldpp_dout(dpp, 0) << "ERROR: put::fopen file has return error, errno=" << errno << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: get::fopen file has return error, errno=" << errno << dendl;
         return -errno;
     }
 
-    nbytes = fread(buffer, sizeof(buffer), 1 , cache_file);
+    fseek(cache_file, offset, SEEK_SET);
+
+    nbytes = fread(buffer, 1, len, cache_file);
     if (nbytes != len) {
-        ldpp_dout(dpp, 0) << "ERROR: put::io_read: fread has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << len << dendl;
+        fclose(cache_file);
+        ldpp_dout(dpp, 0) << "ERROR: get::io_read: fread has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << len << dendl;
         return -EIO;
     }
 
     r = fclose(cache_file);
     if (r != 0) {
-        ldpp_dout(dpp, 0) << "ERROR: put::fclose file has return error, errno=" << errno << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: get::fclose file has return error, errno=" << errno << dendl;
         return -errno;
     }
 
-    ceph::encode(buffer, bl);
+    bl.append(buffer, len);
 
-    if (attrs.size() > 0) {
-        r = get_attrs(dpp, key, attrs, y);
-        if (r < 0) {
-            ldpp_dout(dpp, 0) << "ERROR: put::get_attrs: failed to get attrs, r = " << r << dendl;
-            return r;
-        }
+    r = get_attrs(dpp, key, attrs, y);
+    if (r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: get::get_attrs: failed to get attrs, r = " << r << dendl;
+        return r;
     }
+
     return 0;
 }
 
@@ -402,9 +404,8 @@ int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& ke
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     for (auto& it : attrs) {
-        std::string attr_name, attr_val;
-        attr_name = it.first;
-        attr_val = it.second.c_str();
+        std::string attr_name = it.first;
+        std::string attr_val = it.second.to_str();
         std::string old_attr_val = get_attr(dpp, key, attr_name, y);
         int ret;
         if (old_attr_val.empty()) {
@@ -460,17 +461,16 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
 
         keylen = strlen(keyptr) + 1;
         std::string attr_name(keyptr);
-        std::string::size_type prefixloc = key.find(ATTR_PREFIX);
+        std::string::size_type prefixloc = attr_name.find(ATTR_PREFIX);
+        buflen -= keylen;
+        keyptr += keylen;
         if (prefixloc == std::string::npos) {
-            buflen -= keylen;
-            keyptr += keylen;
             continue;
         }
         std::string attr_value = get_attr(dpp, key, attr_name, y);
         bufferlist bl_value;
-        ceph::encode(attr_value, bl_value);
+        bl_value.append(attr_value);
         attrs.emplace(std::move(attr_name), std::move(bl_value));
-
     }
     return 0;
 }
@@ -483,7 +483,7 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     for (auto& [attr_name, attr_val_bl] : attrs) {
         ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): attr_name = " << attr_name << " attr_val_bl length: " << attr_val_bl.length() << dendl;
         if (attr_val_bl.length() != 0) {
-            auto ret = set_attr(dpp, key, attr_name, attr_val_bl.c_str(), y);
+            auto ret = set_attr(dpp, key, attr_name, attr_val_bl.to_str(), y);
             if (ret < 0) {
                 ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not set attr value for attr name: " << attr_name << " key: " << key << cpp_strerror(errno) << dendl;
                 return ret;
@@ -500,32 +500,30 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
 std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y)
 {
     std::string location = partition_info.location + key;
-    std::string attr_val;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): get_attr: key: " << attr_name << dendl;
 
     int attr_size = getxattr(location.c_str(), attr_name.c_str(), nullptr, 0);
     if (attr_size < 0) {
-      auto ret = errno;
-      ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << attr_name << ": " << cpp_strerror(ret) << dendl;
-      return attr_val;
+        auto ret = errno;
+        ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << attr_name << ": " << cpp_strerror(ret) << dendl;
+        return "";
     }
 
     if (attr_size == 0) {
-      ldpp_dout(dpp, 0) << "ERROR: no attribute value found for attr_name: " << attr_name << dendl;
-      return attr_val;
+        ldpp_dout(dpp, 0) << "ERROR: no attribute value found for attr_name: " << attr_name << dendl;
+        return "";
     }
 
-    attr_val.reserve(attr_size + 1);
-    char* attr_val_ptr =  &attr_val[0];
-
+    char attr_val_ptr[attr_size + 1];
     attr_size = getxattr(location.c_str(), attr_name.c_str(), attr_val_ptr, attr_size);
     if (attr_size < 0) {
         ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not get attr value for attr name: " << attr_name << " key: " << key << dendl;
     }
+    attr_val_ptr[attr_size] = '\0';
 
-    return attr_val;
+    return std::string(attr_val_ptr);
 }
 
 int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y)
