@@ -137,6 +137,23 @@ add_executable(unittest_rgw_ratelimit test_rgw_ratelimit.cc $<TARGET_OBJECTS:uni
 target_link_libraries(unittest_rgw_ratelimit ${rgw_libs})
 add_ceph_unittest(unittest_rgw_ratelimit)
 
+add_executable(ceph_test_rgw_ssd_driver
+  test_ssd_driver.cc
+  )
+target_include_directories(ceph_test_rgw_ssd_driver
+  PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src"
+  SYSTEM PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw/")
+target_link_libraries(ceph_test_rgw_ssd_driver PRIVATE
+  rgw_common
+  librados
+  ceph-common
+  ${rgw_libs}
+  ${UNITTEST_LIBS}
+  ${EXTRALIBS}
+  )
+  target_link_libraries(ceph_test_rgw_ssd_driver PRIVATE spawn)
+install(TARGETS ceph_test_rgw_ssd_driver DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # ceph_test_rgw_manifest
 set(test_rgw_manifest_srcs test_rgw_manifest.cc)
 add_executable(ceph_test_rgw_manifest
