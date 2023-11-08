@@ -436,7 +436,13 @@ sudo() {
 
         usr_args, args = self._omit_cmd_args(args, omit_sudo)
 
-        log.debug('> ' + usr_args)
+        # Let's print all commands on INFO log level since some logging level
+        # might be changed to INFO from DEBUG during a vstart_runner.py's
+        # execution due to code added for teuthology. This happened for
+        # ceph_test_case.RunCephCmd.negtest_ceph_cmd(). Commands it executes
+        # weren't printed in output because logging level for
+        # ceph_test_case.py is set to INFO by default.
+        log.info('> ' + usr_args)
 
         return args, usr_args
 

@@ -15,7 +15,7 @@
 #include <ostream>
 
 #include "FSMap.h"
-
+#include "common/debug.h"
 #include "common/StackStringStream.h"
 
 #ifdef WITH_SEASTAR
@@ -25,6 +25,11 @@
 #endif
 #include "global/global_context.h"
 #include "mon/health_check.h"
+
+#define dout_context g_ceph_context
+#define dout_subsys ceph_subsys_mds
+#undef dout_prefix
+#define dout_prefix *_dout << "FSMap "
 
 using std::list;
 using std::pair;
@@ -1203,4 +1208,21 @@ void FSMap::erase_filesystem(fs_cluster_id_t fscid)
       }
     }
   }
+}
+
+void FSMap::swap_fscids(fs_cluster_id_t fscid1, fs_cluster_id_t fscid2)
+{
+  auto fs1 = std::move(filesystems.at(fscid1));
+  filesystems[fscid1] = std::move(filesystems.at(fscid2));
+  filesystems[fscid2] = std::move(fs1);
+
+  auto set_fs1_fscid = [fscid1](auto&& fs) {
+    fs.set_fscid(fscid1);
+  };
+  modify_filesystem(fscid1, std::move(set_fs1_fscid));
+
+  auto set_fs2_fscid = [fscid2](auto&& fs) {
+    fs.set_fscid(fscid2);
+  };
+  modify_filesystem(fscid2, std::move(set_fs2_fscid));
 }
