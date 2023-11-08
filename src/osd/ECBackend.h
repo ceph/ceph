@@ -325,8 +325,12 @@ public:
   const ECUtil::stripe_info_t sinfo;
   /// If modified, ensure that the ref is held until the update is applied
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
-  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid, bool create,
-				    const std::map<std::string, ceph::buffer::list, std::less<>>& attr);
+  ECUtil::HashInfoRef get_hash_info(const hobject_t &hoid,
+				    bool create,
+				    const std::map<std::string, ceph::buffer::list, std::less<>>& attr,
+				    uint64_t size);
+
+  int object_stat(const hobject_t &hoid, struct stat* st);
 
 public:
   ECBackend(
