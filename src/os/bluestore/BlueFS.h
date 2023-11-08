@@ -82,27 +82,102 @@ public:
 
   virtual ~BlueFSVolumeSelector() {
   }
+  /**
+  *  Method to learn a hint (aka logic level discriminator)  specific for
+  *  BlueFS log
+  *
+  */
   virtual void* get_hint_for_log() const = 0;
+  /**
+  *  Method to learn a hint (aka logic level discriminator) provided directory
+  *  bound to.
+  *
+  */
   virtual void* get_hint_by_dir(std::string_view dirname) const = 0;
 
+  /**
+  *  Increments stats for a given logical level using provided fnode as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fnode: fnode metadata to be used as a complex delta value:
+  *           (+1 file count, +file size, +all the extents)
+  *
+  */
   void add_usage(void* hint, const bluefs_fnode_t& fnode) {
     for (auto& e : fnode.extents) {
       add_usage(hint, e);
     }
     add_usage(hint, fnode.size, true);
   }
+  /**
+  *  Decrements stats for a given logical level using provided fnode as a delta
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fnode: fnode metadata to be used as a complex delta value:
+  *           (-1 file count, -file size, -all the extents)
+  *
+  */
   void sub_usage(void* hint, const bluefs_fnode_t& fnode) {
     for (auto& e : fnode.extents) {
       sub_usage(hint, e);
     }
     sub_usage(hint, fnode.size, true);
   }
+  /**
+  *  Increments stats for a given logical level using provided extent as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    extent: bluefs extent to be used as a complex delta value:
+  *           (.bdev determines physical location, +length)
+  *
+  */
   virtual void add_usage(void* hint, const bluefs_extent_t& extent) = 0;
+  /**
+  *  Decrements stats for a given logical level using provided extent as a delta,
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    extent: bluefs extent to be used as a complex delta value:
+  *           (.bdev determines physical location, -length)
+  *
+  */
   virtual void sub_usage(void* hint, const bluefs_extent_t& extent) = 0;
+  /**
+  *  Increments files count and overall files size for a given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fsize: delta value for file size
+  *    upd_files: whether or not to increment file count
+  *
+  */
   virtual void add_usage(void* hint, uint64_t fsize, bool upd_files = false) = 0;
+  /**
+  *  Decrements files count and overall files size for a given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *    fsize: delta value for file size
+  *    upd_files: whether or not to decrement file count
+  *
+  */
   virtual void sub_usage(void* hint, uint64_t fsize, bool upd_files = false) = 0;
+
+  /**
+  *  Determines preferred physical device for the given logical level
+  *  Parameters:
+  *    hint: logical level discriminator
+  *
+  */
   virtual uint8_t select_prefer_bdev(void* hint) = 0;
+  /**
+  *  Builds path set for RocksDB to use
+  *  Parameters:
+  *    base: path's root
+  *
+  */
   virtual void get_paths(const std::string& base, paths& res) const = 0;
+  /**
+  *  Dumps VSelector's state
+  *
+  */
   virtual void dump(std::ostream& sout) = 0;
 
   /* used for sanity checking of vselector */
