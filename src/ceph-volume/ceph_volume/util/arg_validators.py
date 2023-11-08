@@ -4,10 +4,19 @@ import math
 from ceph_volume import terminal, decorators, process
 from ceph_volume.util.device import Device
 from ceph_volume.util import disk
-
+from ceph_volume.util.encryption import set_dmcrypt_no_workqueue
+from ceph_volume import process, conf
 
 def valid_osd_id(val):
     return str(int(val))
+
+class DmcryptAction(argparse._StoreTrueAction):
+    def __init__(self, *args, **kwargs):
+        super(DmcryptAction, self).__init__(*args, **kwargs)
+
+    def __call__(self, *args, **kwargs):
+        set_dmcrypt_no_workqueue()
+        super(DmcryptAction, self).__call__(*args, **kwargs)
 
 class ValidDevice(object):
 

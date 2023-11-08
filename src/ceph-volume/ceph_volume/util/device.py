@@ -121,13 +121,8 @@ class Device(object):
             # check if we are not a device mapper
             if "dm-" not in real_path:
                 self.path = real_path
-        if not sys_info.devices:
-            if self.path:
-                sys_info.devices = disk.get_devices(device=self.path)
-            else:
-                sys_info.devices = disk.get_devices()
-        if sys_info.devices.get(self.path, {}):
-            self.device_nodes = sys_info.devices[self.path]['device_nodes']
+        if not sys_info.devices.get(self.path):
+            sys_info.devices = disk.get_devices()
         self.sys_api = sys_info.devices.get(self.path, {})
         self.partitions = self._get_partitions()
         self.lv_api = None
@@ -143,6 +138,7 @@ class Device(object):
         self._is_lvm_member = None
         self.ceph_device = False
         self._parse()
+        self.device_nodes = sys_info.devices[self.path]['device_nodes']
         self.lsm_data = self.fetch_lsm(with_lsm)
 
         self.available_lvm, self.rejected_reasons_lvm = self._check_lvm_reject_reasons()

@@ -73,7 +73,7 @@ common_args = {
         'default': "",
     },
     '--dmcrypt': {
-        'action': 'store_true',
+        'action': arg_validators.DmcryptAction,
         'help': 'Enable device encryption via dm-crypt',
     },
     '--no-systemd': {
