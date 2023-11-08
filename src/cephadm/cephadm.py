@@ -1159,15 +1159,12 @@ class CephIscsi(ContainerDaemonForm):
         return cls.daemon_type == daemon_type
 
     def __init__(self,
-                 ctx,
-                 fsid,
-                 daemon_id,
-                 config_json,
-                 image=DEFAULT_IMAGE):
-        # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
+                 ctx: CephadmContext,
+                 ident: DaemonIdentity,
+                 config_json: Dict,
+                 image: str = DEFAULT_IMAGE):
         self.ctx = ctx
-        self.fsid = fsid
-        self.daemon_id = daemon_id
+        self._identity = ident
         self.image = image
 
         # config-json options
@@ -1177,18 +1174,24 @@ class CephIscsi(ContainerDaemonForm):
         self.validate()
 
     @classmethod
-    def init(cls, ctx, fsid, daemon_id):
-        # type: (CephadmContext, str, Union[int, str]) -> CephIscsi
-        return cls(ctx, fsid, daemon_id,
-                   fetch_configs(ctx), ctx.image)
+    def init(cls, ctx: CephadmContext, fsid: str, daemon_id: str) -> 'CephIscsi':
+        return cls.create(ctx, DaemonIdentity(fsid, cls.daemon_type, daemon_id))
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephIscsi':
-        return cls.init(ctx, ident.fsid, ident.daemon_id)
+        return cls(ctx, ident, fetch_configs(ctx), ctx.image)
 
     @property
     def identity(self) -> DaemonIdentity:
-        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
+        return self._identity
+
+    @property
+    def fsid(self) -> str:
+        return self._identity.fsid
+
+    @property
+    def daemon_id(self) -> str:
+        return self._identity.daemon_id
 
     @staticmethod
     def _get_container_mounts(data_dir, log_dir):
@@ -1344,8 +1347,9 @@ done
         subident = DaemonSubIdentity(
             self.fsid, self.daemon_type, self.daemon_id, 'tcmu'
         )
+        tcmu_dmn = self.create(self.ctx, subident)
         tcmu_container = to_deployment_container(
-            self.ctx, get_container(self.ctx, subident)
+            self.ctx, daemon_to_container(self.ctx, tcmu_dmn, privileged=True)
         )
         # TODO: Eventually we don't want to run tcmu-runner through this script.
         # This is intended to be a workaround backported to older releases
