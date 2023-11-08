@@ -759,7 +759,6 @@ void PGMapDigest::dump_pool_stats_full(
     }
   }
 
-  map<int,uint64_t> avail_by_rule;
   for (auto p = osd_map.get_pools().begin();
        p != osd_map.get_pools().end(); ++p) {
     int64_t pool_id = p->first;
@@ -772,16 +771,9 @@ void PGMapDigest::dump_pool_stats_full(
 
     const pg_pool_t *pool = osd_map.get_pg_pool(pool_id);
     int ruleno = pool->get_crush_rule();
-    int64_t avail;
-    if (avail_by_rule.count(ruleno) == 0) {
-      // FIXME: we don't guarantee avail_space_by_rule is up-to-date before this function is invoked
-      avail = get_rule_avail(ruleno);
-      if (avail < 0)
-	avail = 0;
-      avail_by_rule[ruleno] = avail;
-    } else {
-      avail = avail_by_rule[ruleno];
-    }
+    int64_t avail = get_rule_avail(ruleno);
+    if (avail < 0)
+      avail = 0;
     if (f) {
       f->open_object_section("pool");
       f->dump_string("name", pool_name);
