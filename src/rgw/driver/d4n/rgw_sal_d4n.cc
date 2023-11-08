@@ -59,33 +59,11 @@ std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
   return std::make_unique<D4NFilterObject>(std::move(o), this, filter);
 }
 
-int D4NFilterUser::create_bucket(const DoutPrefixProvider* dpp,
-                              const rgw_bucket& b,
-                              const std::string& zonegroup_id,
-                              rgw_placement_rule& placement_rule,
-                              std::string& swift_ver_location,
-                              const RGWQuotaInfo * pquota_info,
-                              const RGWAccessControlPolicy& policy,
-                              Attrs& attrs,
-                              RGWBucketInfo& info,
-                              obj_version& ep_objv,
-                              bool exclusive,
-                              bool obj_lock_enabled,
-                              bool* existed,
-                              req_info& req_info,
-                              std::unique_ptr<Bucket>* bucket_out,
-                              optional_yield y)
+int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
+                            const CreateParams& params,
+                            optional_yield y)
 {
-  std::unique_ptr<Bucket> nb;
-  int ret;
-
-  ret = next->create_bucket(dpp, b, zonegroup_id, placement_rule, swift_ver_location, pquota_info, policy, attrs, info, ep_objv, exclusive, obj_lock_enabled, existed, req_info, &nb, y);
-  if (ret < 0)
-    return ret;
-
-  Bucket* fb = new D4NFilterBucket(std::move(nb), this, filter);
-  bucket_out->reset(fb);
-  return 0;
+  return next->create(dpp, params, y);
 }
 
 int D4NFilterObject::copy_object(User* user,

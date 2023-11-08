@@ -37,51 +37,6 @@ const std::string MP_OBJ_PART_PFX = "part-";
 const std::string MP_OBJ_PART_FMT = "{:0>5}";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 
-static int decode_policy(CephContext* cct,
-                         bufferlist& bl,
-                         RGWAccessControlPolicy* policy)
-{
-  auto iter = bl.cbegin();
-  try {
-    policy->decode(iter);
-  } catch (buffer::error& err) {
-    ldout(cct, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
-    return -EIO;
-  }
-  if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
-    ldout(cct, 15) << __func__ << " POSIX Read AccessControlPolicy";
-    RGWAccessControlPolicy_S3* s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    s3policy->to_xml(*_dout);
-    *_dout << dendl;
-  }
-  return 0;
-}
-
-static int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider* dpp,
-					      POSIXDriver* driver,
-					      User* user,
-					      Attrs& bucket_attrs,
-					      RGWAccessControlPolicy* policy,
-					      optional_yield y)
-{
-  auto aiter = bucket_attrs.find(RGW_ATTR_ACL);
-
-  if (aiter != bucket_attrs.end()) {
-    int ret = decode_policy(driver->ctx(), aiter->second, policy);
-    if (ret < 0)
-      return ret;
-  } else {
-    ldout(driver->ctx(), 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
-    /* object exists, but policy is broken */
-    int r = user->load_user(dpp, y);
-    if (r < 0)
-      return r;
-
-    policy->create_default(user->get_id(), user->get_display_name());
-  }
-  return 0;
-}
-
 static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
 {
   auto iter = attrs.find(name);
@@ -393,41 +348,16 @@ std::unique_ptr<Object> POSIXDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<POSIXObject>(this, k);
 }
 
-int POSIXDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int POSIXDriver::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  int ret;
-  Bucket* bp;
-
-  bp = new POSIXBucket(this, root_fd, b, u);
-  ret = bp->load_bucket(dpp, y);
-  if (ret < 0) {
-    delete bp;
-    return ret;
-  }
-
-  bucket->reset(bp);
-  return 0;
+  *bucket = std::make_unique<POSIXBucket>(this, root_fd, b, u);
+  return (*bucket)->load_bucket(dpp, y);
 }
 
-int POSIXDriver::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
+std::unique_ptr<Bucket> POSIXDriver::get_bucket(User* u, const RGWBucketInfo& i)
 {
-  Bucket* bp;
-
-  bp = new POSIXBucket(this, root_fd, i, u);
   /* Don't need to fetch the bucket info, use the provided one */
-
-  bucket->reset(bp);
-  return 0;
-}
-
-int POSIXDriver::get_bucket(const DoutPrefixProvider* dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
-{
-  rgw_bucket b;
-
-  b.tenant = tenant;
-  b.name = name;
-
-  return get_bucket(dpp, u, b, bucket, y);
+  return std::make_unique<POSIXBucket>(this, root_fd, i, u);
 }
 
 std::string POSIXDriver::zone_unique_trans_id(const uint64_t unique_num)
@@ -591,74 +521,46 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
   return 0;
 }
 
-int POSIXUser::create_bucket(const DoutPrefixProvider* dpp,
-			      const rgw_bucket& b,
-			      const std::string& zonegroup_id,
-			      rgw_placement_rule& placement_rule,
-			      std::string& swift_ver_location,
-			      const RGWQuotaInfo * pquota_info,
-			      const RGWAccessControlPolicy& policy,
-			      Attrs& attrs,
-			      RGWBucketInfo& binfo,
-			      obj_version& ep_objv,
-			      bool exclusive,
-			      bool obj_lock_enabled,
-			      bool* existed,
-			      req_info& req_info,
-			      std::unique_ptr<Bucket>* bucket_out,
-			      optional_yield y)
+int POSIXBucket::create(const DoutPrefixProvider* dpp,
+			const CreateParams& params,
+			optional_yield y)
 {
-  /* Check for existence */
-  {
-    std::unique_ptr<rgw::sal::Bucket> bucket;
+  ceph_assert(owner);
+  info.owner = owner->get_id();
 
-    int ret = driver->get_bucket(dpp, this, b, &bucket, y);
-    if (ret >= 0) {
-      *existed = true;
-      // Bucket exists.  Check owner comparison
-      if (bucket->get_info().owner.compare(this->get_id()) != 0) {
-	return -EEXIST;
-      }
-      // Don't allow changes to ACL policy
-      RGWAccessControlPolicy old_policy(driver->ctx());
-      ret = rgw_op_get_bucket_policy_from_attr(
-          dpp, driver, this, bucket->get_attrs(), &old_policy, y);
-      if (ret >= 0 && old_policy != policy) {
-        bucket_out->swap(bucket);
-        return -EEXIST;
-      }
-    } else {
-      *existed = false;
-    }
+  info.bucket.marker = params.marker;
+  info.bucket.bucket_id = params.bucket_id;
+
+  info.zonegroup = params.zonegroup_id;
+  info.placement_rule = params.placement_rule;
+  info.swift_versioning = params.swift_ver_location.has_value();
+  if (params.swift_ver_location) {
+    info.swift_ver_location = *params.swift_ver_location;
+  }
+  if (params.obj_lock_enabled) {
+    info.flags |= BUCKET_VERSIONED | BUCKET_OBJ_LOCK_ENABLED;
+  }
+  info.requester_pays = false;
+  if (params.creation_time) {
+    info.creation_time = *params.creation_time;
+  } else {
+    info.creation_time = ceph::real_clock::now();
+  }
+  if (params.quota) {
+    info.quota = *params.quota;
   }
 
-  binfo.bucket = b;
-  binfo.owner = get_id();
-  binfo.zonegroup = zonegroup_id;
-  binfo.placement_rule = placement_rule;
-  binfo.swift_ver_location = swift_ver_location;
-  binfo.swift_versioning = (!swift_ver_location.empty());
-  binfo.requester_pays = false;
-  binfo.creation_time = ceph::real_clock::now();
-  if (pquota_info) {
-    binfo.quota = *pquota_info;
-  }
-
-  POSIXBucket* fb = new POSIXBucket(driver, driver->get_root_fd(), binfo, this);
-
-  int ret = fb->set_attrs(attrs);
+  int ret = set_attrs(attrs);
   if (ret < 0) {
-    delete fb;
-    return  ret;
+    return ret;
   }
 
-  ret = fb->create(dpp, y, existed);
+  bool existed = false;
+  ret = create(dpp, y, &existed);
   if (ret < 0) {
-    delete fb;
-    return  ret;
+    return ret;
   }
 
-  bucket_out->reset(fb);
   return 0;
 }
 
@@ -730,7 +632,8 @@ int POSIXDriver::mint_listing_entry(const std::string &bname,
     POSIXObject *pobj;
     int ret;
 
-    ret = get_bucket(nullptr, nullptr, std::string(), bname, &b, null_yield);
+    ret = load_bucket(nullptr, nullptr, rgw_bucket(std::string(), bname),
+                      &b, null_yield);
     if (ret < 0)
       return ret;
 
@@ -948,22 +851,20 @@ int POSIXBucket::merge_and_store_attrs(const DoutPrefixProvider* dpp,
   return write_attrs(dpp, y);
 }
 
-int POSIXBucket::remove_bucket(const DoutPrefixProvider* dpp,
-				bool delete_children,
-				bool forward_to_master,
-				req_info* req_info,
-				optional_yield y)
+int POSIXBucket::remove(const DoutPrefixProvider* dpp,
+			bool delete_children,
+			optional_yield y)
 {
   return delete_directory(parent_fd, get_fname().c_str(),
 			  delete_children, dpp);
 }
 
-int POSIXBucket::remove_bucket_bypass_gc(int concurrent_max,
-					 bool keep_index_consistent,
-					 optional_yield y,
-					 const DoutPrefixProvider *dpp)
+int POSIXBucket::remove_bypass_gc(int concurrent_max,
+				  bool keep_index_consistent,
+				  optional_yield y,
+				  const DoutPrefixProvider *dpp)
 {
-  return remove_bucket(dpp, true, false, nullptr, y);
+  return remove(dpp, true, y);
 }
 
 int POSIXBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
@@ -1266,7 +1167,7 @@ int POSIXBucket::create(const DoutPrefixProvider* dpp, optional_yield y, bool* e
     } else if (existed != nullptr) {
       *existed = true;
     }
-    return ret;
+    return -ret;
   }
 
   return write_attrs(dpp, y);
@@ -1547,7 +1448,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 
   if (!b->versioned()) {
     if (shadow) {
-      ret = shadow->remove_bucket(dpp, true, false, nullptr, y);
+      ret = shadow->remove(dpp, true, y);
       if (ret < 0) {
 	return ret;
       }
@@ -2686,7 +2587,7 @@ int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
     return ret;
   }
 
-  shadow->remove_bucket(dpp, true, false, nullptr, y);
+  shadow->remove(dpp, true, y);
 
   return 0;
 }

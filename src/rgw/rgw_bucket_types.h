@@ -61,6 +61,9 @@ struct rgw_bucket {
 	     const std::string& _bucket_id) : tenant(_tenant),
                                               name(_name),
                                               bucket_id(_bucket_id) {}
+  rgw_bucket(const std::string& _tenant,
+	     const std::string& _name)
+      : tenant(_tenant), name(_name) {}
   rgw_bucket(const rgw_bucket_key& bk) : tenant(bk.tenant),
                                          name(bk.name),
                                          bucket_id(bk.bucket_id) {}

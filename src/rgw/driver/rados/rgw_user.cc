@@ -1579,7 +1579,7 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
     for (const auto& ent : listing.buckets) {
       std::unique_ptr<rgw::sal::Bucket> bucket;
-      ret = driver->get_bucket(dpp, old_user.get(), ent.bucket, &bucket, y);
+      ret = driver->load_bucket(dpp, old_user.get(), ent.bucket, &bucket, y);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + bucket->get_name());
         return ret;
@@ -1785,13 +1785,13 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
     for (const auto& ent : listing.buckets) {
       std::unique_ptr<rgw::sal::Bucket> bucket;
-      ret = driver->get_bucket(dpp, user, ent.bucket, &bucket, y);
+      ret = driver->load_bucket(dpp, user, ent.bucket, &bucket, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to load bucket " + ent.bucket.name);
         return ret;
       }
 
-      ret = bucket->remove_bucket(dpp, true, false, nullptr, y);
+      ret = bucket->remove(dpp, true, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;

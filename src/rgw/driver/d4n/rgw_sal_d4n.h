@@ -71,23 +71,6 @@ class D4NFilterUser : public FilterUser {
       FilterUser(std::move(_next)),
       filter(_filter) {}
     virtual ~D4NFilterUser() = default;
-
-    virtual int create_bucket(const DoutPrefixProvider* dpp,
-                            const rgw_bucket& b,
-                            const std::string& zonegroup_id,
-                            rgw_placement_rule& placement_rule,
-                            std::string& swift_ver_location,
-                            const RGWQuotaInfo* pquota_info,
-                            const RGWAccessControlPolicy& policy,
-                            Attrs& attrs,
-                            RGWBucketInfo& info,
-                            obj_version& ep_objv,
-                            bool exclusive,
-                            bool obj_lock_enabled,
-                            bool* existed,
-                            req_info& req_info,
-                            std::unique_ptr<Bucket>* bucket,
-                            optional_yield y) override;
 };
 
 class D4NFilterBucket : public FilterBucket {
@@ -101,6 +84,9 @@ class D4NFilterBucket : public FilterBucket {
     virtual ~D4NFilterBucket() = default;
    
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& key) override;
+    virtual int create(const DoutPrefixProvider* dpp,
+                       const CreateParams& params,
+                       optional_yield y) override;
 };
 
 class D4NFilterObject : public FilterObject {

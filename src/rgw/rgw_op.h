@@ -66,24 +66,21 @@ class RGWRados;
 class RGWMultiCompleteUpload;
 class RGWPutObj_Torrent;
 
+namespace rgw::auth::registry { class StrategyRegistry; }
 
-namespace rgw {
-namespace auth {
-namespace registry {
-
-class StrategyRegistry;
-
-}
-}
-}
+int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
+                                  const rgw::SiteConfig& site,
+                                  const rgw_user& uid,
+                                  bufferlist* indata, JSONParser* jp,
+                                  req_info& req, optional_yield y);
 
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        CephContext *cct,
-				       rgw::sal::Driver* driver,
-                                       RGWBucketInfo& bucket_info,
+                                       rgw::sal::Driver* driver,
+                                       const rgw_user& bucket_owner,
                                        std::map<std::string, bufferlist>& bucket_attrs,
                                        RGWAccessControlPolicy *policy,
-				       optional_yield y);
+                                       optional_yield y);
 
 class RGWHandler {
 protected:
@@ -1076,31 +1073,21 @@ public:
 };
 
 class RGWCreateBucket : public RGWOp {
-protected:
+ protected:
+  rgw::sal::Bucket::CreateParams createparams;
   RGWAccessControlPolicy policy;
   std::string location_constraint;
-  rgw_placement_rule placement_rule;
-  RGWBucketInfo info;
-  obj_version ep_objv;
-  bool has_cors;
-  bool relaxed_region_enforcement;
-  bool obj_lock_enabled;
+  bool has_cors = false;
+  bool relaxed_region_enforcement = false;
   RGWCORSConfiguration cors_config;
-  boost::optional<std::string> swift_ver_location;
-  std::map<std::string, buffer::list> attrs;
   std::set<std::string> rmattr_names;
-
-  bufferlist in_data;
 
   virtual bool need_metadata_upload() const { return false; }
 
-public:
-  RGWCreateBucket() : has_cors(false), relaxed_region_enforcement(false), obj_lock_enabled(false) {}
-
+ public:
   void emplace_attr(std::string&& key, buffer::list&& bl) {
-    attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
+    createparams.attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
-
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1403,7 +1390,7 @@ protected:
   RGWAccessControlPolicy policy;
   RGWCORSConfiguration cors_config;
   rgw_placement_rule placement_rule;
-  boost::optional<std::string> swift_ver_location;
+  std::optional<std::string> swift_ver_location;
 
 public:
   RGWPutMetadataBucket()

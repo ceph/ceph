@@ -91,7 +91,7 @@ void RGWRESTConn::populate_params(param_vec_t& params, const rgw_user *uid, cons
   populate_zonegroup(params, zonegroup);
 }
 
-int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_user& uid, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_user& uid, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
   string url;
   int ret = get_url(url);
@@ -109,7 +109,7 @@ int RGWRESTConn::forward(const DoutPrefixProvider *dpp, const rgw_user& uid, req
   return req.forward_request(dpp, key, info, max_response, inbl, outbl, y);
 }
 
-int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
+int RGWRESTConn::forward_iam_request(const DoutPrefixProvider *dpp, const RGWAccessKey& key, const req_info& info, obj_version *objv, size_t max_response, bufferlist *inbl, bufferlist *outbl, optional_yield y)
 {
   string url;
   int ret = get_url(url);

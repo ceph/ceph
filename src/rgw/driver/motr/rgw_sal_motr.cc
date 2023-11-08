@@ -210,8 +210,8 @@ int MotrUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
 int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
                             const rgw_bucket& b,
                             const std::string& zonegroup_id,
-                            rgw_placement_rule& placement_rule,
-                            std::string& swift_ver_location,
+                            const rgw_placement_rule& placement_rule,
+                            const std::string& swift_ver_location,
                             const RGWQuotaInfo* pquota_info,
                             const RGWAccessControlPolicy& policy,
                             Attrs& attrs,
@@ -228,30 +228,13 @@ int MotrUser::create_bucket(const DoutPrefixProvider* dpp,
   std::unique_ptr<Bucket> bucket;
 
   // Look up the bucket. Create it if it doesn't exist.
-  ret = this->store->get_bucket(dpp, this, b, &bucket, y);
+  ret = this->store->load_bucket(dpp, this, b, &bucket, y);
   if (ret < 0 && ret != -ENOENT)
     return ret;
 
   if (ret != -ENOENT) {
     *existed = true;
-    // if (swift_ver_location.empty()) {
-    //   swift_ver_location = bucket->get_info().swift_ver_location;
-    // }
-    // placement_rule.inherit_from(bucket->get_info().placement_rule);
-
-    // TODO: ACL policy
-    // // don't allow changes to the acl policy
-    //RGWAccessControlPolicy old_policy(ctx());
-    //int rc = rgw_op_get_bucket_policy_from_attr(
-    //           dpp, this, u, bucket->get_attrs(), &old_policy, y);
-    //if (rc >= 0 && old_policy != policy) {
-    //    bucket_out->swap(bucket);
-    //    return -EEXIST;
-    //}
   } else {
-
-    placement_rule.name = "default";
-    placement_rule.storage_class = "STANDARD";
     bucket = std::make_unique<MotrBucket>(store, b, this);
     bucket->set_attrs(attrs);
     *existed = false;
@@ -556,7 +539,7 @@ int MotrUser::verify_mfa(const std::string& mfa_str, bool* verified, const DoutP
   return 0;
 }
 
-int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
+int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
 {
   int ret;
 
@@ -686,7 +669,7 @@ int MotrBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_childre
   return ret;
 }
 
-int MotrBucket::remove_bucket_bypass_gc(int concurrent_max, bool
+int MotrBucket::remove_bypass_gc(int concurrent_max, bool
         keep_index_consistent,
         optional_yield y, const
         DoutPrefixProvider *dpp) {
@@ -1062,20 +1045,6 @@ void MotrStore::finalize(void)
 {
   // close connection with motr
   m0_client_fini(this->instance, true);
-}
-
-const std::string& MotrZoneGroup::get_endpoint() const
-{
-  if (!group.endpoints.empty()) {
-      return group.endpoints.front();
-  } else {
-    // use zonegroup's master zone endpoints
-    auto z = group.zones.find(group.master_zone);
-    if (z != group.zones.end() && !z->second.endpoints.empty()) {
-      return z->second.endpoints.front();
-    }
-  }
-  return empty;
 }
 
 bool MotrZoneGroup::placement_target_exists(std::string& target) const
@@ -3259,62 +3228,22 @@ std::unique_ptr<Object> MotrStore::get_object(const rgw_obj_key& k)
 }
 
 
-int MotrStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+std::unique_ptr<Bucket> MotrStore::get_bucket(User* u, const RGWBucketInfo& i)
 {
-  int ret;
-  Bucket* bp;
-
-  bp = new MotrBucket(this, b, u);
-  ret = bp->load_bucket(dpp, y);
-  if (ret < 0) {
-    delete bp;
-    return ret;
-  }
-
-  bucket->reset(bp);
-  return 0;
-}
-
-int MotrStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
-{
-  Bucket* bp;
-
-  bp = new MotrBucket(this, i, u);
   /* Don't need to fetch the bucket info, use the provided one */
-
-  bucket->reset(bp);
-  return 0;
+  return std::make_unique<MotrBucket>(this, i, u);
 }
 
-int MotrStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int MotrStore::load_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
-  rgw_bucket b;
-
-  b.tenant = tenant;
-  b.name = name;
-
-  return get_bucket(dpp, u, b, bucket, y);
+  *bucket = std::make_unique<MotrBucket>(this, b, u);
+  return (*bucket)->load_bucket(dpp, y);
 }
 
 bool MotrStore::is_meta_master()
 {
   return true;
-}
-
-int MotrStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version *objv,
-    bufferlist& in_data,
-    JSONParser *jp, req_info& info,
-    optional_yield y)
-{
-  return 0;
-}
-
-int MotrStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
-					     bufferlist& in_data,
-					     RGWXMLDecoder::XMLParser* parser, req_info& info,
-					     optional_yield y)
-{
-    return 0;
 }
 
 std::string MotrStore::zone_unique_id(uint64_t unique_num)

@@ -58,103 +58,22 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBUser::create_bucket(const DoutPrefixProvider *dpp,
-      const rgw_bucket& b,
-      const string& zonegroup_id,
-      rgw_placement_rule& placement_rule,
-      string& swift_ver_location,
-      const RGWQuotaInfo * pquota_info,
-      const RGWAccessControlPolicy& policy,
-      Attrs& attrs,
-      RGWBucketInfo& info,
-      obj_version& ep_objv,
-      bool exclusive,
-      bool obj_lock_enabled,
-      bool *existed,
-      req_info& req_info,
-      std::unique_ptr<Bucket>* bucket_out,
-      optional_yield y)
+  int DBBucket::create(const DoutPrefixProvider *dpp,
+                       const CreateParams& params,
+                       optional_yield y)
   {
-    int ret;
-    bufferlist in_data;
-    RGWBucketInfo master_info;
-    rgw_bucket *pmaster_bucket = nullptr;
-    uint32_t *pmaster_num_shards = nullptr;
-    real_time creation_time;
-    std::unique_ptr<Bucket> bucket;
-    obj_version objv, *pobjv = NULL;
+    ceph_assert(owner);
+    const rgw_user& owner_id = owner->get_id();
 
-    /* If it exists, look it up; otherwise create it */
-    ret = store->get_bucket(dpp, this, b, &bucket, y);
-    if (ret < 0 && ret != -ENOENT)
-      return ret;
+    rgw_bucket key = get_key();
+    key.marker = params.marker;
+    key.bucket_id = params.bucket_id;
 
-    if (ret != -ENOENT) {
-      RGWAccessControlPolicy old_policy(store->ctx());
-      *existed = true;
-      if (swift_ver_location.empty()) {
-        swift_ver_location = bucket->get_info().swift_ver_location;
-      }
-      placement_rule.inherit_from(bucket->get_info().placement_rule);
-
-      // don't allow changes to the acl policy
-      /*    int r = rgw_op_get_bucket_policy_from_attr(dpp, this, this, bucket->get_attrs(),
-            &old_policy, y);
-            if (r >= 0 && old_policy != policy) {
-            bucket_out->swap(bucket);
-            return -EEXIST;
-            }*/
-    } else {
-      bucket = std::make_unique<DBBucket>(store, b, this);
-      *existed = false;
-      bucket->set_attrs(attrs);
-      // XXX: For now single default zone and STANDARD storage class
-      // supported.
-      placement_rule.name = "default";
-      placement_rule.storage_class = "STANDARD";
-    }
-
-    /*
-     * XXX: If not master zone, fwd the request to master zone.
-     * For now DBStore has single zone.
-     */
-    std::string zid = zonegroup_id;
-    /* if (zid.empty()) {
-       zid = svc()->zone->get_zonegroup().get_id();
-       } */
-
-    if (*existed) {
-      rgw_placement_rule selected_placement_rule;
-      /* XXX: Handle this when zone is implemented
-         ret = svc()->zone->select_bucket_placement(this.get_info(),
-         zid, placement_rule,
-         &selected_placement_rule, nullptr, y);
-         if (selected_placement_rule != info.placement_rule) {
-         ret = -EEXIST;
-         bucket_out->swap(bucket);
-         return ret;
-         } */
-    } else {
-
-      /* XXX: We may not need to send all these params. Cleanup the unused ones */
-      ret = store->getDB()->create_bucket(dpp, this->get_info(), bucket->get_key(),
-          zid, placement_rule, swift_ver_location, pquota_info,
-          attrs, info, pobjv, &ep_objv, creation_time,
-          pmaster_bucket, pmaster_num_shards, y, exclusive);
-      if (ret == -EEXIST) {
-        *existed = true;
-        ret = 0;
-      } else if (ret != 0) {
-        return ret;
-      }
-    }
-
-    bucket->set_version(ep_objv);
-    bucket->get_info() = info;
-
-    bucket_out->swap(bucket);
-
-    return ret;
+    /* XXX: We may not need to send all these params. Cleanup the unused ones */
+    return store->getDB()->create_bucket(dpp, owner_id, key,
+        params.zonegroup_id, params.placement_rule, params.attrs,
+        params.swift_ver_location, params.quota, params.creation_time,
+        &bucket_version, info, y);
   }
 
   int DBUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
@@ -236,7 +155,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::remove_bucket(const DoutPrefixProvider *dpp, bool delete_children, bool forward_to_master, req_info* req_info, optional_yield y)
+  int DBBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, optional_yield y)
   {
     int ret;
 
@@ -277,10 +196,10 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBBucket::remove_bucket_bypass_gc(int concurrent_max, bool
-					keep_index_consistent,
-					optional_yield y, const
-					DoutPrefixProvider *dpp) {
+  int DBBucket::remove_bypass_gc(int concurrent_max, bool
+				 keep_index_consistent,
+				 optional_yield y, const
+				 DoutPrefixProvider *dpp) {
     return 0;
   }
 
@@ -507,19 +426,6 @@ namespace rgw::sal {
   {
     if (dbsm)
       dbsm->destroyAllHandles();
-  }
-
-  const std::string&  DBZoneGroup::get_endpoint() const {
-    if (!group->endpoints.empty()) {
-      return group->endpoints.front();
-    } else {
-      // use zonegroup's master zone endpoints
-      auto z = group->zones.find(group->master_zone);
-      if (z != group->zones.end() && !z->second.endpoints.empty()) {
-	return z->second.endpoints.front();
-      }
-    }
-    return empty;
   }
 
   bool DBZoneGroup::placement_target_exists(std::string& target) const {
@@ -1646,62 +1552,22 @@ namespace rgw::sal {
   }
 
 
-  int DBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+  std::unique_ptr<Bucket> DBStore::get_bucket(User* u, const RGWBucketInfo& i)
   {
-    int ret;
-    Bucket* bp;
-
-    bp = new DBBucket(this, b, u);
-    ret = bp->load_bucket(dpp, y);
-    if (ret < 0) {
-      delete bp;
-      return ret;
-    }
-
-    bucket->reset(bp);
-    return 0;
-  }
-
-  int DBStore::get_bucket(User* u, const RGWBucketInfo& i, std::unique_ptr<Bucket>* bucket)
-  {
-    Bucket* bp;
-
-    bp = new DBBucket(this, i, u);
     /* Don't need to fetch the bucket info, use the provided one */
-
-    bucket->reset(bp);
-    return 0;
+    return std::make_unique<DBBucket>(this, i, u);
   }
 
-  int DBStore::get_bucket(const DoutPrefixProvider *dpp, User* u, const std::string& tenant, const std::string& name, std::unique_ptr<Bucket>* bucket, optional_yield y)
+  int DBStore::load_bucket(const DoutPrefixProvider *dpp, User* u, const rgw_bucket& b,
+                           std::unique_ptr<Bucket>* bucket, optional_yield y)
   {
-    rgw_bucket b;
-
-    b.tenant = tenant;
-    b.name = name;
-
-    return get_bucket(dpp, u, b, bucket, y);
+    *bucket = std::make_unique<DBBucket>(this, b, u);
+    return (*bucket)->load_bucket(dpp, y);
   }
 
   bool DBStore::is_meta_master()
   {
     return true;
-  }
-
-  int DBStore::forward_request_to_master(const DoutPrefixProvider *dpp, User* user, obj_version *objv,
-      bufferlist& in_data,
-      JSONParser *jp, req_info& info,
-      optional_yield y)
-  {
-    return 0;
-  }
-
-  int DBStore::forward_iam_request_to_master(const DoutPrefixProvider *dpp, const RGWAccessKey& key, obj_version* objv,
-					     bufferlist& in_data,
-					     RGWXMLDecoder::XMLParser* parser, req_info& info,
-					     optional_yield y)
-  {
-      return 0;
   }
 
   std::string DBStore::zone_unique_id(uint64_t unique_num)

@@ -628,21 +628,20 @@ public:
   bool get_obj_data_pool(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_pool *pool);
   bool obj_to_raw(const rgw_placement_rule& placement_rule, const rgw_obj& obj, rgw_raw_obj *raw_obj);
 
-  int create_bucket(const RGWUserInfo& owner, rgw_bucket& bucket,
-		    const std::string& zonegroup_id,
-		    const rgw_placement_rule& placement_rule,
-		    const std::string& swift_ver_location,
-		    const RGWQuotaInfo * pquota_info,
-		    std::map<std::string,bufferlist>& attrs,
-		    RGWBucketInfo& bucket_info,
-		    obj_version *pobjv,
-		    obj_version *pep_objv,
-		    ceph::real_time creation_time,
-		    rgw_bucket *master_bucket,
-		    uint32_t *master_num_shards,
-		    optional_yield y,
-                    const DoutPrefixProvider *dpp,
-		    bool exclusive = true);
+  int create_bucket(const DoutPrefixProvider* dpp,
+                    optional_yield y,
+                    const rgw_bucket& bucket,
+                    const rgw_user& owner,
+                    const std::string& zonegroup_id,
+                    const rgw_placement_rule& placement_rule,
+                    const RGWZonePlacementInfo* zone_placement,
+                    const std::map<std::string, bufferlist>& attrs,
+                    bool obj_lock_enabled,
+                    const std::optional<std::string>& swift_ver_location,
+                    const std::optional<RGWQuotaInfo>& quota,
+                    std::optional<ceph::real_time> creation_time,
+                    obj_version* pep_objv,
+                    RGWBucketInfo& info);
 
   RGWCoroutinesManagerRegistry *get_cr_registry() { return cr_registry; }
 
@@ -1395,7 +1394,7 @@ public:
       std::map<RGWObjCategory, RGWStorageStats>& stats, std::string *max_marker, bool* syncstopped = NULL);
   int get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *cb);
 
-  int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp, optional_yield y);
+  int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, const std::map<std::string, bufferlist> *pattrs, const DoutPrefixProvider *dpp, optional_yield y);
   /* xxx dang obj_ctx -> svc */
   int get_bucket_instance_info(const std::string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
   int get_bucket_instance_info(const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, std::map<std::string, bufferlist> *pattrs, optional_yield y, const DoutPrefixProvider *dpp);
@@ -1420,7 +1419,7 @@ public:
 			      std::map<std::string, bufferlist> *pattrs = nullptr);
 
   int put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, obj_version *pep_objv,
-			     std::map<std::string, bufferlist> *pattrs, bool create_entry_point,
+			     const std::map<std::string, bufferlist> *pattrs, bool create_entry_point,
                              const DoutPrefixProvider *dpp, optional_yield y);
 
   int cls_obj_prepare_op(const DoutPrefixProvider *dpp, BucketShard& bs, RGWModifyOp op, std::string& tag, rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *zones_trace = nullptr);

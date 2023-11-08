@@ -50,8 +50,6 @@ public:
     { return next->get_name(); }
   virtual int equals(const std::string& other_zonegroup) const override
     { return next->equals(other_zonegroup); }
-  virtual const std::string& get_endpoint() const override
-    { return next->get_endpoint(); }
   virtual bool placement_target_exists(std::string& target) const override
     { return next->placement_target_exists(target); }
   virtual bool is_master_zonegroup() const override
@@ -159,26 +157,11 @@ public:
 				std::string& user_str, optional_yield y,
 				std::unique_ptr<User>* user) override;
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
-  virtual int get_bucket(User* u, const RGWBucketInfo& i,
-			 std::unique_ptr<Bucket>* bucket) override;
-  virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const
-			 rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
-			 optional_yield y) override;
-  virtual int get_bucket(const DoutPrefixProvider* dpp, User* u, const
-			 std::string& tenant, const std::string& name,
-			 std::unique_ptr<Bucket>* bucket, optional_yield y) override;
+  std::unique_ptr<Bucket> get_bucket(User* u, const RGWBucketInfo& i) override;
+  int load_bucket(const DoutPrefixProvider* dpp, User* u,
+                  const rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
+                  optional_yield y) override;
   virtual bool is_meta_master() override;
-  virtual int forward_request_to_master(const DoutPrefixProvider *dpp, User* user,
-					obj_version* objv, bufferlist& in_data,
-					JSONParser* jp, req_info& info,
-					optional_yield y) override;
-  virtual int forward_iam_request_to_master(const DoutPrefixProvider *dpp,
-					    const RGWAccessKey& key,
-					    obj_version* objv,
-					    bufferlist& in_data,
-					    RGWXMLDecoder::XMLParser* parser,
-					    req_info& info,
-					    optional_yield y) override;
   virtual Zone* get_zone() override { return zone.get(); }
   virtual std::string zone_unique_id(uint64_t unique_num) override;
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
@@ -329,22 +312,6 @@ public:
 			   const std::string& marker, const std::string& end_marker,
 			   uint64_t max, bool need_stats, BucketList& buckets,
 			   optional_yield y) override;
-  virtual int create_bucket(const DoutPrefixProvider* dpp,
-			    const rgw_bucket& b,
-			    const std::string& zonegroup_id,
-			    rgw_placement_rule& placement_rule,
-			    std::string& swift_ver_location,
-			    const RGWQuotaInfo* pquota_info,
-			    const RGWAccessControlPolicy& policy,
-			    Attrs& attrs,
-			    RGWBucketInfo& info,
-			    obj_version& ep_objv,
-			    bool exclusive,
-			    bool obj_lock_enabled,
-			    bool* existed,
-			    req_info& req_info,
-			    std::unique_ptr<Bucket>* bucket,
-			    optional_yield y) override;
 
   virtual std::string& get_display_name() override { return next->get_display_name(); }
   virtual const std::string& get_tenant() override { return next->get_tenant(); }
@@ -412,18 +379,20 @@ public:
 		   ListResults&, optional_yield y) override;
   virtual Attrs& get_attrs(void) override { return next->get_attrs(); }
   virtual int set_attrs(Attrs a) override { return next->set_attrs(a); }
-  virtual int remove_bucket(const DoutPrefixProvider* dpp, bool delete_children,
-			    bool forward_to_master, req_info* req_info,
-			    optional_yield y) override;
-  virtual int remove_bucket_bypass_gc(int concurrent_max, bool
-				      keep_index_consistent,
-				      optional_yield y, const
-				      DoutPrefixProvider *dpp) override;
+  virtual int remove(const DoutPrefixProvider* dpp, bool delete_children,
+		     optional_yield y) override;
+  virtual int remove_bypass_gc(int concurrent_max, bool
+			       keep_index_consistent,
+			       optional_yield y, const
+			       DoutPrefixProvider *dpp) override;
   virtual RGWAccessControlPolicy& get_acl(void) override { return next->get_acl(); }
   virtual int set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy& acl,
 		      optional_yield y) override;
 
   virtual void set_owner(rgw::sal::User* _owner) override { next->set_owner(_owner); }
+  virtual int create(const DoutPrefixProvider* dpp,
+		     const CreateParams& params,
+		     optional_yield y) override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int read_stats(const DoutPrefixProvider *dpp,
 			 const bucket_index_layout_generation& idx_layout,
