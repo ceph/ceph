@@ -32,5 +32,11 @@ export enum MultiClusterPromqls {
   OSDS = 'count by (cluster) (ceph_osd_metadata) or vector(0)',
   CRITICAL_ALERTS_COUNT = 'count(ALERTS{alertstate=\"firing\",severity=\"critical\"}) or vector(0)',
   WARNING_ALERTS_COUNT = 'count(ALERTS{alertstate=\"firing\",severity=\"warning\"}) or vector(0)',
-  ALERTS = 'ALERTS'
+  ALERTS = 'ALERTS',
+  CLUSTER_CAPACITY_UTILIZATION = 'topk(2, ceph_cluster_total_used_bytes/ceph_cluster_total_bytes)',
+  CLUSTER_IOPS_UTILIZATION = 'topk(2, sum by (cluster) (irate(ceph_osd_op_w[1m]))  \n+ sum by (cluster) (irate(ceph_osd_op_r[1m])) )',
+  CLUSTER_THROUGHPUT_UTILIZATION = 'topk(2, sum by (cluster) (irate(ceph_pool_rd_bytes[1m]))  \n+ sum by (cluster) (irate(ceph_pool_wr_bytes[1m])) )',
+  POOL_CAPACITY_UTILIZATION = 'topk(2, ceph_pool_bytes_used/ceph_pool_max_avail * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata)',
+  POOL_IOPS_UTILIZATION = 'topk(2, sum by (cluster) (irate(ceph_pool_rd[1m]))  \n+ sum by (cluster) (irate(ceph_pool_wr[1m])) )',
+  POOL_THROUGHPUT_UTILIZATION = 'topk(2, sum by (cluster) (irate(ceph_pool_rd_bytes[1m]))  \n+ sum by (cluster) (irate(ceph_pool_wr_bytes[1m])) )',
 }

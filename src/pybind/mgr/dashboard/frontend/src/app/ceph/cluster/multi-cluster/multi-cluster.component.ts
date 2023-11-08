@@ -39,6 +39,12 @@ export class MultiClusterComponent implements OnInit{
     HEALTH_ERROR_COUNT: 0,
     TOTAL_CLUSTERS_CAPACITY: 0,
     TOTAL_USED_CAPACITY: 0,
+    CLUSTER_CAPACITY_UTILIZATION: 0,
+    CLUSTER_IOPS_UTILIZATION: 0,
+    CLUSTER_THROUGHPUT_UTILIZATION: 0,
+    POOL_CAPACITY_UTILIZATION: 0,
+    POOL_IOPS_UTILIZATION: 0,
+    POOL_THROUGHPUT_UTILIZATION: 0,
     TOTAL_CAPACITY: 0,
     USED_CAPACITY: 0,
     HOSTS: 0,
@@ -107,6 +113,8 @@ export class MultiClusterComponent implements OnInit{
     this.prometheusService.getMultiClusterQueriesData(selectedTime, queries, this.queriesResults)
       .subscribe((data: any) => {
         this.queriesResults = data;
+        console.log(this.queriesResults);
+        
         this.loading = false;
         this.alerts = this.queriesResults.ALERTS;
         this.getAlertsInfo();
@@ -201,6 +209,8 @@ export class MultiClusterComponent implements OnInit{
     }
     
     this.clusters = clusters;
+    console.log(this.clusters);
+    
   }
   
 

@@ -108,7 +108,8 @@
       </cd-card>
     </div>
     <div class="col-lg-9">
-      <cd-card  i18n-title
+      <cd-card  cardTitle="Cluster Details"
+                i18n-title
                 class="d-flex h-100"
                 aria-label="Cluster Details">
         <div>
@@ -145,7 +146,8 @@
       </cd-card>
     </div>
     <div class="col-lg-9">
-      <cd-card  i18n-title
+      <cd-card  cardTitle="Alert Details"
+                i18n-title
                 class="d-flex h-100"
                 aria-label="Alert Details">
         <div>
@@ -157,6 +159,77 @@
       </cd-card>
     </div>
   </div>
+
+  <div class="row pt-4">
+    <div class="col-lg-6">
+      <cd-card cardTitle="Cluster Utilization"
+               i18n-title
+               aria-label="Cluster Utilization card">
+      <div class="ms-4 me-4 mt-0">
+        <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
+        </cd-dashboard-time-selector>
+        <cd-dashboard-area-chart  chartTitle="Capacity"
+                                  [label]="clusters[0].cluster"
+                                  [label2]="clusters[1].cluster"
+                                  dataUnits="B"
+                                  [data]="queriesResults.CLUSTER_CAPACITY_UTILIZATION[0]"
+                                  [data2]="queriesResults.CLUSTER_CAPACITY_UTILIZATION[1]">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="IOPS"
+                                [label]="clusters[0].cluster"
+                                [label2]="clusters[1].cluster"
+                                 dataUnits=""
+                                 decimals="0"
+                                 [data]="queriesResults.CLUSTER_IOPS_UTILIZATION[0]"
+                                 [data2]="queriesResults.CLUSTER_IOPS_UTILIZATION[1]">
+        </cd-dashboard-area-chart>
+        <cd-dashboard-area-chart chartTitle="Client Throughput"
+                                [label]="clusters[0].cluster"
+                                [label2]="clusters[1].cluster"
+                                 dataUnits="B/s"
+                                 decimals="2"
+                                 [data]="queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0]"
+                                 [data2]="queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1]">
+        </cd-dashboard-area-chart>
+      </div>
+    </cd-card>
+    </div>
+
+
+  <div class="col-lg-6">
+    <cd-card cardTitle="Pools Utilization"
+             i18n-title
+             aria-label="Pools Utilization card">
+    <div class="ms-4 me-4 mt-0">
+      <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
+      </cd-dashboard-time-selector>
+      <cd-dashboard-area-chart  chartTitle="Capacity"
+                                [label]="clusters[0].cluster + '-' + clusters[0].name"
+                                [label2]="clusters[1].cluster"
+                                dataUnits="B"
+                                [data]="queriesResults.POOL_CAPACITY_UTILIZATION[0]"
+                                [data2]="queriesResults.POOL_CAPACITY_UTILIZATION[1]">
+      </cd-dashboard-area-chart>
+      <cd-dashboard-area-chart chartTitle="IOPS"
+                              [label]="clusters[0].cluster"
+                              [label2]="clusters[1].cluster"
+                               dataUnits=""
+                               decimals="0"
+                               [data]="queriesResults.POOL_IOPS_UTILIZATION[0]"
+                               [data2]="queriesResults.POOL_IOPS_UTILIZATION[1]">
+      </cd-dashboard-area-chart>
+      <cd-dashboard-area-chart chartTitle="Client Throughput"
+                              [label]="clusters[0].cluster"
+                              [label2]="clusters[1].cluster"
+                               dataUnits="B/s"
+                               decimals="2"
+                               [data]="queriesResults.POOL_THROUGHPUT_UTILIZATION[0]"
+                               [data2]="queriesResults.POOL_THROUGHPUT_UTILIZATION[1]">
+      </cd-dashboard-area-chart>
+    </div>
+  </cd-card>
   </div>
+</div>
+</div>
 </div>
  

@@ -63,6 +63,7 @@ import { UpgradeStartModalComponent } from './upgrade/upgrade-form/upgrade-start
 import { UpgradeProgressComponent } from './upgrade/upgrade-progress/upgrade-progress.component';
 import { MultiClusterComponent } from './multi-cluster/multi-cluster.component';
 import { MultiClusterFormComponent } from './multi-cluster/multi-cluster-form/multi-cluster-form.component';
+import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
 
 @NgModule({
   imports: [
@@ -83,7 +84,8 @@ import { MultiClusterFormComponent } from './multi-cluster/multi-cluster-form/mu
     NgbPopoverModule,
     NgbDropdownModule,
     NgxPipeFunctionModule,
-    NgbProgressbarModule
+    NgbProgressbarModule,
+    DashboardV3Module
   ],
   declarations: [
     HostsComponent,

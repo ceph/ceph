@@ -46,6 +46,10 @@ export class PrometheusService {
     return this.http.get<any>(`${this.baseURL}/multi_cluster_data`, { params });
   }
 
+  getMultiClusterQueryRangeData(params: any): any {
+    return this.http.get<any>(`${this.baseURL}/multi_cluster_query_range_data`, { params });
+  }
+
   
 
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
@@ -197,18 +201,35 @@ export class PrometheusService {
         if (this.timerGetPrometheusDataSub) {
           this.timerGetPrometheusDataSub.unsubscribe();
         }
+
+
+        this.timerGetPrometheusDataSub = timer(0, this.timerTime).subscribe(() => {
+          selectedTime = this.updateTimeStamp(selectedTime);
         
         const requests = [];
         for (const queryName in queries) {
           if (queries.hasOwnProperty(queryName)) {
-            const query = queries[queryName];
-            const request = this.getMultiClusterData({
+            const validRangeQueries1 = ['CLUSTER_CAPACITY_UTILIZATION', 'CLUSTER_IOPS_UTILIZATION', 'CLUSTER_THROUGHPUT_UTILIZATION', 'POOL_CAPACITY_UTILIZATION', 'POOL_IOPS_UTILIZATION', 'POOL_THROUGHPUT_UTILIZATION'];
+            if (validRangeQueries1.includes(queryName)) {
+                const query = queries[queryName];
+                const request = this.getMultiClusterQueryRangeData({
+                params: encodeURIComponent(query),
+                start: selectedTime['start'],
+                end: selectedTime['end'],
+                step: selectedTime['step'],
+              });
+              requests.push(request); 
+            }
+            else {
+              const query = queries[queryName];
+              const request = this.getMultiClusterData({
               params: encodeURIComponent(query),
               start: selectedTime['start'],
               end: selectedTime['end'],
-              step: selectedTime['step']
+              step: selectedTime['step'],
             });
-            requests.push(request);
+              requests.push(request); 
+            }
           }
         }
   
@@ -222,8 +243,15 @@ export class PrometheusService {
                 queriesResults[queryName] = data.result;
               }
               else {
-                if (data.result.length) {                
-                  queriesResults[queryName] = data.result.map((result: { value: any; }) => result.value);
+                if (data.result.length) {     
+                  console.log(queryName, data);
+                  const validRangeQueries = ['CLUSTER_CAPACITY_UTILIZATION', 'CLUSTER_IOPS_UTILIZATION', 'CLUSTER_THROUGHPUT_UTILIZATION', 'POOL_CAPACITY_UTILIZATION', 'POOL_IOPS_UTILIZATION', 'POOL_THROUGHPUT_UTILIZATION'];
+                  if (validRangeQueries.includes(queryName)) {
+                    queriesResults[queryName] = data.result.map((result: { values: any; }) => result.values);
+                  }
+                  else {
+                    queriesResults[queryName] = data.result.map((result: { value: any; }) => result.value);
+                  }
                 }
               }
               if (queriesResults[queryName] !== undefined && queriesResults[queryName] !== '' && checkNan) {
@@ -237,6 +265,8 @@ export class PrometheusService {
                 });
               }
             }
+            console.log(queriesResults);
+            
             
             observer.next(queriesResults);
             observer.complete();
@@ -245,6 +275,7 @@ export class PrometheusService {
             observer.error(error);
           }
         );
+        });
       });
     });
   }

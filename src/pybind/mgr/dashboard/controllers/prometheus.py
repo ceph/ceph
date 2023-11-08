@@ -145,6 +145,11 @@ class Prometheus(PrometheusRESTController):
     def get_prometeus_multicluster_data(self, **params):
         params['query'] = params.pop('params')
         return self.thanos_proxy('GET', '/query', params)
+    
+    @RESTController.Collection(method='GET', path='/multi_cluster_query_range_data')
+    def get_prometeus_multicluster_query_range_data(self, **params):
+        params['query'] = params.pop('params')
+        return self.thanos_proxy('GET', '/query_range', params)
 
     @RESTController.Collection(method='GET', path='/silences')
     def get_silences(self, **params):
