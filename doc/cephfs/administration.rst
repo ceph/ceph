@@ -92,6 +92,46 @@ The CephX IDs authorized to the old file system name need to be reauthorized
 to the new name. Any on-going operations of the clients using these IDs may be
 disrupted. Mirroring is expected to be disabled on the file system.
 
+::
+
+    fs swap <fs1-name> <fs1_id> <fs2-name> <fs2_id> [--swap-fscids=yes|no] [--yes-i-really-mean-it]
+
+Swaps names of two Ceph file sytems and updates the application tags on all
+pools of both FSs accordingly. Certain tools that track FSCIDs of the file
+systems, besides the FS names, might get confused due to this operation. For
+this reason, mandatory option ``--swap-fscids`` has been provided that must be
+used to indicate whether or not FSCIDs must be swapped.
+
+.. note:: FSCID stands for "File System Cluster ID".
+
+Before the swap, mirroring should be disabled on both the CephFSs
+(because the cephfs-mirror daemon uses the fscid internally and changing it
+while the daemon is running could result in undefined behaviour), both the
+CephFSs should be offline and the file system flag ``refuse_client_sessions``
+must be set for both the CephFS.
+
+The function of this API is to facilitate disaster recovery where a new file
+system reconstructed from the previous one is ready to take over for the
+possibly damaged file system. Instead of two ``fs rename`` operations, the
+operator can use a swap so there is no FSMap epoch where the primary (or
+production) named file system does not exist. This is important when Ceph is
+monitored by automatic storage operators like (Rook) which try to reconcile
+the storage system continuously. That operator may attempt to recreate the
+file system as soon as it is seen to not exist.
+
+After the swap, CephX credentials may need to be reauthorized if the existing
+mounts should "follow" the old file system to its new name. Generally, for
+disaster recovery, its desirable for the existing mounts to continue using
+the same file system name. Any active file system mounts for either CephFSs
+must remount. Existing unflushed operations will be lost. When it is judged
+that one of the swapped file systems is ready for clients, run::
+
+    ceph fs set <fs> joinable true
+    ceph fs set <fs> refuse_client_sessions false
+
+Keep in mind that one of the swapped file systems may be left offline for
+future analysis if doing a disaster recovery swap.
+
 
 Settings
 --------
