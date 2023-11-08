@@ -6,9 +6,27 @@ from ceph_volume.util import constants, system
 from ceph_volume.util.device import Device
 from .prepare import write_keyring
 from .disk import lsblk, device_family, get_part_entry_type
+from packaging import version
 
 logger = logging.getLogger(__name__)
 mlogger = terminal.MultiLogger(__name__)
+
+def set_dmcrypt_no_workqueue(target_version: str = '2.3.4') -> None:
+    """
+    set `conf.dmcrypt_no_workqueue` to `True` if the available
+    version of `cryptsetup` is greater or equal to `version`
+    """
+    command = ["cryptsetup", "--version"]
+    out, err, rc = process.call(command)
+    try:
+        if version.parse(out[0]) >= version.parse(f'cryptsetup {target_version}'):
+            conf.dmcrypt_no_workqueue = True
+    except IndexError:
+        mlogger.debug(f'cryptsetup version check: rc={rc} out={out} err={err}')
+        raise RuntimeError("Couldn't check the cryptsetup version.")
+
+def bypass_workqueue(device: str) -> bool:
+    return not Device(device).rotational and conf.dmcrypt_no_workqueue
 
 def get_key_size_from_conf():
     """
@@ -79,6 +97,10 @@ def plain_open(key, device, mapping):
         '--key-size', '256',
     ]
 
+    if bypass_workqueue(device):
+        command.extend(['--perf-no_read_workqueue',
+                        '--perf-no_write_workqueue'])
+
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 
@@ -103,6 +125,11 @@ def luks_open(key, device, mapping):
         device,
         mapping,
     ]
+
+    if bypass_workqueue(device):
+        command.extend(['--perf-no_read_workqueue',
+                        '--perf-no_write_workqueue'])
+
     process.call(command, stdin=key, terminal_verbose=True, show_command=True)
 
 

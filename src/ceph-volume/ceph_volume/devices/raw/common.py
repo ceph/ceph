@@ -46,7 +46,7 @@ def create_parser(prog, description):
     )
     parser.add_argument(
         '--dmcrypt',
-        action='store_true',
+        action=arg_validators.DmcryptAction,
         help='Enable device encryption via dm-crypt',
     )
     parser.add_argument(
