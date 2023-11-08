@@ -25,27 +25,27 @@
   </div>
 </ng-template>
 
+<ng-template #nametpl>
+  <div class="datatable-body-cell-label" style="margin-left: 0px;">
+    <span title="{{cluster}}">
+      <a href="#">
+        {{cluster}}
+      </a>
+    </span>
+  </div>
+</ng-template>
+
 
 <div class="container-fluid h-100 p-4">
-
-  <ng-template #nametpl>
-    <div class="datatable-body-cell-label" style="margin-left: 0px;">
-      <span title="{{clusterName}}">
-        <a href="#">
-          {{clusterName}}
-        </a>
-      </span>
-    </div>
-  </ng-template>
-
   <div *ngIf="dashboardClustersMap?.size <= 1">
     <ng-container *ngTemplateOutlet="emptyCluster"></ng-container>
   </div>
-  <div *ngIf="dashboardClustersMap?.size > 1">
+
   <span *ngIf="loading"
         class="d-flex justify-content-center">
     <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
   </span>
+  <div *ngIf="dashboardClustersMap?.size > 1">
   <div *ngIf="!loading">
   <div class="row">
     <div class="col-lg-12">
@@ -220,7 +220,7 @@
                                  [data]="clusterIopsData1"
                                  [data2]="clusterIopsData2">
         </cd-dashboard-area-chart>
-        <cd-dashboard-area-chart chartTitle="Client Throughput"
+        <cd-dashboard-area-chart chartTitle="Throughput"
                                 [label]="clusterThroughputLabel1"
                                 [label2]="clusterThroughputLabel2"
                                  dataUnits="B/s"

@@ -147,12 +147,12 @@
   .cd-context-bar {
     background-color: vv.$white;
     color: vv.$secondary;
+    cursor: pointer;
   }
 
   .dropdown-text {
-    font-weight: 600;
     font-size: small;
-    max-width: 30rem;
+    font-weight: 600;
   }
 }
 

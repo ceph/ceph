@@ -49,7 +49,8 @@ export class MultiClusterComponent implements OnInit {
     HOSTS: 0,
     POOLS: 0,
     OSDS: 0,
-    CLUSTER_ALERTS: 0
+    CLUSTER_ALERTS: 0,
+    version: ''
   };
 
   timerGetPrometheusDataSub: Subscription;
@@ -57,37 +58,37 @@ export class MultiClusterComponent implements OnInit {
   addRemoteClusterAction: CdTableAction[];
   capacity: any = {};
   clusters: any;
-  dashboardClustersMap: Map<string, string> = new Map<string, string>();;
+  dashboardClustersMap: Map<string, string> = new Map<string, string>();
   columns: Array<CdTableColumn> = [];
   alertColumns: Array<CdTableColumn> = [];
   tableData: any;
   clusterDataList: any;
   alerts: any;
   private subs = new Subscription();
-  clusterCapacityLabel1 = ''
-  clusterCapacityLabel2 = ''
-  clusterIopsLabel1 = ''
-  clusterIopsLabel2 = ''
-  clusterThroughputLabel1 = ''
-  clusterThroughputLabel2 = ''
-  clusterCapacityData1 = ''
-  clusterCapacityData2 = ''
-  clusterIopsData1 = ''
-  clusterIopsData2 = ''
-  clusterThroughputData1 = ''
-  clusterThroughputData2 = ''
-  poolCapacityLabel1 = ''
-  poolCapacityLabel2 = ''
-  poolIopsLabel1 = ''
-  poolIopsLabel2 = ''
-  poolThroughputLabel1 = ''
-  poolThroughputLabel2 = ''
-  poolCapacityData1 = ''
-  poolCapacityData2 = ''
-  poolIopsData1 = ''
-  poolIopsData2 = ''
-  poolThroughputData1 = ''
-  poolThroughputData2 = ''
+  clusterCapacityLabel1 = '';
+  clusterCapacityLabel2 = '';
+  clusterIopsLabel1 = '';
+  clusterIopsLabel2 = '';
+  clusterThroughputLabel1 = '';
+  clusterThroughputLabel2 = '';
+  clusterCapacityData1 = '';
+  clusterCapacityData2 = '';
+  clusterIopsData1 = '';
+  clusterIopsData2 = '';
+  clusterThroughputData1 = '';
+  clusterThroughputData2 = '';
+  poolCapacityLabel1 = '';
+  poolCapacityLabel2 = '';
+  poolIopsLabel1 = '';
+  poolIopsLabel2 = '';
+  poolThroughputLabel1 = '';
+  poolThroughputLabel2 = '';
+  poolCapacityData1 = '';
+  poolCapacityData2 = '';
+  poolIopsData1 = '';
+  poolIopsData2 = '';
+  poolThroughputData1 = '';
+  poolThroughputData2 = '';
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -120,7 +121,7 @@ export class MultiClusterComponent implements OnInit {
       {
         prop: 'cluster',
         name: $localize`Cluster Name`,
-        flexGrow: 1,
+        flexGrow: 2,
         cellTemplate: this.nameTpl
       },
       {
@@ -137,6 +138,7 @@ export class MultiClusterComponent implements OnInit {
         }
       },
       { prop: 'alert', name: $localize`Alerts`, flexGrow: 1 },
+      { prop: 'version', name: $localize`Version`, flexGrow: 2 },
       {
         prop: 'total_capacity',
         name: $localize`Total Capacity`,
@@ -160,9 +162,9 @@ export class MultiClusterComponent implements OnInit {
       { prop: 'osds', name: $localize`OSDs`, flexGrow: 1 }
     ];
     this.alertColumns = [
-      { prop: 'alertname', name: $localize`Name`, flexGrow: 1 },
+      { prop: 'alertName', name: $localize`Name`, flexGrow: 1 },
       { prop: 'cluster', name: $localize`Cluster`, flexGrow: 1 },
-      { prop: 'alertstate', name: $localize`State`, flexGrow: 1 },
+      { prop: 'alertState', name: $localize`State`, flexGrow: 1 },
       { prop: 'severity', name: $localize`Severity`, flexGrow: 1 }
     ];
   }
@@ -171,7 +173,7 @@ export class MultiClusterComponent implements OnInit {
     this.prometheusService
       .getMultiClusterQueriesData(selectedTime, queries, this.queriesResults)
       .subscribe((data: any) => {
-        this.queriesResults = data;        
+        this.queriesResults = data;
         this.loading = false;
         this.alerts = this.queriesResults.ALERTS;
         this.getAlertsInfo();
@@ -181,8 +183,8 @@ export class MultiClusterComponent implements OnInit {
 
   getAlertsInfo() {
     interface Alert {
-      alertname: string;
-      alertstate: string;
+      alertName: string;
+      alertState: string;
       severity: string;
       cluster: string;
     }
@@ -192,9 +194,9 @@ export class MultiClusterComponent implements OnInit {
     this.alerts?.forEach((item: any) => {
       const metric = item.metric;
       const alert: Alert = {
-        alertname: metric.alertname,
+        alertName: metric.alertname,
         cluster: metric.cluster,
-        alertstate: metric.alertstate,
+        alertState: metric.alertstate,
         severity: metric.severity
       };
       alerts.push(alert);
@@ -214,6 +216,7 @@ export class MultiClusterComponent implements OnInit {
       pools: number;
       osds: number;
       hosts: number;
+      version: string;
     }
 
     const clusters: ClusterInfo[] = [];
@@ -221,11 +224,14 @@ export class MultiClusterComponent implements OnInit {
     this.queriesResults.TOTAL_CAPACITY?.forEach((totalCapacityMetric: any) => {
       const clusterName = totalCapacityMetric.metric.cluster;
       const totalCapacity = parseInt(totalCapacityMetric.value[1]);
-      const usedCapacity = this.findClusterData(this.queriesResults?.USED_CAPACITY, clusterName)
+      const getMgrMetadata = this.findCluster(this.queriesResults?.MGR_METADATA, clusterName);
+      const version = this.getVersion(getMgrMetadata.metric.ceph_version);
+
+      const usedCapacity = this.findClusterData(this.queriesResults?.USED_CAPACITY, clusterName);
       const pools = this.findClusterData(this.queriesResults?.POOLS, clusterName);
       const hosts = this.findClusterData(this.queriesResults?.HOSTS, clusterName);
       const alert = this.findClusterData(this.queriesResults?.CLUSTER_ALERTS, clusterName);
-      const osds =  this.findClusterData(this.queriesResults?.OSDS, clusterName);
+      const osds = this.findClusterData(this.queriesResults?.OSDS, clusterName);
       const status = this.findClusterData(this.queriesResults?.HEALTH_STATUS, clusterName);
       const available_capacity = totalCapacity - usedCapacity;
 
@@ -238,42 +244,110 @@ export class MultiClusterComponent implements OnInit {
         available_capacity: available_capacity,
         pools,
         osds,
-        hosts
+        hosts,
+        version
       });
     });
 
     this.clusters = clusters;
-    this.clusterCapacityLabel1 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0] ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0].metric.cluster : '';
-    this.clusterCapacityLabel2 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1] ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1].metric.cluster : '';
-    this.clusterCapacityData1 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0] ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0].values : '';
-    this.clusterCapacityData2 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1] ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1].values : '';
-    this.clusterIopsLabel1 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[0] ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[0].metric.cluster : '';
-    this.clusterIopsLabel2 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[1] ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[1].metric.cluster : '';
-    this.clusterIopsData1 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[0] ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[0].values : '';
-    this.clusterIopsData2 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[1] ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[1].values : '';
-    this.clusterThroughputLabel1 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0] ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0].metric.cluster : '';
-    this.clusterThroughputLabel2 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1] ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1].metric.cluster : '';
-    this.clusterThroughputData1 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0] ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0].values : '';
-    this.clusterThroughputData2 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1] ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1].values : '';
-    this.poolCapacityLabel1 = this.queriesResults.POOL_CAPACITY_UTILIZATION[0] ? this.queriesResults.POOL_CAPACITY_UTILIZATION[0].metric.name + ' - ' + this.queriesResults.POOL_CAPACITY_UTILIZATION[0].metric.cluster: '';
-    this.poolCapacityLabel2 = this.queriesResults.POOL_CAPACITY_UTILIZATION[1] ? this.queriesResults.POOL_CAPACITY_UTILIZATION[1].metric.name + ' - ' + this.queriesResults.POOL_CAPACITY_UTILIZATION[1].metric.cluster: '';
-    this.poolCapacityData1 = this.queriesResults.POOL_CAPACITY_UTILIZATION[0] ? this.queriesResults.POOL_CAPACITY_UTILIZATION[0].values : '';
-    this.poolCapacityData2 = this.queriesResults.POOL_CAPACITY_UTILIZATION[1] ? this.queriesResults.POOL_CAPACITY_UTILIZATION[1].values : '';
-    this.poolIopsLabel1 = this.queriesResults.POOL_IOPS_UTILIZATION[0] ? this.queriesResults.POOL_IOPS_UTILIZATION[0].metric.name + ' - ' + this.queriesResults.POOL_IOPS_UTILIZATION[0].metric.cluster : '';
-    this.poolIopsLabel2 = this.queriesResults.POOL_IOPS_UTILIZATION[1] ? this.queriesResults.POOL_IOPS_UTILIZATION[1].metric.name + ' - ' + this.queriesResults.POOL_IOPS_UTILIZATION[1].metric.cluster : '';
-    this.poolIopsData1 = this.queriesResults.POOL_IOPS_UTILIZATION[0] ? this.queriesResults.POOL_IOPS_UTILIZATION[0].values : '';
-    this.poolIopsData2 = this.queriesResults.POOL_IOPS_UTILIZATION[1] ? this.queriesResults.POOL_IOPS_UTILIZATION[1].values : '';
-    this.poolThroughputLabel1 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0] ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].metric.name + ' - ' + this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].metric.cluster : '';
-    this.poolThroughputLabel2 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1] ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].metric.name + ' - ' + this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].metric.cluster : '';
-    this.poolThroughputData1 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0] ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].values : '';
-    this.poolThroughputData2 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1] ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].values : ''; 
+    this.clusterCapacityLabel1 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0]
+      ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0].metric.cluster
+      : '';
+    this.clusterCapacityLabel2 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1]
+      ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1].metric.cluster
+      : '';
+    this.clusterCapacityData1 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0]
+      ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0].values
+      : '';
+    this.clusterCapacityData2 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1]
+      ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1].values
+      : '';
+    this.clusterIopsLabel1 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[0]
+      ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[0].metric.cluster
+      : '';
+    this.clusterIopsLabel2 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[1]
+      ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[1].metric.cluster
+      : '';
+    this.clusterIopsData1 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[0]
+      ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[0].values
+      : '';
+    this.clusterIopsData2 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[1]
+      ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[1].values
+      : '';
+    this.clusterThroughputLabel1 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0]
+      ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0].metric.cluster
+      : '';
+    this.clusterThroughputLabel2 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1]
+      ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1].metric.cluster
+      : '';
+    this.clusterThroughputData1 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0]
+      ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0].values
+      : '';
+    this.clusterThroughputData2 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1]
+      ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1].values
+      : '';
+    this.poolCapacityLabel1 = this.queriesResults.POOL_CAPACITY_UTILIZATION[0]
+      ? this.queriesResults.POOL_CAPACITY_UTILIZATION[0].metric.name +
+        ' - ' +
+        this.queriesResults.POOL_CAPACITY_UTILIZATION[0].metric.cluster
+      : '';
+    this.poolCapacityLabel2 = this.queriesResults.POOL_CAPACITY_UTILIZATION[1]
+      ? this.queriesResults.POOL_CAPACITY_UTILIZATION[1].metric.name +
+        ' - ' +
+        this.queriesResults.POOL_CAPACITY_UTILIZATION[1].metric.cluster
+      : '';
+    this.poolCapacityData1 = this.queriesResults.POOL_CAPACITY_UTILIZATION[0]
+      ? this.queriesResults.POOL_CAPACITY_UTILIZATION[0].values
+      : '';
+    this.poolCapacityData2 = this.queriesResults.POOL_CAPACITY_UTILIZATION[1]
+      ? this.queriesResults.POOL_CAPACITY_UTILIZATION[1].values
+      : '';
+    this.poolIopsLabel1 = this.queriesResults.POOL_IOPS_UTILIZATION[0]
+      ? this.queriesResults.POOL_IOPS_UTILIZATION[0].metric.name +
+        ' - ' +
+        this.queriesResults.POOL_IOPS_UTILIZATION[0].metric.cluster
+      : '';
+    this.poolIopsLabel2 = this.queriesResults.POOL_IOPS_UTILIZATION[1]
+      ? this.queriesResults.POOL_IOPS_UTILIZATION[1].metric.name +
+        ' - ' +
+        this.queriesResults.POOL_IOPS_UTILIZATION[1].metric.cluster
+      : '';
+    this.poolIopsData1 = this.queriesResults.POOL_IOPS_UTILIZATION[0]
+      ? this.queriesResults.POOL_IOPS_UTILIZATION[0].values
+      : '';
+    this.poolIopsData2 = this.queriesResults.POOL_IOPS_UTILIZATION[1]
+      ? this.queriesResults.POOL_IOPS_UTILIZATION[1].values
+      : '';
+    this.poolThroughputLabel1 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0]
+      ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].metric.name +
+        ' - ' +
+        this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].metric.cluster
+      : '';
+    this.poolThroughputLabel2 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1]
+      ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].metric.name +
+        ' - ' +
+        this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].metric.cluster
+      : '';
+    this.poolThroughputData1 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0]
+      ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].values
+      : '';
+    this.poolThroughputData2 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1]
+      ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].values
+      : '';
   }
 
   findClusterData(metrics: any, clusterName: string) {
-    const clusterMetrics = metrics.find(
-        (metric: any) => metric.metric.cluster === clusterName
-      );
-    return parseInt(clusterMetrics?.value[1])
+    const clusterMetrics = this.findCluster(metrics, clusterName);
+    return parseInt(clusterMetrics?.value[1] || 0);
+  }
+
+  findCluster(metrics: any, clusterName: string) {
+    return metrics.find((metric: any) => metric?.metric?.cluster === clusterName);
+  }
+
+  getVersion(fullVersion: string) {
+    const version = fullVersion.replace('ceph version ', '').split(' ');
+    return version[0] + ' ' + version.slice(2, version.length).join(' ');
   }
 
   openRemoteClusterInfoModal() {

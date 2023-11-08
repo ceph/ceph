@@ -187,15 +187,8 @@ export class PrometheusService {
     return queriesResults;
   }
 
-  getMultiClusterQueriesData(
-    selectedTime: any,
-    queries: any,
-    queriesResults: any,
-    checkNan?: boolean
-  ) {
-    return new Observable(observer => {
-      console.log(checkNan);
-      
+  getMultiClusterQueriesData(selectedTime: any, queries: any, queriesResults: any) {
+    return new Observable((observer) => {
       this.ifPrometheusConfigured(() => {
         if (this.timerGetPrometheusDataSub) {
           this.timerGetPrometheusDataSub.unsubscribe();
@@ -242,20 +235,37 @@ export class PrometheusService {
               for (let i = 0; i < responses.length; i++) {
                 const data = responses[i];
                 const queryName = Object.keys(queries)[i];
-                const validQueries = ['ALERTS', 'HEALTH_STATUS', 'TOTAL_CAPACITY', 'USED_CAPACITY', 'POOLS', 'OSDS', 'CLUSTER_CAPACITY_UTILIZATION', 'CLUSTER_IOPS_UTILIZATION', 'CLUSTER_THROUGHPUT_UTILIZATION', 'POOL_CAPACITY_UTILIZATION', 'POOL_IOPS_UTILIZATION', 'POOL_THROUGHPUT_UTILIZATION'];
+                const validQueries = [
+                  'ALERTS',
+                  'MGR_METADATA',
+                  'HEALTH_STATUS',
+                  'TOTAL_CAPACITY',
+                  'USED_CAPACITY',
+                  'POOLS',
+                  'OSDS',
+                  'CLUSTER_CAPACITY_UTILIZATION',
+                  'CLUSTER_IOPS_UTILIZATION',
+                  'CLUSTER_THROUGHPUT_UTILIZATION',
+                  'POOL_CAPACITY_UTILIZATION',
+                  'POOL_IOPS_UTILIZATION',
+                  'POOL_THROUGHPUT_UTILIZATION',
+                  'HOSTS',
+                  'CLUSTER_ALERTS'
+                ];
                 if (data.result.length) {
                   if (validQueries.includes(queryName)) {
                     queriesResults[queryName] = data.result;
-                  }
-                  else {                
-                    queriesResults[queryName] = data.result.map((result: { value: any; }) => result.value);
+                  } else {
+                    queriesResults[queryName] = data.result.map(
+                      (result: { value: any }) => result.value
+                    );
                   }
                 }
-              }            
+              }
               observer.next(queriesResults);
               observer.complete();
             },
-            error => {
+            (error) => {
               observer.error(error);
             }
           );

@@ -34,7 +34,15 @@ export class MultiClusterService {
     return this.http.get('api/multicluster/get_config');
   }
 
-  addCluster(url: any, name: string, helperText: string, username: string, password: string, token = '', origin = '') {
+  addCluster(
+    url: any,
+    name: string,
+    helperText: string,
+    username: string,
+    password: string,
+    token = '',
+    origin = ''
+  ) {
     return this.http.post('api/multicluster/auth', {
       url,
       helper_text: helperText,

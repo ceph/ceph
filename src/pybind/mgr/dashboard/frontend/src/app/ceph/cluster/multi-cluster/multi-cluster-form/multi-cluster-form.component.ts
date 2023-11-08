@@ -30,10 +30,10 @@ export class MultiClusterFormComponent {
   createForm() {
     this.remoteClusterForm = new CdFormGroup({
       username: new FormControl('', {
-        validators: [Validators.required]
+        // validators: [Validators.required]
       }),
       password: new FormControl('', {
-        validators: [Validators.required]
+        // validators: [Validators.required]
       }),
       remoteClusterUrl: new FormControl(null, {
         validators: [Validators.required]
@@ -50,7 +50,7 @@ export class MultiClusterFormComponent {
       ),
       helperText: new FormControl('', {
         validators: [Validators.required]
-      }),
+      })
     });
   }
 

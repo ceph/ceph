@@ -47,7 +47,6 @@ export class NavigationComponent implements OnInit, OnDestroy {
   clusters: string[] = [];
   clustersMap: Map<string, any> = new Map<string, any>();
   selectedCluster: any;
-
   constructor(
     // private authService: AuthService,
     private authStorageService: AuthStorageService,
@@ -67,7 +66,10 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.subs.add(
       this.multiClusterService.subscribe((resp: string) => {
         resp['config']?.forEach((config: any) => {
-          this.clustersMap.set(config['url'], { name: config['name'] , helperText: config['helper_text']});
+          this.clustersMap.set(config['url'], {
+            name: config['name'],
+            helperText: config['helper_text']
+          });
         });
 
         this.selectedCluster =
