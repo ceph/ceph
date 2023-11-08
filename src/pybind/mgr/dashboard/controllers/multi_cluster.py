@@ -5,6 +5,8 @@ from ..exceptions import DashboardException
 from ..settings import Settings
 from ..security import Scope
 
+from ..tools import configure_cors 
+
 import logging
 
 import json
@@ -14,18 +16,18 @@ logger = logging.getLogger('routes')
 @APIRouter('/multicluster', Scope.CONFIG_OPT)
 @APIDoc('Multi Cluster Route Management API', 'Multi Cluster Route')
 class MultiClusterRoute(RESTController):
-    def _proxy(self, method, base_url, path, params=None, payload=None, verify=False):
+    def _proxy(self, method, base_url, path, params=None, payload=None, verify=False, exit=False, headers=None):
 
 
         
         try:
-            headers = {
-                'Accept': 'application/vnd.ceph.api.v1.0+json',
-                'Content-Type': 'application/json',
-            }
+            if not headers:
+                headers = {
+                    'Accept': 'application/vnd.ceph.api.v1.0+json',
+                    'Content-Type': 'application/json',
+                }
             response = requests.request(method, base_url + path, params=params,
                                         json=payload, verify=verify, headers=headers)
-            logger.error("the response is %s", response)
         except Exception as e:
             raise DashboardException(
                 "Could not reach {}".format(base_url+path),
@@ -37,6 +39,15 @@ class MultiClusterRoute(RESTController):
             raise DashboardException(
                 "Error parsing Dashboard API response: {}".format(e.msg),
                 component='dashboard')
+        if not exit:
+            logger.error("the response is %s", content['token'])
+            headers = {
+                'Accept': 'application/vnd.ceph.api.v1.0+json',
+                'Authorization': 'Bearer ' + content['token'],
+            }
+            self._proxy('PUT', base_url, path='api/multicluster/update_cors', payload={'url': 'https://127.0.0.1:4200'},
+                        headers=headers, exit=True)
+
         return content
 
     @Endpoint('POST')
@@ -84,3 +95,8 @@ class MultiClusterRoute(RESTController):
     @CreatePermission
     def add_clusters(self, config: str):   
         Settings.MULTICLUSTER_CONFIG = config
+    
+    @Endpoint('PUT')
+    @UpdatePermission
+    def update_cors(self, url: str):
+        configure_cors(url)
