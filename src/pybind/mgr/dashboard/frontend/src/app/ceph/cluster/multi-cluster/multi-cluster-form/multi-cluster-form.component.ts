@@ -66,7 +66,6 @@ export class MultiClusterFormComponent {
           $localize`Cluster added successfully`
         );
         this.activeModal.close();
-        window.location.reload();
       }
     });
   }

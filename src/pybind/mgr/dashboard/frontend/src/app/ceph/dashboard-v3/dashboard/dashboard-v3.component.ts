@@ -91,8 +91,8 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
       this.getHealth();
       this.getCapacityCardData();
     });
-    this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getDetailsCardData();
+    this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.getTelemetryReport();
   }
 

@@ -142,31 +142,37 @@ export class NavigationComponent implements OnInit, OnDestroy {
   }
 
   onClusterSelection(url: string) {
-    this.multiClusterService.setCluster(url).subscribe((resp: any) => {
-      // let token: string;
-      localStorage.setItem('cluster_api_url', url);
-      this.selectedCluster = url;
-      resp['config'].forEach((config: any) => {
-        if (config['url'] === this.selectedCluster) {
-          localStorage.setItem('token_of_selected_cluster', config['token']);
+    this.multiClusterService.setCluster(url).subscribe(
+      (resp: any) => {
+        // let token: string;
+        localStorage.setItem('cluster_api_url', url);
+        this.selectedCluster = url;
+        resp['config'].forEach((config: any) => {
+          if (config['url'] === this.selectedCluster) {
+            localStorage.setItem('token_of_selected_cluster', config['token']);
+          }
+        });
+        // this.multiClusterService.setCluster(url).subscribe(() => this.summaryService.refresh());
+        // this.authService.check(token).subscribe((resp: any) => {
+        //   this.authStorageService.set(resp.permissions);
+        // });
+        //get the current route without the cluster_api_url
+      },
+      () => {},
+      () => {
+        this.multiClusterService.refresh();
+        this.summaryService.refresh();
+        const currentRoute = this.router.url.split('?')[0];
+        if (currentRoute.includes('dashboard')) {
+          this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
+            this.router.navigate([currentRoute]);
+          });
+        } else {
+          this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+            this.router.navigate([currentRoute]);
+          });
         }
-      });
-      // this.multiClusterService.setCluster(url).subscribe(() => this.summaryService.refresh());
-      // this.authService.check(token).subscribe((resp: any) => {
-      //   this.authStorageService.set(resp.permissions);
-      // });
-      this.summaryService.refresh();
-      //get the current route without the cluster_api_url
-      const currentRoute = this.router.url.split('?')[0];
-      if (currentRoute.includes('dashboard')) {
-        this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
-          this.router.navigate([currentRoute]);
-        });
-      } else {
-        this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-          this.router.navigate([currentRoute]);
-        });
       }
-    });
+    );
   }
 }
