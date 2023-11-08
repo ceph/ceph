@@ -334,7 +334,7 @@ int ceph_fscrypt_key_identifier::init(const char *k, int klen) {
 
 int ceph_fscrypt_key_identifier::init(const struct fscrypt_key_specifier& k) {
   if (k.type != FSCRYPT_KEY_SPEC_TYPE_IDENTIFIER) {
-    return -ENOTSUP;
+    return -EINVAL;
   }
 
   return init((const char *)k.u.identifier, sizeof(k.u.identifier));
@@ -430,7 +430,7 @@ int FSCryptKeyStore::maybe_remove_user(struct fscrypt_remove_key_arg* arg, std::
     removed = true;
     users->erase(it);
   } else {
-    return -ENOKEY;
+    return -EUSERS;
   }
   ldout(cct, 10) << "maybe_add_user size is now=" << users->size() << dendl;
 
