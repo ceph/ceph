@@ -971,6 +971,18 @@ public:
     bool all,
     const PExtentVector& logical,
     PExtentVector* r);
+
+  /// Remove blob's pextents.
+  /// [offset~length] - range to remove, in local blob space
+  /// released_disk   - a vector of disk allocation units that are no longer in use;
+  ///                   appends to it
+  /// returns:
+  ///   size of released disk
+  uint32_t release_extents(
+    uint32_t offset,
+    uint32_t length,
+    PExtentVector* released_disk
+  );
 };
 WRITE_CLASS_DENC_FEATURED(bluestore_blob_t)
 
