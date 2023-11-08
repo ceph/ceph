@@ -62,9 +62,10 @@ set(librgw_common_srcs
   rgw_acl_swift.cc
   rgw_aio.cc
   rgw_aio_throttle.cc
-  rgw_auth.cc
-  rgw_auth_s3.cc
   rgw_arn.cc
+  rgw_auth.cc
+  rgw_auth_keystone.cc
+  rgw_auth_s3.cc
   rgw_basic_types.cc
   rgw_bucket.cc
   rgw_bucket_layout.cc
@@ -110,6 +111,8 @@ set(librgw_common_srcs
   rgw_rest_ratelimit.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
+  rgw_rest_swift.cc
+  rgw_swift_auth.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
   rgw_s3select.cc
@@ -355,7 +358,6 @@ set(rgw_a_srcs
   rgw_appmain.cc
   rgw_asio_client.cc
   rgw_asio_frontend.cc
-  rgw_auth_keystone.cc
   rgw_client_io.cc
   rgw_file.cc
   rgw_frontend.cc
@@ -377,10 +379,8 @@ set(rgw_a_srcs
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
   rgw_rest_sts.cc
-  rgw_rest_swift.cc
   rgw_rest_usage.cc
   rgw_signal.cc
-  rgw_swift_auth.cc
   rgw_usage.cc
   rgw_sts.cc
   driver/rados/rgw_rest_bucket.cc
