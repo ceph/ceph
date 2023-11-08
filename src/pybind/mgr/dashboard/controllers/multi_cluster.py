@@ -16,10 +16,8 @@ logger = logging.getLogger('routes')
 @APIRouter('/multicluster', Scope.CONFIG_OPT)
 @APIDoc('Multi Cluster Route Management API', 'Multi Cluster Route')
 class MultiClusterRoute(RESTController):
-    def _proxy(self, method, base_url, path, params=None, payload=None, verify=False, exit=False, headers=None):
-
-
-        
+    def _proxy(self, method, base_url, path, params=None, payload=None, verify=False, exit=False, headers=None,
+               origin=None):
         try:
             if not headers:
                 headers = {
@@ -45,7 +43,7 @@ class MultiClusterRoute(RESTController):
                 'Accept': 'application/vnd.ceph.api.v1.0+json',
                 'Authorization': 'Bearer ' + content['token'],
             }
-            self._proxy('PUT', base_url, path='api/multicluster/update_cors', payload={'url': 'https://127.0.0.1:4200'},
+            self._proxy('PUT', base_url, path='api/multicluster/update_cors', payload={'url': origin},
                         headers=headers, exit=True)
 
         return content
@@ -53,7 +51,7 @@ class MultiClusterRoute(RESTController):
     @Endpoint('POST')
     @ReadPermission
     @EndpointDoc("Which route you want to go")
-    def auth(self, url: str, name: str, username = '', password = '', token = None):
+    def auth(self, url: str, name: str, username = '', password = '', token = None, origin=None):
         if isinstance(Settings.MULTICLUSTER_CONFIG, str):
             item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
             copy_config = item_to_dict.copy()
@@ -67,7 +65,7 @@ class MultiClusterRoute(RESTController):
             Settings.MULTICLUSTER_CONFIG = copy_config
             return
         params = { "username": username, "password": password }
-        response = self._proxy('POST', url, path='api/auth', payload=json.dumps(params))
+        response = self._proxy('POST', url, path='api/auth', payload=json.dumps(params), origin=origin)
         try:
             copy_config['config'].append({'name': name, 'url': url, 'token': response['token']})
         except KeyError:

@@ -58,15 +58,17 @@ export class MultiClusterFormComponent {
     const password = this.remoteClusterForm.getValue('password');
     const token = this.remoteClusterForm.getValue('apiToken');
 
-    this.multiClusterService.addCluster(url, name, username, password, token).subscribe({
-      error: () => this.remoteClusterForm.setErrors({ cdSubmitButton: true }),
-      complete: () => {
-        this.notificationService.show(
-          NotificationType.success,
-          $localize`Cluster added successfully`
-        );
-        this.activeModal.close();
-      }
-    });
+    this.multiClusterService
+      .addCluster(url, name, username, password, token, window.location.origin)
+      .subscribe({
+        error: () => this.remoteClusterForm.setErrors({ cdSubmitButton: true }),
+        complete: () => {
+          this.notificationService.show(
+            NotificationType.success,
+            $localize`Cluster added successfully`
+          );
+          this.activeModal.close();
+        }
+      });
   }
 }

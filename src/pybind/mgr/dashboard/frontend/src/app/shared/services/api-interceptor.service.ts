@@ -89,7 +89,7 @@ export class ApiInterceptorService implements HttpInterceptor {
       reqWithVersion = reqWithVersion.clone({
         url: `${apiUrl}${reqWithVersion.url}`,
         setHeaders: {
-          'Access-Control-Allow-Origin': 'https://127.0.0.1:4200',
+          'Access-Control-Allow-Origin': origin,
           Authorization: `Bearer ${token}`
         }
       });
