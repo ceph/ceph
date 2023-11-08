@@ -365,25 +365,37 @@ class TestCephAdm(object):
         assert os.path.join('data', '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'custom_config_files', 'grafana.host1', 'testing.str') in c.volume_mounts
         assert c.volume_mounts[os.path.join('data', '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'custom_config_files', 'grafana.host1', 'testing.str')] == '/etc/testing.str'
 
-    @mock.patch('cephadm.logger')
-    @mock.patch('cephadm.FileLock')
-    @mock.patch('cephadm.deploy_daemon')
-    @mock.patch('cephadm.make_var_run')
-    @mock.patch('cephadm.migrate_sysctl_dir')
-    @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
-    @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
-    @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: (0, 0))
-    @mock.patch('cephadm.get_container')
-    @mock.patch('cephadm.apply_deploy_config_to_ctx', lambda d, c: None)
-    def test_mon_crush_location(self, _get_container, _migrate_sysctl, _make_var_run, _deploy_daemon, _file_lock, _logger, monkeypatch):
+    def test_mon_crush_location(self, funkypatch):
         """
         test that crush location for mon is set if it is included in config_json
         """
-        _fetch_configs = mock.MagicMock()
-        monkeypatch.setattr('cephadmlib.context_getters.fetch_configs', _fetch_configs)
-        monkeypatch.setattr('cephadm.fetch_configs', _fetch_configs)
-        monkeypatch.setattr('cephadm.read_configuration_source', lambda c: {})
-        monkeypatch.setattr('cephadm.fetch_custom_config_files', mock.MagicMock())
+        funkypatch.patch('cephadm.logger')
+        funkypatch.patch('cephadm.FileLock')
+        _deploy_daemon = funkypatch.patch('cephadm.deploy_daemon')
+        _make_var_run = funkypatch.patch('cephadm.make_var_run')
+        _migrate_sysctl = funkypatch.patch('cephadm.migrate_sysctl_dir')
+        funkypatch.patch(
+            'cephadm.check_unit',
+            dest=lambda *args, **kwargs: (None, 'running', None),
+        )
+        funkypatch.patch(
+            'cephadm.get_unit_name',
+            dest=lambda *args, **kwargs: 'mon-unit-name',
+        )
+        funkypatch.patch(
+            'cephadm.extract_uid_gid', dest=lambda *args, **kwargs: (0, 0)
+        )
+        _get_container = funkypatch.patch('cephadm.get_container')
+        funkypatch.patch(
+            'cephadm.apply_deploy_config_to_ctx', dest=lambda d, c: None
+        )
+        _fetch_configs = funkypatch.patch(
+            'cephadmlib.context_getters.fetch_configs'
+        )
+        funkypatch.patch(
+            'cephadm.read_configuration_source', dest=lambda c: {}
+        )
+        funkypatch.patch('cephadm.fetch_custom_config_files')
 
         ctx = _cephadm.CephadmContext()
         ctx.name = 'mon.test'
