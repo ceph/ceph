@@ -1904,21 +1904,25 @@ int ceph_debug_get_file_caps(struct ceph_mount_info *cmount, const char *path);
  * @param key_data key data
  * @param key_len key data length
  * @param kid to hold the returned key identifier
+ * @param user user id
  * @returns zero on success, other returns a negative error code.
  */
 int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
                          const char *key_data, int key_len,
-                         struct ceph_fscrypt_key_identifier *kid);
+			 struct ceph_fscrypt_key_identifier *kid,
+			 int user);
 
 /**
  * Remove fscrypt encryption key from the in-memory key manager
  *
  * @param cmount the ceph mount handle to use.
  * @param kid pointer to the key identifier
+ * @param user user id
  * @returns zero on success, other returns a negative error code.
  */
 int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
-                            struct fscrypt_remove_key_arg *kid);
+                            struct fscrypt_remove_key_arg *kid,
+			    int user);
 
 /**
  * Set encryption policy on a directory.

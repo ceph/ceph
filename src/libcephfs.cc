@@ -2318,21 +2318,23 @@ extern "C" void ceph_finish_reclaim(class ceph_mount_info *cmount)
 
 extern "C" int ceph_add_fscrypt_key(struct ceph_mount_info *cmount,
                                     const char *key_data, int key_len,
-                                    struct ceph_fscrypt_key_identifier *kid)
+				    struct ceph_fscrypt_key_identifier *kid,
+				    int user)
 {
   if (!cmount->is_mounted())
     return -CEPHFS_ENOTCONN;
 
-  return cmount->get_client()->add_fscrypt_key(key_data, key_len, kid);
+  return cmount->get_client()->add_fscrypt_key(key_data, key_len, kid, user);
 }
 
 extern "C" int ceph_remove_fscrypt_key(struct ceph_mount_info *cmount,
-                                       struct fscrypt_remove_key_arg *kid)
+                                       struct fscrypt_remove_key_arg *kid,
+				       int user)
 {
   if (!cmount->is_mounted())
     return -CEPHFS_ENOTCONN;
 
-  return cmount->get_client()->remove_fscrypt_key(kid);
+  return cmount->get_client()->remove_fscrypt_key(kid, user);
 }
 
 extern "C" int ceph_set_fscrypt_policy_v2(struct ceph_mount_info *cmount,
