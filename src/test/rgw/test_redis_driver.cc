@@ -17,6 +17,45 @@ using boost::redis::request;
 using boost::redis::response;
 
 class Environment* env;
+rgw::AioResultList completed;
+uint64_t offset = 0;
+
+int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results) {
+  int r = rgw::check_for_errors(results);
+
+  if (r < 0) {
+    return r;
+  }
+
+  auto cmp = [](const auto& lhs, const auto& rhs) { return lhs.id < rhs.id; };
+  results.sort(cmp); // merge() requires results to be sorted first
+  completed.merge(results, cmp); // merge results in sorted order
+
+  while (!completed.empty() && completed.front().id == offset) {
+    auto ret = std::move(completed.front().result);
+
+    EXPECT_EQ(0, ret);
+    completed.pop_front_and_dispose(std::default_delete<rgw::AioResultEntry>{});
+  }
+  return 0;
+}
+
+void cancel(rgw::Aio* aio) {
+  aio->drain();
+}
+
+int drain(const DoutPrefixProvider* dpp, rgw::Aio* aio) {
+  auto c = aio->wait(); 
+  while (!c.empty()) {
+    int r = flush(dpp, std::move(c));
+    if (r < 0) {
+      cancel(aio);
+      return r;
+    }
+    c = aio->wait();
+  }
+  return flush(dpp, std::move(c));
+}
 
 class Environment : public ::testing::Environment {
   public:
@@ -142,6 +181,60 @@ TEST_F(RedisDriverFixture, GetYield)
       ASSERT_EQ((bool)ec, false);
     }
 
+    conn->cancel();
+  });
+
+  io.run();
+}
+
+TEST_F(RedisDriverFixture, PutAsyncYield)
+{
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
+    std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(env->cct->_conf->rgw_get_obj_window_size, optional_yield{io, yield});
+    auto completed = cacheDriver->put_async(env->dpp, optional_yield{io, yield}, aio.get(), "testName", bl, bl.length(), attrs, 0, 0);
+    drain(env->dpp, aio.get());
+
+    cacheDriver->shutdown();
+
+    boost::system::error_code ec;
+    request req;
+    req.push("HMGET", "RedisCache/testName", "attr", "data");
+    req.push("FLUSHALL");
+    response<std::vector<std::string>, boost::redis::ignore_t> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value()[0], "attrVal");
+    EXPECT_EQ(std::get<0>(resp).value()[1], "test data");
+    conn->cancel();
+  });
+
+  io.run();
+}
+
+TEST_F(RedisDriverFixture, GetAsyncYield)
+{
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
+    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
+
+    std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(env->cct->_conf->rgw_get_obj_window_size, optional_yield{io, yield});
+    auto completed = cacheDriver->get_async(env->dpp, optional_yield{io, yield}, aio.get(), "testName", 0, bl.length(), 0, 0);
+    drain(env->dpp, aio.get());
+
+    cacheDriver->shutdown();
+
+    boost::system::error_code ec;
+    request req;
+    req.push("HMGET", "RedisCache/testName", "attr", "data");
+    req.push("FLUSHALL");
+    response<std::vector<std::string>, boost::redis::ignore_t> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value()[0], "attrVal");
+    EXPECT_EQ(std::get<0>(resp).value()[1], "test data");
     conn->cancel();
   });
 

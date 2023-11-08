@@ -31,7 +31,8 @@ class RedisDriver : public CacheDriver {
 
     virtual int initialize(const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y) override;
-    virtual rgw::AioResultList put_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, uint64_t cost, uint64_t id) override;
+    virtual rgw::AioResultList put_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, const bufferlist& bl, uint64_t len, 
+                                          const rgw::sal::Attrs& attrs, uint64_t cost, uint64_t id) override;
     virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) override;
     virtual rgw::AioResultList get_async(const DoutPrefixProvider* dpp, optional_yield y, rgw::Aio* aio, const std::string& key, off_t ofs, uint64_t len, uint64_t cost, uint64_t id) override;
     virtual int del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
@@ -52,6 +53,7 @@ class RedisDriver : public CacheDriver {
     uint64_t outstanding_write_size;
 
     struct redis_response {
+      boost::redis::request req;
       boost::redis::response<std::string> resp;
     };
 
@@ -61,14 +63,24 @@ class RedisDriver : public CacheDriver {
       std::shared_ptr<redis_response> s;
 
       /* Read Callback */
-      void operator()(boost::system::error_code ec, auto) const {
-	r.result = -ec.value();
-	r.data.append(std::get<0>(s->resp).value().c_str());
+      void operator()(auto ec, auto) const {
+        if (ec.failed()) {
+	  r.result = -ec.value();
+        } else {
+	  r.result = 0;
+        }
+
+        /* Only append data for GET call */
+        if (s->req.payload().find("HGET") != std::string::npos) {
+	  r.data.append(std::get<0>(s->resp).value());
+        }
+
 	throttle->put(r);
       }
     };
 
-    static Aio::OpFunc redis_read_op(optional_yield y, std::shared_ptr<connection> conn, off_t read_ofs, off_t read_len, const std::string& key);
+    Aio::OpFunc redis_read_op(optional_yield y, std::shared_ptr<connection> conn, off_t read_ofs, off_t read_len, const std::string& key);
+    Aio::OpFunc redis_write_op(optional_yield y, std::shared_ptr<connection> conn, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, const std::string& key);
 };
 
 } } // namespace rgw::cache
