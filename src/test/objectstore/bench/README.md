@@ -7,6 +7,10 @@ one of those files in `last_bench.json` the next time you run the command it wil
 
 `python ../src/test/objectstore/bench/benchmarker.py --period 5 --osds 3 --rados_bench_args "-t 4 --concurrent-ios=50"`
 
+If you want to plot previous runs you can plot as many as you want with the same command
+
+`python ../src/test/objectstore/bench/benchmarker.py compare 1699023315.json previous.json anotherone.json`
+
 output:
 `benchmark.png` > plots
 
@@ -19,4 +23,4 @@ output:
 Current ugly plot:
 
 It plots a line for each osd.
-![Benchmark plot](image.png)
+![Benchmark plot](example.png)
