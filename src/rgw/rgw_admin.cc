@@ -86,6 +86,8 @@ using namespace std;
 
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
+std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
+rgw::SiteConfig site;
 
 
 static const DoutPrefixProvider* dpp() {
@@ -4258,14 +4260,26 @@ int main(int argc, const char **argv)
       return EIO;
     }
 
+    cfgstore = DriverManager::create_config_store(dpp(), config_store_type);
+    if (!cfgstore) {
+      std::cerr << "Unable to initialize config store." << std::endl;
+      exit(1);
+    }
+    auto r = site.load(dpp(), null_yield, cfgstore.get());
+    if (r < 0) {
+      std::cerr << "Unable to initialize config store." << std::endl;
+      exit(1);
+    }
+
     if (raw_storage_op) {
       driver = DriverManager::get_raw_storage(dpp(), g_ceph_context,
-					      cfg, context_pool);
+					      cfg, context_pool, site);
     } else {
       driver = DriverManager::get_storage(dpp(),
 					g_ceph_context,
 					cfg,
 					context_pool,
+					site,
 					false,
 					false,
 					false,
