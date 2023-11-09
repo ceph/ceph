@@ -62,7 +62,7 @@ void JournalTool::usage()
     << "    <output>: [summary|list|binary|json] [--path <path>]\n"
     << "\n"
     << "General options:\n"
-    << "  --rank=filesystem:mds-rank|all Journal rank (mandatory)\n"
+    << "  --rank=filesystem:{mds-rank|all} journal rank or \"all\" ranks (mandatory)\n"
     << "  --journal=<mdlog|purge_queue>  Journal type (purge_queue means\n"
     << "                                 this journal is used to queue for purge operation,\n"
     << "                                 default is mdlog, and only mdlog support event mode)\n"
