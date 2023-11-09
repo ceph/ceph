@@ -400,6 +400,9 @@ seastar::future<> OSD::start()
     );
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
+    if (!superblock.cluster_osdmap_trim_lower_bound) {
+      superblock.cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
+    }
     pg_shard_manager.set_superblock(superblock);
     return pg_shard_manager.get_local_map(superblock.current_epoch);
   }).then([this](OSDMapService::local_cached_map_t&& map) {
@@ -934,6 +937,16 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
   logger().info("handle_osd_map epochs [{}..{}], i have {}, src has [{}..{}]",
                 first, last, superblock.get_newest_map(),
                 m->cluster_osdmap_trim_lower_bound, m->newest_map);
+
+  if (superblock.cluster_osdmap_trim_lower_bound <
+      m->cluster_osdmap_trim_lower_bound) {
+    superblock.cluster_osdmap_trim_lower_bound =
+      m->cluster_osdmap_trim_lower_bound;
+    logger().debug("{} superblock cluster_osdmap_trim_lower_bound new epoch is: {}",
+                   __func__, superblock.cluster_osdmap_trim_lower_bound);
+    ceph_assert(
+      superblock.cluster_osdmap_trim_lower_bound >= superblock.get_oldest_map());
+  }
   // make sure there is something new, here, before we bother flushing
   // the queues and such
   if (last <= superblock.get_newest_map()) {
@@ -964,8 +977,7 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
       monc->sub_got("osdmap", last);
 
       if (!superblock.maps.empty()) {
-        // TODO: support osdmap trimming
-        // See: <tracker>
+        pg_shard_manager.trim_maps(t, superblock);
       }
 
       superblock.insert_osdmap_epochs(first, last);

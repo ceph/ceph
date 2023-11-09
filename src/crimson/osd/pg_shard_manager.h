@@ -136,6 +136,7 @@ public:
   FORWARD_TO_OSD_SINGLETON(load_map_bl)
   FORWARD_TO_OSD_SINGLETON(load_map_bls)
   FORWARD_TO_OSD_SINGLETON(store_maps)
+  FORWARD_TO_OSD_SINGLETON(trim_maps)
 
   seastar::future<> set_up_epoch(epoch_t e);
 
