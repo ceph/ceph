@@ -135,7 +135,7 @@ int LFUDAPolicy::get_local_weight_sum(optional_yield y) {
   }
 
   if (!std::get<0>(resp).value()) {
-    uint64_t sum = 0;
+    int sum = 0;
     for (auto& entry : entries_map)
       sum += entry.second->localWeight; 
  
@@ -244,7 +244,7 @@ int LFUDAPolicy::get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw
 int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) {
   uint64_t freeSpace = cacheDriver->get_free_space(dpp);
 
-  while (freeSpace < size) { // possible infinite loop? -Sam
+  while (freeSpace < size) { // TODO: Think about parallel reads and writes; can this turn into an infinite loop? 
     CacheBlock* victim = find_victim(dpp, y);
 
     if (victim == nullptr) {
@@ -270,13 +270,8 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       if (victim->globalWeight) {
 	const std::lock_guard l(lfuda_lock);
 	it->second->localWeight += victim->globalWeight;
-
-	for (auto& entry : entries_heap) {
-	  if (entry->key == key) {
-	    (*(entry->handle))->localWeight = it->second->localWeight;
-	    entries_heap.increase(entry->handle);
-	  }
-	}
+        (*it->second->handle)->localWeight = it->second->localWeight;
+	entries_heap.increase(it->second->handle);
 
 	if (cacheDriver->set_attr(dpp, key, "user.rgw.localWeight", std::to_string(it->second->localWeight), y) < 0) 
 	  return -1;
