@@ -316,6 +316,7 @@ private:
                     epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
+  void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
 };
 
 /**
