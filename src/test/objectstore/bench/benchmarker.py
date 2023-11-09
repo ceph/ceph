@@ -30,27 +30,26 @@ def smooth(y, box_pts):
 class Benchmarker:
     def __init__(self, args):
         self.args = args
-        self.rados_lock = Lock()
         self.finished_bench = False
         self.warmup_completed = False
 
-    def rados_run_and_wait(self):
-        rados_bench_process = subprocess.Popen(f'bin/rados bench -p test {self.args.period} write {self.args.rados_bench_args}'.split(' '))
-        rados_bench_process.wait()
+    def benchmark_run_and_wait(self):
+        bench_process = subprocess.Popen(f'{self.args.bench}'.split(' '))
+        bench_process.wait()
 
-    def rados_bench(self, samples, iterations, warmup_iterations):
+    def run_bench(self, samples, iterations, warmup_iterations):
         print('Running warmup')
         for iteration in range(warmup_iterations):
-            self.rados_run_and_wait()
+            self.benchmark_run_and_wait()
         self.warmup_completed = True
 
         print('Running benchmark')
         for sample in range(samples):
             for iteration in range(iterations):
-                self.rados_run_and_wait()
+                self.benchmark_run_and_wait()
 
-    def rados_bench_entrypoint(self):
-        self.rados_bench(self.args.samples, self.args.iterations, self.args.iterations)
+    def bench_entrypoint(self):
+        self.run_bench(self.args.samples, self.args.iterations, self.args.iterations)
         self.finished_bench = True
 
     def run(self):
@@ -76,14 +75,19 @@ class Benchmarker:
         freq = self.args.freq
         start = time.time()
         period = self.args.period
-        print(self.args.rados_bench_args)
-        rados_bench_thread = Thread(target=self.rados_bench_entrypoint)
-        rados_bench_thread.start()
+        print(self.args.bench)
+        run_bench = self.args.bench != ""
+        if run_bench:
+            bench_thread = Thread(target=self.bench_entrypoint)
+            bench_thread.start()
 
-        while not self.warmup_completed:
+
+        while run_bench and not self.warmup_completed:
             time.sleep(freq)
 
-        while not self.finished_bench:
+        if not run_bench:
+            print(f'Collecting data for {period}s')
+        while (run_bench and not self.finished_bench) or (not run_bench and time.time() - start < period):
             time.sleep(freq)
 
             sample_time = (time.time_ns() - (start*1000000000)) / 1000000
@@ -94,7 +98,8 @@ class Benchmarker:
                 samples_per_process[process.pid].append(sample)
             
         
-        rados_bench_thread.join()
+        if run_bench:
+            bench_thread.join()
 
 
         # save data to compare with other runs
@@ -180,7 +185,11 @@ class Benchmarker:
                 _avg = np.average(y)
                 _p95 = np.percentile(y, 95)
                 _p90 = np.percentile(y, 90)
-                ax[row, col].set_yticks(np.arange(_min, _max, int(_max/50)))
+                print(y)
+                try:
+                    ax[row, col].set_yticks(np.arange(_min, _max, int(_max/50)))
+                except:
+                    ax[row, col].set_yticks(y)
                 ax[row, col].axhline(_avg, label='avg', color='red', in_layout=True)
                 ax[row, col].axhline(_p90, label='p90', color='#c676db', in_layout=True)
                 ax[row, col].axhline(_p95, label='p95', color='#a533c1', in_layout=True)
@@ -207,7 +216,7 @@ def main():
     parser.add_argument('--freq', type=int, default=0.1, help="Frequency of sampling")
     parser.add_argument('--samples', type=int, default=5, help="Number of samples")
     parser.add_argument('--iterations', type=int, default=5, help="Number of iterations per sample")
-    parser.add_argument('--rados_bench_args', type=str, default="write")
+    parser.add_argument('--bench', type=str, default="")
     parser.add_argument('--format', help="format of matplotlib plots saved image", type=str, default='png')
     parser.set_defaults(func=Benchmarker.run)
 

@@ -1,11 +1,20 @@
 # vstart simple benchmark tool
 
 
-This tool will create a cluster with test pool and then start running `rados bench` in the background while in the foreground, we collect data from all osds.
-A previous.json with data related to the previous run will be generated, there will exist the same file with a different name with the timestamp. If you save 
-one of those files in `last_bench.json` the next time you run the command it will plot the difference with of a new run with that one.
+This tool is basically a collector of data for all osds.
 
-`python ../src/test/objectstore/bench/benchmarker.py --period 5 --osds 3 --rados_bench_args "-t 4 --concurrent-ios=50"`
+Currently it collects per osd process:
+- CPU (% usage)
+- Memory utilization (MBs)
+
+A simple use for this tool would be collect data for a range of time, let's say 30 seconds:
+
+`python3.11 ~/tester/benchmarker.py --period 30`
+
+Instead of tracking by a period of time, you can run a benchmark tool for a number `number=samples*iterations` so that in he background we tracks osd information while the benchmarks runs:
+
+`python3.11 ../src/test/objectstore/bench/benchmarker.py -n --period 30 --bench="bin/rados bench -p test 5 write" --samples 1 --iterations 5 # from build folder if you want to deploy vstart`
+`python3.11 ../src/test/objectstore/bench/benchmarker.py -n --period 30 --bench="fio ..." --samples 1 --iterations 5`
 
 If you want to plot previous runs you can plot as many as you want with the same command
 
@@ -17,8 +26,6 @@ output:
 `previous.json` > last's run data
 
 `1699023315.json` > data associated to a timestamp
-
-
 
 Current ugly plot:
 
