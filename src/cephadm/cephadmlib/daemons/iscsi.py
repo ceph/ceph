@@ -34,11 +34,13 @@ class CephIscsi(ContainerDaemonForm):
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return cls.daemon_type == daemon_type
 
-    def __init__(self,
-                 ctx: CephadmContext,
-                 ident: DaemonIdentity,
-                 config_json: Dict,
-                 image: str = DEFAULT_IMAGE):
+    def __init__(
+        self,
+        ctx: CephadmContext,
+        ident: DaemonIdentity,
+        config_json: Dict,
+        image: str = DEFAULT_IMAGE,
+    ):
         self.ctx = ctx
         self._identity = ident
         self.image = image
@@ -50,11 +52,17 @@ class CephIscsi(ContainerDaemonForm):
         self.validate()
 
     @classmethod
-    def init(cls, ctx: CephadmContext, fsid: str, daemon_id: str) -> 'CephIscsi':
-        return cls.create(ctx, DaemonIdentity(fsid, cls.daemon_type, daemon_id))
+    def init(
+        cls, ctx: CephadmContext, fsid: str, daemon_id: str
+    ) -> 'CephIscsi':
+        return cls.create(
+            ctx, DaemonIdentity(fsid, cls.daemon_type, daemon_id)
+        )
 
     @classmethod
-    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephIscsi':
+    def create(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> 'CephIscsi':
         return cls(ctx, ident, fetch_configs(ctx), ctx.image)
 
     @property
@@ -75,9 +83,13 @@ class CephIscsi(ContainerDaemonForm):
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
-        mounts[os.path.join(data_dir, 'iscsi-gateway.cfg')] = '/etc/ceph/iscsi-gateway.cfg:z'
+        mounts[
+            os.path.join(data_dir, 'iscsi-gateway.cfg')
+        ] = '/etc/ceph/iscsi-gateway.cfg:z'
         mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config'
-        mounts[os.path.join(data_dir, 'tcmu-runner-entrypoint.sh')] = '/usr/local/scripts/tcmu-runner-entrypoint.sh'
+        mounts[
+            os.path.join(data_dir, 'tcmu-runner-entrypoint.sh')
+        ] = '/usr/local/scripts/tcmu-runner-entrypoint.sh'
         mounts[log_dir] = '/var/log:z'
         mounts['/dev'] = '/dev'
         return mounts
@@ -108,11 +120,18 @@ class CephIscsi(ContainerDaemonForm):
     def get_version(ctx, container_id):
         # type: (CephadmContext, str) -> Optional[str]
         version = None
-        out, err, code = call(ctx,
-                              [ctx.container_engine.path, 'exec', container_id,
-                               '/usr/bin/python3', '-c',
-                               "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)"],
-                              verbosity=CallVerbosity.QUIET)
+        out, err, code = call(
+            ctx,
+            [
+                ctx.container_engine.path,
+                'exec',
+                container_id,
+                '/usr/bin/python3',
+                '-c',
+                "import pkg_resources; print(pkg_resources.require('ceph_iscsi')[0].version)",
+            ],
+            verbosity=CallVerbosity.QUIET,
+        )
         if code == 0:
             version = out.strip()
         return version
@@ -130,7 +149,9 @@ class CephIscsi(ContainerDaemonForm):
         if self.required_files:
             for fname in self.required_files:
                 if fname not in self.files:
-                    raise Error('required file missing from config-json: %s' % fname)
+                    raise Error(
+                        'required file missing from config-json: %s' % fname
+                    )
 
     def get_daemon_name(self):
         # type: () -> str
@@ -157,7 +178,9 @@ class CephIscsi(ContainerDaemonForm):
         # to be mounted into the container. For more info
         # on why we need this script, see the
         # tcmu_runner_entrypoint_script function
-        self.files['tcmu-runner-entrypoint.sh'] = self.tcmu_runner_entrypoint_script()
+        self.files[
+            'tcmu-runner-entrypoint.sh'
+        ] = self.tcmu_runner_entrypoint_script()
 
         # populate files from the config-json
         populate_files(data_dir, self.files, uid, gid)
@@ -171,11 +194,15 @@ class CephIscsi(ContainerDaemonForm):
         # type: (str, bool) -> List[str]
         mount_path = os.path.join(data_dir, 'configfs')
         if mount:
-            cmd = 'if ! grep -qs {0} /proc/mounts; then ' \
-                  'mount -t configfs none {0}; fi'.format(mount_path)
+            cmd = (
+                'if ! grep -qs {0} /proc/mounts; then '
+                'mount -t configfs none {0}; fi'.format(mount_path)
+            )
         else:
-            cmd = 'if grep -qs {0} /proc/mounts; then ' \
-                  'umount {0}; fi'.format(mount_path)
+            cmd = (
+                'if grep -qs {0} /proc/mounts; then '
+                'umount {0}; fi'.format(mount_path)
+            )
         return cmd.split()
 
     @staticmethod
@@ -230,7 +257,9 @@ done
         # TODO: Eventually we don't want to run tcmu-runner through this script.
         # This is intended to be a workaround backported to older releases
         # and should eventually be removed in at least squid onward
-        tcmu_container.entrypoint = '/usr/local/scripts/tcmu-runner-entrypoint.sh'
+        tcmu_container.entrypoint = (
+            '/usr/local/scripts/tcmu-runner-entrypoint.sh'
+        )
         tcmu_container.cname = self.get_container_name(desc='tcmu')
         return tcmu_container
 
