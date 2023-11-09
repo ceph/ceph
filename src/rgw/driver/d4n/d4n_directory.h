@@ -19,7 +19,7 @@ using boost::redis::response;
 struct CacheObj {
   std::string objName; /* S3 object name */
   std::string bucketName; /* S3 bucket name */
-  time_t creationTime; /* Creation time of the S3 Object */
+  std::string creationTime; /* Creation time of the S3 Object */
   bool dirty;
   std::vector<std::string> hostsList; /* List of hostnames <ip:port> of object locations for multiple backends */
 };
