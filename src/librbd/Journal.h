@@ -18,6 +18,7 @@
 #include "journal/ReplayHandler.h"
 #include "librbd/Utils.h"
 #include "librbd/asio/ContextWQ.h"
+#include "librbd/io/Types.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
 
@@ -200,11 +201,13 @@ private:
 
     Event() {
     }
-    Event(const Futures &_futures, uint64_t offset, size_t length,
+    Event(const Futures &_futures, const io::Extents &image_extents,
           int filter_ret_val)
       : futures(_futures), filter_ret_val(filter_ret_val) {
-      if (length > 0) {
-        pending_extents.insert(offset, length);
+      for (auto &extent : image_extents) {
+        if (extent.second > 0) {
+          pending_extents.insert(extent.first, extent.second);
+        }
       }
     }
   };
@@ -324,7 +327,7 @@ private:
 
   uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
-                            uint64_t offset, size_t length, bool flush_entry,
+                            const io::Extents &extents, bool flush_entry,
                             int filter_ret_val);
   Future wait_event(ceph::mutex &lock, uint64_t tid, Context *on_safe);
 
