@@ -784,24 +784,26 @@ class TestCephAdm(object):
                 assert _cephadm.get_container_info(ctx, daemon_filter, by_name) == output
 
     def test_should_log_to_journald(self):
+        from cephadmlib import context_getters
+
         ctx = _cephadm.CephadmContext()
         # explicit
         ctx.log_to_journald = True
-        assert _cephadm.should_log_to_journald(ctx)
+        assert context_getters.should_log_to_journald(ctx)
 
         ctx.log_to_journald = None
         # enable if podman support --cgroup=split
         ctx.container_engine = mock_podman()
         ctx.container_engine.version = (2, 1, 0)
-        assert _cephadm.should_log_to_journald(ctx)
+        assert context_getters.should_log_to_journald(ctx)
 
         # disable on old podman
         ctx.container_engine.version = (2, 0, 0)
-        assert not _cephadm.should_log_to_journald(ctx)
+        assert not context_getters.should_log_to_journald(ctx)
 
         # disable on docker
         ctx.container_engine = mock_docker()
-        assert not _cephadm.should_log_to_journald(ctx)
+        assert not context_getters.should_log_to_journald(ctx)
 
     def test_normalize_image_digest(self):
         s = 'myhostname:5000/ceph/ceph@sha256:753886ad9049004395ae990fbb9b096923b5a518b819283141ee8716ddf55ad1'
