@@ -376,7 +376,8 @@ class TestCephAdm(object):
         funkypatch.patch('cephadm.logger')
         funkypatch.patch('cephadm.FileLock')
         _deploy_daemon = funkypatch.patch('cephadm.deploy_daemon')
-        _make_var_run = funkypatch.patch('cephadm.make_var_run')
+        funkypatch.patch('cephadm.make_var_run')
+        funkypatch.patch('cephadmlib.file_utils.make_run_dir')
         _migrate_sysctl = funkypatch.patch('cephadm.migrate_sysctl_dir')
         funkypatch.patch(
             'cephadm.check_unit',
