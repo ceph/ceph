@@ -37,16 +37,32 @@ class MultiClusterRoute(RESTController):
             raise DashboardException(
                 "Error parsing Dashboard API response: {}".format(e.msg),
                 component='dashboard')
-        if not exit:
-            logger.error("the response is %s", content['token'])
+        try:
             headers = {
                 'Accept': 'application/vnd.ceph.api.v1.0+json',
                 'Authorization': 'Bearer ' + content['token'],
             }
-            self._proxy('PUT', base_url, path='api/multicluster/update_cors', payload={'url': origin},
-                        headers=headers, exit=True)
+            requests.request('PUT', base_url + 'api/multicluster/update_cors', json={'url': origin}, verify=verify, headers=headers)
+            response = requests.request('GET', base_url + 'api/health/get_cluster_fsid',
+                                        headers=headers, verify=verify)
+                            
+        except Exception as e:
+            raise DashboardException(
+                "Could not reach {}".format(base_url+path),
+                http_status_code=404,
+                component='dashboard')
 
-        return content
+        try:
+            fsid = json.loads(response.content, strict=False)
+        except json.JSONDecodeError as e:
+            raise DashboardException(
+                "Error parsing Dashboard API response: {}".format(e.msg),
+                component='dashboard')
+
+        return {
+            "token": content['token'],
+            "fsid": fsid
+        }
 
     @Endpoint('POST')
     @ReadPermission
@@ -67,9 +83,9 @@ class MultiClusterRoute(RESTController):
         params = { "username": username, "password": password }
         response = self._proxy('POST', url, path='api/auth', payload=json.dumps(params), origin=origin)
         try:
-            copy_config['config'].append({'name': name, 'url': url, 'token': response['token']})
+            copy_config['config'].append({'name': response['fsid'], 'url': url, 'token': response['token']})
         except KeyError:
-            copy_config = {'current_url': url, 'config': [{'name': name, 'url': url, 'token': response['token']}]}
+            copy_config = {'current_url': url, 'config': [{'name': response['fsid'], 'url': url, 'token': response['token']}]}
         Settings.MULTICLUSTER_CONFIG = copy_config
 
     @Endpoint('PUT')

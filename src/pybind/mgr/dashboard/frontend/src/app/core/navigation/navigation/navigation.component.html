@@ -31,7 +31,7 @@
       <div class="collapse navbar-collapse"
            [ngClass]="{'show': rightSidebarOpen}">
         
-      <ng-container *ngIf="clusters?.length > 1">
+      <ng-container *ngIf="clustersMap?.size > 1">
         <ng-container>
           <div class="cd-context-bar">
             <div ngbDropdown
@@ -44,11 +44,11 @@
                 {{ selectedCluster }}
               </button>
               <div ngbDropdownMenu>
-                <ng-container *ngFor="let cluster of clusters">
+                <ng-container *ngFor="let cluster of clustersMap | keyvalue">
                   <button ngbDropdownItem
                           class="ctx-bar-available-rgw-daemon"
-                          (click)="onClusterSelection(cluster)">
-                    {{ cluster }}
+                          (click)="onClusterSelection(cluster.key)">
+                    {{ cluster.value }}
                   </button>
                 </ng-container>
               </div>

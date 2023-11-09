@@ -45,6 +45,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
 
   clusters: string[] = [];
+  clustersMap: Map<string, string> = new Map<string, string>();
   selectedCluster = '';
 
   constructor(
@@ -65,13 +66,15 @@ export class NavigationComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.subs.add(
       this.multiClusterService.subscribe((resp: string) => {
-        // assign urls from resp['config ] array to clusters array
-        this.clusters = resp['config']?.map((config: string) => config['url']);
-        this.clusters?.unshift(window.location.origin);
-
-        this.selectedCluster = resp['current_url'] || localStorage.getItem('cluster_api_url');
         resp['config']?.forEach((config: any) => {
-          if (config['url'] === this.selectedCluster) {
+          this.clustersMap.set(config['url'], config['name']);
+        });
+
+        this.selectedCluster =
+          this.clustersMap.get(resp['current_url']) ||
+          this.clustersMap.get(localStorage.getItem('cluster_api_url'));
+        resp['config']?.forEach((config: any) => {
+          if (config['name'] === this.selectedCluster) {
             localStorage.setItem('token_of_selected_cluster', config['token']);
           }
         });
@@ -146,9 +149,9 @@ export class NavigationComponent implements OnInit, OnDestroy {
       (resp: any) => {
         // let token: string;
         localStorage.setItem('cluster_api_url', url);
-        this.selectedCluster = url;
+        this.selectedCluster = this.clustersMap.get(url);
         resp['config'].forEach((config: any) => {
-          if (config['url'] === this.selectedCluster) {
+          if (config['name'] === this.selectedCluster) {
             localStorage.setItem('token_of_selected_cluster', config['token']);
           }
         });

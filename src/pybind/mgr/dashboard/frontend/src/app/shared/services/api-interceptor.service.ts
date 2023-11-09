@@ -128,6 +128,9 @@ export class ApiInterceptorService implements HttpInterceptor {
               timeoutId = this.notificationService.notifyTask(finishedTask);
               break;
             case 401:
+              this.multiClusterService.setCluster('https://127.0.0.1:4200').subscribe(() => {
+                localStorage.setItem('cluster_api_url', 'https://127.0.0.1:4200');
+              });
               this.authStorageService.remove();
               this.router.navigate(['/login']);
               break;

@@ -3,6 +3,7 @@
 import http.cookies
 import logging
 import sys
+import json
 
 from .. import mgr
 from ..exceptions import InvalidCredentialsError, UserDoesNotExist
@@ -44,6 +45,17 @@ class Auth(RESTController, ControllerAuthMixin):
                 user_perms = user_data.get('permissions')
                 pwd_expiration_date = user_data.get('pwdExpirationDate', None)
                 pwd_update_required = user_data.get('pwdUpdateRequired', False)
+            
+            if isinstance(Settings.MULTICLUSTER_CONFIG, str):
+                item_to_dict = json.loads(Settings.MULTICLUSTER_CONFIG)
+                copy_config = item_to_dict.copy()
+            else:
+                copy_config = Settings.MULTICLUSTER_CONFIG.copy()
+            try:
+                copy_config['config'].append({'name': mgr.get('config')['fsid'], 'url': 'https://127.0.0.1:4200'})
+            except KeyError:
+                copy_config = {'current_url': 'https://127.0.0.1:4200', 'config': [{'name': mgr.get('config')['fsid'], 'url': 'https://127.0.0.1:4200'}]}
+            Settings.MULTICLUSTER_CONFIG = copy_config
 
             if user_perms is not None:
                 url_prefix = 'https' if mgr.get_localized_module_option('ssl') else 'http'
