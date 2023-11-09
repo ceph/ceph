@@ -69,7 +69,7 @@ class List(object):
     def generate(self, devs=None):
         logger.debug('Listing block devices via lsblk...')
         info_devices = disk.lsblk_all(abspath=True)
-        if devs is None or devs == []:
+        if not devs or not any(devs):
             # If no devs are given initially, we want to list ALL devices including children and
             # parents. Parent disks with child partitions may be the appropriate device to return if
             # the parent disk has a bluestore header, but children may be the most appropriate
@@ -88,10 +88,11 @@ class List(object):
             # parent isn't bluestore, then the child could be a valid bluestore OSD. If we fail to
             # determine whether a parent is bluestore, we should err on the side of not reporting
             # the child so as not to give a false negative.
-            info_device = [info for info in info_devices if info['NAME'] == dev][0]
-            if info_device['TYPE'] == 'lvm':
-                # lvm devices are not raw devices
+            matched_info_devices = [info for info in info_devices if info['NAME'] == dev]
+            if not matched_info_devices:
+                logger.warning('device {} does not exist'.format(dev))
                 continue
+            info_device = matched_info_devices[0]
             if 'PKNAME' in info_device and info_device['PKNAME'] != "":
                 parent = info_device['PKNAME']
                 try:
