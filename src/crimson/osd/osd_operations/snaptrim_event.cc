@@ -44,7 +44,7 @@ void SnapTrimEvent::SubOpBlocker::dump_detail(Formatter *f) const
   f->open_array_section("dependent_operations");
   {
     for (const auto &kv : subops) {
-      f->dump_unsigned("op_id", kv.first);
+      f->dump_unsigned("op_id", kv.first->get_id());
     }
   }
   f->close_section();
@@ -152,7 +152,7 @@ SnapTrimEvent::start()
 	      object,
 	      snapid);
 	    subop_blocker.emplace_back(
-	      op->get_id(),
+	      std::move(op),
 	      std::move(fut)
 	    );
 	  }
