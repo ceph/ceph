@@ -643,17 +643,17 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     const std::lock_guard l(d4n_get_data_lock);
     rgw::d4n::CacheBlock block;
     rgw::d4n::BlockDirectory* blockDir = source->driver->get_block_dir();
-    block.version = "";
+    block.version = ""; // TODO: initialize correctly 
     block.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); 
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_name();
-    block.cacheObj.creationTime = 0;
+    block.cacheObj.creationTime = to_iso_8601(source->get_mtime()); 
     block.cacheObj.dirty = false;
     Attrs attrs; // empty attrs for cache sets
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
-      block.blockID = ofs; // TODO: fill out block correctly
+      block.blockID = ofs; 
       block.size = bl.length();
       if (filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y) == 0) {
         if (filter->get_cache_driver()->put_async(dpp, oid, bl, bl.length(), attrs) == 0) {
@@ -699,7 +699,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
       if (bl_rem.length() == rgw_get_obj_max_req_size) {
         std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
         ofs += bl_rem.length();
-	block.blockID = ofs; // TODO: fill out block correctly
+	block.blockID = ofs;
 	block.size = bl_rem.length();
         if (filter->get_policy_driver()->get_cache_policy()->eviction(dpp, block.size, *y) == 0) {
           if (filter->get_cache_driver()->put_async(dpp, oid, bl_rem, bl_rem.length(), attrs) == 0) {
@@ -728,15 +728,13 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 					   optional_yield y)
 {
-  rgw::d4n::CacheBlock block = rgw::d4n::CacheBlock{
-                                 .cacheObj = {
-                                   .objName = source->get_key().get_oid(),
-                                   .bucketName = source->get_bucket()->get_name()
-                                 },
-                                 .blockID = 0 // TODO: get correct blockID
-                               };
-  if (source->driver->get_block_dir()->del(&block, y) < 0) 
-    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): BlockDirectory del method failed." << dendl;
+  rgw::d4n::CacheObj obj = rgw::d4n::CacheObj{ // TODO: Add logic to ObjectDirectory del method to also delete all blocks belonging to that object
+			     .objName = source->get_key().get_oid(),
+			     .bucketName = source->get_bucket()->get_name()
+			   };
+
+  if (source->driver->get_obj_dir()->del(&obj, y) < 0) 
+    ldpp_dout(dpp, 10) << "D4NFilterObject::" << __func__ << "(): ObjectDirectory del method failed." << dendl;
 
   Attrs::iterator attrs;
   Attrs currentattrs = source->get_attrs();
@@ -788,7 +786,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
 				 .objName = obj->get_key().get_oid(), 
 				 .bucketName = obj->get_bucket()->get_name(),
-				 .creationTime = 0, // TODO: get correct value
+				 .creationTime = to_iso_8601(*mtime), 
 				 .dirty = false,
 				 .hostsList = { driver->get_block_dir()->cct->_conf->rgw_local_cache_address } 
                                };
