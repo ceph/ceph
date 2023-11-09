@@ -1310,7 +1310,7 @@ def main():
         if final_e:
             raise final_e
 
-    # Block until command completion (currently scrub and deep_scrub only)
+    # Block until command completion (currently scrub and deep scrub only)
     if block:
         wait(childargs, waitdata)
 
