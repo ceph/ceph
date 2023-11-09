@@ -22,6 +22,7 @@ from ..file_utils import makedirs, populate_files
 @register_daemon_form
 class HAproxy(ContainerDaemonForm):
     """Defines an HAproxy container"""
+
     daemon_type = 'haproxy'
     required_files = ['haproxy.cfg']
     default_image = DEFAULT_HAPROXY_IMAGE
@@ -30,10 +31,14 @@ class HAproxy(ContainerDaemonForm):
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return cls.daemon_type == daemon_type
 
-    def __init__(self,
-                 ctx: CephadmContext,
-                 fsid: str, daemon_id: Union[int, str],
-                 config_json: Dict, image: str) -> None:
+    def __init__(
+        self,
+        ctx: CephadmContext,
+        fsid: str,
+        daemon_id: Union[int, str],
+        config_json: Dict,
+        image: str,
+    ) -> None:
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
@@ -45,10 +50,10 @@ class HAproxy(ContainerDaemonForm):
         self.validate()
 
     @classmethod
-    def init(cls, ctx: CephadmContext,
-             fsid: str, daemon_id: Union[int, str]) -> 'HAproxy':
-        return cls(ctx, fsid, daemon_id, fetch_configs(ctx),
-                   ctx.image)
+    def init(
+        cls, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str]
+    ) -> 'HAproxy':
+        return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'HAproxy':
@@ -65,7 +70,9 @@ class HAproxy(ContainerDaemonForm):
 
         # create additional directories in data dir for HAproxy to use
         if not os.path.isdir(os.path.join(data_dir, 'haproxy')):
-            makedirs(os.path.join(data_dir, 'haproxy'), uid, gid, DATA_DIR_MODE)
+            makedirs(
+                os.path.join(data_dir, 'haproxy'), uid, gid, DATA_DIR_MODE
+            )
 
         data_dir = os.path.join(data_dir, 'haproxy')
         populate_files(data_dir, self.files, uid, gid)
@@ -86,7 +93,9 @@ class HAproxy(ContainerDaemonForm):
         if self.required_files:
             for fname in self.required_files:
                 if fname not in self.files:
-                    raise Error('required file missing from config-json: %s' % fname)
+                    raise Error(
+                        'required file missing from config-json: %s' % fname
+                    )
 
     def get_daemon_name(self):
         # type: () -> str
@@ -144,6 +153,7 @@ class HAproxy(ContainerDaemonForm):
 @register_daemon_form
 class Keepalived(ContainerDaemonForm):
     """Defines an Keepalived container"""
+
     daemon_type = 'keepalived'
     required_files = ['keepalived.conf']
     default_image = DEFAULT_KEEPALIVED_IMAGE
@@ -152,10 +162,14 @@ class Keepalived(ContainerDaemonForm):
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return cls.daemon_type == daemon_type
 
-    def __init__(self,
-                 ctx: CephadmContext,
-                 fsid: str, daemon_id: Union[int, str],
-                 config_json: Dict, image: str) -> None:
+    def __init__(
+        self,
+        ctx: CephadmContext,
+        fsid: str,
+        daemon_id: Union[int, str],
+        config_json: Dict,
+        image: str,
+    ) -> None:
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
@@ -167,13 +181,15 @@ class Keepalived(ContainerDaemonForm):
         self.validate()
 
     @classmethod
-    def init(cls, ctx: CephadmContext, fsid: str,
-             daemon_id: Union[int, str]) -> 'Keepalived':
-        return cls(ctx, fsid, daemon_id,
-                   fetch_configs(ctx), ctx.image)
+    def init(
+        cls, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str]
+    ) -> 'Keepalived':
+        return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
 
     @classmethod
-    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Keepalived':
+    def create(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> 'Keepalived':
         return cls.init(ctx, ident.fsid, ident.daemon_id)
 
     @property
@@ -187,7 +203,9 @@ class Keepalived(ContainerDaemonForm):
 
         # create additional directories in data dir for keepalived to use
         if not os.path.isdir(os.path.join(data_dir, 'keepalived')):
-            makedirs(os.path.join(data_dir, 'keepalived'), uid, gid, DATA_DIR_MODE)
+            makedirs(
+                os.path.join(data_dir, 'keepalived'), uid, gid, DATA_DIR_MODE
+            )
 
         # populate files from the config-json
         populate_files(data_dir, self.files, uid, gid)
@@ -205,7 +223,9 @@ class Keepalived(ContainerDaemonForm):
         if self.required_files:
             for fname in self.required_files:
                 if fname not in self.files:
-                    raise Error('required file missing from config-json: %s' % fname)
+                    raise Error(
+                        'required file missing from config-json: %s' % fname
+                    )
 
     def get_daemon_name(self):
         # type: () -> str
@@ -225,7 +245,7 @@ class Keepalived(ContainerDaemonForm):
             'KEEPALIVED_AUTOCONF=false',
             'KEEPALIVED_CONF=/etc/keepalived/keepalived.conf',
             'KEEPALIVED_CMD=/usr/sbin/keepalived -n -l -f /etc/keepalived/keepalived.conf',
-            'KEEPALIVED_DEBUG=false'
+            'KEEPALIVED_DEBUG=false',
         ]
         return envs
 
@@ -244,7 +264,9 @@ class Keepalived(ContainerDaemonForm):
     @staticmethod
     def _get_container_mounts(data_dir: str) -> Dict[str, str]:
         mounts = dict()
-        mounts[os.path.join(data_dir, 'keepalived.conf')] = '/etc/keepalived/keepalived.conf'
+        mounts[
+            os.path.join(data_dir, 'keepalived.conf')
+        ] = '/etc/keepalived/keepalived.conf'
         return mounts
 
     def customize_container_mounts(
