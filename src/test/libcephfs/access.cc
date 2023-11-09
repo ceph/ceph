@@ -114,6 +114,7 @@ TEST(AccessTest, Foo) {
 
 TEST(AccessTest, Path) {
   string good = get_unique_dir("good");
+  string good_slash = get_unique_dir("good_slash") + "/";
   string bad = get_unique_dir("bad");
   string user = "libcephfs_path_test." + stringify(rand());
   struct ceph_mount_info *admin;
@@ -122,10 +123,14 @@ TEST(AccessTest, Path) {
   ASSERT_EQ(0, ceph_conf_parse_env(admin, NULL));
   ASSERT_EQ(0, ceph_mount(admin, "/"));
   ASSERT_EQ(0, ceph_mkdir(admin, good.c_str(), 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, good_slash.c_str(), 0755));
   ASSERT_EQ(0, ceph_mkdir(admin, string(good + "/p").c_str(), 0755));
+  ASSERT_EQ(0, ceph_mkdir(admin, string(good_slash + "/p").c_str(), 0755));
   ASSERT_EQ(0, ceph_mkdir(admin, bad.c_str(), 0755));
   ASSERT_EQ(0, ceph_mkdir(admin, string(bad + "/p").c_str(), 0755));
   int fd = ceph_open(admin, string(good + "/q").c_str(), O_CREAT|O_WRONLY, 0755);
+  ceph_close(admin, fd);
+  fd = ceph_open(admin, string(good_slash + "/q").c_str(), O_CREAT|O_WRONLY, 0755);
   ceph_close(admin, fd);
   fd = ceph_open(admin, string(bad + "/q").c_str(), O_CREAT|O_WRONLY, 0755);
   ceph_close(admin, fd);
@@ -137,7 +142,7 @@ TEST(AccessTest, Path) {
   ASSERT_EQ(0, do_mon_command(
       "{\"prefix\": \"auth get-or-create\", \"entity\": \"client." + user + "\", "
       "\"caps\": [\"mon\", \"allow r\", \"osd\", \"allow rwx\", "
-      "\"mds\", \"allow r, allow rw path=" + good + "\""
+      "\"mds\", \"allow r, allow rw path=" + good + ", allow rw path=" + good_slash + "\""
       "], \"format\": \"json\"}", &key));
 
   struct ceph_mount_info *cmount;
@@ -157,6 +162,16 @@ TEST(AccessTest, Path) {
   ceph_close(cmount, fd);
   ASSERT_GE(ceph_unlink(cmount, string(good + "/y").c_str()), 0);
   ASSERT_GE(ceph_rmdir(cmount, string(good + "/x").c_str()), 0);
+
+  ASSERT_GE(ceph_mkdir(cmount, string(good_slash + "/x").c_str(), 0755), 0);
+  ASSERT_GE(ceph_rmdir(cmount, string(good_slash + "/p").c_str()), 0);
+  ASSERT_GE(ceph_unlink(cmount, string(good_slash + "/q").c_str()), 0);
+  fd = ceph_open(cmount, string(good_slash + "/y").c_str(), O_CREAT|O_WRONLY, 0755);
+  ASSERT_GE(fd, 0);
+  ceph_write(cmount, fd, "bar", 3, 0);
+  ceph_close(cmount, fd);
+  ASSERT_GE(ceph_unlink(cmount, string(good_slash + "/y").c_str()), 0);
+  ASSERT_GE(ceph_rmdir(cmount, string(good_slash + "/x").c_str()), 0);
 
   fd = ceph_open(cmount, string(bad + "/z").c_str(), O_RDONLY, 0644);
   ASSERT_GE(fd, 0);
