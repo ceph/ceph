@@ -19,6 +19,7 @@ overrides:
       - \(MGR_DOWN\)
       - slow request
       - \(MON_MSGR2_NOT_ENABLED\)
+      - \(POOL_APP_NOT_ENABLED\)
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
