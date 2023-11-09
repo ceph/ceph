@@ -84,7 +84,7 @@ int ObjectDirectory::set(CacheObj* object, optional_yield y) {
   redisValues.push_back("bucketName");
   redisValues.push_back(object->bucketName);
   redisValues.push_back("creationTime");
-  redisValues.push_back(std::to_string(object->creationTime)); 
+  redisValues.push_back(object->creationTime); 
   redisValues.push_back("dirty");
   redisValues.push_back(std::to_string(object->dirty));
   redisValues.push_back("objHosts");
@@ -145,7 +145,7 @@ int ObjectDirectory::get(CacheObj* object, optional_yield y) {
 
       object->objName = std::get<0>(resp).value()[0];
       object->bucketName = std::get<0>(resp).value()[1];
-      object->creationTime = boost::lexical_cast<time_t>(std::get<0>(resp).value()[2]);
+      object->creationTime = std::get<0>(resp).value()[2];
       object->dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[3]);
 
       {
@@ -354,7 +354,7 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
   redisValues.push_back("bucketName");
   redisValues.push_back(block->cacheObj.bucketName);
   redisValues.push_back("creationTime");
-  redisValues.push_back(std::to_string(block->cacheObj.creationTime)); 
+  redisValues.push_back(block->cacheObj.creationTime); 
   redisValues.push_back("dirty");
   redisValues.push_back(std::to_string(block->cacheObj.dirty));
   redisValues.push_back("objHosts");
@@ -438,7 +438,7 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y) {
 
       block->cacheObj.objName = std::get<0>(resp).value()[5];
       block->cacheObj.bucketName = std::get<0>(resp).value()[6];
-      block->cacheObj.creationTime = boost::lexical_cast<time_t>(std::get<0>(resp).value()[7]);
+      block->cacheObj.creationTime = std::get<0>(resp).value()[7];
       block->cacheObj.dirty = boost::lexical_cast<bool>(std::get<0>(resp).value()[8]);
 
       {
