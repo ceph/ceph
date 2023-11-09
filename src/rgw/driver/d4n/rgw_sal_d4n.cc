@@ -41,7 +41,6 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
   partition_info.type = "read-cache";
   partition_info.size = g_conf()->rgw_d4n_l1_datacache_size;
 
-  //cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info); // change later -Sam
   cacheDriver = new rgw::cache::SSDDriver(partition_info);
   objDir = new rgw::d4n::ObjectDirectory(io_context);
   blockDir = new rgw::d4n::BlockDirectory(io_context);
@@ -482,7 +481,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   ldpp_dout(dpp, 20) << "D4NFilterObject::iterate:: " << "oid: " << oid << " ofs: " << ofs << " end: " << end << dendl;
 
   this->client_cb = cb;
-  this->cb->set_client_cb(cb, dpp, &y); // what's this for? -Sam
+  this->cb->set_client_cb(cb, dpp, &y);
 
   /* This algorithm stores chunks for ranged requests also in the cache, which might be smaller than obj_max_req_size
      One simplification could be to overwrite the smaller chunks with a bigger chunk of obj_max_req_size, and to serve requests for smaller
@@ -607,7 +606,7 @@ int D4NFilterObject::D4NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
     this->cb->set_ofs(ofs);
   } else {
     this->cb->set_ofs(adjusted_start_ofs);
-    ofs = adjusted_start_ofs; // redundant? -Sam
+    ofs = adjusted_start_ofs;
   }
 
   this->cb->set_ofs(ofs);
@@ -649,9 +648,8 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_name();
     block.cacheObj.creationTime = 0;
-    block.cacheObj.dirty = false;// update hostsList since may overwrite existing hosts -Sam
-    block.cacheObj.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); // Is the entire object getting stored in the local cache as well or only blocks? -Sam
-    Attrs attrs; // empty attrs for block sets
+    block.cacheObj.dirty = false;
+    Attrs attrs; // empty attrs for cache sets
 
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
       std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
@@ -662,7 +660,7 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
 	  filter->get_policy_driver()->get_cache_policy()->update(dpp, oid, ofs, bl.length(), "", *y);
 
 	  /* Store block in directory */
-          if (!blockDir->exist_key(&block, *y)) { // If the block exists, do we want to update anything else? -Sam
+          if (!blockDir->exist_key(&block, *y)) {
             if (blockDir->set(&block, *y) < 0) 
 	      ldpp_dout(dpp, 10) << "D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::" << __func__ << "(): BlockDirectory set method failed." << dendl;
           } else {
@@ -787,22 +785,16 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        rgw_zone_set *zones_trace, bool *canceled,
                        const req_context& rctx)
 {
-  rgw::d4n::CacheBlock block = rgw::d4n::CacheBlock{
-                                 .cacheObj = {
-                                   .objName = obj->get_key().get_oid(), 
-                                   .bucketName = obj->get_bucket()->get_name(),
-                                   .creationTime = 0, // TODO: get correct value
-                                   .dirty = false,
-				   .hostsList = { driver->get_block_dir()->cct->_conf->rgw_local_cache_address } 
-                                 },
-                                 .blockID = 0, // TODO: get correct blockID
-                                 .version = "", 
-                                 .size = accounted_size,
-                                 .hostsList = { driver->get_block_dir()->cct->_conf->rgw_local_cache_address }
+  rgw::d4n::CacheObj object = rgw::d4n::CacheObj{
+				 .objName = obj->get_key().get_oid(), 
+				 .bucketName = obj->get_bucket()->get_name(),
+				 .creationTime = 0, // TODO: get correct value
+				 .dirty = false,
+				 .hostsList = { driver->get_block_dir()->cct->_conf->rgw_local_cache_address } 
                                };
 
-  if (driver->get_block_dir()->set(&block, y) < 0) 
-    ldpp_dout(save_dpp, 10) << "D4NFilterWriter::" << __func__ << "(): BlockDirectory set method failed." << dendl;
+  if (driver->get_obj_dir()->set(&object, y) < 0) 
+    ldpp_dout(save_dpp, 10) << "D4NFilterWriter::" << __func__ << "(): ObjectDirectory set method failed." << dendl;
    
   /* Retrieve complete set of attrs */
   int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
@@ -855,12 +847,10 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   }
 
   baseAttrs.insert(attrs.begin(), attrs.end());
-
-  // is the accounted_size equivalent to the length? -Sam
   
   //bufferlist bl_empty;
   //int putReturn = driver->get_cache_driver()->
-  //	  put(save_dpp, obj->get_key().get_oid(), bl_empty, accounted_size, baseAttrs, y); /* Data already written during process call */
+  //	  put(save_dpp, obj->get_key().get_oid(), bl_empty, 0, baseAttrs, y); /* Data already written during process call */
   /*
   if (putReturn < 0) {
     ldpp_dout(save_dpp, 20) << "D4N Filter: Cache put operation failed." << dendl;
