@@ -27,7 +27,7 @@ class Tracing(ContainerDaemonForm):
     components: Dict[str, Dict[str, Any]] = {
         'elasticsearch': {
             'image': DEFAULT_ELASTICSEARCH_IMAGE,
-            'envs': ['discovery.type=single-node']
+            'envs': ['discovery.type=single-node'],
         },
         'jaeger-agent': {
             'image': DEFAULT_JAEGER_AGENT_IMAGE,
@@ -50,12 +50,13 @@ class Tracing(ContainerDaemonForm):
             assert 'elasticsearch_nodes' in config
             Tracing.components[daemon_type]['envs'] = [
                 'SPAN_STORAGE_TYPE=elasticsearch',
-                f'ES_SERVER_URLS={config["elasticsearch_nodes"]}']
+                f'ES_SERVER_URLS={config["elasticsearch_nodes"]}',
+            ]
         if daemon_type == 'jaeger-agent':
             assert 'collector_nodes' in config
             Tracing.components[daemon_type]['daemon_args'] = [
                 f'--reporter.grpc.host-port={config["collector_nodes"]}',
-                '--processor.jaeger-compact.server-host-port=6799'
+                '--processor.jaeger-compact.server-host-port=6799',
             ]
 
     def __init__(self, ident: DaemonIdentity) -> None:
