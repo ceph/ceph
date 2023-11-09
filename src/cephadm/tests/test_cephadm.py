@@ -558,25 +558,31 @@ class TestCephAdm(object):
 
 
     def test_dict_get(self):
-        result = _cephadm.dict_get({'a': 1}, 'a', require=True)
+        from cephadmlib.data_utils import dict_get
+
+        result = dict_get({'a': 1}, 'a', require=True)
         assert result == 1
-        result = _cephadm.dict_get({'a': 1}, 'b')
+        result = dict_get({'a': 1}, 'b')
         assert result is None
-        result = _cephadm.dict_get({'a': 1}, 'b', default=2)
+        result = dict_get({'a': 1}, 'b', default=2)
         assert result == 2
 
     def test_dict_get_error(self):
+        from cephadmlib.data_utils import dict_get
+
         with pytest.raises(_cephadm.Error):
-            _cephadm.dict_get({'a': 1}, 'b', require=True)
+            dict_get({'a': 1}, 'b', require=True)
 
     def test_dict_get_join(self):
-        result = _cephadm.dict_get_join({'foo': ['a', 'b']}, 'foo')
+        from cephadmlib.data_utils import dict_get_join
+
+        result = dict_get_join({'foo': ['a', 'b']}, 'foo')
         assert result == 'a\nb'
-        result = _cephadm.dict_get_join({'foo': [1, 2]}, 'foo')
+        result = dict_get_join({'foo': [1, 2]}, 'foo')
         assert result == '1\n2'
-        result = _cephadm.dict_get_join({'bar': 'a'}, 'bar')
+        result = dict_get_join({'bar': 'a'}, 'bar')
         assert result == 'a'
-        result = _cephadm.dict_get_join({'a': 1}, 'a')
+        result = dict_get_join({'a': 1}, 'a')
         assert result == 1
 
     @mock.patch('os.listdir', return_value=[])
