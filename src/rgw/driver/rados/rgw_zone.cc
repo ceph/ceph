@@ -1165,7 +1165,7 @@ static int read_or_create_default_zonegroup(const DoutPrefixProvider* dpp,
 }
 
 int SiteConfig::load(const DoutPrefixProvider* dpp, optional_yield y,
-                     sal::ConfigStore* cfgstore)
+                     sal::ConfigStore* cfgstore, bool force_local_zonegroup)
 {
   // clear existing configuration
   zone = nullptr;
@@ -1219,7 +1219,7 @@ int SiteConfig::load(const DoutPrefixProvider* dpp, optional_yield y,
     }
   }
 
-  if (realm) {
+  if (realm && !force_local_zonegroup) {
     // try to load the realm's period
     r = load_period_zonegroup(dpp, y, cfgstore, *realm, zone_params.id);
   } else {
@@ -1228,6 +1228,15 @@ int SiteConfig::load(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   return r;
+}
+
+std::unique_ptr<SiteConfig> SiteConfig::make_fake() {
+  auto fake = std::make_unique<SiteConfig>();
+  fake->local_zonegroup.emplace();
+  fake->local_zonegroup->zones.emplace(""s, RGWZone{});
+  fake->zonegroup = &*fake->local_zonegroup;
+  fake->zone = &fake->zonegroup->zones.begin()->second;
+  return fake;
 }
 
 int SiteConfig::load_period_zonegroup(const DoutPrefixProvider* dpp,

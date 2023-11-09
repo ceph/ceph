@@ -46,7 +46,8 @@
 #define dout_subsys ceph_subsys_rgw
 
 extern "C" {
-extern rgw::sal::Driver* newRadosStore(boost::asio::io_context* io_context);
+extern rgw::sal::Driver* newRadosStore(boost::asio::io_context* io_context,
+				       const rgw::SiteConfig* site_config);
 #ifdef WITH_RADOSGW_DBSTORE
 extern rgw::sal::Driver* newDBStore(CephContext *cct);
 #endif
@@ -104,6 +105,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     CephContext* cct,
 						     const Config& cfg,
 						     boost::asio::io_context& io_context,
+						     const rgw::SiteConfig& site_config,
 						     bool use_gc_thread,
 						     bool use_lc_thread,
 						     bool quota_threads,
@@ -116,7 +118,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   rgw::sal::Driver* driver{nullptr};
 
   if (cfg.store_name.compare("rados") == 0) {
-    driver = newRadosStore(&io_context);
+    driver = newRadosStore(&io_context, &site_config);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
     if ((*rados).set_use_cache(use_cache)
@@ -142,7 +144,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   }
   else if (cfg.store_name.compare("d3n") == 0) {
-    driver = new rgw::sal::RadosStore(io_context);
+    driver = new rgw::sal::RadosStore(io_context, site_config);
     RGWRados* rados = new D3nRGWDataCache<RGWRados>;
     dynamic_cast<rgw::sal::RadosStore*>(driver)->setRados(rados);
     rados->set_store(static_cast<rgw::sal::RadosStore* >(driver));
@@ -262,11 +264,13 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   return driver;
 }
 
-rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const Config& cfg, boost::asio::io_context& io_context)
+rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct,
+							   const Config& cfg, boost::asio::io_context& io_context,
+							   const rgw::SiteConfig& site_config)
 {
   rgw::sal::Driver* driver = nullptr;
   if (cfg.store_name.compare("rados") == 0) {
-    driver = newRadosStore(&io_context);
+    driver = newRadosStore(&io_context, &site_config);
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
     rados->set_context(cct);

@@ -1537,6 +1537,7 @@ public:
 				      CephContext* cct,
 				      const Config& cfg,
 				      boost::asio::io_context& io_context,
+				      const rgw::SiteConfig& site_config,
 				      bool use_gc_thread,
 				      bool use_lc_thread,
 				      bool quota_threads,
@@ -1545,7 +1546,9 @@ public:
 				      bool run_notification_thread, optional_yield y,
 				      bool use_cache = true,
 				      bool use_gc = true) {
-    rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, io_context, use_gc_thread,
+    rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, io_context,
+						   site_config,
+						   use_gc_thread,
 						   use_lc_thread,
 						   quota_threads,
 						   run_sync_thread,
@@ -1557,8 +1560,11 @@ public:
   /** Get a stripped down driver by service name */
   static rgw::sal::Driver* get_raw_storage(const DoutPrefixProvider* dpp,
 					  CephContext* cct, const Config& cfg,
-					  boost::asio::io_context& io_context) {
-    rgw::sal::Driver* driver = init_raw_storage_provider(dpp, cct, cfg, io_context);
+					  boost::asio::io_context& io_context,
+					  const rgw::SiteConfig& site_config) {
+    rgw::sal::Driver* driver = init_raw_storage_provider(dpp, cct, cfg,
+							 io_context,
+							 site_config);
     return driver;
   }
   /** Initialize a new full Driver */
@@ -1566,6 +1572,7 @@ public:
 						CephContext* cct,
 						const Config& cfg,
 						boost::asio::io_context& io_context,
+						const rgw::SiteConfig& site_config,
 						bool use_gc_thread,
 						bool use_lc_thread,
 						bool quota_threads,
@@ -1578,7 +1585,8 @@ public:
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,
 						    const Config& cfg,
-						    boost::asio::io_context& io_context);
+						    boost::asio::io_context& io_context,
+						    const rgw::SiteConfig& site_config);
   /** Close a Driver when it's no longer needed */
   static void close_storage(rgw::sal::Driver* driver);
 

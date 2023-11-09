@@ -250,6 +250,7 @@ int rgw::AppMain::init_storage()
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           cfg,
 	  *context_pool,
+	  site,
           run_gc,
           run_lc,
           run_quota,
