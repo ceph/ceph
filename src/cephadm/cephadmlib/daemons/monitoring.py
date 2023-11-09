@@ -27,12 +27,14 @@ class Monitoring(ContainerDaemonForm):
     """Define the configs for the monitoring containers"""
 
     port_map = {
-        'prometheus': [9095],  # Avoid default 9090, due to conflict with cockpit UI
+        'prometheus': [
+            9095
+        ],  # Avoid default 9090, due to conflict with cockpit UI
         'node-exporter': [9100],
         'grafana': [3000],
         'alertmanager': [9093, 9094],
         'loki': [3100],
-        'promtail': [9080]
+        'promtail': [9080],
     }
 
     components = {
@@ -55,9 +57,7 @@ class Monitoring(ContainerDaemonForm):
             'args': [
                 '--config.file=/etc/loki/loki.yml',
             ],
-            'config-json-files': [
-                'loki.yml'
-            ],
+            'config-json-files': ['loki.yml'],
         },
         'promtail': {
             'image': DEFAULT_PROMTAIL_IMAGE,
@@ -74,9 +74,7 @@ class Monitoring(ContainerDaemonForm):
             'image': DEFAULT_NODE_EXPORTER_IMAGE,
             'cpus': '1',
             'memory': '1GB',
-            'args': [
-                '--no-collector.timex'
-            ],
+            'args': ['--no-collector.timex'],
         },
         'grafana': {
             'image': DEFAULT_GRAFANA_IMAGE,
@@ -95,7 +93,9 @@ class Monitoring(ContainerDaemonForm):
             'cpus': '2',
             'memory': '2GB',
             'args': [
-                '--cluster.listen-address=:{}'.format(port_map['alertmanager'][1]),
+                '--cluster.listen-address=:{}'.format(
+                    port_map['alertmanager'][1]
+                ),
             ],
             'config-json-files': [
                 'alertmanager.yml',
@@ -116,7 +116,13 @@ class Monitoring(ContainerDaemonForm):
         """
         :param: daemon_type Either "prometheus", "alertmanager", "loki", "promtail" or "node-exporter"
         """
-        assert daemon_type in ('prometheus', 'alertmanager', 'node-exporter', 'loki', 'promtail')
+        assert daemon_type in (
+            'prometheus',
+            'alertmanager',
+            'node-exporter',
+            'loki',
+            'promtail',
+        )
         cmd = daemon_type.replace('-', '_')
         code = -1
         err = ''
@@ -124,17 +130,32 @@ class Monitoring(ContainerDaemonForm):
         version = ''
         if daemon_type == 'alertmanager':
             for cmd in ['alertmanager', 'prometheus-alertmanager']:
-                out, err, code = call(ctx, [
-                    ctx.container_engine.path, 'exec', container_id, cmd,
-                    '--version'
-                ], verbosity=CallVerbosity.QUIET)
+                out, err, code = call(
+                    ctx,
+                    [
+                        ctx.container_engine.path,
+                        'exec',
+                        container_id,
+                        cmd,
+                        '--version',
+                    ],
+                    verbosity=CallVerbosity.QUIET,
+                )
                 if code == 0:
                     break
             cmd = 'alertmanager'  # reset cmd for version extraction
         else:
-            out, err, code = call(ctx, [
-                ctx.container_engine.path, 'exec', container_id, cmd, '--version'
-            ], verbosity=CallVerbosity.QUIET)
+            out, err, code = call(
+                ctx,
+                [
+                    ctx.container_engine.path,
+                    'exec',
+                    container_id,
+                    cmd,
+                    '--version',
+                ],
+                verbosity=CallVerbosity.QUIET,
+            )
         if code == 0:
             if err.startswith('%s, version ' % cmd):
                 version = err.split(' ')[2]
@@ -169,7 +190,9 @@ class Monitoring(ContainerDaemonForm):
         self._identity = ident
 
     @classmethod
-    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Monitoring':
+    def create(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> 'Monitoring':
         return cls(ctx, ident)
 
     @property
@@ -232,7 +255,9 @@ class Monitoring(ContainerDaemonForm):
             if daemon_type == 'prometheus':
                 config = fetch_configs(ctx)
                 retention_time = config.get('retention_time', '15d')
-                retention_size = config.get('retention_size', '0')  # default to disabled
+                retention_size = config.get(
+                    'retention_size', '0'
+                )  # default to disabled
                 r += [f'--storage.tsdb.retention.time={retention_time}']
                 r += [f'--storage.tsdb.retention.size={retention_size}']
                 scheme = 'http'
@@ -270,9 +295,11 @@ class Monitoring(ContainerDaemonForm):
                 r += [f'--web.config.file={config["web_config"]}']
             except KeyError:
                 pass
-            r += ['--path.procfs=/host/proc',
-                  '--path.sysfs=/host/sys',
-                  '--path.rootfs=/rootfs']
+            r += [
+                '--path.procfs=/host/proc',
+                '--path.sysfs=/host/sys',
+                '--path.rootfs=/rootfs',
+            ]
         return r
 
     def _get_container_mounts(self, data_dir: str) -> Dict[str, str]:
