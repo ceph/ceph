@@ -48,7 +48,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	.cacheObj = {
 	  .objName = "testName",
 	  .bucketName = "testBucket",
-	  .creationTime = 0,
+	  .creationTime = "",
 	  .dirty = false,
 	  .hostsList = { env->redisHost }
 	},
@@ -192,7 +192,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
       .cacheObj = {
 	.objName = "victimName",
 	.bucketName = "testBucket",
-	.creationTime = 0,
+	.creationTime = "",
 	.dirty = false,
 	.hostsList = { env->redisHost }
       },

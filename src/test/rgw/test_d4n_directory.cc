@@ -51,7 +51,7 @@ class ObjectDirectoryFixture: public ::testing::Test {
       obj = new rgw::d4n::CacheObj{
 	.objName = "testName",
 	.bucketName = "testBucket",
-	.creationTime = 0,
+	.creationTime = "",
 	.dirty = false,
 	.hostsList = { env->redisHost }
       };
@@ -84,7 +84,7 @@ class ObjectDirectoryFixture: public ::testing::Test {
     net::io_context io;
     connection* conn;
 
-    std::vector<std::string> vals{"testName", "testBucket", "0", "0", env->redisHost};
+    std::vector<std::string> vals{"testName", "testBucket", "", "0", env->redisHost};
     std::vector<std::string> fields{"objName", "bucketName", "creationTime", "dirty", "objHosts"};
 };
 
@@ -96,7 +96,7 @@ class BlockDirectoryFixture: public ::testing::Test {
         .cacheObj = {
 	  .objName = "testName",
 	  .bucketName = "testBucket",
-	  .creationTime = 0,
+	  .creationTime = "",
 	  .dirty = false,
 	  .hostsList = { env->redisHost }
 	},
@@ -135,7 +135,7 @@ class BlockDirectoryFixture: public ::testing::Test {
     connection* conn;
 
     std::vector<std::string> vals{"0", "", "0", "0", env->redisHost, 
-                                   "testName", "testBucket", "0", "0", env->redisHost};
+                                   "testName", "testBucket", "", "0", env->redisHost};
     std::vector<std::string> fields{"blockID", "version", "size", "globalWeight", "blockHosts", 
 				     "objName", "bucketName", "creationTime", "dirty", "objHosts"};
 };
