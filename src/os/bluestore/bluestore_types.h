@@ -403,6 +403,15 @@ struct bluestore_blob_use_tracker_t {
     uint32_t len,
     PExtentVector *release);
 
+  /// Puts back references in region [offset~length].
+  /// It is different, simpler version of put,
+  /// as it does not allow for overprovisioning.
+  /// Releasing off=0x500 len=0x2000 from {0x1000,0x1004,0x1000} will fail,
+  /// while the other one behaves properly
+  std::pair<uint32_t, uint32_t> put_simple(
+    uint32_t offset,
+    uint32_t length);
+
   bool can_split() const;
   bool can_split_at(uint32_t blob_offset) const;
   void split(
