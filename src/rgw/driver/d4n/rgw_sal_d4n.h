@@ -198,6 +198,7 @@ class D4NFilterObject : public FilterObject {
                                optional_yield y, const DoutPrefixProvider* dpp) override;
     virtual int delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
                                optional_yield y) override;
+    virtual ceph::real_time get_mtime(void) const override { return next->get_mtime(); };
 
     virtual std::unique_ptr<ReadOp> get_read_op() override;
     virtual std::unique_ptr<DeleteOp> get_delete_op() override;
