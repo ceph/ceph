@@ -251,18 +251,26 @@ detail`` returns a message similar to the following::
   information about the proper preparation of logs.
 
 
-**What if state is ``electing``?**
+**What does it mean when a Monitor's state is ``electing``?**
 
-  This means the monitor is in the middle of an election. With recent Ceph
-  releases these typically complete quickly, but at times the monitors can
-  get stuck in what is known as an *election storm*. This can indicate
-  clock skew among the monitor nodes; jump to
-  `Clock Skews`_ for more information. If all your clocks are properly
-  synchronized, you should search the mailing lists and tracker.
-  This is not a state that is likely to persist and aside from
-  (*really*) old bugs there is not an obvious reason besides clock skews on
-  why this would happen.  Worst case, if there are enough surviving mons,
-  down the problematic one while you investigate.
+  If ``ceph health detail`` shows that a Monitor's state is ``electing``, the
+  monitor is in the middle of an election. Elections typically complete
+  quickly, but sometimes the monitors can get stuck in what is known as an
+  *election storm*. See :ref:`Monitor Elections <dev_mon_elections>` for more
+  on monitor elections.
+  
+  The presence of election storm might indicate clock skew among the monitor
+  nodes. See `Clock Skews`_ for more information. 
+  
+  If your clocks are properly synchronized, search the mailing lists and bug
+  tracker for issues similar to your issue. The ``electing`` state is not
+  likely to persist. In versions of Ceph after the release of Cuttlefish, there
+  is no obvious reason other than clock skew that explains why an ``electing``
+  state would persist.  
+  
+  It is possible to investigate the cause of a persistent ``electing`` state if
+  you put the problematic Monitor into a ``down`` state while you investigate.
+  This is possible only if there are enough surviving Monitors to form quorum. 
 
 **What if state is ``synchronizing``?**
 
