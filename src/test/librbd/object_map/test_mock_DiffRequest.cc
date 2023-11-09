@@ -42,6 +42,10 @@ public:
     ASSERT_EQ(0, open_image(m_image_name, &m_image_ctx));
   }
 
+  bool is_diff_iterate() const {
+    return true;
+  }
+
   void expect_get_flags(MockTestImageCtx& mock_image_ctx, uint64_t snap_id,
                         int32_t flags, int r) {
     EXPECT_CALL(mock_image_ctx, get_flags(snap_id, _))
@@ -87,7 +91,8 @@ TEST_F(TestMockObjectMapDiffRequest, InvalidStartSnap) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, CEPH_NOSNAP, 0,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -98,7 +103,7 @@ TEST_F(TestMockObjectMapDiffRequest, StartEndSnapEqual) {
   InSequence seq;
 
   C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, 1,
+  auto req = new MockDiffRequest(&mock_image_ctx, 1, 1, is_diff_iterate(),
                                  &m_object_diff_state, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -115,7 +120,8 @@ TEST_F(TestMockObjectMapDiffRequest, FastDiffDisabled) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -133,7 +139,8 @@ TEST_F(TestMockObjectMapDiffRequest, FastDiffInvalid) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
@@ -180,7 +187,8 @@ TEST_F(TestMockObjectMapDiffRequest, FullDelta) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -188,7 +196,7 @@ TEST_F(TestMockObjectMapDiffRequest, FullDelta) {
   expected_diff_state.resize(object_count);
   expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
   expected_diff_state[2] = DIFF_STATE_DATA_UPDATED;
-  expected_diff_state[3] = DIFF_STATE_HOLE_UPDATED;
+  expected_diff_state[3] = DIFF_STATE_HOLE;
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
@@ -226,7 +234,7 @@ TEST_F(TestMockObjectMapDiffRequest, IntermediateDelta) {
   expect_load_map(mock_image_ctx, 2U, object_map_2, 0);
 
   C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, 2,
+  auto req = new MockDiffRequest(&mock_image_ctx, 1, 2, is_diff_iterate(),
                                  &m_object_diff_state, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
@@ -274,7 +282,8 @@ TEST_F(TestMockObjectMapDiffRequest, EndDelta) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 2, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -302,7 +311,8 @@ TEST_F(TestMockObjectMapDiffRequest, StartSnapDNE) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 1, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -328,7 +338,7 @@ TEST_F(TestMockObjectMapDiffRequest, EndSnapDNE) {
   expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
 
   C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, 2,
+  auto req = new MockDiffRequest(&mock_image_ctx, 1, 2, is_diff_iterate(),
                                  &m_object_diff_state, &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
@@ -367,7 +377,8 @@ TEST_F(TestMockObjectMapDiffRequest, IntermediateSnapDNE) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -394,7 +405,8 @@ TEST_F(TestMockObjectMapDiffRequest, LoadObjectMapDNE) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
@@ -427,7 +439,8 @@ TEST_F(TestMockObjectMapDiffRequest, LoadIntermediateObjectMapDNE) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 
@@ -458,7 +471,8 @@ TEST_F(TestMockObjectMapDiffRequest, LoadObjectMapError) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(-EPERM, ctx.wait());
 }
@@ -484,7 +498,8 @@ TEST_F(TestMockObjectMapDiffRequest, ObjectMapTooSmall) {
 
   C_SaferCond ctx;
   auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 &m_object_diff_state, &ctx);
+                                 is_diff_iterate(), &m_object_diff_state,
+                                 &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
