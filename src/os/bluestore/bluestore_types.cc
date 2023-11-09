@@ -534,6 +534,62 @@ bool bluestore_blob_use_tracker_t::put(
   return empty;
 }
 
+
+std::pair<uint32_t, uint32_t> bluestore_blob_use_tracker_t::put_simple(
+  uint32_t offset, uint32_t length)
+{
+  if (num_au == 0) {
+    // single tracker for entire blob
+    ceph_assert(total_bytes >= length);
+    total_bytes -= length;
+    if (total_bytes == 0) {
+      return std::make_pair(0, au_size);
+    } else {
+      return std::make_pair(0, 0);
+    }
+  } else {
+    uint32_t clear_start = 0;
+    uint32_t clear_end = 0;
+    uint32_t pos = offset / au_size;
+    uint32_t remain = p2remain(offset, au_size);
+    if (length <= remain) {
+      // all in same block
+      ceph_assert(length <= bytes_per_au[pos]);
+      bytes_per_au[pos] -= length;
+      if (bytes_per_au[pos] == 0) {
+        clear_start = pos * au_size;
+        clear_end = clear_start + au_size;
+      }
+    } else {
+      // length > remain
+      ceph_assert(remain <= bytes_per_au[pos]);
+      bytes_per_au[pos] -= remain;
+      if (bytes_per_au[pos] == 0) {
+        clear_start = pos * au_size;
+      } else {
+        clear_start = (pos + 1) * au_size;
+      }
+      ++pos;
+      length -= remain;
+      while (length >= au_size) {
+        ceph_assert(au_size == bytes_per_au[pos]);
+        bytes_per_au[pos] = 0;
+        ++pos;
+        length -= au_size;
+      }
+      if (length > 0) {
+        ceph_assert(length <= bytes_per_au[pos]);
+        bytes_per_au[pos] -= length;
+        if (bytes_per_au[pos] == 0) {
+          ++pos;
+        }
+      }
+      clear_end = pos * au_size;
+    }
+    return std::make_pair(clear_start, clear_end - clear_start);
+  }
+}
+
 bool bluestore_blob_use_tracker_t::can_split() const
 {
   return num_au > 0;
