@@ -86,6 +86,8 @@ using namespace std;
 
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
+std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
+rgw::SiteConfig site;
 
 static const DoutPrefixProvider* dpp() {
   struct GlobalPrefix : public DoutPrefixProvider {

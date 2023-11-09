@@ -16,6 +16,40 @@ using boost::container::flat_set;
 using rgw::auth::Identity;
 using rgw::auth::Principal;
 
+DoutPrefix init_dp{g_ceph_context, ceph_subsys_rgw, "Initializing test_rgw_lua"};
+
+static auto init_configstore() {
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  std::unique_ptr<rgw::sal::ConfigStore> cfgstore
+    = DriverManager::create_config_store(&init_dp, config_store_type);
+  if (!cfgstore) {
+    std::cerr << "Unable to initialize config store" << std::endl;
+    abort();
+  }
+  assert(cfgstore);
+  return cfgstore;
+}
+
+static auto get_configstore() {
+  static auto configstore = init_configstore();
+  return configstore.get();
+}
+
+static auto init_site() {
+  rgw::SiteConfig site;
+  auto r = site.load(&init_dp, null_yield, get_configstore());
+  if (r < 0) {
+    std::cerr << "Unable to initialize SiteConfig: r=" << r << std::endl;
+    abort();
+  }
+  return site;
+}
+
+static auto& get_site() {
+  static auto site = init_site();
+  return site;
+}
+
 class CctCleaner {
   CephContext* cct;
 public:
