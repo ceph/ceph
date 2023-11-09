@@ -9,6 +9,7 @@ from .fixtures import (
     mock_podman,
     with_cephadm_ctx,
     FunkyPatcher,
+    funkypatch,
 )
 
 
@@ -290,11 +291,11 @@ def test_deploy_nvmeof_container(cephadm_fs, monkeypatch):
         assert (si.st_uid, si.st_gid) == (167, 167)
 
 
-def test_deploy_a_monitoring_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_a_monitoring_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
-    _get_ip_addresses = mock.MagicMock(return_value=(['10.10.10.10'], []))
-    monkeypatch.setattr('cephadm.get_ip_addresses', _get_ip_addresses)
+    _get_ip_addresses = funkypatch.patch('cephadm.get_ip_addresses')
+    _get_ip_addresses.return_value = (['10.10.10.10'], [])
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
         ctx.container_engine = mock_podman()

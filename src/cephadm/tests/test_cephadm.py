@@ -1211,15 +1211,17 @@ class TestMaintenance:
 
 
 class TestMonitoring(object):
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.daemons.monitoring.call')
     def test_get_version_alertmanager(self, _call):
+        from cephadmlib.daemons import monitoring
+
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         daemon_type = 'alertmanager'
 
         # binary `prometheus`
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
-        version = _cephadm.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        version = monitoring.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
         # binary `prometheus-alertmanager`
@@ -1230,13 +1232,15 @@ class TestMonitoring(object):
         version = _cephadm.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.daemons.monitoring.call')
     def test_get_version_prometheus(self, _call):
+        from cephadmlib.daemons import monitoring
+
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         daemon_type = 'prometheus'
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
-        version = _cephadm.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        version = monitoring.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
     def test_prometheus_external_url(self):
@@ -1250,13 +1254,15 @@ class TestMonitoring(object):
         ).get_daemon_args()
         assert any([x.startswith('--web.external-url=http://') for x in args])
 
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.daemons.monitoring.call')
     def test_get_version_node_exporter(self, _call):
+        from cephadmlib.daemons import monitoring
+
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         daemon_type = 'node-exporter'
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type.replace('-', '_')), 0
-        version = _cephadm.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        version = monitoring.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
     def test_create_daemon_dirs_prometheus(self, cephadm_fs):
