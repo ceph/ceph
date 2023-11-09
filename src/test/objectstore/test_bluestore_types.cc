@@ -2464,6 +2464,108 @@ INSTANTIATE_TEST_SUITE_P(
     )
 );
 
+class bluestore_blob_use_tracker_t_test :
+  public ::testing::Test,
+  public ::testing::WithParamInterface<std::vector<int>>
+{
+};
+
+TEST_P(bluestore_blob_use_tracker_t_test, put_simple)
+{
+  // generate offset / length
+  // get region [offset~length] in tracker
+  // choose randomly x points in range [offset~length]
+  // in random order
+  // put them into tracker
+  // check if all is cleared as it should
+
+  std::vector<int> param = GetParam();
+  ASSERT_EQ(param.size(), 6);
+  uint32_t alloc_unit =         param[0];
+  uint32_t test_size_range =    param[1];
+  uint32_t test_offset_range =  param[2];
+  uint32_t test_offset_length = param[3];
+  uint32_t test_aligned_nom =   param[4];
+  uint32_t test_aligned_denom = param[5];
+
+  auto rand_next = [&](uint32_t prev) -> uint32_t {
+    uint32_t next;
+    uint32_t len = rand() % test_size_range + 1;
+    if (rand() % test_aligned_denom < test_aligned_nom) {
+      // go for aligned
+      next = p2roundup(prev + len, alloc_unit);
+    } else {
+      // unaligned
+      next = prev + len;
+    }
+    return next;
+  };
+  auto rand_pos = [&](uint32_t range) -> uint32_t {
+    if (rand() % test_aligned_denom < test_aligned_nom) {
+      return p2align(rand() % range, alloc_unit);
+    } else {
+      return rand() % range;
+    }
+  };
+
+  for (int k = 0; k < 10000; k++) {
+    std::map<int, std::pair<int, int>> regions;
+    uint32_t offset = rand_pos(test_offset_range);
+    uint32_t length = 0;
+    while (length == 0) {
+      length = rand_pos(test_offset_length);
+    }
+    //std::cout << std::hex << "offset=" << offset
+    //          << " length=" << length << std::dec << std::endl;
+    uint32_t i = offset;
+    uint32_t j = offset;
+    while (i < offset + length) {
+      j = rand_next(i);
+      if (j > offset + length)
+        j = offset + length;
+      regions[rand() * 10000 + regions.size()] = std::make_pair(i, j - i);
+      i = j;
+    }
+    bluestore_blob_use_tracker_t t;
+    t.init(offset + length, alloc_unit);
+    t.get(offset, length);
+
+    interval_set<uint32_t> released;
+    for (auto r : regions) {
+      auto v = t.put_simple(r.second.first, r.second.second);
+      //std::cout << std::hex << "0x" << r.second.first << "~" << r.second.second
+      //          << "->0x" << v.first << "~" << v.second << std::dec << std::endl;
+      if (v.second > 0) {
+        released.insert(v.first, v.second);
+      }
+    }
+    ASSERT_FALSE(released.empty());
+    ASSERT_EQ(t.get_referenced_bytes(), 0);
+    ASSERT_EQ(released.begin().get_start(), p2align(offset, alloc_unit));
+    ASSERT_EQ(released.begin().get_end(), p2roundup(offset + length, alloc_unit));
+  }
+}
+
+/*
+  uint32_t alloc_unit = 4096;
+  uint32_t test_size_range = 10000;
+  uint32_t test_offset_range = 50000;
+  uint32_t test_offset_length = 100000;
+  uint32_t test_aligned_denom = 3;
+  uint32_t test_aligned_nom = 2;
+*/
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  bluestore_blob_use_tracker_t_test,
+  ::testing::Values(
+    std::vector<int>({4096, 10000, 50000, 100000, 2, 3}),
+    std::vector<int>({4096, 10000, 40000, 80000, 1, 11}),
+    std::vector<int>({8192, 30000, 80000, 160000, 2, 4}),
+    std::vector<int>({32768, 40000, 80000, 160000, 5, 6})
+    )
+);
+
+
 //---------------------------------------------------------------------------------
 static int verify_extent(const extent_t &ext, const extent_t *ext_arr,
                          uint64_t ext_arr_size, uint64_t idx) {
