@@ -272,21 +272,28 @@ detail`` returns a message similar to the following::
   you put the problematic Monitor into a ``down`` state while you investigate.
   This is possible only if there are enough surviving Monitors to form quorum. 
 
-**What if state is ``synchronizing``?**
+**What does it mean when a Monitor's state is ``synchronizing``?**
 
-  This means the monitor is catching up with the rest of the cluster in
-  order to join the quorum. Time to synchronize is a function of the size
-  of your monitor store and thus of cluster size and state, so if you have a
-  large or degraded cluster this may take a while.
+  If ``ceph health detail`` shows that the Monitor is ``synchronizing``, the
+  monitor is catching up with the rest of the cluster so that it can join the
+  quorum. The amount of time that it takes for the Monitor to synchronize with
+  the rest of the quorum is a function of the size of the cluster's monitor
+  store, the cluster's size, and the state of the cluster. Larger and degraded
+  clusters generally keep Monitors in the ``synchronizing`` state longer than
+  do smaller, new clusters.
 
-  If you notice that the monitor jumps from ``synchronizing`` to
-  ``electing`` and then back to ``synchronizing``, then you do have a
-  problem: the cluster state may be advancing (i.e., generating new maps)
-  too fast for the synchronization process to keep up. This was a more common
-  thing in early days (Cuttlefish), but since then the synchronization process
-  has been refactored and enhanced to avoid this dynamic. If you experience
-  this in later versions please let us know via a bug tracker. And bring some logs
-  (see `Preparing your logs`_).
+  A Monitor that changes its state from ``synchronizing`` to ``electing`` and
+  then back to ``synchronizing`` indicates a problem: the cluster state may be
+  advancing (that is, generating new maps) too fast for the synchronization
+  process to keep up with the pace of the creation of the new maps. This issue
+  presented more frequently prior to the Cuttlefish release than it does in
+  more recent releases, because the synchronization process has since been
+  refactored and enhanced to avoid this dynamic. If you experience this in
+  later versions, report the issue in the `Ceph bug tracker
+  <https://tracker.ceph.com>`_. Prepare and provide logs to substantiate any
+  bug you raise. See `Preparing your logs`_ for information about the proper
+  preparation of logs.
+
 
 **What if state is ``leader`` or ``peon``?**
 
