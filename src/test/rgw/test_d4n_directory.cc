@@ -271,6 +271,34 @@ TEST_F(ObjectDirectoryFixture, DelYield)
   io.run();
 }
 
+TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
+{
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
+    ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->update_field(obj, "objName", "newTestName", optional_yield{io, yield}));
+    ASSERT_EQ(0, dir->update_field(obj, "objHosts", "127.0.0.1:5000", optional_yield{io, yield}));
+    dir->shutdown();
+
+    boost::system::error_code ec;
+    request req;
+    req.push("HMGET", "testBucket_testName", "objName", "objHosts");
+    req.push("FLUSHALL");
+    response< std::vector<std::string>, 
+	      boost::redis::ignore_t> resp;
+
+    conn->async_exec(req, resp, yield[ec]);
+
+    ASSERT_EQ((bool)ec, false);
+    EXPECT_EQ(std::get<0>(resp).value()[0], "newTestName");
+    EXPECT_EQ(std::get<0>(resp).value()[1], "127.0.0.1:6379_127.0.0.1:5000");
+
+    conn->cancel();
+  });
+
+  io.run();
+}
+
+
 TEST_F(BlockDirectoryFixture, SetYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
