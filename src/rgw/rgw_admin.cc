@@ -87,7 +87,6 @@ using namespace std;
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
 
-
 static const DoutPrefixProvider* dpp() {
   struct GlobalPrefix : public DoutPrefixProvider {
     CephContext *get_cct() const override { return dout_context; }
@@ -4130,6 +4129,11 @@ int main(int argc, const char **argv)
     // not a raw op if 'period pull' needs to read zone/period configuration
     bool raw_period_pull = opt_cmd == OPT::PERIOD_PULL && !url.empty();
 
+    // Before a period commit or pull, our zonegroup may not be in the
+    // period, causing `load_period_zonegroup` to fail.
+    bool localzonegroup_op = ((opt_cmd == OPT::PERIOD_UPDATE && commit) ||
+			      (opt_cmd == OPT::PERIOD_PULL && url.empty()));
+
     std::set<OPT> raw_storage_ops_list = {OPT::ZONEGROUP_ADD, OPT::ZONEGROUP_CREATE,
 			 OPT::ZONEGROUP_DELETE,
 			 OPT::ZONEGROUP_GET, OPT::ZONEGROUP_LIST,
@@ -4258,14 +4262,25 @@ int main(int argc, const char **argv)
       return EIO;
     }
 
+    std::unique_ptr<rgw::SiteConfig> site;
+
     if (raw_storage_op) {
+      site = rgw::SiteConfig::make_fake();
       driver = DriverManager::get_raw_storage(dpp(), g_ceph_context,
-					      cfg, context_pool);
+					      cfg, context_pool, *site);
     } else {
+      site = std::make_unique<rgw::SiteConfig>();
+      auto r = site->load(dpp(), null_yield, cfgstore.get(), localzonegroup_op);
+      if (r < 0) {
+	std::cerr << "Unable to initialize site config." << std::endl;
+	exit(1);
+      }
+
       driver = DriverManager::get_storage(dpp(),
 					g_ceph_context,
 					cfg,
 					context_pool,
+					*site,
 					false,
 					false,
 					false,

@@ -973,7 +973,17 @@ class SiteConfig {
   /// Load or reload the multisite configuration from storage. This is not
   /// thread-safe, so requires careful coordination with the RGWRealmReloader.
   int load(const DoutPrefixProvider* dpp, optional_yield y,
-           sal::ConfigStore* cfgstore);
+           sal::ConfigStore* cfgstore, bool force_local_zonegroup = false);
+
+  /// Create a fake site config to be used by tests and similar, just
+  /// to have a site config.
+  ///
+  /// \warning Do not use this anywhere but unittests where we need to
+  /// bring up parts of RGW that require a SiteConfig exist, but need
+  /// to run without a cluster.
+  static std::unique_ptr<SiteConfig> make_fake();
+
+  virtual ~SiteConfig() = default;
 
  private:
   int load_period_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
@@ -990,5 +1000,6 @@ class SiteConfig {
   const RGWZoneGroup* zonegroup = nullptr;
   const RGWZone* zone = nullptr;
 };
+
 
 } // namespace rgw

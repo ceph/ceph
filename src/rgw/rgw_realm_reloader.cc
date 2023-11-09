@@ -121,6 +121,7 @@ void RGWRealmReloader::reload()
       cfg.store_name = "rados";
       cfg.filter_name = "none";
       env.driver = DriverManager::get_storage(&dp, cct, cfg, io_context,
+	  *env.site,
           cct->_conf->rgw_enable_gc_threads,
           cct->_conf->rgw_enable_lc_threads,
           cct->_conf->rgw_enable_quota_threads,
