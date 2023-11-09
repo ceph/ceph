@@ -77,6 +77,10 @@ class PerShardState {
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
 
+  const epoch_t& get_osdmap_tlb() {
+    return per_shard_superblock.cluster_osdmap_trim_lower_bound;
+  }
+
   // Op Management
   OSDOperationRegistry registry;
   OperationThrottler throttler;
@@ -514,6 +518,7 @@ public:
   FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
   FORWARD_TO_LOCAL(update_shard_superblock)
+  FORWARD_TO_LOCAL(get_osdmap_tlb)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
 

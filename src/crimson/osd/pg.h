@@ -348,8 +348,7 @@ public:
   void on_active_advmap(const OSDMapRef &osdmap) final;
 
   epoch_t cluster_osdmap_trim_lower_bound() final {
-    // TODO
-    return 0;
+    return shard_services.get_osdmap_tlb();
   }
 
   void on_backfill_reserved() final {
