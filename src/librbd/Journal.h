@@ -134,14 +134,20 @@ public:
 
   void user_flushed();
 
-  uint64_t append_write_event(uint64_t offset, size_t length,
+  uint64_t append_write_event(const io::Extents &image_extents,
                               const bufferlist &bl,
                               bool flush_entry);
+  uint64_t append_write_same_event(const io::Extents &image_extents,
+                                   const bufferlist &bl,
+                                   bool flush_entry);
   uint64_t append_compare_and_write_event(uint64_t offset,
                                           size_t length,
                                           const bufferlist &cmp_bl,
                                           const bufferlist &write_bl,
                                           bool flush_entry);
+  uint64_t append_discard_event(const io::Extents &image_extents,
+                                uint32_t discard_granularity_bytes,
+                                bool flush_entry);
   uint64_t append_io_event(journal::EventEntry &&event_entry,
                            uint64_t offset, size_t length,
                            bool flush_entry, int filter_ret_val);
@@ -325,6 +331,10 @@ private:
   bool is_journal_replaying(const ceph::mutex &) const;
   bool is_tag_owner(const ceph::mutex &) const;
 
+  void add_write_event_entries(uint64_t offset, size_t length,
+                               const bufferlist &bl,
+                               uint64_t buffer_offset,
+                               Bufferlists *bufferlists);
   uint64_t append_io_events(journal::EventType event_type,
                             const Bufferlists &bufferlists,
                             const io::Extents &extents, bool flush_entry,
