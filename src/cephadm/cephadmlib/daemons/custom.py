@@ -23,15 +23,20 @@ logger = logging.getLogger()
 @register_daemon_form
 class CustomContainer(ContainerDaemonForm):
     """Defines a custom container"""
+
     daemon_type = 'container'
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return cls.daemon_type == daemon_type
 
-    def __init__(self,
-                 fsid: str, daemon_id: Union[int, str],
-                 config_json: Dict, image: str) -> None:
+    def __init__(
+        self,
+        fsid: str,
+        daemon_id: Union[int, str],
+        config_json: Dict,
+        image: str,
+    ) -> None:
         self.fsid = fsid
         self.daemon_id = daemon_id
         self.image = image
@@ -50,13 +55,15 @@ class CustomContainer(ContainerDaemonForm):
         self.files = dict_get(config_json, 'files', {})
 
     @classmethod
-    def init(cls, ctx: CephadmContext,
-             fsid: str, daemon_id: Union[int, str]) -> 'CustomContainer':
-        return cls(fsid, daemon_id,
-                   fetch_configs(ctx), ctx.image)
+    def init(
+        cls, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str]
+    ) -> 'CustomContainer':
+        return cls(fsid, daemon_id, fetch_configs(ctx), ctx.image)
 
     @classmethod
-    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CustomContainer':
+    def create(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> 'CustomContainer':
         return cls.init(ctx, ident.fsid, ident.daemon_id)
 
     @property
@@ -67,8 +74,10 @@ class CustomContainer(ContainerDaemonForm):
         """
         Create dirs/files below the container data directory.
         """
-        logger.info('Creating custom container configuration '
-                    'dirs/files in {} ...'.format(data_dir))
+        logger.info(
+            'Creating custom container configuration '
+            'dirs/files in {} ...'.format(data_dir)
+        )
 
         if not os.path.isdir(data_dir):
             raise OSError('data_dir is not a directory: %s' % data_dir)
@@ -82,7 +91,9 @@ class CustomContainer(ContainerDaemonForm):
             logger.info('Creating file: {}'.format(file_path))
             content = dict_get_join(self.files, file_path)
             file_path = os.path.join(data_dir, file_path.strip('/'))
-            with write_new(file_path, owner=(uid, gid), encoding='utf-8') as f:
+            with write_new(
+                file_path, owner=(uid, gid), encoding='utf-8'
+            ) as f:
                 f.write(content)
 
     def get_daemon_args(self) -> List[str]:
@@ -146,8 +157,9 @@ class CustomContainer(ContainerDaemonForm):
             for index, value in enumerate(bind):
                 match = re.match(r'^source=(.+)$', value)
                 if match:
-                    bind[index] = 'source={}'.format(os.path.join(
-                        data_dir, match.group(1)))
+                    bind[index] = 'source={}'.format(
+                        os.path.join(data_dir, match.group(1))
+                    )
         return binds
 
     def customize_container_binds(
