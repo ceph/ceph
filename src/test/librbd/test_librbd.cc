@@ -7783,6 +7783,10 @@ TYPED_TEST(DiffIterateTest, DiffIterateDiscard)
   extents.clear();
   ASSERT_EQ(0, image.diff_iterate2("snap1", 0, size, true, this->whole_object,
       			           vector_iterate_cb, (void *) &extents));
+  ASSERT_EQ(0u, extents.size());
+
+  ASSERT_EQ(0, image.diff_iterate2("snap2", 0, size, true, this->whole_object,
+                                   vector_iterate_cb, (void *) &extents));
   ASSERT_EQ(1u, extents.size());
   ASSERT_EQ(diff_extent(0, 256, false, object_size), extents[0]);
   ASSERT_PASSED(this->validate_object_map, image);

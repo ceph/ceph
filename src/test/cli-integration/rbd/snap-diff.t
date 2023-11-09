@@ -39,10 +39,14 @@
   $ rbd diff --from-snap=snap1 xrbddiff1/xtestdiff1 --format json
   []
   $ rbd snap rollback xrbddiff1/xtestdiff1@snap1 --no-progress
+  $ rbd diff --from-snap=allzeroes xrbddiff1/xtestdiff1 --format json
+  [{"offset":0,"length":1048576,"exists":"true"}]
   $ rbd diff --from-snap=snap1 xrbddiff1/xtestdiff1 --format json
   []
   $ rbd snap rollback xrbddiff1/xtestdiff1@allzeroes --no-progress
   $ rbd diff --from-snap=allzeroes xrbddiff1/xtestdiff1 --format json
+  []
+  $ rbd diff --from-snap=snap1 xrbddiff1/xtestdiff1 --format json
   [{"offset":0,"length":1048576,"exists":"false"}]
   $ ceph osd pool rm xrbddiff1 xrbddiff1 --yes-i-really-really-mean-it
   pool 'xrbddiff1' removed
