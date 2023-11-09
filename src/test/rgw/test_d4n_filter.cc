@@ -11,6 +11,8 @@
 #include "rgw_sal.h"
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
+#include "driver/rados/rgw_zone.h"
+#include "rgw_sal_config.h"
 
 #include <boost/asio/io_context.hpp>
 
@@ -55,16 +57,24 @@ class Environment : public ::testing::Environment {
       cct = global_init(nullptr, args, CEPH_ENTITY_TYPE_CLIENT, 
 		        CODE_ENVIRONMENT_UTILITY, 
 			CINIT_FLAG_NO_MON_CONFIG);
-      
+
       dpp = new DoutPrefix(cct->get(), dout_subsys, "d4n test: ");
       DriverManager::Config cfg;
 
       cfg.store_name = "dbstore";
       cfg.filter_name = "d4n";
-      
+      auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+      std::unique_ptr<rgw::sal::ConfigStore> cfgstore
+        = DriverManager::create_config_store(dpp, config_store_type);
+      ASSERT_TRUE(cfgstore);
+      rgw::SiteConfig site;
+      auto r = site.load(dpp, null_yield, cfgstore.get());
+      ASSERT_GT(r, 0);
+
       driver = DriverManager::get_storage(dpp, dpp->get_cct(),
               cfg,
               ioc,
+              site,
               false,
               false,
               false,
