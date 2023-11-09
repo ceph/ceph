@@ -6,6 +6,7 @@ from .fixtures import import_cephadm
 
 from cephadmlib import daemon_form
 from cephadmlib import daemon_identity
+from cephadmlib import daemons
 
 _cephadm = import_cephadm()
 
@@ -22,7 +23,7 @@ _cephadm = import_cephadm()
         ('mon', _cephadm.Ceph),
         ('nfs', _cephadm.NFSGanesha),
         ('nvmeof', _cephadm.CephNvmeof),
-        ('osd', _cephadm.OSD),
+        ('osd', daemons.OSD),
         ('prometheus', _cephadm.Monitoring),
         ('snmp-gateway', _cephadm.SNMPGateway),
     ],

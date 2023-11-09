@@ -6,8 +6,11 @@ from .iscsi import CephIscsi
 from .nfs import NFSGanesha
 from .monitoring import Monitoring
 from .snmp import SNMPGateway
+from .ceph import Ceph, OSD, CephExporter
 
 __all__ = [
+    'Ceph',
+    'CephExporter',
     'CephIscsi',
     'CephNvmeof',
     'CustomContainer',
@@ -15,6 +18,7 @@ __all__ = [
     'Keepalived',
     'Monitoring',
     'NFSGanesha',
+    'OSD',
     'SNMPGateway',
     'Tracing',
 ]
