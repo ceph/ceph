@@ -161,16 +161,17 @@ std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<FilterObject>(std::move(o));
 }
 
-std::unique_ptr<Bucket> FilterDriver::get_bucket(User* u, const RGWBucketInfo& i)
+std::unique_ptr<Bucket> FilterDriver::get_bucket(const RGWBucketInfo& i)
 {
-  return std::make_unique<FilterBucket>(next->get_bucket(nextUser(u), i), u);
+  return std::make_unique<FilterBucket>(next->get_bucket(i));
 }
 
-int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, User* u, const rgw_bucket& b, std::unique_ptr<Bucket>* bucket, optional_yield y)
+int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
+                              std::unique_ptr<Bucket>* bucket, optional_yield y)
 {
   std::unique_ptr<Bucket> nb;
-  const int ret = next->load_bucket(dpp, nextUser(u), b, &nb, y);
-  *bucket = std::make_unique<FilterBucket>(std::move(nb), u);
+  const int ret = next->load_bucket(dpp, b, &nb, y);
+  *bucket = std::make_unique<FilterBucket>(std::move(nb));
   return ret;
 }
 
@@ -629,9 +630,9 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return next->check_bucket_shards(dpp, num_objs, y);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, User& new_user, optional_yield y)
+int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
 {
-  return next->chown(dpp, new_user, y);
+  return next->chown(dpp, new_owner, y);
 }
 
 int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
@@ -640,9 +641,9 @@ int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
   return next->put_info(dpp, exclusive, _mtime, y);
 }
 
-bool FilterBucket::is_owner(User* user)
+const rgw_user& FilterBucket::get_owner() const
 {
-  return next->is_owner(nextUser(user));
+  return next->get_owner();
 }
 
 int FilterBucket::check_empty(const DoutPrefixProvider* dpp, optional_yield y)

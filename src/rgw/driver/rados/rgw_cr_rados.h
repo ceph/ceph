@@ -1350,7 +1350,7 @@ public:
     if (_zones_trace) {
       zones_trace = *_zones_trace;
     }
-    bucket = store->get_bucket(nullptr, _bucket_info);
+    bucket = store->get_bucket(_bucket_info);
     obj = bucket->get_object(_key);
   }
 };

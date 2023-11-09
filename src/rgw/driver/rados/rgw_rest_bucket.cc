@@ -233,7 +233,7 @@ void RGWOp_Bucket_Remove::execute(optional_yield y)
     return;
   }
 
-  op_ret = driver->load_bucket(s, nullptr, rgw_bucket("", bucket_name),
+  op_ret = driver->load_bucket(s, rgw_bucket("", bucket_name),
                                &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "get_bucket returned ret=" << op_ret << dendl;
@@ -301,7 +301,7 @@ void RGWOp_Set_Bucket_Quota::execute(optional_yield y)
   }
   if (use_http_params) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    op_ret = driver->load_bucket(s, nullptr, rgw_bucket(uid.tenant, bucket_name),
+    op_ret = driver->load_bucket(s, rgw_bucket(uid.tenant, bucket_name),
                                  &bucket, s->yield);
     if (op_ret < 0) {
       return;

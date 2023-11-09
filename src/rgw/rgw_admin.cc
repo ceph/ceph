@@ -1189,20 +1189,19 @@ public:
   }
 };
 
-static int init_bucket(rgw::sal::User* user, const rgw_bucket& b,
+static int init_bucket(const rgw_bucket& b,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  return driver->load_bucket(dpp(), user, b, bucket, null_yield);
+  return driver->load_bucket(dpp(), b, bucket, null_yield);
 }
 
-static int init_bucket(rgw::sal::User* user,
-		       const string& tenant_name,
+static int init_bucket(const string& tenant_name,
 		       const string& bucket_name,
 		       const string& bucket_id,
                        std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
   rgw_bucket b{tenant_name, bucket_name, bucket_id};
-  return init_bucket(user, b, bucket);
+  return init_bucket(b, bucket);
 }
 
 static int read_input(const string& infile, bufferlist& bl)
@@ -1407,8 +1406,7 @@ int set_bucket_quota(rgw::sal::Driver* driver, OPT opt_cmd,
                      bool have_max_size, bool have_max_objects)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->load_bucket(dpp(), nullptr,
-                              rgw_bucket(tenant_name, bucket_name),
+  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
                               &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
@@ -1433,8 +1431,7 @@ int set_bucket_ratelimit(rgw::sal::Driver* driver, OPT opt_cmd,
                      bool have_max_read_bytes, bool have_max_write_bytes)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->load_bucket(dpp(), nullptr,
-                              rgw_bucket(tenant_name, bucket_name),
+  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
                               &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
@@ -1538,8 +1535,7 @@ int show_bucket_ratelimit(rgw::sal::Driver* driver, const string& tenant_name,
                           const string& bucket_name, Formatter *formatter)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int r = driver->load_bucket(dpp(), nullptr,
-                              rgw_bucket(tenant_name, bucket_name),
+  int r = driver->load_bucket(dpp(), rgw_bucket(tenant_name, bucket_name),
                               &bucket, null_yield);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
@@ -1724,7 +1720,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   f->open_object_section("bucket");
   f->dump_string("bucket", bucket_name);
-  int ret = init_bucket(nullptr, tenant_name, bucket_name, bucket_id, &bucket);
+  int ret = init_bucket(tenant_name, bucket_name, bucket_id, &bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -2041,12 +2037,11 @@ static int update_period(rgw::sal::ConfigStore* cfgstore,
   return 0;
 }
 
-static int init_bucket_for_sync(rgw::sal::User* user,
-				const string& tenant, const string& bucket_name,
+static int init_bucket_for_sync(const string& tenant, const string& bucket_name,
                                 const string& bucket_id,
 				std::unique_ptr<rgw::sal::Bucket>* bucket)
 {
-  int ret = init_bucket(user, tenant, bucket_name, bucket_id, bucket);
+  int ret = init_bucket(tenant, bucket_name, bucket_id, bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -2522,7 +2517,7 @@ static int bucket_source_sync_status(const DoutPrefixProvider *dpp, rgw::sal::Ra
   }
 
   std::unique_ptr<rgw::sal::Bucket> source_bucket;
-  int r = init_bucket(nullptr, *pipe.source.bucket, &source_bucket);
+  int r = init_bucket(*pipe.source.bucket, &source_bucket);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "failed to read source bucket info: " << cpp_strerror(r) << dendl;
     return r;
@@ -2651,7 +2646,7 @@ static void get_hint_entities(const std::set<rgw_zone_id>& zones, const std::set
   for (auto& zone_id : zones) {
     for (auto& b : buckets) {
       std::unique_ptr<rgw::sal::Bucket> hint_bucket;
-      int ret = init_bucket(nullptr, b, &hint_bucket);
+      int ret = init_bucket(b, &hint_bucket);
       if (ret < 0) {
 	ldpp_dout(dpp(), 20) << "could not init bucket info for hint bucket=" << b << " ... skipping" << dendl;
 	continue;
@@ -2694,7 +2689,7 @@ static int sync_info(std::optional<rgw_zone_id> opt_target_zone, std::optional<r
   if (eff_bucket) {
     std::unique_ptr<rgw::sal::Bucket> bucket;
 
-    int ret = init_bucket(nullptr, *eff_bucket, &bucket);
+    int ret = init_bucket(*eff_bucket, &bucket);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: init_bucket failed: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -2998,7 +2993,7 @@ int check_reshard_bucket_params(rgw::sal::Driver* driver,
     return -EINVAL;
   }
 
-  int ret = init_bucket(nullptr, tenant, bucket_name, bucket_id, bucket);
+  int ret = init_bucket(tenant, bucket_name, bucket_id, bucket);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -3181,7 +3176,7 @@ public:
       return 0;
     }
 
-    ret = init_bucket(nullptr, *b, &bucket);
+    ret = init_bucket(*b, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return ret;
@@ -7020,7 +7015,7 @@ int main(int argc, const char **argv)
       bucket_op.marker = marker;
       RGWBucketAdminOp::info(driver, bucket_op, stream_flusher, null_yield, dpp());
     } else {
-      int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
         cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -7113,7 +7108,7 @@ int main(int argc, const char **argv)
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -7227,7 +7222,7 @@ int main(int argc, const char **argv)
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -7435,7 +7430,7 @@ next:
 
 
     if (!bucket_name.empty()) {
-      int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
 	cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
@@ -7479,7 +7474,7 @@ next:
     }
 
     if (!bucket_name.empty()) {
-      int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+      int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
       if (ret < 0) {
 	cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
 	return -ret;
@@ -7518,7 +7513,7 @@ next:
   }
 
   if (opt_cmd == OPT::OLH_GET) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7535,7 +7530,7 @@ next:
   }
 
   if (opt_cmd == OPT::OLH_READLOG) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7573,7 +7568,7 @@ next:
       cerr << "ERROR: object not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7599,7 +7594,7 @@ next:
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7627,7 +7622,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       ldpp_dout(dpp(), 0) << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
 	dendl;
@@ -7697,14 +7692,14 @@ next:
       cerr << "ERROR: bucket name not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
     std::unique_ptr<rgw::sal::Bucket> cur_bucket;
-    ret = init_bucket(user.get(), tenant, bucket_name, string(), &cur_bucket);
+    ret = init_bucket(tenant, bucket_name, string(), &cur_bucket);
     if (ret == -ENOENT) {
       // no bucket entrypoint
     } else if (ret < 0) {
@@ -7782,7 +7777,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECT_RM) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7806,7 +7801,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7849,7 +7844,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) <<
 	"." << std::endl;
@@ -7942,7 +7937,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8184,7 +8179,7 @@ next:
       return EINVAL;
     }
 
-    ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8221,7 +8216,7 @@ next:
     }
 
     bool bucket_initable = true;
-    ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       if (yes_i_really_mean_it) {
         bucket_initable = false;
@@ -8283,7 +8278,7 @@ next:
   } // OPT_RESHARD_CANCEL
 
   if (opt_cmd == OPT::OBJECT_UNLINK) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8303,7 +8298,7 @@ next:
   }
 
   if (opt_cmd == OPT::OBJECT_STAT) {
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8509,7 +8504,7 @@ next:
     }
 
     RGWLifecycleConfiguration config;
-    ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -8535,7 +8530,7 @@ next:
   if (opt_cmd == OPT::LC_PROCESS) {
     if ((! bucket_name.empty()) ||
 	(! bucket_id.empty())) {
-        int ret = init_bucket(nullptr, tenant, bucket_name, bucket_id, &bucket);
+        int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
 	if (ret < 0) {
 	  cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret)
 	       << std::endl;
@@ -8696,7 +8691,7 @@ next:
 
     if (sync_stats) {
       if (!bucket_name.empty()) {
-        int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+        int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
         if (ret < 0) {
           cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -9219,7 +9214,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9227,7 +9222,7 @@ next:
     if (opt_sb && opt_sb->bucket_id.empty()) {
       string sbid;
       std::unique_ptr<rgw::sal::Bucket> sbuck;
-      int ret = init_bucket_for_sync(user.get(), opt_sb->tenant, opt_sb->name, sbid, &sbuck);
+      int ret = init_bucket_for_sync(opt_sb->tenant, opt_sb->name, sbid, &sbuck);
       if (ret < 0) {
         return -ret;
       }
@@ -9258,7 +9253,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9310,7 +9305,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9322,7 +9317,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9338,7 +9333,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9371,7 +9366,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket_for_sync(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket_for_sync(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       return -ret;
     }
@@ -9396,7 +9391,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9906,7 +9901,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -9929,7 +9924,7 @@ next:
       cerr << "ERROR: bucket not specified" << std::endl;
       return EINVAL;
     }
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -10514,7 +10509,7 @@ next:
     RGWPubSub ps(driver, tenant);
 
     rgw_pubsub_bucket_topics result;
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -10581,7 +10576,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -10635,7 +10630,7 @@ next:
       return EINVAL;
     }
 
-    int ret = init_bucket(user.get(), tenant, bucket_name, bucket_id, &bucket);
+    int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;

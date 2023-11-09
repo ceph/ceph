@@ -858,8 +858,7 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
-    r = driver->load_bucket(s, s->user.get(),
-                            rgw_bucket(s->user->get_id().tenant, bucket_name),
+    r = driver->load_bucket(s, rgw_bucket(s->user->get_tenant(), bucket_name),
                             &bucket, s->yield);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
@@ -2123,8 +2122,7 @@ void RGWFormPost::get_owner_info(const req_state* const s,
 
   /* Need to get user info of bucket owner. */
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = driver->load_bucket(s, user.get(),
-                                rgw_bucket(bucket_tenant, bucket_name),
+  int ret = driver->load_bucket(s, rgw_bucket(bucket_tenant, bucket_name),
                                 &bucket, s->yield);
   if (ret < 0) {
     throw ret;

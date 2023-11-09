@@ -78,8 +78,8 @@ class D4NFilterBucket : public FilterBucket {
     D4NFilterDriver* filter;
 
   public:
-    D4NFilterBucket(std::unique_ptr<Bucket> _next, User* _user, D4NFilterDriver* _filter) :
-      FilterBucket(std::move(_next), _user), 
+    D4NFilterBucket(std::unique_ptr<Bucket> _next, D4NFilterDriver* _filter) :
+      FilterBucket(std::move(_next)),
       filter(_filter) {}
     virtual ~D4NFilterBucket() = default;
    

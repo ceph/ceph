@@ -2343,7 +2343,7 @@ static void dump_bucket_metadata(req_state *s, rgw::sal::Bucket* bucket,
   dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(stats.size));
 
   // only bucket's owner is allowed to get the quota settings of the account
-  if (bucket->is_owner(s->user.get())) {
+  if (bucket->get_owner() == s->user->get_id()) {
     auto user_info = s->user->get_info();
     auto bucket_quota = s->bucket->get_info().quota; // bucket quota
     dump_header(s, "X-RGW-Quota-User-Size", static_cast<long long>(user_info.quota.user_quota.max_size));
