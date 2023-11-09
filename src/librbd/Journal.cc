@@ -39,6 +39,7 @@ using util::create_async_context_callback;
 using util::create_context_callback;
 using journal::util::C_DecodeTag;
 using journal::util::C_DecodeTags;
+using io::Extents;
 
 namespace {
 
@@ -788,8 +789,8 @@ uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
     bytes_remaining -= event_length;
   } while (bytes_remaining > 0);
 
-  return append_io_events(journal::EVENT_TYPE_AIO_WRITE, bufferlists, offset,
-                          length, flush_entry, 0);
+  return append_io_events(journal::EVENT_TYPE_AIO_WRITE, bufferlists,
+                          {{offset, length}}, flush_entry, 0);
 }
 
 template <typename I>
@@ -832,7 +833,8 @@ uint64_t Journal<I>::append_compare_and_write_event(uint64_t offset,
   } while (bytes_remaining > 0);
 
   return append_io_events(journal::EVENT_TYPE_AIO_COMPARE_AND_WRITE,
-                          bufferlists, offset, length, flush_entry, -EILSEQ);
+                          bufferlists, {{offset, length}}, flush_entry,
+                          -EILSEQ);
 }
 
 template <typename I>
@@ -842,14 +844,14 @@ uint64_t Journal<I>::append_io_event(journal::EventEntry &&event_entry,
   bufferlist bl;
   event_entry.timestamp = ceph_clock_now();
   encode(event_entry, bl);
-  return append_io_events(event_entry.get_event_type(), {bl}, offset, length,
-                          flush_entry, filter_ret_val);
+  return append_io_events(event_entry.get_event_type(), {bl},
+                          {{offset, length}}, flush_entry, filter_ret_val);
 }
 
 template <typename I>
 uint64_t Journal<I>::append_io_events(journal::EventType event_type,
                                       const Bufferlists &bufferlists,
-                                      uint64_t offset, size_t length,
+                                      const Extents &image_extents,
                                       bool flush_entry, int filter_ret_val) {
   ceph_assert(!bufferlists.empty());
 
@@ -870,14 +872,13 @@ uint64_t Journal<I>::append_io_events(journal::EventType event_type,
 
   {
     std::lock_guard event_locker{m_event_lock};
-    m_events[tid] = Event(futures, offset, length, filter_ret_val);
+    m_events[tid] = Event(futures, image_extents, filter_ret_val);
   }
 
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << ": "
                  << "event=" << event_type << ", "
-                 << "offset=" << offset << ", "
-                 << "length=" << length << ", "
+                 << "image_extents=" << image_extents << ", "
                  << "flush=" << flush_entry << ", tid=" << tid << dendl;
 
   Context *on_safe = create_async_context_callback(
