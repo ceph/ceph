@@ -20,7 +20,8 @@
 
 #include "svc_meta_be.h"
 #include "svc_user.h"
-#include "rgw_bucket.h"
+
+#include "driver/rados/rgw_bucket.h" // FIXME: subclass dependency
 
 class RGWSI_RADOS;
 class RGWSI_Zone;

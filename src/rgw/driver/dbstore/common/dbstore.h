@@ -18,8 +18,9 @@
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "common/ceph_context.h"
-#include "rgw_obj_manifest.h"
 #include "rgw_multi.h"
+
+#include "driver/rados/rgw_obj_manifest.h" // FIXME: subclass dependency
 
 namespace rgw { namespace store {
 
