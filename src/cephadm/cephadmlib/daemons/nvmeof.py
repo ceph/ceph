@@ -32,12 +32,9 @@ class CephNvmeof(ContainerDaemonForm):
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return cls.daemon_type == daemon_type
 
-    def __init__(self,
-                 ctx,
-                 fsid,
-                 daemon_id,
-                 config_json,
-                 image=DEFAULT_NVMEOF_IMAGE):
+    def __init__(
+        self, ctx, fsid, daemon_id, config_json, image=DEFAULT_NVMEOF_IMAGE
+    ):
         # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
         self.ctx = ctx
         self.fsid = fsid
@@ -53,11 +50,12 @@ class CephNvmeof(ContainerDaemonForm):
     @classmethod
     def init(cls, ctx, fsid, daemon_id):
         # type: (CephadmContext, str, Union[int, str]) -> CephNvmeof
-        return cls(ctx, fsid, daemon_id,
-                   fetch_configs(ctx), ctx.image)
+        return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
 
     @classmethod
-    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephNvmeof':
+    def create(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> 'CephNvmeof':
         return cls.init(ctx, ident.fsid, ident.daemon_id)
 
     @property
@@ -69,7 +67,9 @@ class CephNvmeof(ContainerDaemonForm):
         mounts = dict()
         mounts[os.path.join(data_dir, 'config')] = '/etc/ceph/ceph.conf:z'
         mounts[os.path.join(data_dir, 'keyring')] = '/etc/ceph/keyring:z'
-        mounts[os.path.join(data_dir, 'ceph-nvmeof.conf')] = '/src/ceph-nvmeof.conf:z'
+        mounts[
+            os.path.join(data_dir, 'ceph-nvmeof.conf')
+        ] = '/src/ceph-nvmeof.conf:z'
         mounts[os.path.join(data_dir, 'configfs')] = '/sys/kernel/config'
         mounts['/dev/hugepages'] = '/dev/hugepages'
         mounts['/dev/vfio/vfio'] = '/dev/vfio/vfio'
@@ -94,10 +94,16 @@ class CephNvmeof(ContainerDaemonForm):
 
     @staticmethod
     def get_version(ctx: CephadmContext, container_id: str) -> Optional[str]:
-        out, err, ret = call(ctx,
-                             [ctx.container_engine.path, 'inspect',
-                              '--format', '{{index .Config.Labels "io.ceph.version"}}',
-                              ctx.image])
+        out, err, ret = call(
+            ctx,
+            [
+                ctx.container_engine.path,
+                'inspect',
+                '--format',
+                '{{index .Config.Labels "io.ceph.version"}}',
+                ctx.image,
+            ],
+        )
         version = None
         if ret == 0:
             version = out.strip()
@@ -116,7 +122,9 @@ class CephNvmeof(ContainerDaemonForm):
         if self.required_files:
             for fname in self.required_files:
                 if fname not in self.files:
-                    raise Error('required file missing from config-json: %s' % fname)
+                    raise Error(
+                        'required file missing from config-json: %s' % fname
+                    )
 
     def get_daemon_name(self):
         # type: () -> str
@@ -147,11 +155,15 @@ class CephNvmeof(ContainerDaemonForm):
         # type: (str, bool) -> List[str]
         mount_path = os.path.join(data_dir, 'configfs')
         if mount:
-            cmd = 'if ! grep -qs {0} /proc/mounts; then ' \
-                  'mount -t configfs none {0}; fi'.format(mount_path)
+            cmd = (
+                'if ! grep -qs {0} /proc/mounts; then '
+                'mount -t configfs none {0}; fi'.format(mount_path)
+            )
         else:
-            cmd = 'if grep -qs {0} /proc/mounts; then ' \
-                  'umount {0}; fi'.format(mount_path)
+            cmd = (
+                'if grep -qs {0} /proc/mounts; then '
+                'umount {0}; fi'.format(mount_path)
+            )
         return cmd.split()
 
     @staticmethod
