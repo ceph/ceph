@@ -235,7 +235,7 @@ int rgw::AppMain::init_storage()
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_sync_thread)));
 
   RGWZoneParams zone_params = site.get_zone_params();
-  //DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
+
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           zone_params.sal_config,
           run_gc,

@@ -1104,6 +1104,7 @@ static int read_or_create_default_zone(const DoutPrefixProvider* dpp,
   if (r == -ENOENT) {
     info.name = default_zone_name;
     constexpr bool exclusive = true;
+    info.sal_config = DriverManager::get_default_sal_config();
     r = create_zone(dpp, y, cfgstore, exclusive, info, nullptr);
     if (r == -EEXIST) {
       r = cfgstore->read_zone_by_name(dpp, y, default_zone_name, info, nullptr);
