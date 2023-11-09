@@ -8,6 +8,7 @@ from .fixtures import (
     import_cephadm,
     mock_podman,
     with_cephadm_ctx,
+    FunkyPatcher,
 )
 
 
@@ -15,25 +16,24 @@ _cephadm = import_cephadm()
 
 
 def _common_mp(monkeypatch):
+    return _common_patches(FunkyPatcher(monkeypatch))
+
+
+def _common_patches(funkypatch):
     mocks = {}
-    _call = mock.MagicMock(return_value=('', '', 0))
-    monkeypatch.setattr('cephadmlib.container_types.call', _call)
+    _call = funkypatch.patch('cephadmlib.container_types.call')
+    _call.return_value = ('', '', 0)
     mocks['call'] = _call
-    _call_throws = mock.MagicMock(return_value=0)
-    monkeypatch.setattr(
-        'cephadmlib.container_types.call_throws', _call_throws
-    )
+    _call_throws = funkypatch.patch('cephadmlib.container_types.call_throws')
+    _call_throws.return_value = ('', '', 0)
     mocks['call_throws'] = _call_throws
-    _firewalld = mock.MagicMock()
+    _firewalld = funkypatch.patch('cephadm.Firewalld')
     _firewalld().external_ports.get.return_value = []
-    monkeypatch.setattr('cephadm.Firewalld', _firewalld)
     mocks['Firewalld'] = _firewalld
-    _extract_uid_gid = mock.MagicMock()
+    _extract_uid_gid = funkypatch.patch('cephadm.extract_uid_gid', force=True)
     _extract_uid_gid.return_value = (8765, 8765)
-    monkeypatch.setattr('cephadm.extract_uid_gid', _extract_uid_gid)
     mocks['extract_uid_gid'] = _extract_uid_gid
-    _install_sysctl = mock.MagicMock()
-    monkeypatch.setattr('cephadm.install_sysctl', _install_sysctl)
+    _install_sysctl = funkypatch.patch('cephadm.install_sysctl')
     mocks['install_sysctl'] = _install_sysctl
     return mocks
 
