@@ -221,6 +221,7 @@ class Ceph(ContainerDaemonForm):
     def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:
         self.ctx = ctx
         self._identity = ident
+        self.user_supplied_config = False
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'Ceph':
@@ -300,6 +301,52 @@ class Ceph(ContainerDaemonForm):
             else:
                 r += ['--default-mon-cluster-log-to-stderr=true']
         return r
+
+    @staticmethod
+    def get_ceph_mounts(
+        ctx: CephadmContext,
+        ident: DaemonIdentity,
+        no_config: bool = False,
+    ) -> Dict[str, str]:
+        # Warning: This is a hack done for more expedient refactoring
+        mounts = _get_container_mounts_for_type(
+            ctx, ident.fsid, ident.daemon_type
+        )
+        data_dir = ident.data_dir(ctx.data_dir)
+        if ident.daemon_type == 'rgw':
+            cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (
+                ident.daemon_id
+            )
+        else:
+            cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (
+                ident.daemon_type,
+                ident.daemon_id,
+            )
+        if ident.daemon_type != 'crash':
+            mounts[data_dir] = cdata_dir + ':z'
+        if not no_config:
+            mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
+        if ident.daemon_type in [
+            'rbd-mirror',
+            'cephfs-mirror',
+            'crash',
+            'ceph-exporter',
+        ]:
+            # these do not search for their keyrings in a data directory
+            mounts[
+                data_dir + '/keyring'
+            ] = '/etc/ceph/ceph.client.%s.%s.keyring' % (
+                ident.daemon_type,
+                ident.daemon_id,
+            )
+        return mounts
+
+    def get_container_mounts(self) -> Dict[str, str]:
+        return self.get_ceph_mounts(
+            self.ctx,
+            self.identity,
+            no_config=self.ctx.config and self.user_supplied_config,
+        )
 
 ##################################
 
@@ -762,6 +809,49 @@ class Monitoring(ContainerDaemonForm):
                   '--path.sysfs=/host/sys',
                   '--path.rootfs=/rootfs']
         return r
+
+    def get_container_mounts(self, data_dir: str) -> Dict[str, str]:
+        ctx = self.ctx
+        daemon_type = self.identity.daemon_type
+        mounts: Dict[str, str] = {}
+        log_dir = get_log_dir(self.identity.fsid, ctx.log_dir)
+        if daemon_type == 'prometheus':
+            mounts[
+                os.path.join(data_dir, 'etc/prometheus')
+            ] = '/etc/prometheus:Z'
+            mounts[os.path.join(data_dir, 'data')] = '/prometheus:Z'
+        elif daemon_type == 'loki':
+            mounts[os.path.join(data_dir, 'etc/loki')] = '/etc/loki:Z'
+            mounts[os.path.join(data_dir, 'data')] = '/loki:Z'
+        elif daemon_type == 'promtail':
+            mounts[os.path.join(data_dir, 'etc/promtail')] = '/etc/promtail:Z'
+            mounts[log_dir] = '/var/log/ceph:z'
+            mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
+        elif daemon_type == 'node-exporter':
+            mounts[
+                os.path.join(data_dir, 'etc/node-exporter')
+            ] = '/etc/node-exporter:Z'
+            mounts['/proc'] = '/host/proc:ro'
+            mounts['/sys'] = '/host/sys:ro'
+            mounts['/'] = '/rootfs:ro'
+        elif daemon_type == 'grafana':
+            mounts[
+                os.path.join(data_dir, 'etc/grafana/grafana.ini')
+            ] = '/etc/grafana/grafana.ini:Z'
+            mounts[
+                os.path.join(data_dir, 'etc/grafana/provisioning/datasources')
+            ] = '/etc/grafana/provisioning/datasources:Z'
+            mounts[
+                os.path.join(data_dir, 'etc/grafana/certs')
+            ] = '/etc/grafana/certs:Z'
+            mounts[
+                os.path.join(data_dir, 'data/grafana.db')
+            ] = '/var/lib/grafana/grafana.db:Z'
+        elif daemon_type == 'alertmanager':
+            mounts[
+                os.path.join(data_dir, 'etc/alertmanager')
+            ] = '/etc/alertmanager:Z'
+        return mounts
 
 ##################################
 
@@ -1352,12 +1442,6 @@ class CephExporter(ContainerDaemonForm):
     def identity(self) -> DaemonIdentity:
         return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
 
-    @staticmethod
-    def get_container_mounts() -> Dict[str, str]:
-        mounts = dict()
-        mounts['/var/run/ceph'] = '/var/run/ceph:z'
-        return mounts
-
     def get_daemon_args(self) -> List[str]:
         args = [
             f'--sock-dir={self.sock_dir}',
@@ -1383,6 +1467,9 @@ class CephExporter(ContainerDaemonForm):
         self, ctx: CephadmContext
     ) -> Tuple[Optional[str], Optional[str]]:
         return get_config_and_keyring(ctx)
+
+    def get_container_mounts(self) -> Dict[str, str]:
+        return Ceph.get_ceph_mounts(self.ctx, self.identity)
 
 
 ##################################
@@ -2566,49 +2653,17 @@ def get_container_mounts(
     """
     # unpack fsid and daemon_type from ident because they're used very frequently
     fsid, daemon_type = ident.fsid, ident.daemon_type
-    mounts = _get_container_mounts_for_type(ctx, fsid, daemon_type)
+    mounts: Dict[str, str] = {}
 
     assert ident.fsid
     assert ident.daemon_id
     if daemon_type in ceph_daemons():
-        data_dir = ident.data_dir(ctx.data_dir)
-        if daemon_type == 'rgw':
-            cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (ident.daemon_id)
-        else:
-            cdata_dir = '/var/lib/ceph/%s/ceph-%s' % (daemon_type, ident.daemon_id)
-        if daemon_type != 'crash':
-            mounts[data_dir] = cdata_dir + ':z'
-        if not no_config:
-            mounts[data_dir + '/config'] = '/etc/ceph/ceph.conf:z'
-        if daemon_type in ['rbd-mirror', 'cephfs-mirror', 'crash', 'ceph-exporter']:
-            # these do not search for their keyrings in a data directory
-            mounts[data_dir + '/keyring'] = '/etc/ceph/ceph.client.%s.%s.keyring' % (daemon_type, ident.daemon_id)
+        mounts = Ceph.get_ceph_mounts(ctx, ident, no_config=no_config)
 
     if daemon_type in Monitoring.components:
         data_dir = ident.data_dir(ctx.data_dir)
-        log_dir = get_log_dir(fsid, ctx.log_dir)
-        if daemon_type == 'prometheus':
-            mounts[os.path.join(data_dir, 'etc/prometheus')] = '/etc/prometheus:Z'
-            mounts[os.path.join(data_dir, 'data')] = '/prometheus:Z'
-        elif daemon_type == 'loki':
-            mounts[os.path.join(data_dir, 'etc/loki')] = '/etc/loki:Z'
-            mounts[os.path.join(data_dir, 'data')] = '/loki:Z'
-        elif daemon_type == 'promtail':
-            mounts[os.path.join(data_dir, 'etc/promtail')] = '/etc/promtail:Z'
-            mounts[log_dir] = '/var/log/ceph:z'
-            mounts[os.path.join(data_dir, 'data')] = '/promtail:Z'
-        elif daemon_type == 'node-exporter':
-            mounts[os.path.join(data_dir, 'etc/node-exporter')] = '/etc/node-exporter:Z'
-            mounts['/proc'] = '/host/proc:ro'
-            mounts['/sys'] = '/host/sys:ro'
-            mounts['/'] = '/rootfs:ro'
-        elif daemon_type == 'grafana':
-            mounts[os.path.join(data_dir, 'etc/grafana/grafana.ini')] = '/etc/grafana/grafana.ini:Z'
-            mounts[os.path.join(data_dir, 'etc/grafana/provisioning/datasources')] = '/etc/grafana/provisioning/datasources:Z'
-            mounts[os.path.join(data_dir, 'etc/grafana/certs')] = '/etc/grafana/certs:Z'
-            mounts[os.path.join(data_dir, 'data/grafana.db')] = '/var/lib/grafana/grafana.db:Z'
-        elif daemon_type == 'alertmanager':
-            mounts[os.path.join(data_dir, 'etc/alertmanager')] = '/etc/alertmanager:Z'
+        monitoring = Monitoring.create(ctx, ident)
+        mounts.update(monitoring.get_container_mounts(data_dir))
 
     if daemon_type == NFSGanesha.daemon_type:
         data_dir = ident.data_dir(ctx.data_dir)
