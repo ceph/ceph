@@ -146,38 +146,6 @@ TEST_F(RedisDriverFixture, GetYield)
   io.run();
 }
 
-#if 0
-TEST_F(RedisDriverFixture, GetAsyncYield)
-{
-  spawn::spawn(io, [this] (yield_context yield) {
-    ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
-
-    std::unique_ptr<rgw::Aio> aio = rgw::make_throttle(env->cct->_conf->rgw_get_obj_window_size, optional_yield{io, yield});
-    auto completed = cacheDriver->get_async(env->dpp, optional_yield{io, yield}, aio.get(), "testName", 0, bl.length(), 0, 0);
-    cacheDriver->shutdown();
-
-#if 0
-    EXPECT_EQ(completed.empty(), false);
-
-    {
-      boost::system::error_code ec;
-      request req;
-      req.push("FLUSHALL");
-      response<boost::redis::ignore_t> resp;
-
-      conn->async_exec(req, resp, yield[ec]);
-
-      ASSERT_EQ((bool)ec, false);
-    }
-#endif
-
-    conn->cancel();
-  });
-
-  io.run();
-}
-#endif
-
 TEST_F(RedisDriverFixture, DelYield)
 {
   spawn::spawn(io, [this] (yield_context yield) {

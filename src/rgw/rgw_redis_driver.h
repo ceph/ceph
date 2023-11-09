@@ -56,32 +56,19 @@ class RedisDriver : public CacheDriver {
 
     struct redis_response {
       boost::redis::response<std::string> resp;
-      ~redis_response() { // remove later -Sam
-        std::cout << "redis_response destroyed!" << std::endl;
-      }
     };
 
     struct redis_aio_handler { 
       rgw::Aio* throttle = nullptr;
       rgw::AioResult& r;
-      boost::redis::response<std::string> resp;
-      //std::shared_ptr<redis_response> s;
+      std::shared_ptr<redis_response> s;
 
       /* Read Callback */
       void operator()(boost::system::error_code ec, auto) const {
 	r.result = -ec.value();
-	r.data.append(std::get<0>(resp).value().c_str());
-	//r.data.append(std::get<0>(s->resp).value().c_str());
+	r.data.append(std::get<0>(s->resp).value().c_str());
 	throttle->put(r);
       }
-
-#if 0
-      /* Write Callback */
-      void operator()(boost::system::error_code ec) const {
-	r.result = -ec.value();
-	throttle->put(r);
-      }
-#endif
     };
 
   protected:
@@ -94,7 +81,6 @@ class RedisDriver : public CacheDriver {
 
     int add_partition_info(Partition& info);
     int remove_partition_info(Partition& info);
-    uint64_t calculate_free_space(const DoutPrefixProvider* dpp, optional_yield y); 
 };
 
 } } // namespace rgw::cache
