@@ -960,10 +960,8 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     return;
   }
 
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->load_bucket(this, user.get(),
-                               rgw_bucket(s->bucket_tenant, s->bucket_name),
+  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get bucket '" << 
@@ -1110,10 +1108,8 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     return;
   }
 
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->load_bucket(this, user.get(),
-                               rgw_bucket(s->bucket_tenant, s->bucket_name),
+  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get bucket '" << 
@@ -1209,10 +1205,8 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
     return;
   }
 
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(s->owner.get_id());
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  op_ret = driver->load_bucket(this, user.get(),
-                               rgw_bucket(s->bucket_tenant, s->bucket_name),
+  op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                &bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get bucket '" << 

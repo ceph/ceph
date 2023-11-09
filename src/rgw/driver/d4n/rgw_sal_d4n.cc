@@ -326,7 +326,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
   } else {
     /* Set metadata locally */
-    RGWQuotaInfo quota_info;
     RGWObjState* astate;
     source->get_obj_state(dpp, &astate, y);
 
@@ -343,16 +342,9 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 	source->set_instance(it->second);
       } else if (!std::strcmp(it->first.data(), "source_zone_short_id")) {
 	astate->zone_short_id = static_cast<uint32_t>(std::stoul(it->second));
-      } else if (!std::strcmp(it->first.data(), "user_quota.max_size")) {
-        quota_info.max_size = std::stoull(it->second);
-      } else if (!std::strcmp(it->first.data(), "user_quota.max_objects")) {
-        quota_info.max_objects = std::stoull(it->second);
-      } else if (!std::strcmp(it->first.data(), "max_buckets")) {
-        source->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second));
       }
     }
 
-    source->get_bucket()->get_owner()->set_info(quota_info);
     source->set_obj_state(*astate);
    
     /* Set attributes locally */
@@ -490,19 +482,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
     baseAttrs.insert({"source_zone_short_id", bl});
     bl.clear();
   }
-
-  RGWUserInfo info = obj->get_bucket()->get_owner()->get_info();
-  bl.append(std::to_string(info.quota.user_quota.max_size));
-  baseAttrs.insert({"user_quota.max_size", bl});
-  bl.clear();
-
-  bl.append(std::to_string(info.quota.user_quota.max_objects));
-  baseAttrs.insert({"user_quota.max_objects", bl});
-  bl.clear();
-
-  bl.append(std::to_string(obj->get_bucket()->get_owner()->get_max_buckets()));
-  baseAttrs.insert({"max_buckets", bl});
-  bl.clear();
 
   baseAttrs.insert(attrs.begin(), attrs.end());
 

@@ -285,7 +285,7 @@ int RGWDataAccess::Bucket::finish_init()
 int RGWDataAccess::Bucket::init(const DoutPrefixProvider *dpp, optional_yield y)
 {
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = sd->driver->load_bucket(dpp, nullptr, rgw_bucket(tenant, name), &bucket, y);
+  int ret = sd->driver->load_bucket(dpp, rgw_bucket(tenant, name), &bucket, y);
   if (ret < 0) {
     return ret;
   }
@@ -327,7 +327,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   rgw::BlockingAioThrottle aio(driver->ctx()->_conf->rgw_put_obj_min_window_size);
 
-  std::unique_ptr<rgw::sal::Bucket> b = driver->get_bucket(nullptr, bucket_info);
+  std::unique_ptr<rgw::sal::Bucket> b = driver->get_bucket(bucket_info);
   std::unique_ptr<rgw::sal::Object> obj = b->get_object(key);
 
   auto& owner = bucket->policy.get_owner();
