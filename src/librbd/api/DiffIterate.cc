@@ -249,7 +249,7 @@ int DiffIterate<I>::execute() {
   if (m_whole_object) {
     C_SaferCond ctx;
     auto req = object_map::DiffRequest<I>::create(&m_image_ctx, from_snap_id,
-                                                  end_snap_id,
+                                                  end_snap_id, true,
                                                   &object_diff_state, &ctx);
     req->send();
 
