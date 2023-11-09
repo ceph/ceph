@@ -61,7 +61,7 @@ private:
   struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
     static constexpr const char* type_name = "CompoundOpBlocker";
 
-    using id_done_t = std::pair<crimson::Operation::id_t,
+    using id_done_t = std::pair<crimson::OperationRef,
                                 remove_or_update_iertr::future<>>;
 
     void dump_detail(Formatter *f) const final;
