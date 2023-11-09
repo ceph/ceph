@@ -27,8 +27,16 @@ logger = logging.getLogger()
 
 @register_daemon_form
 class Ceph(ContainerDaemonForm):
-    _daemons = ('mon', 'mgr', 'osd', 'mds', 'rgw', 'rbd-mirror',
-                'crash', 'cephfs-mirror')
+    _daemons = (
+        'mon',
+        'mgr',
+        'osd',
+        'mds',
+        'rgw',
+        'rbd-mirror',
+        'crash',
+        'cephfs-mirror',
+    )
 
     @classmethod
     def for_daemon_type(cls, daemon_type: str) -> bool:
@@ -93,8 +101,10 @@ class Ceph(ContainerDaemonForm):
         if self.identity.daemon_type == 'crash':
             return []
         r = [
-            '--setuser', 'ceph',
-            '--setgroup', 'ceph',
+            '--setuser',
+            'ceph',
+            '--setgroup',
+            'ceph',
             '--default-log-to-file=false',
         ]
         log_to_journald = should_log_to_journald(self.ctx)
@@ -128,9 +138,7 @@ class Ceph(ContainerDaemonForm):
         no_config: bool = False,
     ) -> Dict[str, str]:
         # Warning: This is a hack done for more expedient refactoring
-        mounts = get_ceph_mounts_for_type(
-            ctx, ident.fsid, ident.daemon_type
-        )
+        mounts = get_ceph_mounts_for_type(ctx, ident.fsid, ident.daemon_type)
         data_dir = ident.data_dir(ctx.data_dir)
         if ident.daemon_type == 'rgw':
             cdata_dir = '/var/lib/ceph/radosgw/ceph-rgw.%s' % (
@@ -270,11 +278,14 @@ class CephExporter(ContainerDaemonForm):
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return cls.daemon_type == daemon_type
 
-    def __init__(self,
-                 ctx: CephadmContext,
-                 fsid: str, daemon_id: Union[int, str],
-                 config_json: Dict[str, Any],
-                 image: str = DEFAULT_IMAGE) -> None:
+    def __init__(
+        self,
+        ctx: CephadmContext,
+        fsid: str,
+        daemon_id: Union[int, str],
+        config_json: Dict[str, Any],
+        image: str = DEFAULT_IMAGE,
+    ) -> None:
         self.ctx = ctx
         self.fsid = fsid
         self.daemon_id = daemon_id
@@ -291,13 +302,15 @@ class CephExporter(ContainerDaemonForm):
         self.validate()
 
     @classmethod
-    def init(cls, ctx: CephadmContext, fsid: str,
-             daemon_id: Union[int, str]) -> 'CephExporter':
-        return cls(ctx, fsid, daemon_id,
-                   fetch_configs(ctx), ctx.image)
+    def init(
+        cls, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str]
+    ) -> 'CephExporter':
+        return cls(ctx, fsid, daemon_id, fetch_configs(ctx), ctx.image)
 
     @classmethod
-    def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephExporter':
+    def create(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> 'CephExporter':
         return cls.init(ctx, ident.fsid, ident.daemon_id)
 
     @property
@@ -397,26 +410,44 @@ def get_ceph_mounts_for_type(
                     os.makedirs(selinux_folder, mode=0o755)
                 mounts[selinux_folder] = '/sys/fs/selinux:ro'
             else:
-                logger.error(f'Cluster direcotry {cluster_dir} does not exist.')
+                logger.error(
+                    f'Cluster direcotry {cluster_dir} does not exist.'
+                )
         mounts['/'] = '/rootfs'
 
     try:
-        if ctx.shared_ceph_folder:  # make easy manager modules/ceph-volume development
+        if (
+            ctx.shared_ceph_folder
+        ):  # make easy manager modules/ceph-volume development
             ceph_folder = pathify(ctx.shared_ceph_folder)
             if os.path.exists(ceph_folder):
                 cephadm_binary = ceph_folder + '/src/cephadm/cephadm'
                 if not os.path.exists(pathify(cephadm_binary)):
-                    raise Error("cephadm binary does not exist. Please run './build.sh cephadm' from ceph/src/cephadm/ directory.")
+                    raise Error(
+                        "cephadm binary does not exist. Please run './build.sh cephadm' from ceph/src/cephadm/ directory."
+                    )
                 mounts[cephadm_binary] = '/usr/sbin/cephadm'
-                mounts[ceph_folder + '/src/ceph-volume/ceph_volume'] = '/usr/lib/python3.6/site-packages/ceph_volume'
-                mounts[ceph_folder + '/src/pybind/mgr'] = '/usr/share/ceph/mgr'
-                mounts[ceph_folder + '/src/python-common/ceph'] = '/usr/lib/python3.6/site-packages/ceph'
-                mounts[ceph_folder + '/monitoring/ceph-mixin/dashboards_out'] = '/etc/grafana/dashboards/ceph-dashboard'
-                mounts[ceph_folder + '/monitoring/ceph-mixin/prometheus_alerts.yml'] = '/etc/prometheus/ceph/ceph_default_alerts.yml'
+                mounts[
+                    ceph_folder + '/src/ceph-volume/ceph_volume'
+                ] = '/usr/lib/python3.6/site-packages/ceph_volume'
+                mounts[
+                    ceph_folder + '/src/pybind/mgr'
+                ] = '/usr/share/ceph/mgr'
+                mounts[
+                    ceph_folder + '/src/python-common/ceph'
+                ] = '/usr/lib/python3.6/site-packages/ceph'
+                mounts[
+                    ceph_folder + '/monitoring/ceph-mixin/dashboards_out'
+                ] = '/etc/grafana/dashboards/ceph-dashboard'
+                mounts[
+                    ceph_folder
+                    + '/monitoring/ceph-mixin/prometheus_alerts.yml'
+                ] = '/etc/prometheus/ceph/ceph_default_alerts.yml'
             else:
                 logger.error(
                     'Ceph shared source folder does not exist.',
-                    extra=Highlight.FAILURE.extra())
+                    extra=Highlight.FAILURE.extra(),
+                )
     except AttributeError:
         pass
     return mounts
