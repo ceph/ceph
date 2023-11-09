@@ -74,8 +74,8 @@ void ObjectDirectory::shutdown()
 int ObjectDirectory::set(CacheObj* object, optional_yield y) {
   std::string key = build_index(object);
     
-  /* Every set will be treated as new */ // or maybe, if key exists, simply return? -Sam
-  std::string endpoint = cct->_conf->rgw_d4n_host + ":" + std::to_string(cct->_conf->rgw_d4n_port);
+  /* Every set will be treated as new */
+  std::string endpoint;
   std::list<std::string> redisValues;
     
   /* Creating a redisValues of the entry's properties */
@@ -88,6 +88,17 @@ int ObjectDirectory::set(CacheObj* object, optional_yield y) {
   redisValues.push_back("dirty");
   redisValues.push_back(std::to_string(object->dirty));
   redisValues.push_back("objHosts");
+
+  for (auto const& host : object->hostsList) {
+    if (endpoint.empty())
+      endpoint = host + "_";
+    else
+      endpoint = endpoint + host + "_";
+  }
+
+  if (!endpoint.empty())
+    endpoint.pop_back();
+
   redisValues.push_back(endpoint); 
 
   try {
@@ -223,6 +234,63 @@ int ObjectDirectory::del(CacheObj* object, optional_yield y) {
   }
 }
 
+int ObjectDirectory::update_field(CacheObj* object, std::string field, std::string value, optional_yield y) {
+  std::string key = build_index(object);
+
+  if (exist_key(object, y)) {
+    try {
+      /* Ensure field exists */
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push("HEXISTS", key, field);
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value() || (bool)ec)
+	  return -1;
+      }
+
+      if (field == "objHosts") {
+	/* Append rather than overwrite */
+	boost::system::error_code ec;
+	request req;
+	req.push("HGET", key, field);
+	response<std::string> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if (!std::get<0>(resp).value().size() || (bool)ec)
+	  return -1;
+
+	std::get<0>(resp).value() += "_";
+	std::get<0>(resp).value() += value;
+	value = std::get<0>(resp).value();
+      }
+
+      {
+	boost::system::error_code ec;
+	request req;
+	req.push_range("HSET", key, std::map<std::string, std::string>{{field, value}});
+	response<int> resp;
+
+	redis_exec(conn, ec, req, resp, y);
+
+	if ((bool)ec) {
+	  return -1;
+	}
+
+	return std::get<0>(resp).value(); 
+      }
+    } catch(std::exception &e) {
+      return -1;
+    }
+  } else {
+    return -2;
+  }
+}
+
 std::string BlockDirectory::build_index(CacheBlock* block) {
   return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
 }
@@ -276,7 +344,9 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
       endpoint = endpoint + host + "_";
   }
 
-  endpoint.pop_back();
+  if (!endpoint.empty())
+    endpoint.pop_back();
+
   redisValues.push_back(endpoint);
 
   redisValues.push_back("objName");
@@ -297,7 +367,9 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
       endpoint = endpoint + host + "_";
   }
 
-  endpoint.pop_back();
+  if (!endpoint.empty())
+    endpoint.pop_back();
+
   redisValues.push_back(endpoint);
 
   try {
@@ -474,7 +546,7 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 	  return -1;
       }
 
-      if (field == "blockHosts") { // Need one for object hosts? -Sam
+      if (field == "blockHosts") { 
 	/* Append rather than overwrite */
 	boost::system::error_code ec;
 	request req;
@@ -503,7 +575,7 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 	  return -1;
 	}
 
-	return std::get<0>(resp).value(); /* Zero fields added since it is an update of an existing field */ 
+	return std::get<0>(resp).value(); 
       }
     } catch(std::exception &e) {
       return -1;

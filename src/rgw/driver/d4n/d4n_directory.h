@@ -40,7 +40,7 @@ class Directory {
     Directory() {}
 };
 
-class ObjectDirectory: public Directory { // weave into write workflow -Sam
+class ObjectDirectory: public Directory {
   public:
     ObjectDirectory(net::io_context& io_context) {
       conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
@@ -53,7 +53,7 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
       this->cct = cct;
 
       config cfg;
-      cfg.addr.host = cct->_conf->rgw_d4n_host; // same or different address from block directory? -Sam
+      cfg.addr.host = cct->_conf->rgw_d4n_host;
       cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
       cfg.clientname = "D4N.ObjectDir";
 
@@ -73,6 +73,7 @@ class ObjectDirectory: public Directory { // weave into write workflow -Sam
     int get(CacheObj* object, optional_yield y);
     int copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y);
     int del(CacheObj* object, optional_yield y);
+    int update_field(CacheObj* object, std::string field, std::string value, optional_yield y);
 
   private:
     std::shared_ptr<connection> conn;
