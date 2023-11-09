@@ -360,9 +360,8 @@ std::unique_ptr<Object::DeleteOp> D4NFilterObject::get_delete_op()
 int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
   rgw::sal::Attrs attrs;
-  int getObjReturn = source->driver->get_cache_driver()->get_attrs(dpp, 
-		                                                         source->get_key().get_oid(), 
-					   				 attrs, y);
+  int getObjReturn = source->driver->get_cache_driver()->get_attrs(dpp, source->get_key().get_oid(), 
+								    attrs, y);
 
   next->params.mod_ptr = params.mod_ptr;
   next->params.unmod_ptr = params.unmod_ptr;
