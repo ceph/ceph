@@ -105,6 +105,7 @@ rgw::sal::Driver* DriverManager::read_rados_config(const DoutPrefixProvider* dpp
                                               JSONFormattable sal_config,
                                               rgw::sal::Driver* driver,
                                               CephContext* cct,
+                                              bool raw_storage,
                                               bool use_gc_thread,
                                               bool use_lc_thread,
                                               bool quota_threads,
@@ -112,31 +113,52 @@ rgw::sal::Driver* DriverManager::read_rados_config(const DoutPrefixProvider* dpp
                                               bool run_reshard_thread,
                                               bool run_notification_thread,
                                               bool use_cache,
+                                              bool use_datacache,
                                               bool use_gc, optional_yield y) {
 
   driver = newRadosStore();
   RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
 
-  if ((*rados).set_use_cache(use_cache)
-              .set_use_datacache(false)
-              .set_use_gc(use_gc)
-              .set_run_gc_thread(use_gc_thread)
-              .set_run_lc_thread(use_lc_thread)
-              .set_run_quota_threads(quota_threads)
-              .set_run_sync_thread(run_sync_thread)
-              .set_run_reshard_thread(run_reshard_thread)
-              .set_run_notification_thread(run_notification_thread)
-              .init_begin(cct, dpp) < 0) {
-    delete driver;
-    return nullptr;
-  }
-  if (driver->initialize(cct, dpp) < 0) {
-    delete driver;
-    return nullptr;
-  }
-  if (rados->init_complete(dpp, y) < 0) {
-    delete driver;
-    return nullptr;
+  if (raw_storage) {
+    rados->set_context(cct);
+
+    int ret = rados->init_svc(true, dpp);
+    if (ret < 0) {
+      ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
+      delete driver;
+      return nullptr;
+    }
+
+    if (rados->init_rados() < 0) {
+      delete driver;
+      return nullptr;
+    }
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+  } else {
+    if ((*rados).set_use_cache(use_cache)
+                .set_use_datacache(use_datacache)
+                .set_use_gc(use_gc)
+                .set_run_gc_thread(use_gc_thread)
+                .set_run_lc_thread(use_lc_thread)
+                .set_run_quota_threads(quota_threads)
+                .set_run_sync_thread(run_sync_thread)
+                .set_run_reshard_thread(run_reshard_thread)
+                .set_run_notification_thread(run_notification_thread)
+                .init_begin(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      return nullptr;
+    }
+    if (rados->init_complete(dpp, y) < 0) {
+      delete driver;
+      return nullptr;
+    }
   }
 
   return driver;
@@ -147,6 +169,7 @@ rgw::sal::Driver* DriverManager::read_dbstore_config(const DoutPrefixProvider* d
                                               JSONFormattable sal_config,
                                               rgw::sal::Driver* driver,
                                               CephContext* cct,
+                                              bool raw_storage,
                                               bool use_lc_thread) {
     std::string db_dir;
     if (sal_config.exists("db_dir")) {
@@ -170,12 +193,14 @@ rgw::sal::Driver* DriverManager::read_base_config(const DoutPrefixProvider* dpp,
                                               JSONFormattable sal_config,
                                               rgw::sal::Driver* driver,
                                               CephContext* cct,
+                                              bool raw_storage,
                                               bool use_gc_thread,
                                               bool use_lc_thread,
                                               bool quota_threads,
                                               bool run_sync_thread,
                                               bool run_reshard_thread,
                                               bool run_notification_thread,
+                                              bool use_datacache,
                                               bool use_cache,
                                               bool use_gc, optional_yield y) {
 
@@ -184,12 +209,14 @@ rgw::sal::Driver* DriverManager::read_base_config(const DoutPrefixProvider* dpp,
                             sal_config["next"],
                             driver,
                             cct,
+                            raw_storage,
                             use_gc_thread,
                             use_lc_thread,
                             quota_threads,
                             run_sync_thread,
                             run_reshard_thread,
                             run_notification_thread,
+                            use_datacache,
                             use_cache, use_gc, y);
   } else {
     return nullptr;
@@ -211,6 +238,7 @@ rgw::sal::Driver* DriverManager::create_drivers(const DoutPrefixProvider* dpp,
                                               JSONFormattable sal_config,
                                               rgw::sal::Driver* driver,
                                               CephContext* cct,
+                                              bool raw_storage,
                                               bool use_gc_thread,
                                               bool use_lc_thread,
                                               bool quota_threads,
@@ -218,6 +246,7 @@ rgw::sal::Driver* DriverManager::create_drivers(const DoutPrefixProvider* dpp,
                                               bool run_reshard_thread,
                                               bool run_notification_thread,
                                               bool use_cache,
+                                              bool use_datacache,
                                               bool use_gc, optional_yield y)
 {
   if (sal_config.exists("type")) {
@@ -227,30 +256,35 @@ rgw::sal::Driver* DriverManager::create_drivers(const DoutPrefixProvider* dpp,
                                    sal_config,
                                    driver,
                                    cct,
+                                   raw_storage,
                                    use_gc_thread,
                                    use_lc_thread,
                                    quota_threads,
                                    run_sync_thread,
                                    run_reshard_thread,
                                    run_notification_thread,
+                                   use_datacache,
                                    use_cache, use_gc, y);
       } else if(type.compare("dbstore") == 0) {
         driver = read_dbstore_config(dpp,
                                   sal_config,
                                   driver,
                                   cct,
+                                  raw_storage,
                                   use_lc_thread);
       } else if(type.compare("base") == 0) {
         driver = read_base_config(dpp,
                                   sal_config,
                                   driver,
                                   cct,
+                                  raw_storage,
                                   use_gc_thread,
                                   use_lc_thread,
                                   quota_threads,
                                   run_sync_thread,
                                   run_reshard_thread,
                                   run_notification_thread,
+                                  use_datacache,
                                   use_cache, use_gc, y);
       }
   } else if (sal_config.exists("next")) {
@@ -258,12 +292,14 @@ rgw::sal::Driver* DriverManager::create_drivers(const DoutPrefixProvider* dpp,
                           sal_config["next"],
                           driver,
                           cct,
+                          raw_storage,
                           use_gc_thread,
                           use_lc_thread,
                           quota_threads,
                           run_sync_thread,
                           run_reshard_thread,
                           run_notification_thread,
+                          use_datacache,
                           use_cache, use_gc, y);
   }
   return driver;
@@ -271,7 +307,6 @@ rgw::sal::Driver* DriverManager::create_drivers(const DoutPrefixProvider* dpp,
 
 rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider* dpp,
 						     CephContext* cct,
-						     const Config& cfg,
 						     JSONFormattable sal_config,
 						     bool use_gc_thread,
 						     bool use_lc_thread,
@@ -279,37 +314,26 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
 						     bool run_sync_thread,
 						     bool run_reshard_thread,
                                                      bool run_notification_thread,
+                                                     bool use_datacache,
 						     bool use_cache,
 						     bool use_gc, optional_yield y)
 {
   rgw::sal::Driver* driver{nullptr};
+  return create_drivers(dpp,
+                        sal_config,
+                        driver,
+                        cct,
+                        false,
+                        use_gc_thread,
+                        use_lc_thread,
+                        quota_threads,
+                        run_sync_thread,
+                        run_reshard_thread,
+                        run_notification_thread,
+                        use_datacache,
+                        use_cache, use_gc, y);
 
-  if (cfg.store_name.compare("rados") == 0) {
-    return create_drivers(dpp,
-                          sal_config,
-                          driver,
-                          cct,
-                          use_gc_thread,
-                          use_lc_thread,
-                          quota_threads,
-                          run_sync_thread,
-                          run_reshard_thread,
-                          run_notification_thread,
-                          use_cache, use_gc, y);
-  } else if (cfg.store_name.compare("dbstore") == 0) {
-    return create_drivers(dpp,
-                          sal_config,
-                          driver,
-                          cct,
-                          use_gc_thread,
-                          use_lc_thread,
-                          quota_threads,
-                          run_sync_thread,
-                          run_reshard_thread,
-                          run_notification_thread,
-                          use_cache, use_gc, y);
-  }
-
+  Config cfg;
   if (cfg.store_name.compare("rados") == 0) {
     driver = newRadosStore();
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
@@ -458,9 +482,24 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
   return driver;
 }
 
-rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, const Config& cfg)
+rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvider* dpp, CephContext* cct, JSONFormattable sal_config)
 {
-  rgw::sal::Driver* driver = nullptr;
+  rgw::sal::Driver* driver{nullptr};
+  return create_drivers(dpp,
+                        sal_config,
+                        driver,
+                        cct,
+                        true,
+                        false,
+                        false,
+                        false,
+                        false,
+                        false,
+                        false,
+                        false,
+                        false, false, null_yield);
+
+  DriverManager::Config cfg;
   if (cfg.store_name.compare("rados") == 0) {
     driver = newRadosStore();
     RGWRados* rados = static_cast<rgw::sal::RadosStore* >(driver)->getRados();
@@ -537,12 +576,28 @@ void DriverManager::close_storage(rgw::sal::Driver* driver)
   delete driver;
 }
 
+JSONFormattable DriverManager::get_default_sal_config() {
+  const auto& config_store = g_conf().get_val<std::string>("rgw_config_store");
+  JSONFormattable sal_config;
+  if (config_store == "rados") {
+    sal_config.set("type", "rados");
+  } else if (config_store == "dbstore") {
+    sal_config.set("type", "dbstore");
+    const auto& default_config_uri = g_conf().get_val<std::string>("dbstore_db_dir");
+    const auto& default_db_name_prefix = g_conf().get_val<std::string>("dbstore_db_name_prefix");
+    sal_config.set("db_dir", default_config_uri);
+    sal_config.set("db_name_prefix", default_db_name_prefix);
+  }
+
+  return sal_config;
+}
+
 DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
 {
   DriverManager::Config cfg;
 
   // Get the store backend
-  const auto& config_store = g_conf().get_val<std::string>("rgw_backend_store");
+  const auto& config_store = g_conf().get_val<std::string>("rgw_config_store");
   if (config_store == "rados") {
     cfg.store_name = "rados";
 

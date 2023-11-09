@@ -3488,6 +3488,7 @@ int main(int argc, const char **argv)
   map<string, string, ltstr_nocase> tier_config_add;
   map<string, string, ltstr_nocase> tier_config_rm;
 
+  JSONFormattable init_sal_config;
   map<string, string, ltstr_nocase> sal_config;
 
   boost::optional<string> index_pool;
@@ -4267,7 +4268,7 @@ int main(int argc, const char **argv)
     bool need_cache = readonly_ops_list.find(opt_cmd) == readonly_ops_list.end();
     bool need_gc = (gc_ops_list.find(opt_cmd) != gc_ops_list.end()) && !bypass_gc;
 
-    DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
+    //DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
 
     auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
     cfgstore = DriverManager::create_config_store(dpp(), config_store_type);
@@ -4277,28 +4278,37 @@ int main(int argc, const char **argv)
     }
 
     // this sal_config is only in scope for this block of the conditional on 4110
-    JSONFormattable sal_config;
-    sal_config.set("type", "rados");
+    for (auto a : sal_config) {
+      int r = init_sal_config.set(a.first, a.second);
+      if (r < 0) {
+        cerr << "ERROR: failed to set initial sal configuration: " << a.first << std::endl;
+        return EINVAL;
+      }
+    }
+
+    if (!init_sal_config.exists("type")) {
+      init_sal_config = DriverManager::get_default_sal_config();
+    }
 
     if (raw_storage_op) {
       driver = DriverManager::get_raw_storage(dpp(),
-					    g_ceph_context,
-					    cfg);
+                                           g_ceph_context,
+                                           init_sal_config);
     } else {
       driver = DriverManager::get_storage(dpp(),
-					g_ceph_context,
-					cfg,
-					sal_config,
-					false,
-					false,
-					false,
-					false,
-					false,
-                                        false,
-                                        null_yield,
-					need_cache && g_conf()->rgw_cache_enabled,
-					need_gc);
+                                       g_ceph_context,
+                                       init_sal_config,
+                                       false,
+                                       false,
+                                       false,
+                                       false,
+                                       false,
+                                       false,
+                                       null_yield,
+                                       need_cache && g_conf()->rgw_cache_enabled,
+                                       need_gc);
     }
+
     if (!driver) {
       cerr << "couldn't init storage provider" << std::endl;
       return EIO;
@@ -5779,6 +5789,7 @@ int main(int argc, const char **argv)
         zone_params.system_key.id = access_key;
         zone_params.system_key.key = secret_key;
 	zone_params.realm_id = realm_id;
+        zone_params.sal_config = init_sal_config;
         for (const auto& a : tier_config_add) {
           int r = zone_params.tier_config.set(a.first, a.second);
           if (r < 0) {
@@ -5787,13 +5798,6 @@ int main(int argc, const char **argv)
           }
         }
 
-        for (auto a : sal_config) {
-          int r = zone_params.sal_config.set(a.first, a.second);
-          if (r < 0) {
-            cerr << "ERROR: failed to set sal configuration: " << a.first << std::endl;
-            return EINVAL;
-          }
-        }
 
         if (zone_params.realm_id.empty()) {
           RGWRealm realm;

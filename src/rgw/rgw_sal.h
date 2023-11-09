@@ -1548,7 +1548,6 @@ public:
   /** Get a full driver by service name */
   static rgw::sal::Driver* get_storage(const DoutPrefixProvider* dpp,
 				      CephContext* cct,
-				      const Config& cfg,
 				      JSONFormattable sal_config,
 				      bool use_gc_thread,
 				      bool use_lc_thread,
@@ -1556,23 +1555,24 @@ public:
 				      bool run_sync_thread,
 				      bool run_reshard_thread,
 				      bool run_notification_thread, optional_yield y,
+				      bool use_datacache = false,
 				      bool use_cache = true,
 				      bool use_gc = true) {
 
-    rgw::sal::Driver* driver = init_storage_provider(dpp, cct, cfg, sal_config,
+    rgw::sal::Driver* driver = init_storage_provider(dpp, cct, sal_config,
 						   use_gc_thread,
 						   use_lc_thread,
 						   quota_threads,
 						   run_sync_thread,
 						   run_reshard_thread,
                                                    run_notification_thread,
-						   use_cache, use_gc, y);
+						   use_datacache, use_cache, use_gc, y);
     return driver;
   }
   /** Get a stripped down driver by service name */
   static rgw::sal::Driver* get_raw_storage(const DoutPrefixProvider* dpp,
-					  CephContext* cct, const Config& cfg) {
-    rgw::sal::Driver* driver = init_raw_storage_provider(dpp, cct, cfg);
+					  CephContext* cct, JSONFormattable sal_config) {
+    rgw::sal::Driver* driver = init_raw_storage_provider(dpp, cct, sal_config);
     return driver;
   }
 
@@ -1580,6 +1580,7 @@ public:
                                           JSONFormattable sal_config,
                                           rgw::sal::Driver* driver,
                                           CephContext* cct,
+                                          bool raw_storage,
                                           bool use_gc_thread,
                                           bool use_lc_thread,
                                           bool quota_threads,
@@ -1587,24 +1588,28 @@ public:
                                           bool run_reshard_thread,
                                           bool run_notification_thread,
                                           bool use_cache,
+                                          bool use_datacache,
                                           bool use_gc, optional_yield y);
 
   static rgw::sal::Driver* read_dbstore_config(const DoutPrefixProvider* dpp,
                                           JSONFormattable sal_config,
                                           rgw::sal::Driver* driver,
                                           CephContext* cct,
+                                          bool raw_storage,
                                           bool use_lc_thread);
 
   static rgw::sal::Driver* read_base_config(const DoutPrefixProvider* dpp,
                                           JSONFormattable sal_config,
                                           rgw::sal::Driver* driver,
                                           CephContext* cct,
+                                          bool raw_storage,
                                           bool use_gc_thread,
                                           bool use_lc_thread,
                                           bool quota_threads,
                                           bool run_sync_thread,
                                           bool run_reshard_thread,
                                           bool run_notification_thread,
+                                          bool use_datacache,
                                           bool use_cache,
                                           bool use_gc, optional_yield y);
 
@@ -1613,18 +1618,19 @@ public:
                                           JSONFormattable sal_config,
                                           rgw::sal::Driver* driver,
                                           CephContext* cct,
+                                          bool raw_storage,
                                           bool use_gc_thread,
                                           bool use_lc_thread,
                                           bool quota_threads,
                                           bool run_sync_thread,
                                           bool run_reshard_thread,
                                           bool run_notification_thread,
+                                          bool use_datacache,
                                           bool use_cache,
                                           bool use_gc, optional_yield y);
   /** Initialize a new full Driver */
   static rgw::sal::Driver* init_storage_provider(const DoutPrefixProvider* dpp,
 						CephContext* cct,
-						const Config& cfg,
 						JSONFormattable sal_config,
 						bool use_gc_thread,
 						bool use_lc_thread,
@@ -1632,17 +1638,20 @@ public:
 						bool run_sync_thread,
 						bool run_reshard_thread,
                                                 bool run_notification_thread,
+						bool use_datacache,
 						bool use_metadata_cache,
 						bool use_gc, optional_yield y);
   /** Initialize a new raw Driver */
   static rgw::sal::Driver* init_raw_storage_provider(const DoutPrefixProvider* dpp,
 						    CephContext* cct,
-						    const Config& cfg);
+						    JSONFormattable sal_config);
   /** Close a Driver when it's no longer needed */
   static void close_storage(rgw::sal::Driver* driver);
 
   /** Get the config for Drivers */
   static Config get_config(bool admin, CephContext* cct);
+
+  static JSONFormattable get_default_sal_config();
 
   /** Create a ConfigStore */
   static auto create_config_store(const DoutPrefixProvider* dpp,

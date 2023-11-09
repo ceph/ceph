@@ -115,12 +115,9 @@ void RGWRealmReloader::reload()
       ldpp_dout(&dp, 1) << "Creating new driver" << dendl;
 
       // recreate and initialize a new driver
-      DriverManager::Config cfg;
-      cfg.store_name = "rados";
-      cfg.filter_name = "none";
       JSONFormattable sal_config;
       sal_config.set("type", "rados");
-      env.driver = DriverManager::get_storage(&dp, cct, cfg,
+      env.driver = DriverManager::get_storage(&dp, cct,
           sal_config,
           cct->_conf->rgw_enable_gc_threads,
           cct->_conf->rgw_enable_lc_threads,

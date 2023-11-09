@@ -1035,18 +1035,6 @@ int create_zone(const DoutPrefixProvider* dpp, optional_yield y,
     info.id = gen_random_uuid();
   }
 
-
-
-  // TODO: write an empty function for JSONFormattable
-  std::string sal_type = info.sal_config["type"];
-  if (sal_type.empty()) {
-    int r = info.sal_config.set("type", "rados");
-    if (r < 0) {
-      ldpp_dout(dpp,0) << "ERROR: failed to set default driver configuration for zone: " << cpp_strerror(r) << dendl;
-      return r;
-    }
-  }
-
   // add default placement with empty pool name
   rgw_pool pool;
   auto& placement = info.placement_pools["default-placement"];
