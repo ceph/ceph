@@ -5,6 +5,7 @@ from .nvmeof import CephNvmeof
 from .iscsi import CephIscsi
 from .nfs import NFSGanesha
 from .monitoring import Monitoring
+from .snmp import SNMPGateway
 
 __all__ = [
     'CephIscsi',
@@ -14,5 +15,6 @@ __all__ = [
     'Keepalived',
     'Monitoring',
     'NFSGanesha',
+    'SNMPGateway',
     'Tracing',
 ]
