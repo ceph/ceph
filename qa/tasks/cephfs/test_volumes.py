@@ -377,13 +377,15 @@ class TestVolumesHelper(CephFSTestCase):
         """.format(authid=authid,key=key))
 
         guest_mount.client_id = authid
-        guest_mount.client_remote.write_file(guest_mount.get_keyring_path(),
-                                             keyring_txt, sudo=True)
+        guest_keyring_path = guest_mount.client_remote.mktemp(
+            data=keyring_txt)
         # Add a guest client section to the ceph config file.
         self.config_set("client.{0}".format(authid), "debug client", 20)
         self.config_set("client.{0}".format(authid), "debug objecter", 20)
         self.set_conf("client.{0}".format(authid),
                       "keyring", guest_mount.get_keyring_path())
+
+        return guest_keyring_path
 
     def _auth_metadata_get(self, filedata):
         """
@@ -1144,11 +1146,12 @@ class TestSubvolumeGroups(TestVolumesHelper):
         guest_mount.umount_wait()
 
         # configure credentials for guest client
-        self._configure_guest_auth(guest_mount, "guest1", user[0]["key"])
-
+        guest_keyring_path = self._configure_guest_auth(
+            guest_mount, "guest1", user[0]["key"])
         # mount the subvolume
         mount_path = os.path.join("/", subvolpath)
-        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path,
+                               client_keyring_path=guest_keyring_path)
 
         # create 99 files of 1MB
         guest_mount.run_shell_payload("mkdir -p dir1")
@@ -1230,10 +1233,11 @@ class TestSubvolumeGroups(TestVolumesHelper):
         guest_mount.umount_wait()
 
         # configure credentials for guest client
-        self._configure_guest_auth(guest_mount, "guest1", user[0]["key"])
-
+        guest_keyring_path = self._configure_guest_auth(
+            guest_mount, "guest1", user[0]["key"])
         # mount the subvolume
-        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path,
+                               client_keyring_path=guest_keyring_path)
 
         # create 99 files of 1MB to exceed quota
         guest_mount.run_shell_payload("mkdir -p dir1")
@@ -2621,10 +2625,11 @@ class TestSubvolumes(TestVolumesHelper):
         self.assertIn("client.{0}".format(authid), existing_ids)
 
         # configure credentials for guest client
-        self._configure_guest_auth(guest_mount, authid, key)
-
+        guest_keyring_path  = self._configure_guest_auth(
+            guest_mount, authid, key)
         # mount the subvolume, and write to it
-        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path,
+                               client_keyring_path=guest_keyring_path)
         guest_mount.write_n_mb("data.bin", 1)
 
         # authorize guest authID read access to subvolume
@@ -2677,10 +2682,11 @@ class TestSubvolumes(TestVolumesHelper):
         self.assertIn("client.{0}".format(authid), existing_ids)
 
         # configure credentials for guest client
-        self._configure_guest_auth(guest_mount, authid, key)
-
+        guest_keyring_path = self._configure_guest_auth(
+            guest_mount, authid, key)
         # mount the subvolume, and write to it
-        guest_mount.mount_wait(cephfs_mntpt=mount_path)
+        guest_mount.mount_wait(cephfs_mntpt=mount_path,
+                               client_keyring_path=guest_keyring_path)
         guest_mount.write_n_mb("data.bin", 1)
 
         # authorize guest authID read access to subvolume
@@ -3291,11 +3297,14 @@ class TestSubvolumes(TestVolumesHelper):
 
             mount_path = self._fs_cmd("subvolume", "getpath", self.volname, subvolumes[i],
                                       "--group_name", group).rstrip()
-            # configure credentials for guest client
-            self._configure_guest_auth(guest_mounts[i], auth_id, key)
 
+            # configure credentials for guest client
+            guest_keyring_path = self._configure_guest_auth(guest_mounts[i],
+                                                            auth_id, key)
             # mount the subvolume, and write to it
-            guest_mounts[i].mount_wait(cephfs_mntpt=mount_path)
+            guest_mounts[i].mount_wait(
+                cephfs_mntpt=mount_path,
+                client_keyring_path=guest_keyring_path)
             guest_mounts[i].write_n_mb("data.bin", 1)
 
         # Evict client, guest_mounts[0], using auth ID 'guest' and has mounted
