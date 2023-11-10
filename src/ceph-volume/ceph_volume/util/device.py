@@ -464,7 +464,7 @@ class Device(object):
         elif self.disk_api:
             return self.disk_api['TYPE']
         elif self.blkid_api:
-            return self.blkid_api['TYPE']
+            return self.blkid_api.get('TYPE')
 
     @property
     def is_mpath(self):
@@ -480,7 +480,7 @@ class Device(object):
         if self.disk_api:
             return self.disk_api['TYPE'] == 'part'
         elif self.blkid_api:
-            return self.blkid_api['TYPE'] == 'part'
+            return self.blkid_api.get('TYPE') == 'part'
         return False
 
     @property
