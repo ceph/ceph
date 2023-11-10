@@ -16,9 +16,7 @@
 #include "rgw_sync_trace.h"
 #include "rgw_mdlog.h"
 #include "sync_fairness.h"
-
-#define ERROR_LOGGER_SHARDS 32
-#define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
+#include "rgw_sync_common.h"
 
 struct rgw_mdlog_info {
   uint32_t num_shards;
@@ -69,18 +67,11 @@ class RGWMetaSyncCR;
 class RGWRESTConn;
 class RGWSyncTraceManager;
 
-class RGWSyncErrorLogger {
-  rgw::sal::RadosStore* store;
-
-  std::vector<std::string> oids;
-  int num_shards;
-
-  std::atomic<int64_t> counter = { 0 };
+class RGWSyncErrorLogger : public rgw::sync::ErrorLoggerBase {
 public:
-  RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const std::string &oid_prefix, int _num_shards);
+  RGWSyncErrorLogger(rgw::sal::RadosStore* store, std::string_view oid_prefix, int num_shards)
+    : rgw::sync::ErrorLoggerBase(store, oid_prefix, num_shards) {}
   RGWCoroutine *log_error_cr(const DoutPrefixProvider *dpp, const std::string& source_zone, const std::string& section, const std::string& name, uint32_t error_code, const std::string& message);
-
-  static std::string get_shard_oid(const std::string& oid_prefix, int shard_id);
 };
 
 

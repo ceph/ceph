@@ -5,13 +5,19 @@
 
 #include <cstdint>
 #include <string>
+#include <string_view>
+#include <vector>
 
 #include "include/buffer.h"
 #include "include/encoding.h"
 
 #include "common/Formatter.h"
 
+#include "rgw_sal_rados.h"
+
 namespace rgw::sync {
+using namespace std::literals;
+
 namespace buffer = ceph::buffer;
 struct error_info {
   std::string source_zone;
@@ -43,4 +49,31 @@ struct error_info {
   void dump(ceph::Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(error_info)
+
+class ErrorLoggerBase {
+public:
+  static constexpr auto SHARDS = 32;
+  static constexpr auto PREFIX = "sync.error-log"sv;
+protected:
+  sal::RadosStore* const store;
+
+  const std::string& next_oid() {
+    return oids[++counter % num_shards];
+  }
+
+private:
+  const int num_shards;
+
+  std::vector<std::string> oids;
+  std::atomic<int64_t> counter = { 0 };
+
+public:
+  ErrorLoggerBase(rgw::sal::RadosStore* store,
+		  std::string_view oid_prefix = PREFIX,
+		  int num_shards = SHARDS);
+
+
+  static std::string get_shard_oid(std::string_view oid_prefix,
+				   int shard_id);
+};
 }

@@ -3058,7 +3058,7 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
 
 static int trim_sync_error_log(int shard_id, const string& marker, int delay_ms)
 {
-  auto oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
+  auto oid = RGWSyncErrorLogger::get_shard_oid(RGWSyncErrorLogger::PREFIX,
                                                shard_id);
   // call cls_log_trim() until it returns -ENODATA
   for (;;) {
@@ -9475,13 +9475,13 @@ next:
 
     formatter->open_array_section("entries");
 
-    for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
+    for (; shard_id < RGWSyncErrorLogger::SHARDS; ++shard_id) {
       formatter->open_object_section("shard");
       encode_json("shard_id", shard_id, formatter.get());
       formatter->open_array_section("entries");
 
       int count = 0;
-      string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
+      string oid = RGWSyncErrorLogger::get_shard_oid(RGWSyncErrorLogger::PREFIX, shard_id);
 
       do {
         vector<cls::log::entry> entries;
@@ -9555,7 +9555,7 @@ next:
       shard_id = 0;
     }
 
-    for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
+    for (; shard_id < RGWSyncErrorLogger::SHARDS; ++shard_id) {
       ret = trim_sync_error_log(shard_id, marker, trim_delay_ms);
       if (ret < 0) {
         cerr << "ERROR: sync error trim: " << cpp_strerror(-ret) << std::endl;

@@ -3278,7 +3278,8 @@ int RGWDataSyncStatusManager::init(const DoutPrefixProvider *dpp)
     return -EINVAL;
   }
 
-  error_logger = new RGWSyncErrorLogger(driver, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
+  error_logger = new RGWSyncErrorLogger(driver, RGWSyncErrorLogger::PREFIX,
+					RGWSyncErrorLogger::SHARDS);
 
   int r = source_log.init(source_zone, conn, error_logger, driver->getRados()->get_sync_tracer(),
                           sync_module, counters);

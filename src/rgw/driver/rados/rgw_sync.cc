@@ -28,17 +28,6 @@ static const string meta_sync_bids_oid = "meta-sync-bids";
 
 RGWContinuousLeaseCR::~RGWContinuousLeaseCR() {}
 
-RGWSyncErrorLogger::RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const string &oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
-  for (int i = 0; i < num_shards; i++) {
-    oids.push_back(get_shard_oid(oid_prefix, i));
-  }
-}
-string RGWSyncErrorLogger::get_shard_oid(const string& oid_prefix, int shard_id) {
-  char buf[oid_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), shard_id);
-  return string(buf);
-}
-
 RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const DoutPrefixProvider *dpp, const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message) {
   cls::log::entry entry;
 
@@ -47,10 +36,7 @@ RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const DoutPrefixProvider *dpp, co
   encode(info, bl);
   store->svc()->cls->timelog.prepare_entry(entry, real_clock::now(), section, name, bl);
 
-  uint32_t shard_id = ++counter % num_shards;
-
-
-  return new RGWRadosTimelogAddCR(dpp, store, oids[shard_id], entry);
+  return new RGWRadosTimelogAddCR(dpp, store, next_oid(), entry);
 }
 
 void RGWSyncBackoff::update_wait_time()
@@ -290,7 +276,9 @@ int RGWRemoteMetaLog::init()
     return ret;
   }
 
-  error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
+  error_logger = new RGWSyncErrorLogger(store,
+					RGWSyncErrorLogger::PREFIX,
+					RGWSyncErrorLogger::SHARDS);
 
   init_sync_env(&sync_env);
 

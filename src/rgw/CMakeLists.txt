@@ -182,6 +182,7 @@ set(librgw_common_srcs
   driver/rados/rgw_sync.cc
   driver/rados/rgw_sync_counters.cc
   driver/rados/rgw_sync_common.cc
+  driver/rados/rgw_sync_asio.cc
   driver/rados/rgw_sync_error_repo.cc
   driver/rados/rgw_sync_module.cc
   driver/rados/rgw_sync_module_aws.cc
