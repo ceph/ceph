@@ -111,6 +111,7 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
 }
 
 int D4NFilterObject::copy_object(const ACLOwner& owner,
+                              const rgw_user& remote_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -197,7 +198,7 @@ int D4NFilterObject::copy_object(const ACLOwner& owner,
     }
   }*/
 
-  return next->copy_object(owner, info, source_zone,
+  return next->copy_object(owner, remote_user, info, source_zone,
                            nextObject(dest_object),
                            nextBucket(dest_bucket),
                            nextBucket(src_bucket),
