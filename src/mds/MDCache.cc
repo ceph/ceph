@@ -8850,8 +8850,9 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool pro
   ceph_assert(dnl->is_remote() || dnl->is_referent());
   CInode *in = get_inode(dnl->get_remote_ino());
   if (in) {
-    dout(7) << "get_dentry_inode linking in remote in " << *in << dendl;
-    dn->link_remote(dnl, in);
+    CInode *ref_in = dnl->get_ref_inode();
+    dout(7) << "get_dentry_inode linking in remote in " << *in << "referent " << *ref_in << dendl;
+    dn->link_remote(dnl, in, ref_in);
     return in;
   } else {
     dout(10) << "get_dentry_inode on remote dn, opening inode for " << *dn << dendl;
@@ -11092,6 +11093,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
       in->inode_auth.first = in->ino() - MDS_INO_MDSDIR_OFFSET;
     dout(10) << __func__ << " added " << *in << dendl;
     if (dn && dn->get_linkage()->is_remote()){
+      dout(10) << __func__ << " setting referent inode " << *in << dendl;
       dn->dir->set_referent_inode(dn, in);
     } else if (dn) {
       ceph_assert(dn->get_linkage()->is_null());
@@ -11104,7 +11106,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
     dout(10) << __func__ << " had " << *in << dendl;
     if (dn && dn->get_linkage()->is_remote()) {
       dn->dir->set_referent_inode(dn, in);
-      dout(10) << __func__ << " setting referent inode " << *in << dendl;
+      dout(10) << __func__ << " had referent inode, setting it" << *in << dendl;
     }
   }
 
