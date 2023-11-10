@@ -486,15 +486,15 @@ public:
   virtual int read_stats_async(const DoutPrefixProvider *dpp,
 			       const bucket_index_layout_generation& idx_layout,
 			       int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
-  int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                      RGWBucketEnt* ent) override;
+  int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                       RGWBucketEnt* ent) override;
   int check_bucket_shards(const DoutPrefixProvider* dpp,
                           uint64_t num_objs, optional_yield y) override;
-  virtual int chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner,
+  virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
 		    optional_yield y) override;
   virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive,
 		       ceph::real_time mtime, optional_yield y) override;
-  virtual const rgw_user& get_owner() const override;
+  virtual const rgw_owner& get_owner() const override;
   virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
   virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota,
 			  uint64_t obj_size, optional_yield y,
@@ -625,6 +625,7 @@ public:
 			    optional_yield y,
 			    uint32_t flags) override;
   virtual int copy_object(const ACLOwner& owner,
+               const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
 	       rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -712,10 +713,15 @@ public:
   virtual bool have_instance(void) override { return next->have_instance(); }
   virtual void clear_instance() override { return next->clear_instance(); }
 
-  virtual int swift_versioning_restore(const ACLOwner& owner, bool& restored,   /* out */
-				       const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
-				    optional_yield y) override;
+  virtual int swift_versioning_restore(const ACLOwner& owner,
+                                       const rgw_user& remote_user,
+                                       bool& restored,
+                                       const DoutPrefixProvider* dpp,
+                                       optional_yield y) override;
+  virtual int swift_versioning_copy(const ACLOwner& owner,
+                                    const rgw_user& remote_user,
+                                    const DoutPrefixProvider* dpp,
+                                    optional_yield y) override;
 
   virtual std::unique_ptr<ReadOp> get_read_op() override;
   virtual std::unique_ptr<DeleteOp> get_delete_op() override;

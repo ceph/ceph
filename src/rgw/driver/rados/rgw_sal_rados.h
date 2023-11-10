@@ -453,6 +453,7 @@ class RadosObject : public StoreObject {
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y, uint32_t flags) override;
     virtual int copy_object(const ACLOwner& owner,
+               const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -514,10 +515,10 @@ class RadosObject : public StoreObject {
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
     /* Swift versioning */
-    virtual int swift_versioning_restore(const ACLOwner& owner, bool& restored,
+    virtual int swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,
 					 const DoutPrefixProvider* dpp, optional_yield y) override;
-    virtual int swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
-				      optional_yield y) override;
+    virtual int swift_versioning_copy(const ACLOwner& owner, const rgw_user& remote_user,
+				      const DoutPrefixProvider* dpp, optional_yield y) override;
 
     /* OPs */
     virtual std::unique_ptr<ReadOp> get_read_op() override;
@@ -601,11 +602,11 @@ class RadosBucket : public StoreBucket {
     virtual int read_stats_async(const DoutPrefixProvider *dpp,
                                  const bucket_index_layout_generation& idx_layout,
                                  int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
-    int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                        RGWBucketEnt* ent) override;
+    int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                         RGWBucketEnt* ent) override;
     int check_bucket_shards(const DoutPrefixProvider* dpp, uint64_t num_objs,
                             optional_yield y) override;
-    virtual int chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y) override;
+    virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y) override;
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) override;
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int check_quota(const DoutPrefixProvider *dpp, RGWQuota& quota, uint64_t obj_size, optional_yield y, bool check_size_only = false) override;
@@ -645,8 +646,8 @@ class RadosBucket : public StoreBucket {
         optional_yield y, const DoutPrefixProvider *dpp) override;
 
   private:
-    int link(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
-    int unlink(const DoutPrefixProvider* dpp, const rgw_user& owner, optional_yield y, bool update_entrypoint = true);
+    int link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y, bool update_entrypoint = true, RGWObjVersionTracker* objv = nullptr);
+    int unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint = true);
     friend class RadosUser;
 };
 

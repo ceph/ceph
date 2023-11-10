@@ -505,7 +505,9 @@ void dump_owner(req_state *s, const std::string& id, const string& name,
     section = "Owner";
   s->formatter->open_object_section(section);
   s->formatter->dump_string("ID", id);
-  s->formatter->dump_string("DisplayName", name);
+  if (!name.empty()) {
+    s->formatter->dump_string("DisplayName", name);
+  }
   s->formatter->close_section();
 }
 
@@ -588,7 +590,7 @@ void end_header(req_state* s, RGWOp* op, const char *content_type,
   dump_trans_id(s);
 
   if ((!s->is_err()) && s->bucket &&
-      (s->bucket->get_info().owner != s->user->get_id()) &&
+      (!s->auth.identity->is_owner_of(s->bucket->get_info().owner)) &&
       (s->bucket->get_info().requester_pays)) {
     dump_header(s, "x-amz-request-charged", "requester");
   }

@@ -10,6 +10,7 @@
 #include "json_spirit/json_spirit.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
+#include "common/versioned_variant.h"
 
 #include "rgw_op.h"
 #include "rgw_common.h"
@@ -2261,9 +2262,19 @@ RGWBucketInfo::~RGWBucketInfo()
 }
 
 void RGWBucketInfo::encode(bufferlist& bl) const {
-  ENCODE_START(23, 4, bl);
+  // rgw_owner is now encoded at the end. if the owner is a user, duplicate the
+  // encoding of its id/tenant/ns in the existing locations for backward compat.
+  // otherwise, encode empty strings there
+  const rgw_user* user = std::get_if<rgw_user>(&owner);
+  std::string empty;
+
+  ENCODE_START(24, 4, bl);
   encode(bucket, bl);
-  encode(owner.id, bl);
+  if (user) {
+    encode(user->id, bl);
+  } else {
+    encode(empty, bl);
+  }
   encode(flags, bl);
   encode(zonegroup, bl);
   uint64_t ct = real_clock::to_time_t(creation_time);
@@ -2272,7 +2283,11 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
   encode(has_instance_obj, bl);
   encode(quota, bl);
   encode(requester_pays, bl);
-  encode(owner.tenant, bl);
+  if (user) {
+    encode(user->tenant, bl);
+  } else {
+    encode(empty, bl);
+  }
   encode(has_website, bl);
   if (has_website) {
     encode(website_conf, bl);
@@ -2294,17 +2309,24 @@ void RGWBucketInfo::encode(bufferlist& bl) const {
     encode(*sync_policy, bl);
   }
   encode(layout, bl);
-  encode(owner.ns, bl);
+  if (user) {
+    encode(user->ns, bl);
+  } else {
+    encode(empty, bl);
+  }
+  ceph::versioned_variant::encode(owner, bl); // v24
+
   ENCODE_FINISH(bl);
 }
 
 void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
-  DECODE_START_LEGACY_COMPAT_LEN_32(23, 4, 4, bl);
+  rgw_user user;
+  DECODE_START_LEGACY_COMPAT_LEN_32(24, 4, 4, bl);
   decode(bucket, bl);
   if (struct_v >= 2) {
     string s;
     decode(s, bl);
-    owner.from_str(s);
+    user.from_str(s);
   }
   if (struct_v >= 3)
     decode(flags, bl);
@@ -2330,7 +2352,7 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
   if (struct_v >= 12)
     decode(requester_pays, bl);
   if (struct_v >= 13)
-    decode(owner.tenant, bl);
+    decode(user.tenant, bl);
   if (struct_v >= 14) {
     decode(has_website, bl);
     if (has_website) {
@@ -2374,7 +2396,12 @@ void RGWBucketInfo::decode(bufferlist::const_iterator& bl) {
     decode(layout, bl);
   }
   if (struct_v >= 23) {
-    decode(owner.ns, bl);
+    decode(user.ns, bl);
+  }
+  if (struct_v >= 24) {
+    ceph::versioned_variant::decode(owner, bl);
+  } else {
+    owner = std::move(user); // user was decoded piecewise above
   }
 
   if (layout.logs.empty() &&
@@ -2493,7 +2520,7 @@ void RGWBucketInfo::dump(Formatter *f) const
   encode_json("bucket", bucket, f);
   utime_t ut(creation_time);
   encode_json("creation_time", ut, f);
-  encode_json("owner", owner.to_str(), f);
+  encode_json("owner", owner, f);
   encode_json("flags", flags, f);
   encode_json("zonegroup", zonegroup, f);
   encode_json("placement_rule", placement_rule, f);
