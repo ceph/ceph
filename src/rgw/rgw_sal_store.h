@@ -135,7 +135,7 @@ class StoreBucket : public Bucket {
 
     virtual Attrs& get_attrs(void) override { return attrs; }
     virtual int set_attrs(Attrs a) override { attrs = a; return 0; }
-    virtual const rgw_user& get_owner() const override { return info.owner; };
+    virtual const rgw_owner& get_owner() const override { return info.owner; }
     virtual bool empty() const override { return info.bucket.name.empty(); }
     virtual const std::string& get_name() const override { return info.bucket.name; }
     virtual const std::string& get_tenant() const override { return info.bucket.tenant; }

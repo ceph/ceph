@@ -3178,8 +3178,6 @@ class SyncPolicyContext
 
   rgw_sync_policy_info *policy{nullptr};
 
-  std::optional<rgw_user> owner;
-
 public:
   SyncPolicyContext(rgw::sal::ConfigStore* cfgstore,
                     std::optional<rgw_bucket> _bucket)
@@ -3204,8 +3202,6 @@ public:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return ret;
     }
-
-    owner = bucket->get_info().owner;
 
     if (!bucket->get_info().sync_policy) {
       rgw_sync_policy_info new_policy;
@@ -3238,10 +3234,6 @@ public:
 
   rgw_sync_policy_info& get_policy() {
     return *policy;
-  }
-
-  std::optional<rgw_user>& get_owner() {
-    return owner;
   }
 };
 
@@ -7442,7 +7434,7 @@ int main(int argc, const char **argv)
 	return -r;
       }
       formatter->dump_string("bucket_id", entry.bucket_id);
-      formatter->dump_string("bucket_owner", entry.bucket_owner.to_str());
+      formatter->dump_string("bucket_owner", to_string(entry.bucket_owner));
       formatter->dump_string("bucket", entry.bucket);
 
       uint64_t agg_time = 0;
@@ -8887,7 +8879,7 @@ next:
           cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
-        ret = bucket->sync_user_stats(dpp(), null_yield, nullptr);
+        ret = bucket->sync_owner_stats(dpp(), null_yield, nullptr);
         if (ret < 0) {
           cerr << "ERROR: could not sync bucket stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -10006,11 +9998,9 @@ next:
 
     if (!rgw::sal::User::empty(user)) {
       pipe->params.user = user->get_id();
-    } else if (pipe->params.user.empty()) {
-      auto owner = sync_policy_ctx.get_owner();
-      if (owner) {
-        pipe->params.user = *owner;
-      }
+    } else if (pipe->params.mode == rgw_sync_pipe_params::MODE_USER) {
+      cerr << "ERROR: missing --uid for --mode=user" << std::endl;
+      return EINVAL;
     }
 
     ret = sync_policy_ctx.write_policy();

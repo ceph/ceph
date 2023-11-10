@@ -303,8 +303,19 @@ struct BucketMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "PlacementRule") == 0) {
       create_metatable<PlacementRuleMetaTable>(L, name, index, false, &(bucket->get_info().placement_rule));
     } else if (strcasecmp(index, "User") == 0) {
-      create_metatable<UserMetaTable>(L, name, index, false, 
-          const_cast<rgw_user*>(&bucket->get_owner()));
+      const rgw_owner& owner = bucket->get_owner();
+      if (const rgw_user* u = std::get_if<rgw_user>(&owner); u) {
+        create_metatable<UserMetaTable>(L, name, index, false, const_cast<rgw_user*>(u));
+      } else {
+        lua_pushnil(L);
+      }
+    } else if (strcasecmp(index, "Account") == 0) {
+      const rgw_owner& owner = bucket->get_owner();
+      if (const rgw_account_id* a = std::get_if<rgw_account_id>(&owner); a) {
+        pushstring(L, *a);
+      } else {
+        lua_pushnil(L);
+      }
     } else {
       return error_unknown_field(L, index, name);
     }
