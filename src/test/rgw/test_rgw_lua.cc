@@ -367,8 +367,7 @@ TEST(TestRGWLua, Bucket)
   info.bucket.name = "myname";
   info.bucket.marker = "mymarker";
   info.bucket.bucket_id = "myid";
-  info.owner.id = "myuser";
-  info.owner.tenant = "mytenant";
+  info.owner = rgw_user{"mytenant", "myuser"};
   s.bucket.reset(new sal::RadosBucket(nullptr, info));
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
@@ -672,8 +671,7 @@ TEST(TestRGWLua, Acl)
     end
 
     assert(Request.UserAcl.Owner.DisplayName == "jack black", Request.UserAcl.Owner.DisplayName)
-    assert(Request.UserAcl.Owner.User.Id == "black", Request.UserAcl.Owner.User.Id)
-    assert(Request.UserAcl.Owner.User.Tenant == "jack", Request.UserAcl.Owner.User.Tenant)
+    assert(Request.UserAcl.Owner.User == "jack$black", Request.UserAcl.Owner.User)
     assert(#Request.UserAcl.Grants == 7)
     print_grant("", Request.UserAcl.Grants[""])
     for k, v in pairs(Request.UserAcl.Grants) do
@@ -735,8 +733,7 @@ TEST(TestRGWLua, UseFunction)
 	const std::string script = R"(
 		function print_owner(owner)
   		print("Owner Display Name: " .. owner.DisplayName)
-  		print("Owner Id: " .. owner.User.Id)
-  		print("Owner Tenanet: " .. owner.User.Tenant)
+  		print("Owner Id: " .. owner.User)
 		end
 
 		print_owner(Request.ObjectOwner)
@@ -1586,8 +1583,7 @@ TEST(TestRGWLua, DifferentContextUser)
   s.user.reset(new sal::RadosUser(nullptr, rgw_user("tenant1", "user1")));
   RGWBucketInfo info;
   info.bucket.name = "bucket1";
-  info.owner.id = "user2";
-  info.owner.tenant = "tenant2";
+  info.owner = rgw_user{"tenant2", "user2"};
   s.bucket.reset(new sal::RadosBucket(nullptr, info));
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);

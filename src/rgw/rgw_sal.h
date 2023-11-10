@@ -738,7 +738,7 @@ class Bucket {
 
     /// Input parameters for create().
     struct CreateParams {
-      rgw_user owner;
+      rgw_owner owner;
       std::string zonegroup_id;
       rgw_placement_rule placement_rule;
       // zone placement is optional on buckets created for another zonegroup
@@ -772,18 +772,18 @@ class Bucket {
 				 const bucket_index_layout_generation& idx_layout,
 				 int shard_id, boost::intrusive_ptr<ReadStatsCB> cb) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
-    virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                                RGWBucketEnt* optional_ent) = 0;
+    virtual int sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* optional_ent) = 0;
     /** Check if this bucket needs resharding, and schedule it if it does */
     virtual int check_bucket_shards(const DoutPrefixProvider* dpp,
                                     uint64_t num_objs, optional_yield y) = 0;
     /** Change the owner of this bucket in the backing store.  Current owner must be set.  Does not
      * change ownership of the objects in the bucket. */
-    virtual int chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y) = 0;
+    virtual int chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y) = 0;
     /** Store the cached bucket info into the backing store */
     virtual int put_info(const DoutPrefixProvider* dpp, bool exclusive, ceph::real_time mtime, optional_yield y) = 0;
     /** Get the owner of this bucket */
-    virtual const rgw_user& get_owner() const = 0;
+    virtual const rgw_owner& get_owner() const = 0;
     /** Check in the backing store if this bucket is empty */
     virtual int check_empty(const DoutPrefixProvider* dpp, optional_yield y) = 0;
     /** Check if the given size fits within the quota */
@@ -965,8 +965,8 @@ class Object {
      */
     struct DeleteOp {
       struct Params {
-        ACLOwner bucket_owner;
-        ACLOwner obj_owner;
+        rgw_owner bucket_owner; //< bucket owner for usage/quota accounting
+        ACLOwner obj_owner; //< acl owner for delete marker if necessary
         int versioning_status{0};
         uint64_t olh_epoch{0};
 	std::string marker_version_id;
@@ -1000,7 +1000,7 @@ class Object {
 			      optional_yield y,
 			      uint32_t flags) = 0;
     /** Copy an this object to another object. */
-    virtual int copy_object(const ACLOwner& owner,
+    virtual int copy_object(const ACLOwner& owner, const rgw_user& remote_user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -1122,10 +1122,15 @@ class Object {
     virtual rgw_obj get_obj(void) const = 0;
 
     /** Restore the previous swift version of this object */
-    virtual int swift_versioning_restore(const ACLOwner& owner, bool& restored,   /* out */
-					 const DoutPrefixProvider* dpp, optional_yield y) = 0;
+    virtual int swift_versioning_restore(const ACLOwner& owner,
+                                         const rgw_user& remote_user,
+                                         bool& restored,
+                                         const DoutPrefixProvider* dpp,
+                                         optional_yield y) = 0;
     /** Copy the current version of a swift object to the configured destination bucket*/
-    virtual int swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
+    virtual int swift_versioning_copy(const ACLOwner& owner,
+                                      const rgw_user& remote_user,
+				      const DoutPrefixProvider* dpp,
 				      optional_yield y) = 0;
 
     /** Get a new ReadOp for this object */

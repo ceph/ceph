@@ -682,10 +682,10 @@ int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return next->read_stats_async(dpp, idx_layout, shard_id, ctx);
 }
 
-int FilterBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                                  RGWBucketEnt* ent)
+int FilterBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                   RGWBucketEnt* ent)
 {
-  return next->sync_user_stats(dpp, y, ent);
+  return next->sync_owner_stats(dpp, y, ent);
 }
 
 int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
@@ -694,7 +694,7 @@ int FilterBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return next->check_bucket_shards(dpp, num_objs, y);
 }
 
-int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
+int FilterBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
 {
   return next->chown(dpp, new_owner, y);
 }
@@ -705,7 +705,7 @@ int FilterBucket::put_info(const DoutPrefixProvider* dpp, bool exclusive,
   return next->put_info(dpp, exclusive, _mtime, y);
 }
 
-const rgw_user& FilterBucket::get_owner() const
+const rgw_owner& FilterBucket::get_owner() const
 {
   return next->get_owner();
 }
@@ -825,6 +825,7 @@ int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 }
 
 int FilterObject::copy_object(const ACLOwner& owner,
+			      const rgw_user& remote_user,
 			      req_info* info,
 			      const rgw_zone_id& source_zone,
 			      rgw::sal::Object* dest_object,
@@ -852,7 +853,7 @@ int FilterObject::copy_object(const ACLOwner& owner,
 			      const DoutPrefixProvider* dpp,
 			      optional_yield y)
 {
-  return next->copy_object(owner, info, source_zone,
+  return next->copy_object(owner, remote_user, info, source_zone,
 			   nextObject(dest_object),
 			   nextBucket(dest_bucket),
 			   nextBucket(src_bucket),
@@ -957,16 +958,21 @@ void FilterObject::set_bucket(Bucket* b)
   next->set_bucket(nextBucket(b));
 };
 
-int FilterObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
-					   const DoutPrefixProvider* dpp, optional_yield y)
+int FilterObject::swift_versioning_restore(const ACLOwner& owner,
+                                           const rgw_user& remote_user,
+                                           bool& restored,
+                                           const DoutPrefixProvider* dpp,
+                                           optional_yield y)
 {
-  return next->swift_versioning_restore(owner, restored, dpp, y);
+  return next->swift_versioning_restore(owner, remote_user, restored, dpp, y);
 }
 
-int FilterObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
-					optional_yield y)
+int FilterObject::swift_versioning_copy(const ACLOwner& owner,
+                                        const rgw_user& remote_user,
+                                        const DoutPrefixProvider* dpp,
+                                        optional_yield y)
 {
-  return next->swift_versioning_copy(owner, dpp, y);
+  return next->swift_versioning_copy(owner, remote_user, dpp, y);
 }
 
 std::unique_ptr<Object::ReadOp> FilterObject::get_read_op()

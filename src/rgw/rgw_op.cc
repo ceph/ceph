@@ -265,7 +265,7 @@ static int get_user_policy_from_attr(const DoutPrefixProvider *dpp,
 int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp, 
                                        CephContext *cct,
 				       rgw::sal::Driver* driver,
-				       const rgw_user& bucket_owner,
+				       const rgw_owner& bucket_owner,
 				       map<string, bufferlist>& bucket_attrs,
 				       RGWAccessControlPolicy& policy,
 				       optional_yield y)
@@ -278,13 +278,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
       return ret;
   } else {
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(bucket_owner);
-    /* object exists, but policy is broken */
-    int r = user->load_user(dpp, y);
-    if (r < 0)
-      return r;
-
-    policy.create_default(user->get_id(), user->get_display_name());
+    policy.create_default(bucket_owner, "");
   }
   return 0;
 }
@@ -486,6 +480,42 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   return ret;
 }
 
+// try to read swift account acls from the owning user
+static int get_swift_owner_account_acl(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       rgw::sal::Driver* driver,
+                                       const ACLOwner& owner,
+                                       RGWAccessControlPolicy& policy)
+{
+  // only rgw_user owners support swift acls
+  const rgw_user* uid = std::get_if<rgw_user>(&owner.id);
+  if (uid == nullptr) {
+    return 0;
+  }
+  if (uid->empty()) {
+    return 0;
+  }
+
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(*uid);
+  int ret = user->read_attrs(dpp, y);
+  if (!ret) {
+    ret = get_user_policy_from_attr(dpp, dpp->get_cct(),
+                                    user->get_attrs(), policy);
+  }
+  if (-ENOENT == ret) {
+    /* In already existing clusters users won't have ACL. In such case
+     * assuming that only account owner has the rights seems to be
+     * reasonable. That allows to have only one verification logic.
+     * NOTE: there is small compatibility kludge for global, empty tenant:
+     *  1. if we try to reach an existing bucket, its owner is considered
+     *     as account owner.
+     *  2. otherwise account owner is identity stored in s->owner. */
+    policy.create_default(owner.id, owner.display_name);
+    ret = 0;
+  }
+  return ret;
+}
+
 /**
  * Get the AccessControlPolicy for an user, bucket or object off of disk.
  * s: The req_state to draw information from.
@@ -588,24 +618,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 
   /* handle user ACL only for those APIs which support it */
   if (s->dialect == "swift" && !s->user->get_id().empty()) {
-    std::unique_ptr<rgw::sal::User> acl_user = driver->get_user(acct_acl_user->id);
-
-    ret = acl_user->read_attrs(dpp, y);
-    if (!ret) {
-      ret = get_user_policy_from_attr(dpp, s->cct, acl_user->get_attrs(), s->user_acl);
-    }
-    if (-ENOENT == ret) {
-      /* In already existing clusters users won't have ACL. In such case
-       * assuming that only account owner has the rights seems to be
-       * reasonable. That allows to have only one verification logic.
-       * NOTE: there is small compatibility kludge for global, empty tenant:
-       *  1. if we try to reach an existing bucket, its owner is considered
-       *     as account owner.
-       *  2. otherwise account owner is identity stored in s->user->user_id.  */
-      s->user_acl.create_default(acct_acl_user->id,
-                                 acct_acl_user->display_name);
-      ret = 0;
-    } else if (ret < 0) {
+    ret = get_swift_owner_account_acl(dpp, y, driver, *acct_acl_user, s->user_acl);
+    if (ret < 0) {
       ldpp_dout(dpp, 0) << "NOTICE: couldn't get user attrs for handling ACL "
           "(user_id=" << s->user->get_id() << ", ret=" << ret << ")" << dendl;
       return ret;
@@ -1412,6 +1426,34 @@ int RGWOp::do_aws4_auth_completion()
   return 0;
 }
 
+static int get_owner_quota_info(DoutPrefixProvider* dpp,
+                                optional_yield y,
+                                rgw::sal::Driver* driver,
+                                const rgw_owner& owner,
+                                RGWQuota& quotas)
+{
+  return std::visit(fu2::overload(
+      [&] (const rgw_user& uid) {
+        auto user = driver->get_user(uid);
+        int r = user->load_user(dpp, y);
+        if (r >= 0) {
+          quotas = user->get_info().quota;
+        }
+        return r;
+      },
+      [&] (const rgw_account_id& account_id) {
+        RGWAccountInfo info;
+        rgw::sal::Attrs attrs; // ignored
+        RGWObjVersionTracker objv; // ignored
+        int r = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+        if (r >= 0) {
+          // no bucket quota
+          quotas.user_quota = info.quota;
+        }
+        return r;
+      }), owner);
+}
+
 int RGWOp::init_quota()
 {
   /* no quota enforcement for system requests */
@@ -1428,30 +1470,29 @@ int RGWOp::init_quota()
     return 0;
   }
 
-  std::unique_ptr<rgw::sal::User> owner_user =
-			driver->get_user(s->bucket->get_info().owner);
-  rgw::sal::User* user;
+  RGWQuota user_quotas;
 
-  if (s->user->get_id() == s->bucket_owner.id) {
-    user = s->user.get();
+  if (s->owner.id == s->bucket_owner.id) {
+    user_quotas = s->user->get_info().quota;
   } else {
-    int r = owner_user->load_user(this, s->yield);
-    if (r < 0)
+    // consult the bucket owner's quota
+    int r = get_owner_quota_info(this, s->yield, driver,
+                                 s->bucket_owner.id, user_quotas);
+    if (r < 0) {
       return r;
-    user = owner_user.get();
-    
+    }
   }
 
   driver->get_quota(quota);
 
   if (s->bucket->get_info().quota.enabled) {
     quota.bucket_quota = s->bucket->get_info().quota;
-  } else if (user->get_info().quota.bucket_quota.enabled) {
-    quota.bucket_quota = user->get_info().quota.bucket_quota;
+  } else if (user_quotas.bucket_quota.enabled) {
+    quota.bucket_quota = user_quotas.bucket_quota;
   }
 
-  if (user->get_info().quota.user_quota.enabled) {
-    quota.user_quota = user->get_info().quota.user_quota;
+  if (user_quotas.user_quota.enabled) {
+    quota.user_quota = user_quotas.user_quota;
   }
 
   return 0;
@@ -3585,7 +3626,7 @@ void RGWCreateBucket::execute(optional_yield y)
       op_ret = s->bucket->load_bucket(this, y);
       if (op_ret < 0) {
         return;
-      } else if (s->bucket->get_owner() != s->user->get_id()) {
+      } else if (!s->auth.identity->is_owner_of(s->bucket->get_owner())) {
         /* New bucket doesn't belong to the account we're operating on. */
         op_ret = -EEXIST;
         return;
@@ -3679,7 +3720,7 @@ void RGWDeleteBucket::execute(optional_yield y)
     }
   }
 
-  op_ret = s->bucket->sync_user_stats(this, y, nullptr);
+  op_ret = s->bucket->sync_owner_stats(this, y, nullptr);
   if ( op_ret < 0) {
      ldpp_dout(this, 1) << "WARNING: failed to sync user stats before bucket delete: op_ret= " << op_ret << dendl;
   }
@@ -4191,7 +4232,8 @@ void RGWPutObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
-    op_ret = s->object->swift_versioning_copy(s->owner, this, s->yield);
+    op_ret = s->object->swift_versioning_copy(s->owner, s->user->get_id(),
+                                              this, s->yield);
     if (op_ret < 0) {
       return;
     }
@@ -5323,7 +5365,8 @@ void RGWDeleteObj::execute(optional_yield y)
     s->object->set_atomic();
     
     bool ver_restored = false;
-    op_ret = s->object->swift_versioning_restore(s->owner, ver_restored, this, y);
+    op_ret = s->object->swift_versioning_restore(s->owner, s->user->get_id(),
+                                                 ver_restored, this, y);
     if (op_ret < 0) {
       return;
     }
@@ -5341,7 +5384,7 @@ void RGWDeleteObj::execute(optional_yield y)
 
       std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = s->object->get_delete_op();
       del_op->params.obj_owner = s->owner;
-      del_op->params.bucket_owner = s->bucket_owner;
+      del_op->params.bucket_owner = s->bucket_owner.id;
       del_op->params.versioning_status = s->bucket->get_info().versioning_status();
       del_op->params.unmod_since = unmod_since;
       del_op->params.high_precision_time = s->system_request;
@@ -5799,12 +5842,14 @@ void RGWCopyObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. In case of copying to remote this
    * should fail gently (op_ret == 0) as the dst_obj will not exist here. */
-  op_ret = s->object->swift_versioning_copy(s->owner, this, s->yield);
+  op_ret = s->object->swift_versioning_copy(s->owner, s->user->get_id(),
+                                            this, s->yield);
   if (op_ret < 0) {
     return;
   }
 
   op_ret = s->src_object->copy_object(s->owner,
+	   s->user->get_id(),
 	   &s->info,
 	   source_zone,
 	   s->object.get(),
@@ -6012,7 +6057,7 @@ void RGWPutACLs::execute(optional_yield y)
   if (op_ret < 0)
     return;
 
-  if (!existing_owner.id.empty() &&
+  if (!existing_owner.empty() &&
       existing_owner.id != new_policy.get_owner().id) {
     s->err.message = "Cannot modify ACL Owner";
     op_ret = -EPERM;
@@ -7261,7 +7306,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
   del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
   del_op->params.obj_owner = s->owner;
-  del_op->params.bucket_owner = s->bucket_owner;
+  del_op->params.bucket_owner = s->bucket_owner.id;
   del_op->params.marker_version_id = version_id;
 
   op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
@@ -7436,7 +7481,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
     del_op->params.versioning_status = obj->get_bucket()->get_info().versioning_status();
     del_op->params.obj_owner = bowner;
-    del_op->params.bucket_owner = bucket_owner;
+    del_op->params.bucket_owner = bucket_owner.id;
 
     ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {

@@ -68,6 +68,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "account.h"
+#include "buckets.h"
 #include "rgw_pubsub.h"
 #include "topic.h"
 
@@ -335,7 +336,8 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
     }
   }
 
-  ret = store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y, nullptr);
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  ret = store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, nullptr);
   if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -353,14 +355,13 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
 
   // if bucket has notification definitions associated with it
   // they should be removed (note that any pending notifications on the bucket are still going to be sent)
-  const RGWPubSub ps(store, info.owner.tenant, *store->svc()->site);
+  const RGWPubSub ps(store, info.bucket.tenant, *store->svc()->site);
   const RGWPubSub::Bucket ps_bucket(ps, this);
   const auto ps_ret = ps_bucket.remove_notifications(dpp, y);
   if (ps_ret < 0 && ps_ret != -ENOENT) {
     ldpp_dout(dpp, -1) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
   }
 
-  librados::Rados& rados = *store->getRados()->get_rados_handle();
   ret = store->ctl()->bucket->unlink_bucket(rados, info.owner,
                                             info.bucket, y, dpp, false);
   if (ret < 0) {
@@ -487,7 +488,7 @@ int RadosBucket::remove_bypass_gc(int concurrent_max, bool
     return ret;
   }
 
-  sync_user_stats(dpp, y, nullptr);
+  sync_owner_stats(dpp, y, nullptr);
   if (ret < 0) {
      ldpp_dout(dpp, 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -551,10 +552,11 @@ int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return store->getRados()->get_bucket_stats_async(dpp, get_info(), idx_layout, shard_id, ctx);
 }
 
-int RadosBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                                 RGWBucketEnt* ent)
+int RadosBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                  RGWBucketEnt* ent)
 {
-  return store->ctl()->bucket->sync_user_stats(dpp, info.owner, info, y, ent);
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  return store->ctl()->bucket->sync_owner_stats(dpp, rados, info.owner, info, y, ent);
 }
 
 int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
@@ -563,18 +565,19 @@ int RadosBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return store->getRados()->check_bucket_shards(info, num_objs, dpp, y);
 }
 
-int RadosBucket::link(const DoutPrefixProvider* dpp, const rgw_user& new_user, optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv)
+int RadosBucket::link(const DoutPrefixProvider* dpp, const rgw_owner& new_owner,
+                      optional_yield y, bool update_entrypoint, RGWObjVersionTracker* objv)
 {
   RGWBucketEntryPoint ep;
   ep.bucket = info.bucket;
-  ep.owner = new_user;
+  ep.owner = new_owner;
   ep.creation_time = get_creation_time();
   ep.linked = true;
   Attrs ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
 
   librados::Rados& rados = *store->getRados()->get_rados_handle();
-  int r = store->ctl()->bucket->link_bucket(rados, new_user, info.bucket,
+  int r = store->ctl()->bucket->link_bucket(rados, new_owner, info.bucket,
 					    get_creation_time(), y, dpp, update_entrypoint,
 					    &ep_data);
   if (r < 0)
@@ -586,14 +589,14 @@ int RadosBucket::link(const DoutPrefixProvider* dpp, const rgw_user& new_user, o
   return r;
 }
 
-int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_user& owner, optional_yield y, bool update_entrypoint)
+int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_owner& owner, optional_yield y, bool update_entrypoint)
 {
   librados::Rados& rados = *store->getRados()->get_rados_handle();
   return store->ctl()->bucket->unlink_bucket(rados, owner, info.bucket,
                                              y, dpp, update_entrypoint);
 }
 
-int RadosBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
+int RadosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
 {
   std::string obj_marker;
   // unlink from the owner, but don't update the entrypoint until link()
@@ -642,14 +645,22 @@ int RadosBucket::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			       RGWUsageIter& usage_iter,
 			       map<rgw_user_bucket, rgw_usage_log_entry>& usage)
 {
-  return store->getRados()->read_usage(dpp, info.owner, get_name(), start_epoch,
+  const rgw_user* user = std::get_if<rgw_user>(&info.owner);
+  if (!user) {
+    return -ENOTSUP; // not supported for account owners
+  }
+  return store->getRados()->read_usage(dpp, *user, get_name(), start_epoch,
 				       end_epoch, max_entries, is_truncated,
 				       usage_iter, usage);
 }
 
 int RadosBucket::trim_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, optional_yield y)
 {
-  return store->getRados()->trim_usage(dpp, info.owner, get_name(), start_epoch, end_epoch, y);
+  const rgw_user* user = std::get_if<rgw_user>(&info.owner);
+  if (!user) {
+    return -ENOTSUP; // not supported for account owners
+  }
+  return store->getRados()->trim_usage(dpp, *user, get_name(), start_epoch, end_epoch, y);
 }
 
 int RadosBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
@@ -1092,14 +1103,21 @@ int RadosStore::load_account_stats(const DoutPrefixProvider* dpp,
                                    ceph::real_time& last_synced,
                                    ceph::real_time& last_updated)
 {
-  return -ENOTSUP;
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_buckets_obj(zone, id);
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  return rgwrados::buckets::read_stats(dpp, y, rados, obj, stats,
+                                       &last_synced, &last_updated);
 }
 
 int RadosStore::load_account_stats_async(const DoutPrefixProvider* dpp,
                                          std::string_view id,
                                          boost::intrusive_ptr<ReadStatsCB> cb)
 {
-  return -ENOTSUP;
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_buckets_obj(zone, id);
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  return rgwrados::buckets::read_stats_async(dpp, rados, obj, std::move(cb));
 }
 
 std::unique_ptr<Object> RadosStore::get_object(const rgw_obj_key& k)
@@ -2255,7 +2273,7 @@ RadosObject::RadosDeleteOp::RadosDeleteOp(RadosObject *_source) :
 
 int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
-  parent_op.params.bucket_owner = params.bucket_owner.id;
+  parent_op.params.bucket_owner = params.bucket_owner;
   parent_op.params.versioning_status = params.versioning_status;
   parent_op.params.obj_owner = params.obj_owner;
   parent_op.params.olh_epoch = params.olh_epoch;
@@ -2295,6 +2313,7 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 }
 
 int RadosObject::copy_object(const ACLOwner& owner,
+				const rgw_user& remote_user,
 				req_info* info,
 				const rgw_zone_id& source_zone,
 				rgw::sal::Object* dest_object,
@@ -2324,6 +2343,7 @@ int RadosObject::copy_object(const ACLOwner& owner,
 {
   return store->getRados()->copy_obj(*rados_ctx,
 				     owner,
+				     remote_user,
 				     info,
 				     source_zone,
 				     dest_object->get_obj(),
@@ -2359,22 +2379,23 @@ int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
   return parent_op.iterate(dpp, ofs, end, cb, y);
 }
 
-int RadosObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
+int RadosObject::swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,
 					  const DoutPrefixProvider* dpp, optional_yield y)
 {
   rgw_obj obj = get_obj();
   return store->getRados()->swift_versioning_restore(*rados_ctx,
-						     owner,
+						     owner, remote_user,
 						     bucket->get_info(),
 						     obj,
 						     restored,
 						     dpp, y);
 }
 
-int RadosObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp, optional_yield y)
+int RadosObject::swift_versioning_copy(const ACLOwner& owner, const rgw_user& remote_user,
+                                       const DoutPrefixProvider* dpp, optional_yield y)
 {
   return store->getRados()->swift_versioning_copy(*rados_ctx,
-                                        owner,
+                                        owner, remote_user,
                                         bucket->get_info(),
                                         get_obj(),
                                         dpp,
@@ -2491,7 +2512,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   }
 
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
-  del_op->params.bucket_owner.id = bucket->get_info().owner;
+  del_op->params.bucket_owner = bucket->get_info().owner;
   del_op->params.versioning_status = 0;
   if (!remove_objs.empty()) {
     del_op->params.remove_objs = &remove_objs;

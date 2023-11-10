@@ -967,8 +967,8 @@ int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int POSIXBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                                 RGWBucketEnt* ent)
+int POSIXBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                  RGWBucketEnt* ent)
 {
   return 0;
 }
@@ -979,7 +979,7 @@ int POSIXBucket::check_bucket_shards(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int POSIXBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
+int POSIXBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_owner, optional_yield y)
 {
   /* TODO map user to UID/GID, and change it */
   return 0;
@@ -1488,6 +1488,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 }
 
 int POSIXObject::copy_object(const ACLOwner& owner,
+                              const rgw_user& remote_user,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -1690,14 +1691,14 @@ int POSIXObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y
     return 0;
 }
 
-int POSIXObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
+int POSIXObject::swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,
 				       const DoutPrefixProvider* dpp, optional_yield y)
 {
   return 0;
 }
 
-int POSIXObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
-				    optional_yield y)
+int POSIXObject::swift_versioning_copy(const ACLOwner& owner, const rgw_user& remote_user,
+				    const DoutPrefixProvider* dpp, optional_yield y)
 {
   return 0;
 }

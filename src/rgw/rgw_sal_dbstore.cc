@@ -39,7 +39,8 @@ namespace rgw::sal {
     RGWUserBuckets ulist;
     bool is_truncated = false;
 
-    int ret = store->getDB()->list_buckets(dpp, "", info.user_id, marker,
+    std::string owner = info.user_id.to_str();
+    int ret = store->getDB()->list_buckets(dpp, "", owner, marker,
         end_marker, max, need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
@@ -226,8 +227,8 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                                RGWBucketEnt* ent)
+  int DBBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* ent)
   {
     return 0;
   }
@@ -238,7 +239,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::chown(const DoutPrefixProvider *dpp, const rgw_user& new_owner, optional_yield y)
+  int DBBucket::chown(const DoutPrefixProvider *dpp, const rgw_owner& new_owner, optional_yield y)
   {
     int ret;
 
@@ -702,7 +703,6 @@ namespace rgw::sal {
 
   int DBObject::DBDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
   {
-    parent_op.params.bucket_owner = params.bucket_owner.id;
     parent_op.params.versioning_status = params.versioning_status;
     parent_op.params.obj_owner = params.obj_owner;
     parent_op.params.olh_epoch = params.olh_epoch;
@@ -732,13 +732,13 @@ namespace rgw::sal {
     DB::Object del_target(store->getDB(), bucket->get_info(), get_obj());
     DB::Object::Delete del_op(&del_target);
 
-    del_op.params.bucket_owner = bucket->get_info().owner;
     del_op.params.versioning_status = bucket->get_info().versioning_status();
 
     return del_op.delete_obj(dpp);
   }
 
   int DBObject::copy_object(const ACLOwner& owner,
+      const rgw_user& remote_user,
       req_info* info,
       const rgw_zone_id& source_zone,
       rgw::sal::Object* dest_object,
@@ -774,14 +774,16 @@ namespace rgw::sal {
     return parent_op.iterate(dpp, ofs, end, cb);
   }
 
-  int DBObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
+  int DBObject::swift_versioning_restore(const ACLOwner& owner,
+      const rgw_user& remote_user, bool& restored,
       const DoutPrefixProvider* dpp, optional_yield y)
   {
     return 0;
   }
 
-  int DBObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
-      optional_yield y)
+  int DBObject::swift_versioning_copy(const ACLOwner& owner,
+      const rgw_user& remote_user,
+      const DoutPrefixProvider* dpp, optional_yield y)
   {
     return 0;
   }
@@ -794,7 +796,7 @@ namespace rgw::sal {
     int ret;
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
-    del_op->params.bucket_owner.id = bucket->get_info().owner;
+    del_op->params.bucket_owner = bucket->get_info().owner;
     del_op->params.versioning_status = 0;
 
     // Since the data objects are associated with meta obj till
@@ -834,7 +836,7 @@ namespace rgw::sal {
     DB::Object::Write obj_op(&op_target);
 
     /* Create meta object */
-    obj_op.meta.owner = owner.id;
+    obj_op.meta.owner = to_string(owner.id);
     obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
     obj_op.meta.mtime = &mtime;
@@ -1013,7 +1015,7 @@ namespace rgw::sal {
     DB::Object::Write obj_op(&op_target);
     ret = obj_op.prepare(dpp);
 
-    obj_op.meta.owner = owner.id;
+    obj_op.meta.owner = to_string(owner.id);
     obj_op.meta.flags = PUT_OBJ_CREATE;
     obj_op.meta.category = RGWObjCategory::Main;
     obj_op.meta.modify_tail = true;

@@ -77,8 +77,12 @@ transform_old_authinfo(CephContext* const cct,
 
     ACLOwner get_aclowner() const {
       ACLOwner owner;
-      owner.id = id;
-      owner.display_name = display_name;
+      if (!account_id.empty()) {
+        owner.id.emplace<rgw_account_id>(account_id);
+      } else {
+        owner.id = id;
+        owner.display_name = display_name;
+      }
       return owner;
     }
 
@@ -793,8 +797,12 @@ const std::string rgw::auth::LocalApplier::NO_ACCESS_KEY;
 ACLOwner rgw::auth::LocalApplier::get_aclowner() const
 {
   ACLOwner owner;
-  owner.id = user_info.user_id;
-  owner.display_name = user_info.display_name;
+  if (!user_info.account_id.empty()) {
+    owner.id = user_info.account_id;
+  } else {
+    owner.id = user_info.user_id;
+    owner.display_name = user_info.display_name;
+  }
   return owner;
 }
 

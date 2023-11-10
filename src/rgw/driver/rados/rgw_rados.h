@@ -633,7 +633,7 @@ public:
   int create_bucket(const DoutPrefixProvider* dpp,
                     optional_yield y,
                     const rgw_bucket& bucket,
-                    const rgw_user& owner,
+                    const rgw_owner& owner,
                     const std::string& zonegroup_id,
                     const rgw_placement_rule& placement_rule,
                     const RGWZonePlacementInfo* zone_placement,
@@ -797,7 +797,7 @@ public:
         const std::string *ptag;
         std::list<rgw_obj_index_key> *remove_objs;
         ceph::real_time set_mtime;
-        rgw_user bucket_owner; // for quota stats update
+        rgw_owner bucket_owner; // for quota stats update
         ACLOwner owner; // owner/owner_display_name for bucket index
         RGWObjCategory category;
         int flags;
@@ -839,7 +839,7 @@ public:
       RGWRados::Object *target;
 
       struct DeleteParams {
-        rgw_user bucket_owner; // for quota stats update
+        rgw_owner bucket_owner; // for quota stats update
         int versioning_status; // versioning flags defined in enum RGWBucketFlags
         ACLOwner obj_owner;    // needed for creation of deletion marker
         uint64_t olh_epoch;
@@ -1073,12 +1073,14 @@ public:
 
   int swift_versioning_copy(RGWObjectCtx& obj_ctx,              /* in/out */
                             const ACLOwner& owner,              /* in */
+                            const rgw_user& remote_user,        /* in */
                             RGWBucketInfo& bucket_info,         /* in */
                             const rgw_obj& obj,                 /* in */
                             const DoutPrefixProvider *dpp,      /* in */
                             optional_yield y);                  /* in */
   int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
                                const ACLOwner& owner,           /* in */
+                               const rgw_user& remote_user,     /* in */
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in/out */
                                bool& restored,                  /* out */
@@ -1174,7 +1176,8 @@ public:
    * Returns: 0 on success, -ERR# otherwise.
    */
   int copy_obj(RGWObjectCtx& obj_ctx,
-               const ACLOwner& owner,
+               const ACLOwner& owner, // owner of destination object
+               const rgw_user& remote_user, // uid for fetch_remote_obj() auth
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& dest_obj,
@@ -1579,7 +1582,7 @@ public:
   int fix_tail_obj_locator(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info,
                            rgw_obj_key& key, bool fix, bool *need_fix, optional_yield y);
 
-  int check_quota(const DoutPrefixProvider *dpp, const rgw_user& bucket_owner, rgw_bucket& bucket,
+  int check_quota(const DoutPrefixProvider *dpp, const rgw_owner& bucket_owner, rgw_bucket& bucket,
                   RGWQuota& quota, uint64_t obj_size,
 		  optional_yield y, bool check_size_only = false);
 

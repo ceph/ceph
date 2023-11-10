@@ -596,9 +596,9 @@ int RGWOwnerStatsCache::sync_bucket(const rgw_owner& owner, const rgw_bucket& b,
   }
 
   RGWBucketEnt ent;
-  r = bucket->sync_user_stats(dpp, y, &ent);
+  r = bucket->sync_owner_stats(dpp, y, &ent);
   if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: sync_user_stats() for bucket=" << bucket << " returned " << r << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: sync_owner_stats() for bucket=" << bucket << " returned " << r << dendl;
     return r;
   }
 

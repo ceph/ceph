@@ -13,6 +13,7 @@
 #include <rgw/rgw_b64.h>
 #include <rgw/rgw_rest_s3.h>
 #include "include/ceph_assert.h"
+#include "include/function2.hpp"
 #include "crypto/crypto_accel.h"
 #include "crypto/crypto_plugin.h"
 #include "rgw/rgw_kms.h"
@@ -964,7 +965,13 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
       continue;
     }
     if (t.compare(i+1, 8, "owner_id") == 0) {
-      r.append(s->bucket->get_info().owner.id);
+      r.append(std::visit(fu2::overload(
+          [] (const rgw_user& user_id) -> const std::string& {
+            return user_id.id;
+          },
+          [] (const rgw_account_id& account_id) -> const std::string& {
+            return account_id;
+          }), s->bucket->get_info().owner));
       i += 9;
       continue;
     }

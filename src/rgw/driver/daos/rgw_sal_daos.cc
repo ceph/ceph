@@ -499,8 +499,8 @@ int DaosBucket::read_stats_async(
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::sync_user_stats(const DoutPrefixProvider* dpp,
-                                optional_yield y) {
+int DaosBucket::sync_owner_stats(const DoutPrefixProvider* dpp,
+                                 optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -508,7 +508,7 @@ int DaosBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosBucket::chown(const DoutPrefixProvider* dpp, User& new_user,
+int DaosBucket::chown(const DoutPrefixProvider* dpp, const rgw_owner& new_user,
                       optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
@@ -1207,7 +1207,8 @@ int DaosObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int DaosObject::copy_object(
-    const ACLOwner& owner, req_info* info, const rgw_zone_id& source_zone,
+    const ACLOwner& owner, const rgw_user& remote_user,
+    req_info* info, const rgw_zone_id& source_zone,
     rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
     rgw::sal::Bucket* src_bucket, const rgw_placement_rule& dest_placement,
     ceph::real_time* src_mtime, ceph::real_time* mtime,
@@ -1221,13 +1222,13 @@ int DaosObject::copy_object(
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
-                                         const DoutPrefixProvider* dpp) {
+int DaosObject::swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,
+                                         const DoutPrefixProvider* dpp, optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
-                                      optional_yield y) {
+int DaosObject::swift_versioning_copy(const ACLOwner& owner, const rgw_user& remote_user,
+                                      const DoutPrefixProvider* dpp, optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 

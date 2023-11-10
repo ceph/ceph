@@ -964,7 +964,7 @@ class RGWSI_Zone;
 
 struct RGWBucketInfo {
   rgw_bucket bucket;
-  rgw_user owner;
+  rgw_owner owner;
   uint32_t flags{0};
   std::string zonegroup;
   ceph::real_time creation_time;

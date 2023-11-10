@@ -1074,7 +1074,7 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
   auto* rados = radosdriver->getRados()->get_rados_handle();
   int r = radosdriver->ctl()->bucket->unlink_bucket(*rados, owner.id, old_bucket->get_info().bucket, y, dpp, false);
   if (r < 0) {
-    set_err_msg(err, "could not unlink policy from user " + owner.id.to_str());
+    set_err_msg(err, "could not unlink bucket from owner " + to_string(owner.id));
     return r;
   }
 
@@ -3284,11 +3284,12 @@ int RGWBucketCtl::read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
   });
 }
 
-int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp, 
-                                  const rgw_user& user_id,
-                                  const RGWBucketInfo& bucket_info,
-				  optional_yield y,
-                                  RGWBucketEnt* pent)
+int RGWBucketCtl::sync_owner_stats(const DoutPrefixProvider *dpp,
+                                   librados::Rados& rados,
+                                   const rgw_owner& owner,
+                                   const RGWBucketInfo& bucket_info,
+                                   optional_yield y,
+                                   RGWBucketEnt* pent)
 {
   RGWBucketEnt ent;
   if (!pent) {
@@ -3300,7 +3301,16 @@ int RGWBucketCtl::sync_user_stats(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  return svc.user->flush_bucket_stats(dpp, user_id, *pent, y);
+  // flush stats to the user/account owner object
+  const rgw_raw_obj& obj = std::visit(fu2::overload(
+      [&] (const rgw_user& user) {
+        return svc.user->get_buckets_obj(user);
+      },
+      [&] (const rgw_account_id& id) {
+        const RGWZoneParams& zone = svc.zone->get_zone_params();
+        return rgwrados::account::get_buckets_obj(zone, id);
+      }), owner);
+  return rgwrados::buckets::write_stats(dpp, y, rados, obj, *pent);
 }
 
 int RGWBucketCtl::get_sync_policy_handler(std::optional<rgw_zone_id> zone,
