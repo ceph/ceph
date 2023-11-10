@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_sync.h"
+#include "rgw_sync_common.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
@@ -41,7 +42,7 @@ string RGWSyncErrorLogger::get_shard_oid(const string& oid_prefix, int shard_id)
 RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const DoutPrefixProvider *dpp, const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message) {
   cls::log::entry entry;
 
-  rgw_sync_error_info info(source_zone, error_code, message);
+  rgw::sync::error_info info(source_zone, error_code, message);
   bufferlist bl;
   encode(info, bl);
   store->svc()->cls->timelog.prepare_entry(entry, real_clock::now(), section, name, bl);
@@ -2640,10 +2641,4 @@ void rgw_meta_sync_status::decode_json(JSONObj *obj)
 void rgw_meta_sync_status::dump(Formatter *f) const {
   encode_json("info", sync_info, f);
   encode_json("markers", sync_markers, f);
-}
-
-void rgw_sync_error_info::dump(Formatter *f) const {
-  encode_json("source_zone", source_zone, f);
-  encode_json("error_code", error_code, f);
-  encode_json("message", message, f);
 }

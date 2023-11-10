@@ -83,33 +83,6 @@ public:
   static std::string get_shard_oid(const std::string& oid_prefix, int shard_id);
 };
 
-struct rgw_sync_error_info {
-  std::string source_zone;
-  uint32_t error_code;
-  std::string message;
-
-  rgw_sync_error_info() : error_code(0) {}
-  rgw_sync_error_info(const std::string& _source_zone, uint32_t _error_code, const std::string& _message) : source_zone(_source_zone), error_code(_error_code), message(_message) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(source_zone, bl);
-    encode(error_code, bl);
-    encode(message, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(source_zone, bl);
-    decode(error_code, bl);
-    decode(message, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(rgw_sync_error_info)
 
 #define DEFAULT_BACKOFF_MAX 30
 

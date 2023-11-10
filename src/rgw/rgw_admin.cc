@@ -76,6 +76,7 @@ extern "C" {
 
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_sal_rados.h"
+#include "driver/rados/rgw_sync_common.h"
 
 #define dout_context g_ceph_context
 
@@ -9497,7 +9498,7 @@ next:
         count += entries.size();
 
         for (auto& cls_entry : entries) {
-          rgw_sync_error_info log_entry;
+	  rgw::sync::error_info log_entry;
 
           auto iter = cls_entry.data.cbegin();
           try {
