@@ -13,6 +13,7 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_sync_common.h"
 #include "rgw_sync_trace.h"
 #include "rgw_mdlog.h"
 #include "sync_fairness.h"
@@ -75,21 +76,12 @@ public:
 };
 
 
-#define DEFAULT_BACKOFF_MAX 30
-
-class RGWSyncBackoff {
-  int cur_wait;
-  int max_secs;
-
-  void update_wait_time();
+class RGWSyncBackoff : public rgw::sync::BackoffBase {
 public:
-  explicit RGWSyncBackoff(int _max_secs = DEFAULT_BACKOFF_MAX) : cur_wait(0), max_secs(_max_secs) {}
+  explicit RGWSyncBackoff(std::chrono::seconds max = DEFAULT_MAX)
+    : rgw::sync::BackoffBase(max) {}
 
   void backoff_sleep();
-  void reset() {
-    cur_wait = 0;
-  }
-
   void backoff(RGWCoroutine *op);
 };
 

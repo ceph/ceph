@@ -3,16 +3,17 @@
 
 #include "rgw_sync_asio.h"
 
+#include <boost/asio/steady_timer.hpp>
 #include <boost/asio/use_awaitable.hpp>
 
 #include <fmt/format.h>
 
 #include "include/neorados/RADOS.hpp"
 
+#include "neorados/cls/log.h"
+
 #include "rgw_neorados.h"
 #include "rgw_sync_common.h"
-
-#include "neorados/cls/log.h"
 
 using ceph::real_clock;
 using neorados::WriteOp;
@@ -47,5 +48,11 @@ asio::awaitable<void> ErrorLogger::log_error(const DoutPrefixProvider* dpp,
   co_await store->get_neorados().execute(
     next_oid(), ioc, WriteOp{}.exec(ncl::add(std::move(entry))),
     asio::use_awaitable);
+}
+
+asio::awaitable<void> Backoff::backoff() {
+  update_wait_time();
+  asio::steady_timer t(co_await asio::this_coro::executor, cur_wait);
+  co_return co_await t.async_wait(asio::use_awaitable);
 }
 }

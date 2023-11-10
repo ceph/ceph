@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstdint>
 #include <string>
 #include <string_view>
@@ -19,6 +20,8 @@ namespace rgw::sync {
 using namespace std::literals;
 
 namespace buffer = ceph::buffer;
+using namespace std::literals;
+
 struct error_info {
   std::string source_zone;
   std::uint32_t error_code = 0;
@@ -50,6 +53,7 @@ struct error_info {
 };
 WRITE_CLASS_ENCODER(error_info)
 
+
 class ErrorLoggerBase {
 public:
   static constexpr auto SHARDS = 32;
@@ -75,5 +79,32 @@ public:
 
   static std::string get_shard_oid(std::string_view oid_prefix,
 				   int shard_id);
+};
+
+/// Base for an exponential backoff, managing the actual time values.
+///
+/// This class and its descendants are not thread-safe and must called
+/// from a single thread or otherwise protected.
+class BackoffBase {
+protected:
+  /// The default maximum backoff
+  static constexpr auto DEFAULT_MAX = 30s;
+
+  /// Maximum backoff
+  const std::chrono::seconds max;
+  /// current backoff time
+  std::chrono::seconds cur_wait = 0s;
+
+  /// Double (up to a ceiling) the backoff time, to be called from
+  /// every wait function.
+  void update_wait_time();
+public:
+  explicit BackoffBase(std::chrono::seconds max = DEFAULT_MAX)
+    : max(max) {}
+
+  /// reset wait time to 0.
+  void reset() {
+    cur_wait = 0s;
+  }
 };
 }

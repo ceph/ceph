@@ -45,6 +45,22 @@ public:
 				  std::string name, uint32_t error_code,
 				  std::string message);
 };
+
 asio::awaitable<std::unique_ptr<ErrorLogger>> create_error_logger(
   const DoutPrefixProvider* dpp, sal::RadosStore* store);
+
+/// A C++ Coroutine based Backoff class, providing exponential backoff
+/// up to a given maximum
+///
+/// This class is not thread-safe
+class Backoff : public BackoffBase {
+public:
+  explicit Backoff(std::chrono::seconds max = DEFAULT_MAX)
+    : rgw::sync::BackoffBase(max) {}
+
+  /// Increase wait time and wait
+  ///
+  /// This method is not thread-safe and must be called from a strand.
+  asio::awaitable<void> backoff();
+};
 }

@@ -39,28 +39,16 @@ RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const DoutPrefixProvider *dpp, co
   return new RGWRadosTimelogAddCR(dpp, store, next_oid(), entry);
 }
 
-void RGWSyncBackoff::update_wait_time()
-{
-  if (cur_wait == 0) {
-    cur_wait = 1;
-  } else {
-    cur_wait = (cur_wait << 1);
-  }
-  if (cur_wait >= max_secs) {
-    cur_wait = max_secs;
-  }
-}
-
 void RGWSyncBackoff::backoff_sleep()
 {
   update_wait_time();
-  sleep(cur_wait);
+  sleep(cur_wait.count());
 }
 
 void RGWSyncBackoff::backoff(RGWCoroutine *op)
 {
   update_wait_time();
-  op->wait(utime_t(cur_wait, 0));
+  op->wait(utime_t(cur_wait.count(), 0));
 }
 
 int RGWBackoffControlCR::operate(const DoutPrefixProvider *dpp) {

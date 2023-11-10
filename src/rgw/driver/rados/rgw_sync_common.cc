@@ -22,4 +22,16 @@ std::string ErrorLoggerBase::get_shard_oid(std::string_view oid_prefix,
                                            int shard_id) {
   return fmt::format("{}.{}", oid_prefix, shard_id);
 }
+
+void BackoffBase::update_wait_time()
+{
+  if (cur_wait == 0s) {
+    cur_wait = 1s;
+  } else {
+    cur_wait = (cur_wait * 2);
+  }
+  if (cur_wait >= max) {
+    cur_wait = max;
+  }
+}
 }
