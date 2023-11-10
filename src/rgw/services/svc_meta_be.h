@@ -19,8 +19,9 @@
 
 #include "svc_meta_be_params.h"
 
-#include "rgw_service.h"
 #include "rgw_mdlog_types.h"
+
+#include "driver/rados/rgw_service.h" // FIXME: subclass dependency
 
 class RGWMetadataLogData;
 

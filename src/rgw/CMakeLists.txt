@@ -287,7 +287,6 @@ target_link_libraries(rgw_common
     ${FMT_LIB})
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
-  PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/driver/rados"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
   PUBLIC "${LUA_INCLUDE_DIR}")
 
