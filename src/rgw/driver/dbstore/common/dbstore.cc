@@ -474,7 +474,7 @@ out:
 }
 
 int DB::create_bucket(const DoutPrefixProvider *dpp,
-    const rgw_user& owner, const rgw_bucket& bucket,
+    const rgw_owner& owner, const rgw_bucket& bucket,
     const std::string& zonegroup_id,
     const rgw_placement_rule& placement_rule,
     const std::map<std::string, bufferlist>& attrs,
@@ -502,7 +502,7 @@ int DB::create_bucket(const DoutPrefixProvider *dpp,
   orig_info.bucket.name = bucket.name;
   ret = get_bucket_info(dpp, string("name"), "", orig_info, nullptr, nullptr, nullptr);
 
-  if (!ret && !orig_info.owner.id.empty()) {
+  if (!ret && !orig_info.bucket.bucket_id.empty()) {
     /* already exists. Return the old info */
     info = std::move(orig_info);
     return ret;
@@ -543,7 +543,7 @@ int DB::create_bucket(const DoutPrefixProvider *dpp,
   params.op.bucket.info = info;
   params.op.bucket.bucket_attrs = attrs;
   params.op.bucket.mtime = ceph::real_time();
-  params.op.user.uinfo.user_id.id = owner.id;
+  params.op.bucket.owner = to_string(owner);
 
   ret = ProcessOp(dpp, "InsertBucket", &params);
 
@@ -576,7 +576,7 @@ out:
 }
 
 int DB::list_buckets(const DoutPrefixProvider *dpp, const std::string& query_str,
-    rgw_user& user,
+    std::string& owner,
     const string& marker,
     const string& end_marker,
     uint64_t max,
@@ -589,7 +589,7 @@ int DB::list_buckets(const DoutPrefixProvider *dpp, const std::string& query_str
   DBOpParams params = {};
   InitializeParams(dpp, &params);
 
-  params.op.user.uinfo.user_id = user;
+  params.op.bucket.owner = owner;
   params.op.bucket.min_marker = marker;
   params.op.bucket.max_marker = end_marker;
   params.op.list_max_count = max;
@@ -619,7 +619,7 @@ int DB::list_buckets(const DoutPrefixProvider *dpp, const std::string& query_str
 
   if (query_str == "all") {
     // userID/OwnerID may have changed. Update it.
-    user.id = params.op.bucket.info.owner.id;
+    owner = to_string(params.op.bucket.info.owner);
   }
 
 out:
@@ -629,7 +629,7 @@ out:
 int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_str,
     RGWBucketInfo& info,
     bool exclusive,
-    const rgw_user* powner_id,
+    const rgw_owner* powner,
     map<std::string, bufferlist>* pattrs,
     ceph::real_time* pmtime,
     RGWObjVersionTracker* pobjv)
@@ -650,7 +650,7 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
     goto out;
   }
 
-  if (!orig_info.owner.id.empty() && exclusive) {
+  if (!orig_info.bucket.bucket_id.empty() && exclusive) {
     /* already exists. Return the old info */
 
     info = std::move(orig_info);
@@ -672,17 +672,17 @@ int DB::update_bucket(const DoutPrefixProvider *dpp, const std::string& query_st
 
   params.op.bucket.info.bucket.name = info.bucket.name;
 
-  if (powner_id) {
-    params.op.user.uinfo.user_id.id = powner_id->id;
+  if (powner) {
+    params.op.bucket.owner = to_string(*powner);
   } else {
-    params.op.user.uinfo.user_id.id = orig_info.owner.id;
+    params.op.bucket.owner = to_string(orig_info.owner);
   }
 
   /* Update version & mtime */
   params.op.bucket.bucket_version.ver = ++(bucket_version.ver);
 
   if (pmtime) {
-    params.op.bucket.mtime = *pmtime;;
+    params.op.bucket.mtime = *pmtime;
   } else {
     params.op.bucket.mtime = ceph::real_time();
   }
@@ -1771,7 +1771,7 @@ int DB::Object::Write::_do_write_meta(const DoutPrefixProvider *dpp,
   params.op.obj.state.exists = true;
   params.op.obj.state.size = size;
   params.op.obj.state.accounted_size = accounted_size;
-  params.op.obj.owner = target->get_bucket_info().owner.id;
+  params.op.obj.owner = to_string(target->get_bucket_info().owner);
   params.op.obj.category = meta.category;
 
   if (meta.mtime) {
@@ -2201,12 +2201,11 @@ void *DB::GC::entry() {
 
     do {
       std::string& marker = bucket_marker;
-      rgw_user user;
-      user.id = user_marker;
+      std::string owner = user_marker;
       buckets.clear();
       is_truncated = false;
 
-      int r = db->list_buckets(dpp, "all", user, marker, string(),
+      int r = db->list_buckets(dpp, "all", owner, marker, string(),
                        max, false, &buckets, &is_truncated);
  
       if (r < 0) { //do nothing? retry later ?
@@ -2222,7 +2221,7 @@ void *DB::GC::entry() {
          ldpp_dout(dpp, 2) << " delete_stale_objs failed for bucket( " << bname <<")" << dendl;
         }
         bucket_marker = bname;
-        user_marker = user.id;
+        user_marker = owner;
 
         /* XXX: If using locks, unlock here and reacquire in the next iteration */
         cv.wait_for(lk, std::chrono::milliseconds(100));

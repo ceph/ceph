@@ -607,7 +607,7 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
   }
 
   // 4. Sync user stats.
-  ret = this->sync_user_stats(dpp, y);
+  ret = this->sync_owner_stats(dpp, y);
   if (ret < 0) {
      ldout(store->ctx(), 1) << "WARNING: failed sync user stats before bucket delete. ret=" <<  ret << dendl;
   }
@@ -808,8 +808,8 @@ int MotrBucket::read_stats_async(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int MotrBucket::sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
-                                RGWBucketEnt* ent)
+int MotrBucket::sync_owner_stats(const DoutPrefixProvider *dpp, optional_yield y,
+                                 RGWBucketEnt* ent)
 {
   return 0;
 }
@@ -820,7 +820,7 @@ int MotrBucket::check_bucket_shards(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-int MotrBucket::chown(const DoutPrefixProvider *dpp, User& new_user, optional_yield y)
+int MotrBucket::chown(const DoutPrefixProvider *dpp, const rgw_owner& new_user, optional_yield y)
 {
   // TODO: update bucket with new owner
   return 0;
@@ -1511,6 +1511,7 @@ int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, u
 }
 
 int MotrObject::copy_object(const ACLOwner& owner,
+    const rgw_user& remote_user,
     req_info* info,
     const rgw_zone_id& source_zone,
     rgw::sal::Object* dest_object,
@@ -1541,14 +1542,14 @@ int MotrObject::copy_object(const ACLOwner& owner,
       return 0;
 }
 
-int MotrObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
-    const DoutPrefixProvider* dpp)
+int MotrObject::swift_versioning_restore(const ACLOwner& owner, const rgw_user& remote_user, bool& restored,
+    const DoutPrefixProvider* dpp, optional_yield y)
 {
   return 0;
 }
 
-int MotrObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
-    optional_yield y)
+int MotrObject::swift_versioning_copy(const ACLOwner& owner, const rgw_user& remote_user,
+    const DoutPrefixProvider* dpp, optional_yield y)
 {
   return 0;
 }

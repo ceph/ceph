@@ -2850,7 +2850,7 @@ int RGWFetchObjFilter_Sync::filter(CephContext *cct,
     rgw_user& acl_translation_owner = params.dest.acl_translation->owner;
     if (!acl_translation_owner.empty()) {
       if (params.mode == rgw_sync_pipe_params::MODE_USER &&
-          acl_translation_owner != dest_bucket_info.owner) {
+          rgw_owner{acl_translation_owner} != dest_bucket_info.owner) {
         ldout(cct, 0) << "ERROR: " << __func__ << ": acl translation was requested, but user (" << acl_translation_owner
           << ") is not dest bucket owner (" << dest_bucket_info.owner << ")" << dendl;
         return -EPERM;

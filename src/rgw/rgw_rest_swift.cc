@@ -2227,10 +2227,17 @@ void RGWFormPost::get_owner_info(const req_state* const s,
     throw ret;
   }
 
-  ldpp_dout(this, 20) << "temp url user (bucket owner): " << bucket->get_info().owner
-                 << dendl;
+  const rgw_owner& owner = bucket->get_owner();
+  const rgw_user* uid = std::get_if<rgw_user>(&owner);
+  if (!uid) {
+    ldpp_dout(this, 20) << "bucket " << *bucket <<  " is not owned by a user "
+        "so has no temp url keys" << dendl;
+    throw -EPERM;
+  }
 
-  user = driver->get_user(bucket->get_info().owner);
+  ldpp_dout(this, 20) << "temp url user (bucket owner): " << *uid << dendl;
+
+  user = driver->get_user(*uid);
   if (user->load_user(s, s->yield) < 0) {
     throw -EPERM;
   }

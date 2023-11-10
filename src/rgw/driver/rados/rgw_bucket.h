@@ -705,10 +705,12 @@ public:
                         const DoutPrefixProvider *dpp);
 
   /* quota related */
-  int sync_user_stats(const DoutPrefixProvider *dpp, 
-                      const rgw_user& user_id, const RGWBucketInfo& bucket_info,
-		      optional_yield y,
-                      RGWBucketEnt* pent);
+  int sync_owner_stats(const DoutPrefixProvider *dpp,
+                       librados::Rados& rados,
+                       const rgw_owner& owner,
+                       const RGWBucketInfo& bucket_info,
+                       optional_yield y,
+                       RGWBucketEnt* pent);
 
   /* bucket sync */
   int get_sync_policy_handler(std::optional<rgw_zone_id> zone,

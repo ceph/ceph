@@ -229,7 +229,7 @@ struct ElasticConfig {
 
   bool should_handle_operation(RGWBucketInfo& bucket_info) {
     return index_buckets.exists(bucket_info.bucket.name) &&
-           allow_owners.exists(bucket_info.owner.to_str());
+           allow_owners.exists(to_string(bucket_info.owner));
   }
 };
 
@@ -501,12 +501,12 @@ struct es_obj_metadata {
 
         const RGWAccessControlList& acl = policy.get_acl();
 
-        permissions.insert(policy.get_owner().id.to_str());
+        permissions.insert(to_string(policy.get_owner().id));
         for (const auto& acliter : acl.get_grant_map()) {
           const ACLGrant& grant = acliter.second;
           const auto* user = grant.get_user();
           if (user && (grant.get_permission().get_permissions() & RGW_PERM_READ) != 0) {
-            permissions.insert(user->id.to_str());
+            permissions.insert(to_string(user->id));
           }
         }
       } else if (attr_name == RGW_ATTR_TAGS) {

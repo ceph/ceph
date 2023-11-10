@@ -124,11 +124,16 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
     throw ret;
   }
 
+  const rgw_user* uid = std::get_if<rgw_user>(&bucket->get_info().owner);
+  if (!uid) {
+    throw -EPERM;
+  }
+
   ldpp_dout(dpp, 20) << "temp url user (bucket owner): " << bucket->get_info().owner
                  << dendl;
 
   std::unique_ptr<rgw::sal::User> user;
-  user = driver->get_user(bucket->get_info().owner);
+  user = driver->get_user(*uid);
   if (user->load_user(dpp, s->yield) < 0) {
     throw -EPERM;
   }
