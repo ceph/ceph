@@ -28,6 +28,16 @@ tasks:
             HOST_C="${host}"
           fi
         done
+        # One last thing to worry about before draining the host
+        # is that the teuthology test tends to put the explicit
+        # hostnames in the placement for the mon service.
+        # We want to make sure we can drain without providing
+        # --force and there is a check for the host being removed
+        # being listed explicitly in the placements. Therefore,
+        # we should remove it from the mon placement.
+        ceph orch ls mon --export > mon.yaml
+        sed /"$HOST_C"/d mon.yaml > mon_adjusted.yaml
+        ceph orch apply -i mon_adjusted.yaml
         # now drain that host
         ceph orch host drain $HOST_C --zap-osd-devices
         # wait for drain to complete
