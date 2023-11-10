@@ -495,8 +495,17 @@ def cephfs_setup(ctx, config):
     # Do this last because requires mon cluster to be up and running
     if mdss.remotes:
         log.info('Setting up CephFS filesystem(s)...')
+
         cephfs_config = config.get('cephfs', {})
-        fs_configs = cephfs_config.get('fs', [{'name': gen_fsname()}])
+        if not cephfs_config:
+            log.info('msg123 1 setting name for default fs...')
+            cephfs_config.update({'cephfs': {'fs': [{'name': gen_fsname()}]}})
+
+        fs_configs = cephfs_config.get('fs', None)
+        if fs_configs is None:
+            log.info('msg123 2 setting name for default fs...')
+            fs_configs = [{'name': gen_fsname()}]
+            config.update({'cephfs': {'fs': fs_configs}})
 
         # wait for standbys to become available (slow due to valgrind, perhaps)
         mdsc = MDSCluster(ctx)
