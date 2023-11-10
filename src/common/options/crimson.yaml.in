@@ -117,3 +117,8 @@ options:
   level: advanced
   desc: Begin fast eviction when the used ratio of the main tier reaches this value.
   default: 0.7
+- name: seastore_data_delta_based_overwrite
+  type: size
+  level: dev
+  desc: overwrite the existing data block based on delta if the original size is smaller than the value, otherwise do overwrite based on remapping, set to 0 to enforce the remap-based overwrite.
+  default: 0
