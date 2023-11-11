@@ -294,13 +294,16 @@ detail`` returns a message similar to the following::
   bug you raise. See `Preparing your logs`_ for information about the proper
   preparation of logs.
 
+**What does it mean when the Monitor state is ``leader`` or ``peon``?**
 
-**What if state is ``leader`` or ``peon``?**
-
-  This should not happen:  famous last words.  If it does, however, it likely
-  has a lot to do with clock skew -- see `Clock Skews`_. If you are not
-  suffering from clock skew, then please prepare your logs (see
-  `Preparing your logs`_) and reach out to the community.
+  If ``ceph health detail`` shows that the Monitor is in the ``leader`` state
+  or in the ``peon`` state, it is likely that clock skew is present. Follow the
+  instructions in `Clock Skews`_. If you have followed those instructions and
+  ``ceph health detail`` still shows that the Monitor is in the ``leader``
+  state or the ``peon`` state, report the issue in the `Ceph bug tracker
+  <https://tracker.ceph.com>`_. If you raise an issue, provide logs to
+  substantiate it. See `Preparing your logs`_ for information about the
+  proper preparation of logs.
 
 
 Recovering a Monitor's Broken ``monmap``
