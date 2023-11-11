@@ -842,8 +842,6 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
       diff.insert(0, image_ctx->layout.object_size);
       end_size = image_ctx->layout.object_size;
       clone_end_snap_id = end_snap_id;
-    } else if (!exists) {
-      end_size = 0;
     }
 
     if (exists) {
