@@ -76,7 +76,6 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
       saw_start = true;
     }
 
-    *end_size = r->size;
     if (end < a) {
       ldout(cct, 20) << " past end " << end << ", end object does not exist" << dendl;
       *end_exists = false;
@@ -88,6 +87,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     }
     if (end <= b) {
       ldout(cct, 20) << " end" << dendl;
+      *end_size = r->size;
       *end_exists = true;
       *clone_end_snap_id = b;
       break;
