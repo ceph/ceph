@@ -777,8 +777,10 @@ class LocalCephManager(CephManager):
         self.rook = False
         self.testdir = None
         self.run_ceph_w_prefix = self.run_cluster_cmd_prefix = [CEPH_CMD]
-        self.CEPH_CMD = [CEPH_CMD]
         self.RADOS_CMD = [RADOS_CMD]
+
+    def get_ceph_cmd(self, **kwargs):
+        return [CEPH_CMD]
 
     def find_remote(self, daemon_type, daemon_id):
         """
