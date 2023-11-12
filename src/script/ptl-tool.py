@@ -302,12 +302,13 @@ def build_branch(args):
         try:
             base_path = args.base_path + base
             base = next(ref for ref in G.refs if ref.path == base_path)
+            # So we know that we're not on an old test branch, detach HEAD onto ref:
+            base.checkout()
         except StopIteration:
-            log.error("Branch " + base + " does not exist!")
-            sys.exit(1)
-
-        # So we know that we're not on an old test branch, detach HEAD onto ref:
-        base.checkout()
+            log.info(f"Trying to checkout uninterpreted base {base}")
+            c = G.commit(base)
+            G.git.checkout(c)
+        assert G.head.is_detached
 
     for pr in prs:
         pr = int(pr)
