@@ -8,6 +8,7 @@
 #include "common/ceph_mutex.h"
 #include "common/config_proxy.h"
 #include "common/Formatter.h"
+#include "osd/osd_types.h"
 
 namespace Scrub {
 
@@ -28,8 +29,9 @@ class ScrubResources {
   /// the number of concurrent scrubs performed by Primaries on this OSD
   int scrubs_local{0};
 
-  /// the number of active scrub reservations granted by replicas
-  int scrubs_remote{0};
+  /// the set of PGs that have active scrub reservations as replicas
+  /// \todo come C++23 - consider std::flat_set<pg_t>
+  std::set<pg_t> granted_reservations;
 
   mutable ceph::mutex resource_lock =
       ceph::make_mutex("ScrubQueue::resource_lock");
@@ -56,10 +58,10 @@ class ScrubResources {
   void dec_scrubs_local();
 
   /// increments the number of scrubs acting as a Replica
-  bool inc_scrubs_remote();
+  bool inc_scrubs_remote(pg_t pgid);
 
   /// decrements the number of scrubs acting as a Replica
-  void dec_scrubs_remote();
+  void dec_scrubs_remote(pg_t pgid);
 
   void dump_scrub_reservations(ceph::Formatter* f) const;
 };

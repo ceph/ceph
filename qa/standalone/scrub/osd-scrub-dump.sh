@@ -123,7 +123,7 @@ function TEST_recover_unexpected() {
 	for o in $(seq 0 $(expr $OSDS - 1))
 	do
 		CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations
-		scrubs=$(CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations | jq '.scrubs_local + .scrubs_remote')
+		scrubs=$(CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations | jq '.scrubs_local + .granted_reservations')
 		if [ $scrubs -gt $MAX_SCRUBS ]; then
 		    echo "ERROR: More than $MAX_SCRUBS currently reserved"
 		    return 1

@@ -67,8 +67,8 @@ class OsdScrub {
   // updating the resource counters
   bool inc_scrubs_local();
   void dec_scrubs_local();
-  bool inc_scrubs_remote();
-  void dec_scrubs_remote();
+  bool inc_scrubs_remote(pg_t pgid);
+  void dec_scrubs_remote(pg_t pgid);
 
   // counting the number of PGs stuck while scrubbing, waiting for objects
   void mark_pg_scrub_blocked(spg_t blocked_pg);

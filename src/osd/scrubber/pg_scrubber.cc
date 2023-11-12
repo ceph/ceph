@@ -218,7 +218,7 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
 
 void PgScrubber::dec_scrubs_remote()
 {
-  m_osds->get_scrub_services().dec_scrubs_remote();
+  m_osds->get_scrub_services().dec_scrubs_remote(m_pg_id.pgid);
 }
 
 void PgScrubber::advance_token()
@@ -1708,7 +1708,7 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
   if (m_pg->cct->_conf->osd_scrub_during_recovery ||
       !m_osds->is_recovery_active()) {
 
-    granted = m_osds->get_scrub_services().inc_scrubs_remote();
+    granted = m_osds->get_scrub_services().inc_scrubs_remote(m_pg_id.pgid);
     if (granted) {
       m_fsm->process_event(ReplicaGrantReservation{});
     } else {
