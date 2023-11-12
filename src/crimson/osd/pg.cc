@@ -506,13 +506,14 @@ void PG::on_active_actmap()
       }).then([this, trimmed=to_trim] {
         logger().debug("{}: trimmed snap={}", *this, trimmed);
       });
-    }).finally([this, pg_ref] {
-      logger().debug("{}: PG::on_active_actmap() finished trimming",
-                     *this);
-      peering_state.state_clear(PG_STATE_SNAPTRIM);
-      peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
-      publish_stats_to_osd();
-    });
+    }
+  ).finally([this, pg_ref] {
+    logger().debug("{}: PG::on_active_actmap() finished trimming",
+                   *this);
+    peering_state.state_clear(PG_STATE_SNAPTRIM);
+    peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
+    publish_stats_to_osd();
+  });
 }
 
 void PG::on_active_advmap(const OSDMapRef &osdmap)
