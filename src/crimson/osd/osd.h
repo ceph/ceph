@@ -106,8 +106,11 @@ class OSD final : public crimson::net::Dispatcher,
   // pg statistics including osd ones
   osd_stat_t osd_stat;
   uint32_t osd_stat_seq = 0;
+  epoch_t min_last_epoch_clean = 0;
+  // which pgs were scanned for min_lec
+  std::vector<pg_t> min_last_epoch_clean_pgs;
   void update_stats();
-  seastar::future<MessageURef> get_stats() const final;
+  seastar::future<MessageURef> get_stats() final;
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,

@@ -119,7 +119,7 @@ class PerShardState {
   PGMap pg_map;
 
   seastar::future<> stop_pgs();
-  std::map<pg_t, pg_stat_t> get_pg_stats() const;
+  std::map<pg_t, pg_stat_t> get_pg_stats();
   seastar::future<> broadcast_map_to_pgs(
     ShardServices &shard_services,
     epoch_t epoch);
