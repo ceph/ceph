@@ -979,6 +979,8 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
 
       if (!superblock.maps.empty()) {
         pg_shard_manager.trim_maps(t, superblock);
+        // TODO: once we support pg splitting, update pg_num_history here
+        //pg_num_history.prune(superblock.get_oldest_map());
       }
 
       superblock.insert_osdmap_epochs(first, last);

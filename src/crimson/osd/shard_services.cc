@@ -358,7 +358,6 @@ void OSDSingletonState::handle_conf_change(
 seastar::future<OSDSingletonState::local_cached_map_t>
 OSDSingletonState::get_local_map(epoch_t e)
 {
-  // TODO: use LRU cache for managing osdmap, fallback to disk if we have to
   if (auto found = osdmaps.find(e); found) {
     logger().debug("{} osdmap.{} found in cache", __func__, e);
     return seastar::make_ready_future<local_cached_map_t>(std::move(found));
@@ -398,6 +397,9 @@ seastar::future<std::map<epoch_t, bufferlist>> OSDSingletonState::load_map_bls(
   logger().debug("{} loading maps [{},{}]",
                  __func__, first, last);
   ceph_assert(first <= last);
+  // TODO: take osd_map_max into account
+  //int max = cct->_conf->osd_map_message_max;
+  //ssize_t max_bytes = cct->_conf->osd_map_message_max_bytes;
   return seastar::map_reduce(boost::make_counting_iterator<epoch_t>(first),
 			     boost::make_counting_iterator<epoch_t>(last + 1),
 			     [this](epoch_t e) {
@@ -750,6 +752,8 @@ seastar::future<> OSDSingletonState::send_incremental_map(
                 "superblock's oldest map: {}",
                 __func__, first, superblock.get_oldest_map());
   if (first >= superblock.get_oldest_map()) {
+    // TODO: osd_map_share_max_epochs
+    // See OSDService::build_incremental_map_msg
     if (first < superblock.cluster_osdmap_trim_lower_bound) {
       logger().info("{}: cluster osdmap lower bound: {} "
                 " > first {}, starting with full map",
