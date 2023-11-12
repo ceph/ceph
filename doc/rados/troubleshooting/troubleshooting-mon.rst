@@ -217,7 +217,7 @@ detail`` returns a message similar to the following::
   the documentation.
   
 
-**What does it mean if  a Monitor's state is ``probing``?**
+**What does it mean when a Monitor's state is ``probing``?**
 
   If ``ceph health detail`` shows that a Monitor's state is
   ``probing``, then the Monitor is still looking for the other Monitors. Every
@@ -294,7 +294,7 @@ detail`` returns a message similar to the following::
   bug you raise. See `Preparing your logs`_ for information about the proper
   preparation of logs.
 
-**What does it mean when the Monitor state is ``leader`` or ``peon``?**
+**What does it mean when a Monitor's state is ``leader`` or ``peon``?**
 
   If ``ceph health detail`` shows that the Monitor is in the ``leader`` state
   or in the ``peon`` state, it is likely that clock skew is present. Follow the
