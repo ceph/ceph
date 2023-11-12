@@ -883,13 +883,20 @@ void OSD::update_stats()
   });
 }
 
-seastar::future<MessageURef> OSD::get_stats() const
+seastar::future<MessageURef> OSD::get_stats()
 {
   // MPGStats::had_map_for is not used since PGMonitor was removed
   auto m = crimson::make_message<MPGStats>(monc->get_fsid(), osdmap->get_epoch());
   m->osd_stat = osd_stat;
   return pg_shard_manager.get_pg_stats(
-  ).then([m=std::move(m)](auto &&stats) mutable {
+  ).then([this, m=std::move(m)](auto &&stats) mutable {
+    min_last_epoch_clean = osdmap->get_epoch();
+    min_last_epoch_clean_pgs.clear();
+    for (auto [pgid, stat] : stats) {
+      min_last_epoch_clean = std::min(min_last_epoch_clean,
+                                      stat.get_effective_last_epoch_clean());
+      min_last_epoch_clean_pgs.push_back(pgid);
+    }
     m->pg_stat = std::move(stats);
     return seastar::make_ready_future<MessageURef>(std::move(m));
   });
@@ -1283,14 +1290,13 @@ seastar::future<> OSD::send_beacon()
   if (!pg_shard_manager.is_active()) {
     return seastar::now();
   }
-  // FIXME: min lec should be calculated from pg_stat
-  //        and should set m->pgs
-  epoch_t min_last_epoch_clean = osdmap->get_epoch();
-  auto m = crimson::make_message<MOSDBeacon>(osdmap->get_epoch(),
+  auto beacon = crimson::make_message<MOSDBeacon>(osdmap->get_epoch(),
                                     min_last_epoch_clean,
                                     superblock.last_purged_snaps_scrub,
                                     local_conf()->osd_beacon_report_interval);
-  return monc->send_message(std::move(m));
+  beacon->pgs = min_last_epoch_clean_pgs;
+  logger().debug("{} {}", __func__, *beacon);
+  return monc->send_message(std::move(beacon));
 }
 
 seastar::future<> OSD::update_heartbeat_peers()

@@ -72,7 +72,7 @@ seastar::future<> PerShardState::stop_pgs()
     });
 }
 
-std::map<pg_t, pg_stat_t> PerShardState::get_pg_stats() const
+std::map<pg_t, pg_stat_t> PerShardState::get_pg_stats()
 {
   assert_core();
   std::map<pg_t, pg_stat_t> ret;
