@@ -4,7 +4,7 @@
  Configuring Ceph
 ==================
 
-When Ceph services start, the initialization process activates a series of
+When Ceph services start, the initialization process activates a set of
 daemons that run in the background. A :term:`Ceph Storage Cluster` runs at
 least three types of daemons:
 
@@ -12,15 +12,16 @@ least three types of daemons:
 - :term:`Ceph Manager` (``ceph-mgr``)
 - :term:`Ceph OSD Daemon` (``ceph-osd``)
 
-Ceph Storage Clusters that support the :term:`Ceph File System` also run at
-least one :term:`Ceph Metadata Server` (``ceph-mds``). Clusters that support
-:term:`Ceph Object Storage` run Ceph RADOS Gateway daemons (``radosgw``).
+Any Ceph Storage Cluster that supports the :term:`Ceph File System` also runs
+at least one :term:`Ceph Metadata Server` (``ceph-mds``). Any Cluster that
+supports :term:`Ceph Object Storage` runs Ceph RADOS Gateway daemons
+(``radosgw``).
 
-Each daemon has a number of configuration options, each of which has a default
-value. You may adjust the behavior of the system by changing these
-configuration options. Be careful to understand the consequences before
-overriding default values, as it is possible to significantly degrade the
-performance and stability of your cluster. Note too that default values
+Each daemon has a number of configuration options, and each of those options
+has a default value. Adjust the behavior of the system by changing these
+configuration options. Make sure to understand the consequences before
+overriding the default values, as it is possible to significantly degrade the
+performance and stability of your cluster. Remember that default values
 sometimes change between releases. For this reason, it is best to review the
 version of this documentation that applies to your Ceph release.
 
