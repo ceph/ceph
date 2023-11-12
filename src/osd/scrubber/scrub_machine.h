@@ -628,7 +628,7 @@ struct ReplicaIdle : sc::state<ReplicaIdle, ReservedReplica>,
 };
 
 /**
- * ReservedActiveOp
+ * ReplicaActiveOp
  *
  * Lifetime matches handling for a single map request op
  */
@@ -646,7 +646,7 @@ struct ReplicaActiveOp
  * - the details of the Primary's request were internalized by PgScrubber;
  * - 'active' scrubbing is set
  */
-struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReservedReplica>,
+struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReplicaActiveOp>,
 			    NamedSimply {
   explicit ReplicaWaitUpdates(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<ReplicaPushesUpd>>;
@@ -655,7 +655,7 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReservedReplica>,
 };
 
 
-struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReservedReplica>
+struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReplicaActiveOp>
 			  , NamedSimply {
   explicit ReplicaBuildingMap(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<SchedReplica>>;

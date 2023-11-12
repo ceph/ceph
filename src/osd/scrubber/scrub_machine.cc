@@ -674,38 +674,42 @@ ReservedReplica::~ReservedReplica()
 
 ReplicaIdle::ReplicaIdle(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaIdle")
+    , NamedSimply(
+	  context<ScrubMachine>().m_scrbr,
+	  "ReservedReplica/ReplicaIdle")
 {
-  dout(10) << "-- state -->> ReplicaIdle" << dendl;
+  dout(10) << "-- state -->> ReservedReplica/ReplicaIdle" << dendl;
 }
 
-ReplicaIdle::~ReplicaIdle()
-{
-}
-
+ReplicaIdle::~ReplicaIdle() = default;
 
 // ----------------------- ReplicaActiveOp --------------------------------
 
 ReplicaActiveOp::ReplicaActiveOp(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaActiveOp")
+    , NamedSimply(
+	  context<ScrubMachine>().m_scrbr,
+	  "ReservedReplica/ReplicaActiveOp")
 {
-  dout(10) << "-- state -->> ReplicaActiveOp" << dendl;
+  dout(10) << "-- state -->> ReservedReplica/ReplicaActiveOp" << dendl;
 }
 
-ReplicaActiveOp::~ReplicaActiveOp()
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  scrbr->replica_handling_done();
-}
+/**
+ * \note: here is too late to call replica_handling_done(). See the
+ * comment in build_replica_map_chunk()
+ */
+ReplicaActiveOp::~ReplicaActiveOp() = default;
 
 // ----------------------- ReplicaWaitUpdates --------------------------------
 
 ReplicaWaitUpdates::ReplicaWaitUpdates(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaWaitUpdates")
+    , NamedSimply(
+	  context<ScrubMachine>().m_scrbr,
+	  "ReservedReplica/ReplicaActiveOp/ReplicaWaitUpdates")
 {
-  dout(10) << "-- state -->> ReplicaWaitUpdates" << dendl;
+  dout(10) << "-- state -->> ReservedReplica/ReplicaActiveOp/ReplicaWaitUpdates"
+	   << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   scrbr->on_replica_init();
 }
@@ -732,10 +736,13 @@ sc::result ReplicaWaitUpdates::react(const ReplicaPushesUpd&)
 
 ReplicaBuildingMap::ReplicaBuildingMap(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "ReplicaBuildingMap")
+    , NamedSimply(
+	  context<ScrubMachine>().m_scrbr,
+	  "ReservedReplica/ReplicaActiveOp/ReplicaBuildingMap")
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "-- state -->> ReplicaBuildingMap" << dendl;
+  dout(10) << "-- state -->> ReservedReplica/ReplicaActiveOp/ReplicaBuildingMap"
+	   << dendl;
   // and as we might have skipped ReplicaWaitUpdates:
   scrbr->on_replica_init();
   post_event(SchedReplica{});
