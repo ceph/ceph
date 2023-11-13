@@ -529,8 +529,8 @@ class TestSnapSchedulesSnapdir(TestSnapSchedulesHelper):
             self.mount_a.run_shell(['rmdir', snapshot_path])
 
     def get_snap_dir_name(self):
-        from tasks.cephfs.fuse_mount import FuseMount
-        from tasks.cephfs.kernel_mount import KernelMount
+        from .fuse_mount import FuseMount
+        from .kernel_mount import KernelMount
 
         if isinstance(self.mount_a, KernelMount):
             sdn = self.mount_a.client_config.get('snapdirname', '.snap')
