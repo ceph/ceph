@@ -479,11 +479,6 @@ class PgScrubber : public ScrubPgIF,
   /// Clears `m_queued_or_active` and restarts snap-trimming
   void clear_queued_or_active() final;
 
-  /// tell the OSD we are no longer reserved by our primary
-  void clear_reservation_by_remote_primary();
-
-  void advance_token() final;
-
   void mark_local_map_ready() final;
 
   [[nodiscard]] bool are_all_maps_available() const final;
@@ -567,6 +562,12 @@ class PgScrubber : public ScrubPgIF,
   bool is_token_current(Scrub::act_token_t received_token);
 
   void requeue_waiting() const { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
+
+  /// tell the OSD we are no longer reserved by our primary
+  void clear_reservation_by_remote_primary();
+
+  /// Modify the token identifying the current replica scrub operation
+  void advance_token();
 
   /**
    *  mark down some parameters of the initiated scrub:
@@ -676,11 +677,12 @@ class PgScrubber : public ScrubPgIF,
   epoch_t m_epoch_start{0};  ///< the actual epoch when scrubbing started
 
   /**
-   * (replica) a tag identifying a specific scrub "session". Incremented
-   * whenever the Primary releases the replica scrub resources. When the scrub
-   * session is terminated (even if the interval remains unchanged, as might
-   * happen following an asok no-scrub command), stale scrub-resched messages
-   *  triggered by the backend will be discarded.
+   * (replica) a tag identifying a specific replica operation, i.e. the
+   * creation of the replica scrub map for a single chunk.
+   * Incremented immediately before sending a response to the primary,
+   * so that the next request would be identified as such. Also changed
+   * on reservation release.
+   * Used to identify stale scrub-re-sched messages triggered by the backend.
    */
   Scrub::act_token_t m_current_token{1};
 

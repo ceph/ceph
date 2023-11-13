@@ -149,9 +149,6 @@ MEV(IntLocalMapDone)
 /// scrub_snapshot_metadata()
 MEV(DigestUpdate)
 
-/// event emitted when the replica grants a reservation to the primary
-MEV(ReplicaGrantReservation)
-
 /// initiating replica scrub
 MEV(StartReplica)
 
@@ -196,8 +193,9 @@ struct NotActive;	    ///< the quiescent state. No active scrubbing.
 struct Session;            ///< either reserving or actively scrubbing
 struct ReservingReplicas;   ///< securing scrub resources from replicas' OSDs
 struct ActiveScrubbing;	    ///< the active state for a Primary. A sub-machine.
-struct ReplicaIdle;         ///< Initial reserved replica state
-struct ReplicaBuildingMap;	    ///< an active state for a replica.
+// the active states for a replica:
+struct ReplicaWaitUpdates;
+struct ReplicaBuildingMap;
 
 
 class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
@@ -366,11 +364,14 @@ public:
 struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
   explicit NotActive(my_context ctx);
 
-  using reactions =
-    mpl::list<sc::custom_reaction<StartScrub>,
-	      // a scrubbing that was initiated at recovery completion:
-	      sc::custom_reaction<AfterRepairScrub>,
-	      sc::transition<ReplicaGrantReservation, ReplicaIdle>>;
+  using reactions = mpl::list<
+      sc::custom_reaction<StartScrub>,
+      // a scrubbing that was initiated at recovery completion:
+      sc::custom_reaction<AfterRepairScrub>,
+      // handling a request from our primary:
+      sc::transition<StartReplica, ReplicaWaitUpdates>,
+      sc::transition<StartReplicaNoWait, ReplicaBuildingMap>>;
+
   sc::result react(const StartScrub&);
   sc::result react(const AfterRepairScrub&);
 };
@@ -597,46 +598,17 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
 // ----------------------------- the "replica active" states
 
 /**
- * ReservedReplica
- *
- * Parent state for replica states,  Controls lifecycle for
- * PgScrubber::m_reservations.
- */
-struct ReservedReplica : sc::state<ReservedReplica, ScrubMachine, ReplicaIdle>,
-			 NamedSimply {
-  explicit ReservedReplica(my_context ctx);
-  ~ReservedReplica();
-
-  using reactions = mpl::list<sc::transition<FullReset, NotActive>>;
-};
-
-struct ReplicaWaitUpdates;
-
-/**
- * ReplicaIdle
- *
- * Replica is waiting for a map request.
- */
-struct ReplicaIdle : sc::state<ReplicaIdle, ReservedReplica>,
-		     NamedSimply {
-  explicit ReplicaIdle(my_context ctx);
-  ~ReplicaIdle();
-
-  using reactions = mpl::list<
-    sc::transition<StartReplica, ReplicaWaitUpdates>,
-    sc::transition<StartReplicaNoWait, ReplicaBuildingMap>>;
-};
-
-/**
  * ReplicaActiveOp
  *
  * Lifetime matches handling for a single map request op
  */
 struct ReplicaActiveOp
-  : sc::state<ReplicaActiveOp, ReservedReplica, ReplicaWaitUpdates>,
+  : sc::state<ReplicaActiveOp, ScrubMachine, ReplicaWaitUpdates>,
     NamedSimply {
   explicit ReplicaActiveOp(my_context ctx);
   ~ReplicaActiveOp();
+
+  using reactions = mpl::list<sc::transition<FullReset, NotActive>>;
 };
 
 /*

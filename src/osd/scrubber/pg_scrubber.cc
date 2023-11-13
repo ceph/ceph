@@ -219,6 +219,9 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
 void PgScrubber::clear_reservation_by_remote_primary()
 {
   m_osds->get_scrub_services().dec_scrubs_remote(m_pg_id.pgid);
+  // this specific scrub session has terminated. All incoming events carrying
+  // the old tag will be discarded.
+  advance_token();
 }
 
 void PgScrubber::advance_token()
@@ -1524,6 +1527,7 @@ void PgScrubber::replica_scrub_op(OpRequestRef op)
   replica_scrubmap_pos.reset();	 // needed? RRR
 
   set_queued_or_active();
+  advance_token();
   m_osds->queue_for_rep_scrub(m_pg,
 			      m_replica_request_priority,
 			      m_flags.priority,
@@ -1713,9 +1717,7 @@ void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
       !m_osds->is_recovery_active()) {
 
     granted = m_osds->get_scrub_services().inc_scrubs_remote(m_pg_id.pgid);
-    if (granted) {
-      m_fsm->process_event(ReplicaGrantReservation{});
-    } else {
+    if (!granted) {
       dout(20) << __func__ << ": failed to reserve remotely" << dendl;
     }
   } else {
