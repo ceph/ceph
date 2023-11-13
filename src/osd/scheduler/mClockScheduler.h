@@ -101,6 +101,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const uint32_t num_shards;
   const int shard_id;
   const bool is_rotational;
+  const unsigned cutoff_priority;
   MonClient *monc;
 
   /**
@@ -211,7 +212,8 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
 
 public:
   mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
-    int shard_id, bool is_rotational, MonClient *monc);
+    int shard_id, bool is_rotational, unsigned cutoff_priority,
+    MonClient *monc);
   ~mClockScheduler() override;
 
   /// Calculate scaled cost per item
@@ -239,6 +241,7 @@ public:
 
   void print(std::ostream &ostream) const final {
     ostream << get_op_queue_type_name(get_type());
+    ostream << ", cutoff=" << cutoff_priority;
   }
 
   // Update data associated with the modified mclock config key(s)

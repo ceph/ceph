@@ -2418,6 +2418,21 @@ OSD::OSD(CephContext *cct_,
   };
   op_queue_type_t op_queue = get_op_queue_type();
 
+  // Determine op queue cutoff
+  auto get_op_queue_cut_off = [&conf = cct->_conf]() {
+    if (conf.get_val<std::string>("osd_op_queue_cut_off") == "debug_random") {
+      std::random_device rd;
+      std::mt19937 random_gen(rd());
+      return (random_gen() % 2 < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
+    } else if (conf.get_val<std::string>("osd_op_queue_cut_off") == "high") {
+      return CEPH_MSG_PRIO_HIGH;
+    } else {
+      // default / catch-all is 'low'
+      return CEPH_MSG_PRIO_LOW;
+    }
+  };
+  unsigned op_queue_cut_off = get_op_queue_cut_off();
+
   // initialize shards
   num_shards = get_num_op_shards();
   for (uint32_t i = 0; i < num_shards; i++) {
@@ -2425,7 +2440,8 @@ OSD::OSD(CephContext *cct_,
       i,
       cct,
       this,
-      op_queue);
+      op_queue,
+      op_queue_cut_off);
     shards.push_back(one_shard);
   }
 }
@@ -11075,7 +11091,8 @@ OSDShard::OSDShard(
   int id,
   CephContext *cct,
   OSD *osd,
-  op_queue_type_t osd_op_queue)
+  op_queue_type_t osd_op_queue,
+  unsigned osd_op_queue_cut_off)
   : shard_id(id),
     cct(cct),
     osd(osd),
@@ -11087,7 +11104,7 @@ OSDShard::OSDShard(
     shard_lock{make_mutex(shard_lock_name)},
     scheduler(ceph::osd::scheduler::make_scheduler(
       cct, osd->whoami, osd->num_shards, id, osd->store->is_rotational(),
-      osd->store->get_type(), osd_op_queue, osd->monc)),
+      osd->store->get_type(), osd_op_queue, osd_op_queue_cut_off, osd->monc)),
     context_queue(sdata_wait_lock, sdata_cond)
 {
   dout(0) << "using op scheduler " << *scheduler << dendl;
