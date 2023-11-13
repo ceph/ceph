@@ -164,14 +164,11 @@ MEV(IntLocalMapDone)
 /// scrub_snapshot_metadata()
 MEV(DigestUpdate)
 
-/// event emitted when the replica grants a reservation to the primary
-MEV(ReplicaGrantReservation)
+/// we are a replica for this PG
+MEV(ReplicaActivate)
 
 /// initiating replica scrub
 MEV(StartReplica)
-
-/// 'start replica' when there are no pending updates
-MEV(StartReplicaNoWait)
 
 MEV(SchedReplica)
 
@@ -211,8 +208,11 @@ struct NotActive;	    ///< the quiescent state. No active scrubbing.
 struct Session;            ///< either reserving or actively scrubbing
 struct ReservingReplicas;   ///< securing scrub resources from replicas' OSDs
 struct ActiveScrubbing;	    ///< the active state for a Primary. A sub-machine.
-struct ReplicaIdle;         ///< Initial reserved replica state
-struct ReplicaBuildingMap;	    ///< an active state for a replica.
+// the active states for a replica:
+struct ReplicaActive;    ///< the quiescent state for a replica
+struct ReplicaActiveOp;
+struct ReplicaWaitUpdates;
+struct ReplicaBuildingMap;
 
 
 class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
@@ -370,8 +370,8 @@ public:
  *
  *  - a special end-of-recovery Primary scrub event ('AfterRepairScrub').
  *
- *  - (for a replica) 'StartReplica' or 'StartReplicaNoWait', triggered by
- *    an incoming MOSDRepScrub message.
+ *  - (if already in ReplicaActive): an incoming MOSDRepScrub triggers
+ *    'StartReplica'.
  *
  *  note (20.8.21): originally, AfterRepairScrub was triggering a scrub without
  *  waiting for replica resources to be acquired. But once replicas started
@@ -381,11 +381,13 @@ public:
 struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
   explicit NotActive(my_context ctx);
 
-  using reactions =
-    mpl::list<sc::custom_reaction<StartScrub>,
-	      // a scrubbing that was initiated at recovery completion:
-	      sc::custom_reaction<AfterRepairScrub>,
-	      sc::transition<ReplicaGrantReservation, ReplicaIdle>>;
+  using reactions = mpl::list<
+      sc::custom_reaction<StartScrub>,
+      // a scrubbing that was initiated at recovery completion:
+      sc::custom_reaction<AfterRepairScrub>,
+      // peering done, and we are a replica
+      sc::transition<ReplicaActivate, ReplicaActive>>;
+
   sc::result react(const StartScrub&);
   sc::result react(const AfterRepairScrub&);
 };
@@ -611,45 +613,95 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
 
 // ----------------------------- the "replica active" states
 
-/**
- * ReservedReplica
+/*
+ *  The replica states:
  *
- * Parent state for replica states,  Controls lifecycle for
- * PgScrubber::m_reservations.
+ *  ReplicaActive - starts after being peered as a replica. Ends on interval.
+ *   - maintain the "I am reserved by a primary" state;
+ *   - handles reservation requests
+ *
+ *     - ReplicaIdle - ready for a new scrub request
+ *          * initial state of ReplicaActive
+ *
+ *     - ReplicaActiveOp - handling a single map request op
+ *          * ReplicaWaitUpdates
+ *  	    * ReplicaBuildingMap
  */
-struct ReservedReplica : sc::state<ReservedReplica, ScrubMachine, ReplicaIdle>,
+
+struct ReplicaIdle;
+
+struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
 			 NamedSimply {
-  explicit ReservedReplica(my_context ctx);
-  ~ReservedReplica();
+  explicit ReplicaActive(my_context ctx);
+  ~ReplicaActive();
 
-  using reactions = mpl::list<sc::transition<FullReset, NotActive>>;
-};
+  /// handle a reservation request from a primary
+  void on_reserve_req(const ReplicaReserveReq&);
 
-struct ReplicaWaitUpdates;
+  /// handle a 'release' from a primary
+  void on_release(const ReplicaRelease&);
 
-/**
- * ReplicaIdle
- *
- * Replica is waiting for a map request.
- */
-struct ReplicaIdle : sc::state<ReplicaIdle, ReservedReplica>,
-		     NamedSimply {
-  explicit ReplicaIdle(my_context ctx);
-  ~ReplicaIdle();
+  void check_for_updates(const StartReplica&);
 
   using reactions = mpl::list<
-    sc::transition<StartReplica, ReplicaWaitUpdates>,
-    sc::transition<StartReplicaNoWait, ReplicaBuildingMap>>;
+      // a reservation request from the primary
+      sc::in_state_reaction<
+	  ReplicaReserveReq,
+	  ReplicaActive,
+	  &ReplicaActive::on_reserve_req>,
+      // an explicit release request from the primary
+      sc::in_state_reaction<
+	  ReplicaRelease,
+	  ReplicaActive,
+	  &ReplicaActive::on_release>,
+      // when the interval ends - we may not be a replica anymore
+      sc::transition<IntervalChanged, NotActive>>;
+
+ private:
+  bool reserved_by_my_primary{false};
+
+  // shortcuts:
+  PG* m_pg;
+  OSDService* m_osds;
+
+  /// a convenience internal result structure
+  struct ReservationAttemptRes {
+    MOSDScrubReserve::ReserveMsgOp op;	// GRANT or REJECT
+    std::string_view error_msg;
+    bool granted;
+  };
+
+  /// request a scrub resource from our local OSD
+  /// (after performing some checks)
+  ReservationAttemptRes get_remote_reservation();
+
+  void clear_reservation_by_remote_primary();
 };
+
+
+struct ReplicaIdle : sc::state<ReplicaIdle, ReplicaActive>, NamedSimply {
+  explicit ReplicaIdle(my_context ctx);
+  ~ReplicaIdle() = default;
+
+  // note the execution of check_for_updates() when transitioning to
+  // ReplicaActiveOp/ReplicaWaitUpdates. That would trigger a ReplicaPushesUpd
+  // event, which will be handled by ReplicaWaitUpdates.
+  using reactions = mpl::list<sc::transition<
+      StartReplica,
+      ReplicaWaitUpdates,
+      ReplicaActive,
+      &ReplicaActive::check_for_updates>>;
+};
+
 
 /**
  * ReplicaActiveOp
  *
- * Lifetime matches handling for a single map request op
+ * Lifetime matches handling for a single map request op.
  */
 struct ReplicaActiveOp
-  : sc::state<ReplicaActiveOp, ReservedReplica, ReplicaWaitUpdates>,
-    NamedSimply {
+    : sc::state<ReplicaActiveOp, ReplicaActive, ReplicaWaitUpdates>,
+      NamedSimply {
   explicit ReplicaActiveOp(my_context ctx);
   ~ReplicaActiveOp();
 };
@@ -670,8 +722,8 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReplicaActiveOp>,
 };
 
 
-struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReplicaActiveOp>
-			  , NamedSimply {
+struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReplicaActiveOp>,
+			    NamedSimply {
   explicit ReplicaBuildingMap(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<SchedReplica>>;
 
