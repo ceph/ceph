@@ -1381,6 +1381,12 @@ public:
 	  cct->_conf->
 	    bluestore_extent_map_inline_shard_prealloc_size) {
     }
+
+    ~Onode() {
+      std::lock_guard l(c->cache->lock);
+      bc._clear(c->cache);
+    }
+
     static void decode_raw(
       BlueStore::Onode* on,
       const bufferlist& v,

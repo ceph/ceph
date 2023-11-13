@@ -1654,6 +1654,16 @@ BlueStore::BufferCacheShard *BlueStore::BufferCacheShard::create(
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.BufferSpace(" << this << " in " << cache << ") "
 
+void BlueStore::BufferSpace::_clear(BufferCacheShard* cache)
+{
+  // note: we already hold cache->lock
+  ldout(cache->cct, 20) << __func__ << dendl;
+  while (!buffer_map.empty()) {
+    _rm_buffer(cache, buffer_map.begin());
+  }
+  writing.clear();
+}
+
 bool BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collection, OnodeRef onode, uint64_t offset, uint64_t length)
 {
   bool copied = false;
@@ -1876,6 +1886,7 @@ void BlueStore::BufferSpace::read(
 void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache, uint32_t offset, uint64_t seq)
 {
   std::lock_guard l(cache->lock);
+  ldout(cache->cct, 20) << __func__ << " seq=" << seq << dendl;
   auto i = writing.begin();
   while (i != writing.end()) {
     if (i->seq > seq) {
