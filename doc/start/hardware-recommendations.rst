@@ -103,7 +103,7 @@ that the OSD attempts to consume by changing the :confval:`osd_memory_target`
 configuration option.
 
 - Setting the :confval:`osd_memory_target` below 2GB is not
-  recommended.  eph may fail to keep the memory consumption under 2GB and 
+  recommended. Ceph may fail to keep the memory consumption under 2GB and 
   extremely slow performance is likely.
 
 - Setting the memory target between 2GB and 4GB typically works but may result
