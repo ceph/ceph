@@ -64,4 +64,5 @@
 - `jenkins test ceph-volume all`
 - `jenkins test ceph-volume tox`
 - `jenkins test windows`
+- `jenkins test rook e2e`
 </details>
