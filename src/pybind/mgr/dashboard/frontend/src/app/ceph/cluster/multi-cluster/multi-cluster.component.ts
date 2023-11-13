@@ -64,6 +64,30 @@ export class MultiClusterComponent implements OnInit {
   clusterDataList: any;
   alerts: any;
   private subs = new Subscription();
+  clusterCapacityLabel1 = ''
+  clusterCapacityLabel2 = ''
+  clusterIopsLabel1 = ''
+  clusterIopsLabel2 = ''
+  clusterThroughputLabel1 = ''
+  clusterThroughputLabel2 = ''
+  clusterCapacityData1 = ''
+  clusterCapacityData2 = ''
+  clusterIopsData1 = ''
+  clusterIopsData2 = ''
+  clusterThroughputData1 = ''
+  clusterThroughputData2 = ''
+  poolCapacityLabel1 = ''
+  poolCapacityLabel2 = ''
+  poolIopsLabel1 = ''
+  poolIopsLabel2 = ''
+  poolThroughputLabel1 = ''
+  poolThroughputLabel2 = ''
+  poolCapacityData1 = ''
+  poolCapacityData2 = ''
+  poolIopsData1 = ''
+  poolIopsData2 = ''
+  poolThroughputData1 = ''
+  poolThroughputData2 = ''
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -147,7 +171,7 @@ export class MultiClusterComponent implements OnInit {
     this.prometheusService
       .getMultiClusterQueriesData(selectedTime, queries, this.queriesResults)
       .subscribe((data: any) => {
-        this.queriesResults = data;
+        this.queriesResults = data;        
         this.loading = false;
         this.alerts = this.queriesResults.ALERTS;
         this.getAlertsInfo();
@@ -219,6 +243,30 @@ export class MultiClusterComponent implements OnInit {
     });
 
     this.clusters = clusters;
+    this.clusterCapacityLabel1 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0] ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0].metric.cluster : '';
+    this.clusterCapacityLabel2 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1] ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1].metric.cluster : '';
+    this.clusterCapacityData1 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0] ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0].values : '';
+    this.clusterCapacityData2 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1] ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[1].values : '';
+    this.clusterIopsLabel1 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[0] ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[0].metric.cluster : '';
+    this.clusterIopsLabel2 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[1] ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[1].metric.cluster : '';
+    this.clusterIopsData1 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[0] ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[0].values : '';
+    this.clusterIopsData2 = this.queriesResults.CLUSTER_IOPS_UTILIZATION[1] ? this.queriesResults.CLUSTER_IOPS_UTILIZATION[1].values : '';
+    this.clusterThroughputLabel1 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0] ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0].metric.cluster : '';
+    this.clusterThroughputLabel2 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1] ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1].metric.cluster : '';
+    this.clusterThroughputData1 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0] ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0].values : '';
+    this.clusterThroughputData2 = this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1] ? this.queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1].values : '';
+    this.poolCapacityLabel1 = this.queriesResults.POOL_CAPACITY_UTILIZATION[0] ? this.queriesResults.POOL_CAPACITY_UTILIZATION[0].metric.name + ' - ' + this.queriesResults.POOL_CAPACITY_UTILIZATION[0].metric.cluster: '';
+    this.poolCapacityLabel2 = this.queriesResults.POOL_CAPACITY_UTILIZATION[1] ? this.queriesResults.POOL_CAPACITY_UTILIZATION[1].metric.name + ' - ' + this.queriesResults.POOL_CAPACITY_UTILIZATION[1].metric.cluster: '';
+    this.poolCapacityData1 = this.queriesResults.POOL_CAPACITY_UTILIZATION[0] ? this.queriesResults.POOL_CAPACITY_UTILIZATION[0].values : '';
+    this.poolCapacityData2 = this.queriesResults.POOL_CAPACITY_UTILIZATION[1] ? this.queriesResults.POOL_CAPACITY_UTILIZATION[1].values : '';
+    this.poolIopsLabel1 = this.queriesResults.POOL_IOPS_UTILIZATION[0] ? this.queriesResults.POOL_IOPS_UTILIZATION[0].metric.name + ' - ' + this.queriesResults.POOL_IOPS_UTILIZATION[0].metric.cluster : '';
+    this.poolIopsLabel2 = this.queriesResults.POOL_IOPS_UTILIZATION[1] ? this.queriesResults.POOL_IOPS_UTILIZATION[1].metric.name + ' - ' + this.queriesResults.POOL_IOPS_UTILIZATION[1].metric.cluster : '';
+    this.poolIopsData1 = this.queriesResults.POOL_IOPS_UTILIZATION[0] ? this.queriesResults.POOL_IOPS_UTILIZATION[0].values : '';
+    this.poolIopsData2 = this.queriesResults.POOL_IOPS_UTILIZATION[1] ? this.queriesResults.POOL_IOPS_UTILIZATION[1].values : '';
+    this.poolThroughputLabel1 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0] ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].metric.name + ' - ' + this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].metric.cluster : '';
+    this.poolThroughputLabel2 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1] ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].metric.name + ' - ' + this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].metric.cluster : '';
+    this.poolThroughputData1 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0] ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[0].values : '';
+    this.poolThroughputData2 = this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1] ? this.queriesResults.POOL_THROUGHPUT_UTILIZATION[1].values : ''; 
   }
 
   findClusterData(metrics: any, clusterName: string) {

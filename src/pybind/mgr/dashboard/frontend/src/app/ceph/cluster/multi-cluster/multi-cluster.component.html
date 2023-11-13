@@ -206,28 +206,27 @@
         <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
         </cd-dashboard-time-selector>
         <cd-dashboard-area-chart  chartTitle="Capacity"
-                                  [label]="clusters[0].cluster"
-                                  [label2]="clusters[1].cluster"
+                                  [label]="clusterCapacityLabel1"
+                                  [label2]="clusterCapacityLabel2"
                                   dataUnits="B"
-                                  decimals="2"
-                                  [data]="queriesResults.CLUSTER_CAPACITY_UTILIZATION[0]"
-                                  [data2]="queriesResults.CLUSTER_CAPACITY_UTILIZATION[1]">
+                                  [data]="clusterCapacityData1"
+                                  [data2]="clusterCapacityData2">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="IOPS"
-                                 [label]="clusters[0].cluster"
-                                 [label2]="clusters[1].cluster"
+                                 [label]="clusterIopsLabel1"
+                                 [label2]="clusterIopsLabel2"
                                  dataUnits=""
                                  decimals="0"
-                                 [data]="queriesResults.CLUSTER_IOPS_UTILIZATION[0]"
-                                 [data2]="queriesResults.CLUSTER_IOPS_UTILIZATION[1]">
+                                 [data]="clusterIopsData1"
+                                 [data2]="clusterIopsData2">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="Client Throughput"
-                                 [label]="clusters[0].cluster"
-                                 [label2]="clusters[1].cluster"
+                                [label]="clusterThroughputLabel1"
+                                [label2]="clusterThroughputLabel2"
                                  dataUnits="B/s"
                                  decimals="2"
-                                 [data]="queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[0]"
-                                 [data2]="queriesResults.CLUSTER_THROUGHPUT_UTILIZATION[1]">
+                                 [data]="clusterThroughputData1"
+                                 [data2]="clusterThroughputData2">
         </cd-dashboard-area-chart>
       </div>
     </cd-card>
@@ -242,27 +241,27 @@
       <cd-dashboard-time-selector (selectedTime)="getPrometheusData($event)">
       </cd-dashboard-time-selector>
       <cd-dashboard-area-chart  chartTitle="Capacity"
-                                [label]="clusters[0].cluster + '-' + clusters[0].name"
-                                [label2]="clusters[1].cluster"
+                                [label]="poolCapacityLabel1"
+                                [label2]="poolCapacityLabel2"
                                 dataUnits="B"
-                                [data]="queriesResults.POOL_CAPACITY_UTILIZATION[0]"
-                                [data2]="queriesResults.POOL_CAPACITY_UTILIZATION[1]">
+                                [data]="poolCapacityData1"
+                                [data2]="poolCapacityData2">
       </cd-dashboard-area-chart>
       <cd-dashboard-area-chart chartTitle="IOPS"
-                               [label]="clusters[0].cluster"
-                               [label2]="clusters[1].cluster"
+                               [label]="poolIopsLabel1"
+                               [label2]="poolIopsLabel2"
                                dataUnits=""
                                decimals="0"
-                               [data]="queriesResults.POOL_IOPS_UTILIZATION[0]"
-                               [data2]="queriesResults.POOL_IOPS_UTILIZATION[1]">
+                               [data]="poolIopsData1"
+                               [data2]="poolIopsData2">
       </cd-dashboard-area-chart>
       <cd-dashboard-area-chart chartTitle="Client Throughput"
-                               [label]="clusters[0].cluster"
-                               [label2]="clusters[1].cluster"
+                               [label]="poolThroughputLabel1"
+                               [label2]="poolThroughputLabel2"
                                dataUnits="B/s"
                                decimals="2"
-                               [data]="queriesResults.POOL_THROUGHPUT_UTILIZATION[0]"
-                               [data2]="queriesResults.POOL_THROUGHPUT_UTILIZATION[1]">
+                               [data]="poolThroughputData1"
+                               [data2]="poolThroughputData2">
       </cd-dashboard-area-chart>
     </div>
   </cd-card>
