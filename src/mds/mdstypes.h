@@ -8,6 +8,7 @@
 #include <ostream>
 #include <set>
 #include <map>
+#include <string>
 #include <string_view>
 
 #include "common/config.h"
@@ -600,6 +601,22 @@ WRITE_CLASS_ENCODER(mds_table_pending_t)
 struct metareqid_t {
   metareqid_t() {}
   metareqid_t(entity_name_t n, ceph_tid_t t) : name(n), tid(t) {}
+  metareqid_t(std::string_view sv) {
+    auto p = sv.find(':');
+    if (p == std::string::npos) {
+      throw std::invalid_argument("invalid format: expected colon");
+    }
+    if (!name.parse(sv.substr(0, p))) {
+      throw std::invalid_argument("invalid format: invalid entity name");
+    }
+    try {
+      tid = std::stoul(std::string(sv.substr(p+1)), nullptr, 0);
+    } catch (const std::invalid_argument& e) {
+      throw std::invalid_argument("invalid format: tid is not a number");
+    } catch (const std::out_of_range& e) {
+      throw std::invalid_argument("invalid format: tid is out of range");
+    }
+  }
   void encode(ceph::buffer::list& bl) const {
     using ceph::encode;
     encode(name, bl);

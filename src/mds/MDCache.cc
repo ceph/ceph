@@ -9914,6 +9914,11 @@ void MDCache::request_cleanup(const MDRequestRef& mdr)
 
 void MDCache::request_kill(const MDRequestRef& mdr)
 {
+  if (mdr->killed) {
+    /* ignore duplicate kills */
+    return;
+  }
+
   // rollback peer requests is tricky. just let the request proceed.
   if (mdr->has_more() &&
       (!mdr->more()->witnessed.empty() || !mdr->more()->waiting_on_peer.empty())) {
