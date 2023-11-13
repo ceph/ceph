@@ -456,7 +456,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     if (ret < 0) {
       return ret;
     }
-    const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
+    const rgw_user& bucket_owner = bucket_policy.get_owner().id;
     if (bucket_owner != s->user->get_id() &&
         ! s->auth.identity->is_admin_of(bucket_owner)) {
       auto r = eval_identity_or_session_policies(dpp, s->iam_user_policies, s->env,
@@ -577,7 +577,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 			     s->bucket_acl.get(), s->bucket->get_key(), y);
     acct_acl_user = {
       s->bucket->get_info().owner,
-      s->bucket_acl->get_owner().get_display_name(),
+      s->bucket_acl->get_owner().display_name,
     };
 
     s->bucket_owner = s->bucket_acl->get_owner();
@@ -1449,7 +1449,7 @@ int RGWOp::init_quota()
 			driver->get_user(s->bucket->get_info().owner);
   rgw::sal::User* user;
 
-  if (s->user->get_id() == s->bucket_owner.get_id()) {
+  if (s->user->get_id() == s->bucket_owner.id) {
     user = s->user.get();
   } else {
     int r = owner_user->load_user(this, s->yield);
@@ -3527,8 +3527,8 @@ void RGWCreateBucket::execute(optional_yield y)
     }
   }
 
-  s->bucket_owner.set_id(s->user->get_id());
-  s->bucket_owner.set_name(s->user->get_display_name());
+  s->bucket_owner.id = s->user->get_id();
+  s->bucket_owner.display_name = s->user->get_display_name();
   createparams.owner = s->user->get_id();
 
   buffer::list aclbl;
@@ -3860,7 +3860,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     }
 
     /* admin request overrides permission checks */
-    if (! s->auth.identity->is_admin_of(cs_acl.get_owner().get_id())) {
+    if (! s->auth.identity->is_admin_of(cs_acl.get_owner().id)) {
       if (policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
         //add source object tags for permission evaluation
         auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, policy, s->iam_user_policies, s->session_policies);
@@ -4269,7 +4269,7 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
     processor = driver->get_append_writer(this, s->yield, s->object.get(),
-					 s->bucket_owner.get_id(),
+					 s->bucket_owner.id,
 					 pdest_placement, s->req_id, position,
 					 &cur_accounted_size);
   } else {
@@ -4282,7 +4282,7 @@ void RGWPutObj::execute(optional_yield y)
       }
     }
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
-					 s->bucket_owner.get_id(),
+					 s->bucket_owner.id,
 					 pdest_placement, olh_epoch, s->req_id);
   }
 
@@ -4688,7 +4688,7 @@ void RGWPostObj::execute(optional_yield y)
 
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
-					 s->bucket_owner.get_id(),
+					 s->bucket_owner.id,
 					 &s->dest_placement, 0, s->req_id);
     op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
@@ -5512,7 +5512,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     }
 
     /* admin request overrides permission checks */
-    if (!s->auth.identity->is_admin_of(src_acl.get_owner().get_id())) {
+    if (!s->auth.identity->is_admin_of(src_acl.get_owner().id)) {
       if (src_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
         auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, src_policy, s->iam_user_policies, s->session_policies);
         if (has_s3_existing_tag || has_s3_resource_tag)
@@ -5596,7 +5596,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
   }
   auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket->get_tenant());
   /* admin request overrides permission checks */
-  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
+  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().id)){
     if (dest_iam_policy != boost::none || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
       //Add destination bucket tags for authorization
       auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, dest_iam_policy, s->iam_user_policies, s->session_policies);
@@ -7445,7 +7445,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
   if (!path.obj_key.empty()) { // object deletion
     ACLOwner bucket_owner;
 
-    bucket_owner.set_id(bucket->get_info().owner);
+    bucket_owner.id = bucket->get_info().owner;
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(path.obj_key);
     obj->set_atomic();
 
@@ -7858,7 +7858,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   std::unique_ptr<rgw::sal::Writer> processor;
   processor = driver->get_atomic_writer(this, s->yield, obj.get(),
-				       bowner.get_id(),
+				       bowner.id,
 				       &s->dest_placement, 0, s->req_id);
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -8243,7 +8243,7 @@ void RGWGetObjLayout::execute(optional_yield y)
 
 int RGWConfigBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
     return -EACCES;
   }
 
@@ -8276,7 +8276,7 @@ void RGWConfigBucketMetaSearch::execute(optional_yield y)
 
 int RGWGetBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
     return -EACCES;
   }
 
@@ -8290,7 +8290,7 @@ void RGWGetBucketMetaSearch::pre_exec()
 
 int RGWDelBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
     return -EACCES;
   }
 

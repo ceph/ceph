@@ -366,11 +366,11 @@ int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_own
 
   ACLGrant owner_grant;
 
-  rgw_user bid = bucket_owner.get_id();
-  string bname = bucket_owner.get_display_name();
+  const rgw_user& bid = bucket_owner.id;
+  const std::string& bname = bucket_owner.display_name;
 
   /* owner gets full control */
-  owner_grant.set_canon(owner.get_id(), owner.get_display_name(), RGW_PERM_FULL_CONTROL);
+  owner_grant.set_canon(owner.id, owner.display_name, RGW_PERM_FULL_CONTROL);
   add_grant(&owner_grant);
 
   if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
@@ -392,12 +392,14 @@ int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_own
     add_grant(&group_grant);
   } else if (canned_acl.compare("bucket-owner-read") == 0) {
     bucket_owner_grant.set_canon(bid, bname, RGW_PERM_READ);
-    if (bid != owner.get_id())
+    if (bid != owner.id) {
       add_grant(&bucket_owner_grant);
+    }
   } else if (canned_acl.compare("bucket-owner-full-control") == 0) {
     bucket_owner_grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
-    if (bid != owner.get_id())
+    if (bid != owner.id) {
       add_grant(&bucket_owner_grant);
+    }
   } else {
     return -EINVAL;
   }
@@ -483,28 +485,27 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
 				       rgw::sal::Driver* driver, ACLOwner *owner,
 				       RGWAccessControlPolicy& dest, std::string &err_msg)
 {
-  if (!owner)
+  if (!owner || owner->id.empty()) {
     return -EINVAL;
-
-  ACLOwner *requested_owner = static_cast<ACLOwner_S3 *>(find_first("Owner"));
-  if (requested_owner) {
-    rgw_user& requested_id = requested_owner->get_id();
-    if (!requested_id.empty() && requested_id != owner->get_id())
-      return -EPERM;
   }
 
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(owner->get_id());
+  ACLOwner *requested_owner = static_cast<ACLOwner_S3 *>(find_first("Owner"));
+  if (requested_owner && requested_owner->id != owner->id) {
+    return -EPERM;
+  }
+
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(owner->id);
   if (user->load_user(dpp, null_yield) < 0) {
     ldpp_dout(dpp, 10) << "owner info does not exist" << dendl;
     err_msg = "Invalid id";
     return -EINVAL;
   }
   ACLOwner& dest_owner = dest.get_owner();
-  dest_owner.set_id(owner->get_id());
-  dest_owner.set_name(user->get_display_name());
+  dest_owner.id = owner->id;
+  dest_owner.display_name = user->get_display_name();
 
-  ldpp_dout(dpp, 20) << "owner id=" << owner->get_id() << dendl;
-  ldpp_dout(dpp, 20) << "dest owner id=" << dest.get_owner().get_id() << dendl;
+  ldpp_dout(dpp, 20) << "owner id=" << owner->id << dendl;
+  ldpp_dout(dpp, 20) << "dest owner id=" << dest.get_owner().id << dendl;
 
   RGWAccessControlList& dst_acl = dest.get_acl();
 

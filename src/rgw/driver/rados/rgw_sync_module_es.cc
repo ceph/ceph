@@ -501,7 +501,7 @@ struct es_obj_metadata {
 
         const RGWAccessControlList& acl = policy.get_acl();
 
-        permissions.insert(policy.get_owner().get_id().to_str());
+        permissions.insert(policy.get_owner().id.to_str());
         for (auto acliter : acl.get_grant_map()) {
           const ACLGrant& grant = acliter.second;
           if (grant.get_type().get_type() == ACL_TYPE_CANON_USER &&

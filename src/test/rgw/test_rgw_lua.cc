@@ -662,9 +662,10 @@ TEST(TestRGWLua, Acl)
   )";
 
   DEFINE_REQ_STATE;
-  ACLOwner owner;
-  owner.set_id(rgw_user("jack", "black"));
-  owner.set_name("jack black");
+  const ACLOwner owner{
+    .id = rgw_user("jack", "black"),
+    .display_name = "jack black"
+  };
   s.user_acl.reset(new RGWAccessControlPolicy(g_cct));
   s.user_acl->set_owner(owner);
   ACLGrant grant1, grant2, grant3, grant4, grant5, grant6_1, grant6_2;
@@ -730,17 +731,17 @@ TEST(TestRGWLua, UseFunction)
 	)";
 
   DEFINE_REQ_STATE;
-  s.owner.set_name("user two");
-  s.owner.set_id(rgw_user("tenant2", "user2"));
+  s.owner.display_name = "user two";
+  s.owner.id = rgw_user("tenant2", "user2");
   s.user_acl.reset(new RGWAccessControlPolicy());
-  s.user_acl->get_owner().set_name("user three");
-  s.user_acl->get_owner().set_id(rgw_user("tenant3", "user3"));
+  s.user_acl->get_owner().display_name = "user three";
+  s.user_acl->get_owner().id = rgw_user("tenant3", "user3");
   s.bucket_acl.reset(new RGWAccessControlPolicy());
-  s.bucket_acl->get_owner().set_name("user four");
-  s.bucket_acl->get_owner().set_id(rgw_user("tenant4", "user4"));
+  s.bucket_acl->get_owner().display_name = "user four";
+  s.bucket_acl->get_owner().id = rgw_user("tenant4", "user4");
   s.object_acl.reset(new RGWAccessControlPolicy());
-  s.object_acl->get_owner().set_name("user five");
-  s.object_acl->get_owner().set_id(rgw_user("tenant5", "user5"));
+  s.object_acl->get_owner().display_name = "user five";
+  s.object_acl->get_owner().id = rgw_user("tenant5", "user5");
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);

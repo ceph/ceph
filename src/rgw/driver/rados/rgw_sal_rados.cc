@@ -684,7 +684,7 @@ int RadosBucket::set_acl(const DoutPrefixProvider* dpp, RGWAccessControlPolicy &
   map<string, bufferlist>& attrs = get_attrs();
 
   attrs[RGW_ATTR_ACL] = aclbl;
-  info.owner = acl.get_owner().get_id();
+  info.owner = acl.get_owner().id;
 
   int r = store->ctl()->bucket->store_bucket_instance_info(info.bucket,
                  info, y, dpp,
@@ -766,8 +766,10 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
   if (!results.objs.empty()) {
     for (const rgw_bucket_dir_entry& dentry : results.objs) {
       rgw_obj_key key(dentry.key);
-      ACLOwner owner(rgw_user(dentry.meta.owner));
-      owner.set_name(dentry.meta.owner_display_name);
+      const ACLOwner owner{
+        .id = rgw_user(dentry.meta.owner),
+        .display_name = dentry.meta.owner_display_name
+      };
       uploads.push_back(this->get_multipart_upload(key.name,
 			std::nullopt, std::move(owner), dentry.meta.mtime));
     }
@@ -1663,7 +1665,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   RGWAccessControlList& acl = policy.get_acl();
 
   //Remove grant that is set to old owner
-  acl.remove_canon_user_grant(owner.get_id());
+  acl.remove_canon_user_grant(owner.id);
 
   //Create a grant and add grant
   ACLGrant grant;
@@ -1671,8 +1673,8 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   acl.add_grant(&grant);
 
   //Update the ACL owner to the new user
-  owner.set_id(new_user.get_id());
-  owner.set_name(new_user.get_display_name());
+  owner.id = new_user.get_id();
+  owner.display_name = new_user.get_display_name();
   policy.set_owner(owner);
 
   bl.clear();
@@ -1986,7 +1988,7 @@ RadosObject::RadosDeleteOp::RadosDeleteOp(RadosObject *_source) :
 
 int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
 {
-  parent_op.params.bucket_owner = params.bucket_owner.get_id();
+  parent_op.params.bucket_owner = params.bucket_owner.id;
   parent_op.params.versioning_status = params.versioning_status;
   parent_op.params.obj_owner = params.obj_owner;
   parent_op.params.olh_epoch = params.olh_epoch;
@@ -2220,7 +2222,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   }
 
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
-  del_op->params.bucket_owner = bucket->get_info().owner;
+  del_op->params.bucket_owner.id = bucket->get_info().owner;
   del_op->params.versioning_status = 0;
   if (!remove_objs.empty()) {
     del_op->params.remove_objs = &remove_objs;
@@ -2272,7 +2274,7 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     RGWRados::Object::Write obj_op(&op_target);
 
     op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
-    obj_op.meta.owner = owner.get_id();
+    obj_op.meta.owner = owner.id;
     obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
     obj_op.meta.mtime = &mtime;
@@ -2561,7 +2563,7 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.remove_objs = &remove_objs;
 
   obj_op.meta.ptag = &tag; /* use req_id as operation tag */
-  obj_op.meta.owner = owner.get_id();
+  obj_op.meta.owner = owner.id;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.modify_tail = true;
   obj_op.meta.completeMultipart = true;

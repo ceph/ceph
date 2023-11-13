@@ -89,7 +89,7 @@ public:
 
   virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const std::string& canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-    if (_owner.get_id() == rgw_user("anonymous")) {
+    if (_owner.id == rgw_user("anonymous")) {
       owner = bucket_owner;
     } else {
       owner = _owner;

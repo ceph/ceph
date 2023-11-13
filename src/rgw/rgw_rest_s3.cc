@@ -3162,8 +3162,8 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
       return -EACCES;
     } else {
       /* Populate the owner info. */
-      s->owner.set_id(s->user->get_id());
-      s->owner.set_name(s->user->get_display_name());
+      s->owner.id = s->user->get_id();
+      s->owner.display_name = s->user->get_display_name();
       ldpp_dout(this, 20) << "Successful Signature Verification!" << dendl;
     }
 
@@ -4107,7 +4107,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("IsTruncated", (truncated ? "true" : "false"));
 
     ACLOwner& owner = policy.get_owner();
-    dump_owner(s, owner.get_id(), owner.get_display_name());
+    dump_owner(s, owner.id, owner.display_name);
 
     for (; iter != upload->get_parts().end(); ++iter) {
       rgw::sal::MultipartPart* part = iter->second.get();
@@ -4170,8 +4170,8 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       }
       s->formatter->dump_string("UploadId", upload->get_upload_id());
       const ACLOwner& owner = upload->get_owner();
-      dump_owner(s, owner.get_id(), owner.get_display_name(), "Initiator");
-      dump_owner(s, owner.get_id(), owner.get_display_name()); // Owner
+      dump_owner(s, owner.id, owner.display_name, "Initiator");
+      dump_owner(s, owner.id, owner.display_name); // Owner
       s->formatter->dump_string("StorageClass", "STANDARD");
       dump_time(s, "Initiated", upload->get_mtime());
       s->formatter->close_section();
@@ -5098,8 +5098,8 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
   const auto ret = rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s, y);
   if (ret == 0) {
     /* Populate the owner info. */
-    s->owner.set_id(s->user->get_id());
-    s->owner.set_name(s->user->get_display_name());
+    s->owner.id = s->user->get_id();
+    s->owner.display_name = s->user->get_display_name();
   }
   return ret;
 }

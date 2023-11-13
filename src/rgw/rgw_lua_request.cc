@@ -260,10 +260,9 @@ struct OwnerMetaTable : public EmptyMetaTable {
     const char* index = luaL_checkstring(L, 2);
 
     if (strcasecmp(index, "DisplayName") == 0) {
-      pushstring(L, owner->get_display_name());
+      pushstring(L, owner->display_name);
     } else if (strcasecmp(index, "User") == 0) {
-      create_metatable<UserMetaTable>(L, name, index, false, 
-          &(owner->get_id()));
+      create_metatable<UserMetaTable>(L, name, index, false, &owner->id);
     } else {
       return error_unknown_field(L, index, name);
     }

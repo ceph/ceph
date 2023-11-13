@@ -601,8 +601,8 @@ namespace rgw {
     s->perm_mask = RGW_PERM_FULL_CONTROL;
 
     // populate the owner info
-    s->owner.set_id(s->user->get_id());
-    s->owner.set_name(s->user->get_display_name());
+    s->owner.id = s->user->get_id();
+    s->owner.display_name = s->user->get_display_name();
 
     return 0;
   } /* RGWHandler_Lib::authorize */

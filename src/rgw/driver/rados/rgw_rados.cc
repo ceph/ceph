@@ -4327,8 +4327,8 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
 
     ACLOwner new_owner;
-    new_owner.set_id(*override_owner);
-    new_owner.set_name(owner_info.display_name);
+    new_owner.id = *override_owner;
+    new_owner.display_name = owner_info.display_name;
 
     acl.set_owner(new_owner);
 
@@ -5152,7 +5152,7 @@ int RGWRados::set_bucket_owner(rgw_bucket& bucket, ACLOwner& owner, const DoutPr
     return r;
   }
 
-  info.owner = owner.get_id();
+  info.owner = owner.id;
 
   r = put_bucket_instance_info(info, false, real_time(), &attrs, dpp, y);
   if (r < 0) {
@@ -5620,8 +5620,8 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
 
       struct rgw_bucket_dir_entry_meta meta;
 
-      meta.owner = params.obj_owner.get_id().to_str();
-      meta.owner_display_name = params.obj_owner.get_display_name();
+      meta.owner = params.obj_owner.id.to_str();
+      meta.owner_display_name = params.obj_owner.display_name;
 
       if (real_clock::is_zero(params.mtime)) {
         meta.mtime = real_clock::now();
@@ -6892,8 +6892,8 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
       ldpp_dout(dpp, 0) << "WARNING: could not decode policy ret=" << ret << dendl;
     }
   }
-  ent.meta.owner = owner.get_id().to_str();
-  ent.meta.owner_display_name = owner.get_display_name();
+  ent.meta.owner = owner.id.to_str();
+  ent.meta.owner_display_name = owner.display_name;
   ent.meta.content_type = content_type;
   ent.meta.appendable = appendable;
 
@@ -10109,8 +10109,8 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   object.meta.etag = etag;
   object.meta.content_type = content_type;
   object.meta.storage_class = storage_class;
-  object.meta.owner = owner.get_id().to_str();
-  object.meta.owner_display_name = owner.get_display_name();
+  object.meta.owner = owner.id.to_str();
+  object.meta.owner_display_name = owner.display_name;
   object.meta.appendable = appendable;
 
   // encode suggested updates
@@ -10139,8 +10139,8 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
     list_state.tag = astate->obj_tag.c_str();
   }
 
-  list_state.meta.owner = owner.get_id().to_str();
-  list_state.meta.owner_display_name = owner.get_display_name();
+  list_state.meta.owner = owner.id.to_str();
+  list_state.meta.owner_display_name = owner.display_name;
 
   list_state.exists = true;
 

@@ -1068,9 +1068,9 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
     return -EIO;
   }
 
-  int r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->unlink_bucket(owner.get_id(), old_bucket->get_info().bucket, y, dpp, false);
+  int r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->unlink_bucket(owner.id, old_bucket->get_info().bucket, y, dpp, false);
   if (r < 0) {
-    set_err_msg(err, "could not unlink policy from user " + owner.get_id().to_str());
+    set_err_msg(err, "could not unlink policy from user " + owner.id.to_str());
     return r;
   }
 

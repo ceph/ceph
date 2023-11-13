@@ -546,9 +546,9 @@ static int remove_expired_obj(
     = obj->get_delete_op();
   del_op->params.versioning_status
     = obj->get_bucket()->get_info().versioning_status();
-  del_op->params.obj_owner.set_id(rgw_user {meta.owner});
-  del_op->params.obj_owner.set_name(meta.owner_display_name);
-  del_op->params.bucket_owner.set_id(bucket_info.owner);
+  del_op->params.obj_owner.id = rgw_user{meta.owner};
+  del_op->params.obj_owner.display_name = meta.owner_display_name;
+  del_op->params.bucket_owner.id = bucket_info.owner;
   del_op->params.unmod_since = meta.mtime;
 
   // notification supported only for RADOS driver for now
