@@ -61,13 +61,6 @@ bool operator!=(const RGWAccessControlList& lhs,
   return !(lhs == rhs);
 }
 
-bool operator==(const ACLOwner& lhs, const ACLOwner& rhs) {
-  return lhs.id == rhs.id && lhs.display_name == rhs.display_name;
-}
-bool operator!=(const ACLOwner& lhs, const ACLOwner& rhs) {
-  return !(lhs == rhs);
-}
-
 bool operator==(const RGWAccessControlPolicy& lhs,
                 const RGWAccessControlPolicy& rhs) {
   return lhs.acl == rhs.acl && lhs.owner == rhs.owner;
@@ -187,7 +180,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
 
   uint32_t perm = acl.get_perm(dpp, auth_identity, perm_mask);
 
-  if (auth_identity.is_owner_of(owner.get_id())) {
+  if (auth_identity.is_owner_of(owner.id)) {
     perm |= perm_mask & (RGW_PERM_READ_ACP | RGW_PERM_WRITE_ACP);
   }
 
@@ -211,7 +204,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
   }
 
   ldpp_dout(dpp, 5) << "-- Getting permissions done for identity=" << auth_identity
-                << ", owner=" << owner.get_id()
+                << ", owner=" << owner.id
                 << ", perm=" << perm << dendl;
 
   return perm;
@@ -367,10 +360,8 @@ void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy
     RGWAccessControlList *l = *iter;
     p->acl = *l;
 
-    string name = "radosgw";
-    rgw_user id("rgw");
-    p->owner.set_name(name);
-    p->owner.set_id(id);
+    p->owner.id.id = "rgw";
+    p->owner.display_name = "radosgw";
 
     o.push_back(p);
 

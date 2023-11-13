@@ -906,7 +906,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
 
   std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = obj->get_delete_op();
 
-  del_op->params.bucket_owner = bucket->get_info().owner;
+  del_op->params.bucket_owner.id = bucket->get_info().owner;
   del_op->params.obj_owner = policy.get_owner();
   if (del_if_older) {
     del_op->params.unmod_since = timestamp;
@@ -916,8 +916,8 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   }
   del_op->params.olh_epoch = versioned_epoch;
   del_op->params.marker_version_id = marker_version_id;
-  del_op->params.obj_owner.set_id(rgw_user(owner));
-  del_op->params.obj_owner.set_name(owner_display_name);
+  del_op->params.obj_owner.id = rgw_user(owner);
+  del_op->params.obj_owner.display_name = owner_display_name;
   del_op->params.mtime = timestamp;
   del_op->params.high_precision_time = true;
   del_op->params.zones_trace = &zones_trace;

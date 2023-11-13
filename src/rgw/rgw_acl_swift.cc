@@ -188,8 +188,8 @@ int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
                                          uint32_t& rw_mask)
 {
   acl.create_default(id, name);
-  owner.set_id(id);
-  owner.set_name(name);
+  owner.id = id;
+  owner.display_name = name;
   rw_mask = 0;
 
   if (read_list) {
@@ -338,8 +338,8 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
                                               const std::string& acl_str)
 {
   acl.create_default(id, name);
-  owner.set_id(id);
-  owner.set_name(name);
+  owner.id = id;
+  owner.display_name = name;
 
   JSONParser parser;
 
@@ -395,7 +395,7 @@ boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
         continue;
       }
       id = SWIFT_GROUP_ALL_USERS;
-    } else if (owner.get_id() == id) {
+    } else if (owner.id == id) {
       continue;
     }
 

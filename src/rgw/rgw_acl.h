@@ -298,15 +298,9 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWAccessControlList)
 
-class ACLOwner
-{
-protected:
+struct ACLOwner {
   rgw_user id;
   std::string display_name;
-public:
-  ACLOwner() {}
-  ACLOwner(const rgw_user& _id) : id(_id) {}
-  ~ACLOwner() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(3, 2, bl);
@@ -327,15 +321,8 @@ public:
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<ACLOwner*>& o);
-  void set_id(const rgw_user& _id) { id = _id; }
-  void set_name(const std::string& name) { display_name = name; }
 
-  rgw_user& get_id() { return id; }
-  const rgw_user& get_id() const { return id; }
-  std::string& get_display_name() { return display_name; }
-  const std::string& get_display_name() const { return display_name; }
-  friend bool operator==(const ACLOwner& lhs, const ACLOwner& rhs);
-  friend bool operator!=(const ACLOwner& lhs, const ACLOwner& rhs);
+  auto operator<=>(const ACLOwner&) const = default;
 };
 WRITE_CLASS_ENCODER(ACLOwner)
 
@@ -388,15 +375,14 @@ public:
     DECODE_FINISH(bl);
   }
 
-  void set_owner(ACLOwner& o) { owner = o; }
-  ACLOwner& get_owner() {
-    return owner;
-  }
+  void set_owner(const ACLOwner& o) { owner = o; }
+  const ACLOwner& get_owner() const { return owner; }
+  ACLOwner& get_owner() { return owner; }
 
-  void create_default(const rgw_user& id, std::string& name) {
+  void create_default(const rgw_user& id, const std::string& name) {
     acl.create_default(id, name);
-    owner.set_id(id);
-    owner.set_name(name);
+    owner.id = id;
+    owner.display_name = name;
   }
   RGWAccessControlList& get_acl() {
     return acl;

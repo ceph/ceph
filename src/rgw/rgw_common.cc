@@ -1421,7 +1421,7 @@ int verify_bucket_owner_or_policy(req_state* const s,
       identity_policy_res == Effect::Allow ||
       (e == Effect::Pass &&
        identity_policy_res == Effect::Pass &&
-       s->auth.identity->is_owner_of(s->bucket_owner.get_id()))) {
+       s->auth.identity->is_owner_of(s->bucket_owner.id))) {
     return 0;
   } else {
     return -EACCES;
