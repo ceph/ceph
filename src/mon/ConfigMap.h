@@ -99,6 +99,14 @@ struct Section {
 };
 
 struct ConfigMap {
+  struct ValueSource {
+    std::string section;
+    const MaskedOption *option = nullptr;
+    ValueSource() {}
+    ValueSource(const std::string& s, const MaskedOption *o)
+      : section(s), option(o) {}
+  };
+
   Section global;
   std::map<std::string,Section, std::less<>> by_type;
   std::map<std::string,Section, std::less<>> by_id;
@@ -125,12 +133,13 @@ struct ConfigMap {
     stray_options.clear();
   }
   void dump(ceph::Formatter *f) const;
+
   std::map<std::string,std::string,std::less<>> generate_entity_map(
     const EntityName& name,
     const std::map<std::string,std::string>& crush_location,
     const CrushWrapper *crush,
     const std::string& device_class,
-    std::map<std::string,std::pair<std::string,const MaskedOption*>> *src=0);
+    std::unordered_map<std::string,ValueSource> *src = nullptr);
 
   void parse_key(
     const std::string& key,
@@ -140,6 +149,13 @@ struct ConfigMap {
     const std::string& in,
     std::string *section,
     OptionMask *mask);
+
+  int add_option(
+    CephContext *cct,
+    const std::string& name,
+    const std::string& who,
+    const std::string& value,
+    std::function<const Option *(const std::string&)> get_opt);
 };
 
 
