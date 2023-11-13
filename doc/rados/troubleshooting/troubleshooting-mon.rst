@@ -17,58 +17,60 @@ consult the following troubleshooting information.
 Initial Troubleshooting
 =======================
 
-**Are the monitors running?**
+#. **Make sure that the monitors are running.**
 
-  First, make sure that the monitor (*mon*) daemon processes (``ceph-mon``) are
-  running. Sometimes Ceph admins either forget to start the mons or forget to
-  restart the mons after an upgrade. Checking for this simple oversight can
-  save hours of painstaking troubleshooting. It is also important to make sure
-  that the manager daemons (``ceph-mgr``) are running. Remember that typical
-  cluster configurations provide one ``ceph-mgr`` for each ``ceph-mon``.
+    First, make sure that the monitor (*mon*) daemon processes (``ceph-mon``)
+    are running. Sometimes Ceph admins either forget to start the mons or
+    forget to restart the mons after an upgrade. Checking for this simple
+    oversight can save hours of painstaking troubleshooting. It is also
+    important to make sure that the manager daemons (``ceph-mgr``) are running.
+    Remember that typical cluster configurations provide one ``ceph-mgr`` for
+    each ``ceph-mon``.
 
-  .. note:: Rook will not run more than two managers.
+    .. note:: Rook will not run more than two managers.
 
-**Can you reach the monitor nodes?**
+#. **Make sure that you can reach the monitor nodes.**
 
-  In certain rare cases, there may be ``iptables`` rules that block access to
-  monitor nodes or TCP ports. These rules might be left over from earlier
-  stress testing or rule development. To check for the presence of such rules,
-  SSH into the server and then try to connect to the monitor's ports
-  (``tcp/3300`` and ``tcp/6789``) using ``telnet``, ``nc``, or a similar tool.
+    In certain rare cases, there may be ``iptables`` rules that block access to
+    monitor nodes or TCP ports. These rules might be left over from earlier
+    stress testing or rule development. To check for the presence of such
+    rules, SSH into the server and then try to connect to the monitor's ports
+    (``tcp/3300`` and ``tcp/6789``) using ``telnet``, ``nc``, or a similar
+    tool.
 
-**Does the ``ceph status`` command run and receive a reply from the cluster?**
+#. **Make sure that the ``ceph status`` command runs  and receives a reply from the cluster.**
 
-  If the ``ceph status`` command does receive a reply from the cluster, then the
-  cluster is up and running. The monitors will answer to a ``status`` request
-  only if there is a formed quorum. Confirm that one or more ``mgr`` daemons
-  are reported as running. Under ideal conditions, all ``mgr`` daemons will be
-  reported as running.
-
-
-  If the ``ceph status`` command does not receive a reply from the cluster, then
-  there are probably not enough monitors ``up`` to form a quorum.  The ``ceph
-  -s`` command with no further options specified connects to an arbitrarily
-  selected monitor. In certain cases, however, it might be helpful to connect
-  to a specific monitor (or to several specific monitors in sequence) by adding
-  the ``-m`` flag to the command: for example, ``ceph status -m mymon1``.
+    If the ``ceph status`` command does receive a reply from the cluster, then
+    the cluster is up and running. The monitors will answer to a ``status``
+    request only if there is a formed quorum. Confirm that one or more ``mgr``
+    daemons are reported as running. Under ideal conditions, all ``mgr``
+    daemons will be reported as running.
 
 
-**None of this worked. What now?**
+    If the ``ceph status`` command does not receive a reply from the cluster,
+    then there are probably not enough monitors ``up`` to form a quorum.  The
+    ``ceph -s`` command with no further options specified connects to an
+    arbitrarily selected monitor. In certain cases, however, it might be
+    helpful to connect to a specific monitor (or to several specific monitors
+    in sequence) by adding the ``-m`` flag to the command: for example, ``ceph
+    status -m mymon1``.
 
-  If the above solutions have not resolved your problems, you might find it
-  helpful to examine each individual monitor in turn. Whether or not a quorum
-  has been formed, it is possible to contact each monitor individually and
-  request its status by using the ``ceph tell mon.ID mon_status`` command (here
-  ``ID`` is the monitor's identifier).
+#. **None of this worked. What now?**
 
-  Run the ``ceph tell mon.ID mon_status`` command for each monitor in the
-  cluster. For more on this command's output, see :ref:`Understanding
-  mon_status
-  <rados_troubleshoting_troubleshooting_mon_understanding_mon_status>`.
+    If the above solutions have not resolved your problems, you might find it
+    helpful to examine each individual monitor in turn. Whether or not a quorum
+    has been formed, it is possible to contact each monitor individually and
+    request its status by using the ``ceph tell mon.ID mon_status`` command
+    (here ``ID`` is the monitor's identifier).
 
-  There is also an alternative method: SSH into each monitor node and query the
-  daemon's admin socket. See :ref:`Using the Monitor's Admin
-  Socket<rados_troubleshoting_troubleshooting_mon_using_admin_socket>`.
+    Run the ``ceph tell mon.ID mon_status`` command for each monitor in the
+    cluster. For more on this command's output, see :ref:`Understanding
+    mon_status
+    <rados_troubleshoting_troubleshooting_mon_understanding_mon_status>`.
+
+    There is also an alternative method: SSH into each monitor node and query
+    the daemon's admin socket. See :ref:`Using the Monitor's Admin
+    Socket<rados_troubleshoting_troubleshooting_mon_using_admin_socket>`.
 
 .. _rados_troubleshoting_troubleshooting_mon_using_admin_socket:
 
