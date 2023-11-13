@@ -1038,7 +1038,8 @@ struct OSDShard {
     int id,
     CephContext *cct,
     OSD *osd,
-    op_queue_type_t osd_op_queue);
+    op_queue_type_t osd_op_queue,
+    unsigned osd_op_queue_cut_off);
 };
 
 class OSD : public Dispatcher,
