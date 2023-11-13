@@ -2693,6 +2693,36 @@ void MDSRankDispatcher::handle_asok_command(
         *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
       }
     }
+  } else if (command == "op kill") {
+    std::string id;
+    if(!cmd_getval(cmdmap, "id", id)) {
+      *css << "malformed id";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    metareqid_t mrid;
+    try {
+      mrid = metareqid_t(id);
+    } catch (const std::exception& e) {
+      *css << "malformed id: " << e.what();
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    std::lock_guard l(mds_lock);
+    if (!mdcache->have_request(mrid)) {
+      *css << "request does not exist";
+      r = -CEPHFS_ENOENT;
+      goto out;
+    }
+    auto mdr = mdcache->request_get(mrid);
+    {
+      f->open_object_section("result");
+      f->dump_int("result", 0);
+      f->dump_object("request", *mdr);
+      f->close_section();
+    }
+    mdcache->request_kill(mdr);
+    r = 0;
   } else if (command == "dump_blocked_ops") {
     if (!op_tracker.dump_ops_in_flight(f, true)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
