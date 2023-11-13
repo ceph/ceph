@@ -550,7 +550,6 @@ bool PrimaryLogPG::should_send_op(
   const hobject_t &hoid) {
   if (peer == get_primary())
     return true;
-  ceph_assert(recovery_state.has_peer_info(peer));
   bool should_send =
       hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= last_backfill_started ||
