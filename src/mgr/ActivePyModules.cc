@@ -866,42 +866,11 @@ void ActivePyModules::_refresh_config_map()
     string who;
     config_map.parse_key(key, &name, &who);
 
-    const Option *opt = g_conf().find_option(name);
-    if (!opt) {
-      config_map.stray_options.push_back(
-	std::unique_ptr<Option>(
-	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
-      opt = config_map.stray_options.back().get();
-    }
-
-    string err;
-    int r = opt->pre_validate(&value, &err);
-    if (r < 0) {
-      dout(10) << __func__ << " pre-validate failed on '" << name << "' = '"
-	       << value << "' for " << name << dendl;
-    }
-
-    MaskedOption mopt(opt);
-    mopt.raw_value = value;
-    string section_name;
-    if (who.size() &&
-	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
-      derr << __func__ << " invalid mask for key " << key << dendl;
-    } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
-      dout(10) << __func__ << " NO_MON_UPDATE option '"
-	       << name << "' = '" << value << "' for " << name
-	       << dendl;
-    } else {
-      Section *section = &config_map.global;;
-      if (section_name.size() && section_name != "global") {
-	if (section_name.find('.') != std::string::npos) {
-	  section = &config_map.by_id[section_name];
-	} else {
-	  section = &config_map.by_type[section_name];
-	}
-      }
-      section->options.insert(make_pair(name, std::move(mopt)));
-    }
+    config_map.add_option(
+      g_ceph_context, name, who, value,
+      [&](const std::string& name) {
+	return  g_conf().find_option(name);
+      });
   }
 }
 
@@ -1198,13 +1167,11 @@ PyObject *ActivePyModules::get_foreign_config(
 		 << " class " << device_class << dendl;
       }
 
-      std::map<std::string,pair<std::string,const MaskedOption*>> src;
       config = config_map.generate_entity_map(
 	entity,
 	crush_location,
 	osdmap.crush.get(),
-	device_class,
-	&src);
+	device_class);
     });
 
   // get a single value
