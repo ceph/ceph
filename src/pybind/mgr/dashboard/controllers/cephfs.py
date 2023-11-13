@@ -418,7 +418,9 @@ class CephFS(RESTController):
         :rtype: dict
         """
         try:
-            return self._get_root_directory(self._cephfs_instance(fs_id))
+            cfs = self._cephfs_instance(fs_id)
+            with cfs:
+                return self._get_root_directory(cfs)
         except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             return None
 
@@ -450,7 +452,8 @@ class CephFS(RESTController):
         path = self._set_ls_dir_path(path)
         try:
             cfs = self._cephfs_instance(fs_id)
-            paths = cfs.ls_dir(path, depth)
+            with cfs:
+                paths = cfs.ls_dir(path, depth)
         except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             paths = []
         return paths
@@ -479,7 +482,8 @@ class CephFS(RESTController):
         :param path: The path of the directory.
         """
         cfs = self._cephfs_instance(fs_id)
-        cfs.mk_dirs(path)
+        with cfs:
+            cfs.mk_dirs(path)
 
     @RESTController.Resource('DELETE', path='/tree')
     def rm_tree(self, fs_id, path):
@@ -489,7 +493,8 @@ class CephFS(RESTController):
         :param path: The path of the directory.
         """
         cfs = self._cephfs_instance(fs_id)
-        cfs.rm_dir(path)
+        with cfs:
+            cfs.rm_dir(path)
 
     @RESTController.Resource('PUT', path='/quota')
     @allow_empty_body
@@ -502,7 +507,8 @@ class CephFS(RESTController):
         :param max_files: The file limit.
         """
         cfs = self._cephfs_instance(fs_id)
-        return cfs.set_quotas(path, max_bytes, max_files)
+        with cfs:
+            return cfs.set_quotas(path, max_bytes, max_files)
 
     @RESTController.Resource('GET', path='/quota')
     @EndpointDoc("Get Cephfs Quotas of the specified path",
@@ -521,7 +527,8 @@ class CephFS(RESTController):
         :rtype: dict
         """
         cfs = self._cephfs_instance(fs_id)
-        return cfs.get_quotas(path)
+        with cfs:
+            return cfs.get_quotas(path)
 
     @RESTController.Resource('POST', path='/write_to_file')
     @allow_empty_body
@@ -533,7 +540,8 @@ class CephFS(RESTController):
         :param buf: The str to write to the buf.
         """
         cfs = self._cephfs_instance(fs_id)
-        cfs.write_to_file(path, buf)
+        with cfs:
+            cfs.write_to_file(path, buf)
 
     @RESTController.Resource('DELETE', path='/unlink')
     def unlink(self, fs_id, path) -> None:
@@ -543,7 +551,8 @@ class CephFS(RESTController):
         :param path: The path of the file or link to unlink.
         """
         cfs = self._cephfs_instance(fs_id)
-        cfs.unlink(path)
+        with cfs:
+            cfs.unlink(path)
 
     @RESTController.Resource('GET', path='/statfs')
     @EndpointDoc("Get Cephfs statfs of the specified path",
@@ -562,7 +571,8 @@ class CephFS(RESTController):
         :rtype: dict
         """
         cfs = self._cephfs_instance(fs_id)
-        return cfs.statfs(path)
+        with cfs:
+            return cfs.statfs(path)
 
     @RESTController.Resource('POST', path='/snapshot')
     @allow_empty_body
@@ -577,15 +587,16 @@ class CephFS(RESTController):
         :rtype: str
         """
         cfs = self._cephfs_instance(fs_id)
-        list_snaps = cfs.ls_snapshots(path)
-        for snap in list_snaps:
-            if name == snap['name']:
-                raise DashboardException(code='Snapshot name already in use',
-                                         msg='Snapshot name {} is already in use.'
-                                         'Please use another name'.format(name),
-                                         component='cephfs')
+        with cfs:
+            list_snaps = cfs.ls_snapshots(path)
+            for snap in list_snaps:
+                if name == snap['name']:
+                    raise DashboardException(code='Snapshot name already in use',
+                                             msg='Snapshot name {} is already in use.'
+                                             'Please use another name'.format(name),
+                                             component='cephfs')
 
-        return cfs.mk_snapshot(path, name)
+            return cfs.mk_snapshot(path, name)
 
     @RESTController.Resource('DELETE', path='/snapshot')
     def rm_snapshot(self, fs_id, path, name):
@@ -596,7 +607,8 @@ class CephFS(RESTController):
         :param name: The name of the snapshot.
         """
         cfs = self._cephfs_instance(fs_id)
-        cfs.rm_snapshot(path, name)
+        with cfs:
+            cfs.rm_snapshot(path, name)
 
 
 class CephFSClients(object):
@@ -661,9 +673,10 @@ class CephFsUi(CephFS):
         path = self._set_ls_dir_path(path)
         try:
             cfs = self._cephfs_instance(fs_id)
-            paths = cfs.ls_dir(path, depth)
-            if path == os.sep:
-                paths = [self._get_root_directory(cfs)] + paths
+            with cfs:
+                paths = cfs.ls_dir(path, depth)
+                if path == os.sep:
+                    paths = [self._get_root_directory(cfs)] + paths
         except (cephfs.PermissionError, cephfs.ObjectNotFound):  # pragma: no cover
             paths = []
         return paths
