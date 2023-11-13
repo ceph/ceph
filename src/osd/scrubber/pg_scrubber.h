@@ -476,11 +476,11 @@ class PgScrubber : public ScrubPgIF,
   [[nodiscard]] bool was_epoch_changed() const final;
 
   void set_queued_or_active() final;
-  /// Clears `m_queued_or_active` and restarts snaptrimming
+  /// Clears `m_queued_or_active` and restarts snap-trimming
   void clear_queued_or_active() final;
 
-  /// Release remote scrub reservation
-  void dec_scrubs_remote();
+  /// tell the OSD we are no longer reserved by our primary
+  void clear_reservation_by_remote_primary();
 
   void advance_token() final;
 

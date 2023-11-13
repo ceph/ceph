@@ -216,7 +216,7 @@ void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
   }
 }
 
-void PgScrubber::dec_scrubs_remote()
+void PgScrubber::clear_reservation_by_remote_primary()
 {
   m_osds->get_scrub_services().dec_scrubs_remote(m_pg_id.pgid);
 }
@@ -468,7 +468,7 @@ void PgScrubber::on_new_interval()
 
   // If we are a reserved replica - we need to free ourselves; otherwise -
   // this is a no-op.
-  dec_scrubs_remote();
+  clear_reservation_by_remote_primary();
 
   // The 'FullReset' is only relevant if we are not an active Primary
   m_fsm->process_event(FullReset{});
@@ -1742,7 +1742,7 @@ void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
     return;
   }
 
-  dec_scrubs_remote();
+  clear_reservation_by_remote_primary();
   m_fsm->process_event(FullReset{});
 }
 
@@ -2214,7 +2214,7 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
 
 PgScrubber::~PgScrubber()
 {
-  dec_scrubs_remote();
+  clear_reservation_by_remote_primary();
   if (m_scrub_job) {
     // make sure the OSD won't try to scrub this one just now
     rm_from_osd_scrubbing();
@@ -2266,7 +2266,7 @@ void PgScrubber::cleanup_on_finish()
   state_clear(PG_STATE_DEEP_SCRUB);
 
   m_local_osd_resource.reset();
-  dec_scrubs_remote();
+  clear_reservation_by_remote_primary();
   requeue_waiting();
 
   reset_internal_state();
