@@ -96,6 +96,7 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
   const uint32_t num_shards;
   const int shard_id;
   const bool is_rotational;
+  const unsigned cutoff_priority;
   MonClient *monc;
 
   /**
@@ -198,21 +199,6 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
     };
   }
 
-  static unsigned int get_io_prio_cut(CephContext *cct) {
-    if (cct->_conf->osd_op_queue_cut_off == "debug_random") {
-      std::random_device rd;
-      std::mt19937 random_gen(rd());
-      return (random_gen() % 2 < 1) ? CEPH_MSG_PRIO_HIGH : CEPH_MSG_PRIO_LOW;
-    } else if (cct->_conf->osd_op_queue_cut_off == "high") {
-      return CEPH_MSG_PRIO_HIGH;
-    } else {
-      // default / catch-all is 'low'
-      return CEPH_MSG_PRIO_LOW;
-    }
-  }
-
-  unsigned cutoff_priority = get_io_prio_cut(cct);
-
   /**
    * set_osd_capacity_params_from_config
    *
@@ -232,7 +218,8 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
 
 public: 
   mClockScheduler(CephContext *cct, int whoami, uint32_t num_shards,
-    int shard_id, bool is_rotational, MonClient *monc);
+    int shard_id, bool is_rotational, unsigned cutoff_priority,
+    MonClient *monc);
   ~mClockScheduler() override;
 
   /// Calculate scaled cost per item
@@ -260,6 +247,7 @@ public:
 
   void print(std::ostream &ostream) const final {
     ostream << get_op_queue_type_name(get_type());
+    ostream << ", cutoff=" << cutoff_priority;
   }
 
   // Update data associated with the modified mclock config key(s)
