@@ -479,7 +479,8 @@ class PgScrubber : public ScrubPgIF,
   /// Clears `m_queued_or_active` and restarts snaptrimming
   void clear_queued_or_active() final;
 
-  void dec_scrubs_remote() final;
+  /// Release remote scrub reservation
+  void dec_scrubs_remote();
 
   void advance_token() final;
 

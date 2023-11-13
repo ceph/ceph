@@ -666,7 +666,9 @@ ReservedReplica::ReservedReplica(my_context ctx)
 ReservedReplica::~ReservedReplica()
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  scrbr->dec_scrubs_remote();
+
+  // this specific scrub session has terminated. All incoming events carrying
+  // the old tag will be discarded.
   scrbr->advance_token();
 }
 

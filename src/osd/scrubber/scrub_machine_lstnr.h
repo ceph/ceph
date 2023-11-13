@@ -196,9 +196,6 @@ struct ScrubMachineListener {
   virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
 
-  /// Release remote scrub reservation
-  virtual void dec_scrubs_remote() = 0;
-
   /// Advance replica token
   virtual void advance_token() = 0;
 

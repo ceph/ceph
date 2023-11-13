@@ -466,6 +466,10 @@ void PgScrubber::on_new_interval()
   // That resets both the scrubber and the FSM.
   m_fsm->process_event(IntervalChanged{});
 
+  // If we are a reserved replica - we need to free ourselves; otherwise -
+  // this is a no-op.
+  dec_scrubs_remote();
+
   // The 'FullReset' is only relevant if we are not an active Primary
   m_fsm->process_event(FullReset{});
   rm_from_osd_scrubbing();
@@ -1738,8 +1742,7 @@ void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
     return;
   }
 
-  // this specific scrub session has terminated. All incoming events carrying
-  // the old tag will be discarded.
+  dec_scrubs_remote();
   m_fsm->process_event(FullReset{});
 }
 
@@ -2211,6 +2214,7 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
 
 PgScrubber::~PgScrubber()
 {
+  dec_scrubs_remote();
   if (m_scrub_job) {
     // make sure the OSD won't try to scrub this one just now
     rm_from_osd_scrubbing();
@@ -2262,6 +2266,7 @@ void PgScrubber::cleanup_on_finish()
   state_clear(PG_STATE_DEEP_SCRUB);
 
   m_local_osd_resource.reset();
+  dec_scrubs_remote();
   requeue_waiting();
 
   reset_internal_state();
