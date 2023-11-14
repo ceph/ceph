@@ -862,6 +862,28 @@ void Locker::drop_rdlocks_for_early_reply(MutationImpl *mut)
   issue_caps_set(need_issue);
 }
 
+void Locker::drop_rdlock(MutationImpl* mut, SimpleLock* what)
+{
+  dout(20) << __func__ << ": " << *what << dendl;
+
+  for (auto it = mut->locks.begin(); it != mut->locks.end(); ++it) {
+    auto* lock = it->lock;
+    if (lock == what) {
+      dout(20) << __func__ << ": found lock " << *lock << dendl;
+      ceph_assert(it->is_rdlock());
+      bool ni = false;
+      rdlock_finish(it, mut, &ni);
+      if (ni) {
+        set<CInode*> need_issue;
+        need_issue.insert(static_cast<CInode*>(lock->get_parent()));
+        issue_caps_set(need_issue);
+      }
+      return;
+    }
+  }
+  dout(20) << __func__ << ": not found!" << dendl;
+}
+
 void Locker::drop_locks_for_fragment_unfreeze(MutationImpl *mut)
 {
   set<CInode*> need_issue;
