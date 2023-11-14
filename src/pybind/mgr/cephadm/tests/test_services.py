@@ -390,6 +390,9 @@ port = {default_port}
 enable_auth = False
 state_update_notify = True
 state_update_interval_sec = 5
+min_controller_id = 1
+max_controller_id = 65519
+enable_spdk_discovery_controller = False
 
 [ceph]
 pool = {pool}
