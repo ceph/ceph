@@ -4286,6 +4286,42 @@ BlueStore::extent_map_t::const_iterator BlueStore::ExtentMap::seek_lextent(
   return fp;
 }
 
+// Split extent at desired offset.
+// Returns iterator to the right part.
+BlueStore::extent_map_t::iterator BlueStore::ExtentMap::split_at(
+  BlueStore::extent_map_t::iterator p, uint32_t offset)
+{
+  ceph_assert(p != extent_map.end());
+  ceph_assert(p->logical_offset < offset);
+  ceph_assert(offset < p->logical_end());
+  add(offset, p->blob_offset + (offset - p->logical_offset),
+      p->logical_end() - offset, p->blob);
+  p->length = offset - p->logical_offset;
+  ++p;
+  return p;
+}
+
+// If inside extent split it, and return right part.
+// If not inside extent return extent on right.
+BlueStore::extent_map_t::iterator BlueStore::ExtentMap::maybe_split_at(uint32_t offset)
+{
+  auto p = seek_lextent(offset);
+  if (p != extent_map.end()) {
+    if (p->logical_offset < offset && offset < p->logical_end()) {
+      // need to split
+      add(offset, p->blob_offset + (offset - p->logical_offset),
+          p->logical_end() - offset, p->blob);
+      p->length = offset - p->logical_offset;
+      ++p;
+      // check that we moved to proper extent
+      ceph_assert(p->logical_offset == offset);
+    } else {
+      // the extent is either outside offset or exactly at
+    }
+  }
+  return p;
+}
+
 bool BlueStore::ExtentMap::has_any_lextents(uint64_t offset, uint64_t length)
 {
   auto fp = seek_lextent(offset);
