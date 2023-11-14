@@ -25,6 +25,7 @@ if(WITH_BLUESTORE)
     bluestore/AvlAllocator.cc
     bluestore/BtreeAllocator.cc
     bluestore/HybridAllocator.cc
+    bluestore/Writer.cc
   )
 endif(WITH_BLUESTORE)
 
