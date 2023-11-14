@@ -382,14 +382,18 @@ int LRUPolicy::exist_key(std::string key)
 
 int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y)
 {
+  const std::lock_guard l(lru_lock);
   uint64_t freeSpace = cacheDriver->get_free_space(dpp);
 
   while (freeSpace < size) {
-    const std::lock_guard l(lru_lock);
     auto p = entries_lru_list.front();
     entries_map.erase(entries_map.find(p.key));
     entries_lru_list.pop_front_and_dispose(Entry_delete_disposer());
-    cacheDriver->delete_data(dpp, p.key, null_yield);
+    auto ret = cacheDriver->delete_data(dpp, p.key, y);
+    if (ret < 0) {
+      ldpp_dout(dpp, 10) << __func__ << "(): Failed to delete data from the cache backend: " << ret << dendl;
+      return ret;
+    }
 
     freeSpace = cacheDriver->get_free_space(dpp);
   }
@@ -399,8 +403,8 @@ int LRUPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_y
 
 void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y)
 {
-  erase(dpp, key, y);
-
+  const std::lock_guard l(lru_lock);
+  _erase(dpp, key, y);
   Entry *e = new Entry(key, offset, len, version);
   entries_lru_list.push_back(*e);
   entries_map.emplace(key, e);
@@ -409,6 +413,11 @@ void LRUPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t
 bool LRUPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
 {
   const std::lock_guard l(lru_lock);
+  return _erase(dpp, key, y);
+}
+
+bool LRUPolicy::_erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
+{
   auto p = entries_map.find(key);
   if (p == entries_map.end()) {
     return false;
