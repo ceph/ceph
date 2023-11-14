@@ -20,6 +20,9 @@ If you want to plot previous runs you can plot as many as you want with the same
 
 `python ../src/test/objectstore/bench/benchmarker.py compare 1699023315.json previous.json anotherone.json`
 
+**vstart configuration**
+`do_vstart.sh` contains the vstart.sh command it will run, if you want to modify it, go ahead and do it manually
+
 output:
 `benchmark.png` > plots
 
@@ -31,3 +34,41 @@ Current ugly plot:
 
 It plots a line for each osd.
 ![Benchmark plot](example.png)
+
+
+
+## Extra examples
+
+### Incerta testing
+
+```bash
+#!/bin/bash
+
+DIR=$1 # incerta run directory 1
+DIR2=$2 # incerta run directory 2
+OUT=$3 # output of files
+
+TEMP=$(mktemp -d)
+TEMP2=$(mktemp -d)
+
+# reformat files to correct json
+for file in $(ls $DIR/*.fio)
+do
+    name=$(basename $file .fio)
+    sed -n '/^{/,/^}/p' $file > $TEMP/$name-fio.json
+done
+
+for file in $(ls $DIR2/*.fio)
+do
+    name=$(basename $file .fio)
+    sed -n '/^{/,/^}/p' $file > $TEMP2/$name-fio.json
+done
+
+# generate plots for each workload separately and group before files and after files separately
+python3.11 ~/tester/benchmarker.py --outplot $OUT/randread --testname randread compare --type fio empty --group $(ls -d $TEMP/*.json | grep randread | grep -v 11 | xargs) --group $(ls -d $TEMP2/*.json | grep randread | grep -v 11 | xargs) --group-names before after
+python3.11 ~/tester/benchmarker.py --outplot $OUT/randwrite --testname randwrite compare --type fio empty --group $(ls -d $TEMP/*.json | grep randwrite | grep -v 11 | xargs) --group $(ls -d $TEMP2/*.json | grep randwrite | grep -v 11 | xargs) --group-names before after
+python3.11 ~/tester/benchmarker.py --outplot $OUT/randrw --testname randrw compare --type fio empty --group $(ls -d $TEMP/*.json | grep randrw | grep -v 11 | xargs) --group $(ls -d $TEMP2/*.json | grep randrw | grep -v 11 | xargs) --group-names before after
+
+# generate plots for all workloads together and group before files and after files separately
+python3.11 ~/tester/benchmarker.py --outplot $OUT/allrw --testname randrw compare --type fio empty --group $(ls -d $TEMP/*.json | grep -v 11 | xargs) --group $(ls -d $TEMP2/*.json | grep -v 11 | xargs) --group-names before after
+```
