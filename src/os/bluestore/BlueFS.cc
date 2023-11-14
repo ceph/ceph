@@ -817,8 +817,8 @@ int BlueFS::mount()
         get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
   }
 
-  _init_alloc();
   _init_logger();
+  _init_alloc();
 
   r = _replay(false, false);
   if (r < 0) {
