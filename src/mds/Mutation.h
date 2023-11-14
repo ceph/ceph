@@ -349,6 +349,8 @@ struct MDRequestImpl : public MutationImpl {
 
     MDSContext::vec waiting_for_finish;
 
+    std::map<CInode*, metareqid_t> quiesce_ops;
+
     // export & fragment
     CDir* export_dir = nullptr;
     dirfrag_t fragment_base;
@@ -374,6 +376,9 @@ struct MDRequestImpl : public MutationImpl {
     const utime_t& get_dispatch_stamp() const {
       return dispatched;
     }
+    bool is_continuous() const {
+      return continuous;
+    }
     metareqid_t reqid;
     __u32 attempt = 0;
     ceph::cref_t<MClientRequest> client_req;
@@ -382,6 +387,7 @@ struct MDRequestImpl : public MutationImpl {
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
     int internal_op = -1;
+    bool continuous = false;
   };
   MDRequestImpl(const Params* params, OpTracker *tracker) :
     MutationImpl(tracker, params->initiated,

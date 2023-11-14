@@ -1067,7 +1067,7 @@ void Migrator::dispatch_export_dir(const MDRequestRef& mdr, int count)
     }
     lov.add_rdlock(&dir->get_inode()->dirfragtreelock);
 
-    if (!mds->locker->acquire_locks(mdr, lov, nullptr, true)) {
+    if (!mds->locker->acquire_locks(mdr, lov, nullptr, {}, true)) {
       if (mdr->aborted)
 	export_try_cancel(dir);
       return;
