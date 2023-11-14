@@ -235,7 +235,9 @@ public:
     out << "mutation(" << this << ")";
   }
 
-  virtual void dump(ceph::Formatter *f) const {}
+  virtual void dump(ceph::Formatter *f) const {
+    _dump(f);
+  }
   void _dump_op_descriptor(std::ostream& stream) const override;
 
   metareqid_t reqid;
