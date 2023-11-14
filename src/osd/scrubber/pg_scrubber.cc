@@ -813,7 +813,7 @@ void PgScrubber::cancel_callback(scrubber_callback_cancel_token_t token)
   m_osds->sleep_timer.cancel_event(token);
 }
 
-LogChannelRef &PgScrubber::get_clog() const
+LogChannelRef& PgScrubber::get_clog() const
 {
   return m_osds->clog;
 }
@@ -821,6 +821,11 @@ LogChannelRef &PgScrubber::get_clog() const
 int PgScrubber::get_whoami() const
 {
   return m_osds->whoami;
+}
+
+[[nodiscard]] bool PgScrubber::is_high_priority() const
+{
+  return m_flags.required;
 }
 
 /*

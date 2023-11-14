@@ -408,6 +408,9 @@ class PgScrubber : public ScrubPgIF,
     return m_pg->recovery_state.is_primary();
   }
 
+  /// is this scrub more than just regular periodic scrub?
+  [[nodiscard]] bool is_high_priority() const final;
+
   void set_state_name(const char* name) final
   {
     m_fsm_state_name = name;
