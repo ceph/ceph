@@ -9928,6 +9928,11 @@ void MDCache::request_kill(const MDRequestRef& mdr)
     return;
   }
 
+  if (mdr->killed) {
+    /* ignore duplicate kills */
+    return;
+  }
+
   mdr->killed = true;
   mdr->mark_event("killing request");
 
