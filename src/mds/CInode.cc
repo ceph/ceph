@@ -317,12 +317,13 @@ ostream& operator<<(ostream& out, const CInode& in)
 CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l) :
     mdcache(c), first(f), last(l),
     item_dirty(this),
-    item_caps(this),
     item_open_file(this),
     item_dirty_parent(this),
     item_dirty_dirfrag_dir(this),
     item_dirty_dirfrag_nest(this),
     item_dirty_dirfrag_dirfragtree(this),
+    item_caps(this),
+    item_realm(this),
     pop(c->decayrate),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
@@ -3457,14 +3458,22 @@ void CInode::remove_client_cap(client_t client)
 
 void CInode::move_to_realm(SnapRealm *realm)
 {
-  dout(10) << __func__ << " joining realm " << *realm
-	   << ", leaving realm " << *containing_realm << dendl;
+  if (containing_realm) {
+    dout(20) << __func__ << " joining realm " << *realm
+             << ", leaving realm " << *containing_realm << dendl;
+  } else {
+    dout(20) << __func__ << " joining realm " << *realm << dendl;
+  }
   for (auto& p : client_caps) {
     containing_realm->remove_cap(p.first, &p.second);
     realm->add_cap(p.first, &p.second);
   }
-  item_caps.remove_myself();
-  realm->inodes_with_caps.push_back(&item_caps);
+  if (!client_caps.empty()) {
+    item_caps.remove_myself();
+    realm->inodes_with_caps.push_back(&item_caps);
+  }
+  item_realm.remove_myself();
+  realm->inodes.push_back(&item_realm);
   containing_realm = realm;
 }
 

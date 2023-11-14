@@ -129,6 +129,7 @@ public:
   std::set<SnapRealm*> open_children;    // active children that are currently open
 
   elist<CInode*> inodes_with_caps;             // for efficient realm splits
+  elist<CInode*> inodes;                       // for efficient quiesce
   std::map<client_t, xlist<Capability*>* > client_caps;   // to identify clients who need snap notifications
 
 protected:

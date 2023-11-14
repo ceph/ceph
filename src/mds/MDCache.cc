@@ -314,6 +314,7 @@ void MDCache::remove_inode(CInode *o)
     o->item_caps.remove_myself();
     snap_inode_map.erase(o->vino());
   }
+  o->item_realm.remove_myself();
 
   clear_taken_inos(o->ino());
 
@@ -1520,6 +1521,7 @@ CInode *MDCache::cow_inode(CInode *in, snapid_t last)
       in->client_snap_caps.clear();
       in->item_open_file.remove_myself();
       in->item_caps.remove_myself();
+      // TODO hmm?
 
       if (!client_snap_caps.empty()) {
 	MDSContext::vec finished;

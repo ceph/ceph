@@ -60,7 +60,7 @@ ostream& operator<<(ostream& out, const SnapRealm& realm)
 }
 
 SnapRealm::SnapRealm(MDCache *c, CInode *in) :
-    mdcache(c), inode(in), inodes_with_caps(member_offset(CInode, item_caps))
+    mdcache(c), inode(in), inodes_with_caps(member_offset(CInode, item_caps)), inodes(member_offset(CInode, item_realm))
 {
   global = (inode->ino() == CEPH_INO_GLOBAL_SNAPREALM);
   if (inode->ino() == CEPH_INO_ROOT) {
@@ -345,8 +345,10 @@ void SnapRealm::split_at(SnapRealm *child)
     }
   }
 
-  // split inodes_with_caps
-  for (auto p = inodes_with_caps.begin(); !p.end(); ) {
+
+  // split inodes
+  // N.B.: inodes_with_caps is handled by CInode::move_to_realm.
+  for (auto p = inodes.begin(); !p.end(); ) {
     CInode *in = *p;
     ++p;
     // does inode fall within the child realm?
@@ -373,7 +375,7 @@ void SnapRealm::merge_to(SnapRealm *newparent)
   }
   open_children.clear();
 
-  for (auto p = inodes_with_caps.begin(); !p.end(); ) {
+  for (auto p = inodes.begin(); !p.end(); ) {
     CInode *in = *p;
     ++p;
     in->move_to_realm(newparent);

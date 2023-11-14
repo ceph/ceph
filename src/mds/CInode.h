@@ -1074,12 +1074,15 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   // LogSegment lists i (may) belong to
   elist<CInode*>::item item_dirty;
-  elist<CInode*>::item item_caps;
   elist<CInode*>::item item_open_file;
   elist<CInode*>::item item_dirty_parent;
   elist<CInode*>::item item_dirty_dirfrag_dir;
   elist<CInode*>::item item_dirty_dirfrag_nest;
   elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
+
+  // Either SnapRealm::inodes_with_caps or Locker::need_snapflush_inodes (but not both!)
+  elist<CInode*>::item item_caps;
+  mutable elist<CInode*>::item item_realm;
 
   // also update RecoveryQueue::RecoveryQueue() if you change this
   elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;
