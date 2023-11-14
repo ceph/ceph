@@ -1149,6 +1149,10 @@ public:
     extent_map_t::iterator seek_lextent(uint64_t offset);
     extent_map_t::const_iterator seek_lextent(uint64_t offset) const;
 
+    /// split extent
+    extent_map_t::iterator split_at(extent_map_t::iterator p, uint32_t offset);
+    /// if inside extent split it, if not return extent on right
+    extent_map_t::iterator maybe_split_at(uint32_t offset);
     /// add a new Extent
     void add(uint32_t lo, uint32_t o, uint32_t l, BlobRef& b) {
       extent_map.insert(*new Extent(lo, o, l, b));
