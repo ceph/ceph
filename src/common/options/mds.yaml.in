@@ -74,6 +74,24 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_cache_quiesce_delay
+  type: millisecs
+  level: dev
+  desc: delay before starting recursive quiesce inode operations
+  default: 0
+  services:
+  - mds
+  flags:
+  - runtime
+- name: mds_cache_quiesce_splitauth
+  type: bool
+  level: advanced
+  desc: allow recursive quiesce across auth boundaries
+  default: false
+  services:
+  - mds
+  flags:
+  - runtime
 - name: mds_cache_release_free_interval
   type: secs
   level: dev
