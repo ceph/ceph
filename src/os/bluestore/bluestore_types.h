@@ -621,7 +621,9 @@ public:
   bool is_shared() const {
     return has_flag(FLAG_SHARED);
   }
-
+  bool has_disk() const {
+    return extents.size() > 1 || extents.begin()->is_valid();
+  }
   /// return chunk (i.e. min readable block) size for the blob
   uint64_t get_chunk_size(uint64_t dev_block_size) const {
     return has_csum() ?

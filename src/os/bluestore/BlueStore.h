@@ -747,6 +747,11 @@ public:
     /// put logical references, and get back any released extents
     bool put_ref(Collection *coll, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
+    uint32_t put_ref_accumulate(
+      Collection *coll,
+      uint32_t offset,
+      uint32_t length,
+      PExtentVector *released_disk);
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
 
@@ -3702,6 +3707,15 @@ private:
       uint64_t loffs_end,
       uint64_t min_alloc_size);
   };
+  BlueStore::extent_map_t::iterator _punch_hole_2(
+    Collection* c,
+    OnodeRef& o,
+    uint32_t offset,
+    uint32_t length,
+    PExtentVector& released,
+    std::vector<BlobRef>& pruned_blobs,
+    std::set<SharedBlobRef>& shared_changed,
+    volatile_statfs& statfs_delta);
   void _do_write_small(
     TransContext *txc,
     CollectionRef &c,
