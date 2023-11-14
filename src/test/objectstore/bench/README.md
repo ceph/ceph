@@ -1,6 +1,7 @@
 # vstart simple benchmark tool
 
 
+## Configuration
 This tool is basically a collector of data for all osds.
 
 Currently it collects per osd process:
@@ -30,15 +31,19 @@ output:
 
 `1699023315.json` > data associated to a timestamp
 
-Current ugly plot:
+## Plot examples
 
-It plots a line for each osd.
+**system plot**
 ![Benchmark plot](example.png)
 
+**fio plot**
+![Alt text](image.png)
+
+**perf dump plot**
+![Alt text](image-1.png)
 
 
 ## Extra examples
-
 ### Incerta testing
 
 ```bash
