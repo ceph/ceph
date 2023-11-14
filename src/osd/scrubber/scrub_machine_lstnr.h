@@ -229,4 +229,7 @@ struct ScrubMachineListener {
   // temporary interface (to be discarded in a follow-up PR)
   /// set the 'resources_failure' flag in the scrub-job object
   virtual void flag_reservations_failure() = 0;
+
+  /// is this scrub more than just regular periodic scrub?
+  [[nodiscard]] virtual bool is_high_priority() const = 0;
 };

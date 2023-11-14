@@ -49,12 +49,17 @@ ReplicaReservations::ReplicaReservations(ScrubMachineListener& scrbr)
       });
 
   m_next_to_request = m_sorted_secondaries.cbegin();
-  // send out the 1'st request (unless we have no replicas)
-  send_next_reservation_or_complete();
-
-  m_slow_response_warn_timeout =
-      m_scrubber.get_pg_cct()->_conf.get_val<milliseconds>(
-	  "osd_scrub_slow_reservation_response");
+  if (m_scrubber.is_high_priority()) {
+    // for high-priority scrubs (i.e. - user-initiated), no reservations are
+    // needed.
+    dout(10) << "high-priority scrub - no reservations needed" << dendl;
+  } else {
+    // send out the 1'st request (unless we have no replicas)
+    send_next_reservation_or_complete();
+    m_slow_response_warn_timeout =
+	m_scrubber.get_pg_cct()->_conf.get_val<milliseconds>(
+	    "osd_scrub_slow_reservation_response");
+  }
 }
 
 void ReplicaReservations::release_all()
