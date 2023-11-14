@@ -506,9 +506,6 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             self.vc = VolumeClient(self)
             self.inited = True
 
-    def __del__(self):
-        self.vc.shutdown()
-
     def shutdown(self):
         self.vc.shutdown()
 
