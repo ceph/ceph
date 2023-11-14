@@ -96,7 +96,7 @@ start_mirrors ${CLUSTER2}
 
 testlog "TEST: add image and test replay after client crashes"
 image=test
-create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${MIRROR_IMAGE_MODE} '512M'
+create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${RBD_MIRROR_MODE} '512M'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
 clean_snap_name=
@@ -151,7 +151,7 @@ snap_name="snap"
 for i in `seq 1 ${IMAGE_COUNT}`
 do
   image="image_${i}"
-  create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${MIRROR_IMAGE_MODE} '128M'
+  create_image_and_enable_mirror ${CLUSTER2} ${POOL} ${image} ${RBD_MIRROR_MODE} '128M'
   if [ -n "${RBD_MIRROR_REDUCE_WRITES}" ]; then
     write_image ${CLUSTER2} ${POOL} ${image} 100
   else
