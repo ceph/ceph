@@ -2050,13 +2050,13 @@ void Server::respond_to_request(const MDRequestRef& mdr, int r)
   mdr->result = r;
   if (mdr->client_request) {
     if (mdr->is_batch_head()) {
-      dout(20) << __func__ << " batch head " << *mdr << dendl;
+      dout(20) << __func__ << ": batch head " << *mdr << dendl;
       mdr->release_batch_op()->respond(r);
     } else {
      reply_client_request(mdr, make_message<MClientReply>(*mdr->client_request, r));
     }
   } else if (mdr->internal_op > -1) {
-    dout(10) << "respond_to_request on internal request " << mdr << dendl;
+    dout(10) << __func__ << ": completing with result " << cpp_strerror(r) << " on internal " << *mdr << dendl;
     if (!mdr->internal_op_finish)
       ceph_abort_msg("trying to respond to internal op without finisher");
     mdr->internal_op_finish->complete(r);
