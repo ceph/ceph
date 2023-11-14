@@ -54,6 +54,7 @@ public:
   bool acquire_locks(const MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
+                     std::set<MDSCacheObject*> mustpin = {},
 		     bool auth_pin_nonblocking=false,
                      bool skip_quiesce=false);
 
@@ -66,6 +67,7 @@ public:
   void set_xlocks_done(MutationImpl *mut, bool skip_dentry=false);
   void drop_non_rdlocks(MutationImpl *mut, std::set<CInode*> *pneed_issue=0);
   void drop_rdlocks_for_early_reply(MutationImpl *mut);
+  void drop_rdlock(MutationImpl* mut, SimpleLock* what);
   void drop_locks_for_fragment_unfreeze(MutationImpl *mut);
 
   int get_cap_bit_for_lock_cache(int op);

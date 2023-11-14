@@ -229,7 +229,8 @@ struct MarkEventOnDestruct {
  * on the appropriate wait list */
 bool Locker::acquire_locks(const MDRequestRef& mdr,
 			   MutationImpl::LockOpVec& lov,
-			   CInode *auth_pin_freeze,
+			   CInode* auth_pin_freeze,
+                           std::set<MDSCacheObject*> mustpin,
 			   bool auth_pin_nonblocking,
                            bool skip_quiesce)
 {
@@ -244,7 +245,6 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 
   client_t client = mdr->get_client();
 
-  set<MDSCacheObject*> mustpin;  // items to authpin
   if (auth_pin_freeze)
     mustpin.insert(auth_pin_freeze);
 
@@ -447,7 +447,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
       continue;
     }
     int err = 0;
-    if (!object->can_auth_pin(&err)) {
+    if (!object->can_auth_pin(&err, skip_quiesce)) {
       if (mdr->lock_cache) {
 	CDir *dir;
 	if (CInode *in = dynamic_cast<CInode*>(object)) {
@@ -544,6 +544,8 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
       }
       if (auth_pin_nonblocking)
 	req->mark_nonblocking();
+      if (skip_quiesce)
+	req->mark_bypassfreezing();
       else if (!mdr->locks.empty())
 	req->mark_notify_blocking();
 
@@ -676,7 +678,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 /* Dropping *all* locks here is necessary so parent directory
  * snap/layout/quiesce locks are unlocked for a future mksnap.  This is the
  * primary purpose of the new quiescelock. An op, e.g. getattr, cannot block
- * waiting for another lock held by quiesce_subvolume_inode, e.g. filelock,
+ * waiting for another lock held by quiesce_inode, e.g. filelock,
  * which will prevent a mksnap on a subvolume inode (because getattr will
  * already have gotten parent snaplocks, see Locker::try_rdlock_snap_layout).
  */
@@ -861,6 +863,28 @@ void Locker::drop_rdlocks_for_early_reply(MutationImpl *mut)
   }
 
   issue_caps_set(need_issue);
+}
+
+void Locker::drop_rdlock(MutationImpl* mut, SimpleLock* what)
+{
+  dout(20) << __func__ << ": " << *what << dendl;
+
+  for (auto it = mut->locks.begin(); it != mut->locks.end(); ++it) {
+    auto* lock = it->lock;
+    if (lock == what) {
+      dout(20) << __func__ << ": found lock " << *lock << dendl;
+      ceph_assert(it->is_rdlock());
+      bool ni = false;
+      rdlock_finish(it, mut, &ni);
+      if (ni) {
+        set<CInode*> need_issue;
+        need_issue.insert(static_cast<CInode*>(lock->get_parent()));
+        issue_caps_set(need_issue);
+      }
+      return;
+    }
+  }
+  dout(20) << __func__ << ": not found!" << dendl;
 }
 
 void Locker::drop_locks_for_fragment_unfreeze(MutationImpl *mut)
