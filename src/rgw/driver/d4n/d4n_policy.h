@@ -132,6 +132,8 @@ class LRUPolicy : public CachePolicy {
     List entries_lru_list;
     rgw::cache::CacheDriver* cacheDriver;
 
+    bool _erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y);
+
   public:
     LRUPolicy(rgw::cache::CacheDriver* cacheDriver) : cacheDriver{cacheDriver} {}
 
