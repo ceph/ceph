@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 /*
  * Ceph - scalable distributed file system
  *
@@ -69,9 +69,9 @@ bool SimpleBitmap::set(uint64_t offset, uint64_t length)
     uint64_t   first_bit_clr = first_bit_set + length;
     if (first_bit_clr <= BITS_IN_WORD) {
       if (first_bit_clr < BITS_IN_WORD) {
-	uint64_t clr_bits = BITS_IN_WORD - first_bit_clr;
-	uint64_t clr_mask = FULL_MASK >> clr_bits;
-	set_mask     &= clr_mask;
+        uint64_t clr_bits = BITS_IN_WORD - first_bit_clr;
+        uint64_t clr_mask = FULL_MASK >> clr_bits;
+        set_mask     &= clr_mask;
       }
       m_arr[word_index] |= set_mask;
       return true;
@@ -126,8 +126,8 @@ bool SimpleBitmap::clr(uint64_t offset, uint64_t length)
     // special case - we only work on a single word
     if (first_bit_set <= BITS_IN_WORD) {
       if (first_bit_set < BITS_IN_WORD) {
-	uint64_t set_mask = FULL_MASK << first_bit_set;
-	clr_mask         |= set_mask;
+        uint64_t set_mask = FULL_MASK << first_bit_set;
+        clr_mask         |= set_mask;
       }
       m_arr[word_index]     &= clr_mask;
       return true;

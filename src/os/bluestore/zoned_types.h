@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 #ifndef CEPH_OS_BLUESTORE_ZONED_TYPES_H
 #define CEPH_OS_BLUESTORE_ZONED_TYPES_H
 
@@ -57,9 +57,9 @@ struct zone_state_t {
     std::ostream& out,
     const zone_state_t& zone_state) {
     return out << std::hex
-	       << " dead bytes: 0x" << zone_state.get_num_dead_bytes()
-	       << " write pointer: 0x"  << zone_state.get_write_pointer()
-	       << " " << std::dec;
+               << " dead bytes: 0x" << zone_state.get_num_dead_bytes()
+               << " write pointer: 0x"  << zone_state.get_write_pointer()
+               << " " << std::dec;
   }
 };
 

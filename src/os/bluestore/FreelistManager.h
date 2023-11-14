@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #ifndef CEPH_OS_BLUESTORE_FREELISTMANAGER_H
 #define CEPH_OS_BLUESTORE_FREELISTMANAGER_H
@@ -26,8 +26,8 @@ public:
   static void setup_merge_operators(KeyValueDB *db, const std::string &type);
 
   virtual int create(uint64_t size, uint64_t granularity,
-		     uint64_t zone_size, uint64_t first_sequential_zone,
-		     KeyValueDB::Transaction txn) = 0;
+                     uint64_t zone_size, uint64_t first_sequential_zone,
+                     KeyValueDB::Transaction txn) = 0;
 
   virtual int init(KeyValueDB *kvdb, bool db_in_read_only,
     std::function<int(const std::string&, std::string*)> cfg_reader) = 0;

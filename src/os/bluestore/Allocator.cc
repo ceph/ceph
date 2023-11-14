@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #include "Allocator.h"
 #include <bit>
@@ -37,16 +37,16 @@ public:
     }
     if (admin_socket) {
       int r = admin_socket->register_command(
-	("bluestore allocator dump " + name).c_str(),
-	this,
-	"dump allocator free regions");
+        ("bluestore allocator dump " + name).c_str(),
+        this,
+        "dump allocator free regions");
       if (r != 0)
         alloc = nullptr; //some collision, disable
       if (alloc) {
         r = admin_socket->register_command(
-	  ("bluestore allocator score " + name).c_str(),
-	  this,
-	  "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
+          ("bluestore allocator score " + name).c_str(),
+          this,
+          "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
         ceph_assert(r == 0);
         r = admin_socket->register_command(
           ("bluestore allocator fragmentation " + name).c_str(),
@@ -54,11 +54,11 @@ public:
           "give allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
         ceph_assert(r == 0);
         r = admin_socket->register_command(
-	  ("bluestore allocator fragmentation histogram " + name +
+          ("bluestore allocator fragmentation histogram " + name +
            " name=alloc_unit,type=CephInt,req=false" +
            " name=num_buckets,type=CephInt,req=false").c_str(),
-	  this,
-	  "build allocator free regions state histogram");
+          this,
+          "build allocator free regions state histogram");
         ceph_assert(r == 0);
       }
     }
@@ -72,11 +72,11 @@ public:
   }
 
   int call(std::string_view command,
-	   const cmdmap_t& cmdmap,
-	   const bufferlist&,
-	   Formatter *f,
-	   std::ostream& ss,
-	   bufferlist& out) override {
+           const cmdmap_t& cmdmap,
+           const bufferlist&,
+           Formatter *f,
+           std::ostream& ss,
+           bufferlist& out) override {
     int r = 0;
     if (command == "bluestore allocator dump " + name) {
       f->open_object_section("allocator_dump");
@@ -193,12 +193,12 @@ Allocator *Allocator::create(
 #ifdef HAVE_LIBZBD
   } else if (type == "zoned") {
     return new ZonedAllocator(cct, size, block_size, zone_size, first_sequential_zone,
-			      name);
+                              name);
 #endif
   }
   if (alloc == nullptr) {
     lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "
-	     << type << dendl;
+             << type << dendl;
   }
   return alloc;
 }
@@ -248,11 +248,11 @@ double Allocator::get_fragmentation_score()
       auto ss = scales.size();
       double scale = double_size_worth_small;
       if (ss >= huge_chunk_p2) {
-	scale = double_size_worth_huge;
+        scale = double_size_worth_huge;
       } else if (ss > small_chunk_p2) {
-	// linear decrease 1.2 ... 1
-	scale = (double_size_worth_huge * (ss - small_chunk_p2) + double_size_worth_small * (huge_chunk_p2 - ss)) /
-	  (huge_chunk_p2 - small_chunk_p2);
+        // linear decrease 1.2 ... 1
+        scale = (double_size_worth_huge * (ss - small_chunk_p2) + double_size_worth_small * (huge_chunk_p2 - ss)) /
+          (huge_chunk_p2 - small_chunk_p2);
       }
       scales.push_back(scales[scales.size() - 1] * scale);
     }

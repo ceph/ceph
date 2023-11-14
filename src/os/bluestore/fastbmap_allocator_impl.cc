@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 /*
  * Bitmap based in-memory allocator implementation.
  * Author: Igor Fedotov, ifedotov@suse.com
@@ -25,7 +25,7 @@ inline interval_t _align2units(uint64_t offset, uint64_t len, uint64_t min_lengt
       res.length = len - delta_off;
       res.length = p2align<uint64_t>(res.length, min_length);
       if (res.length) {
-	return res;
+        return res;
       }
     }
   }
@@ -61,35 +61,35 @@ interval_t AllocatorLevel01Loose::_get_longest_from_l0(uint64_t pos0,
       bits = l0[pos / d];
       if (pos1 - pos >= d) {
         switch(bits) {
-	  case all_slot_set:
-	    // slot is totally free
-	    if (!res_candidate.length) {
-	      res_candidate.offset = pos;
-	    }
-	    res_candidate.length += d;
-	    pos += d;
-	    end_loop = pos >= pos1;
-	    if (end_loop) {
-	      *tail = res_candidate;
-	      res_candidate = _align2units(res_candidate.offset,
-		res_candidate.length, min_granules);
-	      if(res.length < res_candidate.length) {
-		res = res_candidate;
-	      }
-	    }
-	    continue;
-	  case all_slot_clear:
-	    // slot is totally allocated
-	    res_candidate = _align2units(res_candidate.offset,
-	      res_candidate.length, min_granules);
-	    if (res.length < res_candidate.length) {
-	      res = res_candidate;
-	    }
-	    res_candidate = interval_t();
-	    pos += d;
-	    end_loop = pos >= pos1;
-	    continue;
-	}
+          case all_slot_set:
+            // slot is totally free
+            if (!res_candidate.length) {
+              res_candidate.offset = pos;
+            }
+            res_candidate.length += d;
+            pos += d;
+            end_loop = pos >= pos1;
+            if (end_loop) {
+              *tail = res_candidate;
+              res_candidate = _align2units(res_candidate.offset,
+                res_candidate.length, min_granules);
+              if(res.length < res_candidate.length) {
+                res = res_candidate;
+              }
+            }
+            continue;
+          case all_slot_clear:
+            // slot is totally allocated
+            res_candidate = _align2units(res_candidate.offset,
+              res_candidate.length, min_granules);
+            if (res.length < res_candidate.length) {
+              res = res_candidate;
+            }
+            res_candidate = interval_t();
+            pos += d;
+            end_loop = pos >= pos1;
+            continue;
+        }
       }
     } //if ((pos % d) == 0)
 
@@ -97,22 +97,22 @@ interval_t AllocatorLevel01Loose::_get_longest_from_l0(uint64_t pos0,
     if (bits & 1) {
       // item is free
       if (!res_candidate.length) {
-	res_candidate.offset = pos - 1;
+        res_candidate.offset = pos - 1;
       }
       ++res_candidate.length;
       if (end_loop) {
-	*tail = res_candidate;
-	res_candidate = _align2units(res_candidate.offset,
-	  res_candidate.length, min_granules);
-	if (res.length < res_candidate.length) {
-	  res = res_candidate;
-	}
+        *tail = res_candidate;
+        res_candidate = _align2units(res_candidate.offset,
+          res_candidate.length, min_granules);
+        if (res.length < res_candidate.length) {
+          res = res_candidate;
+        }
       }
     } else {
       res_candidate = _align2units(res_candidate.offset,
-	res_candidate.length, min_granules);
+        res_candidate.length, min_granules);
       if (res.length < res_candidate.length) {
-	res = res_candidate;
+        res = res_candidate;
       }
       res_candidate = interval_t();
     }
@@ -152,17 +152,17 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
         if (!ctx->free_count) {
           ctx->free_l1_pos = l1_pos;
         } else if (l1_pos != next_free_l1_pos){
-	  auto o = ctx->free_l1_pos * l1_granularity;
-	  auto l = ctx->free_count * l1_granularity;
+          auto o = ctx->free_l1_pos * l1_granularity;
+          auto l = ctx->free_count * l1_granularity;
           // check if already found extent fits min_length after alignment
-	  if (_align2units(o, l, min_length).length >= min_length) {
-	    break;
-	  }
-	  // if not - proceed with the next one
+          if (_align2units(o, l, min_length).length >= min_length) {
+            break;
+          }
+          // if not - proceed with the next one
           ctx->free_l1_pos = l1_pos;
           ctx->free_count = 0;
-	}
-	next_free_l1_pos = l1_pos + 1;
+        }
+        next_free_l1_pos = l1_pos + 1;
         ++ctx->free_count;
         if (mode == STOP_ON_EMPTY) {
           return;
@@ -172,7 +172,7 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
         prev_tail = empty_tail;
         break;
       case L1_ENTRY_PARTIAL:
-	interval_t longest;
+        interval_t longest;
         ++ctx->partial_count;
 
         longest = _get_longest_from_l0(l1_pos * l0_w, (l1_pos + 1) * l0_w, min_length, &prev_tail);
@@ -182,15 +182,15 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
               ((ctx->affordable_len != 0) &&
                 (longest.length < ctx->affordable_len))) {
             ctx->affordable_len = longest.length;
-	    ctx->affordable_offs = longest.offset;
+            ctx->affordable_offs = longest.offset;
           }
         }
         if (longest.length >= min_length &&
-	    (ctx->min_affordable_len == 0 ||
-	      (longest.length < ctx->min_affordable_len))) {
+            (ctx->min_affordable_len == 0 ||
+              (longest.length < ctx->min_affordable_len))) {
 
           ctx->min_affordable_len = p2align<uint64_t>(longest.length, min_length);
-	  ctx->min_affordable_offs = longest.offset;
+          ctx->min_affordable_offs = longest.offset;
         }
         if (mode == STOP_ON_PARTIAL) {
           return;
@@ -227,9 +227,9 @@ void AllocatorLevel01Loose::_mark_l1_on_l0(int64_t l0_pos, int64_t l0_pos_end)
       // current slot set, it's partial
       ++idx;
       if (mask_to_apply == L1_ENTRY_NOT_USED) {
-	mask_to_apply = L1_ENTRY_FULL;
+        mask_to_apply = L1_ENTRY_FULL;
       } else if (mask_to_apply != L1_ENTRY_FULL) {
-	idx = p2roundup(idx, int64_t(slots_per_slotset));
+        idx = p2roundup(idx, int64_t(slots_per_slotset));
         mask_to_apply = L1_ENTRY_PARTIAL;
       }
     } else if (l0[idx] == all_slot_set) {
@@ -237,9 +237,9 @@ void AllocatorLevel01Loose::_mark_l1_on_l0(int64_t l0_pos, int64_t l0_pos_end)
       // current slot set, it's partial
       ++idx;
       if (mask_to_apply == L1_ENTRY_NOT_USED) {
-	mask_to_apply = L1_ENTRY_FREE;
+        mask_to_apply = L1_ENTRY_FREE;
       } else if (mask_to_apply != L1_ENTRY_FREE) {
-	idx = p2roundup(idx, int64_t(slots_per_slotset));
+        idx = p2roundup(idx, int64_t(slots_per_slotset));
         mask_to_apply = L1_ENTRY_PARTIAL;
       }
     } else {
@@ -257,21 +257,21 @@ void AllocatorLevel01Loose::_mark_l1_on_l0(int64_t l0_pos, int64_t l0_pos_end)
       slot_t old_mask = (slot_val & mask) >> shift;
       switch(old_mask) {
       case L1_ENTRY_FREE:
-	unalloc_l1_count--;
-	break;
+        unalloc_l1_count--;
+        break;
       case L1_ENTRY_PARTIAL:
-	partial_l1_count--;
-	break;
+        partial_l1_count--;
+        break;
       }
       slot_val &= ~mask;
       slot_val |= slot_t(mask_to_apply) << shift;
       switch(mask_to_apply) {
       case L1_ENTRY_FREE:
-	unalloc_l1_count++;
-	break;
+        unalloc_l1_count++;
+        break;
       case L1_ENTRY_PARTIAL:
-	partial_l1_count++;
-	break;
+        partial_l1_count++;
+        break;
       }
       mask_to_apply = L1_ENTRY_NOT_USED;
       ++l1_pos;
@@ -399,16 +399,16 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
       auto l = ctx.free_count * l1_granularity;
       interval_t aligned_extent = _align2units(o, l, min_length);
       if (aligned_extent.length > 0) {
-	aligned_extent.length = std::min(length,
-	  uint64_t(aligned_extent.length));
-	ceph_assert((aligned_extent.offset % l0_granularity) == 0);
-	ceph_assert((aligned_extent.length % l0_granularity) == 0);
+        aligned_extent.length = std::min(length,
+          uint64_t(aligned_extent.length));
+        ceph_assert((aligned_extent.offset % l0_granularity) == 0);
+        ceph_assert((aligned_extent.length % l0_granularity) == 0);
 
-	auto pos_start = aligned_extent.offset / l0_granularity;
-	auto pos_end = (aligned_extent.offset + aligned_extent.length) / l0_granularity;
+        auto pos_start = aligned_extent.offset / l0_granularity;
+        auto pos_end = (aligned_extent.offset + aligned_extent.length) / l0_granularity;
 
-	_mark_alloc_l1_l0(pos_start, pos_end);
-	return aligned_extent;
+        _mark_alloc_l1_l0(pos_start, pos_end);
+        return aligned_extent;
       }
     }
     if (ctx.min_affordable_len) {
@@ -439,11 +439,11 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
     while (length > *allocated && has_space) {
       interval_t i =
         _allocate_l1_contiguous(length - *allocated, min_length, max_length,
-	  l1_pos_start, l1_pos_end);
+          l1_pos_start, l1_pos_end);
       if (i.length == 0) {
         has_space = false;
       } else {
-	_fragment_and_emplace(max_length, i.offset, i.length, res);
+        _fragment_and_emplace(max_length, i.offset, i.length, res);
         *allocated += i.length;
       }
     }
@@ -461,10 +461,10 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
           l1_granularity * d1);
         *allocated += to_alloc;
         ++alloc_fragments_fast;
-	_fragment_and_emplace(max_length, idx * d1 * l1_granularity, to_alloc,
-	  res);
+        _fragment_and_emplace(max_length, idx * d1 * l1_granularity, to_alloc,
+          res);
         _mark_alloc_l1_l0(idx * d1 * bits_per_slotset,
-	  idx * d1 * bits_per_slotset + to_alloc / l0_granularity);
+          idx * d1 * bits_per_slotset + to_alloc / l0_granularity);
         continue;
       }
       auto free_pos = find_next_set_bit(slot_val, 0);
@@ -474,22 +474,22 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
 
         bool empty;
         empty = _allocate_l0(length, max_length,
-	  (idx * d1 + free_pos / L1_ENTRY_WIDTH) * l0_w,
+          (idx * d1 + free_pos / L1_ENTRY_WIDTH) * l0_w,
           (idx * d1 + free_pos / L1_ENTRY_WIDTH + 1) * l0_w,
           allocated,
           res);
 
-	auto mask = slot_t(L1_ENTRY_MASK) << free_pos;
+        auto mask = slot_t(L1_ENTRY_MASK) << free_pos;
 
-	slot_t old_mask = (slot_val & mask) >> free_pos;
-	switch(old_mask) {
-	case L1_ENTRY_FREE:
-	  unalloc_l1_count--;
-	  break;
-	case L1_ENTRY_PARTIAL:
-	  partial_l1_count--;
-	  break;
-	}
+        slot_t old_mask = (slot_val & mask) >> free_pos;
+        switch(old_mask) {
+        case L1_ENTRY_FREE:
+          unalloc_l1_count--;
+          break;
+        case L1_ENTRY_PARTIAL:
+          partial_l1_count--;
+          break;
+        }
         slot_val &= ~mask;
         if (empty) {
           // the next line is no op with the current L1_ENTRY_FULL but left
@@ -498,12 +498,12 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
           slot_val |= slot_t(L1_ENTRY_FULL) << free_pos;
         } else {
           slot_val |= slot_t(L1_ENTRY_PARTIAL) << free_pos;
-	  partial_l1_count++;
+          partial_l1_count++;
         }
         if (length <= *allocated || slot_val == all_slot_clear) {
           break;
         }
-	free_pos = find_next_set_bit(slot_val, free_pos + L1_ENTRY_WIDTH);
+        free_pos = find_next_set_bit(slot_val, free_pos + L1_ENTRY_WIDTH);
       } while (free_pos < bits_per_slot);
     }
   }
@@ -520,20 +520,20 @@ void AllocatorLevel01Loose::collect_stats(
     } else if(slot != all_slot_clear) {
       size_t pos = 0;
       do {
-	auto pos1 = find_next_set_bit(slot, pos);
-	if (pos1 == pos) {
-	  free_seq_cnt++;
-	  pos = pos1 + 1;
-	} else {
-	  if (free_seq_cnt) {
-	    bins_overall[cbits(free_seq_cnt) - 1]++;
-	    free_seq_cnt = 0;
-	  }
-	  if (pos1 < bits_per_slot) {
-	    free_seq_cnt = 1;
-	  }
+        auto pos1 = find_next_set_bit(slot, pos);
+        if (pos1 == pos) {
+          free_seq_cnt++;
           pos = pos1 + 1;
-	}
+        } else {
+          if (free_seq_cnt) {
+            bins_overall[cbits(free_seq_cnt) - 1]++;
+            free_seq_cnt = 0;
+          }
+          if (pos1 < bits_per_slot) {
+            free_seq_cnt = 1;
+          }
+          pos = pos1 + 1;
+        }
       } while (pos < bits_per_slot);
     } else if (free_seq_cnt) {
       bins_overall[cbits(free_seq_cnt) - 1]++;

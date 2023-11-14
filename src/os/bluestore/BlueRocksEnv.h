@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 #ifndef CEPH_OS_BLUESTORE_BLUEROCKSENV_H
 #define CEPH_OS_BLUESTORE_BLUEROCKSENV_H
 
@@ -110,7 +110,7 @@ public:
 
   // Tell if two files are identical
   rocksdb::Status AreFilesSame(const std::string& first,
-			       const std::string& second, bool* res) override;
+                               const std::string& second, bool* res) override;
 
   // Lock the specified file.  Used to prevent concurrent access to
   // the same db by multiple processes.  On failure, stores nullptr in

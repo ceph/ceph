@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 /*
  * Ceph - scalable distributed file system
  *
@@ -131,7 +131,7 @@ struct denc_traits<PExtentVector> {
     }
   }
   static void encode(const PExtentVector& v,
-		     ceph::buffer::list::contiguous_appender& p) {
+                     ceph::buffer::list::contiguous_appender& p) {
     denc_varint(v.size(), p);
     for (auto& i : v) {
       denc(i, p);
@@ -175,7 +175,7 @@ struct bluestore_extent_ref_map_t {
 
   void get(uint64_t offset, uint32_t len);
   void put(uint64_t offset, uint32_t len, PExtentVector *release,
-	   bool *maybe_unshared);
+           bool *maybe_unshared);
   struct debug_len_cnt {
     uint32_t len; // length for which cnt is valid
     uint32_t cnt; // reference count for the region
@@ -203,9 +203,9 @@ struct bluestore_extent_ref_map_t {
       i->second.encode(p);
       int64_t pos = i->first;
       while (++i != ref_map.end()) {
-	denc_varint_lowz((int64_t)i->first - pos, p);
-	i->second.encode(p);
-	pos = i->first;
+        denc_varint_lowz((int64_t)i->first - pos, p);
+        i->second.encode(p);
+        pos = i->first;
       }
     }
   }
@@ -217,10 +217,10 @@ struct bluestore_extent_ref_map_t {
       denc_varint_lowz(pos, p);
       ref_map[pos].decode(p);
       while (--n) {
-	int64_t delta;
-	denc_varint_lowz(delta, p);
-	pos += delta;
-	ref_map[pos].decode(p);
+        int64_t delta;
+        denc_varint_lowz(delta, p);
+        pos += delta;
+        ref_map[pos].decode(p);
       }
     }
   }
@@ -233,15 +233,15 @@ WRITE_CLASS_DENC(bluestore_extent_ref_map_t)
 
 std::ostream& operator<<(std::ostream& out, const bluestore_extent_ref_map_t& rm);
 static inline bool operator==(const bluestore_extent_ref_map_t::record_t& l,
-			      const bluestore_extent_ref_map_t::record_t& r) {
+                              const bluestore_extent_ref_map_t::record_t& r) {
   return l.length == r.length && l.refs == r.refs;
 }
 static inline bool operator==(const bluestore_extent_ref_map_t& l,
-			      const bluestore_extent_ref_map_t& r) {
+                              const bluestore_extent_ref_map_t& r) {
   return l.ref_map == r.ref_map;
 }
 static inline bool operator!=(const bluestore_extent_ref_map_t& l,
-			      const bluestore_extent_ref_map_t& r) {
+                              const bluestore_extent_ref_map_t& r) {
   return !(l == r);
 }
 
@@ -286,7 +286,7 @@ struct bluestore_blob_use_tracker_t {
       total = total_bytes;
     } else {
       for (size_t i = 0; i < num_au; ++i) {
-	total += bytes_per_au[i];
+        total += bytes_per_au[i];
       }
     }
     return total;
@@ -296,9 +296,9 @@ struct bluestore_blob_use_tracker_t {
       return total_bytes != 0;
     } else {
       for (size_t i = 0; i < num_au; ++i) {
-	if (bytes_per_au[i]) {
-	  return true;
-	}
+        if (bytes_per_au[i]) {
+          return true;
+        }
       }
     }
     return false;
@@ -359,19 +359,19 @@ struct bluestore_blob_use_tracker_t {
       uint32_t _num_au = new_len / au_size;
       ceph_assert(_num_au >= num_au);
       if (_num_au > num_au) {
-	auto old_bytes = bytes_per_au;
-	auto old_num_au = num_au;
-	auto old_alloc_au = alloc_au;
-	alloc_au = num_au = 0; // to bypass an assertion in allocate()
-	bytes_per_au = nullptr;
-	allocate(_num_au);
-	for (size_t i = 0; i < old_num_au; i++) {
-	  bytes_per_au[i] = old_bytes[i];
-	}
-	for (size_t i = old_num_au; i < num_au; i++) {
-	  bytes_per_au[i] = 0;
-	}
-	release(old_alloc_au, old_bytes);
+        auto old_bytes = bytes_per_au;
+        auto old_num_au = num_au;
+        auto old_alloc_au = alloc_au;
+        alloc_au = num_au = 0; // to bypass an assertion in allocate()
+        bytes_per_au = nullptr;
+        allocate(_num_au);
+        for (size_t i = 0; i < old_num_au; i++) {
+          bytes_per_au[i] = old_bytes[i];
+        }
+        for (size_t i = old_num_au; i < num_au; i++) {
+          bytes_per_au[i] = 0;
+        }
+        release(old_alloc_au, old_bytes);
       }
     }
   }
@@ -401,7 +401,7 @@ struct bluestore_blob_use_tracker_t {
     uint32_t blob_offset,
     bluestore_blob_use_tracker_t* r);
   void dup(const bluestore_blob_use_tracker_t& from,
-	   uint32_t start, uint32_t len);
+           uint32_t start, uint32_t len);
   bool equal(
     const bluestore_blob_use_tracker_t& other) const;
     
@@ -445,7 +445,7 @@ struct bluestore_blob_use_tracker_t {
       } else {
         allocate(_num_au);
         for (size_t i = 0; i < _num_au; ++i) {
-	  denc_varint(bytes_per_au[i], p);
+          denc_varint(bytes_per_au[i], p);
         }
       }
     }
@@ -528,7 +528,7 @@ public:
       denc(csum_chunk_order, p);
       denc_varint(csum_data.length(), p);
       memcpy(p.get_pos_add(csum_data.length()), csum_data.c_str(),
-	     csum_data.length());
+             csum_data.length());
     }
     if (has_unused()) {
       denc(unused, p);
@@ -788,8 +788,8 @@ public:
 
   template<class F>
   void map_bl(uint64_t x_off,
-	      ceph::buffer::list& bl,
-	      F&& f) const {
+              ceph::buffer::list& bl,
+              F&& f) const {
     static_assert(std::is_invocable_v<F, uint64_t, ceph::buffer::list&>);
 
     auto p = extents.begin();
@@ -897,7 +897,7 @@ public:
   /// return -1 and valid(nonnegative) b_bad_off for checksum error;
   /// return 0 if all is well.
   int verify_csum(uint64_t b_off, const ceph::buffer::list& bl, int* b_bad_off,
-		  uint64_t *bad_csum) const;
+                  uint64_t *bad_csum) const;
 
   bool can_prune_tail() const {
     return
@@ -913,8 +913,8 @@ public:
       ceph::buffer::ptr t;
       t.swap(csum_data);
       csum_data = ceph::buffer::ptr(t.c_str(),
-			    get_logical_length() / get_csum_chunk_size() *
-			    get_csum_value_size());
+                            get_logical_length() / get_csum_chunk_size() *
+                            get_csum_value_size());
       csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
     }
   }
@@ -930,7 +930,7 @@ public:
       ceph::buffer::ptr t;
       t.swap(csum_data);
       csum_data = ceph::buffer::create(
-	get_csum_value_size() * logical_length / get_csum_chunk_size());
+        get_csum_value_size() * logical_length / get_csum_chunk_size());
       csum_data.copy_in(0, t.length(), t.c_str());
       csum_data.zero(t.length(), csum_data.length() - t.length());
       csum_data.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
@@ -975,7 +975,7 @@ struct bluestore_shared_blob_t {
 
   bluestore_shared_blob_t(uint64_t _sbid) : sbid(_sbid) {}
   bluestore_shared_blob_t(uint64_t _sbid,
-			  bluestore_extent_ref_map_t&& _ref_map ) 
+                          bluestore_extent_ref_map_t&& _ref_map ) 
     : sbid(_sbid), ref_map(std::move(_ref_map)) {}
 
   DENC(bluestore_shared_blob_t, v, p) {
@@ -1090,9 +1090,9 @@ struct bluestore_onode_t {
 
   void clear_omap_flag() {
     clear_flag(FLAG_OMAP |
-	       FLAG_PGMETA_OMAP |
-	       FLAG_PERPOOL_OMAP |
-	       FLAG_PERPG_OMAP);
+               FLAG_PGMETA_OMAP |
+               FLAG_PERPOOL_OMAP |
+               FLAG_PERPG_OMAP);
   }
 
   DENC(bluestore_onode_t, v, p) {
@@ -1355,26 +1355,26 @@ struct sb_info_space_efficient_map_t {
   auto find(uint64_t id) {
     if (items.size() != 0) {
       auto it = std::lower_bound(
-	items.begin(),
-	items.end() - 1,
-	id,
-	[](const sb_info_t& a, const uint64_t& b) {
-	  return a < b;
-	});
+        items.begin(),
+        items.end() - 1,
+        id,
+        [](const sb_info_t& a, const uint64_t& b) {
+          return a < b;
+        });
       if (it->get_sbid() == id) {
-	return it;
+        return it;
       }
       if (aux_items.size() != 0) {
-	auto it = std::lower_bound(
-	  aux_items.begin(),
-	  aux_items.end(),
-	  id,
-	  [](const sb_info_t& a, const uint64_t& b) {
-	    return a < b;
-	  });
-	if (it->get_sbid() == id) {
-	  return it;
-	}
+        auto it = std::lower_bound(
+          aux_items.begin(),
+          aux_items.end(),
+          id,
+          [](const sb_info_t& a, const uint64_t& b) {
+            return a < b;
+          });
+        if (it->get_sbid() == id) {
+          return it;
+        }
       }
     }
     return items.end();
@@ -1383,12 +1383,12 @@ struct sb_info_space_efficient_map_t {
   void foreach_stray(std::function<void(const sb_info_t&)> cb) {
     for (auto& sbi : items) {
       if (sbi.is_stray()) {
-	cb(sbi);
+        cb(sbi);
       }
     }
     for (auto& sbi : aux_items) {
       if (sbi.is_stray()) {
-	cb(sbi);
+        cb(sbi);
       }
     }
   }
@@ -1424,7 +1424,7 @@ private:
       aux_items.end(),
       n_id,
       [](const uint64_t& a, const sb_info_t& b) {
-	return a < b.get_sbid();
+        return a < b.get_sbid();
       });
     return *aux_items.emplace(it, id);
   }

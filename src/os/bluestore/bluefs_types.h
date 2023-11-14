@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 #define CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 
@@ -135,9 +135,9 @@ struct bluefs_fnode_t {
   }
   void append_extent(const bluefs_extent_t& ext) {
     if (!extents.empty() &&
-	extents.back().end() == ext.offset &&
-	extents.back().bdev == ext.bdev &&
-	(uint64_t)extents.back().length + (uint64_t)ext.length < 0xffffffff) {
+        extents.back().end() == ext.offset &&
+        extents.back().bdev == ext.bdev &&
+        (uint64_t)extents.back().length + (uint64_t)ext.length < 0xffffffff) {
       extents.back().length += ext.length;
     } else {
       extents_index.emplace_back(allocated);

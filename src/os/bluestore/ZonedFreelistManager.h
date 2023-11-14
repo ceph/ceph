@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 //
 // A freelist manager for zoned devices.
@@ -27,24 +27,24 @@ class ZonedFreelistManager : public FreelistManager {
   std::string info_prefix;    ///< per zone write pointer, dead bytes
   mutable ceph::mutex lock = ceph::make_mutex("ZonedFreelistManager::lock");
 
-  uint64_t size;	      ///< size of sequential region (bytes)
+  uint64_t size;              ///< size of sequential region (bytes)
   uint64_t bytes_per_block;   ///< bytes per allocation unit (bytes)
-  uint64_t zone_size;	      ///< size of a single zone (bytes)
-  uint64_t num_zones;	      ///< number of sequential zones
+  uint64_t zone_size;              ///< size of a single zone (bytes)
+  uint64_t num_zones;              ///< number of sequential zones
   uint64_t starting_zone_num; ///< the first sequential zone number
 
   KeyValueDB::Iterator enumerate_p;
   uint64_t enumerate_zone_num;
 
   void write_zone_state_delta_to_db(uint64_t zone_num,
-				    const zone_state_t &zone_state,
-				    KeyValueDB::Transaction txn);
+                                    const zone_state_t &zone_state,
+                                    KeyValueDB::Transaction txn);
   void write_zone_state_reset_to_db(uint64_t zone_num,
-				    const zone_state_t &zone_state,
-				    KeyValueDB::Transaction txn);
+                                    const zone_state_t &zone_state,
+                                    KeyValueDB::Transaction txn);
   void load_zone_state_from_db(uint64_t zone_num,
-			       zone_state_t &zone_state,
-			       KeyValueDB::Iterator &it) const;
+                               zone_state_t &zone_state,
+                               KeyValueDB::Iterator &it) const;
 
   void init_zone_states(KeyValueDB::Transaction txn);
 
@@ -57,20 +57,20 @@ class ZonedFreelistManager : public FreelistManager {
 
 public:
   ZonedFreelistManager(CephContext* cct,
-		       std::string meta_prefix,
-		       std::string info_prefix);
+                       std::string meta_prefix,
+                       std::string info_prefix);
 
   static void setup_merge_operator(KeyValueDB *db, std::string prefix);
 
   int create(uint64_t size,
-	     uint64_t granularity,
-	     uint64_t zone_size,
-	     uint64_t first_sequential_zone,
-	     KeyValueDB::Transaction txn) override;
+             uint64_t granularity,
+             uint64_t zone_size,
+             uint64_t first_sequential_zone,
+             KeyValueDB::Transaction txn) override;
 
   int init(KeyValueDB *kvdb,
-	   bool db_in_read_only,
-	   cfg_reader_t cfg_reader) override;
+           bool db_in_read_only,
+           cfg_reader_t cfg_reader) override;
 
   void shutdown() override;
   void sync(KeyValueDB* kvdb) override;
@@ -78,16 +78,16 @@ public:
 
   void enumerate_reset() override;
   bool enumerate_next(KeyValueDB *kvdb,
-		      uint64_t *offset,
-		      uint64_t *length) override;
+                      uint64_t *offset,
+                      uint64_t *length) override;
 
   void allocate(uint64_t offset,
-		uint64_t length,
-		KeyValueDB::Transaction txn) override;
+                uint64_t length,
+                KeyValueDB::Transaction txn) override;
 
   void release(uint64_t offset,
-	       uint64_t length,
-	       KeyValueDB::Transaction txn) override;
+               uint64_t length,
+               KeyValueDB::Transaction txn) override;
 
   inline uint64_t get_size() const override {
     return size;
@@ -102,12 +102,12 @@ public:
   }
 
   void get_meta(uint64_t target_size,
-		std::vector<std::pair<std::string, std::string>>*) const override;
+                std::vector<std::pair<std::string, std::string>>*) const override;
 
   std::vector<zone_state_t> get_zone_states(KeyValueDB *kvdb) const;
 
   void mark_zone_to_clean_free(uint64_t zone,
-			       KeyValueDB *kvdb);
+                               KeyValueDB *kvdb);
 };
 
 #endif

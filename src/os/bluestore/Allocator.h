@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 /*
  * Ceph - scalable distributed file system
  *
@@ -20,8 +20,8 @@
 class Allocator {
 public:
   Allocator(std::string_view name,
-	    int64_t _capacity,
-	    int64_t _block_size);
+            int64_t _capacity,
+            int64_t _block_size);
   virtual ~Allocator();
 
   /*
@@ -39,11 +39,11 @@ public:
    * to free block search algorithm and availability of contiguous space.
    */
   virtual int64_t allocate(uint64_t want_size, uint64_t block_size,
-			   uint64_t max_alloc_size, int64_t hint,
-			   PExtentVector *extents) = 0;
+                           uint64_t max_alloc_size, int64_t hint,
+                           PExtentVector *extents) = 0;
 
   int64_t allocate(uint64_t want_size, uint64_t block_size,
-		   int64_t hint, PExtentVector *extents) {
+                   int64_t hint, PExtentVector *extents) {
     return allocate(want_size, block_size, want_size, hint, extents);
   }
 

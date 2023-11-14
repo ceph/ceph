@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #include "BlueRocksEnv.h"
 #include "BlueFS.h"
@@ -42,7 +42,7 @@ split(const std::string &fn)
     --slash;
   return {string_view(fn.data(), slash),
           string_view(fn.data() + file_begin,
-	              fn.size() - file_begin)};
+                      fn.size() - file_begin)};
 }
 
 }
@@ -114,7 +114,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   //
   // Safe for concurrent use by multiple threads.
   rocksdb::Status Read(uint64_t offset, size_t n, rocksdb::Slice* result,
-		       char* scratch) const override {
+                       char* scratch) const override {
     int64_t r = fs->read_random(h, offset, n, scratch);
     ceph_assert(r >= 0);
     *result = rocksdb::Slice(scratch, r);
@@ -138,7 +138,7 @@ class BlueRocksRandomAccessFile : public rocksdb::RandomAccessFile {
   // Note: these IDs are only valid for the duration of the process.
   size_t GetUniqueId(char* id, size_t max_size) const override {
     return snprintf(id, max_size, "%016llx",
-		    (unsigned long long)h->file->fnode.ino);
+                    (unsigned long long)h->file->fnode.ino);
   };
 
   // Readahead the file starting from offset by n bytes for caching.
@@ -230,7 +230,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
     if (last_allocated_block > 0) {
       int r = fs->truncate(h, h->pos);
       if (r < 0)
-	return err_to_status(r);
+        return err_to_status(r);
     }
 
     return rocksdb::Status::OK();
@@ -272,7 +272,7 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
   // For documentation, refer to RandomAccessFile::GetUniqueId()
   size_t GetUniqueId(char* id, size_t max_size) const override {
     return snprintf(id, max_size, "%016llx",
-		    (unsigned long long)h->file->fnode.ino);
+                    (unsigned long long)h->file->fnode.ino);
   }
 
   // Remove any kind of caching of data from the offset to offset+length
@@ -492,7 +492,7 @@ rocksdb::Status BlueRocksEnv::GetFileSize(
 }
 
 rocksdb::Status BlueRocksEnv::GetFileModificationTime(const std::string& fname,
-						      uint64_t* file_mtime)
+                                                      uint64_t* file_mtime)
 {
   auto [dir, file] = split(fname);
   utime_t mtime;

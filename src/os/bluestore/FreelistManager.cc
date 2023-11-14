@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #include "FreelistManager.h"
 #include "BitmapFreelistManager.h"
@@ -42,7 +42,7 @@ FreelistManager *FreelistManager::create(
 }
 
 void FreelistManager::setup_merge_operators(KeyValueDB *db,
-					    const std::string& type)
+                                            const std::string& type)
 {
 #ifdef HAVE_LIBZBD
   if (type == "zoned")

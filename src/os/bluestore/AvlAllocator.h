@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #pragma once
 
@@ -13,7 +13,7 @@
 struct range_seg_t {
   MEMPOOL_CLASS_HELPERS();  ///< memory monitoring
   uint64_t start;   ///< starting offset of this segment
-  uint64_t end;	    ///< ending offset (non-inclusive)
+  uint64_t end;            ///< ending offset (non-inclusive)
 
   range_seg_t(uint64_t start, uint64_t end)
     : start{start},
@@ -35,11 +35,11 @@ struct range_seg_t {
       auto lhs_size = lhs.end - lhs.start;
       auto rhs_size = rhs.end - rhs.start;
       if (lhs_size < rhs_size) {
-	return true;
+        return true;
       } else if (lhs_size > rhs_size) {
-	return false;
+        return false;
       } else {
-	return lhs.start < rhs.start;
+        return lhs.start < rhs.start;
       }
     }
   };
@@ -69,7 +69,7 @@ protected:
 
 public:
   AvlAllocator(CephContext* cct, int64_t device_size, int64_t block_size,
-	       std::string_view name);
+               std::string_view name);
   ~AvlAllocator();
   const char* get_type() const override
   {
@@ -113,9 +113,9 @@ private:
       range_seg_t,
       boost::intrusive::compare<range_seg_t::before_t>,
       boost::intrusive::member_hook<
-	range_seg_t,
-	boost::intrusive::avl_set_member_hook<>,
-	&range_seg_t::offset_hook>>;
+        range_seg_t,
+        boost::intrusive::avl_set_member_hook<>,
+        &range_seg_t::offset_hook>>;
   range_tree_t range_tree;    ///< main range tree
   /*
    * The range_size_tree should always contain the
@@ -128,9 +128,9 @@ private:
       range_seg_t,
       boost::intrusive::compare<range_seg_t::shorter_t>,
       boost::intrusive::member_hook<
-	range_seg_t,
-	boost::intrusive::avl_set_member_hook<>,
-	&range_seg_t::size_hook>,
+        range_seg_t,
+        boost::intrusive::avl_set_member_hook<>,
+        &range_seg_t::size_hook>,
       boost::intrusive::constant_time_size<true>>;
   range_size_tree_t range_size_tree;
 

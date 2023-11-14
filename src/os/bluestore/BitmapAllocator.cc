@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #include "BitmapAllocator.h"
 
@@ -9,14 +9,14 @@
 #define dout_prefix *_dout << "fbmap_alloc " << this << " "
 
 BitmapAllocator::BitmapAllocator(CephContext* _cct,
-					 int64_t capacity,
-					 int64_t alloc_unit,
-					 std::string_view name) :
+                                         int64_t capacity,
+                                         int64_t alloc_unit,
+                                         std::string_view name) :
     Allocator(name, capacity, alloc_unit),
     cct(_cct)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << capacity << "/"
-		 << alloc_unit << std::dec << dendl;
+                 << alloc_unit << std::dec << dendl;
   _init(capacity, alloc_unit, false);
 }
 
@@ -27,8 +27,8 @@ int64_t BitmapAllocator::allocate(
   uint64_t allocated = 0;
   size_t old_size = extents->size();
   ldout(cct, 10) << __func__ << std::hex << " 0x" << want_size
-		 << "/" << alloc_unit << "," << max_alloc_size << "," << hint
-		 << std::dec << dendl;
+                 << "/" << alloc_unit << "," << max_alloc_size << "," << hint
+                 << std::dec << dendl;
     
     
   _allocate_l2(want_size, alloc_unit, max_alloc_size, hint,
@@ -41,8 +41,8 @@ int64_t BitmapAllocator::allocate(
       auto& e = (*extents)[i];
       ldout(cct, 10) << __func__
                      << " extent: 0x" << std::hex << e.offset << "~" << e.length
-		     << "/" << alloc_unit << "," << max_alloc_size << "," << hint
-		     << std::dec << dendl;
+                     << "/" << alloc_unit << "," << max_alloc_size << "," << hint
+                     << std::dec << dendl;
     }
   }
   return int64_t(allocated);
@@ -66,7 +66,7 @@ void BitmapAllocator::release(
 void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
-		  << std::dec << dendl;
+                  << std::dec << dendl;
 
   auto mas = get_min_alloc_size();
   uint64_t offs = round_up_to(offset, mas);
@@ -79,7 +79,7 @@ void BitmapAllocator::init_add_free(uint64_t offset, uint64_t length)
 void BitmapAllocator::init_rm_free(uint64_t offset, uint64_t length)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
-		 << std::dec << dendl;
+                 << std::dec << dendl;
   auto mas = get_min_alloc_size();
   uint64_t offs = round_up_to(offset, mas);
   uint64_t l = p2align(offset + length - offs, mas);

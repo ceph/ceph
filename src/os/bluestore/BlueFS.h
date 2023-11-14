@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_H
 #define CEPH_OS_BLUESTORE_BLUEFS_H
 
@@ -164,14 +164,14 @@ public:
     FRIEND_MAKE_REF(File);
     File()
       :
-	refs(0),
-	dirty_seq(0),
-	locked(false),
-	deleted(false),
-	is_dirty(false),
-	num_readers(0),
-	num_writers(0),
-	num_reading(0),
+        refs(0),
+        dirty_seq(0),
+        locked(false),
+        deleted(false),
+        is_dirty(false),
+        num_readers(0),
+        num_writers(0),
+        num_reading(0),
         vselector_hint(nullptr)
       {}
     ~File() override {
@@ -187,8 +187,8 @@ public:
       File,
       boost::intrusive::member_hook<
         File,
-	boost::intrusive::list_member_hook<>,
-	&File::dirty_item> > dirty_file_list_t;
+        boost::intrusive::list_member_hook<>,
+        &File::dirty_item> > dirty_file_list_t;
 
   struct Dir : public RefCountedObject {
     MEMPOOL_CLASS_HELPERS();
@@ -235,7 +235,7 @@ public:
       iocv.fill(nullptr);
       dirty_devs.fill(false);
       if (file->fnode.ino == 1) {
-	write_hint = WRITE_LIFE_MEDIUM;
+        write_hint = WRITE_LIFE_MEDIUM;
       }
     }
     // NOTE: caller must call BlueFS::close_writer()
@@ -291,7 +291,7 @@ public:
     }
     uint64_t get_buf_remaining(uint64_t p) const {
       if (p >= bl_off && p < bl_off + bl.length())
-	return bl_off + bl.length() - p;
+        return bl_off + bl.length() - p;
       return 0;
     }
 
@@ -303,8 +303,8 @@ public:
     // for the provided extent
     void invalidate_cache(uint64_t offset, uint64_t length) {
       if (offset >= bl_off && offset < get_buf_end()) {
-	bl.clear();
-	bl_off = 0;
+        bl.clear();
+        bl_off = 0;
       }
     }
   };
@@ -324,9 +324,9 @@ public:
 
     FileReader(FileRef f, uint64_t mpf, bool rand, bool ie)
       : file(f),
-	buf(mpf),
-	random(rand),
-	ignore_eof(ie) {
+        buf(mpf),
+        random(rand),
+        ignore_eof(ie) {
       ++file->num_readers;
     }
     ~FileReader() {
@@ -441,7 +441,7 @@ private:
   const char* get_device_name(unsigned id);
   int _allocate(uint8_t bdev, uint64_t len,
                 uint64_t alloc_unit,
-		bluefs_fnode_t* node,
+                bluefs_fnode_t* node,
                 size_t alloc_attempts = 0,
                 bool permit_dev_fallback = true);
 
@@ -484,18 +484,18 @@ private:
   };
   void _compact_log_dump_metadata_NF(uint64_t start_seq,
                                      bluefs_transaction_t *t,
-				     int flags,
-				     uint64_t capture_before_seq);
+                                     int flags,
+                                     uint64_t capture_before_seq);
 
   void _compact_log_sync_LNF_LD();
   void _compact_log_async_LD_LNF_D();
 
   void _rewrite_log_and_layout_sync_LNF_LD(bool permit_dev_fallback,
-				    int super_dev,
-				    int log_dev,
-				    int new_log_dev,
-				    int flags,
-				    std::optional<bluefs_layout_t> layout);
+                                    int super_dev,
+                                    int log_dev,
+                                    int new_log_dev,
+                                    int flags,
+                                    std::optional<bluefs_layout_t> layout);
 
   //void _aio_finish(void *priv);
 
@@ -607,7 +607,7 @@ public:
   void close_writer(FileWriter *h);
 
   int rename(std::string_view old_dir, std::string_view old_file,
-	     std::string_view new_dir, std::string_view new_file);
+             std::string_view new_dir, std::string_view new_file);
 
   int readdir(std::string_view dirname, std::vector<std::string> *ls);
 
@@ -619,7 +619,7 @@ public:
 
   bool dir_exists(std::string_view dirname);
   int stat(std::string_view dirname, std::string_view filename,
-	   uint64_t *size, utime_t *mtime);
+           uint64_t *size, utime_t *mtime);
 
   int lock_file(std::string_view dirname, std::string_view filename, FileLock **p);
   int unlock_file(FileLock *l);
@@ -641,7 +641,7 @@ public:
   }
 
   int add_block_device(unsigned bdev, const std::string& path, bool trim,
-		       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
+                       bluefs_shared_alloc_context_t* _shared_alloc = nullptr);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev) const;
 
@@ -654,14 +654,14 @@ public:
   void flush_range(FileWriter *h, uint64_t offset, uint64_t length);
   int fsync(FileWriter *h);
   int64_t read(FileReader *h, uint64_t offset, size_t len,
-	   ceph::buffer::list *outbl, char *out) {
+           ceph::buffer::list *outbl, char *out) {
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
     return _read(h, offset, len, outbl, out);
   }
   int64_t read_random(FileReader *h, uint64_t offset, size_t len,
-		  char *out) {
+                  char *out) {
     // no need to hold the global lock here; we only touch h and
     // h->file, and read vs write or delete is already protected (via
     // atomics and asserts).
@@ -684,7 +684,7 @@ private:
   // Wrappers for BlockDevice::read(...) and BlockDevice::read_random(...)
   // They are used for checking if read values are all 0, and reread if so.
   int _read_and_check(uint8_t ndev, uint64_t off, uint64_t len,
-	   ceph::buffer::list *pbl, IOContext *ioc, bool buffered);
+           ceph::buffer::list *pbl, IOContext *ioc, bool buffered);
   int _read_random_and_check(uint8_t ndev, uint64_t off, uint64_t len, char *buf, bool buffered);
 
   int _bdev_read(uint8_t ndev, uint64_t off, uint64_t len,
@@ -694,10 +694,10 @@ private:
   /// test and compact log, if necessary
   void _maybe_compact_log_LNF_NF_LD_D();
   int _do_replay_recovery_read(FileReader *log,
-			       size_t log_pos,
-			       size_t read_offset,
-			       size_t read_len,
-			       bufferlist* bl);
+                               size_t log_pos,
+                               size_t read_offset,
+                               size_t read_len,
+                               bufferlist* bl);
   void _check_vselector_LNF();
 };
 

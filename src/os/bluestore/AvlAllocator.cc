@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #include "AvlAllocator.h"
 
@@ -31,8 +31,8 @@ namespace {
  * tree looking for a block that matches the specified criteria.
  */
 uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
-					 uint64_t size,
-					 uint64_t align)
+                                         uint64_t size,
+                                         uint64_t align)
 {
   const auto compare = range_tree.key_comp();
   uint32_t search_count = 0;
@@ -48,7 +48,7 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
       return -1ULL;
     }
     if (search_bytes = rs->start - rs_start->start;
-	max_search_bytes > 0 && search_bytes > max_search_bytes) {
+        max_search_bytes > 0 && search_bytes > max_search_bytes) {
       return -1ULL;
     }
   }
@@ -75,7 +75,7 @@ uint64_t AvlAllocator::_pick_block_after(uint64_t *cursor,
 }
 
 uint64_t AvlAllocator::_pick_block_fits(uint64_t size,
-					uint64_t align)
+                                        uint64_t align)
 {
   // instead of searching from cursor, just pick the smallest range which fits
   // the needs
@@ -97,7 +97,7 @@ void AvlAllocator::_add_to_tree(uint64_t start, uint64_t size)
   uint64_t end = start + size;
 
   auto rs_after = range_tree.upper_bound(range_t{start, end},
-					 range_tree.key_comp());
+                                         range_tree.key_comp());
 
   /* Make sure we don't overlap with either of our neighbors */
   auto rs_before = range_tree.end();
@@ -376,9 +376,9 @@ AvlAllocator::AvlAllocator(CephContext* cct,
 }
 
 AvlAllocator::AvlAllocator(CephContext* cct,
-			   int64_t device_size,
-			   int64_t block_size,
-			   std::string_view name) :
+                           int64_t device_size,
+                           int64_t block_size,
+                           std::string_view name) :
   AvlAllocator(cct, device_size, block_size, 0 /* max_mem */, name)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << get_capacity() << "/"

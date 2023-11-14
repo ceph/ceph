@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #include "StupidAllocator.h"
 #include "bluestore_types.h"
@@ -31,7 +31,7 @@ unsigned StupidAllocator::_choose_bin(uint64_t orig_len)
   uint64_t len = orig_len / block_size;
   int bin = std::min((int)cbits(len), (int)free.size() - 1);
   ldout(cct, 30) << __func__ << " len 0x" << std::hex << orig_len
-		 << std::dec << " -> " << bin << dendl;
+                 << std::dec << " -> " << bin << dendl;
   return bin;
 }
 
@@ -39,14 +39,14 @@ void StupidAllocator::_insert_free(uint64_t off, uint64_t len)
 {
   unsigned bin = _choose_bin(len);
   ldout(cct, 30) << __func__ << " 0x" << std::hex << off << "~" << len
-		 << std::dec << " in bin " << bin << dendl;
+                 << std::dec << " in bin " << bin << dendl;
   while (true) {
     free[bin].insert(off, len, &off, &len);
     unsigned newbin = _choose_bin(len);
     if (newbin == bin)
       break;
     ldout(cct, 30) << __func__ << " promoting 0x" << std::hex << off << "~" << len
-		   << std::dec << " to bin " << newbin << dendl;
+                   << std::dec << " to bin " << newbin << dendl;
     free[bin].erase(off, len);
     bin = newbin;
   }
@@ -72,9 +72,9 @@ int64_t StupidAllocator::allocate_int(
 {
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << " want_size 0x" << std::hex << want_size
-	   	 << " alloc_unit 0x" << alloc_unit
-	   	 << " hint 0x" << hint << std::dec
-	   	 << dendl;
+                    << " alloc_unit 0x" << alloc_unit
+                    << " hint 0x" << hint << std::dec
+                    << dendl;
   uint64_t want = std::max(alloc_unit, want_size);
   int bin = _choose_bin(want);
   int orig_bin = bin;
@@ -89,10 +89,10 @@ int64_t StupidAllocator::allocate_int(
     for (bin = orig_bin; bin < (int)free.size(); ++bin) {
       p = free[bin].lower_bound(hint);
       while (p != free[bin].end()) {
-	if (_aligned_len(p, alloc_unit) >= want_size) {
-	  goto found;
-	}
-	++p;
+        if (_aligned_len(p, alloc_unit) >= want_size) {
+          goto found;
+        }
+        ++p;
       }
     }
   }
@@ -103,7 +103,7 @@ int64_t StupidAllocator::allocate_int(
     auto end = hint ? free[bin].lower_bound(hint) : free[bin].end();
     while (p != end) {
       if (_aligned_len(p, alloc_unit) >= want_size) {
-	goto found;
+        goto found;
       }
       ++p;
     }
@@ -114,10 +114,10 @@ int64_t StupidAllocator::allocate_int(
     for (bin = orig_bin; bin >= 0; --bin) {
       p = free[bin].lower_bound(hint);
       while (p != free[bin].end()) {
-	if (_aligned_len(p, alloc_unit) >= alloc_unit) {
-	  goto found;
-	}
-	++p;
+        if (_aligned_len(p, alloc_unit) >= alloc_unit) {
+          goto found;
+        }
+        ++p;
       }
     }
   }
@@ -128,7 +128,7 @@ int64_t StupidAllocator::allocate_int(
     auto end = hint ? free[bin].lower_bound(hint) : free[bin].end();
     while (p != end) {
       if (_aligned_len(p, alloc_unit) >= alloc_unit) {
-	goto found;
+        goto found;
       }
       ++p;
     }
@@ -147,14 +147,14 @@ int64_t StupidAllocator::allocate_int(
       alloc_unit * (rand() % cct->_conf->bluestore_debug_small_allocations);
     if (max && *length > max) {
       ldout(cct, 10) << __func__ << " shortening allocation of 0x" << std::hex
-	       	     << *length << " -> 0x"
-	       	     << max << " due to debug_small_allocations" << std::dec
-		     << dendl;
+                            << *length << " -> 0x"
+                            << max << " due to debug_small_allocations" << std::dec
+                     << dendl;
       *length = max;
     }
   }
   ldout(cct, 30) << __func__ << " got 0x" << std::hex << *offset << "~" << *length
-	   	 << " from bin " << std::dec << bin << dendl;
+                    << " from bin " << std::dec << bin << dendl;
 
   free[bin].erase(*offset, *length);
   uint64_t off, len;
@@ -162,7 +162,7 @@ int64_t StupidAllocator::allocate_int(
     int newbin = _choose_bin(len);
     if (newbin != bin) {
       ldout(cct, 30) << __func__ << " demoting 0x" << std::hex << off << "~" << len
-	       	     << std::dec << " to bin " << newbin << dendl;
+                            << std::dec << " to bin " << newbin << dendl;
       free[bin].erase(off, len);
       _insert_free(off, len);
     }
@@ -171,7 +171,7 @@ int64_t StupidAllocator::allocate_int(
     int newbin = _choose_bin(len);
     if (newbin != bin) {
       ldout(cct, 30) << __func__ << " demoting 0x" << std::hex << off << "~" << len
-	       	     << std::dec << " to bin " << newbin << dendl;
+                            << std::dec << " to bin " << newbin << dendl;
       free[bin].erase(off, len);
       _insert_free(off, len);
     }
@@ -217,8 +217,8 @@ int64_t StupidAllocator::allocate(
         uint64_t l64 = last_extent.length;
         l64 += length;
         if (l64 < 0x100000000 && l64 <= max_alloc_size) {
-	  can_append = false;
-	  last_extent.length += length;
+          can_append = false;
+          last_extent.length += length;
         }
       }
     }
@@ -246,7 +246,7 @@ void StupidAllocator::release(
     const auto offset = p.get_start();
     const auto length = p.get_len();
     ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
-		   << std::dec << dendl;
+                   << std::dec << dendl;
     _insert_free(offset, length);
     num_free += length;
   }
@@ -289,12 +289,12 @@ void StupidAllocator::dump()
   std::lock_guard l(lock);
   for (unsigned bin = 0; bin < free.size(); ++bin) {
     ldout(cct, 0) << __func__ << " free bin " << bin << ": "
-	    	  << free[bin].num_intervals() << " extents" << dendl;
+                      << free[bin].num_intervals() << " extents" << dendl;
     for (auto p = free[bin].begin();
-	 p != free[bin].end();
-	 ++p) {
+         p != free[bin].end();
+         ++p) {
       ldout(cct, 0) << __func__ << "  0x" << std::hex << p.get_start() << "~"
-	      	    << p.get_len() << std::dec << dendl;
+                          << p.get_len() << std::dec << dendl;
     }
   }
 }
@@ -315,7 +315,7 @@ void StupidAllocator::init_add_free(uint64_t offset, uint64_t length)
     return;
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
-		 << std::dec << dendl;
+                 << std::dec << dendl;
   _insert_free(offset, length);
   num_free += length;
 }
@@ -326,7 +326,7 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
     return;
   std::lock_guard l(lock);
   ldout(cct, 10) << __func__ << " 0x" << std::hex << offset << "~" << length
-	   	 << std::dec << dendl;
+                    << std::dec << dendl;
   interval_set_t rm;
   rm.insert(offset, length);
   for (unsigned i = 0; i < free.size() && !rm.empty(); ++i) {
@@ -334,7 +334,7 @@ void StupidAllocator::init_rm_free(uint64_t offset, uint64_t length)
     overlap.intersection_of(rm, free[i]);
     if (!overlap.empty()) {
       ldout(cct, 20) << __func__ << " bin " << i << " rm 0x" << std::hex << overlap
-		     << std::dec << dendl;
+                     << std::dec << dendl;
       auto it = overlap.begin();
       auto it_end = overlap.end();
       while (it != it_end) {

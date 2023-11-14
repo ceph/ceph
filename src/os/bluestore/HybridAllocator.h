@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #pragma once
 
@@ -13,7 +13,7 @@ class HybridAllocator : public AvlAllocator {
 public:
   HybridAllocator(CephContext* cct, int64_t device_size, int64_t _block_size,
                   uint64_t max_mem,
-	          std::string_view name) :
+                  std::string_view name) :
       AvlAllocator(cct, device_size, _block_size, max_mem, name) {
   }
   const char* get_type() const override

@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:nil -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #include "BtreeAllocator.h"
 
@@ -20,8 +20,8 @@
  * looking for a block that matches the specified criteria.
  */
 uint64_t BtreeAllocator::_pick_block_after(uint64_t *cursor,
-					   uint64_t size,
-					   uint64_t align)
+                                           uint64_t size,
+                                           uint64_t align)
 {
   auto rs_start = range_tree.lower_bound(*cursor);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
@@ -347,10 +347,10 @@ void BtreeAllocator::_shutdown()
 }
 
 BtreeAllocator::BtreeAllocator(CephContext* cct,
-			       int64_t device_size,
-			       int64_t block_size,
-			       uint64_t max_mem,
-			       std::string_view name) :
+                               int64_t device_size,
+                               int64_t block_size,
+                               uint64_t max_mem,
+                               std::string_view name) :
   Allocator(name, device_size, block_size),
   range_size_alloc_threshold(
     cct->_conf.get_val<uint64_t>("bluestore_avl_alloc_bf_threshold")),
@@ -361,9 +361,9 @@ BtreeAllocator::BtreeAllocator(CephContext* cct,
 {}
 
 BtreeAllocator::BtreeAllocator(CephContext* cct,
-			       int64_t device_size,
-			       int64_t block_size,
-			       std::string_view name) :
+                               int64_t device_size,
+                               int64_t block_size,
+                               std::string_view name) :
   BtreeAllocator(cct, device_size, block_size, 0 /* max_mem */, name)
 {}
 

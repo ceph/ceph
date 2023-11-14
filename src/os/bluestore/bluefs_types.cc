@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #include <algorithm>
 #include "bluefs_types.h"
@@ -34,7 +34,7 @@ void bluefs_extent_t::generate_test_instances(list<bluefs_extent_t*>& ls)
 ostream& operator<<(ostream& out, const bluefs_extent_t& e)
 {
   return out << (int)e.bdev << ":0x" << std::hex << e.offset << "~" << e.length
-	     << std::dec;
+             << std::dec;
 }
 
 // bluefs_layout_t
@@ -112,11 +112,11 @@ void bluefs_super_t::generate_test_instances(list<bluefs_super_t*>& ls)
 ostream& operator<<(ostream& out, const bluefs_super_t& s)
 {
   return out << "super(uuid " << s.uuid
-	     << " osd " << s.osd_uuid
-	     << " v " << s.version
-	     << " block_size 0x" << std::hex << s.block_size
-	     << " log_fnode 0x" << s.log_fnode
-	     << std::dec << ")";
+             << " osd " << s.osd_uuid
+             << " v " << s.version
+             << " block_size 0x" << std::hex << s.block_size
+             << " log_fnode 0x" << s.log_fnode
+             << std::dec << ")";
 }
 
 // bluefs_fnode_t
@@ -197,12 +197,12 @@ void bluefs_fnode_t::generate_test_instances(list<bluefs_fnode_t*>& ls)
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 {
   return out << "file(ino " << file.ino
-	     << " size 0x" << std::hex << file.size << std::dec
-	     << " mtime " << file.mtime
-	     << " allocated " << std::hex << file.allocated << std::dec
-	     << " alloc_commit " << std::hex << file.allocated_commited << std::dec
-	     << " extents " << file.extents
-	     << ")";
+             << " size 0x" << std::hex << file.size << std::dec
+             << " mtime " << file.mtime
+             << " allocated " << std::hex << file.allocated << std::dec
+             << " alloc_commit " << std::hex << file.allocated_commited << std::dec
+             << " extents " << file.extents
+             << ")";
 }
 
 // bluefs_fnode_delta_t
@@ -210,11 +210,11 @@ ostream& operator<<(ostream& out, const bluefs_fnode_t& file)
 std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
 {
   return out << "delta(ino " << delta.ino
-	     << " size 0x" << std::hex << delta.size << std::dec
-	     << " mtime " << delta.mtime
-	     << " offset " << std::hex << delta.offset << std::dec
-	     << " extents " << delta.extents
-	     << ")";
+             << " size 0x" << std::hex << delta.size << std::dec
+             << " mtime " << delta.mtime
+             << " offset " << std::hex << delta.offset << std::dec
+             << " extents " << delta.extents
+             << ")";
 }
 
 // bluefs_transaction_t
@@ -265,7 +265,7 @@ void bluefs_transaction_t::decode(bufferlist::const_iterator& p)
   uint32_t actual = op_bl.crc32c(-1);
   if (actual != crc)
     throw ceph::buffer::malformed_input("bad crc " + stringify(actual)
-				  + " expected " + stringify(crc));
+                                  + " expected " + stringify(crc));
 }
 
 void bluefs_transaction_t::dump(Formatter *f) const
@@ -296,8 +296,8 @@ void bluefs_transaction_t::generate_test_instances(
 ostream& operator<<(ostream& out, const bluefs_transaction_t& t)
 {
   return out << "txn(seq " << t.seq
-	     << " len 0x" << std::hex << t.op_bl.length()
-	     << " crc 0x" << t.op_bl.crc32c(-1)
-	     << std::dec << ")";
+             << " len 0x" << std::hex << t.op_bl.length()
+             << " crc 0x" << t.op_bl.crc32c(-1)
+             << std::dec << ")";
 }
 

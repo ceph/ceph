@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #ifndef CEPH_OS_BLUESTORE_BITMAPFASTALLOCATOR_H
 #define CEPH_OS_BLUESTORE_BITMAPFASTALLOCATOR_H
@@ -17,7 +17,7 @@ class BitmapAllocator : public Allocator,
   CephContext* cct;
 public:
   BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit,
-		  std::string_view name);
+                  std::string_view name);
   ~BitmapAllocator() override
   {
   }

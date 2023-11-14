@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #ifndef CEPH_OS_BLUESTORE_BITMAPFREELISTMANAGER_H
 #define CEPH_OS_BLUESTORE_BITMAPFREELISTMANAGER_H
@@ -58,13 +58,13 @@ class BitmapFreelistManager : public FreelistManager {
 
 public:
   BitmapFreelistManager(CephContext* cct, std::string meta_prefix,
-			std::string bitmap_prefix);
+                        std::string bitmap_prefix);
 
   static void setup_merge_operator(KeyValueDB *db, std::string prefix);
 
   int create(uint64_t size, uint64_t granularity,
-	     uint64_t zone_size, uint64_t first_sequential_zone,
-	     KeyValueDB::Transaction txn) override;
+             uint64_t zone_size, uint64_t first_sequential_zone,
+             KeyValueDB::Transaction txn) override;
 
   int init(KeyValueDB *kvdb, bool db_in_read_only,
     std::function<int(const std::string&, std::string*)> cfg_reader) override;

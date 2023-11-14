@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 #ifndef CEPH_OS_BLUESTORE_STUPIDALLOCATOR_H
 #define CEPH_OS_BLUESTORE_STUPIDALLOCATOR_H
@@ -39,7 +39,7 @@ public:
   StupidAllocator(CephContext* cct,
                   int64_t size,
                   int64_t block_size,
-		  std::string_view name);
+                  std::string_view name);
   ~StupidAllocator() override;
   const char* get_type() const override
   {

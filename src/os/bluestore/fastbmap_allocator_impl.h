@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 /*
  * Bitmap based in-memory allocator implementation.
  * Author: Igor Fedotov, ifedotov@suse.com
@@ -159,21 +159,21 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     auto it = res->rbegin();
     if (max_length) {
       if (it != res->rend() && it->offset + it->length == offset) {
-	auto l = max_length - it->length;
-	if (l >= len) {
-	  it->length += len;
-	  return;
-	} else {
-	  offset += l;
-	  len -= l;
-	  it->length += l;
-	}
+        auto l = max_length - it->length;
+        if (l >= len) {
+          it->length += len;
+          return;
+        } else {
+          offset += l;
+          len -= l;
+          it->length += l;
+        }
       }
 
       while (len > max_length) {
-	res->emplace_back(offset, max_length);
-	offset += max_length;
-	len -= max_length;
+        res->emplace_back(offset, max_length);
+        offset += max_length;
+        len -= max_length;
       }
       res->emplace_back(offset, len);
       return;
@@ -214,10 +214,10 @@ class AllocatorLevel01Loose : public AllocatorLevel01
       } else if (slot_val == all_slot_set) {
         uint64_t to_alloc = std::min(need_entries, d0);
         *allocated += to_alloc * l0_granularity;
-	++alloc_fragments;
+        ++alloc_fragments;
         need_entries -= to_alloc;
 
-	_fragment_and_emplace(max_length, base * l0_granularity,
+        _fragment_and_emplace(max_length, base * l0_granularity,
           to_alloc * l0_granularity, res);
 
         if (to_alloc == d0) {
@@ -233,15 +233,15 @@ class AllocatorLevel01Loose : public AllocatorLevel01
       auto next_pos = free_pos + 1;
       while (next_pos < bits_per_slot &&
         (next_pos - free_pos) < need_entries) {
-	++l0_inner_iterations;
+        ++l0_inner_iterations;
 
         if (0 == (slot_val & (slot_t(1) << next_pos))) {
           auto to_alloc = (next_pos - free_pos);
           *allocated += to_alloc * l0_granularity;
-	  ++alloc_fragments;
+          ++alloc_fragments;
           need_entries -= to_alloc;
-	  _fragment_and_emplace(max_length, (base + free_pos) * l0_granularity,
-	    to_alloc * l0_granularity, res);
+          _fragment_and_emplace(max_length, (base + free_pos) * l0_granularity,
+            to_alloc * l0_granularity, res);
           _mark_alloc_l0(base + free_pos, base + next_pos);
           free_pos = find_next_set_bit(slot_val, next_pos + 1);
           next_pos = free_pos + 1;
@@ -252,10 +252,10 @@ class AllocatorLevel01Loose : public AllocatorLevel01
       if (need_entries && free_pos < bits_per_slot) {
         auto to_alloc = std::min(need_entries, d0 - free_pos);
         *allocated += to_alloc * l0_granularity;
-	++alloc_fragments;
-	need_entries -= to_alloc;
-	_fragment_and_emplace(max_length, (base + free_pos) * l0_granularity,
-	  to_alloc * l0_granularity, res);
+        ++alloc_fragments;
+        need_entries -= to_alloc;
+        _fragment_and_emplace(max_length, (base + free_pos) * l0_granularity,
+          to_alloc * l0_granularity, res);
         _mark_alloc_l0(base + free_pos, base + free_pos + to_alloc);
       }
     }
@@ -634,7 +634,7 @@ protected:
     if (mark_as_free) {
       // capacity to have slotset alignment at l1
       auto l2_pos_no_use =
-	p2roundup((int64_t)capacity, (int64_t)l2_granularity) / l2_granularity;
+        p2roundup((int64_t)capacity, (int64_t)l2_granularity) / l2_granularity;
       _mark_l2_allocated(l2_pos_no_use, aligned_capacity / l2_granularity);
       available = p2align(capacity, _alloc_unit);
     } else {
@@ -736,42 +736,42 @@ protected:
     // Looks like they have negative impact on the performance
     for (auto i = 0; i < 2; ++i) {
       for(; length > *allocated && pos < pos_end; ++pos) {
-	slot_t& slot_val = l2[pos];
-	size_t free_pos = 0;
-	bool all_set = false;
-	if (slot_val == all_slot_clear) {
-	  l2_pos += d;
-	  last_pos = l2_pos;
-	  continue;
-	} else if (slot_val == all_slot_set) {
-	  free_pos = 0;
-	  all_set = true;
-	} else {
-	  free_pos = find_next_set_bit(slot_val, 0);
-	  ceph_assert(free_pos < bits_per_slot);
-	}
-	do {
-	  ceph_assert(length > *allocated);
-	  bool empty = l1._allocate_l1(length,
-	    min_length,
-	    max_length,
-	    (l2_pos + free_pos) * l1_w,
-	    (l2_pos + free_pos + 1) * l1_w,
-	    allocated,
-	    res);
-	  if (empty) {
-	    slot_val &= ~(slot_t(1) << free_pos);
-	  }
-	  if (length <= *allocated || slot_val == all_slot_clear) {
-	    break;
-	  }
-	  ++free_pos;
-	  if (!all_set) {
-	    free_pos = find_next_set_bit(slot_val, free_pos);
-	  }
-	} while (free_pos < bits_per_slot);
-	last_pos = l2_pos;
-	l2_pos += d;
+        slot_t& slot_val = l2[pos];
+        size_t free_pos = 0;
+        bool all_set = false;
+        if (slot_val == all_slot_clear) {
+          l2_pos += d;
+          last_pos = l2_pos;
+          continue;
+        } else if (slot_val == all_slot_set) {
+          free_pos = 0;
+          all_set = true;
+        } else {
+          free_pos = find_next_set_bit(slot_val, 0);
+          ceph_assert(free_pos < bits_per_slot);
+        }
+        do {
+          ceph_assert(length > *allocated);
+          bool empty = l1._allocate_l1(length,
+            min_length,
+            max_length,
+            (l2_pos + free_pos) * l1_w,
+            (l2_pos + free_pos + 1) * l1_w,
+            allocated,
+            res);
+          if (empty) {
+            slot_val &= ~(slot_t(1) << free_pos);
+          }
+          if (length <= *allocated || slot_val == all_slot_clear) {
+            break;
+          }
+          ++free_pos;
+          if (!all_set) {
+            free_pos = find_next_set_bit(slot_val, free_pos);
+          }
+        } while (free_pos < bits_per_slot);
+        last_pos = l2_pos;
+        l2_pos += d;
       }
       l2_pos = 0;
       pos = 0;

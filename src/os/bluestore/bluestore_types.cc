@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 /*
  * Ceph - scalable distributed file system
  *
@@ -83,11 +83,11 @@ void bluestore_bdev_label_t::generate_test_instances(
 ostream& operator<<(ostream& out, const bluestore_bdev_label_t& l)
 {
   return out << "bdev(osd_uuid " << l.osd_uuid
-	     << ", size 0x" << std::hex << l.size << std::dec
-	     << ", btime " << l.btime
-	     << ", desc " << l.description
-	     << ", " << l.meta.size() << " meta"
-	     << ")";
+             << ", size 0x" << std::hex << l.size << std::dec
+             << ", btime " << l.btime
+             << ", desc " << l.description
+             << ", " << l.meta.size() << " meta"
+             << ")";
 }
 
 // cnode_t
@@ -153,15 +153,15 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
     if (p == ref_map.end()) {
       // nothing after offset; add the whole thing.
       p = ref_map.insert(
-	map<uint64_t,record_t>::value_type(offset, record_t(length, 1))).first;
+        map<uint64_t,record_t>::value_type(offset, record_t(length, 1))).first;
       break;
     }
     if (p->first > offset) {
       // gap
       uint64_t newlen = std::min<uint64_t>(p->first - offset, length);
       p = ref_map.insert(
-	map<uint64_t,record_t>::value_type(offset,
-					   record_t(newlen, 1))).first;
+        map<uint64_t,record_t>::value_type(offset,
+                                           record_t(newlen, 1))).first;
       offset += newlen;
       length -= newlen;
       _maybe_merge_left(p);
@@ -174,14 +174,14 @@ void bluestore_extent_ref_map_t::get(uint64_t offset, uint32_t length)
       uint64_t left = p->first + p->second.length - offset;
       p->second.length = offset - p->first;
       p = ref_map.insert(map<uint64_t,record_t>::value_type(
-			   offset, record_t(left, p->second.refs))).first;
+                           offset, record_t(left, p->second.refs))).first;
       // continue below
     }
     ceph_assert(p->first == offset);
     if (length < p->second.length) {
       ref_map.insert(make_pair(offset + length,
-			       record_t(p->second.length - length,
-					p->second.refs)));
+                               record_t(p->second.length - length,
+                                        p->second.refs)));
       p->second.length = length;
       ++p->second.refs;
       break;
@@ -221,28 +221,28 @@ void bluestore_extent_ref_map_t::put(
       unshared = false;
     }
     p = ref_map.insert(map<uint64_t,record_t>::value_type(
-			 offset, record_t(left, p->second.refs))).first;
+                         offset, record_t(left, p->second.refs))).first;
   }
   while (length > 0) {
     ceph_assert(p->first == offset);
     if (length < p->second.length) {
       if (p->second.refs != 1) {
-	unshared = false;
+        unshared = false;
       }
       ref_map.insert(make_pair(offset + length,
-			       record_t(p->second.length - length,
-					p->second.refs)));
+                               record_t(p->second.length - length,
+                                        p->second.refs)));
       if (p->second.refs > 1) {
-	p->second.length = length;
-	--p->second.refs;
-	if (p->second.refs != 1) {
-	  unshared = false;
-	}
-	_maybe_merge_left(p);
+        p->second.length = length;
+        --p->second.refs;
+        if (p->second.refs != 1) {
+          unshared = false;
+        }
+        _maybe_merge_left(p);
       } else {
-	if (release)
-	  release->push_back(bluestore_pextent_t(p->first, length));
-	ref_map.erase(p);
+        if (release)
+          release->push_back(bluestore_pextent_t(p->first, length));
+        ref_map.erase(p);
       }
       goto out;
     }
@@ -251,13 +251,13 @@ void bluestore_extent_ref_map_t::put(
     if (p->second.refs > 1) {
       --p->second.refs;
       if (p->second.refs != 1) {
-	unshared = false;
+        unshared = false;
       }
       _maybe_merge_left(p);
       ++p;
     } else {
       if (release)
-	release->push_back(bluestore_pextent_t(p->first, p->second.length));
+        release->push_back(bluestore_pextent_t(p->first, p->second.length));
       ref_map.erase(p++);
     }
   }
@@ -269,10 +269,10 @@ out:
     if (unshared) {
       // we haven't seen a ref != 1 yet; check the whole map.
       for (auto& p : ref_map) {
-	if (p.second.refs != 1) {
-	  unshared = false;
-	  break;
-	}
+        if (p.second.refs != 1) {
+          unshared = false;
+          break;
+        }
       }
     }
     *maybe_unshared = unshared;
@@ -300,11 +300,11 @@ bluestore_extent_ref_map_t::debug_len_cnt bluestore_extent_ref_map_t::debug_peek
       // nah, it ends too soon, we landed in a hole
       ++p;
       if (p != ref_map.end()) {
-	// there is a region after
-	return {uint32_t(p->first - offset), 0};
+        // there is a region after
+        return {uint32_t(p->first - offset), 0};
       } else {
-	// nothing after
-	return {0, 0};
+        // nothing after
+        return {0, 0};
       }
     } else {
       // we're in the range
@@ -392,7 +392,7 @@ ostream& operator<<(ostream& out, const bluestore_extent_ref_map_t& m)
     if (p != m.ref_map.begin())
       out << ",";
     out << std::hex << "0x" << p->first << "~" << p->second.length << std::dec
-	<< "=" << p->second.refs;
+        << "=" << p->second.refs;
   }
   out << ")";
   return out;
@@ -483,7 +483,7 @@ void bluestore_blob_use_tracker_t::get(
     while (offset < end) {
       auto phase = offset % au_size;
       bytes_per_au[offset / au_size] += 
-	std::min(au_size - phase, end - offset);
+        std::min(au_size - phase, end - offset);
       offset += (phase ? au_size - phase : au_size);
     }
   }
@@ -512,18 +512,18 @@ bool bluestore_blob_use_tracker_t::put(
       bytes_per_au[pos] -= diff;
       offset += (phase ? au_size - phase : au_size);
       if (bytes_per_au[pos] == 0) {
-	if (release_units) {
+        if (release_units) {
           if (release_units->empty() || next_offs != pos * au_size) {
-  	    release_units->emplace_back(pos * au_size, au_size);
+              release_units->emplace_back(pos * au_size, au_size);
             next_offs = pos * au_size;
           } else {
             release_units->back().length += au_size;
           }
           next_offs += au_size;
-	}
+        }
       } else {
-	maybe_empty = false; // micro optimization detecting we aren't empty 
-	                     // even in the affected extent
+        maybe_empty = false; // micro optimization detecting we aren't empty 
+                             // even in the affected extent
       }
     }
   }
@@ -576,7 +576,7 @@ void bluestore_blob_use_tracker_t::split(
 }
 
 void bluestore_blob_use_tracker_t::dup(const bluestore_blob_use_tracker_t& from,
-				       uint32_t start, uint32_t len)
+                                       uint32_t start, uint32_t len)
 {
   uint32_t end = start + len;
   ceph_assert(from.total_bytes >= end);
@@ -658,10 +658,10 @@ ostream& operator<<(ostream& out, const bluestore_blob_use_tracker_t& m)
   } else {
     out << "0x" << m.num_au 
         << "*0x" << m.au_size 
-	<< " 0x[";
+        << " 0x[";
     for (size_t i = 0; i < m.num_au; ++i) {
       if (i != 0)
-	out << ",";
+        out << ",";
       out << m.bytes_per_au[i];
     }
     out << "]";
@@ -790,10 +790,10 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   out << "blob(" << o.get_extents();
   if (o.is_compressed()) {
     out << " clen 0x" << std::hex
-	<< o.get_logical_length()
-	<< " -> 0x"
-	<< o.get_compressed_payload_length()
-	<< std::dec;
+        << o.get_logical_length()
+        << " -> 0x"
+        << o.get_compressed_payload_length()
+        << std::dec;
   } else {
     out << " llen=0x" << std::hex << o.get_logical_length() << std::dec;
   }
@@ -802,8 +802,8 @@ ostream& operator<<(ostream& out, const bluestore_blob_t& o)
   }
   if (o.has_csum()) {
     out << " " << Checksummer::get_csum_type_string(o.csum_type)
-	<< "/0x" << std::hex << (1ull << o.csum_chunk_order) << std::dec
-	<< "/" << o.csum_data.length();
+        << "/0x" << std::hex << (1ull << o.csum_chunk_order) << std::dec
+        << "/" << o.csum_data.length();
   }
   if (o.has_unused())
     out << " unused=0x" << std::hex << o.unused << std::dec;
@@ -838,7 +838,7 @@ void bluestore_blob_t::calc_csum(uint64_t b_off, const bufferlist& bl)
 }
 
 int bluestore_blob_t::verify_csum(uint64_t b_off, const bufferlist& bl,
-				  int* b_bad_off, uint64_t *bad_csum) const
+                                  int* b_bad_off, uint64_t *bad_csum) const
 {
   int r = 0;
 
@@ -911,7 +911,7 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const PExtentV
     while (true) {
       ceph_assert(start_it != extents.end());
       if (cur_offs + start_it->length > b_off) {
-	break;
+        break;
       }
       cur_offs += start_it->length;
       ++start_it;
@@ -925,7 +925,7 @@ void bluestore_blob_t::allocated(uint32_t b_off, uint32_t length, const PExtentV
       ceph_assert(end_it != extents.end());
       ceph_assert(!end_it->is_valid());
       if (cur_offs + end_it->length >= end_off) {
-	break;
+        break;
       }
       cur_offs += end_it->length;
       ++end_it;
@@ -997,15 +997,15 @@ void bluestore_blob_t::allocated_test(const bluestore_pextent_t& alloc)
 }
 
 bool bluestore_blob_t::release_extents(bool all,
-				       const PExtentVector& logical,
-				       PExtentVector* r)
+                                       const PExtentVector& logical,
+                                       PExtentVector* r)
 {
   // common case: all of it?
   if (all) {
     uint64_t pos = 0;
     for (auto& e : extents) {
       if (e.is_valid()) {
-	r->push_back(e);
+        r->push_back(e);
       }
       pos += e.length;
     }
@@ -1029,7 +1029,7 @@ bool bluestore_blob_t::release_extents(bool all,
       int delta0 = pext_loffs - pext_loffs_start;
       ceph_assert(delta0 >= 0);
       if ((uint32_t)delta0 < pext_it->length) {
-	vb.add(pext_it->offset + delta0, pext_it->length - delta0);
+        vb.add(pext_it->offset + delta0, pext_it->length - delta0);
       }
       pext_loffs_start += pext_it->length;
       pext_loffs = pext_loffs_start;
@@ -1043,33 +1043,33 @@ bool bluestore_blob_t::release_extents(bool all,
       int delta = loffs_it->offset - pext_loffs;
       ceph_assert(delta >= 0);
       if (delta > 0) {
-	vb.add(pext_it->offset + delta0, delta);
-	pext_loffs += delta;
+        vb.add(pext_it->offset + delta0, delta);
+        pext_loffs += delta;
       }
 
       PExtentVector::iterator last_r = r->end();
       if (r->begin() != last_r) {
-	--last_r;
+        --last_r;
       }
       uint32_t to_release = loffs_it->length;
       do {
-	uint32_t to_release_part =
-	  std::min(pext_it->length - delta0 - delta, to_release);
-	auto o = pext_it->offset + delta0 + delta;
-	if (last_r != r->end() && last_r->offset + last_r->length == o) {
-	  last_r->length += to_release_part;
-	}
-	else {
-	  last_r = r->emplace(r->end(), o, to_release_part);
-	}
-	to_release -= to_release_part;
-	pext_loffs += to_release_part;
-	if (pext_loffs == pext_loffs_start + pext_it->length) {
-	  pext_loffs_start += pext_it->length;
-	  pext_loffs = pext_loffs_start;
-	  pext_it++;
-	  delta0 = delta = 0;
-	}
+        uint32_t to_release_part =
+          std::min(pext_it->length - delta0 - delta, to_release);
+        auto o = pext_it->offset + delta0 + delta;
+        if (last_r != r->end() && last_r->offset + last_r->length == o) {
+          last_r->length += to_release_part;
+        }
+        else {
+          last_r = r->emplace(r->end(), o, to_release_part);
+        }
+        to_release -= to_release_part;
+        pext_loffs += to_release_part;
+        if (pext_loffs == pext_loffs_start + pext_it->length) {
+          pext_loffs_start += pext_it->length;
+          pext_loffs = pext_loffs_start;
+          pext_it++;
+          delta0 = delta = 0;
+        }
       } while (to_release > 0 && pext_it != pext_end);
       vb.add_invalid(loffs_it->length - to_release);
       ++loffs_it;
@@ -1094,13 +1094,13 @@ void bluestore_blob_t::split(uint32_t blob_offset, bluestore_blob_t& rb)
     }
     if (left) {
       if (p->is_valid()) {
-	rb.extents.emplace_back(bluestore_pextent_t(p->offset + left,
-	  p->length - left));
+        rb.extents.emplace_back(bluestore_pextent_t(p->offset + left,
+          p->length - left));
       }
       else {
-	rb.extents.emplace_back(bluestore_pextent_t(
-	  bluestore_pextent_t::INVALID_OFFSET,
-	  p->length - left));
+        rb.extents.emplace_back(bluestore_pextent_t(
+          bluestore_pextent_t::INVALID_OFFSET,
+          p->length - left));
       }
       llen_rb += p->length - left;
       llen_lb += left;
@@ -1152,7 +1152,7 @@ void bluestore_blob_t::dup(const bluestore_blob_t& from)
 
 // bluestore_shared_blob_t
 MEMPOOL_DEFINE_OBJECT_FACTORY(bluestore_shared_blob_t, bluestore_shared_blob_t,
-	          bluestore_shared_blob);
+                  bluestore_shared_blob);
 
 void bluestore_shared_blob_t::dump(Formatter *f) const
 {
@@ -1184,7 +1184,7 @@ void bluestore_onode_t::shard_info::dump(Formatter *f) const
 ostream& operator<<(ostream& out, const bluestore_onode_t::shard_info& si)
 {
   return out << std::hex << "0x" << si.offset << "(0x" << si.bytes << " bytes"
-	     << std::dec << ")";
+             << std::dec << ")";
 }
 
 void bluestore_onode_t::dump(Formatter *f) const

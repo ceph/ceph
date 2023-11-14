@@ -1,5 +1,5 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
-// vim: ts=8 sw=2 smarttab
+// -*- mode:C++; tab-width:2; c-basic-offset:2; indent-tabs-mode:nil -*-
+// vim: ts=2 sw=2 expandtab
 
 //
 // A freelist manager for zoned devices.  This iteration just keeps the write
@@ -113,11 +113,11 @@ int ZonedFreelistManager::create(
   ceph_assert(size % zone_size == 0);
 
   dout(1) << __func__ << std::hex
-	  << " size 0x" << size
-	  << " bytes_per_block 0x" << bytes_per_block
-	  << " zone size 0x " << zone_size
-	  << " num_zones 0x" << num_zones
-	  << " starting_zone 0x" << starting_zone_num << dendl;
+          << " size 0x" << size
+          << " bytes_per_block 0x" << bytes_per_block
+          << " zone size 0x " << zone_size
+          << " num_zones 0x" << num_zones
+          << " starting_zone 0x" << starting_zone_num << dendl;
   {
     bufferlist bl;
     encode(size, bl);
@@ -163,12 +163,12 @@ int ZonedFreelistManager::init(
   ceph_assert(num_zones == size / zone_size);
 
   dout(10) << __func__ << std::hex
-	   << " size 0x" << size
-	   << " bytes_per_block 0x" << bytes_per_block
-	   << " zone size 0x" << zone_size
-	   << " num_zones 0x" << num_zones
-	   << " starting_zone 0x" << starting_zone_num
-	   << std::dec << dendl;
+           << " size 0x" << size
+           << " bytes_per_block 0x" << bytes_per_block
+           << " zone size 0x" << zone_size
+           << " num_zones 0x" << num_zones
+           << " starting_zone 0x" << starting_zone_num
+           << std::dec << dendl;
   return 0;
 }
 
@@ -227,7 +227,7 @@ bool ZonedFreelistManager::enumerate_next(
   *length = zone_size - zone_state.get_write_pointer();
 
   dout(30) << __func__ << std::hex << " 0x" << *offset << "~" << *length
-	   << std::dec << dendl;
+           << std::dec << dendl;
 
   return true;
 }
@@ -238,7 +238,7 @@ void ZonedFreelistManager::dump(KeyValueDB *kvdb)
   uint64_t offset, length;
   while (enumerate_next(kvdb, &offset, &length)) {
     dout(20) << __func__ << " 0x" << std::hex << offset << "~" << length
-	     << std::dec << dendl;
+             << std::dec << dendl;
   }
 }
 
@@ -252,7 +252,7 @@ void ZonedFreelistManager::allocate(
     uint64_t zone_num = offset / zone_size;
     uint64_t this_len = std::min(length, zone_size - offset % zone_size);
     dout(10) << __func__ << " 0x" << std::hex << offset << "~" << this_len
-	     << " zone 0x" << zone_num << std::dec << dendl;
+             << " zone 0x" << zone_num << std::dec << dendl;
     zone_state_t zone_state;
     zone_state.increment_write_pointer(this_len);
     write_zone_state_delta_to_db(zone_num, zone_state, txn);
@@ -276,7 +276,7 @@ void ZonedFreelistManager::release(
     uint64_t zone_num = offset / zone_size;
     uint64_t this_len = std::min(length, zone_size - offset % zone_size);
     dout(10) << __func__ << " 0x" << std::hex << offset << "~" << this_len
-	     << " zone 0x" << zone_num << std::dec << dendl;
+             << " zone 0x" << zone_num << std::dec << dendl;
     zone_state_t zone_state;
     zone_state.increment_num_dead_bytes(this_len);
     write_zone_state_delta_to_db(zone_num, zone_state, txn);
