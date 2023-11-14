@@ -1836,6 +1836,14 @@ public:
       values[STATFS_COMPRESSED_ALLOCATED] = st.data_compressed_allocated;
       return *this;
     }
+    bool operator==(const volatile_statfs& rhs) const {
+      return
+      values[STATFS_ALLOCATED] == rhs.values[STATFS_ALLOCATED] &&
+      values[STATFS_STORED] == rhs.values[STATFS_STORED] &&
+      values[STATFS_COMPRESSED_ORIGINAL] == rhs.values[STATFS_COMPRESSED_ORIGINAL] &&
+      values[STATFS_COMPRESSED] == rhs.values[STATFS_COMPRESSED] &&
+      values[STATFS_COMPRESSED_ALLOCATED] == rhs.values[STATFS_COMPRESSED_ALLOCATED];
+    }
     bool is_empty() {
       return values[STATFS_ALLOCATED] == 0 &&
 	values[STATFS_STORED] == 0 &&
@@ -3532,6 +3540,18 @@ public:
     CephContext* cct, const std::string &path,
     const bluestore_bdev_label_t& label, uint64_t disk_position = 0);
 
+  void debug_punch_hole_2(
+    CollectionRef& c,
+    OnodeRef& o,
+    uint32_t offset,
+    uint32_t length,
+    PExtentVector& released,
+    std::vector<BlobRef>& pruned_blobs,
+    std::set<SharedBlobRef>& shared_changed,
+    volatile_statfs& statfs_delta) {
+      _punch_hole_2(c.get(), o, offset, length, released,
+        pruned_blobs, shared_changed, statfs_delta);
+    }
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,

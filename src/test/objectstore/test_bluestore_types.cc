@@ -1233,6 +1233,339 @@ TEST(ExtentMap, compress_extent_map) {
   ASSERT_EQ(6u, em.extent_map.size());
 }
 
+class BlueStoreFixture :
+  virtual public ::testing::Test,
+  virtual public ::testing::WithParamInterface<std::vector<int>>
+ {
+public:
+  BlueStore* store;
+  BlueStore::OnodeCacheShard *oc;
+  BlueStore::BufferCacheShard *bc;
+  BlueStore::CollectionRef coll;
+  uint32_t au_size = 0;
+  uint32_t csum_order = 12;
+  BlueStore::OnodeRef onode;
+
+  explicit BlueStoreFixture() {}
+  void Init(uint32_t _au_size) {
+    au_size = _au_size;
+    store = new BlueStore(g_ceph_context, "", au_size);
+    oc = BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL);
+    bc = BlueStore::BufferCacheShard::create(g_ceph_context, "lru", NULL);
+    coll = ceph::make_ref<BlueStore::Collection>(store, oc, bc, coll_t());
+  }
+  void SetUp() override {
+    std::vector param = GetParam();
+    Init(param[0]);
+    onode = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+  }
+  void TearDown() override {
+    onode.reset(nullptr);
+    coll.reset(nullptr);
+    delete bc;
+    delete oc;
+    delete store;
+  }
+};
+
+class PunchHoleFixture : public BlueStoreFixture
+{
+  public:
+  struct logical_range_t {
+    uint32_t offset = 0;
+    uint32_t length = 0;
+    uint32_t compressed = 0;
+  };
+  struct punch_range_t {
+    uint32_t offset = 0;
+    uint32_t length = 0;
+  };
+
+  interval_set<uint64_t> disk_allocated;
+  std::set<BlueStore::BlobRef> blobs_created;
+  std::set<BlueStore::SharedBlobRef> blobs_shared_created;
+  BlueStore::volatile_statfs statfs;
+
+  interval_set<uint64_t> disk_to_free;
+  std::set<BlueStore::BlobRef> blobs_to_free;
+  std::set<BlueStore::SharedBlobRef> blobs_shared_to_free;
+  BlueStore::volatile_statfs statfs_to_free;
+
+  uint32_t allocate_block = 10; //let's not start from 0
+  uint32_t allocate_offset = 0;
+
+  uint32_t align_nom;
+  uint32_t align_denom;
+  uint32_t compr_nom = 0;
+  uint32_t compr_denom = 0;
+  uint32_t compr_low = 0;
+  uint32_t compr_high = 0;
+  uint32_t shared_nom = 0;
+  uint32_t shared_denom = 0;
+  // random maybe aligned
+  uint32_t rma(
+    uint32_t low,
+    uint32_t high = 0) {
+      if (high == 0) {
+        high = low;
+        low = 0;
+      }
+      if (low == high) {
+        return low;
+      }
+      if (rand() % align_denom < align_nom) {
+        if (a2align(high) > a2roundup(low)) {
+          uint32_t v = rand() % (a2align(high) - a2roundup(low));
+          return a2align(v) + a2roundup(low);
+        }
+      }
+      return rand() % (high - low) + low;
+    }
+
+  void SetUp() override {
+    std::vector param = GetParam();
+    BlueStoreFixture::SetUp(); //uses param[0]
+    align_nom = param[1];
+    align_denom = param[2];
+    if (param.size() > 7) {
+      ceph_assert(param.size() >= 11);
+      compr_nom = param[7];
+      compr_denom = param[8];
+      compr_low = param[9];
+      compr_high = param[10];
+    }
+    if (param.size() > 11) {
+      ceph_assert(param.size() >= 13);
+      shared_nom = param[11];
+      shared_denom = param[12];
+    }
+  }
+  void clear() {
+    disk_allocated.clear();
+    blobs_created.clear();
+    blobs_shared_created.clear();
+    statfs.reset();
+    disk_to_free.clear();
+    blobs_to_free.clear();
+    blobs_shared_to_free.clear();
+    statfs_to_free.reset();
+    allocate_block = 10;
+    allocate_offset = 0;
+  }
+
+  void append(interval_set<uint64_t>& d, const PExtentVector& vec) {
+    for (auto v: vec) {
+      if (v.length > 0)
+        d.insert(v.offset, v.length);
+    }
+  }
+  interval_set<uint64_t> to_iset(const PExtentVector& vec) {
+    interval_set<uint64_t> set;
+    for (auto& v : vec) {
+      set.insert(v.offset, v.length);
+    }
+    return set;
+  }
+  std::set<BlueStore::BlobRef> to_set(const std::vector<BlueStore::BlobRef>& vec) {
+    std::set<BlueStore::BlobRef> set;
+    for (auto& b : vec) {
+      ceph_assert(!set.contains(b));
+      set.insert(b);
+    }
+    return set;
+  }
+  PExtentVector allocate(uint32_t size) {
+    if (rand()% 6 < 5) {
+      return allocate_continue(size);
+    }
+    ++allocate_block;
+    allocate_offset = 0;
+    PExtentVector v;
+    if (size > 0)
+      v.emplace_back((uint64_t)allocate_block << 32 | allocate_offset, size);
+    allocate_offset += size;
+    return v;
+  }
+  PExtentVector allocate_continue(uint32_t size) {
+    PExtentVector v;
+    if (size > 0)
+      v.emplace_back((uint64_t)allocate_block << 32 | allocate_offset, size);
+    allocate_offset += size;
+    return v;
+  }
+  uint32_t a2roundup(uint32_t x) {
+    return p2roundup(x, au_size);
+  }
+  uint32_t a2align(uint32_t x) {
+    return p2align(x, au_size);
+  }
+  uint32_t a2phase(uint32_t x) {
+    return p2phase(x, au_size);
+  }
+
+// Fills onode data on specific range.
+// Simulates blob-like operation.
+// Specifies which part of the data will be punched in future.
+  void populate(logical_range_t blob_like, punch_range_t will_punch)
+  {
+    if (compr_denom > 0 && rand() % compr_denom < compr_nom) {
+      blob_like.compressed = blob_like.length *
+        (rand() % (compr_high - compr_low) + compr_low);
+      populate_compressed(blob_like, will_punch);
+      return;
+    }
+    uint32_t al_start = a2align(blob_like.offset);
+    uint32_t al_hole_begin = a2roundup(will_punch.offset);
+    uint32_t al_hole_end = a2align(will_punch.offset + will_punch.length);
+    uint32_t al_end = a2roundup(blob_like.offset + blob_like.length);
+    if (will_punch.length == 0) {
+      // no punch, no hole
+      al_hole_begin = al_end;
+      al_hole_end = al_end;
+    } else {
+      if (blob_like.offset == will_punch.offset) {
+        al_hole_begin = al_start;
+      }
+      if (will_punch.offset + will_punch.length == blob_like.offset + blob_like.length) {
+        al_hole_end = al_end;
+      }
+      if (al_hole_end < al_hole_begin) {
+        al_hole_begin = al_end;
+        al_hole_end = al_end;
+      }
+    }
+    PExtentVector disk;
+    PExtentVector d_a = allocate(al_hole_begin - al_start);
+    PExtentVector d_b = allocate_continue(al_hole_end - al_hole_begin);
+    PExtentVector d_c = allocate_continue(al_end - al_hole_end);
+
+    bool blob_remains = al_start != al_hole_begin || al_hole_end != al_end;
+    BlueStore::BlobRef b(new BlueStore::Blob);
+    coll->open_shared_blob(0, b);
+    blobs_created.insert(b);
+    if (!blob_remains) {
+      blobs_to_free.insert(b);
+    }
+    append(disk_allocated, d_a);
+    append(disk_allocated, d_b);
+    append(disk_allocated, d_c);
+
+    disk.insert(disk.end(), d_a.begin(), d_a.end());
+    disk.insert(disk.end(), d_b.begin(), d_b.end());
+    disk.insert(disk.end(), d_c.begin(), d_c.end());
+
+    uint32_t blob_length = al_end - al_start;
+    bluestore_blob_t &bb = b->dirty_blob();
+    bb.init_csum(Checksummer::CSUM_CRC32C, csum_order, blob_length);
+    ceph_assert(p2phase(blob_length, au_size) == 0);
+    uint32_t num_aus = blob_length / au_size;
+    for (size_t i = 0; i < num_aus; ++i) {
+      bb.set_csum_item(i, 0);
+    }
+    bb.allocated(0, blob_length, disk);
+    BlueStore::Extent *ext = new BlueStore::Extent(
+      blob_like.offset, a2phase(blob_like.offset), blob_like.length, b);
+    onode->extent_map.extent_map.insert(*ext);
+    b->get_ref(coll.get(), a2phase(blob_like.offset), blob_like.length);
+    bb.mark_used(a2phase(blob_like.offset), blob_like.length);
+
+    //when shared is triggered, select how much is will be shared
+    bool do_shared = shared_denom !=0 && rand() % shared_denom < shared_nom;
+    uint32_t hole_range = al_hole_end - al_hole_begin;
+    if (do_shared && hole_range > 0) {
+      uint32_t x = (rand() % shared_denom < shared_nom)
+        ? 0 : a2align(rand() % hole_range);
+      uint32_t y = (rand() % shared_denom < shared_nom)
+        ? hole_range : hole_range - a2roundup(rand() % (hole_range - x));
+      if (x == y) {
+        x = 0;
+        y = hole_range;
+      }
+      coll->make_blob_shared(rand(), b);
+      BlueStore::BlobRef cb = new BlueStore::Blob();
+      b->dup(*cb);
+      ceph_assert(d_b.size() == 1);
+      ceph_assert(d_b[0].length == hole_range);
+      PExtentVector d_b_non_shared;
+      if (x != 0) {
+        d_b_non_shared.emplace_back(d_b[0].offset, x);
+      }
+      if (y != hole_range) {
+        d_b_non_shared.emplace_back(d_b[0].offset + y, hole_range - y);
+      }
+      append(disk_to_free, d_b_non_shared);
+      if (x < y) {
+        cb->shared_blob->get_ref(d_b[0].offset + x, y - x);
+        statfs_to_free.allocated() += y - x;
+      }
+    } else {
+      append(disk_to_free, d_b);
+    }
+    statfs_to_free.stored() -= will_punch.length;
+    statfs_to_free.allocated() -= al_hole_end - al_hole_begin;
+  }
+
+  void populate_compressed(logical_range_t blob_like, punch_range_t will_punch)
+  {
+    //compressed are never aligning data
+    ceph_assert(blob_like.compressed > 0);
+    uint32_t al_size = a2roundup(blob_like.compressed);
+    bool blob_remains =
+      will_punch.offset > blob_like.offset ||
+      will_punch.offset + will_punch.length < blob_like.offset + blob_like.length;
+    PExtentVector disk = allocate(al_size);
+
+    BlueStore::BlobRef b(new BlueStore::Blob);
+    coll->open_shared_blob(0, b);
+    blobs_created.insert(b);
+    if (!blob_remains) {
+      blobs_to_free.insert(b);
+    }
+    append(disk_allocated, disk);
+
+    uint32_t blob_length = al_size;
+    bluestore_blob_t &bb = b->dirty_blob();
+    bb.set_compressed(blob_like.length, blob_like.compressed);
+    bb.init_csum(Checksummer::CSUM_CRC32C, csum_order, blob_length);
+    ceph_assert(p2phase(blob_length, au_size) == 0);
+    uint32_t num_aus = blob_length / au_size;
+    for (size_t i = 0; i < num_aus; ++i) {
+      bb.set_csum_item(i, 0);
+    }
+    bb.allocated(0, blob_length, disk);
+    BlueStore::Extent *ext = new BlueStore::Extent(
+      blob_like.offset, 0, blob_like.length, b);
+    onode->extent_map.extent_map.insert(*ext);
+    b->get_ref(coll.get(), 0, blob_like.length);
+
+    //when shared is triggered, it is all or nothing
+    bool do_shared = shared_denom !=0 && rand() % shared_denom < shared_nom;
+    bool create_additional_ref = false;
+    if (do_shared) {
+      create_additional_ref = rand() % 2 == 0;
+      coll->make_blob_shared(rand(), b);
+      BlueStore::BlobRef cb = new BlueStore::Blob();
+      b->dup(*cb);
+      ceph_assert(disk.size() == 1);
+      ceph_assert(disk[0].length == al_size);
+      if (create_additional_ref) {
+        cb->shared_blob->get_ref(disk[0].offset, al_size);
+      }
+    }
+    statfs_to_free.stored() -= will_punch.length;
+    statfs_to_free.compressed_original() -= will_punch.length;
+    if (!blob_remains) {
+      statfs_to_free.compressed() -= blob_like.compressed;
+      if (!create_additional_ref) {
+        statfs_to_free.allocated() -= al_size;
+        statfs_to_free.compressed_allocated() -= al_size;
+        append(disk_to_free, disk);
+      }
+    }
+  }
+};
+
+
 class ExtentMapFixture : virtual public ::testing::Test {
 
 public:
@@ -1598,7 +1931,171 @@ TEST_F(ExtentMapFixture, petri) {
   }
 }
 
-TEST(ExtentMap, dup_extent_map) {
+TEST_P(PunchHoleFixture, selftest)
+{
+  populate({1000, 32000}, {11000, 9000});
+  PExtentVector released;
+  std::vector<BlueStore::BlobRef> pruned_blobs;
+  std::set<BlueStore::SharedBlobRef> shared_changed;
+  BlueStore::volatile_statfs statfs_delta;
+  store->debug_punch_hole_2(coll, onode, 1000, 32000,
+    released, pruned_blobs, shared_changed, statfs_delta);
+  clear();
+}
+
+TEST_P(PunchHoleFixture, all)
+{
+  for (int i = 0; i < 1000; i++) {
+    onode = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+
+    uint32_t start = (rand() % 30000) + 1;
+    uint32_t end = start + (rand() % 100000) + 1;
+    uint32_t blob_length;
+    uint32_t pos = start;
+    while (pos < end) {
+      blob_length = (rand() % 30000) + 1;
+      if (pos + blob_length > end) {
+        blob_length = end - pos;
+      }
+      populate({pos, blob_length}, {pos, blob_length});
+      pos = pos + blob_length;
+    }
+    PExtentVector released;
+    std::vector<BlueStore::BlobRef> pruned_blobs;
+    std::set<BlueStore::SharedBlobRef> shared_changed;
+    BlueStore::volatile_statfs statfs_delta;
+    store->debug_punch_hole_2(coll, onode, start, end - start,
+                         released, pruned_blobs, shared_changed, statfs_delta);
+    EXPECT_EQ(to_iset(released), disk_to_free);
+    EXPECT_EQ(to_set(pruned_blobs), blobs_to_free);
+    EXPECT_EQ(statfs_delta, statfs_to_free);
+    clear();
+  }
+}
+
+TEST_P(PunchHoleFixture, some)
+{
+  for (int i = 0; i < 1000; i++) {
+    onode = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+
+    uint32_t start = (rand() % 30000) + 1;
+    uint32_t hole_start = start + (rand() % 30000);
+    uint32_t hole_end = hole_start + (rand() % 100000) + 1;
+    uint32_t end = hole_end  + (rand() % 30000);
+    uint32_t blob_length;
+    uint32_t pos = start;
+    while (pos < end) {
+      blob_length = (rand() % 30000) + 1;
+      if (pos + blob_length > end) {
+        blob_length = end - pos;
+      }
+      uint32_t a = hole_start;
+      uint32_t b = hole_end;
+      if (a < pos) a = pos;
+      if (b > pos + blob_length) b = pos + blob_length;
+      if (a < b)
+        populate({pos, blob_length}, {a, b - a});
+      else
+        populate({pos, blob_length}, {});
+      pos = pos + blob_length;
+    }
+    PExtentVector released;
+    std::vector<BlueStore::BlobRef> pruned_blobs;
+    std::set<BlueStore::SharedBlobRef> shared_changed;
+    BlueStore::volatile_statfs statfs_delta;
+    store->debug_punch_hole_2(coll, onode, hole_start, hole_end - hole_start,
+                         released, pruned_blobs, shared_changed, statfs_delta);
+    EXPECT_EQ(to_iset(released), disk_to_free);
+    EXPECT_EQ(to_set(pruned_blobs), blobs_to_free);
+    EXPECT_EQ(statfs_delta, statfs_to_free);
+    clear();
+  }
+}
+
+TEST_P(PunchHoleFixture, multipunch)
+{
+  std::vector param = GetParam();
+  ceph_assert(param.size() >= 7);
+  //param[0] for au_size
+  uint32_t object_size_low = param[3];
+  uint32_t object_size_high = param[4];
+  uint32_t blob_size_low = param[5];
+  uint32_t blob_size_high = param[6];
+
+  for (int i = 0; i < 1000; i++) {
+    onode = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+    uint32_t step = object_size_high - object_size_low / 4;
+    uint32_t start =      rma(30000);
+    uint32_t hole_start = rma(start, start + step);
+    uint32_t hole_end;
+    do {
+      hole_end = rma(hole_start, hole_start + step * 2 + 1);
+    } while (hole_end == hole_start);
+    uint32_t end =        rma(hole_end, hole_end + step);
+    uint32_t blob_length;
+    uint32_t pos = start;
+    while (pos < end) {
+      blob_length = rma(blob_size_low, blob_size_high);
+      if (pos + blob_length > end) {
+        blob_length = end - pos;
+      }
+      uint32_t a = hole_start;
+      uint32_t b = hole_end;
+      if (a < pos) a = pos;
+      if (b > pos + blob_length) b = pos + blob_length;
+      if (a < b)
+        populate({pos, blob_length}, {a, b - a});
+      else
+        populate({pos, blob_length}, {});
+      pos = pos + blob_length;
+    }
+    PExtentVector released;
+    std::vector<BlueStore::BlobRef> pruned_blobs;
+    std::set<BlueStore::SharedBlobRef> shared_changed;
+    BlueStore::volatile_statfs statfs_delta;
+
+    for (int j = 0; j < 10; j++) {
+      uint32_t s = rand() % ((hole_end - hole_start) / 5) + 1;
+      uint32_t p = rand() % (hole_end - hole_start - s) + hole_start;
+      store->debug_punch_hole_2(
+        coll, onode, p, s,
+        released, pruned_blobs, shared_changed, statfs_delta);
+    }
+    // and mandatory full clear at the end
+    store->debug_punch_hole_2(
+      coll, onode, hole_start, hole_end - hole_start,
+      released, pruned_blobs, shared_changed, statfs_delta);
+    EXPECT_EQ(to_iset(released), disk_to_free);
+    EXPECT_EQ(to_set(pruned_blobs), blobs_to_free);
+    EXPECT_EQ(statfs_delta, statfs_to_free);
+    clear();
+  }
+}
+
+//0 = au_size, 1/2 = %is_aligned, 3-4 = min-max object
+//5-6 = min-max blob, 7/8 = %is_compressed, 9-10 = min-max %compressed
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  PunchHoleFixture,
+  ::testing::Values(
+    std::vector<int>({4096, 2, 7, 10000, 100000, 20000, 40000}),
+    std::vector<int>({4096, 11, 13, 30000, 300000, 65536, 65536}),
+    std::vector<int>({8192, 3, 4, 20000, 150000, 10000, 25000}),
+    std::vector<int>({32768, 3, 4, 40000, 400000, 65536, 65536}),
+    std::vector<int>({4096, 2, 7, 10000, 100000, 20000, 40000, 1, 2, 10, 50}),
+    std::vector<int>({4096, 11, 13, 30000, 300000, 65536, 65536, 2, 3, 20, 70}),
+    std::vector<int>({8192, 3, 4, 20000, 150000, 10000, 25000, 2, 3 ,10, 50}),
+    std::vector<int>({32768, 3, 4, 40000, 400000, 65536, 65536, 1, 2, 20, 70}),
+    std::vector<int>({4096, 2, 7, 10000, 100000, 20000, 40000, 1, 2, 10, 50, 2, 3}),
+    std::vector<int>({4096, 11, 13, 30000, 300000, 65536, 65536, 2, 3, 20, 70, 1, 5}),
+    std::vector<int>({8192, 3, 4, 20000, 150000, 10000, 25000, 2, 3 ,10, 50, 5, 7}),
+    std::vector<int>({32768, 3, 4, 40000, 400000, 65536, 65536, 1, 2, 20, 70, 1, 3})
+    )
+);
+
+
+TEST(ExtentMap, dup_extent_map)
+{
   BlueStore store(g_ceph_context, "", 4096);
   BlueStore::OnodeCacheShard *oc =
       BlueStore::OnodeCacheShard::create(g_ceph_context, "lru", NULL);
