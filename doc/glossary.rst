@@ -271,7 +271,7 @@
                 The Ceph manager software, which collects all the state from
                 the whole cluster in one place.
 
-	MON
+	:ref:`MON<arch_monitor>`
 		The Ceph monitor software.
 
 	Node
@@ -336,6 +336,12 @@
                 OSD") in an acting set. Primary affinity was introduced in
                 Firefly (v. 0.80). See :ref:`Primary Affinity
                 <rados_ops_primary_affinity>`.
+
+        Quorum	
+                Quorum is the state that exists when a majority of the
+                :ref:`Monitors<arch_monitor>` in the cluster are ``up``. A
+                minimum of three :ref:`Monitors<arch_monitor>` must exist in
+                the cluster in order for Quorum to be possible.
 
 	RADOS
                 **R**\eliable **A**\utonomic **D**\istributed **O**\bject
