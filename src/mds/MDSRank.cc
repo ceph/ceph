@@ -3001,6 +3001,8 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "cache status") {
     std::lock_guard l(mds_lock);
     mdcache->cache_status(f);
+  } else if (command == "quiesce path") {
+    r = command_quiesce_path(f, cmdmap, *css);
   } else if (command == "dump tree") {
     command_dump_tree(cmdmap, *css, f);
   } else if (command == "dump loads") {
@@ -3481,6 +3483,55 @@ void MDSRank::command_openfiles_ls(Formatter *f)
 {
   std::lock_guard l(mds_lock);
   mdcache->dump_openfiles(f);
+}
+
+class C_MDS_QuiescePathCommand : public MDCache::C_MDS_QuiescePath {
+public:
+  C_MDS_QuiescePathCommand(MDCache* cache, Context* fin) : C_MDS_QuiescePath(cache), finisher(fin) {}
+  void finish(int rc) override {
+    if (finisher) {
+      finisher->complete(rc);
+      finisher = nullptr;
+    }
+  }
+private:
+  Context* finisher = nullptr;
+};
+
+int MDSRank::command_quiesce_path(Formatter* f, const cmdmap_t& cmdmap, std::ostream& ss)
+{
+  std::string path;
+  {
+    bool got = cmd_getval(cmdmap, "path", path);
+    if (!got) {
+      ss << "missing path";
+      return -CEPHFS_EINVAL;
+    }
+  }
+
+  bool wait = false;
+  cmd_getval(cmdmap, "wait", wait);
+
+  C_SaferCond cond;
+  auto* finisher = new C_MDS_QuiescePathCommand(mdcache, wait ? &cond : nullptr);
+  auto qs = finisher->qs;
+  MDRequestRef mdr;
+  f->open_object_section("quiesce");
+  {
+    std::lock_guard l(mds_lock);
+    mdr = mdcache->quiesce_path(filepath(path), finisher, f);
+    if (!wait) {
+      f->dump_object("op", *mdr);
+    }
+  }
+  if (wait) {
+    cond.wait();
+    std::lock_guard l(mds_lock);
+    f->dump_object("op", *mdr);
+  }
+  f->dump_object("state", *qs);
+  f->close_section();
+  return 0;
 }
 
 void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss)
