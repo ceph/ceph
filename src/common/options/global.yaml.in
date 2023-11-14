@@ -2903,9 +2903,19 @@ options:
   default: 5_min
   with_legacy: true
 # report pg stats for any given pg at least this often
-- name: osd_pg_stat_report_interval_max
+- name: osd_pg_stat_report_interval_max_seconds
   type: int
   level: advanced
+  desc: The maximum interval seconds for update pg's reported_epoch,
+        benefit for osdmap trim when osdmap not change frequently.
+  default: 500
+  with_legacy: true
+- name: osd_pg_stat_report_interval_max_epochs
+  type: int
+  level: advanced
+  desc: The maximum interval by which pg's reported_epoch lags behind,
+        otherwise, pg's reported_epoch must be updated,
+        benefit for osdmap trim when osdmap changes frequently.
   default: 500
   with_legacy: true
 # Max number of snap intervals to report to mgr in pg_stat_t
