@@ -13,6 +13,7 @@
  */
 
 #include "common/versioned_variant.h"
+#include <bitset>
 #include <string>
 #include <gtest/gtest.h>
 
@@ -318,6 +319,23 @@ TEST(ConvertedVariant, EncodeNew)
     auto p = bl.cbegin();
     EXPECT_THROW(decode(out, p), buffer::malformed_input);
   }
+}
+
+TEST(Variant, GenerateTestInstances)
+{
+  using Variant = std::variant<int, bool, double>;
+
+  std::bitset<std::variant_size_v<Variant>> bits;
+  ASSERT_TRUE(bits.none());
+
+  std::list<Variant> instances;
+  generate_test_instances(instances);
+
+  for (const auto& v : instances) {
+    bits.set(v.index());
+  }
+
+  EXPECT_TRUE(bits.all());
 }
 
 } // namespace ceph

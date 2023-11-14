@@ -16,6 +16,7 @@
 
 #include <concepts>
 #include <limits>
+#include <list>
 #include <variant>
 
 #include <boost/mp11/algorithm.hpp> // for mp_with_index
@@ -211,5 +212,23 @@ void decode(std::variant<Ts...>& v, bufferlist::const_iterator& p)
 }
 
 } // namespace converted_variant
+
+
+/// \brief Generate a list with a default-constructed variant of each type.
+///
+/// This can be used in generate_test_instances() for types that contain
+/// variants to ensure that an encoding of each type is present in the
+/// ceph-object-corpus. This allows the ceph-dencoder tests to catch any
+/// breaking changes to the variant types that are present in encodings.
+template <typename ...Ts>
+void generate_test_instances(std::list<std::variant<Ts...>>& instances)
+{
+  // use an immediately-invoked lambda to get a parameter pack of variant indices
+  [&instances] <std::size_t ...I> (std::index_sequence<I...>) {
+    // use a fold expression to call emplace_back() for each index in the pack
+    // use in_place_index to default-construct a variant of the type at index I
+    (instances.emplace_back(std::in_place_index<I>), ...);
+  } (std::make_index_sequence<sizeof...(Ts)>{});
+}
 
 } // namespace ceph
