@@ -90,7 +90,7 @@ def test_haproxy_container_mounts():
             good_haproxy_json(),
             SAMPLE_HAPROXY_IMAGE,
         )
-        cmounts = hap.get_container_mounts("/var/tmp")
+        cmounts = hap._get_container_mounts("/var/tmp")
         assert len(cmounts) == 1
         assert cmounts["/var/tmp/haproxy"] == "/var/lib/haproxy"
 
@@ -244,7 +244,7 @@ def test_keepalived_container_mounts():
             good_keepalived_json(),
             SAMPLE_KEEPALIVED_IMAGE,
         )
-        cmounts = kad.get_container_mounts("/var/tmp")
+        cmounts = kad._get_container_mounts("/var/tmp")
         assert len(cmounts) == 1
         assert (
             cmounts["/var/tmp/keepalived.conf"]

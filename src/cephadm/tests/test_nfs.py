@@ -117,7 +117,7 @@ def test_nfsganesha_container_mounts():
             "fred",
             good_nfs_json(),
         )
-        cmounts = nfsg.get_container_mounts("/var/tmp")
+        cmounts = nfsg._get_container_mounts("/var/tmp")
         assert len(cmounts) == 3
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"
@@ -130,7 +130,7 @@ def test_nfsganesha_container_mounts():
             "fred",
             nfs_json(pool=True, files=True, rgw=True),
         )
-        cmounts = nfsg.get_container_mounts("/var/tmp")
+        cmounts = nfsg._get_container_mounts("/var/tmp")
         assert len(cmounts) == 4
         assert cmounts["/var/tmp/config"] == "/etc/ceph/ceph.conf:z"
         assert cmounts["/var/tmp/keyring"] == "/etc/ceph/keyring:z"

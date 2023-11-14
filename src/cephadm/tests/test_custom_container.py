@@ -72,7 +72,10 @@ class TestCustomContainer(unittest.TestCase):
         self.assertEqual(result, ['SECRET=password'])
 
     def test_get_container_mounts(self):
-        result = self.cc.get_container_mounts('/xyz')
+        # TODO: get_container_mounts was made private. test the private func for
+        # now. in the future update to test base class func
+        # customize_container_mounts
+        result = self.cc._get_container_mounts('/xyz')
         self.assertDictEqual(result, {
             '/CONFIG_DIR': '/foo/conf',
             '/xyz/bar/config': '/bar:ro'
