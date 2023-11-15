@@ -1688,3 +1688,98 @@ On any cluster in the realm:
 .. _`Sync Policy Config`: ../multisite-sync-policy
 .. _`Server-Side Encryption`: ../encryption
 .. _`Compression`: ../compression
+
+S3-style subdomains for buckets
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+The Ceph Object Gateway supports S3-style subdomains, which provides
+virtual-host-style-URLs for the buckets. Add wildcard entry with server's IP
+address to your DNS server and configure DNS for this entry.
+
+Add hostname in the Ceph Object Gateway zone group:
+
+#. Get the zone group:
+
+   .. prompt:: bash $
+
+      radosgw-admin zonegroup get --rgw-zonegroup={zonegroup-name}
+
+#. Take back up of the zone group configuration:
+
+   .. prompt:: bash $
+
+      radosgw-admin zonegroup get --rgw-zonegroup={zonegroup-name} > zonegroup.json
+      cp zonegroup.json zonegroup.back.json
+
+#. View the zonegroup.json
+
+      .. prompt:: bash $
+
+         cat zonegroup.json
+
+   ::
+
+      {
+            "id": "90b28698-e7c3-462c-a42d-4aa780d24eda",
+            "name": "us",
+            "api_name": "us",
+            "is_master": "true",
+            "endpoints": [
+               "http:\/\/rgw1:80"
+            ],
+            "hostnames": [],
+            "hostnames_s3website": [],
+            "master_zone": "9248cab2-afe7-43d8-a661-a40bf316665e",
+            "zones": [
+               {
+                     "id": "9248cab2-afe7-43d8-a661-a40bf316665e",
+                     "name": "us-east",
+                     "endpoints": [
+                        "http:\/\/rgw1"
+                     ],
+                     "log_meta": "true",
+                     "log_data": "true",
+                     "bucket_index_max_shards": 0,
+                     "read_only": "false"
+               },
+               {
+                     "id": "d1024e59-7d28-49d1-8222-af101965a939",
+                     "name": "us-west",
+                     "endpoints": [
+                        "http:\/\/rgw2:80"
+                     ],
+                     "log_meta": "false",
+                     "log_data": "true",
+                     "bucket_index_max_shards": 0,
+                     "read_only": "false"
+               }
+            ],
+            "placement_targets": [
+               {
+                     "name": "default-placement",
+                     "tags": []
+               }
+            ],
+            "default_placement": "default-placement",
+            "realm_id": "ae031368-8715-4e27-9a99-0c9468852cfe"
+         }
+
+#. Update the zonegroup.json file with list of required hostname of the server
+
+   .. prompt:: bash $
+
+      "hostnames": ["host01", "host02","host03"],
+
+#. Set the zonegroup configuration with updated hostnames:
+
+   .. prompt:: bash $
+
+      radosgw-admin zonegroup set --rgw-zonegroup={zonegroup-name} --infile zonegroup.json
+
+#. Update the period:
+
+   .. prompt:: bash $
+
+      radosgw-admin period update --commit
+
+#. Restart the Ceph Object Store Gateway.
