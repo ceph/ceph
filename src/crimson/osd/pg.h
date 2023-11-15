@@ -332,6 +332,8 @@ public:
 
   void on_removal(ceph::os::Transaction &t) final;
 
+  void clear_log_entry_maps();
+
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 

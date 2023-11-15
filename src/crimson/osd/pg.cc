@@ -318,6 +318,7 @@ unsigned PG::get_target_pg_log_entries() const
 }
 
 void PG::on_removal(ceph::os::Transaction &t) {
+  clear_log_entry_maps();
   t.register_on_commit(
     new LambdaContext(
       [this](int r) {
@@ -326,6 +327,12 @@ void PG::on_removal(ceph::os::Transaction &t) {
         this, pg_whoami, pgid, float(0.001), get_osdmap_epoch(),
         get_osdmap_epoch(), PeeringState::DeleteSome());
   }));
+}
+
+void PG::clear_log_entry_maps()
+{
+  log_entry_update_waiting_on.clear();
+  log_entry_version.clear();
 }
 
 void PG::on_activate(interval_set<snapid_t> snaps)
@@ -1508,6 +1515,7 @@ seastar::future<> PG::stop()
 
 void PG::on_change(ceph::os::Transaction &t) {
   logger().debug("{} {}:", *this, __func__);
+  clear_log_entry_maps();
   context_registry_on_change();
   obc_loader.notify_on_change(is_primary());
   recovery_backend->on_peering_interval_change(t);
