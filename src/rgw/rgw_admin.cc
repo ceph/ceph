@@ -6697,12 +6697,13 @@ next:
     RGWBucketInfo cur_bucket_info;
     rgw_bucket cur_bucket;
     ret = init_bucket(tenant, bucket_name, string(), cur_bucket_info, cur_bucket);
-    if (ret < 0) {
+    if (ret == -ENOENT) {
+      // no bucket entrypoint
+    } else if (ret < 0) {
       cerr << "ERROR: could not init current bucket info for bucket_name=" << bucket_name << ": " << cpp_strerror(-ret) << std::endl;
       return -ret;
-    }
-
-    if (cur_bucket_info.bucket.bucket_id == bucket_info.bucket.bucket_id && !yes_i_really_mean_it) {
+    } else if (cur_bucket_info.bucket.bucket_id == bucket_info.bucket.bucket_id &&
+               !yes_i_really_mean_it) {
       cerr << "specified bucket instance points to a current bucket instance" << std::endl;
       cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
       return EINVAL;
