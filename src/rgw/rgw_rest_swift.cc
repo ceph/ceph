@@ -953,8 +953,9 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
 
   if (!s->cct->_conf->rgw_swift_custom_header.empty()) {
     string custom_header = s->cct->_conf->rgw_swift_custom_header;
-    if (s->info.env->exists(custom_header.c_str())) {
-      user_data = s->info.env->get(custom_header.c_str());
+    auto data = s->info.env->get_optional(custom_header);
+    if (data) {
+      user_data = *data;
     }
   }
 
