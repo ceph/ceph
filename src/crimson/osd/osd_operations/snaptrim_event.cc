@@ -196,7 +196,7 @@ SnapTrimEvent::start()
   }, [this](std::exception_ptr eptr) -> snap_trim_ertr::future<seastar::stop_iteration> {
     logger().debug("{}: interrupted {}", *this, eptr);
     return crimson::ct_error::eagain::make();
-  }, pg).finally([this, ref] {
+  }, pg).finally([this, ref=std::move(ref)] {
     logger().debug("{}: exit", *this);
     handle.exit();
   });
