@@ -30,6 +30,8 @@ A Ceph Storage Cluster consists of multiple types of daemons:
 - :term:`Ceph Manager`
 - :term:`Ceph Metadata Server`
 
+.. _arch_monitor:
+
 Ceph Monitors maintain the master copy of the cluster map, which they provide
 to Ceph clients. Provisioning multiple monitors within the Ceph cluster ensures
 availability in the event that one of the monitor daemons or its host fails.
