@@ -9195,6 +9195,11 @@ int RGWRados::check_disk_state(const DoutPrefixProvider *dpp,
   std::string loc;
 
   rgw_obj obj(bucket, list_state.key);
+  MultipartMetaFilter multipart_meta_filter;
+  string temp_key;
+  if (multipart_meta_filter.filter(list_state.key.name, temp_key)) {
+    obj.set_in_extra_data(true);
+  }
 
   string oid;
   get_obj_bucket_and_oid_loc(obj, oid, loc);
