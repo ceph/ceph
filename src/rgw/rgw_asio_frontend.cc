@@ -256,10 +256,14 @@ void handle_connection(boost::asio::io_context& context,
         ldout(cct, 1) << "failed to connect client: " << ec.message() << dendl;
         return;
       }
+      const auto& local_endpoint = socket.local_endpoint(ec);
+      if (ec) {
+        ldout(cct, 1) << "failed to connect client: " << ec.message() << dendl;
+        return;
+      }
 
       StreamIO real_client{cct, stream, timeout, parser, yield, buffer,
-                           is_ssl, socket.local_endpoint(),
-                           remote_endpoint};
+                           is_ssl, local_endpoint, remote_endpoint};
 
       auto real_client_io = rgw::io::add_reordering(
                               rgw::io::add_buffering(cct,
