@@ -348,8 +348,9 @@ private:
 
   class C_GatherSub : public ContextInstanceType {
     C_GatherBase *gather;
+    Context* finisher;
   public:
-    C_GatherSub(C_GatherBase *g) : gather(g) {}
+    C_GatherSub(C_GatherBase *g, Context* c) : gather(g), finisher(c) {}
     void complete(int r) override {
       // Cancel any customized complete() functionality
       // from the Context subclass we're templated for,
@@ -358,10 +359,18 @@ private:
       Context::complete(r);
     }
     void finish(int r) override {
+      if (finisher) {
+        finisher->complete(r);
+        finisher = nullptr;
+      }
       gather->sub_finish(this, r);
       gather = 0;
     }
     ~C_GatherSub() override {
+      if (finisher) {
+        finisher->complete(-ECANCELED);
+        finisher = nullptr;
+      }
       if (gather)
 	gather->sub_finish(this, 0);
     }
@@ -392,12 +401,12 @@ public:
     lock.unlock();
     delete_me();
   }
-  ContextType *new_sub() {
+  ContextType *new_sub(Context* c = nullptr) {
     std::lock_guard l{lock};
     ceph_assert(activated == false);
     sub_created_count++;
     sub_existing_count++;
-    ContextType *s = new C_GatherSub(this);
+    ContextType *s = new C_GatherSub(this, c);
 #ifdef DEBUG_GATHER
     waitfor.insert(s);
 #endif
@@ -468,11 +477,11 @@ public:
       delete finisher;
     }
   }
-  ContextType *new_sub() {
+  ContextType *new_sub(Context* c = nullptr) {
     if (!c_gather) {
       c_gather = new GatherType(cct, finisher);
     }
-    return c_gather->new_sub();
+    return c_gather->new_sub(c);
   }
   void activate() {
     if (!c_gather)
