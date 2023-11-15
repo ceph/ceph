@@ -266,15 +266,16 @@ protected:
     }
 
     res = secret_req.process(null_yield);
-    if (res < 0) {
-      ldout(cct, 0) << "ERROR: Request to Vault failed with error " << res << dendl;
-      return res;
-    }
 
+    // map 401 to EACCES instead of EPERM
     if (secret_req.get_http_status() ==
         RGWHTTPTransceiver::HTTP_STATUS_UNAUTHORIZED) {
       ldout(cct, 0) << "ERROR: Vault request failed authorization" << dendl;
       return -EACCES;
+    }
+    if (res < 0) {
+      ldout(cct, 0) << "ERROR: Request to Vault failed with error " << res << dendl;
+      return res;
     }
 
     ldout(cct, 20) << "Request to Vault returned " << res << " and HTTP status "
@@ -803,12 +804,13 @@ static int request_key_from_barbican(CephContext *cct,
   secret_req.append_header("X-Auth-Token", barbican_token);
 
   res = secret_req.process(null_yield);
-  if (res < 0) {
-    return res;
-  }
+  // map 401 to EACCES instead of EPERM
   if (secret_req.get_http_status() ==
       RGWHTTPTransceiver::HTTP_STATUS_UNAUTHORIZED) {
     return -EACCES;
+  }
+  if (res < 0) {
+    return res;
   }
 
   if (secret_req.get_http_status() >=200 &&
