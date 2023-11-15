@@ -19,6 +19,8 @@ namespace {
   }
 }
 
+SET_SUBSYS(osd);
+
 namespace crimson::osd {
 
 template <class T>
@@ -63,16 +65,19 @@ template <class T>
 seastar::future<> PeeringEvent<T>::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
+  using interruptor = typename T::interruptor;
+  LOG_PREFIX(PeeringEvent<T>::with_pg);
   if (!pg) {
-    logger().warn("{}: pg absent, did not create", *this);
+    WARNI("{}: pg absent, did not create", *this);
     on_pg_absent(shard_services);
     that()->get_handle().exit();
     return complete_rctx_no_pg(shard_services);
   }
+  DEBUGI("start");
 
-  using interruptor = typename T::interruptor;
   return interruptor::with_interruption([this, pg, &shard_services] {
-    logger().debug("{}: pg present", *this);
+    LOG_PREFIX(PeeringEvent<T>::with_pg);
+    DEBUGI("{} {}: pg present", interruptor::get_interrupt_cond(), *this);
     return this->template enter_stage<interruptor>(peering_pp(*pg).await_map
     ).then_interruptible([this, pg] {
       return this->template with_blocking_event<
@@ -100,7 +105,8 @@ seastar::future<> PeeringEvent<T>::with_pg(
       return shard_services.send_pg_temp();
     });
   }, [this](std::exception_ptr ep) {
-    logger().debug("{}: interrupted with {}", *this, ep);
+    LOG_PREFIX(PeeringEvent<T>::with_pg);
+    DEBUGI("{}: interrupted with {}", *this, ep);
   }, pg).finally([this] {
     logger().debug("{}: exit", *this);
     that()->get_handle().exit();
@@ -110,14 +116,18 @@ seastar::future<> PeeringEvent<T>::with_pg(
 template <class T>
 void PeeringEvent<T>::on_pg_absent(ShardServices &)
 {
-  logger().debug("{}: pg absent, dropping", *this);
+  using interruptor = typename T::interruptor;
+  LOG_PREFIX(PeeringEvent<T>::on_pg_absent);
+  DEBUGI("{}: pg absent, dropping", *this);
 }
 
 template <class T>
 typename PeeringEvent<T>::template interruptible_future<>
 PeeringEvent<T>::complete_rctx(ShardServices &shard_services, Ref<PG> pg)
 {
-  logger().debug("{}: submitting ctx", *this);
+  using interruptor = typename T::interruptor;
+  LOG_PREFIX(PeeringEvent<T>::complete_rctx);
+  DEBUGI("{}: submitting ctx", *this);
   return shard_services.dispatch_context(
     pg->get_collection_ref(),
     std::move(ctx));
@@ -176,7 +186,8 @@ seastar::future<> RemotePeeringEvent::complete_rctx_no_pg(
 
 seastar::future<> LocalPeeringEvent::start()
 {
-  logger().debug("{}: start", *this);
+  LOG_PREFIX(LocalPeeringEvent::start);
+  DEBUGI("{}: start", *this);
 
   IRef ref = this;
   auto maybe_delay = seastar::now();
@@ -187,7 +198,8 @@ seastar::future<> LocalPeeringEvent::start()
   return maybe_delay.then([this] {
     return with_pg(pg->get_shard_services(), pg);
   }).finally([ref=std::move(ref)] {
-    logger().debug("{}: complete", *ref);
+    LOG_PREFIX(LocalPeeringEvent::start);
+    DEBUGI("{}: complete", *ref);
   });
 }
 
