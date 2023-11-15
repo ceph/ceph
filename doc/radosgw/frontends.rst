@@ -127,6 +127,14 @@ Options
 :Type: Integer
 :Default: ``65000``
 
+``max_header_size``
+
+:Description: The maximum number of header bytes available for a single request.
+
+:Type: Integer
+:Default: ``16384``
+:Maximum: ``65536``
+
 
 Civetweb
 ========
