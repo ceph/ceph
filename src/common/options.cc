@@ -7465,7 +7465,7 @@ std::vector<Option> get_rgw_options() {
 			  "point value between 0 and 1."),
     Option("rgw_max_notify_retries", Option::TYPE_UINT,
 	   Option::LEVEL_ADVANCED)
-    .set_default(3)
+    .set_default(10)
     .add_tag("error recovery")
     .add_service("rgw")
     .set_description("Number of attempts to notify peers before giving up.")

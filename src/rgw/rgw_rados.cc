@@ -1366,13 +1366,7 @@ int RGWRados::init_ctl(const DoutPrefixProvider *dpp)
  */
 int RGWRados::initialize(const DoutPrefixProvider *dpp)
 {
-  int ret;
-
-  inject_notify_timeout_probability =
-    cct->_conf.get_val<double>("rgw_inject_notify_timeout_probability");
-  max_notify_retries = cct->_conf.get_val<uint64_t>("rgw_max_notify_retries");
-
-  ret = init_svc(false, dpp);
+  int ret = init_svc(false, dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
