@@ -8,7 +8,7 @@ tasks:
       # override workunit setting of CEPH_ARGS='--cluster'
       CEPH_ARGS: ''
       MIRROR_POOL_MODE: 'image'
-      MIRROR_IMAGE_MODE: 'snapshot'
+      RBD_MIRROR_MODE: 'snapshot'
       RBD_IMAGE_FEATURES: 'layering'
       RBD_MIRROR_INSTANCES: '4'
       RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
