@@ -8549,9 +8549,16 @@ int RGWRados::cls_obj_set_bucket_tag_timeout(const DoutPrefixProvider *dpp, RGWB
 }
 
 
+// returns 0 if there is an error in calculation
 uint32_t RGWRados::calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 						      uint32_t num_shards)
 {
+  if (num_shards == 0) {
+    // we'll get a floating point exception since we divide by
+    // num_shards
+    return 0;
+  }
+
   // We want to minimize the chances that when num_shards >>
   // num_entries that we return much fewer than num_entries to the
   // client. Given all the overhead of making a cls call to the osd,
@@ -8623,6 +8630,13 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
   }
 
   const uint32_t shard_count = shard_oids.size();
+  if (shard_count == 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+      ": the bucket index shard count appears to be 0, "
+      "which is an illegal value" << dendl;
+    return -ERR_INVALID_BUCKET_STATE;
+  }
+
   uint32_t num_entries_per_shard;
   if (expansion_factor == 0) {
     num_entries_per_shard =
@@ -8635,6 +8649,13 @@ int RGWRados::cls_bucket_list_ordered(const DoutPrefixProvider *dpp,
 		calc_ordered_bucket_list_per_shard(num_entries, shard_count)));
   } else {
     num_entries_per_shard = num_entries;
+  }
+
+  if (num_entries_per_shard == 0) {
+    ldpp_dout(dpp, 0) << "ERROR: " << __func__ <<
+      ": unable to calculate the number of entries to read from each "
+      "bucket index shard" << dendl;
+    return -ERR_INVALID_BUCKET_STATE;
   }
 
   ldpp_dout(dpp, 10) << "RGWRados::" << __func__ <<
