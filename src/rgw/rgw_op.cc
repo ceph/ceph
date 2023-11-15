@@ -450,10 +450,10 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
                            map<string, bufferlist>& bucket_attrs,
                            RGWAccessControlPolicy* acl,
                            string *storage_class,
-			   boost::optional<Policy>& policy,
+                           boost::optional<Policy>& policy,
                            rgw::sal::RGWBucket* bucket,
                            rgw::sal::RGWObject* object,
-			   optional_yield y,
+                           optional_yield y,
                            bool copy_src=false)
 {
   string upload_id;
@@ -3572,6 +3572,9 @@ int RGWPutObj::init_processing(optional_yield y) {
 			      &bucket, y);
     if (ret < 0) {
       ldpp_dout(this, 5) << __func__ << "(): get_bucket() returned ret=" << ret << dendl;
+      if (ret == -ENOENT) {
+        ret = -ERR_NO_SUCH_BUCKET;
+      }
       return ret;
     }
 
@@ -3639,9 +3642,9 @@ int RGWPutObj::verify_permission(optional_yield y)
     cs_object->set_prefetch_data(s->obj_ctx);
 
     /* check source object permissions */
-    if (read_obj_policy(this, store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
-			policy, cs_bucket.get(), cs_object.get(), y, true) < 0) {
-      return -EACCES;
+    if (ret = read_obj_policy(this, store, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
+			policy, cs_bucket.get(), cs_object.get(), y, true); ret < 0) {
+      return ret;
     }
 
     /* admin request overrides permission checks */
