@@ -88,7 +88,7 @@ seastar::future<> LogMissingRequest::with_pg(
     });
   }, [](std::exception_ptr) {
     return seastar::now();
-  }, pg).finally([this, ref] {
+  }, pg).finally([this, ref=std::move(ref)] {
     logger().debug("{}: exit", *this);
     handle.exit();
   });
