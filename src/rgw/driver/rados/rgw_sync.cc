@@ -6,6 +6,7 @@
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
+#include "rgw_meta_sync_common.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
@@ -19,12 +20,6 @@
 #define dout_prefix (*_dout << "meta sync: ")
 
 using namespace std;
-
-static string mdlog_sync_status_oid = "mdlog.sync-status";
-static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
-static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
-
-static const string meta_sync_bids_oid = "meta-sync-bids";
 
 RGWContinuousLeaseCR::~RGWContinuousLeaseCR() {}
 
@@ -341,15 +336,12 @@ void RGWMetaSyncEnv::init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw
 
 string RGWMetaSyncEnv::status_oid()
 {
-  return mdlog_sync_status_oid;
+  return std::string(rgw::sync::meta::status_oid);
 }
 
 string RGWMetaSyncEnv::shard_obj_name(int shard_id)
 {
-  char buf[mdlog_sync_status_shard_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), shard_id);
-
-  return string(buf);
+  return fmt::format("{}.{}", rgw::sync::meta::status_shard_prefix, shard_id);
 }
 
 class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
@@ -877,7 +869,7 @@ public:
       }
       entries_index.reset(new RGWShardedOmapCRManager(sync_env->async_rados, sync_env->store, this, num_shards,
                                                       sync_env->store->svc()->zone->get_zone_params().log_pool,
-                                                      mdlog_sync_full_sync_index_prefix));
+                                                      string{rgw::sync::meta::full_sync_index_prefix}));
       yield {
 	call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
 				       "/admin/metadata", NULL, &sections));
@@ -987,9 +979,7 @@ public:
 
 static string full_sync_index_shard_oid(int shard_id)
 {
-  char buf[mdlog_sync_full_sync_index_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_full_sync_index_prefix.c_str(), shard_id);
-  return string(buf);
+  return fmt::format("{}.{}", rgw::sync::meta::full_sync_index_prefix, shard_id);
 }
 
 class RGWReadRemoteMetadataCR : public RGWCoroutine {
@@ -2282,7 +2272,7 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
 
   // construct and start the bid manager for sync fairness
   const auto& control_pool = store->svc()->zone->get_zone_params().control_pool;
-  auto control_obj = rgw_raw_obj{control_pool, meta_sync_bids_oid};
+  auto control_obj = rgw_raw_obj{control_pool, std::string{rgw::sync::meta::bids_oid}};
 
   auto bid_manager = rgw::sync_fairness::create_rados_bid_manager(
       store, control_obj, num_shards);
