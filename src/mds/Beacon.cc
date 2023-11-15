@@ -481,13 +481,17 @@ void Beacon::notify_health(MDSRank const *mds)
 
   // Report laggy client(s) due to laggy OSDs
   {
+    bool defer_client_eviction =
+    g_conf().get_val<bool>("defer_client_eviction_on_laggy_osds")
+    && mds->objecter->with_osdmap([](const OSDMap &map) {
+      return map.any_osd_laggy(); });
     auto&& laggy_clients = mds->server->get_laggy_clients();
-    if (!laggy_clients.empty()) {
+    if (defer_client_eviction && !laggy_clients.empty()) {
       std::vector<MDSHealthMetric> laggy_clients_metrics;
       for (const auto& laggy_client: laggy_clients) {
         CachedStackStringStream css;
         *css << "Client " << laggy_client << " is laggy; not evicted"
-            << " because some OSD(s) is/are laggy";
+             << " because some OSD(s) is/are laggy";
         MDSHealthMetric m(MDS_HEALTH_CLIENTS_LAGGY, HEALTH_WARN, css->strv());
         laggy_clients_metrics.emplace_back(std::move(m));
       }

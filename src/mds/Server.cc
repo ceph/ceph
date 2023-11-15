@@ -1243,6 +1243,8 @@ void Server::find_idle_sessions()
       kill_session(session, NULL);
     }
   }
+  // clear as there's no use to keep the evicted clients in laggy_clients
+  clear_laggy_clients();
 }
 
 void Server::evict_cap_revoke_non_responders() {
