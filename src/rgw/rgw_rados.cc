@@ -1028,6 +1028,12 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 
 void RGWRados::finalize()
 {
+  /* Before joining any sync threads, drain outstanding requests &
+   * mark the async_processor as going_down() */
+  if (svc.rados) {
+    svc.rados->stop_processor();
+  }
+
   if (run_sync_thread) {
     std::lock_guard l{meta_sync_thread_lock};
     meta_sync_processor_thread->stop();

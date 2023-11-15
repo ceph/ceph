@@ -45,6 +45,13 @@ void RGWSI_RADOS::shutdown()
   }
 }
 
+void RGWSI_RADOS::stop_processor()
+{
+  if (async_processor) {
+    async_processor->stop();
+  }
+}
+
 librados::Rados* RGWSI_RADOS::get_rados_handle()
 {
   return &rados;
