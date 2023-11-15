@@ -522,7 +522,7 @@ static int remove_expired_obj(
   auto obj_key = o.key;
   auto& meta = o.meta;
   int ret;
-  auto& version_id = obj_key.instance;
+  auto version_id = obj_key.instance; // deep copy, so not cleared below
   std::unique_ptr<rgw::sal::Notification> notify;
 
   /* per discussion w/Daniel, Casey,and Eric, we *do need*
@@ -849,7 +849,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 	  target, lc_id,
 	  const_cast<std::string&>(target->get_tenant()),
 	  lc_req_id, null_yield);
-      auto& version_id = obj.key.instance;
+      auto version_id = obj.key.instance;
 
       ret = notify->publish_reserve(this, nullptr);
       if (ret < 0) {
@@ -1356,7 +1356,7 @@ public:
 	bucket, lc_id,
 	const_cast<std::string&>(oc.bucket->get_tenant()),
 	lc_req_id, null_yield);
-    auto& version_id = oc.o.key.instance;
+    auto version_id = oc.o.key.instance;
 
     ret = notify->publish_reserve(oc.dpp, nullptr);
     if (ret < 0) {
