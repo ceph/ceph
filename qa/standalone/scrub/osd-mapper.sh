@@ -77,7 +77,7 @@ function TEST_truncated_sna_record() {
     (( extr_dbg >= 1 )) && rados --format json-pretty -p $poolname listsnaps $objname
 
     # scrub the PG
-    ceph pg $pgid deep_scrub || return 1
+    ceph pg $pgid deep-scrub || return 1
 
     # we aren't just waiting for the scrub to terminate, but also for the
     # logs to be published
@@ -149,7 +149,7 @@ function TEST_truncated_sna_record() {
     local cur_prim=`ceph --format=json-pretty osd map $poolname $objname | jq -r '.up[0]'`
     ceph pg dump pgs
     sleep 2
-    ceph pg $pgid deep_scrub || return 1
+    ceph pg $pgid deep-scrub || return 1
     sleep 5
     ceph pg dump pgs
     (( extr_dbg >= 1 )) && grep -a "ERR" $dir/osd.$cur_prim.log
@@ -161,7 +161,7 @@ function TEST_truncated_sna_record() {
     echo "prev count: $prev_err_cnt"
 
     # scrub again. No errors expected this time
-    ceph pg $pgid deep_scrub || return 1
+    ceph pg $pgid deep-scrub || return 1
     sleep 5
     ceph pg dump pgs
     (( extr_dbg >= 1 )) && grep -a "ERR" $dir/osd.$cur_prim.log

@@ -552,29 +552,33 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
   dout(15) << __func__ << ": done " << registration_state() << dendl;
 }
 
-void PgScrubber::scrub_requested(scrub_level_t scrub_level,
-				 scrub_type_t scrub_type,
-				 requested_scrub_t& req_flags)
+scrub_level_t PgScrubber::scrub_requested(
+    scrub_level_t scrub_level,
+    scrub_type_t scrub_type,
+    requested_scrub_t& req_flags)
 {
-  dout(10) << __func__
-	   << (scrub_level == scrub_level_t::deep ? " deep " : " shallow ")
-	   << (scrub_type == scrub_type_t::do_repair ? " repair-scrub "
-						     : " not-repair ")
-	   << " prev stamp: " << m_scrub_job->get_sched_time()
-	   << " registered? " << registration_state() << dendl;
+  const bool deep_requested = (scrub_level == scrub_level_t::deep) ||
+			      (scrub_type == scrub_type_t::do_repair);
+  dout(10) << fmt::format(
+		  "{}: {} {} scrub requested. Prev stamp: {}. Registered? {}",
+		  __func__,
+		  (scrub_type == scrub_type_t::do_repair ? " repair + "
+							 : " not-repair + "),
+		  (deep_requested ? "deep" : "shallow"),
+		  m_scrub_job->get_sched_time(), registration_state())
+	   << dendl;
 
   req_flags.must_scrub = true;
-  req_flags.must_deep_scrub = (scrub_level == scrub_level_t::deep) ||
-			      (scrub_type == scrub_type_t::do_repair);
+  req_flags.must_deep_scrub = deep_requested;
   req_flags.must_repair = (scrub_type == scrub_type_t::do_repair);
   // User might intervene, so clear this
   req_flags.need_auto = false;
   req_flags.req_scrub = true;
 
-  dout(20) << __func__ << " pg(" << m_pg_id << ") planned:" << req_flags
-	   << dendl;
+  dout(20) << fmt::format("{}: planned scrub:{}", __func__, req_flags) << dendl;
 
   update_scrub_job(req_flags);
+  return deep_requested ? scrub_level_t::deep : scrub_level_t::shallow;
 }
 
 
@@ -601,6 +605,129 @@ bool PgScrubber::reserve_local()
   m_local_osd_resource.reset();
   return false;
 }
+
+Scrub::sched_conf_t PgScrubber::populate_config_params() const
+{
+  const pool_opts_t& pool_conf = m_pg->get_pgpool().info.opts;
+  auto& conf = get_pg_cct()->_conf;  // for brevity
+  Scrub::sched_conf_t configs;
+
+  // deep-scrub optimal interval
+  configs.deep_interval =
+      pool_conf.value_or(pool_opts_t::DEEP_SCRUB_INTERVAL, 0.0);
+  if (configs.deep_interval <= 0.0) {
+    configs.deep_interval = conf->osd_deep_scrub_interval;
+  }
+
+  // shallow-scrub interval
+  configs.shallow_interval =
+      pool_conf.value_or(pool_opts_t::SCRUB_MIN_INTERVAL, 0.0);
+  if (configs.shallow_interval <= 0.0) {
+    configs.shallow_interval = conf->osd_scrub_min_interval;
+  }
+
+  // the max allowed delay between scrubs.
+  // For deep scrubs - there is no equivalent of scrub_max_interval. Per the
+  // documentation, once deep_scrub_interval has passed, we are already
+  // "overdue", at least as far as the "ignore allowed load" window is
+  // concerned.
+
+  configs.max_deep = configs.deep_interval + configs.shallow_interval;
+
+  auto max_shallow = pool_conf.value_or(pool_opts_t::SCRUB_MAX_INTERVAL, 0.0);
+  if (max_shallow <= 0.0) {
+    max_shallow = conf->osd_scrub_max_interval;
+  }
+  if (max_shallow > 0.0) {
+    configs.max_shallow = max_shallow;
+    // otherwise - we're left with the default nullopt
+  }
+
+  // but seems like our tests require: \todo fix!
+  configs.max_deep =
+      std::max(configs.max_shallow.value_or(0.0), configs.deep_interval);
+
+  configs.interval_randomize_ratio = conf->osd_scrub_interval_randomize_ratio;
+  configs.deep_randomize_ratio = conf->osd_deep_scrub_randomize_ratio;
+  configs.mandatory_on_invalid = conf->osd_scrub_invalid_stats;
+
+  dout(15) << fmt::format("updated config:{}", configs) << dendl;
+  return configs;
+}
+
+
+// handling Asok's "scrub" & "deep-scrub" commands
+
+namespace {
+void asok_response_section(
+    ceph::Formatter* f,
+    bool is_periodic,
+    scrub_level_t scrub_level,
+    utime_t stamp = utime_t{})
+{
+  f->open_object_section("result");
+  f->dump_bool("deep", (scrub_level == scrub_level_t::deep));
+  f->dump_bool("must", !is_periodic);
+  f->dump_stream("stamp") << stamp;
+  f->close_section();
+}
+}  // namespace
+
+// when asked to force a "periodic" scrub by faking the timestamps
+void PgScrubber::on_operator_periodic_cmd(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    int64_t offset)
+{
+  const auto cnf = populate_config_params();
+  dout(10) << fmt::format(
+		  "{}: {} (cmd offset:{}) conf:{}", __func__,
+		  (scrub_level == scrub_level_t::deep ? "deep" : "shallow"), offset,
+		  cnf)
+	   << dendl;
+
+  // move the relevant time-stamp backwards - enough to trigger a scrub
+
+  utime_t now_is = ceph_clock_now();
+  utime_t stamp = now_is;
+
+  if (offset > 0) {
+    stamp -= offset;
+  } else {
+    double max_iv =
+	(scrub_level == scrub_level_t::deep)
+	    ? 2 * cnf.max_deep
+	    : (cnf.max_shallow ? *cnf.max_shallow : cnf.shallow_interval);
+    dout(20) << fmt::format(
+		    "{}: stamp:{:s} ms:{}/{}/{}", __func__, stamp,
+		    (cnf.max_shallow ? "ms+" : "ms-"),
+		    (cnf.max_shallow ? *cnf.max_shallow : -999.99),
+		    cnf.shallow_interval)
+	     << dendl;
+    stamp -= max_iv;
+  }
+  stamp -= 100.0;  // for good measure
+
+  dout(10) << fmt::format("{}: stamp:{:s} ", __func__, stamp) << dendl;
+  asok_response_section(f, true, scrub_level, stamp);
+
+  if (scrub_level == scrub_level_t::deep) {
+    m_pg->set_last_deep_scrub_stamp(stamp);
+  }
+  // and in both cases:
+  m_pg->set_last_scrub_stamp(stamp);
+}
+
+// when asked to force a high-priority scrub
+void PgScrubber::on_operator_forced_scrub(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    requested_scrub_t& request_flags)
+{
+  auto deep_req = scrub_requested(scrub_level, scrub_type_t::not_repair, request_flags);
+  asok_response_section(f, false, deep_req);
+}
+
 
 // ----------------------------------------------------------------------------
 

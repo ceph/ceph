@@ -20,7 +20,7 @@ Main Scrubber interfaces:
 └────────────────────────────────┬──────────────────┘
                                  │
                                  │
-                                 │ ownes & uses
+                                 │ owns & uses
                                  │
                                  │
                                  │
@@ -43,7 +43,7 @@ Main Scrubber interfaces:
 │         PrimaryLogScrub                           │       │
 └─────┬───────────────────┬─────────────────────────┘       │
       │                   │                         implements
-      │    ownes & uses   │                                 │
+      │    owns & uses    │                                 │
       │                   │       ┌─────────────────────────▼──────┐
       │                   │       │    <<ScrubMachineListener>>    │
       │                   │       └─────────▲──────────────────────┘
@@ -274,7 +274,7 @@ class PgScrubber : public ScrubPgIF,
 
   void on_pg_activate(const requested_scrub_t& request_flags) final;
 
-  void scrub_requested(
+  scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
       scrub_type_t scrub_type,
       requested_scrub_t& req_flags) final;
@@ -290,6 +290,16 @@ class PgScrubber : public ScrubPgIF,
   void handle_query_state(ceph::Formatter* f) final;
 
   pg_scrubbing_status_t get_schedule() const final;
+
+  void on_operator_periodic_cmd(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    int64_t offset) final;
+
+  void on_operator_forced_scrub(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    requested_scrub_t& request_flags) final;
 
   void dump_scrubber(ceph::Formatter* f,
 		     const requested_scrub_t& request_flags) const final;
@@ -768,6 +778,12 @@ class PgScrubber : public ScrubPgIF,
    * initiate a deep-scrub after the current scrub ended with errors.
    */
   void request_rescrubbing(requested_scrub_t& req_flags);
+
+  /**
+   * combine cluster & pool configuration options into a single struct
+   * of scrub-related parameters.
+   */
+  Scrub::sched_conf_t populate_config_params() const;
 
   /*
    * Select a range of objects to scrub.
