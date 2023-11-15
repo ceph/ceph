@@ -328,7 +328,7 @@ echo '{fdata}' | sudo tee /sys/kernel/debug/dynamic_debug/control
         if self.inst is not None:
             return self.inst
 
-        client_gid = "client%d" % self.get_global_id()
+        client_gid = "client%d" % int(self.get_global_id())
         self.inst = " ".join([client_gid, self._global_addr])
         return self.inst
 
