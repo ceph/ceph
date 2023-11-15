@@ -2633,7 +2633,9 @@ void OSD::asok_command(
       prefix == "mark_unfound_lost" ||
       prefix == "list_unfound" ||
       prefix == "scrub" ||
-      prefix == "deep_scrub"
+      prefix == "deep-scrub" ||
+      prefix == "schedule-scrub" ||      ///< dev/tests only!
+      prefix == "schedule-deep-scrub"    ///< dev/tests only!
     ) {
     string pgidstr;
     pg_t pgid;
@@ -4363,18 +4365,16 @@ void OSD::final_init()
     "");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "pg "			   \
-    "name=pgid,type=CephPgid "	   \
-    "name=cmd,type=CephChoices,strings=scrub " \
-    "name=time,type=CephInt,req=false",
+    "pg "
+    "name=pgid,type=CephPgid "
+    "name=cmd,type=CephChoices,strings=scrub",
     asok_hook,
     "");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "pg "			   \
-    "name=pgid,type=CephPgid "	   \
-    "name=cmd,type=CephChoices,strings=deep_scrub " \
-    "name=time,type=CephInt,req=false",
+    "pg "
+    "name=pgid,type=CephPgid "
+    "name=cmd,type=CephChoices,strings=deep-scrub",
     asok_hook,
     "");
   ceph_assert(r == 0);
@@ -4403,19 +4403,33 @@ void OSD::final_init()
     asok_hook,
     "list unfound objects on this pg, perhaps starting at an offset given in JSON");
   ceph_assert(r == 0);
+  // the operator commands (force a scrub)
   r = admin_socket->register_command(
-    "scrub "				\
-    "name=pgid,type=CephPgid,req=false "	\
-    "name=time,type=CephInt,req=false",
+    "scrub "
+    "name=pgid,type=CephPgid,req=false",
     asok_hook,
-    "Trigger a scheduled scrub ");
+    "Trigger a scrub");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "deep_scrub "			\
-    "name=pgid,type=CephPgid,req=false "	\
+    "deep-scrub "
+    "name=pgid,type=CephPgid,req=false",
+    asok_hook,
+    "Trigger a deep scrub");
+  ceph_assert(r == 0);
+  // debug/test commands (faking the timestamps)
+  r = admin_socket->register_command(
+    "schedule-scrub "
+    "name=pgid,type=CephPgid,req=false "
     "name=time,type=CephInt,req=false",
     asok_hook,
-    "Trigger a scheduled deep scrub ");
+    "Schedule a scrub");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "schedule-deep-scrub "
+    "name=pgid,type=CephPgid,req=false "
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "Schedule a deep scrub");
   ceph_assert(r == 0);
 }
 

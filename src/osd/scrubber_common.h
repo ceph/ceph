@@ -92,7 +92,7 @@ struct PgScrubBeListener {
   // query the PG backend for the on-disk size of an object
   virtual uint64_t logical_to_ondisk_size(uint64_t logical_size) const = 0;
 
-  // used to verify our "cleaness" before scrubbing
+  // used to verify our "cleanliness" before scrubbing
   virtual bool is_waiting_for_unreadable_object() const = 0;
 };
 
@@ -316,6 +316,21 @@ struct ScrubPgIF {
 
   virtual pg_scrubbing_status_t get_schedule() const = 0;
 
+
+  // // perform 'scrub'/'deep_scrub' asok commands
+
+  /// ... by faking the "last scrub" stamps
+  virtual void on_operator_periodic_cmd(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    int64_t offset) = 0;
+
+  /// ... by requesting an "operator initiated" scrub
+  virtual void on_operator_forced_scrub(
+    ceph::Formatter* f,
+    scrub_level_t scrub_level,
+    requested_scrub_t& request_flags) = 0;
+
   virtual void dump_scrubber(ceph::Formatter* f,
 			     const requested_scrub_t& request_flags) const = 0;
 
@@ -402,9 +417,10 @@ struct ScrubPgIF {
 
   virtual void rm_from_osd_scrubbing() = 0;
 
-  virtual void scrub_requested(scrub_level_t scrub_level,
-			       scrub_type_t scrub_type,
-			       requested_scrub_t& req_flags) = 0;
+  virtual scrub_level_t scrub_requested(
+      scrub_level_t scrub_level,
+      scrub_type_t scrub_type,
+      requested_scrub_t& req_flags) = 0;
 
   // --------------- debugging via the asok ------------------------------
 

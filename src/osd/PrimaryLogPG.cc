@@ -998,7 +998,7 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
 // ==========================================================
 
 void PrimaryLogPG::do_command(
-  const string_view& orig_prefix,
+  string_view orig_prefix,
   const cmdmap_t& cmdmap,
   const bufferlist& idata,
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
@@ -1157,39 +1157,26 @@ void PrimaryLogPG::do_command(
     f->close_section();
   }
 
-  else if (prefix == "scrub" ||
-	   prefix == "deep_scrub") {
-    bool deep = (prefix == "deep_scrub");
-    int64_t time = cmd_getval_or<int64_t>(cmdmap, "time", 0);
-
+  else if (prefix == "scrub" || prefix == "deep-scrub") {
     if (is_primary()) {
-      const pg_pool_t *p = &pool.info;
-      double pool_scrub_max_interval = 0;
-      double scrub_max_interval;
-      if (deep) {
-        p->opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_deep_scrub_interval;
-      } else {
-        p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_scrub_max_interval;
-      }
-      // Instead of marking must_scrub force a schedule scrub
-      utime_t stamp = ceph_clock_now();
-      if (time == 0)
-        stamp -= scrub_max_interval;
-      else
-        stamp -=  (float)time;
-      stamp -= 100.0;  // push back last scrub more for good measure
-      if (deep) {
-        set_last_deep_scrub_stamp(stamp);
-      }
-      set_last_scrub_stamp(stamp); // for 'deep' as well, as we use this value to order scrubs
-      f->open_object_section("result");
-      f->dump_bool("deep", deep);
-      f->dump_stream("stamp") << stamp;
-      f->close_section();
+      scrub_level_t deep = (prefix == "deep-scrub") ? scrub_level_t::deep
+						    : scrub_level_t::shallow;
+      m_scrubber->on_operator_forced_scrub(f.get(), deep, m_planned_scrub);
+    } else {
+      ss << "Not primary";
+      ret = -EPERM;
+    }
+    outbl.append(ss.str());
+  }
+
+  // the test/debug commands that schedule a scrub by modifying timestamps
+  else if (prefix == "schedule-scrub" || prefix == "schedule-deep-scrub") {
+    if (is_primary()) {
+      scrub_level_t deep = (prefix == "schedule-deep-scrub")
+			       ? scrub_level_t::deep
+			       : scrub_level_t::shallow;
+      const int64_t offst = cmd_getval_or<int64_t>(cmdmap, "time", 0);
+      m_scrubber->on_operator_periodic_cmd(f.get(), deep, offst);
     } else {
       ss << "Not primary";
       ret = -EPERM;
@@ -1213,6 +1200,7 @@ void PrimaryLogPG::do_command(
     }
     outbl.append(ss.str());
   }
+
   else {
     ret = -ENOSYS;
     ss << "prefix '" << prefix << "' not implemented";
