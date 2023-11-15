@@ -789,6 +789,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	mds->locker->resume_stale_caps(session);
 	mds->sessionmap.touch_session(session);
       }
+      trim_completed_request_list(m->oldest_client_tid, session);
       auto reply = make_message<MClientSession>(CEPH_SESSION_RENEWCAPS, m->get_seq());
       mds->send_message_client(reply, session);
     } else {
@@ -2452,6 +2453,35 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
   reply->set_trace(bl);
 }
 
+// trim completed_request list
+void Server::trim_completed_request_list(ceph_tid_t tid, Session *session)
+{
+  if (tid == UINT64_MAX || !session)
+    return;
+
+  dout(15) << " oldest_client_tid=" << tid << dendl;
+  if (session->trim_completed_requests(tid)) {
+    // Sessions 'completed_requests' was dirtied, mark it to be
+    // potentially flushed at segment expiry.
+    mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
+
+    if (session->get_num_trim_requests_warnings() > 0 &&
+        session->get_num_completed_requests() * 2 < g_conf()->mds_max_completed_requests)
+      session->reset_num_trim_requests_warnings();
+  } else {
+    if (session->get_num_completed_requests() >=
+        (g_conf()->mds_max_completed_requests << session->get_num_trim_requests_warnings())) {
+      session->inc_num_trim_requests_warnings();
+      CachedStackStringStream css;
+      *css << "client." << session->get_client() << " does not advance its oldest_client_tid ("
+         << tid << "), " << session->get_num_completed_requests()
+         << " completed requests recorded in session\n";
+      mds->clog->warn() << css->strv();
+      dout(20) << __func__ << " " << css->strv() << dendl;
+    }
+  }
+}
+
 void Server::handle_client_request(const cref_t<MClientRequest> &req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
@@ -2533,31 +2563,7 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
   }
 
   // trim completed_request list
-  if (req->get_oldest_client_tid() > 0) {
-    dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
-    ceph_assert(session);
-    if (session->trim_completed_requests(req->get_oldest_client_tid())) {
-      // Sessions 'completed_requests' was dirtied, mark it to be
-      // potentially flushed at segment expiry.
-      mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
-
-      if (session->get_num_trim_requests_warnings() > 0 &&
-	  session->get_num_completed_requests() * 2 < g_conf()->mds_max_completed_requests)
-	session->reset_num_trim_requests_warnings();
-    } else {
-      if (session->get_num_completed_requests() >=
-	  (g_conf()->mds_max_completed_requests << session->get_num_trim_requests_warnings())) {
-	session->inc_num_trim_requests_warnings();
-	CachedStackStringStream css;
-	*css << "client." << session->get_client() << " does not advance its oldest_client_tid ("
-	   << req->get_oldest_client_tid() << "), "
-	   << session->get_num_completed_requests()
-	   << " completed requests recorded in session\n";
-	mds->clog->warn() << css->strv();
-	dout(20) << __func__ << " " << css->strv() << dendl;
-      }
-    }
-  }
+  trim_completed_request_list(req->get_oldest_client_tid(), session);
 
   // register + dispatch
   MDRequestRef mdr = mdcache->request_start(req);
