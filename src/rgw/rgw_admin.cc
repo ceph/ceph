@@ -5584,11 +5584,10 @@ int main(int argc, const char **argv)
   else if (opt_cmd == OPT::USER_SUSPEND)
     user_op.set_suspension(true);
 
-  if (!placement_id.empty() ||
-      (opt_storage_class && !opt_storage_class->empty())) {
+  if (!placement_id.empty()) {
     rgw_placement_rule target_rule;
     target_rule.name = placement_id;
-    target_rule.storage_class = *opt_storage_class;
+    target_rule.storage_class = opt_storage_class.value_or("");
     if (!store->svc()->zone->get_zone_params().valid_placement(target_rule)) {
       cerr << "NOTICE: invalid dest placement: " << target_rule.to_str() << std::endl;
       return EINVAL;
