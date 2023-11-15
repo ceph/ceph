@@ -39,6 +39,12 @@ std::unique_ptr<Object> D3NFilterDriver::get_object(const rgw_obj_key& k)
   return std::make_unique<D3NFilterObject>(std::move(obj), this);
 }
 
+std::unique_ptr<Bucket> D3NFilterDriver::get_bucket(const RGWBucketInfo& i)
+{
+  std::unique_ptr<Bucket> bp = next->get_bucket(i);
+  return std::make_unique<D3NFilterBucket>(std::move(bp), this);
+}
+
 std::unique_ptr<Object> D3NFilterBucket::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> obj = next->get_object(k);
@@ -62,7 +68,26 @@ int D3NFilterObject::D3NFilterReadOp::prepare(optional_yield y, const DoutPrefix
   next->params.if_nomatch = params.if_nomatch;
   next->params.lastmod = params.lastmod;
 
-  return next->prepare(y, dpp);
+  auto ret = next->prepare(y, dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (! this->source->have_instance()) {
+    RGWObjState* state = nullptr;
+    if (this->source->get_obj_state(dpp, &state, y) == 0) {
+      auto it = state->attrset.find(RGW_ATTR_ID_TAG);
+      if (it != state->attrset.end()) {
+        bufferlist bl = it->second;
+        this->source->set_object_version(bl.c_str());
+        ldpp_dout(dpp, 20) << __func__ << "id tag version is: " << this->source->get_object_version() << dendl;
+      } else {
+        ldpp_dout(dpp, 20) << __func__ << "Failed to find id tag" << dendl;
+      }
+    }
+  }
+
+  return 0;
 }
 
 void D3NFilterObject::D3NFilterReadOp::cancel() {
@@ -112,9 +137,17 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
 			RGWGetDataCB* cb, optional_yield y)
 {
   const uint64_t window_size = g_conf()->rgw_get_obj_window_size;
-  std::string oid = source->get_key().get_oid();
-  
-  ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << "oid: " << oid << " ofs: " << ofs << " end: " << end << dendl;
+  std::string version = source->get_object_version();
+  std::string prefix;
+  if (version.empty()) {
+    prefix = source->get_bucket()->get_name() + "_" + source->get_key().get_oid();
+  } else {
+    prefix = source->get_bucket()->get_name() + "_" + version + "_" + source->get_key().get_oid();
+  }
+
+  this->cb->set_prefix(prefix);
+  ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << "prefix: " << prefix << dendl;
+  ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << "oid: " << source->get_key().get_oid() << " ofs: " << ofs << " end: " << end << dendl;
   
   this->client_cb = cb;
   this->cb->set_client_cb(cb);
@@ -150,7 +183,7 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       id += diff_ofs;
       read_ofs = diff_ofs;
     }
-    std::string oid_in_cache = source->get_bucket()->get_marker() + "_" + oid + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(part_len);
+    std::string oid_in_cache = prefix + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(part_len);
     rgw_raw_obj r_obj;
     r_obj.oid = oid_in_cache;
     ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
@@ -166,7 +199,7 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
       }
     } else {
       //for ranged requests, for last part, the whole part might exist in the cache
-      oid_in_cache = source->get_bucket()->get_marker() + "_" + oid + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(obj_max_req_size);
+      oid_in_cache = prefix + "_" + std::to_string(adjusted_start_ofs) + "_" + std::to_string(obj_max_req_size);
       r_obj.oid = oid_in_cache;
       ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << __func__ << "(): READ FROM CACHE: oid=" << oid_in_cache << " length to read is: " << len_to_read << " part num: " << start_part_num << " read_ofs: " << read_ofs << " part len: " << part_len << dendl;
       if ((part_len != obj_max_req_size) && filter->get_d3n_cache()->get(oid_in_cache, obj_max_req_size)) {
@@ -243,10 +276,10 @@ int D3NFilterObject::D3NFilterReadOp::D3NFilterGetCB::handle_data(bufferlist& bl
   if (write_to_cache) {
     const std::lock_guard l(d3n_get_data.d3n_lock);
     if (bl.length() > 0 && last_part) { // if bl = bl_rem has data and this is the last part, write it to cache
-      std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
+      std::string oid = this->prefix + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
       filter->get_d3n_cache()->put(bl, bl.length(), oid);
     } else if (bl.length() == rgw_get_obj_max_req_size && bl_rem.length() == 0) { // if bl is the same size as rgw_get_obj_max_req_size, write it to cache
-        std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
+        std::string oid = this->prefix + "_" + std::to_string(ofs) + "_" + std::to_string(bl_len);
         ofs += bl_len;
         filter->get_d3n_cache()->put(bl, bl.length(), oid);
     } else { //copy data from incoming bl to bl_rem till it is rgw_get_obj_max_req_size, and then write it to cache
@@ -256,7 +289,7 @@ int D3NFilterObject::D3NFilterReadOp::D3NFilterGetCB::handle_data(bufferlist& bl
       bl.splice(0, len_to_copy, &bl_copy);
       bl_rem.claim_append(bl_copy);
       if (bl_rem.length() == g_conf()->rgw_get_obj_max_req_size) {
-        std::string oid = this->oid + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
+        std::string oid = this->prefix + "_" + std::to_string(ofs) + "_" + std::to_string(bl_rem.length());
         ofs += bl_rem.length();
         filter->get_d3n_cache()->put(bl_rem, bl_rem.length(), oid);
         bl_rem.clear();

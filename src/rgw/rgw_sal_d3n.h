@@ -34,6 +34,7 @@ class D3NFilterDriver : public FilterDriver {
 
     virtual int initialize(CephContext *cct, const DoutPrefixProvider *dpp) override;
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
+    virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
     D3nDataCache* get_d3n_cache() { return d3n_cache.get(); }
     Driver* get_next() { return next;}
 };
@@ -44,7 +45,7 @@ private:
 public:
   virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
 
-  D3NFilterBucket(D3NFilterDriver *filter, std::unique_ptr<Bucket> b)
+  D3NFilterBucket(std::unique_ptr<Bucket> b, D3NFilterDriver *filter)
       : FilterBucket(std::move(b)),
 	      filter(filter) {}
 };
@@ -52,21 +53,23 @@ public:
 class D3NFilterObject : public FilterObject {
 private:
   D3NFilterDriver* filter;
+  std::string version;
 
 public:
   struct D3NFilterReadOp : FilterReadOp {
 
     class D3NFilterGetCB: public RGWGetDataCB {
     public:
-      D3NFilterGetCB(D3NFilterDriver* filter, std::string& oid) : filter(filter), oid(oid) {};
+      D3NFilterGetCB(D3NFilterDriver* filter) : filter(filter) {};
       int handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len) override;
       void set_client_cb(RGWGetDataCB* client_cb) { this->client_cb = client_cb;}
       void set_ofs(uint64_t ofs) { this->ofs = ofs; }
+      void set_prefix(const std::string& prefix) { this->prefix = prefix; }
       int flush_last_part();
       void bypass_cache_write() { this->write_to_cache = false; }
     private:
       D3NFilterDriver* filter;
-      std::string oid;
+      std::string prefix;
       RGWGetDataCB* client_cb;
       uint64_t ofs = 0, len = 0;
       bufferlist bl_rem;
@@ -81,8 +84,7 @@ public:
 
     D3NFilterReadOp(std::unique_ptr<ReadOp> next, D3NFilterObject* source, D3NFilterDriver* filter) : FilterReadOp(std::move(next)),
 										 source(source),
-                     filter(filter) { std::string oid = source->get_bucket()->get_marker() + "_" + source->get_key().get_oid();
-                                      cb = std::make_unique<D3NFilterGetCB>(filter, oid); }
+                     filter(filter) { cb = std::make_unique<D3NFilterGetCB>(filter); }
     virtual ~D3NFilterReadOp() = default;
     virtual int iterate(const DoutPrefixProvider* dpp, int64_t ofs, int64_t end,
 			RGWGetDataCB* cb, optional_yield y) override;
@@ -104,5 +106,7 @@ public:
   D3NFilterObject(std::unique_ptr<Object> next, Bucket* bucket, D3NFilterDriver* filter) : FilterObject(std::move(next), bucket),
 			                                                              filter(filter) {}
   virtual std::unique_ptr<Object::ReadOp> get_read_op() override;
+  void set_object_version(const std::string& version) { this->version = version; }
+  const std::string get_object_version() { return this->version; }
 };
 } } // namespace rgw::sal
