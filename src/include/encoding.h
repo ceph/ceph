@@ -305,7 +305,9 @@ inline void decode_nohead(int len, bufferlist& s, bufferlist::const_iterator& p)
   p.copy(len, s);
 }
 
-// Time, since the templates are defined in std::chrono
+// Time, since the templates are defined in std::chrono. The default encodings
+// for time_point and duration are backward-compatible with utime_t, but
+// truncate seconds to 32 bits so are not guaranteed to round-trip.
 
 template<typename Clock, typename Duration,
          typename std::enable_if_t<converts_to_timespec_v<Clock>>* = nullptr>
@@ -354,6 +356,40 @@ void decode(std::chrono::duration<Rep, Period>& d,
   decode(s, p);
   decode(ns, p);
   d = std::chrono::seconds(s) + std::chrono::nanoseconds(ns);
+}
+
+// Provide encodings for chrono::time_point and duration that use
+// the underlying representation so are guaranteed to round-trip.
+
+template <typename Rep, typename Period,
+          typename std::enable_if_t<std::is_integral_v<Rep>>* = nullptr>
+void round_trip_encode(const std::chrono::duration<Rep, Period>& d,
+                       ceph::bufferlist &bl) {
+  const Rep r = d.count();
+  encode(r, bl);
+}
+
+template <typename Rep, typename Period,
+          typename std::enable_if_t<std::is_integral_v<Rep>>* = nullptr>
+void round_trip_decode(std::chrono::duration<Rep, Period>& d,
+                       bufferlist::const_iterator& p) {
+  Rep r;
+  decode(r, p);
+  d = std::chrono::duration<Rep, Period>(r);
+}
+
+template <typename Clock, typename Duration>
+void round_trip_encode(const std::chrono::time_point<Clock, Duration>& t,
+                       ceph::bufferlist &bl) {
+  round_trip_encode(t.time_since_epoch(), bl);
+}
+
+template <typename Clock, typename Duration>
+void round_trip_decode(std::chrono::time_point<Clock, Duration>& t,
+                       bufferlist::const_iterator& p) {
+  Duration dur;
+  round_trip_decode(dur, p);
+  t = std::chrono::time_point<Clock, Duration>(dur);
 }
 
 // -----------------------------
