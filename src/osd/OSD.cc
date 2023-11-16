@@ -1444,11 +1444,6 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   return m;
 }
 
-void OSDService::send_map(MOSDMap *m, Connection *con)
-{
-  con->send_message(m);
-}
-
 void OSDService::send_incremental_map(epoch_t since, Connection *con,
                                       const OSDMapRef& osdmap)
 {
