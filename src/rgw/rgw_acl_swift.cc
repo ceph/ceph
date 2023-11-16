@@ -194,10 +194,8 @@ int create_container_policy(const DoutPrefixProvider *dpp,
   return 0;
 }
 
-} // namespace rgw::swift
-
-void RGWAccessControlPolicy_SWIFT::filter_merge(uint32_t rw_mask,
-                                                RGWAccessControlPolicy_SWIFT *old)
+void merge_policy(uint32_t rw_mask, const RGWAccessControlPolicy& src,
+                  RGWAccessControlPolicy& dest)
 {
   /* rw_mask&SWIFT_PERM_READ => setting read acl,
    * rw_mask&SWIFT_PERM_WRITE => setting write acl
@@ -207,15 +205,13 @@ void RGWAccessControlPolicy_SWIFT::filter_merge(uint32_t rw_mask,
     return;
   }
   rw_mask ^= (SWIFT_PERM_READ|SWIFT_PERM_WRITE);
-  for (auto &iter: old->acl.get_grant_map()) {
-    ACLGrant& grant = iter.second;
+  for (const auto &iter: src.get_acl().get_grant_map()) {
+    const ACLGrant& grant = iter.second;
     uint32_t perm = grant.get_permission().get_permissions();
     rgw_user id;
-    string url_spec;
     if (!grant.get_id(id)) {
       if (grant.get_group() != ACL_GROUP_ALL_USERS) {
-        url_spec = grant.get_referer();
-        if (url_spec.empty()) {
+        if (string url_spec = grant.get_referer(); url_spec.empty()) {
           continue;
         }
         if (perm == 0) {
@@ -225,10 +221,12 @@ void RGWAccessControlPolicy_SWIFT::filter_merge(uint32_t rw_mask,
       }
     }
     if (perm & rw_mask) {
-      acl.add_grant(grant);
+      dest.get_acl().add_grant(grant);
     }
   }
 }
+
+} // namespace rgw::swift
 
 void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
 {

@@ -27,12 +27,16 @@ int create_container_policy(const DoutPrefixProvider *dpp,
                             uint32_t& rw_mask,
                             RGWAccessControlPolicy& policy);
 
+/// Copy grants matching the permission mask (SWIFT_PERM_READ/WRITE) from
+/// one policy to another.
+void merge_policy(uint32_t rw_mask, const RGWAccessControlPolicy& src,
+                  RGWAccessControlPolicy& dest);
+
 } // namespace rgw::swift
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
 public:
-  void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
   void to_str(std::string& read, std::string& write);
 };
 
