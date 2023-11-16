@@ -501,7 +501,7 @@ public:
                   nullptr);
       cache->_trim();
     }
-    void _finish_write(BufferCacheShard* cache, uint32_t offset, uint64_t seq);
+    void _finish_write(BufferCacheShard* cache, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, uint32_t length, ceph::buffer::list&& bl) {
       std::lock_guard l(cache->lock);
       uint16_t cache_private = _discard(cache, offset, bl.length());
@@ -521,7 +521,7 @@ public:
       discard(cache, offset, (uint32_t)-1 - offset);
     }
 
-    bool _dup_writing(TransContext* txc, Collection* collection, OnodeRef onode, uint64_t offset, uint64_t length);
+    void _dup_writing(TransContext* txc, Collection* collection, OnodeRef onode, uint32_t offset, uint32_t length);
     void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
     void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
@@ -1908,7 +1908,7 @@ private:
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    std::set<std::tuple<Onode*, uint32_t, uint64_t>> buffers_written; ///< update these on io completion (buffer -> offset, seq pair)
+    std::set<std::tuple<Onode*, uint64_t>> buffers_written; ///< update these on io completion (buffer -> offset, seq pair)
 
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions
@@ -2906,7 +2906,7 @@ private:
     unsigned flags) {
     onode->bc.write(onode->c->cache, txc->seq, offset, std::move(bl),
 			     flags);
-    txc->buffers_written.insert({onode.get(), offset, txc->seq});
+    txc->buffers_written.insert({onode.get(), txc->seq});
   }
 
   void _buffer_cache_write(
@@ -2918,7 +2918,7 @@ private:
     unsigned flags) {
     onode->bc.write(onode->c->cache, txc->seq, offset, bl,
 			     flags);
-    txc->buffers_written.insert({onode.get(), offset, txc->seq});
+    txc->buffers_written.insert({onode.get(), txc->seq});
   }
 
   int _collection_list(

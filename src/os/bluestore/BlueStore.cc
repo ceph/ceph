@@ -1664,70 +1664,6 @@ void BlueStore::BufferSpace::_clear(BufferCacheShard* cache)
   writing.clear();
 }
 
-bool BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collection, OnodeRef onode, uint64_t offset, uint64_t length)
-{
-  bool copied = false;
-  uint64_t end = offset + length;
-  BufferSpace &to = onode->bc;
-  BufferCacheShard *cache = collection->cache;
-  ldout(cache->cct, 20) << __func__ << " offset=" << std::hex << offset << " length=" << std::hex << length << dendl; 
-  if (!writing.empty()) {
-    copied = true;
-    for (auto it = writing.begin(); it != writing.end(); ++it) {
-      Buffer& b = *it;
-      // If no overlap is found between buffer and range to dup then continue
-      if (std::max((uint64_t)b.end(), offset+length) - std::min((uint64_t)b.offset, offset) > length + (uint64_t)b.length) {
-        continue;
-      }
-
-      bufferlist buffer_to_copy;
-      uint32_t offset_to_copy = 0;
-      if (b.offset >= offset) {
-        if (b.end() > end) {
-          // take head
-          uint64_t tail = b.end() - end;
-          auto new_length = b.data.length() - tail;
-          buffer_to_copy.substr_of(b.data, 0, new_length);
-          buffer_to_copy = b.offset;
-        } else {
-          // take whole buffer
-          buffer_to_copy = b.data;
-          buffer_to_copy = b.offset;
-        }
-      } else {
-        if (b.end() > end) {
-          uint64_t front = offset - b.offset;
-          uint64_t tail = b.end() - end;
-          // take middle
-          uint64_t new_length = b.data.length() - front - tail;
-          buffer_to_copy.substr_of(b.data, front, new_length);
-          offset_to_copy = b.offset + front;
-        } else {
-          // take tail
-          uint64_t front = offset - b.offset;
-          uint64_t new_length = b.data.length() - front;
-          buffer_to_copy.substr_of(b.data, front, new_length);
-          offset_to_copy = b.offset + front;
-        }
-      }
-      Buffer to_b(&onode->bc, b.state, b.seq, offset_to_copy, 
-                               std::move(buffer_to_copy), b.flags);
-      ldout(cache->cct, 20) << __func__ << " offset=" << std::hex << offset
-                            << " length=" << std::hex << length << " buffer=" << to_b << dendl;
-      ceph_assert(to_b.is_writing());
-      if (collection->is_deferred_seq(to_b.seq)) {
-        collection->add_deferred_dependency(to_b.seq, onode);
-      } else {
-      txc->buffers_written.insert({onode.get(), b.offset, b.seq});
-    }
-      to._discard(collection->cache, to_b.offset, to_b.length);
-      to._add_buffer(collection->cache, &to, std::move(to_b), to_b.cache_private, 0, nullptr);
-    }
-  }
-  return copied;
-}
-
-
 int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, uint32_t length)
 {
   // note: we already hold cache->lock
@@ -1883,7 +1819,7 @@ void BlueStore::BufferSpace::read(
   cache->logger->inc(l_bluestore_buffer_miss_bytes, miss_bytes);
 }
 
-void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache, uint32_t offset, uint64_t seq)
+void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache, uint64_t seq)
 {
   std::lock_guard l(cache->lock);
   ldout(cache->cct, 20) << __func__ << " seq=" << seq << dendl;
@@ -1915,6 +1851,69 @@ void BlueStore::BufferSpace::_finish_write(BufferCacheShard* cache, uint32_t off
   }
   cache->_trim();
   cache->_audit("finish_write end");
+}
+
+/*
+  copy Buffers that are in writing queue
+*/
+void BlueStore::BufferSpace::_dup_writing(TransContext* txc, Collection* collection, OnodeRef onode, uint32_t offset, uint32_t length)
+{
+  uint64_t end = offset + length;
+  BufferSpace &to = onode->bc;
+  BufferCacheShard *cache = collection->cache;
+  ldout(cache->cct, 20) << __func__ << " offset=" << std::hex << offset << " length=" << std::hex << length << dendl; 
+  if (!writing.empty()) {
+    for (auto it = writing.begin(); it != writing.end(); ++it) {
+      Buffer& b = *it;
+      // If no overlap is found between buffer and range to dup then continue
+      if (std::max(b.end(), offset+length) - std::min(b.offset, offset) > length + b.length) {
+        continue;
+      }
+
+      bufferlist buffer_to_copy;
+      uint32_t offset_to_copy = 0;
+      if (b.offset >= offset) {
+        if (b.end() > end) {
+          // take head
+          uint64_t tail = b.end() - end;
+          auto new_length = b.data.length() - tail;
+          buffer_to_copy.substr_of(b.data, 0, new_length);
+          buffer_to_copy = b.offset;
+        } else {
+          // take whole buffer
+          buffer_to_copy = b.data;
+          buffer_to_copy = b.offset;
+        }
+      } else {
+        if (b.end() > end) {
+          uint64_t front = offset - b.offset;
+          uint64_t tail = b.end() - end;
+          // take middle
+          uint64_t new_length = b.data.length() - front - tail;
+          buffer_to_copy.substr_of(b.data, front, new_length);
+          offset_to_copy = b.offset + front;
+        } else {
+          // take tail
+          uint64_t front = offset - b.offset;
+          uint64_t new_length = b.data.length() - front;
+          buffer_to_copy.substr_of(b.data, front, new_length);
+          offset_to_copy = b.offset + front;
+        }
+      }
+      Buffer to_b(&onode->bc, b.state, b.seq, offset_to_copy, 
+                               std::move(buffer_to_copy), b.flags);
+      ldout(cache->cct, 20) << __func__ << " offset=" << std::hex << offset
+                            << " length=" << std::hex << length << " buffer=" << to_b << dendl;
+      ceph_assert(to_b.is_writing());
+      if (collection->is_deferred_seq(to_b.seq)) {
+        collection->add_deferred_dependency(to_b.seq, onode);
+      } else {
+      txc->buffers_written.insert({onode.get(), b.seq});
+    }
+      to._discard(collection->cache, to_b.offset, to_b.length);
+      to._add_buffer(collection->cache, &to, std::move(to_b), to_b.cache_private, 0, nullptr);
+    }
+  }
 }
 
 void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStore::BufferSpace &r)
@@ -13807,17 +13806,17 @@ void BlueStore::_txc_finish(TransContext *txc)
   dout(20) << __func__ << " " << txc << " onodes " << txc->onodes << dendl;
   ceph_assert(txc->get_state() == TransContext::STATE_FINISHING);
 
-  for (auto &[onode, offset, seq] : txc->buffers_written) {
+  for (auto &[onode, seq] : txc->buffers_written) {
     if (txc->deferred_txn && txc->deferred_txn->txc_seq == seq) {
       auto it = onode->c->deferred_seq_dependencies.find(seq);
       if (it != onode->c->deferred_seq_dependencies.end()) {
         for (auto &dependent_onode : it->second) {
-          dependent_onode->bc._finish_write(onode->c->cache, offset, seq);
+          dependent_onode->bc._finish_write(dependent_onode->c->cache, seq);
         }
         onode->c->deferred_seq_dependencies.erase(it);
       }
     }
-    onode->bc._finish_write(onode->c->cache, offset, seq);
+    onode->bc._finish_write(onode->c->cache, seq);
   }
   txc->buffers_written.clear();
 
@@ -18179,7 +18178,7 @@ void BlueStore::_shutdown_cache()
     // Clear deferred write buffers before clearing up Onodes
     for (auto &[seq, onodes] : p.second->deferred_seq_dependencies) {
       for (auto &onode : onodes) {
-        onode->bc._finish_write(onode->c->cache, 0, seq);
+        onode->bc._finish_write(onode->c->cache, seq);
       }
     }
     p.second->deferred_seq_dependencies.clear();
