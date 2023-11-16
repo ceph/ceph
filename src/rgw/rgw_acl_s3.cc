@@ -359,46 +359,48 @@ static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::Driver* dri
   return 0;
 }
 
-int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const string& canned_acl)
+static int create_canned(const ACLOwner& owner, const ACLOwner& bucket_owner,
+                         const string& canned_acl, RGWAccessControlList& acl)
 {
-  acl_user_map.clear();
-  grant_map.clear();
-
-  ACLGrant owner_grant;
-
   const rgw_user& bid = bucket_owner.id;
   const std::string& bname = bucket_owner.display_name;
 
   /* owner gets full control */
-  owner_grant.set_canon(owner.id, owner.display_name, RGW_PERM_FULL_CONTROL);
-  add_grant(owner_grant);
+  {
+    ACLGrant grant;
+    grant.set_canon(owner.id, owner.display_name, RGW_PERM_FULL_CONTROL);
+    acl.add_grant(grant);
+  }
 
   if (canned_acl.size() == 0 || canned_acl.compare("private") == 0) {
     return 0;
   }
 
-  ACLGrant bucket_owner_grant;
-  ACLGrant group_grant;
-  if (canned_acl.compare("public-read") == 0) {
-    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
-    add_grant(group_grant);
-  } else if (canned_acl.compare("public-read-write") == 0) {
-    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
-    add_grant(group_grant);
-    group_grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_WRITE);
-    add_grant(group_grant);
-  } else if (canned_acl.compare("authenticated-read") == 0) {
-    group_grant.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
-    add_grant(group_grant);
-  } else if (canned_acl.compare("bucket-owner-read") == 0) {
-    bucket_owner_grant.set_canon(bid, bname, RGW_PERM_READ);
+  if (canned_acl == "public-read") {
+    ACLGrant grant;
+    grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
+    acl.add_grant(grant);
+  } else if (canned_acl == "public-read-write") {
+    ACLGrant grant;
+    grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_READ);
+    acl.add_grant(grant);
+    grant.set_group(ACL_GROUP_ALL_USERS, RGW_PERM_WRITE);
+    acl.add_grant(grant);
+  } else if (canned_acl == "authenticated-read") {
+    ACLGrant grant;
+    grant.set_group(ACL_GROUP_AUTHENTICATED_USERS, RGW_PERM_READ);
+    acl.add_grant(grant);
+  } else if (canned_acl == "bucket-owner-read") {
     if (bid != owner.id) {
-      add_grant(bucket_owner_grant);
+      ACLGrant grant;
+      grant.set_canon(bid, bname, RGW_PERM_READ);
+      acl.add_grant(grant);
     }
-  } else if (canned_acl.compare("bucket-owner-full-control") == 0) {
-    bucket_owner_grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
+  } else if (canned_acl == "bucket-owner-full-control") {
     if (bid != owner.id) {
-      add_grant(bucket_owner_grant);
+      ACLGrant grant;
+      grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
+      acl.add_grant(grant);
     }
   } else {
     return -EINVAL;
@@ -626,3 +628,20 @@ ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
   return ACL_GROUP_NONE;
 }
 
+
+namespace rgw::s3 {
+
+int create_canned_acl(const ACLOwner& owner,
+                      const ACLOwner& bucket_owner,
+                      const std::string& canned_acl,
+                      RGWAccessControlPolicy& policy)
+{
+  if (owner.id == rgw_user("anonymous")) {
+    policy.set_owner(bucket_owner);
+  } else {
+    policy.set_owner(owner);
+  }
+  return create_canned(owner, bucket_owner, canned_acl, policy.get_acl());
+}
+
+} // namespace rgw::s3
