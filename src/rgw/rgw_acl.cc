@@ -70,38 +70,38 @@ bool operator!=(const RGWAccessControlPolicy& lhs,
   return !(lhs == rhs);
 }
 
-void RGWAccessControlList::_add_grant(ACLGrant *grant)
+void RGWAccessControlList::register_grant(const ACLGrant& grant)
 {
-  ACLPermission& perm = grant->get_permission();
-  ACLGranteeType& type = grant->get_type();
+  ACLPermission perm = grant.get_permission();
+  ACLGranteeType type = grant.get_type();
   switch (type.get_type()) {
   case ACL_TYPE_REFERER:
-    referer_list.emplace_back(grant->get_referer(), perm.get_permissions());
+    referer_list.emplace_back(grant.get_referer(), perm.get_permissions());
 
     /* We're specially handling the Swift's .r:* as the S3 API has a similar
      * concept and thus we can have a small portion of compatibility here. */
-     if (grant->get_referer() == RGW_REFERER_WILDCARD) {
+     if (grant.get_referer() == RGW_REFERER_WILDCARD) {
        acl_group_map[ACL_GROUP_ALL_USERS] |= perm.get_permissions();
      }
     break;
   case ACL_TYPE_GROUP:
-    acl_group_map[grant->get_group()] |= perm.get_permissions();
+    acl_group_map[grant.get_group()] |= perm.get_permissions();
     break;
   default:
     {
       rgw_user id;
-      grant->get_id(id);
+      grant.get_id(id);
       acl_user_map[id.to_str()] |= perm.get_permissions();
     }
   }
 }
 
-void RGWAccessControlList::add_grant(ACLGrant *grant)
+void RGWAccessControlList::add_grant(const ACLGrant& grant)
 {
   rgw_user id;
-  grant->get_id(id); // not that this will return false for groups, but that's ok, we won't search groups
-  grant_map.insert(pair<string, ACLGrant>(id.to_str(), *grant));
-  _add_grant(grant);
+  grant.get_id(id); // note that this will return false for groups, but that's ok, we won't search groups
+  grant_map.emplace(id.to_str(), grant);
+  register_grant(grant);
 }
 
 void RGWAccessControlList::remove_canon_user_grant(rgw_user& user_id)
@@ -323,14 +323,10 @@ void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& 
 {
   RGWAccessControlList *acl = new RGWAccessControlList;
 
-  list<ACLGrant *> glist;
-  list<ACLGrant *>::iterator iter;
-
-  ACLGrant::generate_test_instances(glist);
-  for (iter = glist.begin(); iter != glist.end(); ++iter) {
-    ACLGrant *grant = *iter;
-    acl->add_grant(grant);
-
+  list<ACLGrant *> grants;
+  ACLGrant::generate_test_instances(grants);
+  for (ACLGrant* grant : grants) {
+    acl->add_grant(*grant);
     delete grant;
   }
   o.push_back(acl);

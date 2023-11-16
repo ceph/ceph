@@ -168,7 +168,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
     }
 
     if (grant) {
-      acl.add_grant(&*grant);
+      acl.add_grant(*grant);
     } else {
       return -EINVAL;
     }
@@ -257,7 +257,7 @@ void RGWAccessControlPolicy_SWIFT::filter_merge(uint32_t rw_mask,
       }
     }
     if (perm & rw_mask) {
-      acl.add_grant(&grant);
+      acl.add_grant(grant);
     }
   }
 }
@@ -313,7 +313,7 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
 
     if (uid_is_public(uid)) {
       grant.set_group(ACL_GROUP_ALL_USERS, perm);
-      acl.add_grant(&grant);
+      acl.add_grant(grant);
     } else  {
       std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(uid));
 
@@ -321,10 +321,10 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
         ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
         /* skipping silently */
         grant.set_canon(user->get_id(), std::string(), perm);
-        acl.add_grant(&grant);
+        acl.add_grant(grant);
       } else {
         grant.set_canon(user->get_id(), user->get_display_name(), perm);
-        acl.add_grant(&grant);
+        acl.add_grant(grant);
       }
     }
   }
