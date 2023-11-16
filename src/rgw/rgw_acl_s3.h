@@ -55,7 +55,6 @@ public:
   bool xml_end(const char *el) override;
   void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
 
-  int create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const std::string& canned_acl);
   int create_from_grants(std::list<ACLGrant>& grants);
 };
 
@@ -80,16 +79,6 @@ public:
   int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, ACLOwner *owner,
 	      RGWAccessControlPolicy& dest, std::string &err_msg);
 
-  virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const std::string& canned_acl) {
-    RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-    if (_owner.id == rgw_user("anonymous")) {
-      owner = bucket_owner;
-    } else {
-      owner = _owner;
-    }
-    int ret = _acl.create_canned(owner, bucket_owner, canned_acl);
-    return ret;
-  }
   int create_from_headers(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 			  const RGWEnv *env, ACLOwner& _owner);
 };
@@ -106,3 +95,13 @@ class RGWACLXMLParser_S3 : public RGWXMLParser
 public:
   explicit RGWACLXMLParser_S3(CephContext *_cct) : cct(_cct) {}
 };
+
+namespace rgw::s3 {
+
+/// Construct a policy from a s3 canned acl string.
+int create_canned_acl(const ACLOwner& owner,
+                      const ACLOwner& bucket_owner,
+                      const std::string& canned_acl,
+                      RGWAccessControlPolicy& policy);
+
+} // namespace rgw::s3

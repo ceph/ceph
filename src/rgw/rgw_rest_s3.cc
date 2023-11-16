@@ -2393,7 +2393,8 @@ static int create_s3_policy(req_state *s, rgw::sal::Driver* driver,
     return s3policy.create_from_headers(s, driver, s->info.env, owner);
   }
 
-  return s3policy.create_canned(owner, s->bucket_owner, s->canned_acl);
+  return rgw::s3::create_canned_acl(owner, s->bucket_owner,
+                                    s->canned_acl, s3policy);
 }
 
 class RGWLocationConstraint : public XMLObj
@@ -3215,14 +3216,13 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
   string canned_acl;
   part_str(parts, "acl", &canned_acl);
 
-  RGWAccessControlPolicy_S3 s3policy;
   ldpp_dout(this, 20) << "canned_acl=" << canned_acl << dendl;
-  if (s3policy.create_canned(s->owner, s->bucket_owner, canned_acl) < 0) {
+  int r = rgw::s3::create_canned_acl(s->owner, s->bucket_owner,
+                                     canned_acl, policy);
+  if (r < 0) {
     err_msg = "Bad canned ACLs";
-    return -EINVAL;
+    return r;
   }
-
-  policy = s3policy;
 
   return 0;
 }
