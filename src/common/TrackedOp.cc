@@ -207,14 +207,11 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
   f->dump_int("threshold to keep", history_slow_op_threshold.load());
   {
     f->open_array_section("Ops");
-    for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
-	   slow_op.begin();
-	 i != slow_op.end();
-	 ++i) {
-      if (!i->second->filter_out(filters))
+    for (const auto& [t, op] : slow_op) {
+      if (!op->filter_out(filters))
         continue;
       f->open_object_section("Op");
-      i->second->dump(now, f, OpTracker::default_dumper);
+      op->dump(now, f, OpTracker::default_dumper);
       f->close_section();
     }
     f->close_section();
