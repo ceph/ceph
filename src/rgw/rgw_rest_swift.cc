@@ -164,8 +164,8 @@ static void dump_account_metadata(req_state * const s,
     }
   }
 
-  /* Dump account ACLs */
-  auto account_acls = policy.to_str();
+  /* Dump account ACLs, if any */
+  auto account_acls = rgw::swift::format_account_acl(policy);
   if (account_acls) {
     dump_header(s, "X-Account-Access-Control", std::move(*account_acls));
   }

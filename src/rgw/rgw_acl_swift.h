@@ -8,7 +8,6 @@
 #include <string>
 #include <include/types.h>
 
-#include <boost/optional.hpp>
 
 #include "rgw_acl.h"
 
@@ -44,6 +43,11 @@ int create_account_policy(const DoutPrefixProvider* dpp,
                           const std::string& acl_str,
                           RGWAccessControlPolicy& policy);
 
+/// Format the policy in terms of the X-Account-Access-Control string. Returns
+/// std::nullopt if there are no admin/read-write/read-only entries.
+auto format_account_acl(const RGWAccessControlPolicy& policy)
+  -> std::optional<std::string>;
+
 } // namespace rgw::swift
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
@@ -52,6 +56,4 @@ class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 
 class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
 {
-public:
-  boost::optional<std::string> to_str() const;
 };
