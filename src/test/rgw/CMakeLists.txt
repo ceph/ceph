@@ -317,6 +317,11 @@ target_link_libraries(radosgw-cr-test ${rgw_libs} librados
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   GTest::GTest)
 
+add_executable(ceph_test_rgw_neorados rgw_neorados_test.cc)
+target_link_libraries(ceph_test_rgw_neorados ${rgw_libs} libneorados
+  neoradostest-support global ${CURL_LIBRARIES} ${EXPAT_LIBRARIES}
+  ${BLKID_LIBRARIES} GTest::GTest)
+
 if(WITH_RADOSGW_POSIX)
   # unittest_posix_bucket_cache
   add_executable(unittest_posix_bucket_cache
