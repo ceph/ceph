@@ -324,16 +324,17 @@ int create_account_policy(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-} // namespace rgw::swift
-
-boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
+auto format_account_acl(const RGWAccessControlPolicy& policy)
+  -> std::optional<std::string>
 {
+  const ACLOwner& owner = policy.get_owner();
+
   std::vector<std::string> admin;
   std::vector<std::string> readwrite;
   std::vector<std::string> readonly;
 
   /* Partition the grant map into three not-overlapping groups. */
-  for (const auto& item : get_acl().get_grant_map()) {
+  for (const auto& item : policy.get_acl().get_grant_map()) {
     const ACLGrant& grant = item.second;
     const uint32_t perm = grant.get_permission().get_permissions();
 
@@ -361,7 +362,7 @@ boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
   /* If there is no grant to serialize, let's exit earlier to not return
    * an empty JSON object which brakes the functional tests of Swift. */
   if (admin.empty() && readwrite.empty() && readonly.empty()) {
-    return boost::none;
+    return std::nullopt;
   }
 
   /* Serialize the groups. */
@@ -384,3 +385,5 @@ boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
 
   return oss.str();
 }
+
+} // namespace rgw::swift
