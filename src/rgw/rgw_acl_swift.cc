@@ -226,15 +226,10 @@ void merge_policy(uint32_t rw_mask, const RGWAccessControlPolicy& src,
   }
 }
 
-} // namespace rgw::swift
-
-void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
+void format_container_acls(const RGWAccessControlPolicy& policy,
+                           std::string& read, std::string& write)
 {
-  multimap<string, ACLGrant>& m = acl.get_grant_map();
-  multimap<string, ACLGrant>::iterator iter;
-
-  for (iter = m.begin(); iter != m.end(); ++iter) {
-    ACLGrant& grant = iter->second;
+  for (const auto& [k, grant] : policy.get_acl().get_grant_map()) {
     const uint32_t perm = grant.get_permission().get_permissions();
     rgw_user id;
     string url_spec;
@@ -268,6 +263,8 @@ void RGWAccessControlPolicy_SWIFT::to_str(string& read, string& write)
     }
   }
 }
+
+} // namespace rgw::swift
 
 void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
 						  rgw::sal::Driver* driver,
