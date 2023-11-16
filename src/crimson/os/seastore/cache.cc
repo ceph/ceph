@@ -1824,11 +1824,23 @@ Cache::replay_delta(
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
             journal_seq, record_base, delta, *extent);
 
-      assert(extent->last_committed_crc == delta.prev_crc);
-      assert(extent->version == delta.pversion);
-      extent->apply_delta_and_adjust_crc(record_base, delta.bl);
-      extent->set_modify_time(modify_time);
-      assert(extent->last_committed_crc == delta.final_crc);
+      if (delta.paddr.get_addr_type() == paddr_types_t::SEGMENT ||
+	  !can_inplace_rewrite(delta.type)) {
+	assert(extent->last_committed_crc == delta.prev_crc);
+	assert(extent->version == delta.pversion);
+	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+	extent->set_modify_time(modify_time);
+	assert(extent->last_committed_crc == delta.final_crc);
+      } else {
+	assert(delta.paddr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
+	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
+	extent->set_modify_time(modify_time);
+	// Since rewrite_dirty can conflict with other transaction after 
+	// inplace rewrite is complete, crc may not be matched
+	if (delta.final_crc == extent->last_committed_crc) {
+	  assert(extent->version == delta.pversion);
+	}
+      }
 
       extent->version++;
       if (extent->version == 1) {
