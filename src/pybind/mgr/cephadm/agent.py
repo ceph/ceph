@@ -118,38 +118,29 @@ class NodeProxy:
         data: Dict[str, Any] = cherrypy.request.json
         results: Dict[str, Any] = {}
 
-        if self.validate_node_proxy_data(data):
-            host = data["cephx"]["name"]
-            results['result'] = self.mgr.node_proxy.idrac.get(host)
-        else:
-            results['result'] = self.validate_msg
+        self.validate_node_proxy_data(data)
+
+        host = data["cephx"]["name"]
+        results['result'] = self.mgr.node_proxy.idrac.get(host)
 
         return results
 
     def validate_node_proxy_data(self, data: Dict[str, Any]) -> bool:
-        self.validate_msg = 'valid node-proxy data received.'
         cherrypy.response.status = 200
         try:
             if 'cephx' not in data.keys():
-                cherrypy.response.status = 400
-                self.validate_msg = 'The field \'cephx\' must be provided.'
+                raise cherrypy.HTTPError(400, 'The field \'cephx\' must be provided.')
             elif 'name' not in data['cephx'].keys():
                 cherrypy.response.status = 400
-                self.validate_msg = 'The field \'host\' must be provided.'
+                raise cherrypy.HTTPError(400, 'The field \'host\' must be provided.')
             elif 'secret' not in data['cephx'].keys():
-                cherrypy.response.status = 400
-                self.validate_msg = 'The agent keyring must be provided.'
+                raise cherrypy.HTTPError(400, 'The agent keyring must be provided.')
             elif not self.mgr.agent_cache.agent_keys.get(data['cephx']['name']):
-                cherrypy.response.status = 400
-                self.validate_msg = f'Make sure the agent is running on {data["cephx"]["name"]}'
+                raise cherrypy.HTTPError(502, f'Make sure the agent is running on {data["cephx"]["name"]}')
             elif data['cephx']['secret'] != self.mgr.agent_cache.agent_keys[data['cephx']['name']]:
-                cherrypy.response.status = 403
-                self.validate_msg = f'Got wrong keyring from agent on host {data["cephx"]["name"]}.'
+                raise cherrypy.HTTPError(403, f'Got wrong keyring from agent on host {data["cephx"]["name"]}.')
         except AttributeError:
-            cherrypy.response.status = 400
-            self.validate_msg = 'Malformed data received.'
-
-        return cherrypy.response.status == 200
+            raise cherrypy.HTTPError(400, 'Malformed data received.')
 
     def get_nok_members(self,
                         component: str,
@@ -204,18 +195,14 @@ class NodeProxy:
     @cherrypy.tools.allow(methods=['POST'])
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
-    def data(self) -> Dict[str, Any]:
-        results: Dict[str, Any] = {}
-
+    def data(self) -> None:
         data: Dict[str, Any] = cherrypy.request.json
-        if self.validate_node_proxy_data(data):
-            host = data['cephx']['name']
-            self.mgr.node_proxy.save(host, data['patch'])
-            self.raise_alert(data)
-
-        results["result"] = self.validate_msg
-
-        return results
+        self.validate_node_proxy_data(data)
+        if 'patch' not in data.keys():
+            raise cherrypy.HTTPError(400, 'Malformed data received.')
+        host = data['cephx']['name']
+        self.mgr.node_proxy.save(host, data['patch'])
+        self.raise_alert(data)
 
     def query_endpoint(self,
                        addr: str = '',
