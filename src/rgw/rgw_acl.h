@@ -60,10 +60,8 @@ public:
     }
   }
 
-  ACLGranteeType& get_type() { return type; }
-  const ACLGranteeType& get_type() const { return type; }
-  ACLPermission& get_permission() { return permission; }
-  const ACLPermission& get_permission() const { return permission; }
+  ACLGranteeType get_type() const { return type; }
+  ACLPermission get_permission() const { return permission; }
   ACLGroupTypeEnum get_group() const { return group; }
   const std::string& get_referer() const { return url_spec; }
 
@@ -225,7 +223,8 @@ protected:
   std::map<uint32_t, int> acl_group_map;
   std::list<ACLReferer> referer_list;
   ACLGrantMap grant_map;
-  void _add_grant(ACLGrant *grant);
+  // register a grant in the correspoding acl_user/group_map
+  void register_grant(const ACLGrant& grant);
 public:
   uint32_t get_perm(const DoutPrefixProvider* dpp,
                     const rgw::auth::Identity& auth_identity,
@@ -253,10 +252,9 @@ public:
     if (struct_v >= 2) {
       decode(acl_group_map, bl);
     } else if (!maps_initialized) {
-      ACLGrantMap::iterator iter;
-      for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
-        ACLGrant& grant = iter->second;
-        _add_grant(&grant);
+      // register everything in the grant_map
+      for (const auto& [id, grant] : grant_map) {
+        register_grant(grant);
       }
     }
     if (struct_v >= 4) {
@@ -267,7 +265,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<RGWAccessControlList*>& o);
 
-  void add_grant(ACLGrant *grant);
+  void add_grant(const ACLGrant& grant);
   void remove_canon_user_grant(rgw_user& user_id);
 
   ACLGrantMap& get_grant_map() { return grant_map; }
@@ -280,7 +278,7 @@ public:
 
     ACLGrant grant;
     grant.set_canon(id, name, RGW_PERM_FULL_CONTROL);
-    add_grant(&grant);
+    add_grant(grant);
   }
 
   friend bool operator==(const RGWAccessControlList& lhs, const RGWAccessControlList& rhs);

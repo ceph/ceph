@@ -1670,7 +1670,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   //Create a grant and add grant
   ACLGrant grant;
   grant.set_canon(new_user.get_id(), new_user.get_display_name(), RGW_PERM_FULL_CONTROL);
-  acl.add_grant(&grant);
+  acl.add_grant(grant);
 
   //Update the ACL owner to the new user
   owner.id = new_user.get_id();

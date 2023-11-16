@@ -497,7 +497,7 @@ RGWRESTStreamS3PutObj::~RGWRESTStreamS3PutObj()
   delete out_cb;
 }
 
-static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int perm, ACLGrant& grant)
+static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int perm, const ACLGrant& grant)
 {
   string& s = grants_by_type[perm];
 
@@ -505,7 +505,7 @@ static void grants_by_type_add_one_grant(map<int, string>& grants_by_type, int p
     s.append(", ");
 
   string id_type_str;
-  ACLGranteeType& type = grant.get_type();
+  ACLGranteeType type = grant.get_type();
   switch (type.get_type()) {
     case ACL_TYPE_GROUP:
       id_type_str = "uri";
@@ -535,7 +535,7 @@ struct grant_type_to_header grants_headers_def[] = {
   { 0, NULL}
 };
 
-static bool grants_by_type_check_perm(map<int, string>& grants_by_type, int perm, ACLGrant& grant, int check_perm)
+static bool grants_by_type_check_perm(map<int, string>& grants_by_type, int perm, const ACLGrant& grant, int check_perm)
 {
   if ((perm & check_perm) == check_perm) {
     grants_by_type_add_one_grant(grants_by_type, check_perm, grant);
@@ -544,7 +544,7 @@ static bool grants_by_type_check_perm(map<int, string>& grants_by_type, int perm
   return false;
 }
 
-static void grants_by_type_add_perm(map<int, string>& grants_by_type, int perm, ACLGrant& grant)
+static void grants_by_type_add_perm(map<int, string>& grants_by_type, int perm, const ACLGrant& grant)
 {
   struct grant_type_to_header *t;
 
@@ -669,16 +669,13 @@ void RGWRESTGenerateHTTPHeaders::set_http_attrs(const map<string, string>& http_
   }
 }
 
-void RGWRESTGenerateHTTPHeaders::set_policy(RGWAccessControlPolicy& policy)
+void RGWRESTGenerateHTTPHeaders::set_policy(const RGWAccessControlPolicy& policy)
 {
   /* update acl headers */
-  RGWAccessControlList& acl = policy.get_acl();
-  multimap<string, ACLGrant>& grant_map = acl.get_grant_map();
-  multimap<string, ACLGrant>::iterator giter;
+  const RGWAccessControlList& acl = policy.get_acl();
   map<int, string> grants_by_type;
-  for (giter = grant_map.begin(); giter != grant_map.end(); ++giter) {
-    ACLGrant& grant = giter->second;
-    ACLPermission& perm = grant.get_permission();
+  for (const auto& [id, grant] : acl.get_grant_map()) {
+    ACLPermission perm = grant.get_permission();
     grants_by_type_add_perm(grants_by_type, perm.get_permissions(), grant);
   }
   add_grants_headers(grants_by_type, *new_env, new_info->x_meta_map);
