@@ -16,9 +16,6 @@ class RGWUserCtl;
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
-  int add_grant(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
-                const std::string& uid, uint32_t perm);
-
 public:
   int create(const DoutPrefixProvider *dpp,
 	     rgw::sal::Driver* driver,

@@ -3,6 +3,7 @@
 
 #include <string.h>
 
+#include <optional>
 #include <vector>
 
 #include <boost/algorithm/string/predicate.hpp>
@@ -53,8 +54,8 @@ static bool uid_is_public(const string& uid)
   return is_referrer(sub);
 }
 
-static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
-                                                   const uint32_t perm)
+static std::optional<ACLGrant> referrer_to_grant(std::string url_spec,
+                                                 const uint32_t perm)
 {
   /* This function takes url_spec as non-ref std::string because of the trim
    * operation that is essential to preserve compliance with Swift. It can't
@@ -79,7 +80,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
       }
 
       if (url_spec.empty() || url_spec == ".") {
-        return boost::none;
+        return std::nullopt;
       }
     } else {
       /* Please be aware we're specially handling the .r:* in _add_grant()
@@ -90,7 +91,7 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
     grant.set_referer(url_spec, is_negative ? 0 : perm);
     return grant;
   } catch (const std::out_of_range&) {
-    return boost::none;
+    return std::nullopt;
   }
 }
 
@@ -115,12 +116,14 @@ static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
   return grant;
 }
 
-int RGWAccessControlPolicy_SWIFT::add_grant(const DoutPrefixProvider *dpp,
-					    rgw::sal::Driver* driver,
-                                            const std::string& uid,
-                                            const uint32_t perm)
+// parse a container acl grant in 'V1' format
+// https://docs.openstack.org/swift/latest/overview_acl.html#container-acls
+static auto parse_grant(const DoutPrefixProvider* dpp,
+                        rgw::sal::Driver* driver,
+                        const std::string& uid,
+                        const uint32_t perm)
+  -> std::optional<ACLGrant>
 {
-  boost::optional<ACLGrant> grant;
   ldpp_dout(dpp, 20) << "trying to add grant for ACL uid=" << uid << dendl;
 
   /* Let's check whether the item has a separator potentially indicating
@@ -128,30 +131,26 @@ int RGWAccessControlPolicy_SWIFT::add_grant(const DoutPrefixProvider *dpp,
   const size_t pos = uid.find(':');
   if (std::string::npos == pos) {
     /* No, it don't have -- we've got just a regular user identifier. */
-    grant = user_to_grant(dpp, driver, uid, perm);
-  } else {
-    /* Yes, *potentially* an HTTP referral. */
-    auto designator = uid.substr(0, pos);
-    auto designatee = uid.substr(pos + 1);
-
-    /* Swift strips whitespaces at both beginning and end. */
-    boost::algorithm::trim(designator);
-    boost::algorithm::trim(designatee);
-
-    if (! boost::algorithm::starts_with(designator, ".")) {
-      grant = user_to_grant(dpp, driver, uid, perm);
-    } else if ((perm & SWIFT_PERM_WRITE) == 0 && is_referrer(designator)) {
-      /* HTTP referrer-based ACLs aren't acceptable for writes. */
-      grant = referrer_to_grant(designatee, perm);
-    }
+    return user_to_grant(dpp, driver, uid, perm);
   }
 
-  if (!grant) {
-    return -EINVAL;
+  /* Yes, *potentially* an HTTP referral. */
+  auto designator = uid.substr(0, pos);
+  auto designatee = uid.substr(pos + 1);
+
+  /* Swift strips whitespaces at both beginning and end. */
+  boost::algorithm::trim(designator);
+  boost::algorithm::trim(designatee);
+
+  if (! boost::algorithm::starts_with(designator, ".")) {
+    return user_to_grant(dpp, driver, uid, perm);
+  }
+  if ((perm & SWIFT_PERM_WRITE) == 0 && is_referrer(designator)) {
+    /* HTTP referrer-based ACLs aren't acceptable for writes. */
+    return referrer_to_grant(designatee, perm);
   }
 
-  acl.add_grant(*grant);
-  return 0;
+  return std::nullopt;
 }
 
 
@@ -170,23 +169,25 @@ int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
 
   if (read_list) {
     for (std::string_view uid : ceph::split(read_list, " ,")) {
-      int r = add_grant(dpp, driver, std::string{uid}, SWIFT_PERM_READ);
-      if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: add_grants for read returned r="
-                      << r << dendl;
-        return r;
+      auto grant = parse_grant(dpp, driver, std::string{uid}, SWIFT_PERM_READ);
+      if (!grant) {
+        ldpp_dout(dpp, 4) << "ERROR: failed to parse read acl grant "
+            << uid << dendl;
+        return -EINVAL;
       }
+      acl.add_grant(*grant);
     }
     rw_mask |= SWIFT_PERM_READ;
   }
   if (write_list) {
     for (std::string_view uid : ceph::split(write_list, " ,")) {
-      int r = add_grant(dpp, driver, std::string{uid}, SWIFT_PERM_WRITE);
-      if (r < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: add_grants for write returned r="
-                      << r << dendl;
-        return r;
+      auto grant = parse_grant(dpp, driver, std::string{uid}, SWIFT_PERM_WRITE);
+      if (!grant) {
+        ldpp_dout(dpp, 4) << "ERROR: failed to parse write acl grant "
+            << uid << dendl;
+        return -EINVAL;
       }
+      acl.add_grant(*grant);
     }
     rw_mask |= SWIFT_PERM_WRITE;
   }
