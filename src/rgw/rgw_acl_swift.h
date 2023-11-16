@@ -24,7 +24,6 @@ public:
   explicit RGWAccessControlPolicy_SWIFT(CephContext* const cct)
     : RGWAccessControlPolicy(cct) {
   }
-  ~RGWAccessControlPolicy_SWIFT() override = default;
 
   int create(const DoutPrefixProvider *dpp,
 	     rgw::sal::Driver* driver,
@@ -43,7 +42,6 @@ public:
   explicit RGWAccessControlPolicy_SWIFTAcct(CephContext * const cct)
     : RGWAccessControlPolicy(cct) {
   }
-  ~RGWAccessControlPolicy_SWIFTAcct() override {}
 
   void add_grants(const DoutPrefixProvider *dpp,
 		  rgw::sal::Driver* driver,

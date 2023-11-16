@@ -85,7 +85,6 @@ public:
   void to_xml(std::ostream& out);
   int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, ACLOwner *owner,
 	      RGWAccessControlPolicy& dest, std::string &err_msg);
-  bool compare_group_name(std::string& id, ACLGroupTypeEnum group) override;
 
   virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const std::string& canned_acl) {
     RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
