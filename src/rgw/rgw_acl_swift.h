@@ -44,8 +44,6 @@ class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 
 class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
 {
-  void add_grants(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
-                  const std::vector<std::string>& uids, uint32_t perm);
 public:
   bool create(const DoutPrefixProvider *dpp,
 	      rgw::sal::Driver* driver,
