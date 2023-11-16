@@ -75,3 +75,6 @@
 [submodule "src/jaegertracing/opentelemetry-cpp"]
 	path = src/jaegertracing/opentelemetry-cpp
 	url = https://github.com/open-telemetry/opentelemetry-cpp.git
+[submodule "src/BLAKE3"]
+	path = src/BLAKE3
+	url = git@github.com:BLAKE3-team/BLAKE3.git
