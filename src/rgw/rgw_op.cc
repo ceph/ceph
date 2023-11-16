@@ -519,9 +519,9 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
      * the Swift's infrastructure that don't really need req_state::user.
      * Typical example here is the implementation of /info. */
     if (!s->user->get_id().empty()) {
-      s->user_acl = std::make_unique<RGWAccessControlPolicy_SWIFTAcct>();
+      s->user_acl = std::make_unique<RGWAccessControlPolicy>();
     }
-    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_SWIFT>();
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy>();
   } else {
     s->bucket_acl = std::make_unique<RGWAccessControlPolicy>();
   }

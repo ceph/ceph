@@ -3,15 +3,12 @@
 
 #pragma once
 
-#include <map>
-#include <vector>
 #include <string>
-#include <include/types.h>
+#include "rgw_sal_fwd.h"
+#include "rgw_user_types.h"
 
-
-#include "rgw_acl.h"
-
-class RGWUserCtl;
+class DoutPrefixProvider;
+class RGWAccessControlPolicy;
 
 namespace rgw::swift {
 
@@ -49,11 +46,3 @@ auto format_account_acl(const RGWAccessControlPolicy& policy)
   -> std::optional<std::string>;
 
 } // namespace rgw::swift
-
-class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
-{
-};
-
-class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
-{
-};
