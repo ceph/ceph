@@ -115,6 +115,12 @@ class NodeProxy:
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
     def idrac(self) -> Dict[str, Any]:
+        """
+        Get the iDrac details for a given host.
+
+        :return: idrac details.
+        :rtype: dict
+        """
         data: Dict[str, Any] = cherrypy.request.json
         results: Dict[str, Any] = {}
 
@@ -125,7 +131,16 @@ class NodeProxy:
 
         return results
 
-    def validate_node_proxy_data(self, data: Dict[str, Any]) -> bool:
+    def validate_node_proxy_data(self, data: Dict[str, Any]) -> None:
+        """
+        Validate received data.
+
+        :param data: data to validate.
+        :type data: dict
+
+        :raises cherrypy.HTTPError 400: If the data is not valid (missing fields)
+        :raises cherrypy.HTTPError 403: If the secret provided is wrong.
+        """
         cherrypy.response.status = 200
         try:
             if 'cephx' not in data.keys():
@@ -146,6 +161,18 @@ class NodeProxy:
     # TODO(guits): use self.node_proxy.get_critical_from_host() ?
     def get_nok_members(self,
                         data: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Retrieves members whose status is not 'ok'.
+
+        :param data: Data containing information about members.
+        :type data: dict
+
+        :return: A list containing dictionaries of members whose status is not 'ok'.
+        :rtype: List[Dict[str, str]]
+
+        :return: None
+        :rtype: None
+        """
         nok_members: List[Dict[str, str]] = []
 
         for member in data.keys():
@@ -162,14 +189,27 @@ class NodeProxy:
         return nok_members
 
     def raise_alert(self, data: Dict[str, Any]) -> None:
-        mapping: Dict[str, str] = {
-            'storage': 'HARDWARE_STORAGE',
-            'memory': 'HARDWARE_MEMORY',
-            'processors': 'HARDWARE_PROCESSORS',
-            'network': 'HARDWARE_NETWORK',
-            'power': 'HARDWARE_POWER',
-            'fans': 'HARDWARE_FANS'
-        }
+        """
+        Raises hardware alerts based on the provided patch status.
+
+        :param data: Data containing patch status information.
+        :type data: dict
+
+        This function iterates through the provided status
+        information to raise hardware alerts.
+        For each component in the provided data, it removes any
+        existing health warnings associated with it and checks
+        for non-okay members using the `get_nok_members` method.
+        If non-okay members are found, it sets a new health
+        warning for that component and generates a report detailing
+        the non-okay members' statuses.
+
+        Note: This function relies on the `get_nok_members` method to
+        identify non-okay members.
+
+        :return: None
+        :rtype: None
+        """
 
         for component in data['patch']['status'].keys():
             alert_name = f"HARDWARE_{component.upper()}"
@@ -190,6 +230,19 @@ class NodeProxy:
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
     def data(self) -> None:
+        """
+        Handles incoming data via a POST request.
+
+        This function is exposed to handle POST requests and expects incoming
+        JSON data. It processes the incoming data by first validating it
+        through the `validate_node_proxy_data` method. Subsequently, it
+        extracts the hostname from the data and saves the information
+        using `mgr.node_proxy.save`. Finally, it raises alerts based on the
+        provided status through the `raise_alert` method.
+
+        :return: None
+        :rtype: None
+        """
         data: Dict[str, Any] = cherrypy.request.json
         self.validate_node_proxy_data(data)
         if 'patch' not in data.keys():
@@ -235,6 +288,25 @@ class NodeProxy:
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
     def led(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles enclosure LED operations for the specified hostname.
+
+        This function handles GET and PATCH requests related to LED status for a
+        specific hostname. It identifies the request method and provided hostname.
+        If the hostname is missing, it logs an error and returns an error message.
+
+        For PATCH requests, it prepares authorization headers based on the
+        provided ID and password, encodes them, and constructs the authorization
+        header.
+
+        After processing, it queries the endpoint and returns the result.
+
+        :param kw: Keyword arguments including 'hostname'.
+        :type kw: dict
+
+        :return: Result of the LED-related operation.
+        :rtype: dict[str, Any]
+        """
         method: str = cherrypy.request.method
         hostname: Optional[str] = kw.get('hostname')
         headers: Dict[str, str] = {}
@@ -273,60 +345,186 @@ class NodeProxy:
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve a full report.
+
+        This function is exposed to handle GET requests and retrieves a comprehensive
+        report using the 'fullreport' method from the NodeProxyCache class.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: The full report data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.fullreport(**kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def criticals(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve critical information.
+
+        This function is exposed to handle GET requests and fetches critical data
+        using the 'criticals' method from the NodeProxyCache class.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Critical information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.criticals(**kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def summary(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve summary information.
+
+        This function is exposed to handle GET requests and fetches summary
+        data using the 'summary' method from the NodeProxyCache class.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Summary information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.summary(**kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def memory(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.common('memory', **kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def network(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.common('network', **kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def processors(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.common('processors', **kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def storage(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.common('storage', **kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def power(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.common('power', **kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def fans(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.common('fans', **kw)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
     @cherrypy.tools.json_out()
     def firmwares(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve firmware information.
+
+        This function is exposed to handle GET requests and fetches firmware data using
+        the 'firmwares' method from the NodeProxyCache class.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Firmware information data.
+        :rtype: dict[str, Any]
+        """
         return self.mgr.node_proxy.firmwares(**kw)
 
 
