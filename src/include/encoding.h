@@ -1574,6 +1574,16 @@ inline ssize_t decode_file(int fd, bufferptr &bp)
   decode(bp, bli);
   return bl.length();
 }
+
+template<typename T>
+concept encodable = requires(const T& t, buffer::list& bl) {
+  encode(t, bl);
+};
+
+template<typename T>
+concept decodable = requires(T& t, buffer::list::const_iterator& bi) {
+  decode(t, bi);
+};
 }
 
 #endif
