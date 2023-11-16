@@ -1,6 +1,6 @@
 ceph-menv
 
-Environment assistant for use in conjuction with multiple ceph vstart (or more accurately mstart) clusters. Eliminates the need to specify the cluster that is being used with each and every command. Can provide a shell prompt feedback about the currently used cluster.
+Environment assistant for use in conjunction with multiple Ceph vstart (or more accurately mstart) clusters. Eliminates the need to specify the cluster that is being used with each and every command. Can provide a shell prompt feedback about the currently used cluster.
 
 
 Usage:
