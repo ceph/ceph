@@ -1064,16 +1064,14 @@ static int get_swift_account_settings(req_state * const s,
 
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
-    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy;
-    const bool r = swift_acct_policy.create(s, driver,
-                                     s->user->get_id(),
-                                     s->user->get_display_name(),
-                                     string(acl_attr));
-    if (r != true) {
-      return -EINVAL;
+    int r = rgw::swift::create_account_policy(s, driver,
+                                              s->user->get_id(),
+                                              s->user->get_display_name(),
+                                              acl_attr, *policy);
+    if (r < 0) {
+      return r;
     }
 
-    *policy = swift_acct_policy;
     *has_policy = true;
   }
 

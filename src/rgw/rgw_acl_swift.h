@@ -36,6 +36,14 @@ void merge_policy(uint32_t rw_mask, const RGWAccessControlPolicy& src,
 void format_container_acls(const RGWAccessControlPolicy& policy,
                            std::string& read, std::string& write);
 
+/// Create a policy based on swift account acl header X-Account-Access-Control.
+int create_account_policy(const DoutPrefixProvider* dpp,
+                          rgw::sal::Driver* driver,
+                          const rgw_user& id,
+                          const std::string& name,
+                          const std::string& acl_str,
+                          RGWAccessControlPolicy& policy);
+
 } // namespace rgw::swift
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
@@ -45,10 +53,5 @@ class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
 {
 public:
-  bool create(const DoutPrefixProvider *dpp,
-	      rgw::sal::Driver* driver,
-              const rgw_user& id,
-              const std::string& name,
-              const std::string& acl_str);
   boost::optional<std::string> to_str() const;
 };
