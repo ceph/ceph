@@ -2971,7 +2971,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     for (const auto& oid : oids) {
       ret = io_ctx.omap_clear(oid);
       if (ret < 0) {
-        cerr << "error clearing omap keys " << pool_name << "/" << prettify(*obj_name) << "/"
+        cerr << "error clearing omap keys " << pool_name << "/" << prettify(oid) << "/"
              << cpp_strerror(ret) << std::endl;
         return 1;
       }
