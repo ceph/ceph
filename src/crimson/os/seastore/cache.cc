@@ -1261,6 +1261,24 @@ record_t Cache::prepare_record(
     }
   }
 
+  for (auto &i: t.written_inplace_ool_block_list) {
+    if (!i->is_valid()) {
+      continue;
+    }
+    assert(i->state == CachedExtent::extent_state_t::DIRTY);
+    assert(i->version > 0);
+    remove_from_dirty(i);
+    // set the version to zero because the extent state is now clean
+    // in order to handle this transparently
+    i->version = 0;
+    i->dirty_from_or_retired_at = JOURNAL_SEQ_MIN;
+    i->state = CachedExtent::extent_state_t::CLEAN;
+    assert(i->is_logical());
+    i->cast<LogicalCachedExtent>()->clear_delta();
+    touch_extent(*i);
+    DEBUGT("inplace rewrite ool block is commmitted -- {}", t, *i);
+  }
+
   for (auto &i: t.existing_block_list) {
     if (i->is_valid()) {
       alloc_delta.alloc_blk_ranges.emplace_back(
@@ -1330,7 +1348,8 @@ record_t Cache::prepare_record(
 	      t.num_allocated_invalid_extents);
 
   auto& ool_stats = t.get_ool_write_stats();
-  ceph_assert(ool_stats.extents.num == t.written_ool_block_list.size());
+  ceph_assert(ool_stats.extents.num == t.written_ool_block_list.size() +
+    t.written_inplace_ool_block_list.size());
 
   if (record.is_empty()) {
     SUBINFOT(seastore_t,

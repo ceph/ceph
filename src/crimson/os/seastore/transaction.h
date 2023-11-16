@@ -217,6 +217,12 @@ public:
     written_ool_block_list.push_back(ref);
   }
 
+  void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef& ref) {
+    assert(ref->get_paddr().is_absolute());
+    assert(!ref->is_inline());
+    written_inplace_ool_block_list.push_back(ref);
+  }
+
   void add_inplace_rewrite_extent(CachedExtentRef ref) {
    ceph_assert(!is_weak());
    ceph_assert(ref);
@@ -400,6 +406,7 @@ public:
     delayed_alloc_list.clear();
     inline_block_list.clear();
     written_ool_block_list.clear();
+    written_inplace_ool_block_list.clear();
     pre_alloc_list.clear();
     pre_inplace_rewrite_list.clear();
     retired_set.clear();
@@ -555,6 +562,8 @@ private:
   std::list<CachedExtentRef> inline_block_list;
   /// fresh blocks that will be committed with out-of-line record
   std::list<CachedExtentRef> written_ool_block_list;
+  /// dirty blocks that will be committed out-of-line with inplace rewrite
+  std::list<LogicalCachedExtentRef> written_inplace_ool_block_list;
 
   /// list of mutated blocks, holds refcounts, subset of write_set
   std::list<CachedExtentRef> mutated_block_list;

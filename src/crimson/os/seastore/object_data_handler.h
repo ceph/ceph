@@ -60,6 +60,10 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
   ceph::bufferlist get_delta() final;
 
   void apply_delta(const ceph::bufferlist &bl) final;
+
+  void clear_delta() final {
+    delta.clear();
+  }
 };
 using ObjectDataBlockRef = TCachedExtentRef<ObjectDataBlock>;
 

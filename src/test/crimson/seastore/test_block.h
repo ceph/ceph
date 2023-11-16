@@ -79,6 +79,10 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   }
 
   void apply_delta(const ceph::bufferlist &bl) final;
+
+  void clear_delta() final {
+    delta.clear();
+  }
 };
 using TestBlockRef = TCachedExtentRef<TestBlock>;
 
