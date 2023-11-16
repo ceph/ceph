@@ -882,17 +882,6 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
 }
 
 
-int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
-{
-  RGWAccessControlPolicy_S3 policy(g_ceph_context);
-  int ret = decode_bl(bl, policy);
-  if (ret < 0) {
-    ldout(driver->ctx(),0) << "failed to decode RGWAccessControlPolicy" << dendl;
-  }
-  policy.to_xml(o);
-  return 0;
-}
-
 int rgw_object_get_attr(const DoutPrefixProvider *dpp,
 			rgw::sal::Driver* driver, rgw::sal::Object* obj,
 			const char* attr_name, bufferlist& out_bl, optional_yield y)
