@@ -1402,7 +1402,7 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
     max_bytes -= bl.length();
     m->maps[since] = std::move(bl);
   }
-  for (epoch_t e = since + 1; e <= to; ++e) {
+  for (epoch_t e = since; e <= to; ++e) {
     bufferlist bl;
     if (get_inc_map_bl(e, bl)) {
       m->incremental_maps[e] = bl;
@@ -7372,8 +7372,9 @@ void OSDService::maybe_share_map(
                << session->projected_epoch << dendl;
       return;
     }
-
-    send_from = session->projected_epoch;
+    // send incremental maps in the range of:
+    // (projected_epoch, osdmap]
+    send_from = session->projected_epoch + 1;
     dout(10) << __func__ << ": con " << con->get_peer_addr()
              << " map epoch " << session->projected_epoch
              << " -> " << osdmap->get_epoch()
