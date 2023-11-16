@@ -219,7 +219,6 @@ using ACLGrantMap = std::multimap<std::string, ACLGrant>;
 class RGWAccessControlList
 {
 protected:
-  CephContext *cct;
   /* FIXME: in the feature we should consider switching to uint32_t also
    * in data structures. */
   std::map<std::string, int> acl_user_map;
@@ -228,15 +227,6 @@ protected:
   ACLGrantMap grant_map;
   void _add_grant(ACLGrant *grant);
 public:
-  explicit RGWAccessControlList(CephContext *_cct) : cct(_cct) {}
-  RGWAccessControlList() : cct(NULL) {}
-
-  void set_ctx(CephContext *ctx) {
-    cct = ctx;
-  }
-
-  virtual ~RGWAccessControlList() {}
-
   uint32_t get_perm(const DoutPrefixProvider* dpp,
                     const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask);
@@ -329,19 +319,10 @@ WRITE_CLASS_ENCODER(ACLOwner)
 class RGWAccessControlPolicy
 {
 protected:
-  CephContext *cct;
   RGWAccessControlList acl;
   ACLOwner owner;
 
 public:
-  explicit RGWAccessControlPolicy(CephContext *_cct) : cct(_cct), acl(_cct) {}
-  RGWAccessControlPolicy() : cct(NULL), acl(NULL) {}
-
-  void set_ctx(CephContext *ctx) {
-    cct = ctx;
-    acl.set_ctx(ctx);
-  }
-
   uint32_t get_perm(const DoutPrefixProvider* dpp,
                     const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask,

@@ -2675,8 +2675,6 @@ public:
   static int policy_from_attrs(CephContext *cct,
                                const map<string, bufferlist>& attrs,
                                RGWAccessControlPolicy *acl) {
-    acl->set_ctx(cct);
-
     auto aiter = attrs.find(RGW_ATTR_ACL);
     if (aiter == attrs.end()) {
       return -ENOENT;

@@ -1649,7 +1649,7 @@ int RadosObject::chown(User& new_user, const DoutPrefixProvider* dpp, optional_y
   }
 
   bufferlist& bl = aiter->second;
-  RGWAccessControlPolicy policy(store->ctx());
+  RGWAccessControlPolicy policy;
   ACLOwner owner;
   auto bliter = bl.cbegin();
   try {

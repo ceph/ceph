@@ -1914,7 +1914,7 @@ public:
 
   int get_params(optional_yield) override {
     req_state* state = get_state();
-    RGWAccessControlPolicy_S3 s3policy(state->cct);
+    RGWAccessControlPolicy_S3 s3policy;
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
     policy = s3policy;
@@ -2030,7 +2030,7 @@ public:
 
   int get_params(optional_yield) override {
     req_state* state = get_state();
-    RGWAccessControlPolicy_S3 s3policy(state->cct);
+    RGWAccessControlPolicy_S3 s3policy;
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
     policy = s3policy;
@@ -2534,7 +2534,7 @@ public:
 
   int get_params(optional_yield) override {
     req_state* state = get_state();
-    RGWAccessControlPolicy_S3 s3policy(state->cct);
+    RGWAccessControlPolicy_S3 s3policy;
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
     policy = s3policy;
@@ -2641,7 +2641,7 @@ public:
 
   int get_params(optional_yield) override {
     req_state* s = get_state();
-    RGWAccessControlPolicy_S3 s3policy(s->cct);
+    RGWAccessControlPolicy_S3 s3policy;
     /* we don't have (any) headers, so just create canned ACLs */
     int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
     dest_policy = s3policy;

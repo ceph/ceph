@@ -210,7 +210,7 @@ bool ACLGrant_S3::xml_end(const char *el) {
   return true;
 }
 
-void ACLGrant_S3::to_xml(CephContext *cct, ostream& out) {
+void ACLGrant_S3::to_xml(const DoutPrefixProvider* dpp, ostream& out) {
   ACLPermission_S3& perm = static_cast<ACLPermission_S3 &>(permission);
 
   /* only show s3 compatible permissions */
@@ -233,7 +233,7 @@ void ACLGrant_S3::to_xml(CephContext *cct, ostream& out) {
     break;
   case ACL_TYPE_GROUP:
     if (!group_to_uri(group, uri)) {
-      ldout(cct, 0) << "ERROR: group_to_uri failed with group=" << (int)group << dendl;
+      ldpp_dout(dpp, 0) << "ERROR: group_to_uri failed with group=" << (int)group << dendl;
       break;
     }
     out << "<URI>" << uri << "</URI>";
@@ -270,12 +270,12 @@ bool RGWAccessControlList_S3::xml_end(const char *el) {
   return true;
 }
 
-void  RGWAccessControlList_S3::to_xml(ostream& out) {
+void RGWAccessControlList_S3::to_xml(const DoutPrefixProvider* dpp, ostream& out) {
   multimap<string, ACLGrant>::iterator iter;
   out << "<AccessControlList>";
   for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
     ACLGrant_S3& grant = static_cast<ACLGrant_S3 &>(iter->second);
-    grant.to_xml(cct, out);
+    grant.to_xml(dpp, out);
   }
   out << "</AccessControlList>";
 }
@@ -438,12 +438,12 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
   return true;
 }
 
-void  RGWAccessControlPolicy_S3::to_xml(ostream& out) {
+void RGWAccessControlPolicy_S3::to_xml(const DoutPrefixProvider* dpp, ostream& out) {
   out << "<AccessControlPolicy xmlns=\"" << XMLNS_AWS_S3 << "\">";
   ACLOwner_S3& _owner = static_cast<ACLOwner_S3 &>(owner);
   RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
   _owner.to_xml(out);
-  _acl.to_xml(out);
+  _acl.to_xml(dpp, out);
   out << "</AccessControlPolicy>";
 }
 
@@ -593,11 +593,11 @@ XMLObj *RGWACLXMLParser_S3::alloc_obj(const char *el)
 {
   XMLObj * obj = NULL;
   if (strcmp(el, "AccessControlPolicy") == 0) {
-    obj = new RGWAccessControlPolicy_S3(cct);
+    obj = new RGWAccessControlPolicy_S3();
   } else if (strcmp(el, "Owner") == 0) {
     obj = new ACLOwner_S3();
   } else if (strcmp(el, "AccessControlList") == 0) {
-    obj = new RGWAccessControlList_S3(cct);
+    obj = new RGWAccessControlList_S3();
   } else if (strcmp(el, "ID") == 0) {
     obj = new ACLID_S3();
   } else if (strcmp(el, "DisplayName") == 0) {

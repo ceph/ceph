@@ -115,7 +115,6 @@ static boost::optional<ACLGrant> referrer_to_grant(std::string url_spec,
 }
 
 static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
-			      CephContext* const cct,
                               rgw::sal::Driver* driver,
                               const std::string& uid,
                               const uint32_t perm)
@@ -150,7 +149,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
     const size_t pos = uid.find(':');
     if (std::string::npos == pos) {
       /* No, it don't have -- we've got just a regular user identifier. */
-      grant = user_to_grant(dpp, cct, driver, uid, perm);
+      grant = user_to_grant(dpp, driver, uid, perm);
     } else {
       /* Yes, *potentially* an HTTP referral. */
       auto designator = uid.substr(0, pos);
@@ -161,7 +160,7 @@ int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
       boost::algorithm::trim(designatee);
 
       if (! boost::algorithm::starts_with(designator, ".")) {
-        grant = user_to_grant(dpp, cct, driver, uid, perm);
+        grant = user_to_grant(dpp, driver, uid, perm);
       } else if ((perm & SWIFT_PERM_WRITE) == 0 && is_referrer(designator)) {
         /* HTTP referrer-based ACLs aren't acceptable for writes. */
         grant = referrer_to_grant(designatee, perm);

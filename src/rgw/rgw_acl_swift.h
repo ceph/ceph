@@ -21,10 +21,6 @@ class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
                  uint32_t perm);
 
 public:
-  explicit RGWAccessControlPolicy_SWIFT(CephContext* const cct)
-    : RGWAccessControlPolicy(cct) {
-  }
-
   int create(const DoutPrefixProvider *dpp,
 	     rgw::sal::Driver* driver,
              const rgw_user& id,
@@ -39,10 +35,6 @@ public:
 class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
 {
 public:
-  explicit RGWAccessControlPolicy_SWIFTAcct(CephContext * const cct)
-    : RGWAccessControlPolicy(cct) {
-  }
-
   void add_grants(const DoutPrefixProvider *dpp,
 		  rgw::sal::Driver* driver,
                   const std::vector<std::string>& uids,
