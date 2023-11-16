@@ -283,7 +283,7 @@ public:
   ACLGrantMap& get_grant_map() { return grant_map; }
   const ACLGrantMap& get_grant_map() const { return grant_map; }
 
-  void create_default(const rgw_user& id, std::string name) {
+  void create_default(const rgw_user& id, const std::string& name) {
     acl_user_map.clear();
     acl_group_map.clear();
     referer_list.clear();
@@ -336,7 +336,6 @@ protected:
 public:
   explicit RGWAccessControlPolicy(CephContext *_cct) : cct(_cct), acl(_cct) {}
   RGWAccessControlPolicy() : cct(NULL), acl(NULL) {}
-  virtual ~RGWAccessControlPolicy() {}
 
   void set_ctx(CephContext *ctx) {
     cct = ctx;
@@ -391,7 +390,6 @@ public:
     return acl;
   }
 
-  virtual bool compare_group_name(std::string& id, ACLGroupTypeEnum group) { return false; }
   bool is_public(const DoutPrefixProvider *dpp) const;
 
   friend bool operator==(const RGWAccessControlPolicy& lhs, const RGWAccessControlPolicy& rhs);

@@ -589,21 +589,6 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
   return 0; 
 }
 
-bool RGWAccessControlPolicy_S3::compare_group_name(string& id, ACLGroupTypeEnum group)
-{
-  switch (group) {
-  case ACL_GROUP_ALL_USERS:
-    return (id.compare(RGW_USER_ANON_ID) == 0);
-  case ACL_GROUP_AUTHENTICATED_USERS:
-    return (id.compare(rgw_uri_auth_users) == 0);
-  default:
-    return id.empty();
-  }
-
-  // shouldn't get here
-  return false;
-}
-
 XMLObj *RGWACLXMLParser_S3::alloc_obj(const char *el)
 {
   XMLObj * obj = NULL;
