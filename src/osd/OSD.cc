@@ -1458,23 +1458,13 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
 
   MOSDMap *m = NULL;
   OSDSuperblock sblock(get_superblock());
-  if (since < sblock.get_oldest_map()) {
-    // just send latest full map
-    m = new MOSDMap(monc->get_fsid(),
-		       osdmap->get_encoding_features());
-    m->cluster_osdmap_trim_lower_bound = sblock.cluster_osdmap_trim_lower_bound;
-    m->newest_map = sblock.get_newest_map();
-    get_map_bl(to, m->maps[to]);
-  } else {
-    if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
-      dout(10) << "  " << (to - since) << " > max "
-               << cct->_conf->osd_map_share_max_epochs
-               << ", only sending most recent" << dendl;
-      since = to - cct->_conf->osd_map_share_max_epochs;
-    }
-
-    m = build_incremental_map_msg(since, to, sblock);
+  if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
+    dout(10) << "  " << (to - since) << " > max "
+             << cct->_conf->osd_map_share_max_epochs
+             << ", only sending most recent" << dendl;
+    since = to - cct->_conf->osd_map_share_max_epochs;
   }
+  m = build_incremental_map_msg(since, to, sblock);
   send_map(m, con);
 }
 
