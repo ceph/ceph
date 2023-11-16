@@ -100,11 +100,9 @@ static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
                               const std::string& uid,
                               const uint32_t perm)
 {
-  RGWUserInfo grant_user;
   ACLGrant grant;
-  std::unique_ptr<rgw::sal::User> user;
 
-  user = driver->get_user(rgw_user(uid));
+  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(uid));
   if (user->load_user(dpp, null_yield) < 0) {
     ldpp_dout(dpp, 10) << "grant user does not exist: " << uid << dendl;
     /* skipping silently */
@@ -276,20 +274,10 @@ void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
 
     if (uid_is_public(uid)) {
       grant.set_group(ACL_GROUP_ALL_USERS, perm);
-      acl.add_grant(grant);
     } else  {
-      std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(uid));
-
-      if (user->load_user(dpp, null_yield) < 0) {
-        ldpp_dout(dpp, 10) << "grant user does not exist:" << uid << dendl;
-        /* skipping silently */
-        grant.set_canon(user->get_id(), std::string(), perm);
-        acl.add_grant(grant);
-      } else {
-        grant.set_canon(user->get_id(), user->get_display_name(), perm);
-        acl.add_grant(grant);
-      }
+      grant = user_to_grant(dpp, driver, uid, perm);
     }
+    acl.add_grant(grant);
   }
 }
 
