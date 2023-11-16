@@ -1914,11 +1914,9 @@ public:
 
   int get_params(optional_yield) override {
     req_state* state = get_state();
-    RGWAccessControlPolicy_S3 s3policy;
-    /* we don't have (any) headers, so just create canned ACLs */
-    int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
-    policy = s3policy;
-    return ret;
+    /* we don't have (any) headers, so just create default ACLs */
+    policy.create_default(state->owner.id, state->owner.display_name);
+    return 0;
   }
 
   void send_response() override {
@@ -2030,11 +2028,9 @@ public:
 
   int get_params(optional_yield) override {
     req_state* state = get_state();
-    RGWAccessControlPolicy_S3 s3policy;
-    /* we don't have (any) headers, so just create canned ACLs */
-    int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
-    policy = s3policy;
-    return ret;
+    /* we don't have (any) headers, so just create default ACLs */
+    policy.create_default(state->owner.id, state->owner.display_name);
+    return 0;
   }
 
   int get_data(buffer::list& _bl) override {
@@ -2534,11 +2530,9 @@ public:
 
   int get_params(optional_yield) override {
     req_state* state = get_state();
-    RGWAccessControlPolicy_S3 s3policy;
-    /* we don't have (any) headers, so just create canned ACLs */
-    int ret = s3policy.create_canned(state->owner, state->bucket_owner, state->canned_acl);
-    policy = s3policy;
-    return ret;
+    /* we don't have (any) headers, so just create default ACLs */
+    policy.create_default(state->owner.id, state->owner.display_name);
+    return 0;
   }
 
   int get_data(buffer::list& _bl) override {
@@ -2641,15 +2635,13 @@ public:
 
   int get_params(optional_yield) override {
     req_state* s = get_state();
-    RGWAccessControlPolicy_S3 s3policy;
-    /* we don't have (any) headers, so just create canned ACLs */
-    int ret = s3policy.create_canned(s->owner, s->bucket_owner, s->canned_acl);
-    dest_policy = s3policy;
+    /* we don't have (any) headers, so just create default ACLs */
+    dest_policy.create_default(s->owner.id, s->owner.display_name);
     /* src_object required before RGWCopyObj::verify_permissions() */
     rgw_obj_key k = rgw_obj_key(src_name);
     s->src_object = s->bucket->get_object(k);
     s->object = s->src_object->clone(); // needed to avoid trap at rgw_op.cc:5150
-    return ret;
+    return 0;
   }
 
   void send_response() override {}

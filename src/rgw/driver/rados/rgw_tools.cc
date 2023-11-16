@@ -412,9 +412,10 @@ int RGWDataAccess::Object::put(bufferlist& data,
   }
 
   if (!aclbl) {
-    RGWAccessControlPolicy_S3 policy;
+    RGWAccessControlPolicy policy;
 
-    policy.create_canned(bucket->policy.get_owner(), bucket->policy.get_owner(), string()); /* default private policy */
+    const auto& owner = bucket->policy.get_owner();
+    policy.create_default(owner.id, owner.display_name); // default private policy
 
     policy.encode(aclbl.emplace());
   }
