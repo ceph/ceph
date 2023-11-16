@@ -153,19 +153,19 @@ static auto parse_grant(const DoutPrefixProvider* dpp,
   return std::nullopt;
 }
 
+namespace rgw::swift {
 
-int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
-					 rgw::sal::Driver* driver,
-                                         const rgw_user& id,
-                                         const std::string& name,
-                                         const char* read_list,
-                                         const char* write_list,
-                                         uint32_t& rw_mask)
+int create_container_policy(const DoutPrefixProvider *dpp,
+                            rgw::sal::Driver* driver,
+                            const rgw_user& id,
+                            const std::string& name,
+                            const char* read_list,
+                            const char* write_list,
+                            uint32_t& rw_mask,
+                            RGWAccessControlPolicy& policy)
 {
-  acl.create_default(id, name);
-  owner.id = id;
-  owner.display_name = name;
-  rw_mask = 0;
+  policy.create_default(id, name);
+  auto& acl = policy.get_acl();
 
   if (read_list) {
     for (std::string_view uid : ceph::split(read_list, " ,")) {
@@ -193,6 +193,8 @@ int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
   }
   return 0;
 }
+
+} // namespace rgw::swift
 
 void RGWAccessControlPolicy_SWIFT::filter_merge(uint32_t rw_mask,
                                                 RGWAccessControlPolicy_SWIFT *old)
