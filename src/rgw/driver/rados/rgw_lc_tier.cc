@@ -464,7 +464,6 @@ int RGWLCStreamRead::init_rest_obj() {
    */
   init_headers(attrs, rest_obj.attrs);
 
-  rest_obj.acls.set_ctx(cct);
   const auto aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
     bufferlist& bl = aiter->second;

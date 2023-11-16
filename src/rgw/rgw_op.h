@@ -1098,7 +1098,6 @@ class RGWCreateBucket : public RGWOp {
   void execute(optional_yield y) override;
   void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
     RGWOp::init(driver, s, h);
-    policy.set_ctx(s->cct);
     relaxed_region_enforcement =
 	s->cct->_conf.get_val<bool>("rgw_relaxed_region_enforcement");
   }
@@ -1249,11 +1248,6 @@ public:
     delete obj_legal_hold;
   }
 
-  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
-    RGWOp::init(driver, s, h);
-    policy.set_ctx(s->cct);
-  }
-
   virtual int init_processing(optional_yield y) override;
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {
@@ -1328,11 +1322,6 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
-    RGWOp::init(driver, s, h);
-    policy.set_ctx(s->cct);
-  }
-
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1367,10 +1356,6 @@ public:
       has_policy(false) {
   }
 
-  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
-    RGWOp::init(driver, s, h);
-    policy.set_ctx(s->cct);
-  }
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override { }
@@ -1406,11 +1391,6 @@ public:
     attrs.emplace(std::move(key), std::move(bl)); /* key and bl are r-value refs */
   }
 
-  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
-    RGWOp::init(driver, s, h);
-    policy.set_ctx(s->cct);
-  }
-
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1433,10 +1413,6 @@ public:
     : dlo_manifest(NULL)
   {}
 
-  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
-    RGWOp::init(driver, s, h);
-    policy.set_ctx(s->cct);
-  }
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1560,10 +1536,6 @@ public:
     attrs.emplace(std::move(key), std::move(bl));
   }
 
-  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
-    RGWOp::init(driver, s, h);
-    dest_policy.set_ctx(s->cct);
-  }
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
@@ -1844,10 +1816,6 @@ protected:
 public:
   RGWInitMultipart() {}
 
-  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
-    RGWOp::init(driver, s, h);
-    policy.set_ctx(s->cct);
-  }
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;
@@ -1919,10 +1887,6 @@ public:
     truncated = false;
   }
 
-  void init(rgw::sal::Driver* driver, req_state *s, RGWHandler *h) override {
-    RGWOp::init(driver, s, h);
-    policy = RGWAccessControlPolicy(s->cct);
-  }
   int verify_permission(optional_yield y) override;
   void pre_exec() override;
   void execute(optional_yield y) override;

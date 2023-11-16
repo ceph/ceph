@@ -41,7 +41,7 @@ public:
   ACLGrant_S3() {}
   virtual ~ACLGrant_S3() override {}
 
-  void to_xml(CephContext *cct, std::ostream& out);
+  void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
   bool xml_end(const char *el) override;
   bool xml_start(const char *el, const char **attr);
 
@@ -52,11 +52,8 @@ public:
 class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
 {
 public:
-  explicit RGWAccessControlList_S3(CephContext *_cct) : RGWAccessControlList(_cct) {}
-  virtual ~RGWAccessControlList_S3() override {}
-
   bool xml_end(const char *el) override;
-  void to_xml(std::ostream& out);
+  void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
 
   int create_canned(ACLOwner& owner, ACLOwner& bucket_owner, const std::string& canned_acl);
   int create_from_grants(std::list<ACLGrant>& grants);
@@ -77,12 +74,9 @@ class RGWEnv;
 class RGWAccessControlPolicy_S3 : public RGWAccessControlPolicy, public XMLObj
 {
 public:
-  explicit RGWAccessControlPolicy_S3(CephContext *_cct) : RGWAccessControlPolicy(_cct) {}
-  virtual ~RGWAccessControlPolicy_S3() override {}
-
   bool xml_end(const char *el) override;
 
-  void to_xml(std::ostream& out);
+  void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
   int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, ACLOwner *owner,
 	      RGWAccessControlPolicy& dest, std::string &err_msg);
 

@@ -607,7 +607,7 @@ static int get_swift_container_settings(req_state * const s,
   *has_policy = false;
 
   if (read_list || write_list) {
-    RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
+    RGWAccessControlPolicy_SWIFT swift_policy;
     const auto r = swift_policy.create(s, driver,
                                        s->user->get_id(),
                                        s->user->get_display_name(),
@@ -1067,7 +1067,7 @@ static int get_swift_account_settings(req_state * const s,
 
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
-    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
+    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy;
     const bool r = swift_acct_policy.create(s, driver,
                                      s->user->get_id(),
                                      s->user->get_display_name(),

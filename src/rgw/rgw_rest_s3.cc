@@ -2447,7 +2447,7 @@ public:
 
 int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
 {
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
+  RGWAccessControlPolicy_S3 s3policy;
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
 
   int r;
@@ -2589,7 +2589,7 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
     return ret;
   }
 
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
+  RGWAccessControlPolicy_S3 s3policy;
   ret = create_s3_policy(s, driver, s3policy, s->owner);
   if (ret < 0)
     return ret;
@@ -3215,7 +3215,7 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
   string canned_acl;
   part_str(parts, "acl", &canned_acl);
 
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
+  RGWAccessControlPolicy_S3 s3policy;
   ldpp_dout(this, 20) << "canned_acl=" << canned_acl << dendl;
   if (s3policy.create_canned(s->owner, s->bucket_owner, canned_acl) < 0) {
     err_msg = "Bad canned ACLs";
@@ -3450,7 +3450,7 @@ void RGWDeleteObj_ObjStore_S3::send_response()
 
 int RGWCopyObj_ObjStore_S3::init_dest_policy()
 {
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
+  RGWAccessControlPolicy_S3 s3policy;
 
   /* build a policy for the target object */
   int r = create_s3_policy(s, driver, s3policy, s->owner);
@@ -3625,7 +3625,7 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::Driver* driver,
 						  req_state *s,
 						  stringstream& ss)
 {
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
+  RGWAccessControlPolicy_S3 s3policy;
 
   // bucket-* canned acls do not apply to bucket
   if (rgw::sal::Object::empty(s->object.get())) {
@@ -3637,7 +3637,7 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::Driver* driver,
   if (r < 0)
     return r;
 
-  s3policy.to_xml(ss);
+  s3policy.to_xml(this, ss);
 
   return 0;
 }
@@ -3972,7 +3972,7 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
     return ret;
   }
 
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
+  RGWAccessControlPolicy_S3 s3policy;
   ret = create_s3_policy(s, driver, s3policy, s->owner);
   if (ret < 0)
     return ret;

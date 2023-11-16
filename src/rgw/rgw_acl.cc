@@ -90,9 +90,7 @@ void RGWAccessControlList::_add_grant(ACLGrant *grant)
   default:
     {
       rgw_user id;
-      if (!grant->get_id(id)) {
-        ldout(cct, 0) << "ERROR: grant->get_id() failed" << dendl;
-      }
+      grant->get_id(id);
       acl_user_map[id.to_str()] |= perm.get_permissions();
     }
   }
@@ -323,7 +321,7 @@ void ACLGranteeType::generate_test_instances(list<ACLGranteeType*>& o)
 
 void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& o)
 {
-  RGWAccessControlList *acl = new RGWAccessControlList(NULL);
+  RGWAccessControlList *acl = new RGWAccessControlList;
 
   list<ACLGrant *> glist;
   list<ACLGrant *>::iterator iter;
@@ -336,7 +334,7 @@ void RGWAccessControlList::generate_test_instances(list<RGWAccessControlList*>& 
     delete grant;
   }
   o.push_back(acl);
-  o.push_back(new RGWAccessControlList(NULL));
+  o.push_back(new RGWAccessControlList);
 }
 
 void ACLOwner::generate_test_instances(list<ACLOwner*>& o)
@@ -356,7 +354,7 @@ void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy
     RGWAccessControlList::generate_test_instances(acl_list);
     iter = acl_list.begin();
 
-    RGWAccessControlPolicy *p = new RGWAccessControlPolicy(NULL);
+    RGWAccessControlPolicy *p = new RGWAccessControlPolicy;
     RGWAccessControlList *l = *iter;
     p->acl = *l;
 
@@ -368,7 +366,7 @@ void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy
     delete l;
   }
 
-  o.push_back(new RGWAccessControlPolicy(NULL));
+  o.push_back(new RGWAccessControlPolicy);
 }
 
 void RGWAccessControlList::dump(Formatter *f) const

@@ -950,7 +950,7 @@ int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState
 int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y)
 {
-  RGWAccessControlPolicy policy(driver->ctx());
+  RGWAccessControlPolicy policy;
 
   int ret = get_policy(driver, op_state, policy, dpp, y);
   if (ret < 0)
@@ -972,13 +972,13 @@ int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState
 int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   ostream& os, const DoutPrefixProvider *dpp, optional_yield y)
 {
-  RGWAccessControlPolicy_S3 policy(driver->ctx());
+  RGWAccessControlPolicy_S3 policy;
 
   int ret = get_policy(driver, op_state, policy, dpp, y);
   if (ret < 0)
     return ret;
 
-  policy.to_xml(os);
+  policy.to_xml(dpp, os);
 
   return 0;
 }

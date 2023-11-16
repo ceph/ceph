@@ -1731,7 +1731,7 @@ int RGWRados::decode_policy(const DoutPrefixProvider *dpp,
 			    ACLOwner *owner)
 {
   auto i = bl.cbegin();
-  RGWAccessControlPolicy policy(cct);
+  RGWAccessControlPolicy policy;
   try {
     policy.decode_owner(i);
   } catch (buffer::error& err) {

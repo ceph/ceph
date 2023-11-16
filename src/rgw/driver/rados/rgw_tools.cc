@@ -412,7 +412,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   }
 
   if (!aclbl) {
-    RGWAccessControlPolicy_S3 policy(cct);
+    RGWAccessControlPolicy_S3 policy;
 
     policy.create_canned(bucket->policy.get_owner(), bucket->policy.get_owner(), string()); /* default private policy */
 

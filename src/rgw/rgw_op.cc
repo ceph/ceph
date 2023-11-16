@@ -231,7 +231,7 @@ static int decode_policy(const DoutPrefixProvider *dpp,
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";
     RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    s3policy->to_xml(*_dout);
+    s3policy->to_xml(dpp, *_dout);
     *_dout << dendl;
   }
   return 0;
@@ -450,7 +450,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
-    RGWAccessControlPolicy bucket_policy(s->cct);
+    RGWAccessControlPolicy bucket_policy;
     ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info.owner,
                                              bucket_attrs, &bucket_policy, y);
     if (ret < 0) {
@@ -513,17 +513,17 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   }
 
   if(s->dialect.compare("s3") == 0) {
-    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_S3>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_S3>();
   } else if(s->dialect.compare("swift")  == 0) {
     /* We aren't allocating the account policy for those operations using
      * the Swift's infrastructure that don't really need req_state::user.
      * Typical example here is the implementation of /info. */
     if (!s->user->get_id().empty()) {
-      s->user_acl = std::make_unique<RGWAccessControlPolicy_SWIFTAcct>(s->cct);
+      s->user_acl = std::make_unique<RGWAccessControlPolicy_SWIFTAcct>();
     }
-    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_SWIFT>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_SWIFT>();
   } else {
-    s->bucket_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy>();
   }
 
   const RGWZoneGroup& zonegroup = s->penv.site->get_zonegroup();
@@ -696,7 +696,7 @@ int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     if (!s->bucket_exists) {
       return -ERR_NO_SUCH_BUCKET;
     }
-    s->object_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
+    s->object_acl = std::make_unique<RGWAccessControlPolicy>();
 
     s->object->set_atomic();
     if (prefetch_data) {
@@ -1642,7 +1642,7 @@ int rgw_policy_from_attrset(const DoutPrefixProvider *dpp, CephContext *cct, map
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
     ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";
-    s3policy->to_xml(*_dout);
+    s3policy->to_xml(dpp, *_dout);
     *_dout << dendl;
   }
   return 0;
@@ -1667,7 +1667,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
 
   std::unique_ptr<rgw::sal::Object> part = bucket->get_object(ent.key);
 
-  RGWAccessControlPolicy obj_policy(s->cct);
+  RGWAccessControlPolicy obj_policy;
 
   ldpp_dout(this, 20) << "reading obj=" << part << " ofs=" << cur_ofs
       << " end=" << cur_end << dendl;
@@ -1962,7 +1962,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   const std::string bucket_name = url_decode(prefix_view.substr(0, pos));
   const std::string obj_prefix = url_decode(prefix_view.substr(pos + 1));
 
-  RGWAccessControlPolicy _bucket_acl(s->cct);
+  RGWAccessControlPolicy _bucket_acl;
   RGWAccessControlPolicy *bucket_acl;
   boost::optional<Policy> _bucket_policy;
   boost::optional<Policy>* bucket_policy;
@@ -2100,8 +2100,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
         bucket_policy = piter->second.second.get_ptr();
 	bucket = buckets[bucket_name].get();
       } else {
-	allocated_acls.push_back(RGWAccessControlPolicy(s->cct));
-	RGWAccessControlPolicy& _bucket_acl = allocated_acls.back();
+	RGWAccessControlPolicy& _bucket_acl = allocated_acls.emplace_back();
 
 	std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
 	int r = driver->load_bucket(this, rgw_bucket(s->user->get_tenant(),
@@ -3516,7 +3515,7 @@ void RGWCreateBucket::execute(optional_yield y)
     }
 
     // don't allow changes to the acl policy
-    RGWAccessControlPolicy old_policy(get_cct());
+    RGWAccessControlPolicy old_policy;
     int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,
                                                s->bucket->get_attrs(),
                                                &old_policy, y);
@@ -3843,7 +3842,7 @@ int RGWPutObj::verify_permission(optional_yield y)
 {
   if (! copy_source.empty()) {
 
-    RGWAccessControlPolicy cs_acl(s->cct);
+    RGWAccessControlPolicy cs_acl;
     boost::optional<Policy> policy;
     map<string, bufferlist> cs_attrs;
     auto cs_bucket = driver->get_bucket(copy_source_bucket_info);
@@ -5484,7 +5483,7 @@ int RGWCopyObj::init_processing(optional_yield y)
 
 int RGWCopyObj::verify_permission(optional_yield y)
 {
-  RGWAccessControlPolicy src_acl(s->cct);
+  RGWAccessControlPolicy src_acl;
   boost::optional<Policy> src_policy;
 
   /* get buckets info (source and dest) */
@@ -5583,7 +5582,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     }
   }
 
-  RGWAccessControlPolicy dest_bucket_policy(s->cct);
+  RGWAccessControlPolicy dest_bucket_policy;
 
   s->object->set_atomic();
 
@@ -5898,7 +5897,7 @@ void RGWGetACLs::execute(optional_yield y)
     (!rgw::sal::Object::empty(s->object.get()) ? s->object_acl.get() : s->bucket_acl.get());
   RGWAccessControlPolicy_S3* const s3policy = \
     static_cast<RGWAccessControlPolicy_S3*>(acl);
-  s3policy->to_xml(ss);
+  s3policy->to_xml(this, ss);
   acls = ss.str();
 }
 
@@ -5993,7 +5992,7 @@ void RGWPutACLs::execute(optional_yield y)
 
   RGWAccessControlPolicy_S3 *policy = NULL;
   RGWACLXMLParser_S3 parser(s->cct);
-  RGWAccessControlPolicy_S3 new_policy(s->cct);
+  RGWAccessControlPolicy_S3 new_policy;
   stringstream ss;
 
   op_ret = 0; /* XXX redundant? */
@@ -6085,7 +6084,7 @@ void RGWPutACLs::execute(optional_yield y)
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(this, 15) << "Old AccessControlPolicy";
-    policy->to_xml(*_dout);
+    policy->to_xml(this, *_dout);
     *_dout << dendl;
   }
 
@@ -6095,7 +6094,7 @@ void RGWPutACLs::execute(optional_yield y)
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(this, 15) << "New AccessControlPolicy:";
-    new_policy.to_xml(*_dout);
+    new_policy.to_xml(this, *_dout);
     *_dout << dendl;
   }
 
@@ -7408,7 +7407,7 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
                                                ACLOwner& bucket_owner /* out */,
 					       optional_yield y)
 {
-  RGWAccessControlPolicy bacl(driver->ctx());
+  RGWAccessControlPolicy bacl;
   int ret = read_bucket_policy(dpp, driver, s, binfo, battrs, &bacl, binfo.bucket, y);
   if (ret < 0) {
     return false;
@@ -7747,7 +7746,7 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
                                                     ACLOwner& bucket_owner /* out */,
 						    optional_yield y)
 {
-  RGWAccessControlPolicy bacl(driver->ctx());
+  RGWAccessControlPolicy bacl;
   op_ret = read_bucket_policy(this, driver, s, binfo, battrs, &bacl, binfo.bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot read_policy() for bucket" << dendl;

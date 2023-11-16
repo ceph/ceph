@@ -705,7 +705,6 @@ static int do_decode_rest_obj(const DoutPrefixProvider *dpp, CephContext *cct, m
     }
   }
 
-  info->acls.set_ctx(cct);
   auto aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
     bufferlist& bl = aiter->second;
