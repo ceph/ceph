@@ -1448,8 +1448,10 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
                                       const OSDMapRef& osdmap)
 {
   epoch_t to = osdmap->get_epoch();
-  dout(10) << "send_incremental_map " << since << " -> " << to
-           << " to " << con << " " << con->get_peer_addr() << dendl;
+  dout(10) << fmt::format("{} epoch range: ({}, {}] to {} {}",
+                          __func__, since, to,
+                          con->get_peer_entity_name().to_str(),
+                          con->get_peer_addr()) << dendl;
 
   OSDSuperblock sblock(get_superblock());
   if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
