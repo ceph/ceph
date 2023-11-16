@@ -8,6 +8,7 @@
 #include <boost/algorithm/string/predicate.hpp>
 
 #include "common/ceph_json.h"
+#include "common/split.h"
 #include "rgw_common.h"
 #include "rgw_user.h"
 #include "rgw_acl_swift.h"
@@ -25,27 +26,6 @@
 #define SWIFT_GROUP_ALL_USERS ".r:*"
 
 using namespace std;
-
-static int parse_list(const char* uid_list,
-                      std::vector<std::string>& uids)           /* out */
-{
-  char *s = strdup(uid_list);
-  if (!s) {
-    return -ENOMEM;
-  }
-
-  char *tokctx;
-  const char *p = strtok_r(s, " ,", &tokctx);
-  while (p) {
-    if (*p) {
-      string acl = p;
-      uids.push_back(acl);
-    }
-    p = strtok_r(NULL, " ,", &tokctx);
-  }
-  free(s);
-  return 0;
-}
 
 static bool is_referrer(const std::string& designator)
 {
@@ -135,45 +115,42 @@ static ACLGrant user_to_grant(const DoutPrefixProvider *dpp,
   return grant;
 }
 
-int RGWAccessControlPolicy_SWIFT::add_grants(const DoutPrefixProvider *dpp,
-					     rgw::sal::Driver* driver,
-                                             const std::vector<std::string>& uids,
-                                             const uint32_t perm)
+int RGWAccessControlPolicy_SWIFT::add_grant(const DoutPrefixProvider *dpp,
+					    rgw::sal::Driver* driver,
+                                            const std::string& uid,
+                                            const uint32_t perm)
 {
-  for (const auto& uid : uids) {
-    boost::optional<ACLGrant> grant;
-    ldpp_dout(dpp, 20) << "trying to add grant for ACL uid=" << uid << dendl;
+  boost::optional<ACLGrant> grant;
+  ldpp_dout(dpp, 20) << "trying to add grant for ACL uid=" << uid << dendl;
 
-    /* Let's check whether the item has a separator potentially indicating
-     * a special meaning (like an HTTP referral-based grant). */
-    const size_t pos = uid.find(':');
-    if (std::string::npos == pos) {
-      /* No, it don't have -- we've got just a regular user identifier. */
+  /* Let's check whether the item has a separator potentially indicating
+   * a special meaning (like an HTTP referral-based grant). */
+  const size_t pos = uid.find(':');
+  if (std::string::npos == pos) {
+    /* No, it don't have -- we've got just a regular user identifier. */
+    grant = user_to_grant(dpp, driver, uid, perm);
+  } else {
+    /* Yes, *potentially* an HTTP referral. */
+    auto designator = uid.substr(0, pos);
+    auto designatee = uid.substr(pos + 1);
+
+    /* Swift strips whitespaces at both beginning and end. */
+    boost::algorithm::trim(designator);
+    boost::algorithm::trim(designatee);
+
+    if (! boost::algorithm::starts_with(designator, ".")) {
       grant = user_to_grant(dpp, driver, uid, perm);
-    } else {
-      /* Yes, *potentially* an HTTP referral. */
-      auto designator = uid.substr(0, pos);
-      auto designatee = uid.substr(pos + 1);
-
-      /* Swift strips whitespaces at both beginning and end. */
-      boost::algorithm::trim(designator);
-      boost::algorithm::trim(designatee);
-
-      if (! boost::algorithm::starts_with(designator, ".")) {
-        grant = user_to_grant(dpp, driver, uid, perm);
-      } else if ((perm & SWIFT_PERM_WRITE) == 0 && is_referrer(designator)) {
-        /* HTTP referrer-based ACLs aren't acceptable for writes. */
-        grant = referrer_to_grant(designatee, perm);
-      }
-    }
-
-    if (grant) {
-      acl.add_grant(*grant);
-    } else {
-      return -EINVAL;
+    } else if ((perm & SWIFT_PERM_WRITE) == 0 && is_referrer(designator)) {
+      /* HTTP referrer-based ACLs aren't acceptable for writes. */
+      grant = referrer_to_grant(designatee, perm);
     }
   }
 
+  if (!grant) {
+    return -EINVAL;
+  }
+
+  acl.add_grant(*grant);
   return 0;
 }
 
@@ -192,36 +169,24 @@ int RGWAccessControlPolicy_SWIFT::create(const DoutPrefixProvider *dpp,
   rw_mask = 0;
 
   if (read_list) {
-    std::vector<std::string> uids;
-    int r = parse_list(read_list, uids);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: parse_list for read returned r="
-                    << r << dendl;
-      return r;
-    }
-
-    r = add_grants(dpp, driver, uids, SWIFT_PERM_READ);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: add_grants for read returned r="
-                    << r << dendl;
-      return r;
+    for (std::string_view uid : ceph::split(read_list, " ,")) {
+      int r = add_grant(dpp, driver, std::string{uid}, SWIFT_PERM_READ);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: add_grants for read returned r="
+                      << r << dendl;
+        return r;
+      }
     }
     rw_mask |= SWIFT_PERM_READ;
   }
   if (write_list) {
-    std::vector<std::string> uids;
-    int r = parse_list(write_list, uids);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: parse_list for write returned r="
-                    << r << dendl;
-      return r;
-    }
-
-    r = add_grants(dpp, driver, uids, SWIFT_PERM_WRITE);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: add_grants for write returned r="
-                    << r << dendl;
-      return r;
+    for (std::string_view uid : ceph::split(write_list, " ,")) {
+      int r = add_grant(dpp, driver, std::string{uid}, SWIFT_PERM_WRITE);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: add_grants for write returned r="
+                      << r << dendl;
+        return r;
+      }
     }
     rw_mask |= SWIFT_PERM_WRITE;
   }
