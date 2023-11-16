@@ -639,7 +639,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
   return true;
 }
 
-int parse_key_value(string& in_str, const char *delim, string& key, string& val)
+int parse_key_value(const string& in_str, const char *delim, string& key, string& val)
 {
   if (delim == NULL)
     return -EINVAL;
@@ -654,7 +654,7 @@ int parse_key_value(string& in_str, const char *delim, string& key, string& val)
   return 0;
 }
 
-int parse_key_value(string& in_str, string& key, string& val)
+int parse_key_value(const string& in_str, string& key, string& val)
 {
   return parse_key_value(in_str, "=", key,val);
 }
