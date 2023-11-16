@@ -4988,11 +4988,7 @@ void RGWPutMetadataBucket::execute(optional_yield y)
        * contain such keys yet. */
       if (has_policy) {
 	if (s->dialect.compare("swift") == 0) {
-	  auto old_policy =						\
-	    static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
-	  auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
-	  new_policy->filter_merge(policy_rw_mask, old_policy);
-	  policy = *new_policy;
+	  rgw::swift::merge_policy(policy_rw_mask, *s->bucket_acl, policy);
 	}
 	buffer::list bl;
 	policy.encode(bl);
