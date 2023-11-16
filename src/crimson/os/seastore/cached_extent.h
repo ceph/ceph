@@ -587,6 +587,11 @@ public:
     rewrite_generation = gen;
   }
 
+  void set_inplace_rewrite_generation() {
+    user_hint = placement_hint_t::REWRITE;
+    rewrite_generation = OOL_GENERATION;
+  }
+
   bool is_inline() const {
     return poffset.is_relative();
   }

@@ -487,6 +487,12 @@ TransactionManager::rewrite_extent_ret TransactionManager::rewrite_extent(
 
   assert(extent->is_valid() && !extent->is_initial_pending());
   if (extent->is_dirty()) {
+    if (epm->can_inplace_rewrite(t, extent)) {
+      DEBUGT("delta overwriting extent -- {}", t, *extent);
+      t.add_inplace_rewrite_extent(extent);
+      extent->set_inplace_rewrite_generation();
+      return rewrite_extent_iertr::now();
+    }
     extent->set_target_rewrite_generation(INIT_GENERATION);
   } else {
     extent->set_target_rewrite_generation(target_generation);

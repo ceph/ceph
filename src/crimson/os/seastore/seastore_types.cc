@@ -286,6 +286,10 @@ std::ostream &operator<<(std::ostream &out, data_category_t c)
   }
 }
 
+bool can_inplace_rewrite(extent_types_t type) {
+  return get_extent_category(type) == data_category_t::DATA;
+}
+
 std::ostream &operator<<(std::ostream &out, sea_time_point_printer_t tp)
 {
   if (tp.tp == NULL_TIME) {
