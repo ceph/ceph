@@ -88,12 +88,6 @@ int RGWBackoffControlCR::operate(const DoutPrefixProvider *dpp) {
   return 0;
 }
 
-void rgw_mdlog_info::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("num_objects", num_shards, obj);
-  JSONDecoder::decode_json("period", period, obj);
-  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
-}
-
 void rgw_mdlog_entry::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("id", id, obj);
   JSONDecoder::decode_json("section", section, obj);
@@ -209,7 +203,7 @@ public:
   bool spawn_next() override;
 };
 
-int RGWRemoteMetaLog::read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info)
+int RGWRemoteMetaLog::read_log_info(const DoutPrefixProvider *dpp, rgw::sync::meta::log_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
                                   { NULL, NULL } };
@@ -231,7 +225,7 @@ int RGWRemoteMetaLog::read_master_log_shards_info(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  rgw_mdlog_info log_info;
+  rgw::sync::meta::log_info log_info;
   int ret = read_log_info(dpp, &log_info);
   if (ret < 0) {
     return ret;
@@ -2111,7 +2105,7 @@ int RGWRemoteMetaLog::init_sync_status(const DoutPrefixProvider *dpp)
     return 0;
   }
 
-  rgw_mdlog_info mdlog_info;
+  rgw::sync::meta::log_info mdlog_info;
   int r = read_log_info(dpp, &mdlog_info);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
@@ -2189,7 +2183,7 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
   int r = 0;
 
   // get shard count and oldest log period from master
-  rgw_mdlog_info mdlog_info;
+  rgw::sync::meta::log_info mdlog_info;
   for (;;) {
     if (going_down) {
       ldpp_dout(dpp, 1) << __func__ << "(): going down" << dendl;

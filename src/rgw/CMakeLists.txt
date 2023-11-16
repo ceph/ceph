@@ -201,6 +201,7 @@ set(librgw_common_srcs
   driver/rados/obj_version_asio.cc
   driver/rados/rgw_neorados.cc
   driver/rados/sync_fairness_asio.cc
+  driver/rados/rgw_meta_sync_common.cc
 )
 
 list(APPEND librgw_common_srcs

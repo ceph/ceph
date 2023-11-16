@@ -586,7 +586,7 @@ bool MetaPeerTrimShardCollectCR::spawn_next()
 
 class MetaPeerTrimCR : public RGWCoroutine {
   PeerTrimEnv& env;
-  rgw_mdlog_info mdlog_info; //< master's mdlog info
+  rgw::sync::meta::log_info mdlog_info; //< master's mdlog info
 
  public:
   explicit MetaPeerTrimCR(PeerTrimEnv& env) : RGWCoroutine(env.store->ctx()), env(env) {}
@@ -605,7 +605,7 @@ int MetaPeerTrimCR::operate(const DoutPrefixProvider *dpp)
         { nullptr, nullptr }
       };
 
-      using LogInfoCR = RGWReadRESTResourceCR<rgw_mdlog_info>;
+      using LogInfoCR = RGWReadRESTResourceCR<rgw::sync::meta::log_info>;
       call(new LogInfoCR(cct, env.store->svc()->zone->get_master_conn(), env.http,
                          "/admin/log/", params, &mdlog_info));
     }

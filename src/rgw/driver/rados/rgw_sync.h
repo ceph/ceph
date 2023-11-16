@@ -18,17 +18,7 @@
 #include "rgw_mdlog.h"
 #include "sync_fairness.h"
 #include "rgw_sync_common.h"
-
-struct rgw_mdlog_info {
-  uint32_t num_shards;
-  std::string period; //< period id of the master's oldest metadata log
-  epoch_t realm_epoch; //< realm epoch of oldest metadata log
-
-  rgw_mdlog_info() : num_shards(0), realm_epoch(0) {}
-
-  void decode_json(JSONObj *obj);
-};
-
+#include "rgw_meta_sync_common.h"
 
 struct rgw_mdlog_entry {
   std::string id;
@@ -187,7 +177,7 @@ public:
   int init();
   void finish();
 
-  int read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info);
+  int read_log_info(const DoutPrefixProvider *dpp, rgw::sync::meta::log_info *log_info);
   int read_master_log_shards_info(const DoutPrefixProvider *dpp, const std::string& master_period, std::map<int, RGWMetadataLogInfo> *shards_info);
   int read_master_log_shards_next(const DoutPrefixProvider *dpp, const std::string& period, std::map<int, std::string> shard_markers, std::map<int, rgw_mdlog_shard_data> *result);
   int read_sync_status(const DoutPrefixProvider *dpp, rgw_meta_sync_status *sync_status);
@@ -240,7 +230,7 @@ public:
     return master_log.read_sync_status(dpp, sync_status);
   }
   int init_sync_status(const DoutPrefixProvider *dpp) { return master_log.init_sync_status(dpp); }
-  int read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info) {
+  int read_log_info(const DoutPrefixProvider *dpp, rgw::sync::meta::log_info *log_info) {
     return master_log.read_log_info(dpp, log_info);
   }
   int read_master_log_shards_info(const DoutPrefixProvider *dpp, const std::string& master_period, std::map<int, RGWMetadataLogInfo> *shards_info) {
