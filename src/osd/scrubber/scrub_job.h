@@ -238,7 +238,7 @@ struct formatter<Scrub::sched_conf_t> {
   template <typename FormatContext>
   auto format(const Scrub::sched_conf_t& cf, FormatContext& ctx)
   {
-    return format_to(
+    return fmt::format_to(
 	ctx.out(),
 	"periods: s:{}/{} d:{}/{} iv-ratio:{} deep-rand:{} on-inv:{}",
 	cf.shallow_interval, cf.max_shallow.value_or(-1.0), cf.deep_interval,
