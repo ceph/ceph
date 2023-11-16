@@ -14,16 +14,24 @@
 
 class RGWUserCtl;
 
+namespace rgw::swift {
+
+/// Create a policy based on swift container acl headers
+/// X-Container-Read/X-Container-Write.
+int create_container_policy(const DoutPrefixProvider *dpp,
+                            rgw::sal::Driver* driver,
+                            const rgw_user& id,
+                            const std::string& name,
+                            const char* read_list,
+                            const char* write_list,
+                            uint32_t& rw_mask,
+                            RGWAccessControlPolicy& policy);
+
+} // namespace rgw::swift
+
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
 public:
-  int create(const DoutPrefixProvider *dpp,
-	     rgw::sal::Driver* driver,
-             const rgw_user& id,
-             const std::string& name,
-             const char* read_list,
-             const char* write_list,
-             uint32_t& rw_mask);
   void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
   void to_str(std::string& read, std::string& write);
 };
