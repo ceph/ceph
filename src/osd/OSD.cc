@@ -1456,7 +1456,6 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
   dout(10) << "send_incremental_map " << since << " -> " << to
            << " to " << con << " " << con->get_peer_addr() << dendl;
 
-  MOSDMap *m = NULL;
   OSDSuperblock sblock(get_superblock());
   if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
     dout(10) << "  " << (to - since) << " > max "
@@ -1464,8 +1463,7 @@ void OSDService::send_incremental_map(epoch_t since, Connection *con,
              << ", only sending most recent" << dendl;
     since = to - cct->_conf->osd_map_share_max_epochs;
   }
-  m = build_incremental_map_msg(since, to, sblock);
-  send_map(m, con);
+  con->send_message(build_incremental_map_msg(since, to, sblock));
 }
 
 bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
