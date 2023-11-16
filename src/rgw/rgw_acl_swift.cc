@@ -278,23 +278,20 @@ void format_container_acls(const RGWAccessControlPolicy& policy,
   }
 }
 
-} // namespace rgw::swift
-
-bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
-					      rgw::sal::Driver* driver,
-                                              const rgw_user& id,
-                                              const std::string& name,
-                                              const std::string& acl_str)
+int create_account_policy(const DoutPrefixProvider* dpp,
+                          rgw::sal::Driver* driver,
+                          const rgw_user& id,
+                          const std::string& name,
+                          const std::string& acl_str,
+                          RGWAccessControlPolicy& policy)
 {
-  acl.create_default(id, name);
-  owner.id = id;
-  owner.display_name = name;
+  policy.create_default(id, name);
+  auto& acl = policy.get_acl();
 
   JSONParser parser;
-
   if (!parser.parse(acl_str.c_str(), acl_str.length())) {
     ldpp_dout(dpp, 0) << "ERROR: JSONParser::parse returned error=" << dendl;
-    return false;
+    return -EINVAL;
   }
 
   JSONObjIter iter = parser.find_first("admin");
@@ -324,8 +321,10 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
     add_grants(dpp, driver, readonly, SWIFT_PERM_READ, acl);
   }
 
-  return true;
+  return 0;
 }
+
+} // namespace rgw::swift
 
 boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
 {
