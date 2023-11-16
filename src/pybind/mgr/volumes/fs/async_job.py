@@ -122,6 +122,9 @@ class AsyncJobs(threading.Thread):
         self.q = deque()  # type: deque
         # volume => job tracking
         self.jobs = {}
+        # this will store subvol we are operating as key and misc_util.Stats
+        # instance as value.
+        self.job_stats = {}
         # lock, cv for kickstarting jobs
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
@@ -151,6 +154,34 @@ class AsyncJobs(threading.Thread):
         with self.lock:
             self.wakeup_timeout = None
             self.cv.notifyAll()
+
+    def get_clone_job_stats(self, subvolname):
+        if subvolname in self.job_stats:
+            return self.job_stats[subvolname]
+        else:
+            return None
+
+    def report_pending_job(self, subvolname):
+        # skip marking job as pending if it is already in progress or
+        # finished.
+        if subvolname in self.job_stats and \
+           self.job_stats[subvolname] != 'pending':
+                return
+
+        self.job_stats[subvolname] = 'pending'
+
+    def report_ongoing_job(self, subvolname, stats):
+        assert stats is not None
+        self.job_stats[subvolname] = stats
+
+    def finish_job_reporting(self, subvolname):
+        self.job_stats.pop(subvolname)
+
+    def abort_job_reporting(self, subvolname):
+        log.critical('A job is being aborted. Progress made so far is '
+                     f'{self.job_stats[subvolname].progress_fraction}.')
+
+        self.job_stats.pop(subvolname)
 
     def run(self):
         log.debug("tick thread {} starting".format(self.name))
@@ -233,7 +264,7 @@ class AsyncJobs(threading.Thread):
             logging.info("waking up cancellation waiters")
             self.cancel_cv.notifyAll()
 
-    def queue_job(self, volname):
+    def queue_job(self, volname, subvolname=None):
         """
         queue a volume for asynchronous job execution.
         """
@@ -243,6 +274,10 @@ class AsyncJobs(threading.Thread):
                 self.q.append(volname)
                 self.jobs[volname] = []
             self.cv.notifyAll()
+
+        if subvolname is not None:
+            if 'cloner' in self.__class__.__name__.lower():
+                self.report_pending_job(subvolname)
 
     def _cancel_jobs(self, volname):
         """

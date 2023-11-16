@@ -727,7 +727,7 @@ class VolumeClient(CephfsClient["Module"]):
                     t_subvolume.attach_snapshot(s_snapname, t_subvolume)
                 else:
                     s_subvolume.attach_snapshot(s_snapname, t_subvolume)
-                self.cloner.queue_job(volname)
+                self.cloner.queue_job(volname, t_subvolname)
             except VolumeException as ve:
                 try:
                     t_subvolume.remove()
@@ -771,6 +771,19 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _get_clone_status(self, subvolume, json_fmt=True):
+        subvol_status = subvolume.status
+
+        clone_stats = self.cloner.get_clone_job_stats(subvolume.subvolname)
+        if clone_stats not in (None, 'pending'):
+                subvol_status.update({
+                    'progress_report': clone_stats.get_progress_report()})
+
+        if json_fmt:
+            subvol_status = json.dumps({'status' : subvol_status}, indent=2)
+
+        return subvol_status
+
     def clone_status(self, **kwargs):
         ret       = 0, "", ""
         volname   = kwargs['vol_name']
@@ -781,7 +794,7 @@ class VolumeClient(CephfsClient["Module"]):
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, clonename, SubvolumeOpType.CLONE_STATUS) as subvolume:
-                        ret = 0, json.dumps({'status' : subvolume.status}, indent=2), ""
+                        ret = 0, self._get_clone_status(subvolume), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
