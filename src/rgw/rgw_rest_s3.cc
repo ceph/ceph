@@ -2384,13 +2384,14 @@ void RGWStatBucket_ObjStore_S3::send_response()
 
 static int create_s3_policy(req_state *s, rgw::sal::Driver* driver,
 			    RGWAccessControlPolicy_S3& s3policy,
-			    ACLOwner& owner)
+			    const ACLOwner& owner)
 {
   if (s->has_acl_header) {
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return s3policy.create_from_headers(s, driver, s->info.env, owner);
+    return rgw::s3::create_policy_from_headers(s, driver, owner,
+                                               *s->info.env, s3policy);
   }
 
   return rgw::s3::create_canned_acl(owner, s->bucket_owner,

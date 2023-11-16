@@ -1490,8 +1490,8 @@ bool rgw_set_amz_meta_header(
 
 extern std::string rgw_string_unquote(const std::string& s);
 extern void parse_csv_string(const std::string& ival, std::vector<std::string>& ovals);
-extern int parse_key_value(std::string& in_str, std::string& key, std::string& val);
-extern int parse_key_value(std::string& in_str, const char *delim, std::string& key, std::string& val);
+extern int parse_key_value(const std::string& in_str, std::string& key, std::string& val);
+extern int parse_key_value(const std::string& in_str, const char *delim, std::string& key, std::string& val);
 
 extern boost::optional<std::pair<std::string_view,std::string_view>>
 parse_key_value(const std::string_view& in_str,

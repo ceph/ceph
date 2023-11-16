@@ -7,6 +7,7 @@
 #include <map>
 
 #include "include/types.h"
+#include "common/split.h"
 
 #include "rgw_acl_s3.h"
 #include "rgw_user.h"
@@ -285,16 +286,11 @@ struct s3_acl_header {
   const char *http_header;
 };
 
-static const char *get_acl_header(const RGWEnv *env,
-        const struct s3_acl_header *perm)
-{
-  const char *header = perm->http_header;
-
-  return env->get(header, NULL);
-}
-
-static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, string& grantee_str,
-        const struct s3_acl_header *perm, ACLGrant& grant)
+static int parse_grantee_str(const DoutPrefixProvider* dpp,
+                             rgw::sal::Driver* driver,
+                             const std::string& grantee_str,
+                             const s3_acl_header* perm,
+                             ACLGrant& grant)
 {
   string id_type, id_val_quoted;
   int rgw_perm = perm->rgw_perm;
@@ -333,27 +329,22 @@ static int parse_grantee_str(const DoutPrefixProvider *dpp, rgw::sal::Driver* dr
   return 0;
 }
 
-static int parse_acl_header(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
-			    const RGWEnv *env, const struct s3_acl_header *perm,
-			    std::list<ACLGrant>& _grants)
+static int parse_acl_header(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+                            const RGWEnv& env, const s3_acl_header* perm,
+                            RGWAccessControlList& acl)
 {
-  std::list<string> grantees;
-  std::string hacl_str;
-
-  const char *hacl = get_acl_header(env, perm);
-  if (hacl == NULL)
+  const char* hacl = env.get(perm->http_header, nullptr);
+  if (hacl == nullptr) {
     return 0;
+  }
 
-  hacl_str = hacl;
-  get_str_list(hacl_str, ",", grantees);
-
-  for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {
+  for (std::string_view grantee : ceph::split(hacl, ",")) {
     ACLGrant grant;
-    int ret = parse_grantee_str(dpp, driver, *it, perm, grant);
+    int ret = parse_grantee_str(dpp, driver, std::string{grantee}, perm, grant);
     if (ret < 0)
       return ret;
 
-    _grants.push_back(grant);
+    acl.add_grant(grant);
   }
 
   return 0;
@@ -409,21 +400,6 @@ static int create_canned(const ACLOwner& owner, const ACLOwner& bucket_owner,
   return 0;
 }
 
-int RGWAccessControlList_S3::create_from_grants(std::list<ACLGrant>& grants)
-{
-  if (grants.empty())
-    return -EINVAL;
-
-  acl_user_map.clear();
-  grant_map.clear();
-
-  for (const auto& g : grants) {
-    add_grant(g);
-  }
-
-  return 0;
-}
-
 bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
   RGWAccessControlList_S3 *s3acl =
       static_cast<RGWAccessControlList_S3 *>(find_first("AccessControlList"));
@@ -456,28 +432,6 @@ static const s3_acl_header acl_header_perms[] = {
   {RGW_PERM_FULL_CONTROL, "HTTP_X_AMZ_GRANT_FULL_CONTROL"},
   {0, NULL}
 };
-
-int RGWAccessControlPolicy_S3::create_from_headers(const DoutPrefixProvider *dpp,
-						   rgw::sal::Driver* driver,
-						   const RGWEnv *env, ACLOwner& _owner)
-{
-  std::list<ACLGrant> grants;
-  int r = 0;
-
-  for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
-    r = parse_acl_header(dpp, driver, env, p, grants);
-    if (r < 0) {
-      return r;
-    }
-  }
-
-  RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-  r = _acl.create_from_grants(grants);
-
-  owner = _owner;
-
-  return r;
-}
 
 /*
   can only be called on object that was parsed
@@ -642,6 +596,25 @@ int create_canned_acl(const ACLOwner& owner,
     policy.set_owner(owner);
   }
   return create_canned(owner, bucket_owner, canned_acl, policy.get_acl());
+}
+
+int create_policy_from_headers(const DoutPrefixProvider* dpp,
+                               rgw::sal::Driver* driver,
+                               const ACLOwner& owner,
+                               const RGWEnv& env,
+                               RGWAccessControlPolicy& policy)
+{
+  policy.set_owner(owner);
+  auto& acl = policy.get_acl();
+
+  for (const s3_acl_header* p = acl_header_perms; p->rgw_perm; p++) {
+    int r = parse_acl_header(dpp, driver, env, p, acl);
+    if (r < 0) {
+      return r;
+    }
+  }
+
+  return 0;
 }
 
 } // namespace rgw::s3

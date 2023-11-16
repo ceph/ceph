@@ -54,8 +54,6 @@ class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
 public:
   bool xml_end(const char *el) override;
   void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
-
-  int create_from_grants(std::list<ACLGrant>& grants);
 };
 
 class ACLOwner_S3 : public ACLOwner, public XMLObj
@@ -78,9 +76,6 @@ public:
   void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
   int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, ACLOwner *owner,
 	      RGWAccessControlPolicy& dest, std::string &err_msg);
-
-  int create_from_headers(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
-			  const RGWEnv *env, ACLOwner& _owner);
 };
 
 /**
@@ -103,5 +98,12 @@ int create_canned_acl(const ACLOwner& owner,
                       const ACLOwner& bucket_owner,
                       const std::string& canned_acl,
                       RGWAccessControlPolicy& policy);
+
+/// Construct a policy from x-amz-grant-* request headers.
+int create_policy_from_headers(const DoutPrefixProvider* dpp,
+                               rgw::sal::Driver* driver,
+                               const ACLOwner& owner,
+                               const RGWEnv& env,
+                               RGWAccessControlPolicy& policy);
 
 } // namespace rgw::s3
