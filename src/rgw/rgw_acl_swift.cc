@@ -151,6 +151,22 @@ static auto parse_grant(const DoutPrefixProvider* dpp,
   return std::nullopt;
 }
 
+static void add_grants(const DoutPrefixProvider* dpp,
+                       rgw::sal::Driver* driver,
+                       const std::vector<std::string>& uids,
+                       uint32_t perm, RGWAccessControlList& acl)
+{
+  for (const auto& uid : uids) {
+    ACLGrant grant;
+    if (uid_is_public(uid)) {
+      grant.set_group(ACL_GROUP_ALL_USERS, perm);
+    } else  {
+      grant = user_to_grant(dpp, driver, uid, perm);
+    }
+    acl.add_grant(grant);
+  }
+}
+
 namespace rgw::swift {
 
 int create_container_policy(const DoutPrefixProvider *dpp,
@@ -264,23 +280,6 @@ void format_container_acls(const RGWAccessControlPolicy& policy,
 
 } // namespace rgw::swift
 
-void RGWAccessControlPolicy_SWIFTAcct::add_grants(const DoutPrefixProvider *dpp,
-						  rgw::sal::Driver* driver,
-                                                  const std::vector<std::string>& uids,
-                                                  const uint32_t perm)
-{
-  for (const auto& uid : uids) {
-    ACLGrant grant;
-
-    if (uid_is_public(uid)) {
-      grant.set_group(ACL_GROUP_ALL_USERS, perm);
-    } else  {
-      grant = user_to_grant(dpp, driver, uid, perm);
-    }
-    acl.add_grant(grant);
-  }
-}
-
 bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
 					      rgw::sal::Driver* driver,
                                               const rgw_user& id,
@@ -304,7 +303,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
     decode_json_obj(admin, *iter);
     ldpp_dout(dpp, 0) << "admins: " << admin << dendl;
 
-    add_grants(dpp, driver, admin, SWIFT_PERM_ADMIN);
+    add_grants(dpp, driver, admin, SWIFT_PERM_ADMIN, acl);
   }
 
   iter = parser.find_first("read-write");
@@ -313,7 +312,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
     decode_json_obj(readwrite, *iter);
     ldpp_dout(dpp, 0) << "read-write: " << readwrite << dendl;
 
-    add_grants(dpp, driver, readwrite, SWIFT_PERM_RWRT);
+    add_grants(dpp, driver, readwrite, SWIFT_PERM_RWRT, acl);
   }
 
   iter = parser.find_first("read-only");
@@ -322,7 +321,7 @@ bool RGWAccessControlPolicy_SWIFTAcct::create(const DoutPrefixProvider *dpp,
     decode_json_obj(readonly, *iter);
     ldpp_dout(dpp, 0) << "read-only: " << readonly << dendl;
 
-    add_grants(dpp, driver, readonly, SWIFT_PERM_READ);
+    add_grants(dpp, driver, readonly, SWIFT_PERM_READ, acl);
   }
 
   return true;
