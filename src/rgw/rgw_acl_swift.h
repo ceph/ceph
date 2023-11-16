@@ -16,9 +16,8 @@ class RGWUserCtl;
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
-  int add_grants(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
-                 const std::vector<std::string>& uids,
-                 uint32_t perm);
+  int add_grant(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+                const std::string& uid, uint32_t perm);
 
 public:
   int create(const DoutPrefixProvider *dpp,
@@ -34,11 +33,9 @@ public:
 
 class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
 {
+  void add_grants(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+                  const std::vector<std::string>& uids, uint32_t perm);
 public:
-  void add_grants(const DoutPrefixProvider *dpp,
-		  rgw::sal::Driver* driver,
-                  const std::vector<std::string>& uids,
-                  uint32_t perm);
   bool create(const DoutPrefixProvider *dpp,
 	      rgw::sal::Driver* driver,
               const rgw_user& id,
