@@ -32,12 +32,14 @@ int create_container_policy(const DoutPrefixProvider *dpp,
 void merge_policy(uint32_t rw_mask, const RGWAccessControlPolicy& src,
                   RGWAccessControlPolicy& dest);
 
+/// Format the policy in terms of X-Container-Read/X-Container-Write strings.
+void format_container_acls(const RGWAccessControlPolicy& policy,
+                           std::string& read, std::string& write);
+
 } // namespace rgw::swift
 
 class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
 {
-public:
-  void to_str(std::string& read, std::string& write);
 };
 
 class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy

@@ -470,10 +470,8 @@ static void dump_container_metadata(req_state *s,
   }
 
   if (rgw::sal::Object::empty(s->object.get())) {
-    auto swift_policy = \
-      static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
     std::string read_acl, write_acl;
-    swift_policy->to_str(read_acl, write_acl);
+    rgw::swift::format_container_acls(*s->bucket_acl, read_acl, write_acl);
 
     if (read_acl.size()) {
       dump_header(s, "X-Container-Read", read_acl);
