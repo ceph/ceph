@@ -799,7 +799,14 @@ RandomBlockOolWriter::do_write(
     ).safe_then([&t, &ex, paddr, FNAME]() {
       TRACET("ool extent written at {} -- {}",
 	     t, paddr, *ex);
-      t.mark_allocated_extent_ool(ex);
+      if (ex->is_initial_pending()) {
+	t.mark_allocated_extent_ool(ex);
+      } else if (ex->is_dirty()) {
+	assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
+	t.mark_inplace_rewrite_extent_ool(ex);
+      } else {
+	ceph_assert("impossible");
+      }
       return alloc_write_iertr::now();
     });
   });

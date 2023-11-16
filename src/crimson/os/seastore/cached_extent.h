@@ -1242,6 +1242,8 @@ public:
 
   void on_replace_prior(Transaction &t) final;
 
+  virtual void clear_delta() {}
+
   virtual ~LogicalCachedExtent();
 protected:
 
