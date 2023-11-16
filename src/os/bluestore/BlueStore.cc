@@ -16266,18 +16266,7 @@ int BlueStore::_do_alloc_write(
   }
 
   // checksum
-  int64_t csum = csum_type.load();
-  csum = select_option(
-    "csum_type",
-    csum,
-    [&]() {
-      int64_t val;
-      if (coll->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
-        return std::optional<int64_t>(val);
-      }
-      return std::optional<int64_t>();
-    }
-  );
+  int64_t csum = wctx->csum_type;
 
   // compress (as needed) and calc needed space
   uint64_t need = 0;
@@ -16680,6 +16669,21 @@ void BlueStore::_choose_write_options(
 
   // apply basic csum block size
   wctx->csum_order = block_size_order;
+
+  // checksum
+  int64_t csum = csum_type.load();
+  csum = select_option(
+    "csum_type",
+    csum,
+    [&]() {
+      int64_t val;
+      if (c->pool_opts.get(pool_opts_t::CSUM_TYPE, &val)) {
+        return std::optional<int64_t>(val);
+      }
+      return std::optional<int64_t>();
+    }
+  );
+  wctx->csum_type = csum;
 
   // compression parameters
   unsigned alloc_hints = o->onode.alloc_hint_flags;

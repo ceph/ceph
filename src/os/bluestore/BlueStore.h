@@ -3594,8 +3594,9 @@ private:
   struct WriteContext {
     bool buffered = false;          ///< buffered write
     bool compress = false;          ///< compressed write
-    uint64_t target_blob_size = 0;  ///< target (max) blob size
+    uint8_t csum_type = 0;          ///< checksum type for new blobs
     unsigned csum_order = 0;        ///< target checksum chunk order
+    uint64_t target_blob_size = 0;  ///< target (max) blob size
 
     old_extent_map_t old_extents;   ///< must deref these blobs
     interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
@@ -3644,6 +3645,7 @@ private:
       buffered = other.buffered;
       compress = other.compress;
       target_blob_size = other.target_blob_size;
+      csum_type = other.csum_type;
       csum_order = other.csum_order;
     }
     void write(
