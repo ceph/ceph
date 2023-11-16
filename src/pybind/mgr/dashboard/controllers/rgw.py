@@ -96,6 +96,16 @@ class RgwDaemon(RESTController):
             for service in server['services']:
                 metadata = service['metadata']
 
+                frontend_config = metadata['frontend_config#0']
+                port_match = re.search(r"port=(\d+)", frontend_config)
+                port = None
+                if port_match:
+                    port = port_match.group(1)
+                else:
+                    match_from_endpoint = re.search(r"endpoint=\S+:(\d+)", frontend_config)
+                    if match_from_endpoint:
+                        port = match_from_endpoint.group(1)
+
                 # extract per-daemon service data and health
                 daemon = {
                     'id': metadata['id'],
@@ -106,7 +116,7 @@ class RgwDaemon(RESTController):
                     'zonegroup_name': metadata['zonegroup_name'],
                     'zone_name': metadata['zone_name'],
                     'default': instance.daemon.name == metadata['id'],
-                    'port': int(re.findall(r'port=(\d+)', metadata['frontend_config#0'])[0])
+                    'port': int(port) if port else None
                 }
 
                 daemons.append(daemon)
