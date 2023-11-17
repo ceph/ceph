@@ -54,6 +54,7 @@ def write_service_scripts(
     post_stop_file_path = data_dir / 'unit.poststop'
     stop_file_path = data_dir / 'unit.stop'
     image_file_path = data_dir / 'unit.image'
+    initctr_file_path = data_dir / 'init_containers.run'
     # use an ExitStack to make writing the files an all-or-nothing affair. If
     # any file fails to write then the write_new'd file will not get renamed
     # into place
@@ -63,11 +64,6 @@ def write_service_scripts(
         runf.write('set -e\n')
         for command in pre_start_commands or []:
             _write_command(ctx, runf, command)
-        init_containers = init_containers or []
-        if init_containers:
-            _write_init_container_cmds_clean(ctx, runf, init_containers[0])
-        for idx, ic in enumerate(init_containers):
-            _write_init_container_cmds(ctx, runf, idx, ic)
         _write_container_cmd_to_bash(ctx, runf, container, ident.daemon_name)
 
         # some metadata about the deploy
@@ -89,6 +85,14 @@ def write_service_scripts(
             else:
                 meta['ports'] = []
         metaf.write(json.dumps(meta, indent=4) + '\n')
+
+        # init-container commands
+        if init_containers:
+            initf = estack.enter_context(write_new(initctr_file_path))
+            _write_init_container_cmds_clean(ctx, initf, init_containers[0])
+            for idx, ic in enumerate(init_containers):
+                _write_init_container_cmds(ctx, initf, idx, ic)
+            initf.write('exit 0\n')
 
         # post-stop command(s)
         pstopf = estack.enter_context(write_new(post_stop_file_path))
