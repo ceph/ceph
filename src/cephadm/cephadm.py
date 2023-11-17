@@ -1112,8 +1112,12 @@ def deploy_daemon_units(
             _osd_unit_poststop_commands(ctx, ident, osd_fsid)
         )
     if ident.daemon_type == CephIscsi.daemon_type:
-        pre_start_commands.extend(_iscsi_unit_run_commands(ctx, ident, data_dir))
-        post_stop_commands.extend(_iscsi_unit_poststop_commands(ctx, ident, data_dir))
+        pre_start_commands.append(
+            CephIscsi.configfs_mount_umount(data_dir, mount=True)
+        )
+        post_stop_commands.append(
+            CephIscsi.configfs_mount_umount(data_dir, mount=False)
+        )
 
     runscripts.write_service_scripts(
         ctx,
@@ -1214,17 +1218,6 @@ def _osd_unit_run_commands(
     return cmds
 
 
-def _iscsi_unit_run_commands(
-    ctx: CephadmContext, ident: 'DaemonIdentity', data_dir: str
-) -> List[runscripts.Command]:
-    cmds: List[runscripts.Command] = []
-    cmds.append(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
-    ceph_iscsi = CephIscsi.init(ctx, ident.fsid, ident.daemon_id)
-    tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-    cmds.append(runscripts.ContainerCommand(tcmu_container, comment='iscsi tcmu-runner container', background=True))
-    return cmds
-
-
 def _osd_unit_poststop_commands(
     ctx: CephadmContext, ident: 'DaemonIdentity', osd_fsid: str
 ) -> List[runscripts.Command]:
@@ -1240,20 +1233,6 @@ def _osd_unit_poststop_commands(
     )
     return [runscripts.ContainerCommand(poststop, comment='deactivate osd')]
 
-
-def _iscsi_unit_poststop_commands(
-    ctx: CephadmContext, ident: 'DaemonIdentity', data_dir: str
-) -> List[runscripts.Command]:
-    # make sure we also stop the tcmu container
-    cmds: List[runscripts.Command] = []
-    runtime_dir = '/run'
-    ceph_iscsi = CephIscsi.init(ctx, ident.fsid, ident.daemon_id)
-    tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-    cmds.append('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
-    cmds.append('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
-    cmds.append('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
-    cmds.append(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
-    return cmds
 
 ##################################
 
