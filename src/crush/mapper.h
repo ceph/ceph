@@ -77,15 +77,11 @@ extern int crush_do_rule(const struct crush_map *map,
 			 const __u32 *weights, int weight_max,
 			 void *cwin, const struct crush_choose_arg *choose_args);
 
-/* Returns the exact amount of workspace that will need to be used
-   for a given combination of crush_map and result_max. The caller can
-   then allocate this much on its own, either on the stack, in a
-   per-thread long-lived buffer, or however it likes. */
-
-static inline size_t crush_work_size(const struct crush_map *map,
-				     int result_max) {
-	return map->working_size + result_max * 3 * sizeof(__u32);
-}
+/* Returns enough workspace for any crush rule within map to generate
+   result_max outputs. The caller can then allocate this much on its own,
+   either on the stack, in a per-thread long-lived buffer, or however it likes.*/
+extern size_t crush_work_size(const struct crush_map *map,
+			      int result_max);
 
 extern void crush_init_workspace(const struct crush_map *m, void *v);
 
