@@ -329,13 +329,17 @@ public:
   bool has_v5_rules() const;
   bool has_choose_args() const;          // any choose_args
   bool has_incompat_choose_args() const; // choose_args that can't be made compat
+  bool has_msr_rules() const;
 
   bool is_v2_rule(unsigned ruleid) const;
   bool is_v3_rule(unsigned ruleid) const;
   bool is_v5_rule(unsigned ruleid) const;
+  bool is_msr_rule(unsigned ruleid) const;
 
   std::string get_min_required_version() const {
-    if (has_v5_rules() || has_nondefault_tunables5())
+    if (has_msr_rules())
+      return "squid";
+    else if (has_v5_rules() || has_nondefault_tunables5())
       return "jewel";
     else if (has_v4_buckets())
       return "hammer";
