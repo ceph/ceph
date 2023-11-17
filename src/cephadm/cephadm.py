@@ -125,7 +125,7 @@ from cephadmlib.net_utils import (
     wrap_ipv6,
 )
 from cephadmlib.locking import FileLock
-from cephadmlib.daemon_identity import DaemonIdentity
+from cephadmlib.daemon_identity import DaemonIdentity, DaemonSubIdentity
 from cephadmlib.packagers import create_packager, Packager
 from cephadmlib.logging import (
     cephadm_init_logging,
@@ -1126,7 +1126,10 @@ def deploy_daemon_units(
     install_sysctl(ctx, ident.fsid, daemon_form_create(ctx, ident))
 
     # systemd
-    systemd_unit.update_files(ctx, ident)
+    ic_ids = [
+        DaemonSubIdentity.must(ic.identity) for ic in init_containers or []
+    ]
+    systemd_unit.update_files(ctx, ident, init_container_ids=ic_ids)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(ident.fsid, ident.daemon_type, ident.daemon_id)
