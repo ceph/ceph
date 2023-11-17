@@ -5,11 +5,12 @@ import shlex
 
 from typing import Any, Dict, Union, List, IO, TextIO, Optional, cast
 
+from . import templating
 from .container_engines import Podman
-from .container_types import CephContainer, InitContainer
+from .container_types import CephContainer, InitContainer, SidecarContainer
 from .context import CephadmContext
 from .context_getters import fetch_meta
-from .daemon_identity import DaemonIdentity
+from .daemon_identity import DaemonIdentity, DaemonSubIdentity
 from .file_utils import write_new
 from .net_utils import EndPoint
 
@@ -39,6 +40,7 @@ def write_service_scripts(
     *,
     container: CephContainer,
     init_containers: Optional[List[InitContainer]] = None,
+    sidecars: Optional[List[SidecarContainer]] = None,
     endpoints: Optional[List[EndPoint]] = None,
     pre_start_commands: Optional[List[Command]] = None,
     post_stop_commands: Optional[List[Command]] = None,
@@ -93,6 +95,18 @@ def write_service_scripts(
             for idx, ic in enumerate(init_containers):
                 _write_init_container_cmds(ctx, initf, idx, ic)
             initf.write('exit 0\n')
+
+        # sidecar container scripts
+        for sidecar in sidecars or []:
+            assert isinstance(sidecar.identity, DaemonSubIdentity)
+            script_path = sidecar.identity.sidecar_script(ctx.data_dir)
+            scsf = estack.enter_context(write_new(script_path))
+            _write_sidecar_script(
+                ctx,
+                scsf,
+                sidecar,
+                f'sidecar: {sidecar.identity.subcomponent}',
+            )
 
         # post-stop command(s)
         pstopf = estack.enter_context(write_new(post_stop_file_path))
@@ -203,6 +217,23 @@ def _write_stop_actions(
     )
     f.write(
         f'! {container_exists % container.cname} || {" ".join(container.stop_cmd(timeout=timeout))} \n'
+    )
+
+
+def _write_sidecar_script(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    sidecar: SidecarContainer,
+    comment: str = '',
+) -> None:
+    has_podman_engine = isinstance(ctx.container_engine, Podman)
+    templating.render_to_file(
+        file_obj,
+        ctx,
+        templating.Templates.sidecar_run,
+        sidecar=sidecar,
+        comment=comment,
+        has_podman_engine=has_podman_engine,
     )
 
 
