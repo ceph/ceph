@@ -145,9 +145,10 @@ class DaemonSubIdentity(DaemonIdentity):
 
     @property
     def service_name(self) -> str:
-        return self._systemd_name(
-            suffix=self.subcomponent, extension='service'
-        )
+        # use the parent's service_name to get the service. sub-identities
+        # must use other specific methods (like sidecar_service_name) for
+        # sub-identity based services
+        raise ValueError('called service_name on DaemonSubIdentity')
 
     @property
     def sidecar_service_name(self) -> str:
