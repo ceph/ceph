@@ -69,17 +69,18 @@ def test_agent_deploy_daemon_unit(_call_throws, cephadm_fs):
         _check_file(f'{AGENT_DIR}/unit.meta', json.dumps({'meta': 'data'}, indent=4) + '\n')
 
         # check unit file was created correctly
-        _check_file(f'{ctx.unit_dir}/{agent.unit_name()}', agent.unit_file())
+        svcname = agent._service_name()
+        _check_file(f'{ctx.unit_dir}/{svcname}', agent.unit_file())
 
         expected_call_throws_calls = [
             mock.call(ctx, ['systemctl', 'daemon-reload']),
-            mock.call(ctx, ['systemctl', 'enable', '--now', agent.unit_name()]),
+            mock.call(ctx, ['systemctl', 'enable', '--now', svcname]),
         ]
         _call_throws.assert_has_calls(expected_call_throws_calls)
 
         expected_call_calls = [
-            mock.call(ctx, ['systemctl', 'stop', agent.unit_name()], verbosity=_cephadm.CallVerbosity.DEBUG),
-            mock.call(ctx, ['systemctl', 'reset-failed', agent.unit_name()], verbosity=_cephadm.CallVerbosity.DEBUG),
+            mock.call(ctx, ['systemctl', 'stop', svcname], verbosity=_cephadm.CallVerbosity.DEBUG),
+            mock.call(ctx, ['systemctl', 'reset-failed', svcname], verbosity=_cephadm.CallVerbosity.DEBUG),
         ]
         _cephadm.call.assert_has_calls(expected_call_calls)
 

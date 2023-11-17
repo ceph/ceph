@@ -157,9 +157,8 @@ def daemon_to_container(
     if auto_podman_mounts and _is_podman:
         ctx.container_engine.update_mounts(ctx, container_mounts)
     if auto_podman_args and _is_podman:
-        service_name = f'{daemon.identity.unit_name}.service'
         container_args.extend(
-            ctx.container_engine.service_args(ctx, service_name)
+            ctx.container_engine.service_args(ctx, daemon.identity.service_name)
         )
 
     return CephContainer.for_daemon(
