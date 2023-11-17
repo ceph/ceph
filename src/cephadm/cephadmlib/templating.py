@@ -27,6 +27,7 @@ class Templates(str, enum.Enum):
     sidecar_service = 'sidecar.service.j2'
     cluster_logrotate_config = 'cluster.logrotate.config.j2'
     cephadm_logrotate_config = 'cephadm.logrotate.config.j2'
+    sidecar_run = 'sidecar.run.j2'
 
     def __str__(self) -> str:
         return self.value
