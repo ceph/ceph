@@ -22,7 +22,6 @@ public:
   virtual ~ACLPermission_S3() override {}
 
   bool xml_end(const char *el) override;
-  void to_xml(std::ostream& out);
 };
 
 class ACLGrantee_S3 : public XMLObj
@@ -41,7 +40,6 @@ public:
   ACLGrant_S3() {}
   virtual ~ACLGrant_S3() override {}
 
-  void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
   bool xml_end(const char *el) override;
   bool xml_start(const char *el, const char **attr);
 
@@ -53,7 +51,6 @@ class RGWAccessControlList_S3 : public RGWAccessControlList, public XMLObj
 {
 public:
   bool xml_end(const char *el) override;
-  void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
 };
 
 class ACLOwner_S3 : public ACLOwner, public XMLObj
@@ -63,7 +60,6 @@ public:
   virtual ~ACLOwner_S3() override {}
 
   bool xml_end(const char *el) override;
-  void to_xml(std::ostream& out);
 };
 
 class RGWEnv;
@@ -73,7 +69,6 @@ class RGWAccessControlPolicy_S3 : public RGWAccessControlPolicy, public XMLObj
 public:
   bool xml_end(const char *el) override;
 
-  void to_xml(const DoutPrefixProvider* dpp, std::ostream& out);
   int rebuild(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, ACLOwner *owner,
 	      RGWAccessControlPolicy& dest, std::string &err_msg);
 };
@@ -92,6 +87,10 @@ public:
 };
 
 namespace rgw::s3 {
+
+/// Write an AccessControlPolicy xml document for the given policy.
+void write_policy_xml(const RGWAccessControlPolicy& policy,
+                      std::ostream& out);
 
 /// Construct a policy from a s3 canned acl string.
 int create_canned_acl(const ACLOwner& owner,

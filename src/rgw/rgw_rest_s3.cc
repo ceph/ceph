@@ -3638,7 +3638,7 @@ int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::Driver* driver,
   if (r < 0)
     return r;
 
-  s3policy.to_xml(this, ss);
+  rgw::s3::write_policy_xml(s3policy, ss);
 
   return 0;
 }

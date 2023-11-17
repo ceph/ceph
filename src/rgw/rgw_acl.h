@@ -27,6 +27,8 @@ protected:
   ACLGroupTypeEnum group;
   std::string url_spec;
 
+  friend void to_xml(const ACLGrant& grant, std::ostream& out);
+
 public:
   ACLGrant() : group(ACL_GROUP_NONE) {}
   virtual ~ACLGrant() {}

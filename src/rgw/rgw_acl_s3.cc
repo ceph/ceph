@@ -25,8 +25,9 @@ using namespace std;
 static string rgw_uri_all_users = RGW_URI_ALL_USERS;
 static string rgw_uri_auth_users = RGW_URI_AUTH_USERS;
 
-void ACLPermission_S3::to_xml(ostream& out)
+void to_xml(ACLPermission perm, std::ostream& out)
 {
+  const uint32_t flags = perm.get_permissions();
   if ((flags & RGW_PERM_FULL_CONTROL) == RGW_PERM_FULL_CONTROL) {
    out << "<Permission>FULL_CONTROL</Permission>";
   } else {
@@ -143,14 +144,15 @@ bool ACLOwner_S3::xml_end(const char *el) {
   return true;
 }
 
-void  ACLOwner_S3::to_xml(ostream& out) {
+void to_xml(const ACLOwner& o, std::ostream& out)
+{
   string s;
-  id.to_str(s);
+  o.id.to_str(s);
   if (s.empty())
     return;
   out << "<Owner>" << "<ID>" << s << "</ID>";
-  if (!display_name.empty())
-    out << "<DisplayName>" << display_name << "</DisplayName>";
+  if (!o.display_name.empty())
+    out << "<DisplayName>" << o.display_name << "</DisplayName>";
   out << "</Owner>";
 }
 
@@ -211,8 +213,9 @@ bool ACLGrant_S3::xml_end(const char *el) {
   return true;
 }
 
-void ACLGrant_S3::to_xml(const DoutPrefixProvider* dpp, ostream& out) {
-  ACLPermission_S3& perm = static_cast<ACLPermission_S3 &>(permission);
+void to_xml(const ACLGrant& grant, ostream& out)
+{
+  const ACLPermission perm = grant.get_permission();
 
   /* only show s3 compatible permissions */
   if (!(perm.get_permissions() & RGW_PERM_ALL_S3))
@@ -221,20 +224,19 @@ void ACLGrant_S3::to_xml(const DoutPrefixProvider* dpp, ostream& out) {
   string uri;
 
   out << "<Grant>" <<
-         "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(type) << "\">";
-  switch (type.get_type()) {
+         "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(grant.type) << "\">";
+  switch (grant.type.get_type()) {
   case ACL_TYPE_CANON_USER:
-    out << "<ID>" << id << "</ID>";
-    if (name.size()) {
-      out << "<DisplayName>" << name << "</DisplayName>";
+    out << "<ID>" << grant.id << "</ID>";
+    if (grant.name.size()) {
+      out << "<DisplayName>" << grant.name << "</DisplayName>";
     }
     break;
   case ACL_TYPE_EMAIL_USER:
-    out << "<EmailAddress>" << email << "</EmailAddress>";
+    out << "<EmailAddress>" << grant.email << "</EmailAddress>";
     break;
   case ACL_TYPE_GROUP:
-    if (!group_to_uri(group, uri)) {
-      ldpp_dout(dpp, 0) << "ERROR: group_to_uri failed with group=" << (int)group << dendl;
+    if (!ACLGrant_S3::group_to_uri(grant.group, uri)) {
       break;
     }
     out << "<URI>" << uri << "</URI>";
@@ -243,7 +245,7 @@ void ACLGrant_S3::to_xml(const DoutPrefixProvider* dpp, ostream& out) {
     break;
   }
   out << "</Grantee>";
-  perm.to_xml(out);
+  to_xml(perm, out);
   out << "</Grant>";
 }
 
@@ -271,12 +273,11 @@ bool RGWAccessControlList_S3::xml_end(const char *el) {
   return true;
 }
 
-void RGWAccessControlList_S3::to_xml(const DoutPrefixProvider* dpp, ostream& out) {
-  multimap<string, ACLGrant>::iterator iter;
+void to_xml(const RGWAccessControlList& acl, std::ostream& out)
+{
   out << "<AccessControlList>";
-  for (iter = grant_map.begin(); iter != grant_map.end(); ++iter) {
-    ACLGrant_S3& grant = static_cast<ACLGrant_S3 &>(iter->second);
-    grant.to_xml(dpp, out);
+  for (const auto& p : acl.get_grant_map()) {
+    to_xml(p.second, out);
   }
   out << "</AccessControlList>";
 }
@@ -415,12 +416,11 @@ bool RGWAccessControlPolicy_S3::xml_end(const char *el) {
   return true;
 }
 
-void RGWAccessControlPolicy_S3::to_xml(const DoutPrefixProvider* dpp, ostream& out) {
+void to_xml(const RGWAccessControlPolicy& p, std::ostream& out)
+{
   out << "<AccessControlPolicy xmlns=\"" << XMLNS_AWS_S3 << "\">";
-  ACLOwner_S3& _owner = static_cast<ACLOwner_S3 &>(owner);
-  RGWAccessControlList_S3& _acl = static_cast<RGWAccessControlList_S3 &>(acl);
-  _owner.to_xml(out);
-  _acl.to_xml(dpp, out);
+  to_xml(p.get_owner(), out);
+  to_xml(p.get_acl(), out);
   out << "</AccessControlPolicy>";
 }
 
@@ -584,6 +584,12 @@ ACLGroupTypeEnum ACLGrant_S3::uri_to_group(string& uri)
 
 
 namespace rgw::s3 {
+
+void write_policy_xml(const RGWAccessControlPolicy& policy,
+                      std::ostream& out)
+{
+  to_xml(policy, out);
+}
 
 int create_canned_acl(const ACLOwner& owner,
                       const ACLOwner& bucket_owner,

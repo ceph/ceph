@@ -978,7 +978,7 @@ int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpS
   if (ret < 0)
     return ret;
 
-  policy.to_xml(dpp, os);
+  rgw::s3::write_policy_xml(policy, os);
 
   return 0;
 }
