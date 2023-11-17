@@ -230,8 +230,7 @@ static int decode_policy(const DoutPrefixProvider *dpp,
   }
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";
-    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    s3policy->to_xml(dpp, *_dout);
+    rgw::s3::write_policy_xml(*policy, *_dout);
     *_dout << dendl;
   }
   return 0;
@@ -1640,9 +1639,8 @@ int rgw_policy_from_attrset(const DoutPrefixProvider *dpp, CephContext *cct, map
     return -EIO;
   }
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
-    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
     ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";
-    s3policy->to_xml(dpp, *_dout);
+    rgw::s3::write_policy_xml(*policy, *_dout);
     *_dout << dendl;
   }
   return 0;
@@ -5889,11 +5887,11 @@ void RGWGetACLs::pre_exec()
 void RGWGetACLs::execute(optional_yield y)
 {
   stringstream ss;
-  RGWAccessControlPolicy* const acl = \
-    (!rgw::sal::Object::empty(s->object.get()) ? s->object_acl.get() : s->bucket_acl.get());
-  RGWAccessControlPolicy_S3* const s3policy = \
-    static_cast<RGWAccessControlPolicy_S3*>(acl);
-  s3policy->to_xml(this, ss);
+  if (rgw::sal::Object::empty(s->object.get())) {
+    rgw::s3::write_policy_xml(*s->bucket_acl, ss);
+  } else {
+    rgw::s3::write_policy_xml(*s->object_acl, ss);
+  }
   acls = ss.str();
 }
 
@@ -6080,7 +6078,7 @@ void RGWPutACLs::execute(optional_yield y)
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(this, 15) << "Old AccessControlPolicy";
-    policy->to_xml(this, *_dout);
+    rgw::s3::write_policy_xml(*policy, *_dout);
     *_dout << dendl;
   }
 
@@ -6090,7 +6088,7 @@ void RGWPutACLs::execute(optional_yield y)
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(this, 15) << "New AccessControlPolicy:";
-    new_policy.to_xml(this, *_dout);
+    rgw::s3::write_policy_xml(new_policy, *_dout);
     *_dout << dendl;
   }
 
