@@ -135,6 +135,29 @@ bool CrushWrapper::is_v5_rule(unsigned ruleid) const
   return false;
 }
 
+bool CrushWrapper::has_msr_rules() const
+{
+  for (unsigned i=0; i<crush->max_rules; i++) {
+    if (is_msr_rule(i)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+bool CrushWrapper::is_msr_rule(unsigned ruleid) const
+{
+  if (ruleid >= crush->max_rules)
+    return false;
+
+  crush_rule *r = crush->rules[ruleid];
+  if (!r)
+    return false;
+
+  return r->type == CRUSH_RULE_TYPE_MSR_INDEP ||
+    r->type == CRUSH_RULE_TYPE_MSR_FIRSTN;
+}
+
 bool CrushWrapper::has_choose_args() const
 {
   return !choose_args.empty();
@@ -3515,6 +3538,7 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("has_v4_buckets", (int)has_v4_buckets());
   f->dump_int("require_feature_tunables5", (int)has_nondefault_tunables5());
   f->dump_int("has_v5_rules", (int)has_v5_rules());
+  f->dump_int("has_msr_rules", (int)has_msr_rules());
 }
 
 void CrushWrapper::dump_choose_args(Formatter *f) const

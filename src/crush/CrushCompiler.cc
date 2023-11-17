@@ -369,6 +369,12 @@ int CrushCompiler::decompile(ostream &out)
     case CRUSH_RULE_TYPE_ERASURE:
       out << "\ttype erasure\n";
       break;
+    case CRUSH_RULE_TYPE_MSR_FIRSTN:
+      out << "\ttype msr_firstn\n";
+      break;
+    case CRUSH_RULE_TYPE_MSR_INDEP:
+      out << "\ttype msr_indep\n";
+      break;
     default:
       out << "\ttype " << crush.get_rule_type(i) << "\n";
     }
@@ -784,6 +790,10 @@ int CrushCompiler::parse_rule(iter_t const& i)
     type = CRUSH_RULE_TYPE_REPLICATED;
   else if (tname == "erasure")
     type = CRUSH_RULE_TYPE_ERASURE;
+  else if (tname == "msr_firstn")
+    type = CRUSH_RULE_TYPE_MSR_FIRSTN;
+  else if (tname == "msr_indep")
+    type = CRUSH_RULE_TYPE_MSR_INDEP;
   else 
     ceph_abort();
 
