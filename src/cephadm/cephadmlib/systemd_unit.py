@@ -156,11 +156,13 @@ def _install_base_units(ctx: CephadmContext, fsid: str) -> None:
     # global unit
     existed = os.path.exists(ctx.unit_dir + '/ceph.target')
     with write_new(ctx.unit_dir + '/ceph.target', perms=None) as f:
-        f.write('[Unit]\n'
-                'Description=All Ceph clusters and services\n'
-                '\n'
-                '[Install]\n'
-                'WantedBy=multi-user.target\n')
+        f.write(
+            '[Unit]\n'
+            'Description=All Ceph clusters and services\n'
+            '\n'
+            '[Install]\n'
+            'WantedBy=multi-user.target\n'
+        )
     if not existed:
         # we disable before enable in case a different ceph.target
         # (from the traditional package) is present; while newer
@@ -181,8 +183,7 @@ def _install_base_units(ctx: CephadmContext, fsid: str) -> None:
             'Before=ceph.target\n'
             '\n'
             '[Install]\n'
-            'WantedBy=multi-user.target ceph.target\n'.format(
-                fsid=fsid)
+            'WantedBy=multi-user.target ceph.target\n'.format(fsid=fsid)
         )
     if not existed:
         call_throws(ctx, ['systemctl', 'enable', 'ceph-%s.target' % fsid])
