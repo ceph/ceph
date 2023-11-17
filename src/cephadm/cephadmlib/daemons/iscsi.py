@@ -5,10 +5,10 @@ import re
 from typing import Dict, List, Optional, Tuple
 
 from ..container_daemon_form import ContainerDaemonForm, daemon_to_container
-from ..container_types import CephContainer, extract_uid_gid
+from ..container_types import CephContainer, SidecarContainer, extract_uid_gid
 from ..context_getters import fetch_configs, get_config_and_keyring
 from ..daemon_form import register as register_daemon_form
-from ..daemon_identity import DaemonIdentity, DaemonSubIdentity
+from ..daemon_identity import DaemonIdentity
 from ..constants import DEFAULT_IMAGE
 from ..context import CephadmContext
 from ..data_utils import dict_get, is_fsid
@@ -190,8 +190,7 @@ class CephIscsi(ContainerDaemonForm):
         os.chmod(os.path.join(data_dir, 'tcmu-runner-entrypoint.sh'), 0o700)
 
     @staticmethod
-    def configfs_mount_umount(data_dir, mount=True):
-        # type: (str, bool) -> List[str]
+    def configfs_mount_umount(data_dir: str, mount: bool = True) -> str:
         mount_path = os.path.join(data_dir, 'configfs')
         if mount:
             cmd = (
@@ -203,7 +202,7 @@ class CephIscsi(ContainerDaemonForm):
                 'if grep -qs {0} /proc/mounts; then '
                 'umount {0}; fi'.format(mount_path)
             )
-        return cmd.split()
+        return cmd
 
     @staticmethod
     def tcmu_runner_entrypoint_script() -> str:
@@ -242,27 +241,6 @@ do
 done
 """
 
-    def get_tcmu_runner_container(self):
-        # type: () -> CephContainer
-        # daemon_id, is used to generated the cid and pid files used by podman but as both tcmu-runner
-        # and rbd-target-api have the same daemon_id, it conflits and prevent the second container from
-        # starting. .tcmu runner is appended to the daemon_id to fix that.
-        subident = DaemonSubIdentity(
-            self.fsid, self.daemon_type, self.daemon_id, 'tcmu'
-        )
-        tcmu_dmn = self.create(self.ctx, subident)
-        tcmu_container = to_deployment_container(
-            self.ctx, daemon_to_container(self.ctx, tcmu_dmn, privileged=True)
-        )
-        # TODO: Eventually we don't want to run tcmu-runner through this script.
-        # This is intended to be a workaround backported to older releases
-        # and should eventually be removed in at least squid onward
-        tcmu_container.entrypoint = (
-            '/usr/local/scripts/tcmu-runner-entrypoint.sh'
-        )
-        tcmu_container.cname = self.get_container_name(desc='tcmu')
-        return tcmu_container
-
     def container(self, ctx: CephadmContext) -> CephContainer:
         # So the container can modprobe iscsi_target_mod and have write perms
         # to configfs we need to make this a privileged container.
@@ -284,3 +262,18 @@ done
         self, ctx: CephadmContext, args: List[str]
     ) -> None:
         args.append(ctx.container_engine.unlimited_pids_option)
+
+    def sidecar_containers(
+        self, ctx: CephadmContext
+    ) -> List[SidecarContainer]:
+        tcmu_sidecar = SidecarContainer.from_primary_and_values(
+            ctx,
+            self.container(ctx),
+            'tcmu',
+            # TODO: Eventually we don't want to run tcmu-runner through this
+            # script.  This is intended to be a workaround backported to older
+            # releases and should eventually be removed in at least squid
+            # onward
+            entrypoint='/usr/local/scripts/tcmu-runner-entrypoint.sh',
+        )
+        return [tcmu_sidecar]
