@@ -153,6 +153,10 @@ class DaemonSubIdentity(DaemonIdentity):
             category='sidecar', suffix=self.subcomponent, extension='service'
         )
 
+    def sidecar_script(self, base_data_dir: Union[str, os.PathLike]) -> str:
+        sname = f'sidecar-{ self.subcomponent }.run'
+        return str(pathlib.Path(self.data_dir(base_data_dir)) / sname)
+
     @property
     def legacy_container_name(self) -> str:
         raise ValueError(
