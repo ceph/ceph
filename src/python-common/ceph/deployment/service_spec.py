@@ -1248,6 +1248,9 @@ class NvmeofServiceSpec(ServiceSpec):
                  port: Optional[int] = None,
                  pool: Optional[str] = None,
                  enable_auth: bool = False,
+                 min_controller_id: Optional[str] = '1',
+                 max_controller_id: Optional[str] = '65519',
+                 enable_spdk_discovery_controller: Optional[bool] = False,
                  server_key: Optional[str] = None,
                  server_cert: Optional[str] = None,
                  client_key: Optional[str] = None,
@@ -1288,6 +1291,12 @@ class NvmeofServiceSpec(ServiceSpec):
         self.group = group
         #: ``enable_auth`` enables user authentication on nvmeof gateway
         self.enable_auth = enable_auth
+        #: ``min_controller_id`` minimum controller id used by SPDK, essential for multipath
+        self.min_controller_id = min_controller_id
+        #: ``max_controller_id`` maximum controller id used by SPDK, essential for multipath
+        self.max_controller_id = max_controller_id
+        #: ``enable_spdk_discovery_controller`` SPDK or ceph-nvmeof discovery service
+        self.enable_spdk_discovery_controller = enable_spdk_discovery_controller
         #: ``server_key`` gateway server key
         self.server_key = server_key or './server.key'
         #: ``server_cert`` gateway server certificate
