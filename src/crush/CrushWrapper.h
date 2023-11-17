@@ -125,6 +125,7 @@ public:
     crush->chooseleaf_vary_r = 0;
     crush->chooseleaf_stable = 0;
     crush->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+    set_default_msr_tunables();
   }
   void set_tunables_bobtail() {
     crush->choose_local_tries = 0;
@@ -134,6 +135,7 @@ public:
     crush->chooseleaf_vary_r = 0;
     crush->chooseleaf_stable = 0;
     crush->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+    set_default_msr_tunables();
   }
   void set_tunables_firefly() {
     crush->choose_local_tries = 0;
@@ -143,6 +145,7 @@ public:
     crush->chooseleaf_vary_r = 1;
     crush->chooseleaf_stable = 0;
     crush->allowed_bucket_algs = CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+    set_default_msr_tunables();
   }
   void set_tunables_hammer() {
     crush->choose_local_tries = 0;
@@ -156,6 +159,7 @@ public:
       (1 << CRUSH_BUCKET_LIST) |
       (1 << CRUSH_BUCKET_STRAW) |
       (1 << CRUSH_BUCKET_STRAW2);
+    set_default_msr_tunables();
   }
   void set_tunables_jewel() {
     crush->choose_local_tries = 0;
@@ -169,6 +173,7 @@ public:
       (1 << CRUSH_BUCKET_LIST) |
       (1 << CRUSH_BUCKET_STRAW) |
       (1 << CRUSH_BUCKET_STRAW2);
+    set_default_msr_tunables();
   }
 
   void set_tunables_legacy() {
@@ -233,6 +238,24 @@ public:
     crush->straw_calc_version = n;
   }
 
+  unsigned get_msr_descents() const {
+    return crush->msr_descents;
+  }
+  void set_msr_descents(unsigned n) {
+    crush->msr_descents = n;
+  }
+
+  unsigned get_msr_collision_tries() const {
+    return crush->msr_collision_tries;
+  }
+  void set_msr_collision_tries(unsigned n) {
+    crush->msr_collision_tries = n;
+  }
+  void set_default_msr_tunables() {
+    set_msr_descents(100);
+    set_msr_collision_tries(100);
+  }
+
   unsigned get_allowed_bucket_algs() const {
     return crush->allowed_bucket_algs;
   }
@@ -248,7 +271,8 @@ public:
       crush->chooseleaf_descend_once == 0 &&
       crush->chooseleaf_vary_r == 0 &&
       crush->chooseleaf_stable == 0 &&
-      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS &&
+      !has_nondefault_tunables_msr();
   }
   bool has_bobtail_tunables() const {
     return
@@ -258,7 +282,8 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 0 &&
       crush->chooseleaf_stable == 0 &&
-      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS &&
+      !has_nondefault_tunables_msr();
   }
   bool has_firefly_tunables() const {
     return
@@ -268,7 +293,8 @@ public:
       crush->chooseleaf_descend_once == 1 &&
       crush->chooseleaf_vary_r == 1 &&
       crush->chooseleaf_stable == 0 &&
-      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS;
+      crush->allowed_bucket_algs == CRUSH_LEGACY_ALLOWED_BUCKET_ALGS &&
+      !has_nondefault_tunables_msr();
   }
   bool has_hammer_tunables() const {
     return
@@ -281,7 +307,8 @@ public:
       crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
 				      (1 << CRUSH_BUCKET_LIST) |
 				      (1 << CRUSH_BUCKET_STRAW) |
-				      (1 << CRUSH_BUCKET_STRAW2));
+				      (1 << CRUSH_BUCKET_STRAW2)) &&
+      !has_nondefault_tunables_msr();
   }
   bool has_jewel_tunables() const {
     return
@@ -294,7 +321,8 @@ public:
       crush->allowed_bucket_algs == ((1 << CRUSH_BUCKET_UNIFORM) |
 				      (1 << CRUSH_BUCKET_LIST) |
 				      (1 << CRUSH_BUCKET_STRAW) |
-				      (1 << CRUSH_BUCKET_STRAW2));
+				      (1 << CRUSH_BUCKET_STRAW2)) &&
+      !has_nondefault_tunables_msr();
   }
 
   bool has_optimal_tunables() const {
@@ -322,6 +350,11 @@ public:
     return
         crush->chooseleaf_stable != 0;
   }
+  bool has_nondefault_tunables_msr() const {
+    return
+      crush->msr_descents != 100 ||
+      crush->msr_collision_tries != 100;
+  }
 
   bool has_v2_rules() const;
   bool has_v3_rules() const;
@@ -337,7 +370,7 @@ public:
   bool is_msr_rule(unsigned ruleid) const;
 
   std::string get_min_required_version() const {
-    if (has_msr_rules())
+    if (has_msr_rules() || has_nondefault_tunables_msr())
       return "squid";
     else if (has_v5_rules() || has_nondefault_tunables5())
       return "jewel";
@@ -1155,6 +1188,14 @@ public:
   int set_rule_step_set_chooseleaf_stable(unsigned ruleno, unsigned step, int val) {
     return set_rule_step(ruleno, step, CRUSH_RULE_SET_CHOOSELEAF_STABLE, val, 0);
   }
+
+  int set_rule_step_set_msr_descents(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_MSR_DESCENTS, val, 0);
+  }
+  int set_rule_step_set_msr_collision_tries(unsigned ruleno, unsigned step, int val) {
+    return set_rule_step(ruleno, step, CRUSH_RULE_SET_MSR_COLLISION_TRIES, val, 0);
+  }
+
   int set_rule_step_choose_firstn(unsigned ruleno, unsigned step, int val, int type) {
     return set_rule_step(ruleno, step, CRUSH_RULE_CHOOSE_FIRSTN, val, type);
   }
