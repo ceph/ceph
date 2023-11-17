@@ -1789,6 +1789,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
 	features |= CEPH_FEATURE_CRUSH_TUNABLES3;
       if (crush->is_v5_rule(ruleid))
 	features |= CEPH_FEATURE_CRUSH_TUNABLES5;
+      if (crush->is_msr_rule(ruleid))
+	features |= CEPH_FEATURE_CRUSH_MSR;
     }
   }
   mask |= CEPH_FEATURE_OSDHASHPSPOOL | CEPH_FEATURE_OSD_CACHEPOOL;
@@ -1843,6 +1845,9 @@ ceph_release_t OSDMap::get_min_compat_client() const
 {
   uint64_t f = get_features(CEPH_ENTITY_TYPE_CLIENT, nullptr);
 
+  if (HAVE_FEATURE(f, CRUSH_MSR)) {
+    return ceph_release_t::squid;        // v19.2.0
+  }
   if (HAVE_FEATURE(f, OSDMAP_PG_UPMAP) ||      // v12.0.0-1733-g27d6f43
       HAVE_FEATURE(f, CRUSH_CHOOSE_ARGS)) {    // v12.0.1-2172-gef1ef28
     return ceph_release_t::luminous;  // v12.2.0
