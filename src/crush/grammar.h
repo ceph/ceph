@@ -170,7 +170,7 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
 				step_emit );
       crushrule = str_p("rule") >> !name >> '{'
 				>> (str_p("id") | str_p("ruleset")) >> posint
-				>> str_p("type") >> ( str_p("replicated") | str_p("erasure") )
+				>> str_p("type") >> ( str_p("replicated") | str_p("erasure") | str_p("msr_firstn") | str_p("msr_indep") )
 				>> !(str_p("min_size") >> posint)
 				>> !(str_p("max_size") >> posint)
 			   >> +step
