@@ -93,7 +93,9 @@ class DaemonIdentity:
         return self._systemd_name(category='init', extension='service')
 
     def data_dir(self, base_data_dir: Union[str, os.PathLike]) -> str:
-        return str(pathlib.Path(base_data_dir) / self.fsid / self.daemon_name)
+        # do not use self.daemon_name as that may be overridden in subclasses
+        dn = f'{self.daemon_type}.{self.daemon_id}'
+        return str(pathlib.Path(base_data_dir) / self.fsid / dn)
 
     @classmethod
     def from_name(cls, fsid: str, name: str) -> 'DaemonIdentity':
