@@ -930,9 +930,8 @@ def _update_container_args_for_podman(
 ) -> None:
     if not isinstance(ctx.container_engine, Podman):
         return
-    service_name = f'{ident.unit_name}.service'
     container_args.extend(
-        ctx.container_engine.service_args(ctx, service_name)
+        ctx.container_engine.service_args(ctx, ident.service_name)
     )
 
 
@@ -1394,19 +1393,19 @@ class CephadmAgent(DaemonForm):
         with write_new(meta_file_path) as f:
             f.write(json.dumps(meta, indent=4) + '\n')
 
-        unit_file_path = os.path.join(self.ctx.unit_dir, self.unit_name())
+        unit_file_path = os.path.join(self.ctx.unit_dir, self._service_name())
         with write_new(unit_file_path) as f:
             f.write(self.unit_file())
 
         call_throws(self.ctx, ['systemctl', 'daemon-reload'])
-        call(self.ctx, ['systemctl', 'stop', self.unit_name()],
+        call(self.ctx, ['systemctl', 'stop', self._service_name()],
              verbosity=CallVerbosity.DEBUG)
-        call(self.ctx, ['systemctl', 'reset-failed', self.unit_name()],
+        call(self.ctx, ['systemctl', 'reset-failed', self._service_name()],
              verbosity=CallVerbosity.DEBUG)
-        call_throws(self.ctx, ['systemctl', 'enable', '--now', self.unit_name()])
+        call_throws(self.ctx, ['systemctl', 'enable', '--now', self._service_name()])
 
-    def unit_name(self) -> str:
-        return '{}.service'.format(get_unit_name(self.fsid, self.daemon_type, self.daemon_id))
+    def _service_name(self) -> str:
+        return self.identity.service_name
 
     def unit_run(self) -> str:
         py3 = shutil.which('python3')
