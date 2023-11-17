@@ -50,6 +50,8 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
     _step_set_choose_tries,
     _step_set_choose_local_tries,
     _step_set_choose_local_fallback_tries,
+    _step_set_msr_descents,
+    _step_set_msr_collision_tries,
     _step_choose,
     _step_chooseleaf,
     _step_emit,
@@ -91,6 +93,8 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_set_chooseleaf_tries> >    step_set_chooseleaf_tries;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_set_chooseleaf_vary_r> >    step_set_chooseleaf_vary_r;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_set_chooseleaf_stable> >    step_set_chooseleaf_stable;
+    boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_set_msr_descents> >    step_set_msr_descents;
+    boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_set_msr_collision_tries> >    step_set_msr_collision_tries;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_choose> >    step_choose;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_chooseleaf> >      step_chooseleaf;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_emit> >      step_emit;
@@ -149,6 +153,8 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
       step_set_chooseleaf_tries = str_p("set_chooseleaf_tries") >> posint;
       step_set_chooseleaf_vary_r = str_p("set_chooseleaf_vary_r") >> posint;
       step_set_chooseleaf_stable = str_p("set_chooseleaf_stable") >> posint;
+      step_set_msr_descents = str_p("set_msr_descents") >> posint;
+      step_set_msr_collision_tries = str_p("set_msr_collision_tries") >> posint;
       step_choose = str_p("choose")
 	>> ( str_p("indep") | str_p("firstn") )
 	>> integer
@@ -165,6 +171,8 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
 				step_set_chooseleaf_tries |
 				step_set_chooseleaf_vary_r |
 				step_set_chooseleaf_stable |
+				step_set_msr_descents |
+				step_set_msr_collision_tries |
 				step_choose |
 				step_chooseleaf |
 				step_emit );
