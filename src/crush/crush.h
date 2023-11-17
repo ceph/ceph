@@ -87,7 +87,12 @@ struct crush_rule {
 #define crush_rule_size(len) (sizeof(struct crush_rule) + \
 			      (len)*sizeof(struct crush_rule_step))
 
-
+enum crush_rule_type {
+	CRUSH_RULE_TYPE_REPLICATED = 1,
+	CRUSH_RULE_TYPE_ERASURE = 3,
+	CRUSH_RULE_TYPE_MSR_FIRSTN = 4,
+	CRUSH_RULE_TYPE_MSR_INDEP = 5
+};
 
 /*
  * A bucket is a named container of other items (either devices or
