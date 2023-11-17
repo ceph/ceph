@@ -55,10 +55,30 @@ class ContainerDaemonForm(DaemonForm):
         """
         pass
 
-    def customize_container_args(self, args: List[str]) -> None:
+    def customize_container_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
         """Given a list of container arguments this function can update,
         delete, or otherwise mutate the arguments that the container engine
         will use.
+        """
+        pass
+
+    def customize_process_args(
+        self, ctx: CephadmContext, args: List[str]
+    ) -> None:
+        """Given a list of arguments for the containerized process, this
+        function can update, delete, or otherwise mutate the arguments that the
+        process will use.
+        """
+        pass
+
+    def customize_container_envs(
+        self, ctx: CephadmContext, envs: List[str]
+    ) -> None:
+        """Given a list of environment vars this function can update, delete,
+        or otherwise mutate the environment variables that are passed by the
+        container engine to the processes it executes.
         """
         pass
 
@@ -84,3 +104,9 @@ class ContainerDaemonForm(DaemonForm):
         expected to understand this.
         """
         return None
+
+    def default_entrypoint(self) -> str:
+        """Return the default entrypoint value when running a deamon process
+        in a container.
+        """
+        return ''
