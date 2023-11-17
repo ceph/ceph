@@ -1762,6 +1762,8 @@ uint64_t OSDMap::get_features(int entity_type, uint64_t *pmask) const
     features |= CEPH_FEATURE_CRUSH_TUNABLES5;
   if (crush->has_incompat_choose_args())
     features |= CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS;
+  if (crush->has_nondefault_tunables_msr())
+    features |= CEPH_FEATURE_CRUSH_MSR;
   mask |= CEPH_FEATURES_CRUSH;
 
   if (!pg_upmap.empty() || !pg_upmap_items.empty() || !pg_upmap_primaries.empty())

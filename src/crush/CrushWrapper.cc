@@ -3103,6 +3103,10 @@ void CrushWrapper::encode(bufferlist& bl, uint64_t features) const
       }
     }
   }
+  if (HAVE_FEATURE(features, CRUSH_MSR)) {
+    encode(crush->msr_descents, bl);
+    encode(crush->msr_collision_tries, bl);
+  }
 }
 
 static void decode_32_or_64_string_map(map<int32_t,string>& m, bufferlist::const_iterator& blp)
@@ -3252,6 +3256,12 @@ void CrushWrapper::decode(bufferlist::const_iterator& blp)
 	}
 	choose_args[choose_args_index] = arg_map;
       }
+    }
+    if (!blp.end()) {
+      decode(crush->msr_descents, blp);
+      decode(crush->msr_collision_tries, blp);
+    } else {
+      set_default_msr_tunables();
     }
     update_choose_args(nullptr); // in case we decode a legacy "corrupted" map
     finalize();
@@ -3508,6 +3518,8 @@ void CrushWrapper::dump_tunables(Formatter *f) const
   f->dump_int("chooseleaf_descend_once", get_chooseleaf_descend_once());
   f->dump_int("chooseleaf_vary_r", get_chooseleaf_vary_r());
   f->dump_int("chooseleaf_stable", get_chooseleaf_stable());
+  f->dump_int("msr_descents", get_msr_descents());
+  f->dump_int("msr_collision_tries", get_msr_collision_tries());
   f->dump_int("straw_calc_version", get_straw_calc_version());
   f->dump_int("allowed_bucket_algs", get_allowed_bucket_algs());
 
@@ -3637,12 +3649,25 @@ void CrushWrapper::dump_rule(int rule_id, Formatter *f) const
       f->dump_int("num", get_rule_arg1(rule_id, j));
       f->dump_string("type", get_type_name(get_rule_arg2(rule_id, j)));
       break;
+    case CRUSH_RULE_CHOOSE_MSR:
+      f->dump_string("op", "choosemsr");
+      f->dump_int("num", get_rule_arg1(rule_id, j));
+      f->dump_string("type", get_type_name(get_rule_arg2(rule_id, j)));
+      break;
     case CRUSH_RULE_SET_CHOOSE_TRIES:
       f->dump_string("op", "set_choose_tries");
       f->dump_int("num", get_rule_arg1(rule_id, j));
       break;
     case CRUSH_RULE_SET_CHOOSELEAF_TRIES:
       f->dump_string("op", "set_chooseleaf_tries");
+      f->dump_int("num", get_rule_arg1(rule_id, j));
+      break;
+    case CRUSH_RULE_SET_MSR_DESCENTS:
+      f->dump_string("op", "set_msr_descents");
+      f->dump_int("num", get_rule_arg1(rule_id, j));
+      break;
+    case CRUSH_RULE_SET_MSR_COLLISION_TRIES:
+      f->dump_string("op", "set_msr_collision_tries");
       f->dump_int("num", get_rule_arg1(rule_id, j));
       break;
     default:
