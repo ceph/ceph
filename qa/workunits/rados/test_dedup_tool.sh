@@ -515,6 +515,76 @@ function test_sample_dedup_snap()
   $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
 }
 
+function test_dedup_memory_limit()
+{
+  CHUNK_POOL=dedup_chunk_pool
+  $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+  $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+
+  sleep 2
+
+  run_expect_succ "$CEPH_TOOL" osd pool create "$POOL" 8
+  run_expect_succ "$CEPH_TOOL" osd pool create "$CHUNK_POOL" 8
+
+  # 6 dedupable objects
+  CONTENT_1="There hiHI"
+  echo $CONTENT_1 > foo
+  for num in `seq 1 6`
+  do
+    $RADOS_TOOL -p $POOL put foo_$num ./foo
+  done
+
+  # 3 Unique objects
+  for num in `seq 7 9`
+  do
+    CONTENT_="There hiHI"$num
+    echo $CONTENT_ > foo
+    $RADOS_TOOL -p $POOL put foo_$num ./foo
+  done
+
+  # 6 dedupable objects
+  CONTENT_2="There hiHIhi"
+  echo $CONTENT_2 > foo
+  for num in `seq 10 15`
+  do
+    $RADOS_TOOL -p $POOL put foo_$num ./foo
+  done
+
+  #Since the memory limit is 100 bytes, adding 3 unique objects causes a memory drop, leaving
+  #the chunk of the 6 dupable objects. If we then add 6 dedupable objects to the pool,
+  #the crawler should find dedupable chunks because it free memory space through the memory drop before.
+  # 1 entry == 46 bytes
+
+  sleep 2
+
+  # Execute dedup crawler
+  RESULT=$($DEDUP_TOOL --pool $POOL --chunk-pool $CHUNK_POOL --op sample-dedup --chunk-algorithm fastcdc --fingerprint-algorithm sha1 --chunk-dedup-threshold 2 --sampling-ratio 100 --fpstore-threshold 100)
+
+  CHUNK_OID_1=$(echo $CONTENT_1 | sha1sum | awk '{print $1}')
+  CHUNK_OID_2=$(echo $CONTENT_2 | sha1sum | awk '{print $1}')
+
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID_1 | grep foo)
+  if [ -z "$RESULT" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "There is no expected chunk object"
+  fi
+
+  RESULT=$($DEDUP_TOOL --op dump-chunk-refs --chunk-pool $CHUNK_POOL --object $CHUNK_OID_2 | grep foo)
+  if [ -z "$RESULT" ] ; then
+    $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
+    $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+    die "There is no expected chunk object"
+  fi
+
+  rm -rf ./foo
+  for num in `seq 1 15`
+  do
+    $RADOS_TOOL -p $POOL rm foo_$num
+  done
+
+  $CEPH_TOOL osd pool delete $CHUNK_POOL $CHUNK_POOL --yes-i-really-really-mean-it
+}
 
 test_dedup_ratio_fixed
 test_dedup_chunk_scrub
@@ -522,6 +592,7 @@ test_dedup_chunk_repair
 test_dedup_object
 test_sample_dedup
 test_sample_dedup_snap
+test_dedup_memory_limit
 
 $CEPH_TOOL osd pool delete $POOL $POOL --yes-i-really-really-mean-it
 
