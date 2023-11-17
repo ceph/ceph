@@ -363,10 +363,10 @@ int CrushCompiler::decompile(ostream &out)
     out << "\tid " << i << "\n";
 
     switch (crush.get_rule_type(i)) {
-    case CEPH_PG_TYPE_REPLICATED:
+    case CRUSH_RULE_TYPE_REPLICATED:
       out << "\ttype replicated\n";
       break;
-    case CEPH_PG_TYPE_ERASURE:
+    case CRUSH_RULE_TYPE_ERASURE:
       out << "\ttype erasure\n";
       break;
     default:
@@ -781,9 +781,9 @@ int CrushCompiler::parse_rule(iter_t const& i)
   string tname = string_node(i->children[start+2]);
   int type;
   if (tname == "replicated")
-    type = CEPH_PG_TYPE_REPLICATED;
+    type = CRUSH_RULE_TYPE_REPLICATED;
   else if (tname == "erasure")
-    type = CEPH_PG_TYPE_ERASURE;
+    type = CRUSH_RULE_TYPE_ERASURE;
   else 
     ceph_abort();
 
