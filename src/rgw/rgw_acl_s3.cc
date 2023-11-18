@@ -392,11 +392,11 @@ int RGWAccessControlList_S3::create_canned(ACLOwner& owner, ACLOwner& bucket_own
     add_grant(&group_grant);
   } else if (canned_acl.compare("bucket-owner-read") == 0) {
     bucket_owner_grant.set_canon(bid, bname, RGW_PERM_READ);
-    if (bid.compare(owner.get_id()) != 0)
+    if (bid != owner.get_id())
       add_grant(&bucket_owner_grant);
   } else if (canned_acl.compare("bucket-owner-full-control") == 0) {
     bucket_owner_grant.set_canon(bid, bname, RGW_PERM_FULL_CONTROL);
-    if (bid.compare(owner.get_id()) != 0)
+    if (bid != owner.get_id())
       add_grant(&bucket_owner_grant);
   } else {
     return -EINVAL;
@@ -489,7 +489,7 @@ int RGWAccessControlPolicy_S3::rebuild(const DoutPrefixProvider *dpp,
   ACLOwner *requested_owner = static_cast<ACLOwner_S3 *>(find_first("Owner"));
   if (requested_owner) {
     rgw_user& requested_id = requested_owner->get_id();
-    if (!requested_id.empty() && requested_id.compare(owner->get_id()) != 0)
+    if (!requested_id.empty() && requested_id != owner->get_id())
       return -EPERM;
   }
 
