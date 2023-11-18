@@ -364,19 +364,26 @@ struct GrantMetaTable : public EmptyMetaTable {
     if (strcasecmp(index, "Type") == 0) {
       lua_pushinteger(L, grant->get_type().get_type());
     } else if (strcasecmp(index, "User") == 0) {
-      const auto id_ptr = grant->get_id();
-      if (id_ptr) {
+      if (const auto user = grant->get_user(); user) {
         create_metatable<UserMetaTable>(L, name, index, false, 
-            const_cast<rgw_user*>(id_ptr));
+            const_cast<rgw_user*>(&user->id));
       } else {
         lua_pushnil(L);
       }
     } else if (strcasecmp(index, "Permission") == 0) {
       lua_pushinteger(L, grant->get_permission().get_permissions());
     } else if (strcasecmp(index, "GroupType") == 0) {
-      lua_pushinteger(L, grant->get_group());
+      if (const auto group = grant->get_group(); group) {
+        lua_pushinteger(L, group->type);
+      } else {
+        lua_pushnil(L);
+      }
     } else if (strcasecmp(index, "Referer") == 0) {
-      pushstring(L, grant->get_referer());
+      if (const auto referer = grant->get_referer(); referer) {
+        pushstring(L, referer->url_spec);
+      } else {
+        lua_pushnil(L);
+      }
     } else {
       return error_unknown_field(L, index, name);
     }

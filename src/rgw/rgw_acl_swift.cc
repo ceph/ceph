@@ -222,16 +222,13 @@ void merge_policy(uint32_t rw_mask, const RGWAccessControlPolicy& src,
   for (const auto &iter: src.get_acl().get_grant_map()) {
     const ACLGrant& grant = iter.second;
     uint32_t perm = grant.get_permission().get_permissions();
-    rgw_user id;
-    if (!grant.get_id(id)) {
-      if (grant.get_group() != ACL_GROUP_ALL_USERS) {
-        if (string url_spec = grant.get_referer(); url_spec.empty()) {
-          continue;
-        }
-        if (perm == 0) {
-          /* We need to carry also negative, HTTP referrer-based ACLs. */
-          perm = SWIFT_PERM_READ;
-        }
+    if (const auto* referer = grant.get_referer(); referer) {
+      if (referer->url_spec.empty()) {
+        continue;
+      }
+      if (perm == 0) {
+        /* We need to carry also negative, HTTP referrer-based ACLs. */
+        perm = SWIFT_PERM_READ;
       }
     }
     if (perm & rw_mask) {
@@ -245,35 +242,37 @@ void format_container_acls(const RGWAccessControlPolicy& policy,
 {
   for (const auto& [k, grant] : policy.get_acl().get_grant_map()) {
     const uint32_t perm = grant.get_permission().get_permissions();
-    rgw_user id;
-    string url_spec;
-    if (!grant.get_id(id)) {
-      if (grant.get_group() == ACL_GROUP_ALL_USERS) {
+    std::string id;
+    std::string url_spec;
+    if (const auto user = grant.get_user(); user) {
+      id = user->id.to_str();
+    } else if (const auto group = grant.get_group(); group) {
+      if (group->type == ACL_GROUP_ALL_USERS) {
         id = SWIFT_GROUP_ALL_USERS;
-      } else {
-        url_spec = grant.get_referer();
-        if (url_spec.empty()) {
-          continue;
-        }
-        id = (perm != 0) ? ".r:" + url_spec : ".r:-" + url_spec;
       }
+    } else if (const auto referer = grant.get_referer(); referer) {
+      url_spec = referer->url_spec;
+      if (url_spec.empty()) {
+        continue;
+      }
+      id = (perm != 0) ? ".r:" + url_spec : ".r:-" + url_spec;
     }
     if (perm & SWIFT_PERM_READ) {
       if (!read.empty()) {
         read.append(",");
       }
-      read.append(id.to_str());
+      read.append(id);
     } else if (perm & SWIFT_PERM_WRITE) {
       if (!write.empty()) {
         write.append(",");
       }
-      write.append(id.to_str());
+      write.append(id);
     } else if (perm == 0 && !url_spec.empty()) {
       /* only X-Container-Read headers support referers */
       if (!read.empty()) {
         read.append(",");
       }
-      read.append(id.to_str());
+      read.append(id);
     }
   }
 }
@@ -338,22 +337,27 @@ auto format_account_acl(const RGWAccessControlPolicy& policy)
     const ACLGrant& grant = item.second;
     const uint32_t perm = grant.get_permission().get_permissions();
 
-    rgw_user id;
-    if (!grant.get_id(id)) {
-      if (grant.get_group() != ACL_GROUP_ALL_USERS) {
+    std::string id;
+    if (const auto user = grant.get_user(); user) {
+      if (owner.id == user->id) {
+        continue;
+      }
+      id = user->id.to_str();
+    } else if (const auto group = grant.get_group(); group) {
+      if (group->type != ACL_GROUP_ALL_USERS) {
         continue;
       }
       id = SWIFT_GROUP_ALL_USERS;
-    } else if (owner.id == id) {
+    } else {
       continue;
     }
 
     if (SWIFT_PERM_ADMIN == (perm & SWIFT_PERM_ADMIN)) {
-      admin.insert(admin.end(), id.to_str());
+      admin.insert(admin.end(), id);
     } else if (SWIFT_PERM_RWRT == (perm & SWIFT_PERM_RWRT)) {
-      readwrite.insert(readwrite.end(), id.to_str());
+      readwrite.insert(readwrite.end(), id);
     } else if (SWIFT_PERM_READ == (perm & SWIFT_PERM_READ)) {
-      readonly.insert(readonly.end(), id.to_str());
+      readonly.insert(readonly.end(), id);
     } else {
       // FIXME: print a warning
     }

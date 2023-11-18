@@ -33,10 +33,7 @@ bool operator!=(const ACLGranteeType& lhs, const ACLGranteeType& rhs) {
 }
 
 bool operator==(const ACLGrant& lhs, const ACLGrant& rhs) {
-  return lhs.type == rhs.type && lhs.id == rhs.id
-      && lhs.email == rhs.email && lhs.permission == rhs.permission
-      && lhs.name == rhs.name && lhs.group == rhs.group
-      && lhs.url_spec == rhs.url_spec;
+  return lhs.grantee == rhs.grantee && lhs.permission == rhs.permission;
 }
 bool operator!=(const ACLGrant& lhs, const ACLGrant& rhs) {
   return !(lhs == rhs);
@@ -73,49 +70,41 @@ bool operator!=(const RGWAccessControlPolicy& lhs,
 void RGWAccessControlList::register_grant(const ACLGrant& grant)
 {
   ACLPermission perm = grant.get_permission();
-  ACLGranteeType type = grant.get_type();
-  switch (type.get_type()) {
-  case ACL_TYPE_REFERER:
-    referer_list.emplace_back(grant.get_referer(), perm.get_permissions());
+
+  if (const auto* user = grant.get_user(); user) {
+    acl_user_map[user->id.to_str()] |= perm.get_permissions();
+  } else if (const auto* email = grant.get_email(); email) {
+    acl_user_map[email->address] |= perm.get_permissions();
+  } else if (const auto* group = grant.get_group(); group) {
+    acl_group_map[group->type] |= perm.get_permissions();
+  } else if (const auto* referer = grant.get_referer(); referer) {
+    referer_list.emplace_back(referer->url_spec, perm.get_permissions());
 
     /* We're specially handling the Swift's .r:* as the S3 API has a similar
      * concept and thus we can have a small portion of compatibility here. */
-     if (grant.get_referer() == RGW_REFERER_WILDCARD) {
+     if (referer->url_spec == RGW_REFERER_WILDCARD) {
        acl_group_map[ACL_GROUP_ALL_USERS] |= perm.get_permissions();
      }
-    break;
-  case ACL_TYPE_GROUP:
-    acl_group_map[grant.get_group()] |= perm.get_permissions();
-    break;
-  default:
-    {
-      rgw_user id;
-      grant.get_id(id);
-      acl_user_map[id.to_str()] |= perm.get_permissions();
-    }
   }
 }
 
 void RGWAccessControlList::add_grant(const ACLGrant& grant)
 {
-  rgw_user id;
-  grant.get_id(id); // note that this will return false for groups, but that's ok, we won't search groups
-  grant_map.emplace(id.to_str(), grant);
+  std::string id;
+  if (const auto* user = grant.get_user(); user) {
+    id = user->id.to_str();
+  } else if (const auto* email = grant.get_email(); email) {
+    id = email->address;
+  } // other types share the empty key in the grant multimap
+  grant_map.emplace(id, grant);
   register_grant(grant);
 }
 
-void RGWAccessControlList::remove_canon_user_grant(rgw_user& user_id)
+void RGWAccessControlList::remove_canon_user_grant(const rgw_user& user_id)
 {
-  auto multi_map_iter = grant_map.find(user_id.to_str());
-  if(multi_map_iter != grant_map.end()) {
-    auto grants = grant_map.equal_range(user_id.to_str());
-    grant_map.erase(grants.first, grants.second);
-  }
-
-  auto map_iter = acl_user_map.find(user_id.to_str());
-  if (map_iter != acl_user_map.end()){
-    acl_user_map.erase(map_iter);
-  }
+  const std::string& key = user_id.to_str();
+  grant_map.erase(key);
+  acl_user_map.erase(key);
 }
 
 uint32_t RGWAccessControlList::get_perm(const DoutPrefixProvider* dpp, 
@@ -277,31 +266,36 @@ void ACLGranteeType::dump(Formatter *f) const
 void ACLGrant::dump(Formatter *f) const
 {
   f->open_object_section("type");
-  type.dump(f);
+  get_type().dump(f);
   f->close_section();
 
-  f->dump_string("id", id.to_str());
-  f->dump_string("email", email);
+  struct dump_visitor {
+    Formatter* f;
 
-  f->open_object_section("permission");
-  permission.dump(f);
-  f->close_section();
+    void operator()(const ACLGranteeCanonicalUser& user) {
+      encode_json("id", user.id, f);
+      encode_json("name", user.name, f);
+    }
+    void operator()(const ACLGranteeEmailUser& email) {
+      encode_json("email", email.address, f);
+    }
+    void operator()(const ACLGranteeGroup& group) {
+      encode_json("group", static_cast<int>(group.type), f);
+    }
+    void operator()(const ACLGranteeUnknown&) {}
+    void operator()(const ACLGranteeReferer& r) {
+      encode_json("url_spec", r.url_spec, f);
+    }
+  };
+  std::visit(dump_visitor{f}, grantee);
 
-  f->dump_string("name", name);
-  f->dump_int("group", (int)group);
-  f->dump_string("url_spec", url_spec);
+  encode_json("permission", permission, f);
 }
 
 void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
 {
-  rgw_user id("rgw");
-  string name, email;
-  name = "Mr. RGW";
-  email = "r@gw";
-
   ACLGrant *g1 = new ACLGrant;
-  g1->set_canon(id, name, RGW_PERM_READ);
-  g1->email = email;
+  g1->set_canon(rgw_user{"rgw"}, "Mr. RGW", RGW_PERM_READ);
   o.push_back(g1);
 
   ACLGrant *g2 = new ACLGrant;
@@ -313,9 +307,7 @@ void ACLGrant::generate_test_instances(list<ACLGrant*>& o)
 
 void ACLGranteeType::generate_test_instances(list<ACLGranteeType*>& o)
 {
-  ACLGranteeType *t = new ACLGranteeType;
-  t->set(ACL_TYPE_CANON_USER);
-  o.push_back(t);
+  o.push_back(new ACLGranteeType(ACL_TYPE_CANON_USER));
   o.push_back(new ACLGranteeType);
 }
 

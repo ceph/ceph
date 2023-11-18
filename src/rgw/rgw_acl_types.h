@@ -181,12 +181,15 @@ class ACLGranteeType
 protected:
   __u32 type;
 public:
-  ACLGranteeType() : type(ACL_TYPE_UNKNOWN) {}
+  ACLGranteeType(ACLGranteeTypeEnum t = ACL_TYPE_UNKNOWN) : type(t) {}
   virtual ~ACLGranteeType() {}
-//  virtual const char *to_string() = 0;
+
   ACLGranteeTypeEnum get_type() const { return (ACLGranteeTypeEnum)type; }
+  operator ACLGranteeTypeEnum() const { return get_type(); }
+
   void set(ACLGranteeTypeEnum t) { type = t; }
-//  virtual void set(const char *s) = 0;
+  ACLGranteeType& operator=(ACLGranteeTypeEnum t) { set(t); return *this; }
+
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);
     encode(type, bl);
