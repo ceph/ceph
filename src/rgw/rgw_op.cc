@@ -512,7 +512,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   }
 
   if(s->dialect.compare("s3") == 0) {
-    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_S3>();
+    s->bucket_acl = std::make_unique<RGWAccessControlPolicy>();
   } else if(s->dialect.compare("swift")  == 0) {
     /* We aren't allocating the account policy for those operations using
      * the Swift's infrastructure that don't really need req_state::user.
@@ -5982,25 +5982,10 @@ void RGWDeleteLC::pre_exec()
 
 void RGWPutACLs::execute(optional_yield y)
 {
-  bufferlist bl;
-
-  RGWAccessControlPolicy_S3 *policy = NULL;
-  RGWACLXMLParser_S3 parser(s->cct);
-  RGWAccessControlPolicy_S3 new_policy;
-  stringstream ss;
-
-  op_ret = 0; /* XXX redundant? */
-
-  if (!parser.init()) {
-    op_ret = -EINVAL;
-    return;
-  }
-
-
   RGWAccessControlPolicy* const existing_policy = \
     (rgw::sal::Object::empty(s->object.get()) ? s->bucket_acl.get() : s->object_acl.get());
 
-  owner = existing_policy->get_owner();
+  const ACLOwner& existing_owner = existing_policy->get_owner();
 
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -6023,26 +6008,24 @@ void RGWPutACLs::execute(optional_yield y)
     return;
   }
 
+  RGWAccessControlPolicy new_policy;
   if (!s->canned_acl.empty() || s->has_acl_header) {
-    op_ret = get_policy_from_state(driver, s, ss);
-    if (op_ret < 0)
-      return;
-
-    data.clear();
-    data.append(ss.str());
+    op_ret = get_policy_from_state(existing_owner, new_policy);
+  } else {
+    op_ret = rgw::s3::parse_policy(this, y, driver, {data.c_str(), data.length()},
+                                   new_policy, s->err.message);
   }
-
-  if (!parser.parse(data.c_str(), data.length(), 1)) {
-    op_ret = -EINVAL;
+  if (op_ret < 0)
     return;
-  }
-  policy = static_cast<RGWAccessControlPolicy_S3 *>(parser.find_first("AccessControlPolicy"));
-  if (!policy) {
-    op_ret = -EINVAL;
+
+  if (!existing_owner.id.empty() &&
+      existing_owner.id != new_policy.get_owner().id) {
+    s->err.message = "Cannot modify ACL Owner";
+    op_ret = -EPERM;
     return;
   }
 
-  const RGWAccessControlList& req_acl = policy->get_acl();
+  const RGWAccessControlList& req_acl = new_policy.get_acl();
   const multimap<string, ACLGrant>& req_grant_map = req_acl.get_grant_map();
 #define ACL_GRANTS_MAX_NUM      100
   int max_num = s->cct->_conf->rgw_acl_grants_max_num;
@@ -6063,13 +6046,8 @@ void RGWPutACLs::execute(optional_yield y)
 
   // forward bucket acl requests to meta master zone
   if ((rgw::sal::Object::empty(s->object.get()))) {
-    bufferlist in_data;
-    // include acl data unless it was generated from a canned_acl
-    if (s->canned_acl.empty()) {
-      in_data.append(data);
-    }
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                           &in_data, nullptr, s->info, y);
+                                           &data, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -6078,15 +6056,9 @@ void RGWPutACLs::execute(optional_yield y)
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(this, 15) << "Old AccessControlPolicy";
-    rgw::s3::write_policy_xml(*policy, *_dout);
+    rgw::s3::write_policy_xml(*existing_policy, *_dout);
     *_dout << dendl;
-  }
 
-  op_ret = policy->rebuild(this, driver, &owner, new_policy, s->err.message);
-  if (op_ret < 0)
-    return;
-
-  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(this, 15) << "New AccessControlPolicy:";
     rgw::s3::write_policy_xml(new_policy, *_dout);
     *_dout << dendl;
@@ -6098,6 +6070,8 @@ void RGWPutACLs::execute(optional_yield y)
     op_ret = -EACCES;
     return;
   }
+
+  bufferlist bl;
   new_policy.encode(bl);
   map<string, bufferlist> attrs;
 

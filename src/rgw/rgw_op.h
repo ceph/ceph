@@ -1576,7 +1576,6 @@ public:
 class RGWPutACLs : public RGWOp {
 protected:
   bufferlist data;
-  ACLOwner owner;
 
 public:
   RGWPutACLs() {}
@@ -1586,7 +1585,8 @@ public:
   void pre_exec() override;
   void execute(optional_yield y) override;
 
-  virtual int get_policy_from_state(rgw::sal::Driver* driver, req_state *s, std::stringstream& ss) { return 0; }
+  virtual int get_policy_from_state(const ACLOwner& owner,
+                                    RGWAccessControlPolicy& p) { return 0; }
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_acls"; }
@@ -1636,7 +1636,6 @@ public:
   void pre_exec() override;
   void execute(optional_yield y) override;
 
-//  virtual int get_policy_from_state(RGWRados* driver, req_state *s, std::stringstream& ss) { return 0; }
   virtual int get_params(optional_yield y) = 0;
   void send_response() override = 0;
   const char* name() const override { return "put_lifecycle"; }

@@ -111,7 +111,7 @@ public:
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<ACLGrant*>& o);
 
-  ACLGroupTypeEnum uri_to_group(std::string& uri);
+  static ACLGroupTypeEnum uri_to_group(std::string_view uri);
 
   void set_canon(const rgw_user& _id, const std::string& _name, const uint32_t perm) {
     type.set(ACL_TYPE_CANON_USER);
