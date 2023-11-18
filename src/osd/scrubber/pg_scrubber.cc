@@ -85,6 +85,13 @@ ostream& operator<<(ostream& out, const requested_scrub_t& sf)
   return out;
 }
 
+void PgScrubber::on_replica_activate()
+{
+  dout(10) << __func__ << dendl;
+  m_fsm->process_event(ReplicaActivate{});
+}
+
+
 /*
  * if the incoming message is from a previous interval, it must mean
  * PrimaryLogPG::on_change() was called when that interval ended. We can safely
@@ -197,7 +204,6 @@ bool PgScrubber::should_abort() const
  *
  * Some of the considerations above are also relevant to the replica-side
  * initiation
- * ('StartReplica' & 'StartReplicaNoWait').
  */
 
 void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
@@ -277,13 +283,7 @@ void PgScrubber::send_start_replica(epoch_t epoch_queued,
   }
 
   if (check_interval(epoch_queued) && is_token_current(token)) {
-    // save us some time by not waiting for updates if there are none
-    // to wait for. Affects the transition from NotActive into either
-    // ReplicaWaitUpdates or ActiveReplica.
-    if (pending_active_pushes())
-      m_fsm->process_event(StartReplica{});
-    else
-      m_fsm->process_event(StartReplicaNoWait{});
+    m_fsm->process_event(StartReplica{});
   }
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
@@ -455,6 +455,11 @@ unsigned int PgScrubber::scrub_requeue_priority(
  * Responsible for resetting any scrub state and releasing any resources.
  * Any inflight events will be ignored via check_interval/should_drop_message
  * or canceled.
+ * Specifically:
+ * - if Primary and in an active session - the IntervalChanged handler takes
+ *   care of discarding the remote reservations, and transitioning out of
+ *   Session. That resets both the scrubber and the FSM.
+ * - if we are a reserved replica - we need to free ourselves;
  */
 void PgScrubber::on_new_interval()
 {
@@ -464,14 +469,7 @@ void PgScrubber::on_new_interval()
 		  is_scrub_active(), is_queued_or_active())
 	   << dendl;
 
-  // If in active session - the IntervalChanged handler takes care of
-  // discarding the remote reservations, and transitioning out of Session.
-  // That resets both the scrubber and the FSM.
   m_fsm->process_event(IntervalChanged{});
-
-  // If we are a reserved replica - we need to free ourselves; otherwise -
-  // this is a no-op.
-  clear_reservation_by_remote_primary();
 
   // The 'FullReset' is only relevant if we are not an active Primary
   m_fsm->process_event(FullReset{});
@@ -1151,13 +1149,7 @@ void PgScrubber::on_init()
   m_pg->publish_stats_to_osd();
 }
 
-/*
- * Note: as on_replica_init() is likely to be called twice (entering
- * both ReplicaWaitUpdates & ActiveReplica), its operations should be
- * idempotent.
- * Now that it includes some state-changing operations, we need to check
- * m_active against double-activation.
- */
+
 void PgScrubber::on_replica_init()
 {
   dout(10) << __func__ << " called with 'active' "
@@ -1170,6 +1162,7 @@ void PgScrubber::on_replica_init()
     ++m_sessions_counter;
   }
 }
+
 
 int PgScrubber::build_primary_map_chunk()
 {
@@ -1688,70 +1681,20 @@ void PgScrubber::handle_scrub_reserve_msgs(OpRequestRef op)
   auto m = op->get_req<MOSDScrubReserve>();
   switch (m->type) {
     case MOSDScrubReserve::REQUEST:
-      handle_scrub_reserve_request(op);
+      m_fsm->process_event(ReplicaReserveReq{op, m->from});
       break;
     case MOSDScrubReserve::GRANT:
-      m_fsm->process_event(ReplicaGrant{op, m->from});
+      m_fsm->process_event(ReplicaGrant(op, m->from));
       break;
     case MOSDScrubReserve::REJECT:
       m_fsm->process_event(ReplicaReject{op, m->from});
       break;
     case MOSDScrubReserve::RELEASE:
-      handle_scrub_reserve_release(op);
+      m_fsm->process_event(ReplicaRelease{op, m->from});
       break;
   }
 }
 
-
-void PgScrubber::handle_scrub_reserve_request(OpRequestRef op)
-{
-  auto request_ep = op->sent_epoch;
-  dout(20) << fmt::format("{}: request_ep:{} recovery:{}",
-			  __func__,
-			  request_ep,
-			  m_osds->is_recovery_active())
-	   << dendl;
-
-  // The primary may unilaterally restart the scrub process without notifying
-  // replicas. Unconditionally clear any existing state prior to handling
-  // the new reservation.
-  m_fsm->process_event(FullReset{});
-
-  bool granted{false};
-  if (m_pg->cct->_conf->osd_scrub_during_recovery ||
-      !m_osds->is_recovery_active()) {
-
-    granted = m_osds->get_scrub_services().inc_scrubs_remote(m_pg_id.pgid);
-    if (!granted) {
-      dout(20) << __func__ << ": failed to reserve remotely" << dendl;
-    }
-  } else {
-    dout(10) << __func__ << ": recovery is active; not granting" << dendl;
-  }
-
-  dout(10) << __func__ << " reserved? " << (granted ? "yes" : "no") << dendl;
-
-  Message* reply = new MOSDScrubReserve(
-    spg_t(m_pg->info.pgid.pgid, m_pg->get_primary().shard),
-    request_ep,
-    granted ? MOSDScrubReserve::GRANT : MOSDScrubReserve::REJECT,
-    m_pg_whoami);
-
-  m_osds->send_message_osd_cluster(reply, op->get_req()->get_connection());
-}
-
-void PgScrubber::handle_scrub_reserve_release(OpRequestRef op)
-{
-  dout(10) << __func__ << " " << *op->get_req() << dendl;
-  if (should_drop_message(op)) {
-    // we might have turned into a Primary in the meantime. The interval
-    // change should have been noticed already, and caused us to reset.
-    return;
-  }
-
-  clear_reservation_by_remote_primary();
-  m_fsm->process_event(FullReset{});
-}
 
 bool PgScrubber::set_reserving_now() {
   return m_osds->get_scrub_services().set_reserving_now(m_pg_id,

@@ -258,14 +258,6 @@ class PgScrubber : public ScrubPgIF,
    */
   void handle_scrub_reserve_msgs(OpRequestRef op) final;
 
-  /**
-   *  we are a replica being asked by the Primary to reserve OSD resources for
-   *  scrubbing
-   */
-  void handle_scrub_reserve_request(OpRequestRef op);
-
-  void handle_scrub_reserve_release(OpRequestRef op);
-
   // managing scrub op registration
 
   void update_scrub_job(const requested_scrub_t& request_flags) final;
@@ -333,6 +325,8 @@ class PgScrubber : public ScrubPgIF,
   void map_from_replica(OpRequestRef op) final;
 
   void on_new_interval() final;
+
+  void on_replica_activate() final;
 
   void scrub_clear_state() final;
 

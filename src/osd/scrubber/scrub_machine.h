@@ -48,39 +48,54 @@ namespace mpl = ::boost::mpl;
 void on_event_creation(std::string_view nm);
 void on_event_discard(std::string_view nm);
 
-// reservation grant/reject events carry the peer's response:
+
+template <typename EV>
+struct OpCarryingEvent : sc::event<EV> {
+  static constexpr const char* event_name = "<>";
+  const OpRequestRef m_op;
+  const pg_shard_t m_from;
+  OpCarryingEvent(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
+  {
+    on_event_creation(static_cast<EV*>(this)->event_name);
+  }
+
+  OpCarryingEvent(const OpCarryingEvent&) = default;
+  OpCarryingEvent(OpCarryingEvent&&) = default;
+  OpCarryingEvent& operator=(const OpCarryingEvent&) = default;
+  OpCarryingEvent& operator=(OpCarryingEvent&&) = default;
+
+  void print(std::ostream* out) const
+  {
+    *out << fmt::format("{} (from: {})", EV::event_name, m_from);
+  }
+  std::string_view print() const { return EV::event_name; }
+  ~OpCarryingEvent() { on_event_discard(EV::event_name); }
+};
+
+#define OP_EV(T)                                                     \
+  struct T : OpCarryingEvent<T> {                                    \
+    static constexpr const char* event_name = #T;                    \
+    template <typename... Args>                                      \
+    T(Args&&... args) : OpCarryingEvent(std::forward<Args>(args)...) \
+    {                                                                \
+    }                                                                \
+  }
+
+
+// reservation events carry peer's request/response data:
 
 /// a replica has granted our reservation request
-struct ReplicaGrant : sc::event<ReplicaGrant> {
-  OpRequestRef m_op;
-  pg_shard_t m_from;
-  ReplicaGrant(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
-  {
-    on_event_creation("ReplicaGrant");
-  }
-  void print(std::ostream* out) const
-  {
-    *out << fmt::format("ReplicaGrant(from: {})", m_from);
-  }
-  std::string_view print() const { return "ReplicaGrant"; }
-  ~ReplicaGrant() { on_event_discard("ReplicaGrant"); }
-};
+OP_EV(ReplicaGrant);
 
 /// a replica has denied our reservation request
-struct ReplicaReject : sc::event<ReplicaReject> {
-  OpRequestRef m_op;
-  pg_shard_t m_from;
-  ReplicaReject(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
-  {
-    on_event_creation("ReplicaReject");
-  }
-  void print(std::ostream* out) const
-  {
-    *out << fmt::format("ReplicaReject(from: {})", m_from);
-  }
-  std::string_view print() const { return "ReplicaReject"; }
-  ~ReplicaReject() { on_event_discard("ReplicaReject"); }
-};
+OP_EV(ReplicaReject);
+
+/// received Primary request for scrub reservation
+OP_EV(ReplicaReserveReq);
+
+/// explicit release request from the Primary
+OP_EV(ReplicaRelease);
+
 
 #define MEV(E)                                          \
   struct E : sc::event<E> {                             \
@@ -149,11 +164,11 @@ MEV(IntLocalMapDone)
 /// scrub_snapshot_metadata()
 MEV(DigestUpdate)
 
+/// we are a replica for this PG
+MEV(ReplicaActivate)
+
 /// initiating replica scrub
 MEV(StartReplica)
-
-/// 'start replica' when there are no pending updates
-MEV(StartReplicaNoWait)
 
 MEV(SchedReplica)
 
@@ -194,6 +209,8 @@ struct Session;            ///< either reserving or actively scrubbing
 struct ReservingReplicas;   ///< securing scrub resources from replicas' OSDs
 struct ActiveScrubbing;	    ///< the active state for a Primary. A sub-machine.
 // the active states for a replica:
+struct ActiveAsReplica;    ///< the quiescent state for a replica
+struct ReplicaActiveOp;
 struct ReplicaWaitUpdates;
 struct ReplicaBuildingMap;
 
@@ -353,8 +370,8 @@ public:
  *
  *  - a special end-of-recovery Primary scrub event ('AfterRepairScrub').
  *
- *  - (for a replica) 'StartReplica' or 'StartReplicaNoWait', triggered by
- *    an incoming MOSDRepScrub message.
+ *  - (if already in ActiveAsReplica): an incoming MOSDRepScrub triggers
+ *    'StartReplica'.
  *
  *  note (20.8.21): originally, AfterRepairScrub was triggering a scrub without
  *  waiting for replica resources to be acquired. But once replicas started
@@ -368,9 +385,8 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
       sc::custom_reaction<StartScrub>,
       // a scrubbing that was initiated at recovery completion:
       sc::custom_reaction<AfterRepairScrub>,
-      // handling a request from our primary:
-      sc::transition<StartReplica, ReplicaWaitUpdates>,
-      sc::transition<StartReplicaNoWait, ReplicaBuildingMap>>;
+      // peering done, and we are a replica
+      sc::transition<ReplicaActivate, ActiveAsReplica>>;
 
   sc::result react(const StartScrub&);
   sc::result react(const AfterRepairScrub&);
@@ -597,18 +613,106 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
 
 // ----------------------------- the "replica active" states
 
+/*
+ *  The replica states:
+ *
+ *  ActiveAsReplica - starts after being peered as a replica. Ends on interval.
+ *   - maintain the "I am reserved by a primary" state;
+ *   - handles reservation requests
+ *
+ *     - ReplicaIdle - ready for a new scrub request
+ *          * initial state of ActiveAsReplica
+ *
+ *     - ReplicaActiveOp - handling a single map request op
+ *          * ReplicaWaitUpdates
+ *  	    * ReplicaBuildingMap
+ */
+
+struct ReplicaIdle;
+
+struct ActiveAsReplica : sc::state<ActiveAsReplica, ScrubMachine, ReplicaIdle>,
+			 NamedSimply {
+  explicit ActiveAsReplica(my_context ctx);
+  ~ActiveAsReplica();
+
+  /// handle a reservation request from a primary
+  void on_reserve_req(const ReplicaReserveReq&);
+
+  /// handle a 'release' from a primary
+  void on_release(const ReplicaRelease&);
+
+  void check_for_updates(const StartReplica&);
+
+  using reactions = mpl::list<
+      // a reservation request from the primary
+      sc::in_state_reaction<
+	  ReplicaReserveReq,
+	  ActiveAsReplica,
+	  &ActiveAsReplica::on_reserve_req>,
+      // an explicit release request from the primary
+      sc::in_state_reaction<
+	  ReplicaRelease,
+	  ActiveAsReplica,
+	  &ActiveAsReplica::on_release>,
+      sc::custom_reaction<IntervalChanged>>;
+
+  /// discard the current reservation
+  sc::result react(const IntervalChanged&);
+
+ private:
+  bool reserved_by_my_primary{false};
+
+  // shortcuts:
+  PG* m_pg;
+  OSDService* m_osds;
+
+  /// a convenience internal result structure
+  struct ReservationAttemptRes {
+    MOSDScrubReserve::ReserveMsgOp op;	// GRANT or REJECT
+    std::string_view error_msg;
+    bool granted;
+  };
+
+  /// request a scrub resource from our local OSD
+  /// (after performing some checks)
+  ReservationAttemptRes get_resource();
+
+  void clr_remote_reservation();
+};
+
+
+struct ReplicaIdle : sc::state<ReplicaIdle, ActiveAsReplica>, NamedSimply {
+  explicit ReplicaIdle(my_context ctx);
+  ~ReplicaIdle() = default;
+
+  // note the execution of check_for_updates() when transitioning to
+  // ReplicaActiveOp/ReplicaWaitUpdates. That would trigger a ReplicaPushesUpd
+  // event, which will be handled by ReplicaWaitUpdates.
+  using reactions = mpl::list<
+      sc::transition<
+	  StartReplica,
+	  ReplicaWaitUpdates,
+	  ActiveAsReplica,
+	  &ActiveAsReplica::check_for_updates>>;
+};
+
+
 /**
  * ReplicaActiveOp
  *
  * Lifetime matches handling for a single map request op
  */
 struct ReplicaActiveOp
-  : sc::state<ReplicaActiveOp, ScrubMachine, ReplicaWaitUpdates>,
-    NamedSimply {
+    : sc::state<ReplicaActiveOp, ActiveAsReplica, ReplicaWaitUpdates>,
+      NamedSimply {
   explicit ReplicaActiveOp(my_context ctx);
   ~ReplicaActiveOp();
 
-  using reactions = mpl::list<sc::transition<FullReset, NotActive>>;
+  using reactions = mpl::list<
+      sc::custom_reaction<IntervalChanged>,
+      sc::transition<FullReset, ReplicaIdle>>;
+
+  sc::result react(const IntervalChanged&);
 };
 
 /*
@@ -627,8 +731,8 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReplicaActiveOp>,
 };
 
 
-struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReplicaActiveOp>
-			  , NamedSimply {
+struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReplicaActiveOp>,
+			    NamedSimply {
   explicit ReplicaBuildingMap(my_context ctx);
   using reactions = mpl::list<sc::custom_reaction<SchedReplica>>;
 
