@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 #include <string_view>
+#include <variant>
 #include <include/types.h>
 
 #include <boost/optional.hpp>
@@ -15,95 +16,162 @@
 
 #include "rgw_basic_types.h" //includes rgw_acl_types.h
 
+// acl grantee types
+struct ACLGranteeCanonicalUser {
+  rgw_user id;
+  std::string name;
+
+  friend auto operator<=>(const ACLGranteeCanonicalUser&,
+                          const ACLGranteeCanonicalUser&) = default;
+};
+struct ACLGranteeEmailUser {
+  std::string address;
+
+  friend auto operator<=>(const ACLGranteeEmailUser&,
+                          const ACLGranteeEmailUser&) = default;
+};
+struct ACLGranteeGroup {
+  ACLGroupTypeEnum type = ACL_GROUP_NONE;
+
+  friend auto operator<=>(const ACLGranteeGroup&,
+                          const ACLGranteeGroup&) = default;
+};
+struct ACLGranteeUnknown {
+  friend auto operator<=>(const ACLGranteeUnknown&,
+                          const ACLGranteeUnknown&) = default;
+};
+struct ACLGranteeReferer {
+  std::string url_spec;
+
+  friend auto operator<=>(const ACLGranteeReferer&,
+                          const ACLGranteeReferer&) = default;
+};
+
 class ACLGrant
 {
 protected:
-  ACLGranteeType type;
-  rgw_user id;
-  std::string email;
-  mutable rgw_user email_id;
-  ACLPermission permission;
-  std::string name;
-  ACLGroupTypeEnum group;
-  std::string url_spec;
+  // acl grantee variant, where variant index matches ACLGranteeTypeEnum
+  using ACLGrantee = std::variant<
+    ACLGranteeCanonicalUser,
+    ACLGranteeEmailUser,
+    ACLGranteeGroup,
+    ACLGranteeUnknown,
+    ACLGranteeReferer>;
 
-  friend void to_xml(const ACLGrant& grant, std::ostream& out);
+  ACLGrantee grantee;
+  ACLPermission permission;
 
 public:
-  ACLGrant() : group(ACL_GROUP_NONE) {}
-
-  /* there's an assumption here that email/uri/id encodings are
-     different and there can't be any overlap */
-  bool get_id(rgw_user& _id) const {
-    switch(type.get_type()) {
-    case ACL_TYPE_EMAIL_USER:
-      _id = email; // implies from_str() that parses the 't:u' syntax
-      return true;
-    case ACL_TYPE_GROUP:
-    case ACL_TYPE_REFERER:
-      return false;
-    default:
-      _id = id;
-      return true;
-    }
+  ACLGranteeType get_type() const {
+    return static_cast<ACLGranteeTypeEnum>(grantee.index());
   }
-
-  const rgw_user* get_id() const {
-    switch(type.get_type()) {
-    case ACL_TYPE_EMAIL_USER:
-      email_id.from_str(email);
-      return &email_id;
-    case ACL_TYPE_GROUP:
-    case ACL_TYPE_REFERER:
-      return nullptr;
-    default:
-      return &id;
-    }
-  }
-
-  ACLGranteeType get_type() const { return type; }
   ACLPermission get_permission() const { return permission; }
-  ACLGroupTypeEnum get_group() const { return group; }
-  const std::string& get_referer() const { return url_spec; }
+
+  // return the user grantee, or nullptr
+  const ACLGranteeCanonicalUser* get_user() const {
+    return std::get_if<ACLGranteeCanonicalUser>(&grantee);
+  }
+  // return the email grantee, or nullptr
+  const ACLGranteeEmailUser* get_email() const {
+    return std::get_if<ACLGranteeEmailUser>(&grantee);
+  }
+  // return the group grantee, or nullptr
+  const ACLGranteeGroup* get_group() const {
+    return std::get_if<ACLGranteeGroup>(&grantee);
+  }
+  // return the referer grantee, or nullptr
+  const ACLGranteeReferer* get_referer() const {
+    return std::get_if<ACLGranteeReferer>(&grantee);
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(5, 3, bl);
+    ACLGranteeType type = get_type();
     encode(type, bl);
-    std::string s;
-    id.to_str(s);
-    encode(s, bl);
-    std::string uri;
+
+    if (const ACLGranteeCanonicalUser* user = get_user(); user) {
+      encode(user->id.to_str(), bl);
+    } else {
+      encode(std::string{}, bl); // encode empty id
+    }
+
+    std::string uri; // always empty, v2 converted to 'ACLGroupTypeEnum g' below
     encode(uri, bl);
-    encode(email, bl);
+
+    if (const ACLGranteeEmailUser* email = get_email(); email) {
+      encode(email->address, bl);
+    } else {
+      encode(std::string{}, bl); // encode empty email address
+    }
     encode(permission, bl);
-    encode(name, bl);
-    __u32 g = (__u32)group;
+    if (const ACLGranteeCanonicalUser* user = get_user(); user) {
+      encode(user->name, bl);
+    } else {
+      encode(std::string{}, bl); // encode empty name
+    }
+
+    __u32 g;
+    if (const ACLGranteeGroup* group = get_group(); group) {
+      g = static_cast<__u32>(group->type);
+    } else {
+      g = static_cast<__u32>(ACL_GROUP_NONE);
+    }
     encode(g, bl);
-    encode(url_spec, bl);
+
+    if (const ACLGranteeReferer* referer = get_referer(); referer) {
+      encode(referer->url_spec, bl);
+    } else {
+      encode(std::string{}, bl); // encode empty referer
+    }
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(5, 3, 3, bl);
+    ACLGranteeType type;
     decode(type, bl);
+
+    ACLGranteeCanonicalUser user;
     std::string s;
     decode(s, bl);
-    id.from_str(s);
+    user.id.from_str(s);
+
     std::string uri;
     decode(uri, bl);
-    decode(email, bl);
+
+    ACLGranteeEmailUser email;
+    decode(email.address, bl);
+
     decode(permission, bl);
-    decode(name, bl);
-    if (struct_v > 1) {
-      __u32 g;
-      decode(g, bl);
-      group = (ACLGroupTypeEnum)g;
-    } else {
-      group = uri_to_group(uri);
-    }
+    decode(user.name, bl);
+
+    ACLGranteeGroup group;
+    __u32 g;
+    decode(g, bl);
+    group.type = static_cast<ACLGroupTypeEnum>(g);
+
+    ACLGranteeReferer referer;
     if (struct_v >= 5) {
-      decode(url_spec, bl);
-    } else {
-      url_spec.clear();
+      decode(referer.url_spec, bl);
+    }
+
+    // construct the grantee type
+    switch (type) {
+      case ACL_TYPE_CANON_USER:
+        grantee = std::move(user);
+        break;
+      case ACL_TYPE_EMAIL_USER:
+        grantee = std::move(email);
+        break;
+      case ACL_TYPE_GROUP:
+        grantee = std::move(group);
+        break;
+      case ACL_TYPE_REFERER:
+        grantee = std::move(referer);
+        break;
+      case ACL_TYPE_UNKNOWN:
+      default:
+        grantee = ACLGranteeUnknown{};
+        break;
     }
     DECODE_FINISH(bl);
   }
@@ -112,20 +180,16 @@ public:
 
   static ACLGroupTypeEnum uri_to_group(std::string_view uri);
 
-  void set_canon(const rgw_user& _id, const std::string& _name, const uint32_t perm) {
-    type.set(ACL_TYPE_CANON_USER);
-    id = _id;
-    name = _name;
+  void set_canon(const rgw_user& id, const std::string& name, uint32_t perm) {
+    grantee = ACLGranteeCanonicalUser{id, name};
     permission.set_permissions(perm);
   }
-  void set_group(ACLGroupTypeEnum _group, const uint32_t perm) {
-    type.set(ACL_TYPE_GROUP);
-    group = _group;
+  void set_group(ACLGroupTypeEnum group, uint32_t perm) {
+    grantee = ACLGranteeGroup{group};
     permission.set_permissions(perm);
   }
-  void set_referer(const std::string& _url_spec, const uint32_t perm) {
-    type.set(ACL_TYPE_REFERER);
-    url_spec = _url_spec;
+  void set_referer(const std::string& url_spec, uint32_t perm) {
+    grantee = ACLGranteeReferer{url_spec};
     permission.set_permissions(perm);
   }
 
@@ -267,7 +331,7 @@ public:
   static void generate_test_instances(std::list<RGWAccessControlList*>& o);
 
   void add_grant(const ACLGrant& grant);
-  void remove_canon_user_grant(rgw_user& user_id);
+  void remove_canon_user_grant(const rgw_user& user_id);
 
   ACLGrantMap& get_grant_map() { return grant_map; }
   const ACLGrantMap& get_grant_map() const { return grant_map; }

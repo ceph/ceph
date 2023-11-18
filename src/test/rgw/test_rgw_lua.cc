@@ -635,8 +635,12 @@ TEST(TestRGWLua, Acl)
     function print_grant(k, g)
       print("Grant Key: " .. tostring(k))
       print("Grant Type: " .. g.Type)
-      print("Grant Group Type: " .. g.GroupType)
-      print("Grant Referer: " .. g.Referer)
+      if (g.GroupType) then
+        print("Grant Group Type: " .. g.GroupType)
+      end
+      if (g.Referer) then
+        print("Grant Referer: " .. g.Referer)
+      end
       if (g.User) then
         print("Grant User.Tenant: " .. g.User.Tenant)
         print("Grant User.Id: " .. g.User.Id)
@@ -666,8 +670,7 @@ TEST(TestRGWLua, Acl)
     .id = rgw_user("jack", "black"),
     .display_name = "jack black"
   };
-  s.user_acl.reset(new RGWAccessControlPolicy(g_cct));
-  s.user_acl->set_owner(owner);
+  s.user_acl.set_owner(owner);
   ACLGrant grant1, grant2, grant3, grant4, grant5, grant6_1, grant6_2;
   grant1.set_canon(rgw_user("jane", "doe"), "her grant", 1);
   grant2.set_group(ACL_GROUP_ALL_USERS ,2);
@@ -676,13 +679,13 @@ TEST(TestRGWLua, Acl)
   grant5.set_group(ACL_GROUP_AUTHENTICATED_USERS, 5);
   grant6_1.set_canon(rgw_user("kill", "bill"), "his grant", 6);
   grant6_2.set_canon(rgw_user("kill", "bill"), "her grant", 7);
-  s.user_acl->get_acl().add_grant(&grant1);
-  s.user_acl->get_acl().add_grant(&grant2);
-  s.user_acl->get_acl().add_grant(&grant3);
-  s.user_acl->get_acl().add_grant(&grant4);
-  s.user_acl->get_acl().add_grant(&grant5);
-  s.user_acl->get_acl().add_grant(&grant6_1);
-  s.user_acl->get_acl().add_grant(&grant6_2);
+  s.user_acl.get_acl().add_grant(grant1);
+  s.user_acl.get_acl().add_grant(grant2);
+  s.user_acl.get_acl().add_grant(grant3);
+  s.user_acl.get_acl().add_grant(grant4);
+  s.user_acl.get_acl().add_grant(grant5);
+  s.user_acl.get_acl().add_grant(grant6_1);
+  s.user_acl.get_acl().add_grant(grant6_2);
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);
 }
@@ -733,15 +736,12 @@ TEST(TestRGWLua, UseFunction)
   DEFINE_REQ_STATE;
   s.owner.display_name = "user two";
   s.owner.id = rgw_user("tenant2", "user2");
-  s.user_acl.reset(new RGWAccessControlPolicy());
-  s.user_acl->get_owner().display_name = "user three";
-  s.user_acl->get_owner().id = rgw_user("tenant3", "user3");
-  s.bucket_acl.reset(new RGWAccessControlPolicy());
-  s.bucket_acl->get_owner().display_name = "user four";
-  s.bucket_acl->get_owner().id = rgw_user("tenant4", "user4");
-  s.object_acl.reset(new RGWAccessControlPolicy());
-  s.object_acl->get_owner().display_name = "user five";
-  s.object_acl->get_owner().id = rgw_user("tenant5", "user5");
+  s.user_acl.get_owner().display_name = "user three";
+  s.user_acl.get_owner().id = rgw_user("tenant3", "user3");
+  s.bucket_acl.get_owner().display_name = "user four";
+  s.bucket_acl.get_owner().id = rgw_user("tenant4", "user4");
+  s.object_acl.get_owner().display_name = "user five";
+  s.object_acl.get_owner().id = rgw_user("tenant5", "user5");
 
   const auto rc = lua::request::execute(nullptr, nullptr, nullptr, &s, nullptr, script);
   ASSERT_EQ(rc, 0);

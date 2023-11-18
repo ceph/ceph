@@ -253,28 +253,22 @@ void to_xml(const ACLGrant& grant, ostream& out)
   if (!(perm.get_permissions() & RGW_PERM_ALL_S3))
     return;
 
-  string uri;
+  const std::string type = ACLGranteeType_S3::to_string(grant.get_type());
 
   out << "<Grant>" <<
-         "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << ACLGranteeType_S3::to_string(grant.type) << "\">";
-  switch (grant.type.get_type()) {
-  case ACL_TYPE_CANON_USER:
-    out << "<ID>" << grant.id << "</ID>";
-    if (grant.name.size()) {
-      out << "<DisplayName>" << grant.name << "</DisplayName>";
+         "<Grantee xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:type=\"" << type << "\">";
+
+  if (const auto* user = grant.get_user(); user) {
+    out << "<ID>" << user->id << "</ID>";
+    if (user->name.size()) {
+      out << "<DisplayName>" << user->name << "</DisplayName>";
     }
-    break;
-  case ACL_TYPE_EMAIL_USER:
-    out << "<EmailAddress>" << grant.email << "</EmailAddress>";
-    break;
-  case ACL_TYPE_GROUP:
-    if (!rgw::s3::acl_group_to_uri(grant.group, uri)) {
-      break;
-    }
+  } else if (const auto* email = grant.get_email(); email) {
+    out << "<EmailAddress>" << email->address << "</EmailAddress>";
+  } else if (const auto* group = grant.get_group(); group) {
+    std::string uri;
+    rgw::s3::acl_group_to_uri(group->type, uri);
     out << "<URI>" << uri << "</URI>";
-    break;
-  default:
-    break;
   }
   out << "</Grantee>";
   to_xml(perm, out);

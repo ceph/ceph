@@ -502,14 +502,11 @@ struct es_obj_metadata {
         const RGWAccessControlList& acl = policy.get_acl();
 
         permissions.insert(policy.get_owner().id.to_str());
-        for (auto acliter : acl.get_grant_map()) {
+        for (const auto& acliter : acl.get_grant_map()) {
           const ACLGrant& grant = acliter.second;
-          if (grant.get_type().get_type() == ACL_TYPE_CANON_USER &&
-              ((uint32_t)grant.get_permission().get_permissions() & RGW_PERM_READ) != 0) {
-            rgw_user user;
-            if (grant.get_id(user)) {
-              permissions.insert(user.to_str());
-            }
+          const auto* user = grant.get_user();
+          if (user && (grant.get_permission().get_permissions() & RGW_PERM_READ) != 0) {
+            permissions.insert(user->id.to_str());
           }
         }
       } else if (attr_name == RGW_ATTR_TAGS) {
