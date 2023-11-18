@@ -647,8 +647,7 @@ int rgw_log_op(RGWREST* const rest, req_state *s, const RGWOp* op, OpsLogSink *o
   }
 
   entry.user = s->user->get_id().to_str();
-  if (s->object_acl)
-    entry.object_owner = s->object_acl->get_owner().id;
+  entry.object_owner = s->object_acl.get_owner().id;
   entry.bucket_owner = s->bucket_owner.id;
 
   uint64_t bytes_sent = ACCOUNTING_IO(s)->get_bytes_sent();

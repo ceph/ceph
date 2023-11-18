@@ -120,7 +120,7 @@ void RGWAccessControlList::remove_canon_user_grant(rgw_user& user_id)
 
 uint32_t RGWAccessControlList::get_perm(const DoutPrefixProvider* dpp, 
                                         const rgw::auth::Identity& auth_identity,
-                                        const uint32_t perm_mask)
+                                        const uint32_t perm_mask) const
 {
   ldpp_dout(dpp, 5) << "Searching permissions for identity=" << auth_identity
                 << " mask=" << perm_mask << dendl;
@@ -147,7 +147,7 @@ uint32_t RGWAccessControlList::get_group_perm(const DoutPrefixProvider *dpp,
 uint32_t RGWAccessControlList::get_referer_perm(const DoutPrefixProvider *dpp,
                                                 const uint32_t current_perm,
                                                 const std::string http_referer,
-                                                const uint32_t perm_mask)
+                                                const uint32_t perm_mask) const
 {
   ldpp_dout(dpp, 5) << "Searching permissions for referer=" << http_referer
                 << " mask=" << perm_mask << dendl;
@@ -171,7 +171,7 @@ uint32_t RGWAccessControlPolicy::get_perm(const DoutPrefixProvider* dpp,
                                           const rgw::auth::Identity& auth_identity,
                                           const uint32_t perm_mask,
                                           const char * const http_referer,
-                                          bool ignore_public_acls)
+                                          bool ignore_public_acls) const
 {
   ldpp_dout(dpp, 20) << "-- Getting permissions begin with perm_mask=" << perm_mask
                  << dendl;
@@ -213,7 +213,7 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
                                                const uint32_t user_perm_mask,
                                                const uint32_t perm,
                                                const char * const http_referer,
-                                               bool ignore_public_acls)
+                                               bool ignore_public_acls) const
 {
   uint32_t test_perm = perm | RGW_PERM_READ_OBJS | RGW_PERM_WRITE_OBJS;
 

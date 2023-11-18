@@ -711,11 +711,11 @@ struct RequestMetaTable : public EmptyMetaTable {
     } else if (strcasecmp(index, "ZoneGroup") == 0) {
       create_metatable<ZoneGroupMetaTable>(L, name, index, false, s);
     } else if (strcasecmp(index, "UserACL") == 0) {
-      create_metatable<ACLMetaTable>(L, name, index, false, s->user_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->user_acl);
     } else if (strcasecmp(index, "BucketACL") == 0) {
-      create_metatable<ACLMetaTable>(L, name, index, false, s->bucket_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->bucket_acl);
     } else if (strcasecmp(index, "ObjectACL") == 0) {
-      create_metatable<ACLMetaTable>(L, name, index, false, s->object_acl);
+      create_metatable<ACLMetaTable>(L, name, index, false, &s->object_acl);
     } else if (strcasecmp(index, "Environment") == 0) {
         create_metatable<StringMapMetaTable<rgw::IAM::Environment>>(L, name, index, false, &(s->env));
     } else if (strcasecmp(index, "Policy") == 0) {

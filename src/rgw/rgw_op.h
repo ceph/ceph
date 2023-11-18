@@ -79,7 +79,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
                                        rgw::sal::Driver* driver,
                                        const rgw_user& bucket_owner,
                                        std::map<std::string, bufferlist>& bucket_attrs,
-                                       RGWAccessControlPolicy *policy,
+                                       RGWAccessControlPolicy& policy,
                                        optional_yield y);
 
 class RGWHandler {
@@ -420,7 +420,7 @@ public:
   int read_user_manifest_part(
     rgw::sal::Bucket* bucket,
     const rgw_bucket_dir_entry& ent,
-    RGWAccessControlPolicy * const bucket_acl,
+    const RGWAccessControlPolicy& bucket_acl,
     const boost::optional<rgw::IAM::Policy>& bucket_policy,
     const off_t start_ofs,
     const off_t end_ofs,
