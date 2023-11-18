@@ -5,7 +5,7 @@ import os
 import pathlib
 import re
 
-from typing import Union, Optional
+from typing import Union, Optional, Tuple
 
 from .context import CephadmContext
 
@@ -176,6 +176,50 @@ class DaemonSubIdentity(DaemonIdentity):
             parent.daemon_id,
             subcomponent,
         )
+
+    @classmethod
+    def from_service_name(
+        cls, service_name: str
+    ) -> Tuple['DaemonSubIdentity', str]:
+        """Return a DaemonSubIdentity and category value by parsing the
+        contents of a systemd service name for a sidecar container.
+        """
+        # ceph services always have the template@instance form
+        tpart, ipart = service_name.split('@', 1)
+        # drop the .service if it exists
+        if ipart.endswith('.service'):
+            ipart = ipart[:-8]
+        # verify the service name starts with 'ceph' -- our framework
+        framework, tpart = tpart.split('-', 1)
+        if framework != 'ceph':
+            raise ValueError(f'Invalid framework value: {service_name}')
+        # we're parsing only services for subcomponents. it must take the
+        # form <FSID>-<CATEGORY>. Where categories are sidecar or init.
+        fsid, category = tpart.rsplit('-', 1)
+        try:
+            Categories(category)
+        except ValueError:
+            raise ValueError(f'Invalid service category: {service_name}')
+        # if it is a sidecar it will have a subcomponent name following a colon
+        svcparts = ipart.split(':')
+        if len(svcparts) == 1:
+            subc = ''
+        elif len(svcparts) == 2:
+            subc = svcparts[1]
+        else:
+            raise ValueError(f'Unexpected instance value: {ipart}')
+        # only services based on sidecars currently have named subcomponents
+        # init subcomponents are all "hidden" within a single init service
+        if subc and not category == Categories.SIDECAR:
+            raise ValueError(
+                f'Unexpected subcomponent {subc!r} for category {category}'
+            )
+        elif not subc:
+            # because we return a DaemonSubIdentity we need some value for
+            # the subcomponent on init services. Just repeat the category
+            subc = str(category)
+        daemon_type, daemon_id = svcparts[0].split('.', 1)
+        return cls(fsid, daemon_type, daemon_id, subc), category
 
     @classmethod
     def must(cls, value: Optional[DaemonIdentity]) -> 'DaemonSubIdentity':
