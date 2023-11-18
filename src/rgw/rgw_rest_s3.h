@@ -355,7 +355,8 @@ public:
   RGWPutACLs_ObjStore_S3() {}
   ~RGWPutACLs_ObjStore_S3() override {}
 
-  int get_policy_from_state(rgw::sal::Driver* driver, req_state *s, std::stringstream& ss) override;
+  int get_policy_from_state(const ACLOwner& owner,
+                            RGWAccessControlPolicy& p) override;
   void send_response() override;
   int get_params(optional_yield y) override;
 };

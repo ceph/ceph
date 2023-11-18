@@ -419,9 +419,9 @@ void RGWAccessControlPolicy::dump(Formatter *f) const
   encode_json("owner", owner, f);
 }
 
-ACLGroupTypeEnum ACLGrant::uri_to_group(string& uri)
+ACLGroupTypeEnum ACLGrant::uri_to_group(std::string_view uri)
 {
   // this is required for backward compatibility
-  return ACLGrant_S3::uri_to_group(uri);
+  return rgw::s3::acl_uri_to_group(uri);
 }
 
