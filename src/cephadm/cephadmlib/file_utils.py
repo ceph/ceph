@@ -143,3 +143,21 @@ def get_file_timestamp(fn):
 
 def make_run_dir(fsid: str, uid: int, gid: int) -> None:
     makedirs(f'/var/run/ceph/{fsid}', uid, gid, 0o770)
+
+
+def unlink_file(
+    path: Union[str, Path],
+    missing_ok: bool = False,
+    ignore_errors: bool = False,
+) -> None:
+    """Wrapper around unlink that can either ignore missing files or all
+    errors.
+    """
+    try:
+        Path(path).unlink()
+    except FileNotFoundError:
+        if not missing_ok and not ignore_errors:
+            raise
+    except Exception:
+        if not ignore_errors:
+            raise
