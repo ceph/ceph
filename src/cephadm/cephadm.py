@@ -105,6 +105,7 @@ from cephadmlib.file_utils import (
     read_file,
     recursive_chown,
     touch,
+    unlink_file,
     write_new,
     write_tmp,
 )
@@ -132,7 +133,7 @@ from cephadmlib.logging import (
     Highlight,
     LogDestination,
 )
-from cephadmlib.systemd import check_unit, check_units
+from cephadmlib.systemd import check_unit, check_units, terminate_service
 from cephadmlib import systemd_unit
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
@@ -4152,12 +4153,22 @@ def command_rm_daemon(ctx):
         raise Error('must pass --force to proceed: '
                     'this command may destroy precious data!')
 
-    call(ctx, ['systemctl', 'stop', unit_name],
-         verbosity=CallVerbosity.DEBUG)
-    call(ctx, ['systemctl', 'reset-failed', unit_name],
-         verbosity=CallVerbosity.DEBUG)
-    call(ctx, ['systemctl', 'disable', unit_name],
-         verbosity=CallVerbosity.DEBUG)
+    terminate_service(ctx, unit_name)
+
+    # clean up any extra systemd unit files
+    sd_path_info = systemd_unit.sidecars_from_dropin(
+        systemd_unit.PathInfo(ctx.unit_dir, ident), missing_ok=True
+    )
+    for sc_unit in sd_path_info.sidecar_unit_files.values():
+        terminate_service(ctx, sc_unit.name)
+        unlink_file(sc_unit, missing_ok=True)
+    terminate_service(ctx, sd_path_info.init_ctr_unit_file.name)
+    unlink_file(sd_path_info.init_ctr_unit_file, missing_ok=True)
+    unlink_file(sd_path_info.drop_in_file, missing_ok=True)
+    try:
+        sd_path_info.drop_in_file.parent.rmdir()
+    except OSError:
+        pass
 
     # force remove rgw admin socket file if leftover
     if ident.daemon_type in ['rgw']:
