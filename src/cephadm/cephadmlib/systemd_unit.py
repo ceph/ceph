@@ -211,3 +211,30 @@ def update_files(
     _install_extended_systemd_services(
         ctx, pathinfo, ident, bool(init_container_ids)
     )
+
+
+def sidecars_from_dropin(
+    pathinfo: PathInfo, missing_ok: bool = False
+) -> PathInfo:
+    """Read the list of sidecars for a service from the service's drop in file."""
+    # This is useful in the cases where the sidecars would be determined from
+    # input data (deployment) but we lack the original deployment data (rm
+    # daemon).
+    sidecars = []
+    try:
+        with open(pathinfo.drop_in_file) as fh:
+            lines = fh.readlines()
+    except FileNotFoundError:
+        if missing_ok:
+            return pathinfo
+        raise
+    for line in lines:
+        if not line.startswith('Wants='):
+            continue
+        for item in line[6:].strip().split():
+            si, category = DaemonSubIdentity.from_service_name(item)
+            if category == 'sidecar':
+                sidecars.append(si)
+    return PathInfo(
+        pathinfo.default_unit_file.parent, pathinfo.identity, sidecars
+    )
