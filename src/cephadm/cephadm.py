@@ -659,7 +659,7 @@ def get_unit_name(
     return DaemonIdentity(fsid, daemon_type, daemon_id).unit_name
 
 
-def get_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
+def lookup_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
     daemon = get_daemon_description(ctx, fsid, name)
     try:
         return daemon['systemd_unit']
@@ -3306,7 +3306,7 @@ def command_unit(ctx):
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
+    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
     _, _, code = call(
         ctx,
@@ -3325,7 +3325,7 @@ def command_logs(ctx):
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
+    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
     cmd = [find_program('journalctl')]
     cmd.extend(['-u', unit_name])
@@ -4137,7 +4137,7 @@ def command_rm_daemon(ctx):
     lock.acquire()
 
     (daemon_type, daemon_id) = ctx.name.split('.', 1)
-    unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
+    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
     if daemon_type in ['mon', 'osd'] and not ctx.force:
         raise Error('must pass --force to proceed: '
