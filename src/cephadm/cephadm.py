@@ -4178,7 +4178,7 @@ def command_rm_daemon(ctx):
         os.rename(data_dir,
                   os.path.join(backup_dir, dirname))
     else:
-        call_throws(ctx, ['rm', '-rf', data_dir])
+        shutil.rmtree(data_dir, ignore_errors=True)
 
     endpoints = fetch_endpoints(ctx)
     ports: List[int] = [e.port for e in endpoints]
