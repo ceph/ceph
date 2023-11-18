@@ -27,6 +27,7 @@ uint64_t aws_response_handler::get_processed_size()
 void aws_response_handler::update_processed_size(uint64_t value)
 {
   processed_size += value;
+  s->s3select_usage.bytes_processed = processed_size;
 }
 
 uint64_t aws_response_handler::get_total_bytes_returned()
@@ -37,6 +38,7 @@ uint64_t aws_response_handler::get_total_bytes_returned()
 void aws_response_handler::update_total_bytes_returned(uint64_t value)
 {
   total_bytes_returned = value;
+  s->s3select_usage.bytes_returned = total_bytes_returned;
 }
 
 void aws_response_handler::push_header(const char* header_name, const char* header_value)
