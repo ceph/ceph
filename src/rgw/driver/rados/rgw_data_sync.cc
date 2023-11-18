@@ -2725,8 +2725,8 @@ bool RGWUserPermHandler::Bucket::verify_bucket_permission(int perm)
 {
   return verify_bucket_permission_no_policy(sync_env->dpp,
                                             &(*ps),
-                                            &info->user_acl,
-                                            &bucket_acl,
+                                            info->user_acl,
+                                            bucket_acl,
                                             perm);
 }
 
@@ -2742,8 +2742,8 @@ bool RGWUserPermHandler::Bucket::verify_object_permission(const map<string, buff
 
   return verify_bucket_permission_no_policy(sync_env->dpp,
                                             &(*ps),
-                                            &bucket_acl,
-                                            &obj_acl,
+                                            bucket_acl,
+                                            obj_acl,
                                             perm);
 }
 

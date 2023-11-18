@@ -31,7 +31,6 @@ protected:
 
 public:
   ACLGrant() : group(ACL_GROUP_NONE) {}
-  virtual ~ACLGrant() {}
 
   /* there's an assumption here that email/uri/id encodings are
      different and there can't be any overlap */
@@ -230,11 +229,11 @@ protected:
 public:
   uint32_t get_perm(const DoutPrefixProvider* dpp,
                     const rgw::auth::Identity& auth_identity,
-                    uint32_t perm_mask);
+                    uint32_t perm_mask) const;
   uint32_t get_group_perm(const DoutPrefixProvider *dpp, ACLGroupTypeEnum group, uint32_t perm_mask) const;
   uint32_t get_referer_perm(const DoutPrefixProvider *dpp, uint32_t current_perm,
                             std::string http_referer,
-                            uint32_t perm_mask);
+                            uint32_t perm_mask) const;
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 3, bl);
     bool maps_initialized = true;
@@ -327,13 +326,13 @@ public:
                     const rgw::auth::Identity& auth_identity,
                     uint32_t perm_mask,
                     const char * http_referer,
-                    bool ignore_public_acls=false);
+                    bool ignore_public_acls=false) const;
   bool verify_permission(const DoutPrefixProvider* dpp,
                          const rgw::auth::Identity& auth_identity,
                          uint32_t user_perm_mask,
                          uint32_t perm,
                          const char * http_referer = nullptr,
-                         bool ignore_public_acls=false);
+                         bool ignore_public_acls=false) const;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(2, 2, bl);

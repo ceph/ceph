@@ -188,7 +188,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             s->user->get_attrs(),
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            *s->user_acl);
+            s->user_acl);
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
@@ -287,7 +287,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             s->user->get_attrs(),
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            *s->user_acl);
+            s->user_acl);
     dump_errno(s);
     end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
   }
@@ -471,7 +471,7 @@ static void dump_container_metadata(req_state *s,
 
   if (rgw::sal::Object::empty(s->object.get())) {
     std::string read_acl, write_acl;
-    rgw::swift::format_container_acls(*s->bucket_acl, read_acl, write_acl);
+    rgw::swift::format_container_acls(s->bucket_acl, read_acl, write_acl);
 
     if (read_acl.size()) {
       dump_header(s, "X-Container-Read", read_acl);
@@ -565,7 +565,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
             attrs,
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            *s->user_acl);
+            s->user_acl);
   }
 
   set_req_state_err(s, op_ret);
@@ -593,7 +593,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 
 static int get_swift_container_settings(req_state * const s,
                                         rgw::sal::Driver*  const driver,
-                                        RGWAccessControlPolicy * const policy,
+                                        RGWAccessControlPolicy& policy,
                                         bool * const has_policy,
                                         uint32_t * rw_mask,
                                         RGWCORSConfiguration * const cors_config,
@@ -611,7 +611,7 @@ static int get_swift_container_settings(req_state * const s,
                                                 read_list,
                                                 write_list,
                                                 *rw_mask,
-                                                *policy);
+                                                policy);
     if (r < 0) {
       return r;
     }
@@ -713,7 +713,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
   bool has_policy;
   uint32_t policy_rw_mask = 0;
 
-  int r = get_swift_container_settings(s, driver, &policy, &has_policy,
+  int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
@@ -1057,7 +1057,7 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
 
 static int get_swift_account_settings(req_state * const s,
                                       rgw::sal::Driver*  const driver,
-                                      RGWAccessControlPolicy* const policy,
+                                      RGWAccessControlPolicy& policy,
                                       bool * const has_policy)
 {
   *has_policy = false;
@@ -1067,7 +1067,7 @@ static int get_swift_account_settings(req_state * const s,
     int r = rgw::swift::create_account_policy(s, driver,
                                               s->user->get_id(),
                                               s->user->get_display_name(),
-                                              acl_attr, *policy);
+                                              acl_attr, policy);
     if (r < 0) {
       return r;
     }
@@ -1084,7 +1084,7 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  int ret = get_swift_account_settings(s, driver, &policy, &has_policy);
+  int ret = get_swift_account_settings(s, driver, policy, &has_policy);
   if (ret < 0) {
     return ret;
   }
@@ -1117,7 +1117,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  int r = get_swift_container_settings(s, driver, &policy, &has_policy,
+  int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
