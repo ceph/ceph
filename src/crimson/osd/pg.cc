@@ -894,6 +894,10 @@ PG::do_osd_ops_execute(
     }), OpsExecuter::osd_op_errorator::all_same_way(
         [this, rollbacker, failure_func_ptr]
         (const std::error_code& e) mutable {
+          // handle non-fatal errors only
+          ceph_assert(e.value() == EDQUOT ||
+                      e.value() == ENOSPC ||
+                      e.value() == EAGAIN);
           return rollbacker.rollback_obc_if_modified(e).then_interruptible(
           [this, e, failure_func_ptr] {
             return (*failure_func_ptr)(e , shard_services.get_tid());
