@@ -224,6 +224,8 @@ def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
         with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
             src_path = clone_volumes[1].snapshot_data_path(clone_volumes[2])
             dst_path = clone_volumes[0].path
+            # XXX: this is where cloning (of subvolume's snapshots) actually
+            # happens.
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
             set_quota_on_clone(fs_handle, clone_volumes)
 
@@ -287,9 +289,14 @@ def start_clone_sm(fs_client, volspec, volname, index, groupname, subvolname, st
             time.sleep(snapshot_clone_delay)
             log.info("Delayed cloning ({0}, {1}, {2}) -- by {3} seconds".format(volname, groupname, subvolname, snapshot_clone_delay))
         while not finished:
+            # XXX: this is where request operation is mapped to relevant
+            # function.
             handler = state_table.get(current_state, None)
             if not handler:
                 raise VolumeException(-errno.EINVAL, "invalid clone state: \"{0}\"".format(current_state))
+            # XXX: this is where the requested operation for subvolume's
+            # snapshot clone is performed. the function for the request
+            # operation is run through "handler".
             (next_state, finished) = handler(fs_client, volspec, volname, index, groupname, subvolname, should_cancel)
             if next_state:
                 log.debug("({0}, {1}, {2}) transition state [\"{3}\" => \"{4}\"]".format(volname, groupname, subvolname,\
