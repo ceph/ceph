@@ -109,3 +109,35 @@ void cls_user_header::generate_test_instances(list<cls_user_header*>& ls)
   cls_user_gen_test_header(h);
   ls.push_back(h);
 }
+
+
+void cls_user_account_header::dump(ceph::Formatter* f) const
+{
+  encode_json("count", count, f);
+}
+
+void cls_user_account_header::generate_test_instances(std::list<cls_user_account_header*>& ls)
+{
+  ls.push_back(new cls_user_account_header);
+}
+
+void cls_user_account_resource::dump(ceph::Formatter* f) const
+{
+  encode_json("name", name, f);
+  encode_json("path", path, f);
+  // skip metadata
+}
+
+void cls_user_gen_test_resource(cls_user_account_resource& r)
+{
+  r.name = "name";
+  r.path = "path";
+}
+
+void cls_user_account_resource::generate_test_instances(std::list<cls_user_account_resource*>& ls)
+{
+  ls.push_back(new cls_user_account_resource);
+  auto p = new cls_user_account_resource;
+  cls_user_gen_test_resource(*p);
+  ls.push_back(p);
+}
