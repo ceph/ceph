@@ -2,11 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
+#include <algorithm>
+#include <cctype>
 
 #include "include/utime.h"
 #include "objclass/objclass.h"
 
 #include "cls_user_ops.h"
+#include "rgw/rgw_string.h"
 
 using std::map;
 using std::string;
@@ -71,7 +74,8 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
   return 0;
 }
 
-static int read_header(cls_method_context_t hctx, cls_user_header *header)
+template <typename T>
+static int read_header(cls_method_context_t hctx, T *header)
 {
   bufferlist bl;
 
@@ -80,7 +84,7 @@ static int read_header(cls_method_context_t hctx, cls_user_header *header)
     return ret;
 
   if (bl.length() == 0) {
-    *header = cls_user_header();
+    *header = T();
     return 0;
   }
 
@@ -501,6 +505,221 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
   return 0;
 } /* cls_user_reset_stats2 */
 
+
+// account resource names must be unique and aren't distinguished by case, so
+// convert all keys to lowercase
+static std::string resource_key(std::string_view name)
+{
+  std::string key;
+  key.resize(name.size());
+  std::transform(name.begin(), name.end(), key.begin(),
+                 [](unsigned char c) { return std::tolower(c); });
+  return key;
+}
+
+static int cls_account_resource_add(cls_method_context_t hctx,
+                                    buffer::list *in, buffer::list *out)
+{
+  cls_user_account_resource_add_op op;
+  try {
+    auto bliter = in->cbegin();
+    decode(op, bliter);
+  } catch (const ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "adding account resource name=%s path=%s",
+          op.entry.name.c_str(), op.entry.path.c_str());
+
+  const std::string key = resource_key(op.entry.name);
+
+  // does this resource entry exist?
+  bufferlist readbl; // unused
+  int ret = cls_cxx_map_get_val(hctx, key, &readbl);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  const bool exists = (ret == 0);
+
+  std::optional<cls_user_account_header> header;
+  if (!exists) {
+    // if this is a new entry, update the resource count in the account header
+    ret = read_header(hctx, &header.emplace());
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
+      return ret;
+    }
+    if (header->count >= op.limit) {
+      CLS_LOG(4, "account resource limit exceeded, %u >= %u",
+              header->count, op.limit);
+      return -EUSERS; // too many users
+    }
+    header->count++;
+  } else if (op.exclusive) {
+    return -EEXIST;
+  }
+
+  // write/overwrite the entry
+  bufferlist writebl;
+  encode(op.entry, writebl);
+  ret = cls_cxx_map_set_val(hctx, key, &writebl);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to write account resource: %d", ret);
+    return ret;
+  }
+
+  // write the updated account header
+  if (header) {
+    bufferlist headerbl;
+    encode(*header, headerbl);
+    return cls_cxx_map_write_header(hctx, &headerbl);
+  }
+  return 0;
+} // cls_account_resource_add
+
+static int cls_account_resource_get(cls_method_context_t hctx,
+                                    bufferlist *in, bufferlist *out)
+{
+  cls_user_account_resource_get_op op;
+  try {
+    auto p = in->cbegin();
+    decode(op, p);
+  } catch (const ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "reading account resource name=%s", op.name.c_str());
+
+  const std::string key = resource_key(op.name);
+
+  bufferlist bl;
+  int r = cls_cxx_map_get_val(hctx, key, &bl);
+  if (r < 0) {
+    return r;
+  }
+
+  cls_user_account_resource_get_ret ret;
+  try {
+    auto iter = bl.cbegin();
+    decode(ret.entry, iter);
+  } catch (ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: failed to decode entry %s", key.c_str());
+    return -EIO;
+  }
+
+  encode(ret, *out);
+  return 0;
+} // cls_account_resource_get
+
+static int cls_account_resource_rm(cls_method_context_t hctx,
+                                   buffer::list *in, buffer::list *out)
+{
+  cls_user_account_resource_rm_op op;
+  try {
+    auto bliter = in->cbegin();
+    decode(op, bliter);
+  } catch (const ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+
+  CLS_LOG(20, "removing account resource name=%s", op.name.c_str());
+
+  const std::string key = resource_key(op.name);
+
+  // verify that the resource entry exists, so we can return ENOENT otherwise.
+  // remove_key() alone would return success either way
+  bufferlist readbl; // unused
+  int ret = cls_cxx_map_get_val(hctx, key, &readbl);
+  if (ret < 0) {
+    return ret;
+  }
+
+  // remove the resource entry
+  ret = cls_cxx_map_remove_key(hctx, key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to remove account resource: %d", ret);
+    return ret;
+  }
+
+  // update resource count in the account header
+  cls_user_account_header header;
+  ret = read_header(hctx, &header);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
+    return ret;
+  }
+  if (header.count) { // guard underflow
+    header.count--;
+  }
+
+  bufferlist headerbl;
+  encode(header, headerbl);
+  return cls_cxx_map_write_header(hctx, &headerbl);
+} // cls_account_resource_rm
+
+static int cls_account_resource_list(cls_method_context_t hctx,
+                                     bufferlist *in, bufferlist *out)
+{
+  cls_user_account_resource_list_op op;
+  try {
+    auto p = in->cbegin();
+    decode(op, p);
+  } catch (const ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+  CLS_LOG(20, "listing account resources from marker=%s path_prefix=%s max_entries=%d",
+          op.marker.c_str(), op.path_prefix.c_str(), (int)op.max_entries);
+
+  const std::string prefix; // empty
+  const uint32_t max_entries = std::min(op.max_entries, 1000u);
+  std::map<std::string, bufferlist> entries;
+  bool truncated = false;
+
+  int rc = cls_cxx_map_get_vals(hctx, op.marker, prefix, max_entries,
+                                &entries, &truncated);
+  if (rc < 0) {
+    return rc;
+  }
+
+  cls_user_account_resource_list_ret ret;
+
+  // copy matching decoded omap values into a vector
+  for (auto& [key, bl] : entries) {
+    // decode as cls_user_account_resource
+    cls_user_account_resource entry;
+    try {
+      auto p = bl.cbegin();
+      decode(entry, p);
+    } catch (const ceph::buffer::error& e) {
+      CLS_LOG(1, "ERROR: %s failed to decode resource entry at key=%s",
+              __func__, key.c_str());
+      return -EIO;
+    }
+
+    // filter entries by path prefix
+    if (entry.path.starts_with(op.path_prefix)) {
+      CLS_LOG(20, "included resource path=%s name=%s",
+              entry.path.c_str(), entry.name.c_str());
+      ret.entries.push_back(std::move(entry));
+    }
+  }
+
+  ret.truncated = truncated;
+  if (!entries.empty()) {
+    ret.marker = entries.rbegin()->first;
+  }
+  CLS_LOG(20, "entries=%d next_marker=%s truncated=%d",
+          (int)ret.entries.size(), ret.marker.c_str(), (int)ret.truncated);
+
+  encode(ret, *out);
+  return 0;
+} // cls_account_resource_list
+
+
 CLS_INIT(user)
 {
   CLS_LOG(1, "Loaded user class!");
@@ -527,5 +746,18 @@ CLS_INIT(user)
   cls_register_cxx_method(h_class, "reset_user_stats", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats, &h_user_reset_stats);
   cls_register_cxx_method(h_class, "reset_user_stats2", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats2, &h_user_reset_stats2);
 
-  return;
+  // account
+  cls_method_handle_t h_account_resource_add;
+  cls_method_handle_t h_account_resource_get;
+  cls_method_handle_t h_account_resource_rm;
+  cls_method_handle_t h_account_resource_list;
+
+  cls_register_cxx_method(h_class, "account_resource_add", CLS_METHOD_RD | CLS_METHOD_WR,
+                          cls_account_resource_add, &h_account_resource_add);
+  cls_register_cxx_method(h_class, "account_resource_get", CLS_METHOD_RD,
+                          cls_account_resource_get, &h_account_resource_get);
+  cls_register_cxx_method(h_class, "account_resource_rm", CLS_METHOD_RD | CLS_METHOD_WR,
+                          cls_account_resource_rm, &h_account_resource_rm);
+  cls_register_cxx_method(h_class, "account_resource_list", CLS_METHOD_RD,
+                          cls_account_resource_list, &h_account_resource_list);
 }

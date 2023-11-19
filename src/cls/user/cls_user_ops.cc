@@ -116,3 +116,89 @@ void cls_user_complete_stats_sync_op::generate_test_instances(list<cls_user_comp
 }
 
 
+void cls_user_account_resource_add_op::dump(Formatter *f) const
+{
+  encode_json("name", entry.name, f);
+  encode_json("path", entry.path, f);
+  encode_json("limit", limit, f);
+}
+
+void cls_user_account_resource_add_op::generate_test_instances(std::list<cls_user_account_resource_add_op*>& ls)
+{
+  ls.push_back(new cls_user_account_resource_add_op);
+  cls_user_account_resource_add_op *op = new cls_user_account_resource_add_op;
+  cls_user_gen_test_resource(op->entry);
+  ls.push_back(op);
+}
+
+void cls_user_account_resource_get_op::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+}
+
+void cls_user_account_resource_get_op::generate_test_instances(std::list<cls_user_account_resource_get_op*>& ls)
+{
+  ls.push_back(new cls_user_account_resource_get_op);
+  cls_user_account_resource_get_op *op = new cls_user_account_resource_get_op;
+  op->name = "name";
+  ls.push_back(op);
+}
+
+void cls_user_account_resource_get_ret::dump(Formatter *f) const
+{
+  encode_json("entry", entry, f);
+}
+
+void cls_user_account_resource_get_ret::generate_test_instances(std::list<cls_user_account_resource_get_ret*>& ls)
+{
+  ls.push_back(new cls_user_account_resource_get_ret);
+  cls_user_account_resource_get_ret *ret = new cls_user_account_resource_get_ret;
+  cls_user_gen_test_resource(ret->entry);
+  ls.push_back(ret);
+}
+
+void cls_user_account_resource_rm_op::dump(Formatter *f) const
+{
+  encode_json("name", name, f);
+}
+
+void cls_user_account_resource_rm_op::generate_test_instances(std::list<cls_user_account_resource_rm_op*>& ls)
+{
+  ls.push_back(new cls_user_account_resource_rm_op);
+  cls_user_account_resource_rm_op *op = new cls_user_account_resource_rm_op;
+  op->name = "name";
+  ls.push_back(op);
+}
+
+void cls_user_account_resource_list_op::dump(Formatter *f) const
+{
+  encode_json("marker", marker, f);
+  encode_json("path_prefix", path_prefix, f);
+  encode_json("max_entries", max_entries, f);
+}
+
+void cls_user_account_resource_list_op::generate_test_instances(std::list<cls_user_account_resource_list_op*>& ls)
+{
+  ls.push_back(new cls_user_account_resource_list_op);
+  cls_user_account_resource_list_op *op = new cls_user_account_resource_list_op;
+  op->marker = "marker";
+  op->path_prefix = "path";
+  op->max_entries = 20;
+  ls.push_back(op);
+}
+
+void cls_user_account_resource_list_ret::dump(Formatter *f) const
+{
+  encode_json("entries", entries, f);
+  encode_json("truncated", truncated, f);
+  encode_json("marker", marker, f);
+}
+
+void cls_user_account_resource_list_ret::generate_test_instances(std::list<cls_user_account_resource_list_ret*>& ls)
+{
+  ls.push_back(new cls_user_account_resource_list_ret);
+  cls_user_account_resource_list_ret *ret = new cls_user_account_resource_list_ret;
+  cls_user_gen_test_resource(ret->entries.emplace_back());
+  ret->truncated = true;
+  ls.push_back(ret);
+}
