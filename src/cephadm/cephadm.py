@@ -4282,14 +4282,6 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
     if not ctx.fsid:
         raise Error('must select the cluster to delete by passing --fsid to proceed')
 
-    def disable_systemd_service(unit_name: str) -> None:
-        call(ctx, ['systemctl', 'stop', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(ctx, ['systemctl', 'reset-failed', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(ctx, ['systemctl', 'disable', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-
     logger.info(f'Deleting cluster with fsid: {ctx.fsid}')
 
     # stop + disable individual daemon units
@@ -4298,11 +4290,11 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
             continue
         if d['style'] != 'cephadm:v1':
             continue
-        disable_systemd_service('ceph-%s@%s' % (ctx.fsid, d['name']))
+        terminate_service(ctx, 'ceph-%s@%s' % (ctx.fsid, d['name']))
 
     # cluster units
     for unit_name in ['ceph-%s.target' % ctx.fsid]:
-        disable_systemd_service(unit_name)
+        terminate_service(ctx, unit_name)
 
     slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
     call(ctx, ['systemctl', 'stop', slice_name],
@@ -4333,7 +4325,7 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
 
     # if last cluster on host remove shared files
     if get_ceph_cluster_count(ctx) == 0:
-        disable_systemd_service('ceph.target')
+        terminate_service(ctx, 'ceph.target')
 
         # rm shared ceph target files
         call_throws(ctx, ['rm', '-f', ctx.unit_dir + '/multi-user.target.wants/ceph.target'])
