@@ -4285,12 +4285,22 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
     logger.info(f'Deleting cluster with fsid: {ctx.fsid}')
 
     # stop + disable individual daemon units
+    sd_paths = []
     for d in list_daemons(ctx, detail=False):
         if d['fsid'] != ctx.fsid:
             continue
         if d['style'] != 'cephadm:v1':
             continue
         terminate_service(ctx, 'ceph-%s@%s' % (ctx.fsid, d['name']))
+        # terminate sidecar & other supplemental services
+        ident = DaemonIdentity.from_name(ctx.fsid, d['name'])
+        sd_path_info = systemd_unit.sidecars_from_dropin(
+            systemd_unit.PathInfo(ctx.unit_dir, ident), missing_ok=True
+        )
+        for sc_unit in sd_path_info.sidecar_unit_files.values():
+            terminate_service(ctx, sc_unit.name)
+        terminate_service(ctx, sd_path_info.init_ctr_unit_file.name)
+        sd_paths.append(sd_path_info)
 
     # cluster units
     for unit_name in ['ceph-%s.target' % ctx.fsid]:
@@ -4305,12 +4315,16 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
         _zap_osds(ctx)
 
     # rm units
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir
-                      + '/ceph-%s@.service' % ctx.fsid])
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir
-                      + '/ceph-%s.target' % ctx.fsid])
-    call_throws(ctx, ['rm', '-rf',
-                      ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
+    for sd_path_info in sd_paths:
+        for sc_unit in sd_path_info.sidecar_unit_files.values():
+            unlink_file(sc_unit, missing_ok=True)
+        unlink_file(sd_path_info.init_ctr_unit_file, missing_ok=True)
+        shutil.rmtree(sd_path_info.drop_in_file.parent, ignore_errors=True)
+    unit_dir = Path(ctx.unit_dir)
+    unlink_file(unit_dir / f'ceph-{ctx.fsid}@.service', missing_ok=True)
+    unlink_file(unit_dir / f'ceph-{ctx.fsid}.target', missing_ok=True)
+    shutil.rmtree(unit_dir / f'ceph-{ctx.fsid}.target.wants', ignore_errors=True)
+
     # rm data
     call_throws(ctx, ['rm', '-rf', ctx.data_dir + '/' + ctx.fsid])
 
