@@ -7,6 +7,7 @@
 #include "objclass/objclass.h"
 
 #include "cls_user_ops.h"
+#include "rgw/rgw_string.h"
 
 using std::map;
 using std::string;
@@ -71,7 +72,8 @@ static int get_existing_bucket_entry(cls_method_context_t hctx, const string& bu
   return 0;
 }
 
-static int read_header(cls_method_context_t hctx, cls_user_header *header)
+template <typename T>
+static int read_header(cls_method_context_t hctx, T *header)
 {
   bufferlist bl;
 
@@ -80,7 +82,7 @@ static int read_header(cls_method_context_t hctx, cls_user_header *header)
     return ret;
 
   if (bl.length() == 0) {
-    *header = cls_user_header();
+    *header = T();
     return 0;
   }
 
@@ -501,6 +503,245 @@ static int cls_user_reset_stats2(cls_method_context_t hctx,
   return 0;
 } /* cls_user_reset_stats2 */
 
+
+// Account resource index design:
+//
+// The resource_add/rm ops require entries to be indexed by name, while the
+// resource_list op requires them to be indexed by path for filtering by
+// path_prefix. To avoid indirection on listing, the path is used as the
+// primary index.
+//
+// The omap entries for the name index use keys of the form "n:{name}", and
+// their value stores the (possibly empty) path string.
+//
+// The omap entries for the path index use keys of the form "p:{path}{name}"
+// so they can be sorted/filtered by path prefix, and their value encodes a
+// cls_user_account_resource.
+
+constexpr std::string_view resource_name_prefix = "n:";
+constexpr std::string_view resource_path_prefix = "p:";
+
+static std::string resource_name_key(std::string_view name)
+{
+  return string_cat_reserve(resource_name_prefix, name);
+}
+static std::string resource_path_key(std::string_view path,
+                                     std::string_view name)
+{
+  return string_cat_reserve(resource_path_prefix, path, name);
+}
+
+static int cls_account_resource_add(cls_method_context_t hctx,
+                                    buffer::list *in, buffer::list *out)
+{
+  cls_user_account_resource_add_op op;
+  try {
+    auto bliter = in->cbegin();
+    decode(op, bliter);
+  } catch (const ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+
+  const std::string& name = op.entry.name;
+  const std::string name_key = resource_name_key(name);
+  const std::string& new_path = op.entry.path;
+
+  CLS_LOG(20, "adding account resource name=%s path=%s",
+          name.c_str(), new_path.c_str());
+
+  // does this resource name-to-path entry exist?
+  bufferlist pathbl;
+  int ret = cls_cxx_map_get_val(hctx, name_key, &pathbl);
+  if (ret < 0 && ret != -ENOENT) {
+    return ret;
+  }
+  const bool exists = (ret == 0);
+
+  std::optional<std::string> old_path;
+  std::optional<cls_user_account_header> header;
+  if (exists) {
+    // if the path changed, remove the old path entry
+    old_path = pathbl.to_str();
+    if (*old_path != new_path) {
+      const std::string old_path_key = resource_path_key(*old_path, name);
+      ret = cls_cxx_map_remove_key(hctx, old_path_key);
+      if (ret < 0) {
+        CLS_LOG(0, "ERROR: failed to remove account resource path: %d", ret);
+        return ret;
+      }
+    }
+  } else {
+    // if this is a new entry, update the resource count in the account header
+    ret = read_header(hctx, &header.emplace());
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
+      return ret;
+    }
+    if (header->count >= op.limit) {
+      CLS_LOG(4, "account resource limit exceeded, %u >= %u",
+              header->count, op.limit);
+      return -EUSERS; // too many users
+    }
+    header->count++;
+  } // !exists
+
+  // write/overwrite the path entry
+  const std::string path_key = resource_path_key(new_path, name);
+  bufferlist entrybl;
+  encode(op.entry, entrybl);
+  ret = cls_cxx_map_set_val(hctx, path_key, &entrybl);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to write account resource path: %d", ret);
+    return ret;
+  }
+
+  // write/overwrite the name-to-path entry
+  if (!old_path || *old_path != new_path) {
+    bufferlist pathbl;
+    pathbl.append(new_path);
+    ret = cls_cxx_map_set_val(hctx, name_key, &pathbl);
+    if (ret < 0) {
+      CLS_LOG(0, "ERROR: failed to write account resource name: %d", ret);
+      return ret;
+    }
+  }
+
+  // write the updated account header
+  if (header) {
+    bufferlist headerbl;
+    encode(*header, headerbl);
+    return cls_cxx_map_write_header(hctx, &headerbl);
+  }
+  return 0;
+} // cls_account_resource_add
+
+static int cls_account_resource_rm(cls_method_context_t hctx,
+                                   buffer::list *in, buffer::list *out)
+{
+  cls_user_account_resource_rm_op op;
+  try {
+    auto bliter = in->cbegin();
+    decode(op, bliter);
+  } catch (const ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+  const std::string& name = op.name;
+  const std::string name_key = resource_name_key(name);
+
+  CLS_LOG(20, "removing account resource name=%s", name.c_str());
+
+  // does this resource name-to-path entry exist?
+  bufferlist pathbl;
+  int ret = cls_cxx_map_get_val(hctx, name_key, &pathbl);
+  if (ret < 0) {
+    return ret;
+  }
+  const std::string path = pathbl.to_str();
+
+  // remove the path entry
+  const std::string path_key = resource_path_key(path, name);
+  ret = cls_cxx_map_remove_key(hctx, path_key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to remove account resource path: %d", ret);
+    return ret;
+  }
+
+  // remove the name-to-path entry
+  ret = cls_cxx_map_remove_key(hctx, name_key);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to remove account resource name: %d", ret);
+    return ret;
+  }
+
+  // update resource count in the account header
+  cls_user_account_header header;
+  ret = read_header(hctx, &header);
+  if (ret < 0) {
+    CLS_LOG(0, "ERROR: failed to read account header ret=%d", ret);
+    return ret;
+  }
+  if (header.count) { // guard underflow
+    header.count--;
+  }
+
+  bufferlist headerbl;
+  encode(header, headerbl);
+  return cls_cxx_map_write_header(hctx, &headerbl);
+} // cls_account_resource_rm
+
+static int cls_account_resource_list(cls_method_context_t hctx,
+                                     bufferlist *in, bufferlist *out)
+{
+  cls_user_account_resource_list_op op;
+  try {
+    auto p = in->cbegin();
+    decode(op, p);
+  } catch (const ceph::buffer::error& err) {
+    CLS_LOG(0, "ERROR: %s failed to decode op", __func__);
+    return -EINVAL;
+  }
+  CLS_LOG(20, "listing account resources from marker=%s path_prefix=%s max_entries=%d",
+          op.marker.c_str(), op.path_prefix.c_str(), (int)op.max_entries);
+
+  // add the path index prefix to the requested marker/path_prefix
+  const std::string marker = string_cat_reserve(resource_path_prefix, op.marker);
+  const std::string prefix = string_cat_reserve(resource_path_prefix, op.path_prefix);
+
+  const uint32_t max_entries = std::min(op.max_entries, 1000u);
+  std::map<std::string, bufferlist> entries;
+  bool truncated = false;
+
+  int rc = cls_cxx_map_get_vals(hctx, marker, prefix, max_entries,
+                                &entries, &truncated);
+  if (rc < 0) {
+    return rc;
+  }
+
+  cls_user_account_resource_list_ret ret;
+
+  // copy matching decoded omap values into a vector
+  for (auto& [key, bl] : entries) {
+    // decode as cls_user_account_resource
+    cls_user_account_resource entry;
+    try {
+      auto p = bl.cbegin();
+      decode(entry, p);
+    } catch (const ceph::buffer::error& e) {
+      CLS_LOG(1, "ERROR: %s failed to decode resource entry at key=%s",
+              __func__, key.c_str());
+      return -EIO;
+    }
+
+    // because these keys concatenate the path+name, it's possible that
+    // path_prefix matched part of the name. filter out entries whose path is
+    // shorter than the requested prefix
+    if (entry.path.size() < op.path_prefix.size()) {
+      CLS_LOG(20, "path prefix=%s skipping path=%s name=%s",
+              prefix.c_str(), entry.path.c_str(), entry.name.c_str());
+      continue;
+    }
+
+    CLS_LOG(20, "included resource path=%s name=%s",
+            entry.path.c_str(), entry.name.c_str());
+    ret.entries.push_back(std::move(entry));
+  }
+
+  ret.truncated = truncated;
+  if (!entries.empty()) {
+    const auto& last_key = entries.rbegin()->first;
+    // trim the path index prefix from the marker
+    ret.marker = last_key.substr(resource_path_prefix.size());
+  }
+  CLS_LOG(20, "entries=%d next_marker=%s truncated=%d",
+          (int)ret.entries.size(), ret.marker.c_str(), (int)ret.truncated);
+
+  encode(ret, *out);
+  return 0;
+} // cls_account_resource_list
+
+
 CLS_INIT(user)
 {
   CLS_LOG(1, "Loaded user class!");
@@ -527,5 +768,15 @@ CLS_INIT(user)
   cls_register_cxx_method(h_class, "reset_user_stats", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats, &h_user_reset_stats);
   cls_register_cxx_method(h_class, "reset_user_stats2", CLS_METHOD_RD | CLS_METHOD_WR, cls_user_reset_stats2, &h_user_reset_stats2);
 
-  return;
+  // account
+  cls_method_handle_t h_account_resource_add;
+  cls_method_handle_t h_account_resource_rm;
+  cls_method_handle_t h_account_resource_list;
+
+  cls_register_cxx_method(h_class, "account_resource_add", CLS_METHOD_RD | CLS_METHOD_WR,
+                          cls_account_resource_add, &h_account_resource_add);
+  cls_register_cxx_method(h_class, "account_resource_rm", CLS_METHOD_RD | CLS_METHOD_WR,
+                          cls_account_resource_rm, &h_account_resource_rm);
+  cls_register_cxx_method(h_class, "account_resource_list", CLS_METHOD_RD,
+                          cls_account_resource_list, &h_account_resource_list);
 }

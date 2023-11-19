@@ -125,6 +125,7 @@ TYPE(cls_user_bucket)
 TYPE(cls_user_bucket_entry)
 TYPE(cls_user_stats)
 TYPE(cls_user_header)
+TYPE(cls_user_account_header)
 
 #include "cls/user/cls_user_ops.h"
 TYPE(cls_user_set_buckets_op)
@@ -134,6 +135,10 @@ TYPE(cls_user_list_buckets_ret)
 TYPE(cls_user_get_header_op)
 TYPE(cls_user_get_header_ret)
 TYPE(cls_user_complete_stats_sync_op)
+TYPE(cls_user_account_resource_add_op)
+TYPE(cls_user_account_resource_rm_op)
+TYPE(cls_user_account_resource_list_op)
+TYPE(cls_user_account_resource_list_ret)
 
 #include "cls/journal/cls_journal_types.h"
 TYPE(cls::journal::ObjectPosition)

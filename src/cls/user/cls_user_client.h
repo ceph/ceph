@@ -33,4 +33,25 @@ void cls_user_get_header(librados::ObjectReadOperation& op, cls_user_header *hea
 int cls_user_get_header_async(librados::IoCtx& io_ctx, std::string& oid, RGWGetUserHeader_CB *ctx);
 void cls_user_reset_stats(librados::ObjectWriteOperation& op);
 
+// Account resources
+
+/// Add or overwrite an entry to the account's list of resources. Returns
+/// -EUSERS (Too many users) if the resource count would exceed the given limit.
+void cls_user_account_resource_add(librados::ObjectWriteOperation& op,
+                                   const cls_user_account_resource& entry,
+                                   uint32_t limit);
+
+/// Remove an entry from the account's list of resources.
+void cls_user_account_resource_rm(librados::ObjectWriteOperation& op,
+                                  const std::string& name);
+
+/// List the resources linked to an account.
+void cls_user_account_resource_list(librados::ObjectReadOperation& op,
+                                    const std::string& marker,
+                                    const std::string& path_prefix,
+                                    uint32_t max_entries,
+                                    std::vector<cls_user_account_resource>& entries,
+                                    bool* truncated, std::string* next_marker,
+                                    int* pret);
+
 #endif
