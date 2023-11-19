@@ -221,21 +221,25 @@ def set_quota_on_clone(fs_handle, clone_volumes_pair):
 
 def do_clone(fs_client, volspec, volname, groupname, subvolname, should_cancel):
     with open_volume_lockless(fs_client, volname) as fs_handle:
-        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
-            src_path = clone_volumes[1].snapshot_data_path(clone_volumes[2])
-            dst_path = clone_volumes[0].path
+        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname,
+                                       groupname, subvolname) \
+            as (subvol0, subvol1, subvol2):
+            src_path = subvol1.snapshot_data_path(subvol2)
+            dst_path = subvol0.path
             # XXX: this is where cloning (of subvolume's snapshots) actually
             # happens.
             bulk_copy(fs_handle, src_path, dst_path, should_cancel)
-            set_quota_on_clone(fs_handle, clone_volumes)
+            set_quota_on_clone(fs_handle, (subvol0, subvol1, subvol2))
 
 def update_clone_failure_status(fs_client, volspec, volname, groupname, subvolname, ve):
     with open_volume_lockless(fs_client, volname) as fs_handle:
-        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
+        with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname,
+                                       groupname, subvolname) \
+            as (subvol0, subvol1, subvol2) :
             if ve.errno == -errno.EINTR:
-                clone_volumes[0].add_clone_failure(-ve.errno, "user interrupted clone operation")
+                subvol0.add_clone_failure(-ve.errno, "user interrupted clone operation")
             else:
-                clone_volumes[0].add_clone_failure(-ve.errno, ve.error_str)
+                subvol0.add_clone_failure(-ve.errno, ve.error_str)
 
 def log_clone_failure(volname, groupname, subvolname, ve):
     if ve.errno == -errno.EINTR:
@@ -263,8 +267,10 @@ def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolnam
     try:
         with open_volume(fs_client, volname) as fs_handle:
             # detach source but leave the clone section intact for later inspection
-            with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
-                clone_volumes[1].detach_snapshot(clone_volumes[2], index)
+            with open_clone_subvolume_pair(fs_client, fs_handle, volspec,
+                                           volname, groupname, subvolname) \
+                as (subvol0, subvol1, subvol2):
+                subvol1.detach_snapshot(subvol2, index)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
@@ -272,9 +278,11 @@ def handle_clone_failed(fs_client, volspec, volname, index, groupname, subvolnam
 def handle_clone_complete(fs_client, volspec, volname, index, groupname, subvolname, should_cancel):
     try:
         with open_volume(fs_client, volname) as fs_handle:
-            with open_clone_subvolume_pair(fs_client, fs_handle, volspec, volname, groupname, subvolname) as clone_volumes:
-                clone_volumes[1].detach_snapshot(clone_volumes[2], index)
-                clone_volumes[0].remove_clone_source(flush=True)
+            with open_clone_subvolume_pair(fs_client, fs_handle, volspec,
+                                           volname, groupname, subvolname) \
+                as (subvol0, subvol1, subvol2):
+                subvol1.detach_snapshot(subvol2, index)
+                subvol0.remove_clone_source(flush=True)
     except (MetadataMgrException, VolumeException) as e:
         log.error("failed to detach clone from snapshot: {0}".format(e))
     return (None, True)
