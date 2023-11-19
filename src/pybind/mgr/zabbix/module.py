@@ -345,25 +345,38 @@ class Module(MgrModule):
         ]}
 
         # Discovering OSDs
-        # Getting hosts for found crush rules
+        def find_device_in_bucket(device_id: int,
+                                  current_bucket: Mapping[str, Any],
+                                  buckets: List[Mapping[str, Any]]) -> bool:
+            items = current_bucket.get('items', dict())
+
+            for item in items:
+                if item['id'] == device_id:
+                    return True
+
+                for next_bucket in buckets:
+                    if (next_bucket['id'] == item['id']
+                        and find_device_in_bucket(device_id, next_bucket, buckets)
+                    ):
+                        return True
+
+            return False
+
+        # Getting root buckets for found crush rules
         osd_roots = {
-            step['item_name']: [
-                item['id']
-                for item in root_bucket['items']
-            ]
+            step['item_name']: step['item']
             for rule in osd_map_crush['rules']
             for step in rule['steps'] if step['op'] == "take"
-            for root_bucket in osd_map_crush['buckets']
-            if root_bucket['id'] == step['item']
         }
+
         # Getting osds for hosts with map to crush_rule
         osd_discovery = {
-            item['id']: crush_rule
-            for crush_rule, roots in osd_roots.items()
-            for root in roots
+            device['id']: crush_rule
+            for device in osd_map_crush['devices']
+            for crush_rule, root in osd_roots.items()
             for bucket in osd_map_crush['buckets']
-            if bucket['id'] == root
-            for item in bucket['items']
+            if (bucket['id'] == root
+                and find_device_in_bucket(device['id'], bucket, osd_map_crush['buckets']))
         }
         osd_discovery_data = {"data": [
             {
