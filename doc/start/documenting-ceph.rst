@@ -31,14 +31,14 @@ repository. Python Sphinx renders the source into HTML and manpages.
 
 Viewing Old Ceph Documentation
 ==============================
-The https://docs.ceph.com link displays the latest release branch by default
-(for example, if "Quincy" is the most recent release, then by default
-https://docs.ceph.com displays the documentation for Quincy), but you can view
-the documentation for older versions of Ceph (for example, ``pacific``) by
-replacing the version name in the url (for example, ``quincy`` in
-`https://docs.ceph.com/en/pacific <https://docs.ceph.com/en/quincy>`_) with the
-branch name you prefer (for example, ``pacific``, to create a URL that reads
-`https://docs.ceph.com/en/pacific/ <https://docs.ceph.com/en/pacific/>`_).
+The https://docs.ceph.com link displays the documentation for the latest
+release by default (for example, if "Reef" is the most recent release, then by
+default https://docs.ceph.com displays the documentation for Reef), but you can
+view the documentation for older releases of Ceph (for example, ``quincy``) by
+replacing the release name in the url (for example, ``reef`` in
+`https://docs.ceph.com/en/reef/ <https://docs.ceph.com/en/reef>`_) with the
+branch name you prefer (for example, ``quincy``, to create a URL that reads
+`https://docs.ceph.com/en/pacific/ <https://docs.ceph.com/en/quincy/>`_).
 
 .. _making_contributions:
 
