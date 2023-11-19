@@ -900,7 +900,8 @@ PG::do_osd_ops_execute(
                       e.value() == EAGAIN);
           return rollbacker.rollback_obc_if_modified(e).then_interruptible(
           [this, e, failure_func_ptr] {
-            return (*failure_func_ptr)(e , shard_services.get_tid());
+            // no need to record error log
+            return (*failure_func_ptr)(e , shard_services.get_tid(), false);
           });
     }));
 
@@ -916,10 +917,10 @@ PG::do_osd_ops_execute(
     ceph_tid_t rep_tid = shard_services.get_tid();
 
     auto all_completed_fut = e.value() == ENOENT ?
-      (*failure_func_ptr)(e, rep_tid) :
+      (*failure_func_ptr)(e, rep_tid, true) :
       rollbacker.rollback_obc_if_modified(e).then_interruptible(
       [e, failure_func_ptr, rep_tid] {
-          return (*failure_func_ptr)(e, rep_tid);
+          return (*failure_func_ptr)(e, rep_tid, true);
       });
 
     return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
@@ -1056,8 +1057,10 @@ PG::do_osd_ops(
         std::move(reply));
     },
     // failure_func
-    [m, &op_info, obc, this] (const std::error_code& e, const ceph_tid_t& rep_tid) {
-    logger().error("do_osd_ops_execute::failure_func {} got error: {}", *m, e);
+    [m, &op_info, obc, this]
+    (const std::error_code& e, const ceph_tid_t& rep_tid, bool record_error) {
+    logger().error("do_osd_ops_execute::failure_func {} got error: {} record_error: {}",
+                    *m, e, record_error);
     auto error_log_fut = seastar::now();
     epoch_t epoch = get_osdmap_epoch();
     auto last_complete = peering_state.get_info().last_complete;
@@ -1066,7 +1069,7 @@ PG::do_osd_ops(
     }
     return error_log_fut.then([m, e, epoch, &op_info, rep_tid, last_complete, this] {
       auto fut = seastar::now();
-      if (!peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
+      if (record_error && !peering_state.pg_has_reset_since(epoch) && op_info.may_write()) {
         logger().debug("do_osd_ops_execute::failure_func finding rep_tid {}",
                        rep_tid);
         ceph_assert(log_entry_version.contains(rep_tid));
@@ -1156,7 +1159,7 @@ PG::do_osd_ops(
         return do_osd_ops_iertr::now();
       },
       // failure_func
-      [] (const std::error_code& e, const ceph_tid_t& rep_tid) {
+      [] (const std::error_code& e, const ceph_tid_t& rep_tid, bool record_error) {
         return do_osd_ops_iertr::now();
       });
   });
