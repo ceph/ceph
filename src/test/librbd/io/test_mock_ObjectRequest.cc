@@ -1926,7 +1926,7 @@ TEST_F(TestMockIoObjectRequest, ListSnapsWholeObject) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
   MockTestImageCtx mock_image_ctx(*ictx);
-  mock_image_ctx.parent = &mock_image_ctx;
+  mock_image_ctx.snaps = {3};
 
   InSequence seq;
 
@@ -1937,30 +1937,51 @@ TEST_F(TestMockIoObjectRequest, ListSnapsWholeObject) {
   clone_info.cloneid = 3;
   clone_info.snaps = {3};
   clone_info.overlap = std::vector<std::pair<uint64_t,uint64_t>>{{0, 1}};
-  clone_info.size = 4194304;
+  clone_info.size = mock_image_ctx.layout.object_size;
   snap_set.clones.push_back(clone_info);
 
   clone_info.cloneid = CEPH_NOSNAP;
   clone_info.snaps = {};
   clone_info.overlap = {};
-  clone_info.size = 4194304;
+  clone_info.size = mock_image_ctx.layout.object_size;
   snap_set.clones.push_back(clone_info);
 
   expect_list_snaps(mock_image_ctx, snap_set, 0);
 
-  SnapshotDelta snapshot_delta;
-  C_SaferCond ctx;
-  auto req = MockObjectListSnapsRequest::create(
-    &mock_image_ctx, 0, {{0, mock_image_ctx.layout.object_size - 1}},
-    {0, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
+  {
+    SnapshotDelta snapshot_delta;
+    C_SaferCond ctx;
+    auto req = MockObjectListSnapsRequest::create(
+      &mock_image_ctx, 0, {{0, mock_image_ctx.layout.object_size - 1}},
+      {3, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+    req->send();
+    ASSERT_EQ(0, ctx.wait());
 
-  SnapshotDelta expected_snapshot_delta;
-  expected_snapshot_delta[{CEPH_NOSNAP,CEPH_NOSNAP}].insert(
-    0, mock_image_ctx.layout.object_size - 1,
-    {SPARSE_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 1});
-  ASSERT_EQ(expected_snapshot_delta, snapshot_delta);
+    SnapshotDelta expected_snapshot_delta;
+    expected_snapshot_delta[{CEPH_NOSNAP,CEPH_NOSNAP}].insert(
+      1, mock_image_ctx.layout.object_size - 2,
+      {SPARSE_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 2});
+    EXPECT_EQ(expected_snapshot_delta, snapshot_delta);
+  }
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+
+  {
+    SnapshotDelta snapshot_delta;
+    C_SaferCond ctx;
+    auto req = MockObjectListSnapsRequest::create(
+      &mock_image_ctx, 0, {{0, mock_image_ctx.layout.object_size - 1}},
+      {3, CEPH_NOSNAP}, LIST_SNAPS_FLAG_WHOLE_OBJECT, {}, &snapshot_delta,
+      &ctx);
+    req->send();
+    ASSERT_EQ(0, ctx.wait());
+
+    SnapshotDelta expected_snapshot_delta;
+    expected_snapshot_delta[{CEPH_NOSNAP,CEPH_NOSNAP}].insert(
+      0, mock_image_ctx.layout.object_size - 1,
+      {SPARSE_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 1});
+    EXPECT_EQ(expected_snapshot_delta, snapshot_delta);
+  }
 }
 
 } // namespace io
