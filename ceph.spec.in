@@ -124,6 +124,8 @@
 %{!?_selinux_policy_version: %global _selinux_policy_version 0.0.0}
 %endif
 %endif
+%bcond_without cephadm_bundling
+%bcond_without cephadm_pip_deps
 
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
@@ -526,6 +528,13 @@ Requires:       openssh-server
 Requires:       which
 %if 0%{?weak_deps}
 Recommends:     podman >= 2.0.2
+%endif
+%if 0%{with cephadm_bundling}
+%if 0%{without cephadm_pip_deps}
+BuildRequires: python3-jinja2 >= 2.10
+%endif
+%else
+Requires: python3-jinja2 >= 2.10
 %endif
 %description -n cephadm
 Utility to bootstrap a Ceph cluster and manage Ceph daemons deployed
@@ -1431,7 +1440,16 @@ cmake .. \
     -DWITH_SEASTAR:BOOL=ON \
     -DWITH_JAEGER:BOOL=OFF \
 %endif
-    -DWITH_GRAFANA:BOOL=ON
+    -DWITH_GRAFANA:BOOL=ON \
+%if 0%{with cephadm_bundling}
+%if 0%{with cephadm_pip_deps}
+    -DCEPHADM_BUNDLED_DEPENDENCIES=pip
+%else
+    -DCEPHADM_BUNDLED_DEPENDENCIES=rpm
+%endif
+%else
+    -DCEPHADM_BUNDLED_DEPENDENCIES=none
+%endif
 
 %if %{with cmake_verbose_logging}
 cat ./CMakeFiles/CMakeOutput.log

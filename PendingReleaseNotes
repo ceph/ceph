@@ -57,6 +57,13 @@
   level storage operator (like Rook) to recreate the missing file system.
   See https://docs.ceph.com/en/latest/cephfs/administration/#file-systems
   docs for more information.
+* RADOS: A POOL_APP_NOT_ENABLED health warning will now be reported if
+  the application is not enabled for the pool irrespective of whether
+  the pool is in use or not. Always tag a pool with an application
+  using ``ceph osd pool application enable`` command to avoid reporting
+  of POOL_APP_NOT_ENABLED health warning for that pool.
+  The user might temporarily mute this warning using
+  ``ceph health mute POOL_APP_NOT_ENABLED``.
 
 >=18.0.0
 
