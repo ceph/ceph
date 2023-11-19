@@ -1345,7 +1345,9 @@ class TestBootstrap(object):
 
 ###############################################3
 
-    def test_config(self, cephadm_fs):
+    def test_config(self, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
+
         conf_file = 'foo'
         cmd = self._get_cmd(
             '--mon-ip', '192.168.1.1',
@@ -1363,14 +1365,17 @@ class TestBootstrap(object):
             retval = _cephadm.command_bootstrap(ctx)
             assert retval == 0
 
-    def test_no_mon_addr(self, cephadm_fs):
+    def test_no_mon_addr(self, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
+
         cmd = self._get_cmd()
         with with_cephadm_ctx(cmd) as ctx:
             msg = r'must specify --mon-ip or --mon-addrv'
             with pytest.raises(_cephadm.Error, match=msg):
                 _cephadm.command_bootstrap(ctx)
 
-    def test_skip_mon_network(self, cephadm_fs):
+    def test_skip_mon_network(self, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
         cmd = self._get_cmd('--mon-ip', '192.168.1.1')
 
         with with_cephadm_ctx(cmd, list_networks={}) as ctx:
@@ -1453,7 +1458,9 @@ class TestBootstrap(object):
                 True,
             ),
         ])
-    def test_mon_ip(self, mon_ip, list_networks, result, cephadm_fs):
+    def test_mon_ip(self, mon_ip, list_networks, result, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
+
         cmd = self._get_cmd('--mon-ip', mon_ip)
         if not result:
             with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
@@ -1515,7 +1522,9 @@ class TestBootstrap(object):
                 None,
             ),
         ])
-    def test_mon_addrv(self, mon_addrv, list_networks, err, cephadm_fs):
+    def test_mon_addrv(self, mon_addrv, list_networks, err, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
+
         cmd = self._get_cmd('--mon-addrv', mon_addrv)
         if err:
             with with_cephadm_ctx(cmd, list_networks=list_networks) as ctx:
@@ -1526,7 +1535,9 @@ class TestBootstrap(object):
                 retval = _cephadm.command_bootstrap(ctx)
                 assert retval == 0
 
-    def test_allow_fqdn_hostname(self, cephadm_fs):
+    def test_allow_fqdn_hostname(self, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
+
         hostname = 'foo.bar'
         cmd = self._get_cmd(
             '--mon-ip', '192.168.1.1',
@@ -1549,7 +1560,9 @@ class TestBootstrap(object):
             ('00000000-0000-0000-0000-0000deadbeef', None),
             ('00000000-0000-0000-0000-0000deadbeez', 'not an fsid'),
         ])
-    def test_fsid(self, fsid, err, cephadm_fs):
+    def test_fsid(self, fsid, err, cephadm_fs, funkypatch):
+        funkypatch.patch('cephadmlib.systemd.call')
+
         cmd = self._get_cmd(
             '--mon-ip', '192.168.1.1',
             '--skip-mon-network',
