@@ -1057,7 +1057,7 @@ namespace rgw::sal {
     int marker = 0;
     uint64_t min_part_size = cct->_conf->rgw_multipart_min_part_size;
     auto etags_iter = part_etags.begin();
-    rgw::sal::Attrs attrs = target_obj->get_attrs();
+    rgw::sal::Attrs& attrs = target_obj->get_attrs();
 
     ofs = 0;
     accounted_size = 0;
