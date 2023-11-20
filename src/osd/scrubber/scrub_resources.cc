@@ -21,28 +21,38 @@ ScrubResources::ScrubResources(
     , conf{config}
 {}
 
+// ------------------------- scrubbing as primary on this OSD -----------------
+
+// can we increase the number of concurrent scrubs performed by Primaries
+// on this OSD? note that counted separately from the number of scrubs
+// performed by replicas.
 bool ScrubResources::can_inc_scrubs() const
 {
   std::lock_guard lck{resource_lock};
-  if (scrubs_local + granted_reservations.size() < conf->osd_max_scrubs) {
-    return true;
-  }
-  log_upwards(fmt::format(
-      "{}== false. {} (local) + {} (remote) >= max ({})", __func__,
-      scrubs_local, granted_reservations.size(), conf->osd_max_scrubs));
-  return false;
+  return can_inc_local_scrubs_unlocked();
 }
 
 bool ScrubResources::inc_scrubs_local()
 {
   std::lock_guard lck{resource_lock};
-  if (scrubs_local + granted_reservations.size() < conf->osd_max_scrubs) {
+  if (can_inc_local_scrubs_unlocked()) {
     ++scrubs_local;
+    log_upwards(fmt::format(
+	"{}: {} -> {} (max {}, remote {})", __func__, (scrubs_local - 1),
+	scrubs_local, conf->osd_max_scrubs, granted_reservations.size()));
+    return true;
+  }
+  return false;
+}
+
+bool ScrubResources::can_inc_local_scrubs_unlocked() const
+{
+  if (scrubs_local < conf->osd_max_scrubs) {
     return true;
   }
   log_upwards(fmt::format(
-      "{}: {} (local) + {} (remote) >= max ({})", __func__, scrubs_local,
-      granted_reservations.size(), conf->osd_max_scrubs));
+      "{}: Cannot add local scrubs. Current counter ({}) >= max ({})", __func__,
+      scrubs_local, conf->osd_max_scrubs));
   return false;
 }
 
@@ -50,11 +60,14 @@ void ScrubResources::dec_scrubs_local()
 {
   std::lock_guard lck{resource_lock};
   log_upwards(fmt::format(
-      "{}: {} -> {} (max {}, remote {})", __func__, scrubs_local,
-      (scrubs_local - 1), conf->osd_max_scrubs, granted_reservations.size()));
+      "{}:  {} -> {} (max {}, remote {})",
+      __func__, scrubs_local, (scrubs_local - 1), conf->osd_max_scrubs,
+      granted_reservations.size()));
   --scrubs_local;
   ceph_assert(scrubs_local >= 0);
 }
+
+// ------------------------- scrubbing on this OSD as replicas ----------------
 
 bool ScrubResources::inc_scrubs_remote(pg_t pgid)
 {
@@ -67,18 +80,20 @@ bool ScrubResources::inc_scrubs_remote(pg_t pgid)
     return true;
   }
 
-  auto prev = granted_reservations.size();
-  if (scrubs_local + prev < conf->osd_max_scrubs) {
+  auto pre_op_cnt = granted_reservations.size();
+  if (pre_op_cnt < conf->osd_max_scrubs) {
     granted_reservations.insert(pgid);
     log_upwards(fmt::format(
-	"{}: pg[{}] {} -> {} (max {}, local {})", __func__, pgid, prev,
-	granted_reservations.size(), conf->osd_max_scrubs, scrubs_local));
+	"{}: pg[{}] reserved. Remote scrubs count changed from {} -> {} (max "
+	"{}, local {})",
+	__func__, pgid, pre_op_cnt, granted_reservations.size(),
+	conf->osd_max_scrubs, scrubs_local));
     return true;
   }
 
   log_upwards(fmt::format(
-      "{}: pg[{}] {} (local) + {} (remote) >= max ({})", __func__, pgid,
-      scrubs_local, granted_reservations.size(), conf->osd_max_scrubs));
+      "{}: pg[{}] failed. Too many concurrent replica scrubs ({} >= max ({}))",
+      __func__, pgid, pre_op_cnt, conf->osd_max_scrubs));
   return false;
 }
 
