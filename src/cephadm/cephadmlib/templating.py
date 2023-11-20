@@ -29,6 +29,34 @@ class Templates(str, enum.Enum):
         return repr(self.value)
 
 
+class TemplateNotFoundInZipApp(jinja2.TemplateNotFound):
+    def __init__(
+        self,
+        template: str,
+        *,
+        path: str = '',
+        relative_path: str = '',
+        archive_norm_path: str = '',
+        archive_path: str = ''
+    ) -> None:
+        super().__init__(template)
+        self.path = path
+        self.relative_path = relative_path
+        self.archive_norm_path = archive_norm_path
+        self.archive_path = archive_path
+
+    def __str__(self) -> str:
+        msg = self.message
+        msg2 = ''
+        if self.path or self.relative_path:
+            msg2 += f' path [{self.path!r}, rel={self.relative_path!r}] not found'
+        if self.archive_norm_path or self.archive_path:
+            msg2 += f' in [{self.archive_norm_path!r}, orig={self.archive_path!r}]'
+        if msg2:
+            msg2 = ':' + msg2
+        return f'{msg}{msg2}'
+
+
 class _PackageLoader(jinja2.PackageLoader):
     """Workaround for PackageLoader when using cephadm with relative paths.
 
@@ -71,7 +99,14 @@ class _PackageLoader(jinja2.PackageLoader):
         try:
             source = cast(bytes, self._loader.get_data(arelpath))
         except OSError as e:
-            raise jinja2.TemplateNotFound(template) from e
+            not_found = TemplateNotFoundInZipApp(
+                template,
+                path=path,
+                relative_path=arelpath,
+                archive_norm_path=archive_path,
+                archive_path=self._loader.archive,
+            )
+            raise not_found from e
         return source.decode(self.encoding), path, None
 
 
