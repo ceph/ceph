@@ -5,7 +5,7 @@ from typing import Tuple, Optional, List, Dict, Any
 from mgr_module import MgrModule, CLICommand, Option, CLICheckNonemptyFileInput
 import object_format
 import orchestrator
-from orchestrator.module import IngressType
+from orchestrator.module import IngressType, NoOrchestrator
 
 from .export import ExportMgr, AppliedExportResults
 from .cluster import NFSCluster
@@ -186,4 +186,15 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         self.export_mgr.delete_export(cluster_id=cluster_id, pseudo_path=pseudo)
 
     def cluster_ls(self) -> List[str]:
-        return available_clusters(self)
+        try:
+            return available_clusters(self)
+        except NoOrchestrator as e:
+            log.error(str(e))
+            return []
+
+    def available(self) -> bool:
+        try:
+            available_clusters(self)
+        except Exception:
+            return False
+        return True
