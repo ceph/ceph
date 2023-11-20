@@ -131,10 +131,11 @@ and ``quorum_status``.
 Understanding mon_status
 ========================
 
-The status of the monitor (as reported by the ``ceph tell mon.X mon_status``
-command) can always be obtained via the admin socket. This command outputs a
-great deal of information about the monitor (including the information found in
-the output of the ``quorum_status`` command).
+The status of a Monitor (as reported by the ``ceph tell mon.X mon_status``
+command) can be obtained via the admin socket. The ``ceph tell mon.X
+mon_status``  command outputs a great deal of information about the monitor
+(including the information found in the output of the ``quorum_status``
+command).
 
 To understand this command's output, let us consider the following example, in
 which we see the output of ``ceph tell mon.c mon_status``::
@@ -164,29 +165,34 @@ which we see the output of ``ceph tell mon.c mon_status``::
                 "name": "c",
                 "addr": "127.0.0.1:6795\/0"}]}}
 
-It is clear that there are three monitors in the monmap (*a*, *b*, and *c*),
-the quorum is formed by only two monitors, and *c* is in the quorum as a
-*peon*.
+This output reports that there are three monitors in the monmap (*a*, *b*, and
+*c*), that quorum is formed by only two monitors, and that *c* is in quorum as
+a *peon*.
 
-**Which monitor is out of the quorum?**
+**Which monitor is out of quorum?**
 
-  The answer is **a** (that is, ``mon.a``).
+  The answer is **a** (that is, ``mon.a``). ``mon.a`` is out of quorum.
 
-**Why?**
+**How do we know, in this example, that mon.a is out of quorum?**
 
-  When the ``quorum`` set is examined, there are clearly two monitors in the
-  set: *1* and *2*. But these are not monitor names. They are monitor ranks, as
-  established in the current ``monmap``. The ``quorum`` set does not include
-  the monitor that has rank 0, and according to the ``monmap`` that monitor is
-  ``mon.a``.
+  We know that ``mon.a`` is out of quorum because it has rank 0, and Monitors
+  with rank 0 are by definition out of quorum.
+
+  If we examine the ``quorum`` set, we can see that there are clearly two
+  monitors in the set: *1* and *2*. But these are not monitor names. They are
+  monitor ranks, as established in the current ``monmap``. The ``quorum`` set
+  does not include the monitor that has rank 0, and according to the ``monmap``
+  that monitor is ``mon.a``.
 
 **How are monitor ranks determined?**
 
-  Monitor ranks are calculated (or recalculated) whenever monitors are added or
-  removed. The calculation of ranks follows a simple rule: the **greater** the
-  ``IP:PORT`` combination, the **lower** the rank. In this case, because
-  ``127.0.0.1:6789`` is lower than the other two ``IP:PORT`` combinations,
-  ``mon.a`` has the highest rank: namely, rank 0.
+  Monitor ranks are calculated (or recalculated) whenever monitors are added to
+  or removed from the cluster. The calculation of ranks follows a simple rule:
+  the **greater** the ``IP:PORT`` combination, the **lower** the rank. In this
+  case, because ``127.0.0.1:6789`` (``mon.a``) is numerically less than the
+  other two ``IP:PORT`` combinations (which are ``127.0.0.1:6790`` for "Monitor
+  b" and ``127.0.0.1:6795`` for "Monitor c"), ``mon.a`` has the highest rank:
+  namely, rank 0.
   
 
 Most Common Monitor Issues
