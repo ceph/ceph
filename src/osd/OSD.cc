@@ -1726,14 +1726,32 @@ void OSDService::queue_recovery_context(
       e));
 }
 
-void OSDService::queue_for_snap_trim(PG *pg)
+void OSDService::queue_for_snap_trim(PG *pg, uint64_t cost_per_object)
 {
   dout(10) << "queueing " << *pg << " for snaptrim" << dendl;
+  uint64_t cost_for_queue = [this, cost_per_object] {
+    if (cct->_conf->osd_op_queue == "mclock_scheduler") {
+      /* The cost calculation is valid for most snap trim iterations except
+       * for the following cases:
+       * 1) The penultimate iteration which may return 1 object to trim, in
+       *    which case the cost will be off by a factor equivalent to the
+       *    average object size, and,
+       * 2) The final iteration which returns -ENOENT and performs clean-ups.
+       */
+      return cost_per_object * cct->_conf->osd_pg_max_concurrent_snap_trims;
+    } else {
+      /* We retain this legacy behavior for WeightedPriorityQueue.
+       * This branch should be removed after Squid.
+       */
+      return cct->_conf->osd_snap_trim_cost;
+    }
+  }();
+
   enqueue_back(
     OpSchedulerItem(
       unique_ptr<OpSchedulerItem::OpQueueable>(
 	new PGSnapTrim(pg->get_pgid(), pg->get_osdmap_epoch())),
-      cct->_conf->osd_snap_trim_cost,
+      cost_for_queue,
       cct->_conf->osd_snap_trim_priority,
       ceph_clock_now(),
       0,

@@ -15627,8 +15627,10 @@ PrimaryLogPG::AwaitAsyncWork::AwaitAsyncWork(my_context ctx)
     NamedState(nullptr, "Trimming/AwaitAsyncWork")
 {
   auto *pg = context< SnapTrimmer >().pg;
+  // Determine cost in terms of the average object size
+  uint64_t cost_per_object = pg->get_average_object_size();
   context< SnapTrimmer >().log_enter(state_name);
-  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(pg);
+  context< SnapTrimmer >().pg->osd->queue_for_snap_trim(pg, cost_per_object);
   pg->state_set(PG_STATE_SNAPTRIM);
   pg->state_clear(PG_STATE_SNAPTRIM_ERROR);
   pg->publish_stats_to_osd();
