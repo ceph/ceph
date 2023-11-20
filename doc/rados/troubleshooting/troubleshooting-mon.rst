@@ -85,23 +85,27 @@ Using the monitor's admin socket
 ================================
 
 A monitor's admin socket allows you to interact directly with a specific daemon
-by using a Unix socket file. This file is found in the monitor's ``run``
-directory. The admin socket's default directory is
-``/var/run/ceph/ceph-mon.ID.asok``, but this can be overridden and the admin
-socket might be elsewhere, especially if your cluster's daemons are deployed in
-containers. If you cannot find it, either check your ``ceph.conf`` for an
-alternative path or run the following command:
+by using a Unix socket file. This socket file is found in the monitor's ``run``
+directory. 
+
+The admin socket's default directory is ``/var/run/ceph/ceph-mon.ID.asok``. It
+is possible to override the admin socket's default location. If the default
+location has been overridden, then the admin socket will be elsewhere. This is
+often the case when a cluster's daemons are deployed in containers. 
+
+To find the directory of the admin socket, check either your ``ceph.conf`` for
+an alternative path or run the following command:
     
 .. prompt:: bash $
 
    ceph-conf --name mon.ID --show-config-value admin_socket
 
-The admin socket is available for use only when the monitor daemon is running.
-Whenever the monitor has been properly shut down, the admin socket is removed.
-However, if the monitor is not running and the admin socket persists, it is
-likely that the monitor has been improperly shut down.  In any case, if the
-monitor is not running, it will be impossible to use the admin socket, and the
-``ceph`` command is likely to return ``Error 111: Connection Refused``.
+The admin socket is available for use only when the Monitor daemon is running.
+Every time the Monitor is properly shut down, the admin socket is removed.  If
+the Monitor is not running and yet the admin socket persists, it is likely that
+the Monitor has been improperly shut down. If the Monitor is not running, it
+will be impossible to use the admin socket, and the ``ceph`` command is likely
+to return ``Error 111: Connection Refused``.
 
 To access the admin socket, run a ``ceph tell`` command of the following form
 (specifying the daemon that you are interested in):
@@ -110,7 +114,7 @@ To access the admin socket, run a ``ceph tell`` command of the following form
 
    ceph tell mon.<id> mon_status
 
-This command passes a ``help`` command to the specific running monitor daemon
+This command passes a ``help`` command to the specified running Monitor daemon
 ``<id>`` via its admin socket. If you know the full path to the admin socket
 file, this can be done more directly by running the following command:
 
