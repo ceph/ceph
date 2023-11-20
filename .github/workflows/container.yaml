@@ -1,0 +1,71 @@
+name: container
+on:
+  pull_request:
+    # TODO: remove this when this workflow should be run for every Ceph PR
+    paths:
+      - .github/workflows/container.yaml
+      - container/**
+  push:
+    branches:
+      - main
+
+defaults:
+  run:
+    # reference: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#using-a-specific-shell
+    shell: bash --noprofile --norc -eo pipefail -x {0}
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      # TODO: fix licenses output; this reports: org.opencontainers.image.licenses=NOASSERTION
+      - name: Generate container metadata
+        id: container-meta
+        uses: crazy-max/ghaction-docker-meta@v5
+        with:
+          images: quay.io/ceph/ceph-staging
+          labels: |
+            org.opencontainers.image.url=https://ceph.io/
+
+      - name: Buildah Build
+        id: container-build
+        uses: redhat-actions/buildah-build@v2
+        with:
+          base-image: quay.io/centos/centos:stream8
+          containerfiles: ./container/Containerfile
+          platforms: linux/amd64, linux/arm64
+          labels: |
+            ${{ steps.container-meta.outputs.labels }}
+          tags: |
+            ${{ steps.container-meta.outputs.tags }}
+          build-args: |
+            CEPH_VERSION_NAME=main
+            CEPH_PACKAGE_VERSION=
+            GANESHA_PACKAGE_VERSION=
+            IS_DEVEL=true
+            CEPH_REF=main
+            OSD_FLAVOR=default
+
+      # TODO: for semver tags on release branches, rebuild daily w/ cron if base image is updated
+      #       see: https://github.com/lucacome/docker-image-update-checker
+
+      - name: Push To quay.io
+        if: ${{ github.repository_owner == 'ceph' && github.ref == 'refs/heads/master' }}
+        uses: redhat-actions/push-to-registry@v2
+        with:
+          image: ${{ steps.container-build.outputs.image }}
+          tags: ${{ steps.container-build.outputs.tags }}
+          registry: quay.io/ceph/ceph-staging
+          username: ceph+ceph_staging_ci
+          password: ${{ secrets.CEPH_STAGING_QUAY_TOKEN }}
