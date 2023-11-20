@@ -152,10 +152,10 @@ class RGWObjectRetention
 {
 protected:
   std::string mode;
-  ceph::real_time retain_until_date;
+  uint64_t retain_until_date;
 public:
   RGWObjectRetention() {}
-  RGWObjectRetention(std::string _mode, ceph::real_time _date): mode(_mode), retain_until_date(_date) {}
+  RGWObjectRetention(std::string _mode, ceph::real_time _date): mode(_mode), retain_until_date(ceph::real_clock::to_time_t(_date)) {}
 
   void set_mode(std::string _mode) {
     mode = _mode;
@@ -166,11 +166,11 @@ public:
   }
 
   void set_retain_until_date(ceph::real_time _retain_until_date) {
-    retain_until_date = _retain_until_date;
+    retain_until_date = ceph::real_clock::to_time_t(_retain_until_date);
   }
 
   ceph::real_time get_retain_until_date() const {
-    return retain_until_date;
+    return ceph::real_clock::from_time_t(static_cast<time_t>(retain_until_date));
   }
 
   void encode(bufferlist& bl) const {

@@ -116,12 +116,12 @@ void RGWObjectRetention::decode_xml(XMLObj *obj) {
   if (boost::none == date) {
     throw RGWXMLDecoder::err("invalid RetainUntilDate value");
   }
-  retain_until_date = *date;
+  retain_until_date = ceph::real_clock::to_time_t(*date);
 }
 
 void RGWObjectRetention::dump_xml(Formatter *f) const {
   encode_xml("Mode", mode, f);
-  string date = ceph::to_iso_8601(retain_until_date);
+  string date = ceph::to_iso_8601(ceph::real_clock::from_time_t(static_cast<time_t>(retain_until_date)));
   encode_xml("RetainUntilDate", date, f);
 }
 
