@@ -208,7 +208,39 @@ TEST(RGWCksum, DigestSha512)
     }
   }
 }
- 
+
+TEST(RGWCksum, DigestBlake3)
+{
+  auto t = cksum::Type::blake3;
+  for (const auto input_str : {&lorem, &dolor}) {
+    DigestVariant dv = rgw::cksum::digest_factory(t);
+    Digest *digest = get_digest(dv);
+
+    ASSERT_NE(digest, nullptr);
+
+    std::cout << "input_str:" << input_str << std::endl;
+    digest->Update((const unsigned char *)input_str->c_str(),
+		   input_str->length());
+
+    auto cksum = rgw::cksum::finalize_digest(digest, t);
+    std::cout << "computed sha1: " << cksum.hex() << std::endl;
+
+    if (input_str == &lorem) {
+      /* compare w/known value, b3sum */
+      ASSERT_EQ(cksum.hex(), "f1da5f4e2bd5669307bcdb2e223dad05af7425207cbee59e73526235f50f76ad");
+      /* compare w/known value https://www.base64encode.org/ */
+      ASSERT_EQ(cksum.to_base64(),
+		"ZjFkYTVmNGUyYmQ1NjY5MzA3YmNkYjJlMjIzZGFkMDVhZjc0MjUyMDdjYmVlNTllNzM1MjYyMzVmNTBmNzZhZA==");
+    } else { // &dolor
+      /* compare w/known value, b3sum */
+      ASSERT_EQ(cksum.hex(), "71fe44583a6268b56139599c293aeb854e5c5a9908eca00105d81ad5e22b7bb6");
+      /* compare w/known value https://www.base64encode.org/ */
+      ASSERT_EQ(cksum.to_base64(),
+		"NzFmZTQ0NTgzYTYyNjhiNTYxMzk1OTljMjkzYWViODU0ZTVjNWE5OTA4ZWNhMDAxMDVkODFhZDVlMjJiN2JiNg==");
+    }
+  }
+} /* blake3 */
+
 TEST(RGWCksum, DigestSTR)
 {
   for (auto t : {t1, t2, t3, t4, t5, t6}) {
