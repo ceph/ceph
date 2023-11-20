@@ -1019,6 +1019,19 @@ public:
     return num_bytes;
   }
 
+  uint64_t get_average_object_size() {
+    ceph_assert(ceph_mutex_is_locked_by_me(_lock));
+    auto num_bytes = static_cast<uint64_t>(
+      std::max<int64_t>(
+        0, // ensure bytes is non-negative
+        info.stats.stats.sum.num_bytes));
+    auto num_objects = static_cast<uint64_t>(
+      std::max<int64_t>(
+        1, // ensure objects is non-negative and non-zero
+        info.stats.stats.sum.num_objects));
+    return std::max<uint64_t>(num_bytes / num_objects, 1);
+  }
+
 protected:
 
   /*
