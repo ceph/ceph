@@ -1437,16 +1437,41 @@ class NodeProxyCache:
         self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/{host}", json.dumps(data))
 
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves the full report for the specified hostname.
+
+        If a hostname is provided in the keyword arguments, it retrieves the full report
+        data for that specific host. If no hostname is provided, it fetches the full
+        report data for all hosts available.
+
+        :param kw: Keyword arguments including 'hostname'.
+        :type kw: dict
+
+        :return: The full report data for the specified hostname(s).
+        :rtype: dict
+        """
         hostname = kw.get('hostname')
-        if hostname not in self.data.keys():
-            return [self.data[h] for h in self.data.keys()]
-        else:
-            return self.data[hostname]
+        hosts = [hostname] if hostname else self.data.keys()
+        return {host: self.data[host] for host in hosts}
 
     def summary(self, **kw: Any) -> Dict[str, Any]:
-        hostname = kw.get('hostname')
-        results = self.data
+        """
+        Summarizes the health status of components for specified hosts or all hosts.
 
+        Generates a summary of the health status of components for given hosts. If
+        no hostname is provided, it generates the health status summary for all hosts.
+        It inspects the status of each component and categorizes it as 'ok' or 'error'
+        based on the health status of its members.
+
+        :param kw: Keyword arguments including 'hostname'.
+        :type kw: dict
+
+        :return: A dictionary containing the health status summary for each specified
+                host or all hosts and their components.
+        :rtype: Dict[str, Dict[str, str]]
+        """
+        hostname = kw.get('hostname')
+        hosts = [hostname] if hostname else self.data.keys()
         mapper: Dict[bool, str] = {
             True: 'error',
             False: 'ok'
@@ -1454,31 +1479,40 @@ class NodeProxyCache:
 
         _result: Dict[str, Any] = {}
 
-        for host, data in results.items():
+        for host in hosts:
             _result[host] = {}
+            data = self.data[host]
             for component, details in data['status'].items():
                 res = any([member['status']['health'].lower() != 'ok' for member in data['status'][component].values()])
                 _result[host][component] = mapper[res]
 
-        if hostname and hostname in results.keys():
-            return _result[hostname]
-        else:
-            return _result
+        return _result
 
     def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:
+        """
+        Retrieves specific endpoint information for a specific hostname or all hosts.
+
+        Retrieves information from the specified 'endpoint' for all available hosts.
+        If 'hostname' is provided, retrieves the specified 'endpoint' information for that host.
+
+        :param endpoint: The endpoint for which information is retrieved.
+        :type endpoint: str
+        :param kw: Keyword arguments, including 'hostname' if specified.
+        :type kw: dict
+
+        :return: Endpoint information for the specified host(s).
+        :rtype: Union[Dict[str, Any], Any]
+        """
         hostname = kw.get('hostname')
         _result = {}
+        hosts = [hostname] if hostname else self.data.keys()
 
-        for host, data in self.data.items():
+        for host in hosts:
             try:
-                _result[host] = data['status'][endpoint]
+                _result[host] = self.data[host]['status'][endpoint]
             except KeyError:
-                raise RuntimeError(f'Invalid node-proxy endpoint {endpoint}')
-
-        if hostname and hostname in self.data.keys():
-            return _result[hostname]
-        else:
-            return _result
+                raise KeyError(f'Invalid host {host} or component {endpoint}.')
+        return _result
 
     def firmwares(self, **kw: Any) -> Dict[str, Any]:
         """
