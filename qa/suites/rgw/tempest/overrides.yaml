@@ -1,7 +1,21 @@
 overrides:
   ceph:
     conf:
+      global:
+        osd_min_pg_log_entries: 10
+        osd_max_pg_log_entries: 10
       client:
         setuser: ceph
         setgroup: ceph
         debug rgw: 20
+        rgw keystone api version: 3
+        rgw keystone accepted roles: admin,member
+        rgw keystone implicit tenants: true
+        rgw keystone accepted admin roles: admin
+        rgw swift enforce content length: true
+        rgw swift account in url: true
+        rgw swift versioning enabled: true
+        rgw keystone admin domain: Default
+        rgw keystone admin user: admin
+        rgw keystone admin password: ADMIN
+        rgw keystone admin project: admin
