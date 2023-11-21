@@ -218,18 +218,21 @@ namespace TOPNSPC::crypto {
   using ssl::HMACSHA256;
   using ssl::HMACSHA1;
 
-template<class Digest>
-auto digest(const ceph::buffer::list& bl)
-{
-  unsigned char fingerprint[Digest::digest_size];
-  Digest gen;
-  for (auto& p : bl.buffers()) {
-    gen.Update((const unsigned char *)p.c_str(), p.length());
+  template <class Digest>
+  inline void update(Digest &d, const ceph::buffer::list &bl) {
+    for (auto &p : bl.buffers()) {
+      d.Update((const unsigned char *)p.c_str(), p.length());
+    }
   }
-  gen.Final(fingerprint);
-  return sha_digest_t<Digest::digest_size>{fingerprint};
-}
-}
+
+  template <class Digest> auto digest(const ceph::buffer::list &bl) {
+    unsigned char fingerprint[Digest::digest_size];
+    Digest gen;
+    update<Digest>(gen, bl);
+    gen.Final(fingerprint);
+    return sha_digest_t<Digest::digest_size>{fingerprint};
+  }
+} /* TOPNSPC::crypto */
 
 #pragma clang diagnostic pop
 #pragma GCC diagnostic pop

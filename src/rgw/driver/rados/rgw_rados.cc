@@ -5853,12 +5853,14 @@ static void generate_fake_tag(const DoutPrefixProvider *dpp, RGWRados* store, ma
   MD5 hash;
   // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
   hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
-  hash.Update((const unsigned char *)manifest_bl.c_str(), manifest_bl.length());
+
+  /* use segmented Digest::Update */
+  ceph::crypto::update<MD5>(hash, manifest_bl);
 
   map<string, bufferlist>::iterator iter = attrset.find(RGW_ATTR_ETAG);
   if (iter != attrset.end()) {
     bufferlist& bl = iter->second;
-    hash.Update((const unsigned char *)bl.c_str(), bl.length());
+    ceph::crypto::update<MD5>(hash, bl);
   }
 
   hash.Final(md5);

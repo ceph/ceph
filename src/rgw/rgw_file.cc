@@ -1920,7 +1920,7 @@ namespace rgw {
     if (! len)
       return 0;
 
-    hash.Update((const unsigned char *)data.c_str(), data.length());
+    ceph::crypto::update<MD5>(hash, data);
     op_ret = filter->process(std::move(data), ofs);
     if (op_ret < 0) {
       goto done;
