@@ -602,6 +602,20 @@ public:
     if (have_rmaps)
       rule_name_rmap[name] = i;
   }
+  bool rule_valid_for_pool_type(int rule_id, int ptype) const {
+    auto rule_type = get_rule_type(rule_id);
+    switch (ptype) {
+    case CEPH_PG_TYPE_REPLICATED:
+      return rule_type == CRUSH_RULE_TYPE_REPLICATED ||
+	rule_type == CRUSH_RULE_TYPE_MSR_FIRSTN;
+    case CEPH_PG_TYPE_ERASURE:
+      return rule_type == CRUSH_RULE_TYPE_ERASURE ||
+	rule_type == CRUSH_RULE_TYPE_MSR_INDEP;
+    default:
+      ceph_abort_msg("impossible");
+    }
+  }
+
   bool is_shadow_item(int id) const {
     const char *name = get_item_name(id);
     return name && !is_valid_crush_name(name);
