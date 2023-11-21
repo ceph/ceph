@@ -14,6 +14,7 @@ from ceph.fs.earmarking import CephFSVolumeEarmarking, EarmarkException  # type:
 from mgr_util import CephfsClient
 
 from .fs_util import listdir, has_subdir
+from .stats_util import get_stats
 
 from .operations.group import open_group, create_group, remove_group, \
     open_group_unique, set_group_attrs
@@ -21,7 +22,7 @@ from .operations.volume import create_volume, delete_volume, rename_volume, \
     list_volumes, open_volume, get_pool_names, get_pool_ids, \
     get_pending_subvol_deletions_count, get_all_pending_clones_count
 from .operations.subvolume import open_subvol, create_subvol, remove_subvol, \
-    create_clone, open_subvol_in_vol
+    create_clone, open_subvol_in_group, open_subvol_in_vol
 
 from .vol_spec import VolSpec
 from .exception import VolumeException, ClusterError, ClusterTimeout, \
@@ -983,6 +984,59 @@ class VolumeClient(CephfsClient["Module"]):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def _get_clone_src_path(self, vol_handle, dst_group, dst_subvol):
+        src_subvol_details = dst_subvol._get_clone_source()
+        # We exercise op type checks on subvolume but not on subvolumegroups and we don't allow
+        # internal directories (including "_nogroup" to be opened). To do that we need to pass
+        # None (instead of "_nogroup") as value of "groupname" which is a parameter accepted by
+        # Group.__init__(). We could've allowed opening "_nogroup" but moving forward with
+        # current convention.
+        src_group_name = src_subvol_details.get('group', None)
+        src_subvol_name = src_subvol_details['subvolume']
+        src_snap_name = src_subvol_details['snapshot']
+
+        try:
+            if src_group_name != dst_group.groupname:
+                with open_subvol_in_group(self.mgr, vol_handle, self.volspec,
+                                          src_group_name, src_subvol_name,
+                                          SubvolumeOpType.CLONE_SOURCE) as src_subvol:
+                    src_path = src_subvol.snapshot_data_path(src_snap_name).decode('utf-8')
+
+            else:
+                with open_subvol(self.mgr, vol_handle, self.volspec, dst_group,
+                                 src_subvol_name, SubvolumeOpType.CLONE_SOURCE) as \
+                                 src_subvol:
+                    src_path = src_subvol.snapshot_data_path(src_snap_name).decode('utf-8')
+        except VolumeException as e:
+            if e.errno != -errno.ENOENT:
+                raise
+
+            log.debug(f'snapshot "{src_snap_name}" which is/was being cloned to create subvolume '
+                      '"{dst_subvol.subvolname}" has become missing. skipping adding progress '
+                      'report to "clone status" output and, likely, cloning will fail.')
+            src_path = None
+
+        return src_path
+
+    def _get_clone_progress_report(self, vol_handle, dst_group, dst_subvol):
+        dst_path = dst_subvol.base_path.decode('utf-8')
+        src_path = self._get_clone_src_path(vol_handle, dst_group, dst_subvol)
+        if not src_path:
+            return None
+
+        stats = get_stats(src_path, dst_path, vol_handle)
+        stats['percentage cloned'] = str(stats['percentage cloned']) + '%'
+        return stats
+
+    def _get_clone_status(self, vol_handle, group, subvol):
+        status = subvol.status
+        if status['state'] == 'in-progress':
+            stats = self._get_clone_progress_report(vol_handle, group, subvol)
+            if stats:
+                status.update({'progress_report': stats})
+
+        return json.dumps({'status' : status}, indent=2)
+
     def clone_status(self, **kwargs):
         ret       = 0, "", ""
         volname   = kwargs['vol_name']
@@ -993,7 +1047,8 @@ class VolumeClient(CephfsClient["Module"]):
             with open_volume(self, volname) as fs_handle:
                 with open_group(fs_handle, self.volspec, groupname) as group:
                     with open_subvol(self.mgr, fs_handle, self.volspec, group, clonename, SubvolumeOpType.CLONE_STATUS) as subvolume:
-                        ret = 0, json.dumps({'status' : subvolume.status}, indent=2), ""
+                        status = self._get_clone_status(fs_handle, group, subvolume)
+                        ret = 0, status, ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
