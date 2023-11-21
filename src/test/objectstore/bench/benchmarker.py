@@ -497,6 +497,7 @@ class Benchmarker:
         columns = 2 # mem, cpu
         fig, ax = plt.subplots(rows, columns, figsize=(30,20))
 
+        compares =[]
         for i in range(len(files)):
             file_path = files[i]
 
@@ -541,9 +542,43 @@ class Benchmarker:
                 ax[row, col].axhline(_p90, label='p90', color='#c676db', in_layout=True)
                 ax[row, col].axhline(_p95, label='p95', color='#a533c1', in_layout=True)
                 ax[row, col].legend(bbox_to_anchor=(1.0, 1), loc='upper left')
+            compares.append([cpu_aggregate, mem_aggregate])
 
             plot_stats(i, 0, cpu_aggregate)
             plot_stats(i, 1, mem_aggregate)
+
+        def print_stat_differences(compare1, compare2, f1, f2, title, statf, *args):
+            diffcpu = round(((statf(compare1[0], *args) / statf(compare2[0], *args)) - 1) * 100, 2)
+            diffmem = round(((statf(compare1[1], *args) / statf(compare2[1], *args)) - 1) * 100, 2)
+            print(f'')
+            print(f'Difference {title} --------------------------------')
+            if diffcpu > 1:
+                print(f'{f2} uses less cpu {diffcpu}% than {f1}')
+            else:
+                print(f'{f1} uses less cpu {diffcpu}% than {f2}')
+            if diffmem > 1:
+                print(f'{f2} uses less mem {diffmem}% than {f1}')
+            else:
+                print(f'{f1} uses less mem {diffmem}% than {f2}')
+                
+
+        seen_compares = {}
+        for i, f1 in enumerate(files):
+            for j, f2 in enumerate(files):
+                key = (i,j)
+                if key in seen_compares :
+                    continue
+                key = (j,i)
+                if key in seen_compares :
+                    continue
+                if f1 == f2:
+                    continue
+                seen_compares[key] = 1
+                print_stat_differences(compares[i], compares[j], f1, f2, 'average', np.average, None)
+                print_stat_differences(compares[i], compares[j], f1, f2, 'p70', np.percentile, 70)
+                print_stat_differences(compares[i], compares[j], f1, f2, 'p90', np.percentile, 90)
+                print_stat_differences(compares[i], compares[j], f1, f2, 'p95', np.percentile, 95)
+            
         plt.tight_layout()
         plt.savefig(f'{self.args.outplot}.{self.args.format}', format=self.args.format)
 
