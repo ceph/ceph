@@ -5577,8 +5577,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
 				       bucket_objs,
 				       cct->_conf->rgw_bucket_index_max_aio)();
   } else {
-    bucket_info.deleted = true;
-    ldpp_dout(dpp, 0) << "setting deleted to: " << bucket_info.deleted << dendl;
+    bucket_info.flags |= BUCKET_DELETED;
     map<string, bufferlist> attrs;
 
     r = ctl.bucket->store_bucket_instance_info(bucket, bucket_info, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
