@@ -3918,7 +3918,8 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
       info.stats.last_active = now;
     if (info.stats.state & (PG_STATE_ACTIVE|PG_STATE_PEERED))
       info.stats.last_peered = now;
-    info.stats.last_unstale = now;
+    if ((info.stats.state & PG_STATE_STALE) == 0)
+      info.stats.last_unstale = now;
     if ((info.stats.state & PG_STATE_DEGRADED) == 0)
       info.stats.last_undegraded = now;
     if ((info.stats.state & PG_STATE_UNDERSIZED) == 0)
