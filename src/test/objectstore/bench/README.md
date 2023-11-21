@@ -37,7 +37,7 @@ output:
 ![Benchmark plot](example.png)
 
 **fio plot**
-![Alt text](image.png)
+![Alt text](image-2.png)
 
 **perf dump plot**
 ![Alt text](image-1.png)
