@@ -4526,7 +4526,7 @@ int OSDMap::validate_crush_rules(CrushWrapper *newcrush,
 	  << " but it is not present";
       return -EINVAL;
     }
-    if (newcrush->get_rule_type(ruleno) != (int)pool.get_type()) {
+    if (!newcrush->rule_valid_for_pool_type(ruleno, pool.get_type())) {
       *ss << "pool " << i.first << " type does not match rule " << ruleno;
       return -EINVAL;
     }
