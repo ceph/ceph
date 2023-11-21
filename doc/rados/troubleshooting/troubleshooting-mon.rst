@@ -260,14 +260,15 @@ detail`` returns a message similar to the following::
   Monitors at a wrong address. ``mon_status`` outputs the ``monmap`` that is
   known to the monitor: determine whether the other Monitors' locations as
   specified in the ``monmap`` match the locations of the Monitors in the
-  network. If they do not, see `Recovering a Monitor's Broken monmap`_.
-  If the locations of the Monitors as specified in the ``monmap`` match the
-  locations of the Monitors in the network, then the persistent
-  ``probing`` state could  be related to severe clock skews amongst the monitor
-  nodes.  See `Clock Skews`_.  If the information in `Clock Skews`_ does not
-  bring the Monitor out of the ``probing`` state, then prepare your system logs
-  and ask the Ceph community for help. See `Preparing your logs`_ for
-  information about the proper preparation of logs.
+  network. If they do not, see :ref:`Recovering a Monitor's Broken monmap
+  <rados_troubleshooting_troubleshooting_mon_recovering_broken_monmap>`. If
+  the locations of the Monitors as specified in the ``monmap`` match the
+  locations of the Monitors in the network, then the persistent ``probing``
+  state could  be related to severe clock skews among the monitor nodes.  See
+  `Clock Skews`_.  If the information in `Clock Skews`_ does not bring the
+  Monitor out of the ``probing`` state, then prepare your system logs and ask
+  the Ceph community for help. See `Preparing your logs`_ for information about
+  the proper preparation of logs.
 
 
 **What does it mean when a Monitor's state is ``electing``?**
@@ -324,13 +325,16 @@ detail`` returns a message similar to the following::
   substantiate it. See `Preparing your logs`_ for information about the
   proper preparation of logs.
 
+.. _rados_troubleshooting_troubleshooting_mon_recovering_broken_monmap:
 
-Recovering a Monitor's Broken ``monmap``
-----------------------------------------
+Recovering a Monitor's Broken "monmap"
+--------------------------------------
 
-This is how a ``monmap`` usually looks, depending on the number of
-monitors::
+A monmap can be retrieved by using a command of the form ``ceph tell mon.c
+mon_status``, as described in :ref:`Understanding mon_status
+<rados_troubleshoting_troubleshooting_mon_understanding_mon_status>`.
 
+Here is an example of a ``monmap``::
 
       epoch 3
       fsid 5c4e9d53-e2e1-478a-8061-f543f8be4cf8
@@ -339,61 +343,64 @@ monitors::
       0: 127.0.0.1:6789/0 mon.a
       1: 127.0.0.1:6790/0 mon.b
       2: 127.0.0.1:6795/0 mon.c
-      
-This may not be what you have however. For instance, in some versions of
-early Cuttlefish there was a bug that could cause your ``monmap``
-to be nullified.  Completely filled with zeros. This means that not even
-``monmaptool`` would be able to make sense of cold, hard, inscrutable zeros.
-It's also possible to end up with a monitor with a severely outdated monmap,
-notably if the node has been down for months while you fight with your vendor's
-TAC.  The subject ``ceph-mon`` daemon might be unable to find the surviving
-monitors (e.g., say ``mon.c`` is down; you add a new monitor ``mon.d``,
-then remove ``mon.a``, then add a new monitor ``mon.e`` and remove
-``mon.b``; you will end up with a totally different monmap from the one
-``mon.c`` knows).
 
-In this situation you have two possible solutions:
+This ``monmap`` is in working order, but your ``monmap`` might not be in
+working order. The ``monmap`` in a given node might be outdated because the
+node was down for a long time, during which the cluster's Monitors changed.
 
-Scrap the monitor and redeploy
+There are two ways to update a Monitor's outdated ``monmap``: 
 
-  You should only take this route if you are positive that you won't
-  lose the information kept by that monitor; that you have other monitors
-  and that they are running just fine so that your new monitor is able
-  to synchronize from the remaining monitors. Keep in mind that destroying
-  a monitor, if there are no other copies of its contents, may lead to
-  loss of data.
+A. **Scrap the monitor and redeploy.**
 
-Inject a monmap into the monitor
+    Do this only if you are certain that you will not lose the information kept
+    by the Monitor that you scrap. Make sure that you have other Monitors in
+    good condition, so that the new Monitor will be able to synchronize with
+    the surviving Monitors. Remember that destroying a Monitor can lead to data
+    loss if there are no other copies of the Monitor's contents. 
 
-  These are the basic steps:
+B. **Inject a monmap into the monitor.**
 
-  Retrieve the ``monmap`` from the surviving monitors and inject it into the
-  monitor whose ``monmap`` is corrupted or lost.
+    It is possible to fix a Monitor that has an outdated ``monmap`` by
+    retrieving an up-to-date ``monmap`` from surviving Monitors in the cluster
+    and injecting it into the Monitor that has a corrupted or missing
+    ``monmap``.
 
-  Implement this solution by carrying out the following procedure:
+    Implement this solution by carrying out the following procedure:
 
-  1. Is there a quorum of monitors? If so, retrieve the ``monmap`` from the
-     quorum::
+    #. Retrieve the ``monmap`` in one of the two following ways:
 
-      $ ceph mon getmap -o /tmp/monmap
+       a. **IF THERE IS A QUORUM OF MONITORS:** 
+       
+          Retrieve the ``monmap`` from the quorum:
 
-  2. If there is no quorum, then retrieve the ``monmap`` directly from another
-     monitor that has been stopped (in this example, the other monitor has
-     the ID ``ID-FOO``)::
+             .. prompt:: bash
 
-      $ ceph-mon -i ID-FOO --extract-monmap /tmp/monmap
+                ceph mon getmap -o /tmp/monmap
 
-  3. Stop the monitor you are going to inject the monmap into.
+       b. **IF THERE IS NO QUORUM OF MONITORS:** 
+       
+          Retrieve the ``monmap`` directly from a Monitor that has been stopped
+          :
 
-  4. Inject the monmap::
+             .. prompt:: bash
 
-      $ ceph-mon -i ID --inject-monmap /tmp/monmap
+                ceph-mon -i ID-FOO --extract-monmap /tmp/monmap
 
-  5. Start the monitor
+          In this example, the ID of the stopped Monitor is ``ID-FOO``.
 
-  .. warning:: Injecting ``monmaps`` can cause serious problems because doing
-     so will overwrite the latest existing ``monmap`` stored on the monitor. Be
-     careful!
+    #. Stop the Monitor into which the ``monmap`` will be injected. 
+
+    #. Inject the monmap into the stopped Monitor:
+
+       .. prompt:: bash
+
+          ceph-mon -i ID --inject-monmap /tmp/monmap
+
+    #. Start the Monitor.
+
+       .. warning:: Injecting a ``monmap`` into a Monitor  can cause serious
+          problems. Injecting a ``monmap`` overwrites the latest existing
+          ``monmap`` stored on the monitor.  Be careful!
 
 Clock Skews
 -----------
