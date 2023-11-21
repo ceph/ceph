@@ -89,7 +89,15 @@ SnapTrimEvent::snap_trim_ertr::future<seastar::stop_iteration>
 SnapTrimEvent::start()
 {
   ShardServices &shard_services = pg->get_shard_services();
-  return interruptor::with_interruption([&shard_services, this] {
+  IRef ref = this;
+  return interruptor::with_interruption(
+    // SnapTrimEvent is a background operation,
+    // it's lifetime is not guarnteed since the caller
+    // returned future is being ignored. We should capture
+    // a self reference thourhgout the entire execution
+    // progress (not only on finally() continuations).
+    // See: PG::on_active_actmap()
+    [&shard_services, this, ref] {
     return enter_stage<interruptor>(
       client_pp().wait_for_active
     ).then_interruptible([this] {
@@ -192,10 +200,11 @@ SnapTrimEvent::start()
         });
       });
     });
-  }, [this](std::exception_ptr eptr) -> snap_trim_ertr::future<seastar::stop_iteration> {
+  }, [this, ref]
+     (std::exception_ptr eptr) -> snap_trim_ertr::future<seastar::stop_iteration> {
     logger().debug("{}: interrupted {}", *this, eptr);
     return crimson::ct_error::eagain::make();
-  }, pg).finally([this] {
+  }, pg).finally([this, ref=std::move(ref)] {
     logger().debug("{}: exit", *this);
     handle.exit();
   });
