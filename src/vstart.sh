@@ -176,6 +176,7 @@ zoned_enabled=0
 io_uring_enabled=0
 with_jaeger=0
 force_addr=0
+osds_per_host=0
 
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
@@ -265,6 +266,7 @@ options:
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
+	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
 \n
 EOF
 
@@ -598,6 +600,11 @@ case $1 in
     --jaeger)
         with_jaeger=1
         echo "with_jaeger $with_jaeger"
+        ;;
+    --osds-per-host)
+        osds_per_host="$2"
+        shift
+        echo "osds_per_host $osds_per_host"
         ;;
     *)
         usage_exit
@@ -1128,6 +1135,13 @@ start_osd() {
 [osd.$osd]
         host = $HOSTNAME
 EOF
+
+            if [ "$osds_per_host" -gt 0 ]; then
+                wconf <<EOF
+        crush location = root=default host=$HOSTNAME-$(echo "$osd / $osds_per_host" | bc)
+EOF
+            fi
+
             if [ "$spdk_enabled" -eq 1 ]; then
                 wconf <<EOF
         bluestore_block_path = spdk:${bluestore_spdk_dev[$osd]}
