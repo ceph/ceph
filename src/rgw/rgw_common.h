@@ -1034,6 +1034,7 @@ enum RGWBucketFlags {
   BUCKET_DATASYNC_DISABLED = 0X8,
   BUCKET_MFA_ENABLED = 0X10,
   BUCKET_OBJ_LOCK_ENABLED = 0X20,
+  BUCKET_DELETED = 0X40,
 };
 
 class RGWSI_Zone;
@@ -1050,7 +1051,6 @@ struct RGWBucketInfo {
   bool has_instance_obj{false};
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
   RGWQuotaInfo quota;
-  bool deleted{false};
 
   // layout of bucket index objects
   rgw::BucketLayout layout;
@@ -1091,6 +1091,7 @@ struct RGWBucketInfo {
   bool mfa_enabled() const { return (versioning_status() & BUCKET_MFA_ENABLED) != 0; }
   bool datasync_flag_enabled() const { return (flags & BUCKET_DATASYNC_DISABLED) == 0; }
   bool obj_lock_enabled() const { return (flags & BUCKET_OBJ_LOCK_ENABLED) != 0; }
+  bool bucket_deleted() const { return (flags & BUCKET_DELETED) != 0; }
 
   bool has_swift_versioning() const {
     /* A bucket may be versioned through one mechanism only. */
