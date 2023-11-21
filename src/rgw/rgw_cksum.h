@@ -24,6 +24,7 @@
 #include "fmt/format.h"
 #include "common/ceph_crypto.h"
 #include "rgw_crc_digest.h"
+#include "rgw_xxh_digest.h"
 #include <boost/algorithm/hex.hpp>
 #include "rgw_hex.h"
 #include "rgw_b64.h"
@@ -37,6 +38,7 @@ namespace rgw { namespace cksum {
       none = 0,
       crc32,  /* !cryptographic, but AWS supports */
       crc32c, /* !cryptographic, but AWS supports */
+      xxh3,   /* !cryptographic, but strong and very fast */
       sha1,   /* unsafe, but AWS supports */
       sha256,
       sha512,
@@ -66,12 +68,13 @@ namespace rgw { namespace cksum {
 
   class Cksum {
   public:
-    static constexpr std::array<Desc, 7> checksums =
+    static constexpr std::array<Desc, 8> checksums =
     {
       Desc(Type::none, "none", 0),
       Desc(Type::crc32, "crc32", 4),
-      Desc(Type::crc32, "crc32c", 4),
-      Desc(Type::sha256, "sha1", 20),
+      Desc(Type::crc32c, "crc32c", 4),
+      Desc(Type::xxh3, "xxh3", 8),
+      Desc(Type::sha1, "sha1", 20),
       Desc(Type::sha256, "sha256", 32),
       Desc(Type::sha512, "sha512", 64),
       Desc(Type::blake3, "blake3", 32),
@@ -150,16 +153,18 @@ namespace rgw { namespace cksum {
   typedef TDigest<ceph::crypto::Blake3> Blake3;
   typedef TDigest<rgw::digest::Crc32> Crc32;
   typedef TDigest<rgw::digest::Crc32c> Crc32c;
+  typedef TDigest<rgw::digest::XXH3> XXH3;
   typedef TDigest<ceph::crypto::SHA1> SHA1;
   typedef TDigest<ceph::crypto::SHA256> SHA256;
   typedef TDigest<ceph::crypto::SHA512> SHA512;
 
   typedef boost::variant<boost::blank,
 			 Blake3,
-			 SHA256,
 			 Crc32,
 			 Crc32c,
+			 XXH3,
 			 SHA1,
+			 SHA256,
 			 SHA512> DigestVariant;
 
   struct get_digest_ptr : public boost::static_visitor<Digest*>
@@ -169,6 +174,7 @@ namespace rgw { namespace cksum {
     Digest* operator()(Blake3& digest) const { return &digest; }
     Digest* operator()(Crc32& digest) const { return &digest; }
     Digest* operator()(Crc32c& digest) const { return &digest; }
+    Digest* operator()(XXH3& digest) const { return &digest; }
     Digest* operator()(SHA1& digest) const { return &digest; }
     Digest* operator()(SHA256& digest) const { return &digest; }
     Digest* operator()(SHA512& digest) const { return &digest; }
@@ -193,6 +199,9 @@ namespace rgw { namespace cksum {
       break;
     case Type::crc32c:
       return Crc32c();
+      break;
+    case Type::xxh3:
+      return XXH3();
       break;
     case Type::sha512:
       return SHA512();

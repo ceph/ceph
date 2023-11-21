@@ -42,6 +42,7 @@ namespace {
   cksum::Type t4 = cksum::Type::sha512;
   cksum::Type t5 = cksum::Type::crc32;
   cksum::Type t6 = cksum::Type::crc32c;
+  cksum::Type t7 = cksum::Type::xxh3;
 
   std::string lorem =
     "Lorem ipsum dolor sit amet";
@@ -70,7 +71,6 @@ TEST(RGWCksum, DigestCRC32)
 
   ASSERT_NE(digest, nullptr);
 
-  //std::cout << dolor << std::endl;
   digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
 
   auto cksum = rgw::cksum::finalize_digest(digest, t);
@@ -89,7 +89,6 @@ TEST(RGWCksum, DigestCRC32c)
 
   ASSERT_NE(digest, nullptr);
 
-  //std::cout << dolor << std::endl;
   digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
 
   auto cksum = rgw::cksum::finalize_digest(digest, t);
@@ -97,6 +96,23 @@ TEST(RGWCksum, DigestCRC32c)
   ASSERT_EQ(cksum.hex(), "4b2edc95");
   /* compare w/known value https://www.base64encode.org/ */
   ASSERT_EQ(cksum.to_base64(), "NGIyZWRjOTU=");
+}
+
+TEST(RGWCksum, DigestXXH3)
+{
+  auto t = cksum::Type::xxh3;
+  DigestVariant dv = rgw::cksum::digest_factory(t);
+  Digest* digest = get_digest(dv);
+
+  ASSERT_NE(digest, nullptr);
+
+  digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
+
+  auto cksum = rgw::cksum::finalize_digest(digest, t);
+  /* compare w/known value xxhsum -H3 */
+  ASSERT_EQ(cksum.hex(), "5a164e0145351d01");
+  /* compare w/known value https://www.base64encode.org/ */
+  ASSERT_EQ(cksum.to_base64(), "NWExNjRlMDE0NTM1MWQwMQ==");
 }
 
 TEST(RGWCksum, DigestSha1)
@@ -108,7 +124,6 @@ TEST(RGWCksum, DigestSha1)
 
     ASSERT_NE(digest, nullptr);
 
-    std::cout << "input_str:" << input_str << std::endl;
     digest->Update((const unsigned char *)input_str->c_str(),
 		   input_str->length());
 
@@ -120,10 +135,14 @@ TEST(RGWCksum, DigestSha1)
     char buf[20 * 2 + 1];
     memset(buf, 0, sizeof(buf));
     buf_to_hex(sha1_hash, SHA_DIGEST_LENGTH, buf);
-    std::cout << "byhand sha1 " << buf << std::endl;
+    if (verbose) {
+      std::cout << "byhand sha1 " << buf << std::endl;
+    }
 
     auto cksum = rgw::cksum::finalize_digest(digest, t);
-    std::cout << "computed sha1: " << cksum.hex() << std::endl;
+    if (verbose) {
+      std::cout << "computed sha1: " << cksum.hex() << std::endl;
+    }
 
     /* check match with direct OpenSSL mech */
     ASSERT_TRUE(memcmp(buf, cksum.hex().c_str(),
@@ -154,12 +173,13 @@ TEST(RGWCksum, DigestSha256)
 
     ASSERT_NE(digest, nullptr);
 
-    std::cout << "input_str:" << input_str << std::endl;
     digest->Update((const unsigned char *)input_str->c_str(),
 		   input_str->length());
 
     auto cksum = rgw::cksum::finalize_digest(digest, t);
-    std::cout << "computed sha1: " << cksum.hex() << std::endl;
+    if (verbose) {
+      std::cout << "computed sha256: " << cksum.hex() << std::endl;
+    }
 
     if (input_str == &lorem) {
       /* compare w/known value, openssl sha1 */
@@ -186,12 +206,10 @@ TEST(RGWCksum, DigestSha512)
 
     ASSERT_NE(digest, nullptr);
 
-    std::cout << "input_str:" << input_str << std::endl;
     digest->Update((const unsigned char *)input_str->c_str(),
 		   input_str->length());
 
     auto cksum = rgw::cksum::finalize_digest(digest, t);
-    std::cout << "computed sha1: " << cksum.hex() << std::endl;
 
     if (input_str == &lorem) {
       /* compare w/known value, openssl sha1 */
@@ -218,12 +236,10 @@ TEST(RGWCksum, DigestBlake3)
 
     ASSERT_NE(digest, nullptr);
 
-    std::cout << "input_str:" << input_str << std::endl;
     digest->Update((const unsigned char *)input_str->c_str(),
 		   input_str->length());
 
     auto cksum = rgw::cksum::finalize_digest(digest, t);
-    std::cout << "computed sha1: " << cksum.hex() << std::endl;
 
     if (input_str == &lorem) {
       /* compare w/known value, b3sum */
@@ -243,17 +259,19 @@ TEST(RGWCksum, DigestBlake3)
 
 TEST(RGWCksum, DigestSTR)
 {
-  for (auto t : {t1, t2, t3, t4, t5, t6}) {
+  for (auto t : {t1, t2, t3, t4, t5, t6, t7}) {
     DigestVariant dv = rgw::cksum::digest_factory(t);
     Digest* digest = get_digest(dv);
 
     ASSERT_NE(digest, nullptr);
 
     digest->Update((const unsigned char *)dolor.c_str(), dolor.length());
-      auto cksum = rgw::cksum::finalize_digest(digest, t);
+    auto cksum = rgw::cksum::finalize_digest(digest, t);
+    if (verbose) {
       std::cout << "type: " << to_string(t)
 		<< " digest: " << cksum.to_string()
 		<< std::endl;
+    }
   }
 }
 
@@ -268,7 +286,7 @@ TEST(RGWCksum, DigestBL)
 			    const_cast<char*>(dolor.data())));
   }
 
-  for (auto t : {t1, t2, t3, t4, t5, t6}) {
+  for (auto t : {t1, t2, t3, t4, t5, t6, t7}) {
     DigestVariant dv1 = rgw::cksum::digest_factory(t);
     Digest* digest1 = get_digest(dv1);
     ASSERT_NE(digest1, nullptr);
@@ -290,11 +308,21 @@ TEST(RGWCksum, DigestBL)
 
 int main(int argc, char **argv)
 {
+  auto args = argv_to_vec(argc, argv);
+  env_to_vec(args);
+
+  std::string val;
+  for (auto arg_iter = args.begin(); arg_iter != args.end();) {
+     if (ceph_argparse_flag(args, arg_iter, "--verbose",
+			    (char*) nullptr)) {
+       verbose = true;
+     } else {
+       ++arg_iter;
+     }
+  }
 
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
-
-  return 0;
 }
 
 } /* namespace */
