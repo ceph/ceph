@@ -575,6 +575,7 @@ def main():
     parser.add_argument('--iterations', type=int, default=5, help="Number of iterations per sample")
     parser.add_argument('--warmup-iterations', type=int, default=1, help="Number of iterations per sample")
     parser.add_argument('--bench', type=str, default="")
+    parser.add_argument('--vstart', type=str, default="do_vstart.sh")
     parser.add_argument('--format', help="format of matplotlib plots saved image", type=str, default='png')
     parser.add_argument('--outplot', type=str, default="benchmark")
     parser.add_argument('--outdata', type=str, default="")
