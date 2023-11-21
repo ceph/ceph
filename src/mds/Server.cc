@@ -7539,12 +7539,6 @@ void Server::_link_local(const MDRequestRef& mdr, CDentry *dn, CInode *targeti, 
 
   // TODO - snapshot related inode updates - snaprealm on referent inode
   bool adjust_realm = false;
-  if (!target_realm->get_subvolume_ino() && !targeti->is_projected_snaprealm_global()) {
-    sr_t *newsnap = targeti->project_snaprealm();
-    targeti->mark_snaprealm_global(newsnap);
-    targeti->record_snaprealm_parent_dentry(newsnap, target_realm, targeti->get_projected_parent_dn(), true);
-    adjust_realm = true;
-  }
 
   // log + wait
   EUpdate *le = new EUpdate(mdlog, "link_local");
