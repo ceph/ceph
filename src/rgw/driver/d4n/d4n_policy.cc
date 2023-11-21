@@ -105,7 +105,7 @@ int LFUDAPolicy::set_local_weight_sum(size_t weight, optional_yield y) {
     boost::system::error_code ec;
     response<int> resp;
     request req;
-    req.push("HSET", dir->cct->_conf->rgw_local_cache_address, "localWeights", boost::lexical_cast<int>(weight));
+    req.push("HSET", dir->cct->_conf->rgw_local_cache_address, "localWeights", std::to_string(weight));
 
     redis_exec(conn, ec, req, resp, y);
 
@@ -260,7 +260,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       return -1;
     }
 
-    int avgWeight = get_local_weight_sum(y) / entries_map.size();
+    int avgWeight = (get_local_weight_sum(y) / entries_map.size());
     if (avgWeight < 0) {
       delete victim;
       return -1;
@@ -328,6 +328,10 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
   using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
 
   int age = get_age(y); 
+  if (age < 0) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): LFUDAPolicy get_age method failed." << dendl;
+    return;
+  }
   int localWeight = age;
   auto entry = find_entry(key);
   if (entry != nullptr) { 
@@ -347,7 +351,7 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): CacheDriver set_attr method failed." << dendl;
 
   auto localWeights = get_local_weight_sum(y);
-  localWeights += localWeight;
+  localWeights += ((localWeight < 0) ? 0 : localWeight);
   if (set_local_weight_sum(localWeights, y) < 0)
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Failed to update sum of local weights for the cache backend." << dendl;
 }
@@ -361,7 +365,7 @@ bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key, o
   }
 
   auto localWeights = get_local_weight_sum(y);
-  localWeights -= p->second->localWeight;
+  localWeights -= ((p->second->localWeight < 0) ? 0 : p->second->localWeight);
   if (set_local_weight_sum(localWeights, y) < 0)
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Failed to update sum of local weights for the cache backend." << dendl;
 
