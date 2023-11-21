@@ -63,7 +63,6 @@ namespace rgw { namespace digest {
     }
   }; /* Crc32 */
 
-#if CEPH_CRC32C_INTEROP /* hint: 0 */
   /* use Ceph hw-specialized crc32c (0x1EDC6F41) */
   class Crc32c {
   private:
@@ -82,36 +81,8 @@ namespace rgw { namespace digest {
     }
 
     void Final(unsigned char* digest) {
-      // XXX byteswap? */
+      crc = crc ^ 0xffffffff;
       memcpy((char*) digest, &crc, sizeof(crc));
     }
   }; /* Crc32c */
-#else
-  /* use Ceph hw-specialized crc32c (0x1EDC6F41) */
-  class Crc32c {
-  private:
-    using crc32_type =
-      boost::crc_optimal<32, 0x1EDC6F41, 0xFFFFFFFF, 0xFFFFFFFF, true, true>;
-    crc32_type crc;
-  public:
-    static constexpr uint16_t digest_size = 4;
-    static constexpr uint32_t initial_value = 0xffffffff;
-
-    Crc32c() { Restart(); }
-
-    void Restart() { crc.reset(); }
-
-    void Update(const unsigned char *data, uint64_t len) {
-      crc.process_bytes(data, len);
-    }
-
-    void Final(unsigned char* digest) {
-      uint32_t final = crc();
-      if constexpr (std::endian::native != std::endian::big) {
-	uint32_t final = rgw::digest::byteswap(final);
-      }
-      memcpy((char*) digest, &final, sizeof(final));
-    }
-  }; /* Crc32c */
-#endif /* interoperable crc32c */
 }} /* namespace */
