@@ -1,0 +1,14 @@
+tasks:
+- install:
+- ceph:
+- tox: [ client.0 ]
+- keystone:
+    client.0:
+      force-branch: stable/2023.1
+      services:
+        - name: swift
+          type: object-store
+          description: Swift Service
+- rgw:
+    client.0:
+      use-keystone-role: client.0

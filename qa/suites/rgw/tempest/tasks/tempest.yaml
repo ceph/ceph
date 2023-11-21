@@ -1,18 +1,10 @@
-tasks:
-- install:
-- ceph:
-- tox: [ client.0 ]
-- keystone:
+overrides:
+  rgw:
     client.0:
-      force-branch: stable/2023.1
-      services:
-        - name: swift
-          type: object-store
-          description: Swift Service
-- rgw:
-    client.0:
+      # tempest tests expect the swift api at the root
       frontend_prefix: /swift
-      use-keystone-role: client.0
+
+tasks:
 - tempest:
     client.0:
       sha1: 34.1.0
@@ -51,22 +43,3 @@ tasks:
         - .*test_object_expiry.ObjectExpiryTest.test_get_object_after_expiry_time
         - .*test_object_expiry.ObjectExpiryTest.test_get_object_at_expiry_time
         - .*test_account_services.AccountTest.test_list_no_account_metadata
-
-overrides:
-  ceph:
-    conf:
-      global:
-        osd_min_pg_log_entries: 10
-        osd_max_pg_log_entries: 10
-      client:
-        rgw keystone api version: 3
-        rgw keystone accepted roles: admin,member
-        rgw keystone implicit tenants: true
-        rgw keystone accepted admin roles: admin
-        rgw swift enforce content length: true
-        rgw swift account in url: true
-        rgw swift versioning enabled: true
-        rgw keystone admin domain: Default
-        rgw keystone admin user: admin
-        rgw keystone admin password: ADMIN
-        rgw keystone admin project: admin
