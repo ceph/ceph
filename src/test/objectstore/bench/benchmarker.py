@@ -352,7 +352,6 @@ class Benchmarker:
         if self.args.group:
             groups = self.args.group
             group_names = self.args.group_names
-            print(group_names)
             assert len(groups) == len(group_names)
 
         x = np.arange(len(groups))
@@ -425,35 +424,53 @@ class Benchmarker:
                         group_total_bytes.append(tbytes/1024/1024/1024)
                 
 
-            read_bw[0].append(round(np.average(group_read_bw), 2))
-            read_bw[1].append(round(np.average(group_read_bw_dev), 2))
-            read_iops[0].append(round(np.average(group_read_iops), 2))
-            read_iops[1].append(round(np.average(group_read_iops_dev), 2))
-            read_clat[0].append(round(np.average(group_read_clat), 2))
-            read_runtime[0].append(round(np.average(group_read_runtime), 2))
+            read_bw[0].append(group_read_bw)
+            read_iops[0].append(group_read_iops)
+            read_clat[0].append(group_read_clat)
+            read_runtime[0].append(group_read_runtime)
 
-            write_bw[0].append(round(np.average(group_write_bw), 2))
-            write_bw[1].append(round(np.average(group_write_bw_dev), 2))
-            write_iops[0].append(round(np.average(group_write_iops), 2))
-            write_iops[1].append(round(np.average(group_write_iops_dev), 2))
-            write_clat[0].append(round(np.average(group_write_clat), 2))
-            write_runtime[0].append(round(np.average(group_write_runtime), 2))
+            write_bw[0].append(group_write_bw)
+            write_iops[0].append(group_write_iops)
+            write_clat[0].append(group_write_clat)
+            write_runtime[0].append(group_write_runtime)
 
-            total_ios[0].append(round(np.average(group_total_ios), 2))
-            total_bytes[0].append(round(np.average(group_total_bytes), 2))
+            total_ios[0].append(group_total_ios)
+            total_bytes[0].append(group_total_bytes)
+
+            # read_bw[0].append(round(np.average(group_read_bw), 2))
+            # read_bw[1].append(round(np.average(group_read_bw_dev), 2))
+            # read_iops[0].append(group_read_iops)
+            # print(read_iops)
+            # read_iops[1].append(round(np.average(group_read_iops_dev), 2))
+            # read_clat[0].append(round(np.average(group_read_clat), 2))
+            # read_runtime[0].append(round(np.average(group_read_runtime), 2))
+
+            # write_bw[0].append(round(np.average(group_write_bw), 2))
+            # write_bw[1].append(round(np.average(group_write_bw_dev), 2))
+            # write_iops[0].append(round(np.average(group_write_iops), 2))
+            # write_iops[1].append(round(np.average(group_write_iops_dev), 2))
+            # write_clat[0].append(round(np.average(group_write_clat), 2))
+            # write_runtime[0].append(round(np.average(group_write_runtime), 2))
+
+            # total_ios[0].append(round(np.average(group_total_ios), 2))
+            # total_bytes[0].append(round(np.average(group_total_bytes), 2))
 
         def plot_data(row, col, title, file_path, x, y, labels):
             ax[row, col].set_xlabel('File')
             ax[row, col].set_ylabel(title)
 
-            ax[row, col].set_xticks(x)
-            ax[row, col].set_xticklabels(labels)
+            # ax[row, col].set_xticks(x)
 
-            if y[1]:
-                bars = ax[row, col].bar(x, y[0], yerr=y[1], align='center', alpha=0.5, capsize=10, color=['blue', 'red', 'yellow', 'brown'])
-            else:
-                bars = ax[row, col].bar(x, y[0], align='center', alpha=0.5, ecolor='black', capsize=10, color=['blue', 'red', 'yellow', 'brown'])
-            ax[row, col].bar_label(bars, padding=3)
+            box = ax[row, col].boxplot(y[0], patch_artist=True, labels=labels)
+            for patch, color in zip(box['boxes'], COLORS):
+                patch.set_facecolor(color)
+
+            scatter_x = [np.full_like(data, i + 1) for i, data in enumerate(y[0])]
+            scatter_x = np.concatenate(scatter_x)
+            scatter_y = [data for i, data in enumerate(y[0])]
+            ax[row, col].scatter(scatter_x, scatter_y, alpha=0.8, marker='o', zorder=10, color=COLORS[-1])
+
+            # ax[row, col].legend()
 
 
         plot_data(0, 0, 'read kIOPS ', file_path, x, read_iops, labels)
