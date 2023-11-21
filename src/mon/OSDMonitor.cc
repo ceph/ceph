@@ -8072,7 +8072,7 @@ int OSDMonitor::prepare_new_pool(string& name,
     return r;
   }
 
-  if (osdmap.crush->get_rule_type(crush_rule) != (int)pool_type) {
+  if (!osdmap.crush->rule_valid_for_pool_type(crush_rule, pool_type)) {
     *ss << "crush rule " << crush_rule << " type does not match pool";
     return -EINVAL;
   }
@@ -8344,7 +8344,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EPERM;
       }
     }
-    if (osdmap.crush->get_rule_type(p.get_crush_rule()) != (int)p.type) {
+    if (!osdmap.crush->rule_valid_for_pool_type(p.get_crush_rule(), p.type)) {
       ss << "crush rule " << p.get_crush_rule() << " type does not match pool";
       return -EINVAL;
     }
@@ -8577,7 +8577,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << cpp_strerror(id);
       return -ENOENT;
     }
-    if (osdmap.crush->get_rule_type(id) != (int)p.get_type()) {
+    if (!osdmap.crush->rule_valid_for_pool_type(id, p.get_type())) {
       ss << "crush rule " << id << " type does not match pool";
       return -EINVAL;
     }
