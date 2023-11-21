@@ -17,6 +17,8 @@
 
 #include <bit>
 #include <array>
+#include <concepts>
+#include <algorithm>
 #include <stdio.h>
 #include "include/crc32c.h"
 #include <boost/crc.hpp>
