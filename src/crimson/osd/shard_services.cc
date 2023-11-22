@@ -493,6 +493,7 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	  auto i = bl.cbegin();
 	  inc.decode(i);
 	  o->apply_incremental(inc);
+	  store_inc_map_bl(t, e, std::move(bl));
 	  bufferlist fbl;
 	  o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
 	  logger().info("store_maps storing osdmap.{}", o->get_epoch());
