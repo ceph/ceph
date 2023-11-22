@@ -128,7 +128,8 @@ class NodeProxy:
 
         host = data["cephx"]["name"]
         results['result'] = self.mgr.node_proxy.idrac.get(host)
-
+        if not results['result']:
+            raise cherrypy.HTTPError(400, 'The provided host has no iDrac details.')
         return results
 
     def validate_node_proxy_data(self, data: Dict[str, Any]) -> None:
@@ -258,7 +259,8 @@ class NodeProxy:
                        headers: Optional[Dict[str, str]] = {},
                        data: Optional[bytes] = None,
                        endpoint: str = '',
-                       ssl_ctx: Optional[Any] = None) -> Tuple[int, Dict[str, Any]]:
+                       ssl_ctx: Optional[Any] = None,
+                       timeout: Optional[int] = 10) -> Tuple[int, Dict[str, Any]]:
         url = f'https://{addr}:{port}{endpoint}'
         _headers = headers
         response_json = {}
@@ -268,7 +270,7 @@ class NodeProxy:
         _data = bytes(data, 'ascii') if data else None
         try:
             req = Request(url, _data, _headers, method=method)
-            with urlopen(req, context=ssl_ctx) as response:
+            with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
                 response_str = response.read()
                 response_json = json.loads(response_str)
                 response_status = response.status
