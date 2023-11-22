@@ -211,12 +211,6 @@ inline auto matches_gen(uint64_t gen)
   return [gen] (const bucket_log_layout_generation& l) { return l.gen == gen; };
 }
 
-inline bucket_log_layout_generation log_layout_from_deleted_index(
-    uint64_t gen, const bucket_index_layout_generation& index)
-{
-  return {gen, {BucketLogType::Deleted, {index.gen, index.layout.normal}}};
-}
-
 inline bucket_index_layout_generation log_to_index_layout(const bucket_log_layout_generation& log_layout)
 {
   ceph_assert(log_layout.layout.type == BucketLogType::InIndex);
