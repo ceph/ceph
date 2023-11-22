@@ -320,8 +320,9 @@ TEST(RGWCksum, DigestBL)
     ASSERT_EQ(cksum1.to_string(), cksum3.to_string());
   } /* for t1, ... */
 }
+} /* namespace */
 
-int main(int argc, char **argv)
+int main(int argc, char *argv[])
 {
   auto args = argv_to_vec(argc, argv);
   env_to_vec(args);
@@ -339,6 +340,3 @@ int main(int argc, char **argv)
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
-
-} /* namespace */
-
