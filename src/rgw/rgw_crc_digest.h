@@ -84,6 +84,9 @@ namespace rgw { namespace digest {
 
     void Final(unsigned char* digest) {
       crc = crc ^ 0xffffffff;
+      if constexpr (std::endian::native != std::endian::big) {
+	crc = rgw::digest::byteswap(crc);
+      }
       memcpy((char*) digest, &crc, sizeof(crc));
     }
   }; /* Crc32c */

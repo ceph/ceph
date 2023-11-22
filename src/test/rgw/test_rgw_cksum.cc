@@ -76,7 +76,7 @@ TEST(RGWCksum, DigestCRC32)
   auto cksum = rgw::cksum::finalize_digest(digest, t);
   
   /* compare w/known value https://crccalc.com/ */
-  ASSERT_EQ(cksum.hex(), "98b2c5bd" /* not quite bdc5b298 */);
+  ASSERT_EQ(cksum.hex(), "98b2c5bd");
   /* compare w/known value https://www.base64encode.org/ */
   ASSERT_EQ(cksum.to_base64(), "OThiMmM1YmQ=");
 }
@@ -93,9 +93,9 @@ TEST(RGWCksum, DigestCRC32c)
 
   auto cksum = rgw::cksum::finalize_digest(digest, t);
   /* compare w/known value https://crccalc.com/ */
-  ASSERT_EQ(cksum.hex(), "4b2edc95");
+  ASSERT_EQ(cksum.hex(), "95dc2e4b");
   /* compare w/known value https://www.base64encode.org/ */
-  ASSERT_EQ(cksum.to_base64(), "NGIyZWRjOTU=");
+  ASSERT_EQ(cksum.to_base64(), "OTVkYzJlNGI=");
 }
 
 TEST(RGWCksum, DigestXXH3)
