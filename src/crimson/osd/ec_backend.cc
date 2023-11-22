@@ -264,106 +264,89 @@ ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
 {
   const hobject_t& hoid = obc->obs.oi.soid;
   logger().debug("ECBackend::{} hoid={}", __func__, hoid);
+  logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+  auto op = std::make_unique<ECCrimsonOp>(std::move(txn), std::move(obc));
+  logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+  op->hoid = hoid;
+  //op->delta_stats = delta_stats;
+  op->version = osd_op_p.at_version;
+  op->trim_to = osd_op_p.pg_trim_to;
+  op->roll_forward_to =
+    std::max(osd_op_p.min_last_complete_ondisk, rmw_pipeline.committed_to);
+  op->log_entries = std::move(log_entries);
+  //std::swap(op->updated_hit_set_history, hset_history);
+  // TODO: promsie future here
+  auto on_all_commit = new C_AllSubWritesCommited;
+  op->on_all_commit = on_all_commit;
+  op->tid = shard_services.get_tid();
+  op->reqid = osd_op_p.req_id;
+  op->client_op = nullptr; //client_op;
+  //if (client_op) {
+  //  op->trace = client_op->pg_trace;
+  //}
+  op->plan = op->get_write_plan(
+    sinfo,
+    *(op->t),
+    [&op, this](const hobject_t &i) {
+      ECUtil::HashInfoRef ref =
+        get_hash_info(i, true, op->t->obc_map[i]->attr_cache, 0);
+  logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+      ceph_assert_always(ref);
+      return ref;
+    },
+    &dpp);
+  logger().info("{}: op {} starting", "_submit_transaction", ""); //*op);
+  rmw_pipeline.start_rmw(std::move(op));
+  logger().debug("ECBackend::{} started ec op", "_submit_transaction");
+  logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
+  logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
   return {
-  seastar::now(),
-  PGBackend::interruptor::async([=, this,
-				 txn=std::move(txn),
-				 osd_op_p=std::move(osd_op_p)]() mutable {
-    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
-    auto op = std::make_unique<ECCrimsonOp>(std::move(txn), std::move(obc));
-    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
-    op->hoid = hoid;
-    //op->delta_stats = delta_stats;
-    op->version = osd_op_p.at_version;
-    op->trim_to = osd_op_p.pg_trim_to;
-    op->roll_forward_to =
-      std::max(osd_op_p.min_last_complete_ondisk, rmw_pipeline.committed_to);
-    op->log_entries = std::move(log_entries);
-    //std::swap(op->updated_hit_set_history, hset_history);
-    // TODO: promsie future here
-    auto on_all_commit = new C_AllSubWritesCommited;
-    op->on_all_commit = on_all_commit;
-    op->tid = shard_services.get_tid();
-    op->reqid = osd_op_p.req_id;
-    op->client_op = nullptr; //client_op;
-    //if (client_op) {
-    //  op->trace = client_op->pg_trace;
-    //}
-    op->plan = op->get_write_plan(
-      sinfo,
-      *(op->t),
-      [this](const hobject_t &i) {
-        ECUtil::HashInfoRef ref =
-          get_hash_info(i, true).handle_error_interruptible(
-	  crimson::ct_error::assert_all{}
-	).get();
-    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
-        ceph_assert_always(ref);
-        return ref;
-      },
-      &dpp);
-    logger().info("{}: op {} starting", "_submit_transaction", ""); //*op);
-    rmw_pipeline.start_rmw(std::move(op));
-    logger().debug("ECBackend::{} started ec op", "_submit_transaction");
-    on_all_commit->get_future().get();
-    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
-  }).then_interruptible([] {
-    logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
-    return seastar::make_ready_future<crimson::osd::acked_peers_t>();
-  })};
+    seastar::now(),
+    on_all_commit->get_future().then_interruptible([] {
+      return seastar::make_ready_future<crimson::osd::acked_peers_t>();
+    })
+  };
 }
 
-ECBackend::load_hashinfo_iertr::future<ECUtil::HashInfoRef>
-ECBackend::get_hash_info(
+ECUtil::HashInfoRef ECBackend::get_hash_info(
   const hobject_t &hoid,
   bool create,
-  const std::map<std::string, ceph::buffer::ptr, std::less<>> *attr)
+  const std::map<std::string, ceph::bufferlist, std::less<>> &attrs,
+  const uint64_t size)
 {
   logger().debug("{}: getting hashinfo attr on {}", __func__, hoid);
+  ceph::bufferlist valbl;
   if (auto ref = unstable_hashinfo_registry.lookup(hoid); ref) {
-    return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>(
-      std::move(ref));
+    logger().info("{}: found in cache {}", __func__, hoid);
+    return ref;
   }
-  logger().info("{}: not in cache {}", __func__, hoid);
-
-  using get_attr_ertr = crimson::os::FuturizedStore::Shard::get_attr_errorator;
-  return store->get_attr(
-    coll,
-    ghobject_t{hoid, ghobject_t::NO_GEN, get_shard()},
-    ECUtil::get_hinfo_key()
-  ).safe_then([create, hoid, this] (auto&& valbl) {
-    logger().debug("{}: found obj+attr on disk {}", "get_hash_info", hoid);
-    if (!valbl.length()) {
-      // If empty object and no hinfo, create it
-      return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>();
-    }
-    ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
+  if (const auto& attr_it = attrs.find(ECUtil::get_hinfo_key());
+      attr_it != std::end(attrs)) {
+    logger().debug("{}: found obj+attr in attrs {}", "get_hash_info", hoid);
+    valbl = attr_it->second;
+  }
+  ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
+  if (valbl.length() > 0) {
     auto bp = valbl.cbegin();
     try {
       decode(hinfo, bp);
     } catch(...) {
       ceph_abort_msg("can't decode hinfo");
     }
-    return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>(
-      unstable_hashinfo_registry.lookup_or_create(hoid, hinfo));
-  }, crimson::ct_error::enoent::handle([create, hoid, this] {
-    // no object
-    logger().error("{}: the object {} doesn't exist. {}",
-		   "get_hash_info", hoid, create ? "creating" : "");
-    if (create) {
-      ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-      return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>(
-        unstable_hashinfo_registry.lookup_or_create(hoid, hinfo)
-      );
-    } else {
-      return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>();
+    if (hinfo.get_total_chunk_size() != (uint64_t)size) {
+      logger().error("{}: mismatch of total_chunk_size {}",
+		      "get_hash_info", hinfo.get_total_chunk_size());
+      return ECUtil::HashInfoRef();
     }
-  }), crimson::ct_error::enodata::handle([hoid] {
-    // object exists but attr doesn't
-    logger().error("{}: object {} exists but it lacks the attribute",
-		   "get_hash_info", hoid);
-    return load_hashinfo_ertr::make_ready_future<ECUtil::HashInfoRef>();
-  }));
+  } else if (!size) {
+    logger().debug("{}: empty hinfo and size on {}, creating",
+		    "get_hash_info", hoid);
+    create = true;
+  }
+  if (create) {
+    return unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
+  }
+  return ECUtil::HashInfoRef{};
 }
 
 ECBackend::write_iertr::future<>
