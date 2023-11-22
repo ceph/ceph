@@ -26,6 +26,14 @@ DEFAULT_CONFIG = {
 }
 
 
+class NodeProxyInitialization(Exception):
+    pass
+
+
+class NodeProxyFetchIdracError(Exception):
+    pass
+
+
 @cherrypy.tools.auth_basic(on=True)
 @cherrypy.tools.allow(methods=['PUT'])
 @cherrypy.tools.json_out()
