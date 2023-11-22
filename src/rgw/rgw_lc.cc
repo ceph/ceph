@@ -2314,6 +2314,12 @@ bool RGWLC::LCWorker::should_work(utime_t& now)
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
 
+  // next-day adjustment if the configured end_hour is less than start_hour
+  if (end_hour < start_hour) {
+    bdt.tm_hour = bdt.tm_hour > end_hour ? bdt.tm_hour : bdt.tm_hour + hours_in_a_day;
+    end_hour += hours_in_a_day;
+  }
+
   if (cct->_conf->rgw_lc_debug_interval > 0) {
 	  /* We're debugging, so say we can run */
 	  return true;
