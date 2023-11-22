@@ -42,6 +42,9 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
+constexpr int32_t hours_in_a_day = 24;
+constexpr int32_t secs_in_a_day = hours_in_a_day * 60 * 60;
+
 const char* LC_STATUS[] = {
       "UNINITIAL",
       "PROCESSING",
@@ -285,7 +288,7 @@ bool RGWLC::if_already_run_today(time_t start_date)
   bdt.tm_min = 0;
   bdt.tm_sec = 0;
   begin_of_day = mktime(&bdt);
-  if (now - begin_of_day < 24*60*60)
+  if (now - begin_of_day < secs_in_a_day)
     return true;
   else
     return false;
@@ -344,7 +347,7 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days,
   utime_t base_time;
   if (cct->_conf->rgw_lc_debug_interval <= 0) {
     /* Normal case, run properly */
-    cmp = double(days)*24*60*60;
+    cmp = double(days) * secs_in_a_day;
     base_time = ceph_clock_now().round_to_day();
   } else {
     /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
@@ -1698,8 +1701,7 @@ int RGWLC::process(LCWorker* worker, bool once = false)
 bool RGWLC::expired_session(time_t started)
 {
   time_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
-    ? cct->_conf->rgw_lc_debug_interval
-    : 24*60*60;
+    ? cct->_conf->rgw_lc_debug_interval : secs_in_a_day;
 
   auto now = time(nullptr);
 
@@ -1715,8 +1717,7 @@ bool RGWLC::expired_session(time_t started)
 time_t RGWLC::thread_stop_at()
 {
   uint64_t interval = (cct->_conf->rgw_lc_debug_interval > 0)
-    ? cct->_conf->rgw_lc_debug_interval
-    : 24*60*60;
+    ? cct->_conf->rgw_lc_debug_interval : secs_in_a_day;
 
   return time(nullptr) + interval;
 }
@@ -1938,7 +1939,7 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   nt = mktime(&bdt);
   secs = nt - tt;
 
-  return secs>0 ? secs : secs+24*60*60;
+  return secs > 0 ? secs : secs + secs_in_a_day;
 }
 
 RGWLC::LCWorker::~LCWorker()
@@ -2243,7 +2244,7 @@ std::string s3_expiration_header(
       if (rule_expiration.has_days()) {
 	rule_expiration_date =
 	  boost::optional<ceph::real_time>(
-	    mtime + make_timespan(double(rule_expiration.get_days())*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
+	    mtime + make_timespan(double(rule_expiration.get_days()) * secs_in_a_day - ceph::real_clock::to_time_t(mtime)%(secs_in_a_day) + secs_in_a_day));
       }
     }
 
@@ -2322,7 +2323,7 @@ bool s3_multipart_abort_header(
     std::optional<ceph::real_time> rule_abort_date;
     if (mp_expiration.has_days()) {
       rule_abort_date = std::optional<ceph::real_time>(
-              mtime + make_timespan(mp_expiration.get_days()*24*60*60 - ceph::real_clock::to_time_t(mtime)%(24*60*60) + 24*60*60));
+              mtime + make_timespan(mp_expiration.get_days() * secs_in_a_day - ceph::real_clock::to_time_t(mtime)%(secs_in_a_day) + secs_in_a_day));
     }
 
     // update earliest abort date
