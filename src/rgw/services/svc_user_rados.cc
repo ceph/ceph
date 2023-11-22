@@ -935,17 +935,13 @@ public:
 
   void handle_response(int r, cls_user_header& header) override {
     const cls_user_stats& hs = header.stats;
-    if (r >= 0) {
-      RGWStorageStats stats;
+    RGWStorageStats stats;
 
-      stats.size = hs.total_bytes;
-      stats.size_rounded = hs.total_bytes_rounded;
-      stats.num_objects = hs.total_entries;
+    stats.size = hs.total_bytes;
+    stats.size_rounded = hs.total_bytes_rounded;
+    stats.num_objects = hs.total_entries;
 
-      cb->set_response(stats);
-    }
-
-    cb->handle_response(r);
+    cb->handle_response(r, stats);
 
     cb->put();
   }

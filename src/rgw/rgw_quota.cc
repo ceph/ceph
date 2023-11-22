@@ -86,9 +86,9 @@ public:
                 const DoutPrefixProvider* dpp);
   void adjust_stats(const rgw_user& user, rgw_bucket& bucket, int objs_delta, uint64_t added_bytes, uint64_t removed_bytes);
 
-  void set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats);
+  void set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, const RGWStorageStats& stats);
   int async_refresh(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs);
-  void async_refresh_response(const rgw_user& user, rgw_bucket& bucket, RGWStorageStats& stats);
+  void async_refresh_response(const rgw_user& user, rgw_bucket& bucket, const RGWStorageStats& stats);
   void async_refresh_fail(const rgw_user& user, rgw_bucket& bucket);
 
   class AsyncRefreshHandler {
@@ -140,7 +140,7 @@ void RGWQuotaCache<T>::async_refresh_fail(const rgw_user& user, rgw_bucket& buck
 }
 
 template<class T>
-void RGWQuotaCache<T>::async_refresh_response(const rgw_user& user, rgw_bucket& bucket, RGWStorageStats& stats)
+void RGWQuotaCache<T>::async_refresh_response(const rgw_user& user, rgw_bucket& bucket, const RGWStorageStats& stats)
 {
   ldout(driver->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
 
@@ -154,7 +154,7 @@ void RGWQuotaCache<T>::async_refresh_response(const rgw_user& user, rgw_bucket& 
 }
 
 template<class T>
-void RGWQuotaCache<T>::set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, RGWStorageStats& stats)
+void RGWQuotaCache<T>::set_stats(const rgw_user& user, const rgw_bucket& bucket, RGWQuotaCacheStats& qs, const RGWStorageStats& stats)
 {
   qs.stats = stats;
   qs.expiration = ceph_clock_now();
@@ -380,17 +380,18 @@ class UserAsyncRefreshHandler : public RGWQuotaCache<rgw_user>::AsyncRefreshHand
                                 public RGWGetUserStats_CB {
   const DoutPrefixProvider *dpp;
   rgw_bucket bucket;
-public:
-  UserAsyncRefreshHandler(const DoutPrefixProvider *_dpp, rgw::sal::Driver* _driver, RGWQuotaCache<rgw_user> *_cache,
-                          const rgw_user& _user, const rgw_bucket& _bucket) :
-                          RGWQuotaCache<rgw_user>::AsyncRefreshHandler(_driver, _cache),
-                          RGWGetUserStats_CB(_user),
-                          dpp(_dpp),
-                          bucket(_bucket) {}
+  rgw_user user;
+ public:
+  UserAsyncRefreshHandler(const DoutPrefixProvider *_dpp, rgw::sal::Driver* _driver,
+                          RGWQuotaCache<rgw_user> *_cache,
+                          const rgw_user& _user, const rgw_bucket& _bucket)
+      : RGWQuotaCache<rgw_user>::AsyncRefreshHandler(_driver, _cache),
+        dpp(_dpp), bucket(_bucket), user(_user)
+  {}
 
   void drop_reference() override { put(); }
   int init_fetch() override;
-  void handle_response(int r) override;
+  void handle_response(int r, const RGWStorageStats& stats) override;
 };
 
 int UserAsyncRefreshHandler::init_fetch()
@@ -409,7 +410,7 @@ int UserAsyncRefreshHandler::init_fetch()
   return 0;
 }
 
-void UserAsyncRefreshHandler::handle_response(int r)
+void UserAsyncRefreshHandler::handle_response(int r, const RGWStorageStats& stats)
 {
   if (r < 0) {
     ldout(driver->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;

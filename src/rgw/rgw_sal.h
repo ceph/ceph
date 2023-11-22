@@ -95,16 +95,8 @@ public:
 };
 
 class RGWGetUserStats_CB : public RefCountedObject {
-protected:
-  rgw_user user;
-  RGWStorageStats stats;
-public:
-  explicit RGWGetUserStats_CB(const rgw_user& _user) : user(_user) {}
-  ~RGWGetUserStats_CB() override {}
-  virtual void handle_response(int r) = 0;
-  virtual void set_response(RGWStorageStats& _stats) {
-    stats = _stats;
-  }
+ public:
+  virtual void handle_response(int r, const RGWStorageStats& stats) = 0;
 };
 
 struct RGWObjState {
