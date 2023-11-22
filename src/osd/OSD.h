@@ -666,7 +666,9 @@ public:
   // osd map cache (past osd maps)
   ceph::mutex map_cache_lock = ceph::make_mutex("OSDService::map_cache_lock");
   SharedLRU<epoch_t, const OSDMap> map_cache;
+  ceph::mutex map_bl_cache_lock = ceph::make_mutex("OSDService::map_bl_cache_lock");
   SimpleLRU<epoch_t, ceph::buffer::list> map_bl_cache;
+  ceph::mutex map_bl_inc_cache_lock = ceph::make_mutex("OSDService::map_bl_inc_cache_lock");
   SimpleLRU<epoch_t, ceph::buffer::list> map_bl_inc_cache;
 
   OSDMapRef try_get_map(epoch_t e);
@@ -683,7 +685,7 @@ public:
 
   void _add_map_bl(epoch_t e, ceph::buffer::list& bl);
   bool get_map_bl(epoch_t e, ceph::buffer::list& bl) {
-    std::lock_guard l(map_cache_lock);
+    std::lock_guard l(map_bl_cache_lock);
     return _get_map_bl(e, bl);
   }
   bool _get_map_bl(epoch_t e, ceph::buffer::list& bl);

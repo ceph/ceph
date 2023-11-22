@@ -1503,7 +1503,7 @@ bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
 
 bool OSDService::get_inc_map_bl(epoch_t e, bufferlist& bl)
 {
-  std::lock_guard l(map_cache_lock);
+  std::lock_guard l(map_bl_inc_cache_lock);
   bool found = map_bl_inc_cache.lookup(e, &bl);
   if (found) {
     logger->inc(l_osd_map_bl_cache_hit);
@@ -1565,20 +1565,23 @@ OSDMapRef OSDService::_add_map(OSDMap *o)
 
 OSDMapRef OSDService::try_get_map(epoch_t epoch)
 {
-  std::lock_guard l(map_cache_lock);
-  OSDMapRef retval = map_cache.lookup(epoch);
-  if (retval) {
-    dout(30) << "get_map " << epoch << " -cached" << dendl;
-    logger->inc(l_osd_map_cache_hit);
-    return retval;
-  }
   {
-    logger->inc(l_osd_map_cache_miss);
-    epoch_t lb = map_cache.cached_key_lower_bound();
-    if (epoch < lb) {
-      dout(30) << "get_map " << epoch << " - miss, below lower bound" << dendl;
-      logger->inc(l_osd_map_cache_miss_low);
-      logger->inc(l_osd_map_cache_miss_low_avg, lb - epoch);
+    std::lock_guard l(map_cache_lock);
+
+    OSDMapRef retval = map_cache.lookup(epoch);
+    if (retval) {
+      dout(30) << "get_map " << epoch << " -cached" << dendl;
+      logger->inc(l_osd_map_cache_hit);
+      return retval;
+    }
+    {
+      logger->inc(l_osd_map_cache_miss);
+      epoch_t lb = map_cache.cached_key_lower_bound();
+      if (epoch < lb) {
+        dout(30) << "get_map " << epoch << " - miss, below lower bound" << dendl;
+        logger->inc(l_osd_map_cache_miss_low);
+        logger->inc(l_osd_map_cache_miss_low_avg, lb - epoch);
+      }
     }
   }
 
@@ -1586,7 +1589,7 @@ OSDMapRef OSDService::try_get_map(epoch_t epoch)
   if (epoch > 0) {
     dout(20) << "get_map " << epoch << " - loading and decoding " << map << dendl;
     bufferlist bl;
-    if (!_get_map_bl(epoch, bl) || bl.length() == 0) {
+    if (!get_map_bl(epoch, bl) || bl.length() == 0) {
       derr << "failed to load OSD map for epoch " << epoch << ", got " << bl.length() << " bytes" << dendl;
       delete map;
       return OSDMapRef();
@@ -1595,7 +1598,7 @@ OSDMapRef OSDService::try_get_map(epoch_t epoch)
   } else {
     dout(20) << "get_map " << epoch << " - return initial " << map << dendl;
   }
-  return _add_map(map);
+  return add_map(map);
 }
 
 // ops
