@@ -95,15 +95,19 @@ public:
   protected:
     rgw::sal::Driver* driver;
     RGWQuotaCache<T> *cache;
+    boost::intrusive_ptr<RefCountedWaitObject> waiter;
   public:
-    AsyncRefreshHandler(rgw::sal::Driver* _driver, RGWQuotaCache<T> *_cache) : driver(_driver), cache(_cache) {}
+    AsyncRefreshHandler(rgw::sal::Driver* _driver, RGWQuotaCache<T> *_cache,
+                        boost::intrusive_ptr<RefCountedWaitObject> waiter)
+      : driver(_driver), cache(_cache), waiter(std::move(waiter)) {}
     virtual ~AsyncRefreshHandler() {}
 
     virtual int init_fetch() = 0;
     virtual void drop_reference() = 0;
   };
 
-  virtual AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) = 0;
+  virtual AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket,
+                                                        boost::intrusive_ptr<RefCountedWaitObject> waiter) = 0;
 };
 
 template<class T>
@@ -116,14 +120,10 @@ int RGWQuotaCache<T>::async_refresh(const rgw_user& user, const rgw_bucket& buck
     return 0;
   }
 
-  async_refcount->get();
-
-
-  AsyncRefreshHandler *handler = allocate_refresh_handler(user, bucket);
+  AsyncRefreshHandler *handler = allocate_refresh_handler(user, bucket, async_refcount);
 
   int ret = handler->init_fetch();
   if (ret < 0) {
-    async_refcount->put();
     handler->drop_reference();
     return ret;
   }
@@ -135,8 +135,6 @@ template<class T>
 void RGWQuotaCache<T>::async_refresh_fail(const rgw_user& user, rgw_bucket& bucket)
 {
   ldout(driver->ctx(), 20) << "async stats refresh response for bucket=" << bucket << dendl;
-
-  async_refcount->put();
 }
 
 template<class T>
@@ -149,8 +147,6 @@ void RGWQuotaCache<T>::async_refresh_response(const rgw_user& user, rgw_bucket& 
   map_find(user, bucket, qs);
 
   set_stats(user, bucket, qs, stats);
-
-  async_refcount->put();
 }
 
 template<class T>
@@ -252,8 +248,9 @@ class BucketAsyncRefreshHandler : public RGWQuotaCache<rgw_bucket>::AsyncRefresh
   rgw_bucket bucket;
 public:
   BucketAsyncRefreshHandler(rgw::sal::Driver* _driver, RGWQuotaCache<rgw_bucket> *_cache,
+                            boost::intrusive_ptr<RefCountedWaitObject> waiter,
                             const rgw_user& _user, const rgw_bucket& _bucket)
-    : RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler(_driver, _cache),
+    : RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler(_driver, _cache, std::move(waiter)),
       user(_user), bucket(_bucket) {}
 
   void drop_reference() override {
@@ -323,8 +320,9 @@ public:
   explicit RGWBucketStatsCache(rgw::sal::Driver* _driver) : RGWQuotaCache<rgw_bucket>(_driver, _driver->ctx()->_conf->rgw_bucket_quota_cache_size) {
   }
 
-  AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) override {
-    return new BucketAsyncRefreshHandler(driver, this, user, bucket);
+  AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket,
+                                                boost::intrusive_ptr<RefCountedWaitObject> waiter) override {
+    return new BucketAsyncRefreshHandler(driver, this, std::move(waiter), user, bucket);
   }
 };
 
@@ -377,8 +375,9 @@ class UserAsyncRefreshHandler : public RGWQuotaCache<rgw_user>::AsyncRefreshHand
  public:
   UserAsyncRefreshHandler(const DoutPrefixProvider *_dpp, rgw::sal::Driver* _driver,
                           RGWQuotaCache<rgw_user> *_cache,
+                          boost::intrusive_ptr<RefCountedWaitObject> waiter,
                           const rgw_user& _user, const rgw_bucket& _bucket)
-      : RGWQuotaCache<rgw_user>::AsyncRefreshHandler(_driver, _cache),
+      : RGWQuotaCache<rgw_user>::AsyncRefreshHandler(_driver, _cache, std::move(waiter)),
         dpp(_dpp), bucket(_bucket), user(_user)
   {}
 
@@ -570,8 +569,9 @@ public:
     stop();
   }
 
-  AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) override {
-    return new UserAsyncRefreshHandler(dpp, driver, this, user, bucket);
+  AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket,
+                                                boost::intrusive_ptr<RefCountedWaitObject> waiter) override {
+    return new UserAsyncRefreshHandler(dpp, driver, this, std::move(waiter), user, bucket);
   }
 
   bool going_down() {
