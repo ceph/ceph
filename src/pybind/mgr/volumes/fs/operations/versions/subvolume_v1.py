@@ -98,7 +98,6 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             create_base_dir(self.fs, self.group.path, self.vol_spec.DEFAULT_MODE)
             # create directory and set attributes
             self.fs.mkdirs(subvol_path, mode)
-            self.mark_subvolume()
             attrs = {
                 'uid': uid,
                 'gid': gid,
@@ -111,6 +110,7 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             # persist subvolume metadata
             qpath = subvol_path.decode('utf-8')
             self.init_config(SubvolumeV1.VERSION, subvolume_type, qpath, initial_state)
+            self.mark_subvolume()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
                 log.info("cleaning up subvolume with path: {0}".format(self.subvolname))
