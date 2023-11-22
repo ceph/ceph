@@ -6034,7 +6034,12 @@ std::vector<Option> get_rgw_options() {
     Option("rgw_lifecycle_work_time", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("00:00-06:00")
     .set_description("Lifecycle allowed work time")
-    .set_long_description("Local time window in which the lifecycle maintenance thread can work."),
+    .set_long_description(
+        "Local time window in which the lifecycle maintenance thread can work. It expects "
+        "24-hour time notation. For example, "00:00-23:59" means starting at midnight lifecycle "
+        "is allowed to run for the whole day (24 hours). When lifecycle completes, it waits for the "
+        "next maintenance window. In this example, if it completes at 01:00, it will resume processing "
+        "23 hours later at the following midnight."),
 
     Option("rgw_lc_lock_max_time", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(90)
