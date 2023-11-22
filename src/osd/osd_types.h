@@ -5572,7 +5572,12 @@ WRITE_CLASS_ENCODER(SnapSet)
 
 std::ostream& operator<<(std::ostream& out, const SnapSet& cs);
 
-
+inline static const bool should_whiteout(
+  const SnapSet &ss,
+  const SnapContext &client_snapc) {
+  return !ss.clones.empty() ||
+    (!client_snapc.snaps.empty() && client_snapc.snaps[0] > ss.seq);
+}
 
 #define OI_ATTR "_"
 #define SS_ATTR "snapset"

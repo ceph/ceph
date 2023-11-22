@@ -197,12 +197,14 @@ public:
       rollback_ertr>;
   rollback_iertr::future<> rollback(
     ObjectState& os,
+    const SnapSet &ss,
     const OSDOp& osd_op,
     ceph::os::Transaction& txn,
     osd_op_params_t& osd_op_params,
     object_stat_sum_t& delta_stats,
     crimson::osd::ObjectContextRef head,
-    crimson::osd::ObjectContextLoader& obc_loader);
+    crimson::osd::ObjectContextLoader& obc_loader,
+    const SnapContext &snapc);
   write_iertr::future<> truncate(
     ObjectState& os,
     const OSDOp& osd_op,
