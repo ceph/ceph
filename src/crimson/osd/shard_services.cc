@@ -387,7 +387,10 @@ seastar::future<bufferlist> OSDSingletonState::load_map_bl(
     return seastar::make_ready_future<bufferlist>(*found);
   } else {
     logger().debug("{} loading osdmap.{} from disk", __func__, e);
-    return meta_coll->load_map(e);
+    return meta_coll->load_map(e).then([this, e](auto&& bl) {
+      map_bl_cache.insert(e, bl);
+      return seastar::make_ready_future<bufferlist>(std::move(bl));
+    });
   }
 }
 
