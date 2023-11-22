@@ -1043,6 +1043,8 @@ boost::intrusive_ptr<CephContext> do_global_init(
 
 int main(int argc, const char** argv)
 {
+  SetConsoleOutputCP(CP_UTF8);
+
   if (!SetConsoleCtrlHandler((PHANDLER_ROUTINE)ConsoleHandler, TRUE)) {
     cerr << "Couldn't initialize console event handler." << std::endl;
     return -EINVAL;

@@ -1,4 +1,7 @@
-add_executable(rbd-wnbd rbd_wnbd.cc wnbd_handler.cc wnbd_wmi.cc)
+add_executable(
+    rbd-wnbd
+    rbd_wnbd.cc wnbd_handler.cc wnbd_wmi.cc
+    ../../common/win32/code_page.rc)
 set_target_properties(
     rbd-wnbd PROPERTIES COMPILE_FLAGS
     "-fpermissive -I${WNBD_INCLUDE_DIRS}")
