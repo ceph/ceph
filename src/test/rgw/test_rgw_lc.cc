@@ -5,7 +5,6 @@
 #include "rgw_lc.h"
 #include "rgw_lc_s3.h"
 #include <gtest/gtest.h>
-//#include <spawn/spawn.hpp>
 #include <string>
 #include <vector>
 #include <stdexcept>
