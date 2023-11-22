@@ -552,7 +552,7 @@ void AsyncMessenger::wait()
     if (!started) {
       return;
     }
-    if (!stopped)
+    while (!stopped)
       stop_cond.wait(locker);
   }
   dispatch_queue.shutdown();
