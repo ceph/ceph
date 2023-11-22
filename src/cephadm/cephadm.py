@@ -40,7 +40,7 @@ from threading import Thread, Event
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
 from pathlib import Path
-from cephadmlib.node_proxy.main import NodeProxy
+from cephadmlib.node_proxy.main import NodeProxy, NodeProxyInitialization, NodeProxyFetchIdracError
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -4784,6 +4784,7 @@ class CephadmAgent():
         self.recent_iteration_run_times: List[float] = [0.0, 0.0, 0.0]
         self.recent_iteration_index: int = 0
         self.cached_ls_values: Dict[str, Dict[str, str]] = {}
+        self.t_node_proxy: Optional["NodeProxy"] = None
 
     def validate(self, config: Dict[str, str] = {}) -> None:
         # check for the required files
@@ -4898,22 +4899,51 @@ WantedBy=ceph-{fsid}.target
                        port: str = '',
                        data: Optional[Union[Dict[str, str], str]] = None,
                        endpoint: str = '',
-                       ssl_ctx: Optional[Any] = None) -> str:
+                       ssl_ctx: Optional[Any] = None,
+                       timeout: Optional[int] = 10) -> Tuple[int, str]:
         _addr = addr if addr else self.target_ip
         _port = port if port else self.target_port
         url = f'https://{_addr}:{_port}{endpoint}'
-
+        logger.info(f"sending query to {url}")
         try:
             req = Request(url, data, {'Content-Type': 'application/json'})
             send_time = time.monotonic()
-            with urlopen(req, context=ssl_ctx) as response:
+            with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
                 response_str = response.read()
                 response_json = json.loads(response_str)
                 total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
                 logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
+                response_status = response.status
+        except HTTPError as e:
+            logger.debug(f"{e.code} {e.reason}")
+            response_status = e.code
+            response_str = e.reason
+        except URLError as e:
+            logger.debug(f"{e.reason}")
+            response_status = -1
+            response_str = e.reason
         except Exception:
             raise
-        return response_str
+        return (response_status, response_str)
+
+    def node_proxy_loop_check(self, ssl_ctx: Any) -> None:
+        while True:
+            try:
+                if isinstance(self.t_node_proxy, NodeProxy):
+                    status = self.t_node_proxy.check_status()
+                    label = 'Ok' if status else 'Critical'
+                    logger.debug(f'node-proxy status: {label}')
+                else:
+                    raise NodeProxyInitialization("starting node-proxy...")
+            except Exception as e:
+                logger.error(f'node-proxy not running: {e.__class__.__name__}: {e}')
+                try:
+                    self.init_node_proxy(ssl_ctx)
+                except NodeProxyFetchIdracError:
+                    logger.info("No iDrac details could be loaded. "
+                                "Aborting node-proxy initialization. "
+                                "Will retry in 120s.")
+                    time.sleep(120)
 
     def init_node_proxy(self, ssl_ctx: Any) -> None:
         node_proxy_meta = {
@@ -4922,9 +4952,13 @@ WantedBy=ceph-{fsid}.target
                 'secret': self.keyring
             }
         }
-        result = self.query_endpoint(data=json.dumps(node_proxy_meta).encode('ascii'),
-                                     endpoint='/node-proxy/idrac',
-                                     ssl_ctx=ssl_ctx)
+        status, result = self.query_endpoint(data=json.dumps(node_proxy_meta).encode('ascii'),
+                                             endpoint='/node-proxy/idrac',
+                                             ssl_ctx=ssl_ctx)
+        if status != 200:
+            msg = f"Couldn't load iDrac details: {status}, {result}"
+            logger.debug(msg)
+            raise NodeProxyFetchIdracError(msg)
         result_json = json.loads(result)
         kwargs = {
             'host': result_json['result']['addr'],
@@ -4971,15 +5005,10 @@ WantedBy=ceph-{fsid}.target
             self.volume_gatherer.start()
 
         # initiate node-proxy thread
-        self.init_node_proxy(ssl_ctx)
+        node_proxy_loop_thread = Thread(target=self.node_proxy_loop_check, args=(ssl_ctx,))
+        node_proxy_loop_thread.start()
 
         while not self.stop:
-            try:
-                _mapper = {True: 'Ok', False: 'Critical'}
-                logger.debug(f'node-proxy status: {_mapper[self.t_node_proxy.check_status()]}')
-            except Exception as e:
-                logger.error(f'node-proxy failure: {e.__class__.__name__}: {e}')
-                self.init_node_proxy(ssl_ctx)
             start_time = time.monotonic()
             ack = self.ack
 
