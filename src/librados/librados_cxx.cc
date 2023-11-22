@@ -2719,9 +2719,16 @@ int librados::Rados::get_pool_stats(std::list<string>& v,
   return -EOPNOTSUPP;
 }
 
+// deprecated, use pool_is_in_selfmanaged_snaps_mode() instead
 bool librados::Rados::get_pool_is_selfmanaged_snaps_mode(const std::string& pool)
 {
-  return client->get_pool_is_selfmanaged_snaps_mode(pool);
+  // errors are ignored, prone to false negative results
+  return client->pool_is_in_selfmanaged_snaps_mode(pool) > 0;
+}
+
+int librados::Rados::pool_is_in_selfmanaged_snaps_mode(const std::string& pool)
+{
+  return client->pool_is_in_selfmanaged_snaps_mode(pool);
 }
 
 int librados::Rados::cluster_stat(cluster_stat_t& result)
