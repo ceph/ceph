@@ -474,12 +474,6 @@ int CrushTester::test(CephContext* cct)
   // make adjustments
   adjust_weights(weight);
 
-
-  int num_devices_active = 0;
-  for (vector<__u32>::iterator p = weight.begin(); p != weight.end(); ++p)
-    if (*p > 0)
-      num_devices_active++;
-
   if (output_choose_tries)
     crush.start_choose_profile();
   

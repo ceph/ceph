@@ -1576,13 +1576,11 @@ int CrushWrapper::adjust_subtree_weight(CephContext *cct, int id, int weight,
   while (!q.empty()) {
     b = q.front();
     q.pop_front();
-    int local_changed = 0;
     for (unsigned i=0; i<b->size; ++i) {
       int n = b->items[i];
       if (n >= 0) {
 	adjust_item_weight_in_bucket(cct, n, weight, b->id, update_weight_sets);
 	++changed;
-	++local_changed;
       } else {
 	crush_bucket *sub = get_bucket(n);
 	if (IS_ERR(sub))
