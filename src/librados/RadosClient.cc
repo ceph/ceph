@@ -631,16 +631,22 @@ int librados::RadosClient::get_pool_stats(std::list<string>& pools,
   return 0;
 }
 
-bool librados::RadosClient::get_pool_is_selfmanaged_snaps_mode(
+int librados::RadosClient::pool_is_in_selfmanaged_snaps_mode(
   const std::string& pool)
 {
-  bool ret = false;
-  objecter->with_osdmap([&](const OSDMap& osdmap) {
+  int r = wait_for_osdmap();
+  if (r < 0) {
+    return r;
+  }
+
+  return objecter->with_osdmap([&pool](const OSDMap& osdmap) {
       int64_t poolid = osdmap.lookup_pg_pool_name(pool);
-      if (poolid >= 0)
-	ret = osdmap.get_pg_pool(poolid)->is_unmanaged_snaps_mode();
+      if (poolid < 0) {
+        return -ENOENT;
+      }
+      return static_cast<int>(
+        osdmap.get_pg_pool(poolid)->is_unmanaged_snaps_mode());
     });
-  return ret;
 }
 
 int librados::RadosClient::get_fs_stats(ceph_statfs& stats)

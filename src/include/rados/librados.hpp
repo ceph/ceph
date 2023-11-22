@@ -1477,8 +1477,11 @@ inline namespace v14_2_0 {
     int get_pool_stats(std::list<std::string>& v,
                        std::string& category,
 		       std::map<std::string, stats_map>& stats);
+
     /// check if pool has or had selfmanaged snaps
-    bool get_pool_is_selfmanaged_snaps_mode(const std::string& poolname);
+    bool get_pool_is_selfmanaged_snaps_mode(const std::string& poolname)
+      __attribute__ ((deprecated));
+    int pool_is_in_selfmanaged_snaps_mode(const std::string& poolname);
 
     int cluster_stat(cluster_stat_t& result);
     int cluster_fsid(std::string *fsid);

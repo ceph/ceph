@@ -6,6 +6,9 @@
   and valid), diff-iterate is now guaranteed to execute locally if exclusive
   lock is available.  This brings a dramatic performance improvement for QEMU
   live disk synchronization and backup use cases.
+* RADOS: `get_pool_is_selfmanaged_snaps_mode` C++ API has been deprecated
+  due to being prone to false negative results.  It's safer replacement is
+  `pool_is_in_selfmanaged_snaps_mode`.
 
 >=19.0.0
 
