@@ -29,6 +29,8 @@
 #include "rgw_hex.h"
 #include "rgw_b64.h"
 
+#include "include/buffer.h"
+
 #pragma once
 
 namespace rgw { namespace cksum {
@@ -106,7 +108,27 @@ namespace rgw { namespace cksum {
       const auto& ckd = checksums[uint16_t(type)];
       return fmt::format("{{{}}}{}", ckd.name, to_base64());
     }
+
+    void encode(buffer::list& bl) const {
+      const auto& ckd = checksums[uint16_t(type)];
+      ENCODE_START(1, 1, bl);
+      encode(uint16_t(type), bl);
+      encode(ckd.digest_size, bl);
+      bl.append((char*)digest.data(), ckd.digest_size);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& p) {
+      DECODE_START(1, p);
+      uint16_t tt;
+      decode(tt, p);
+      type = cksum::Type(tt);
+      decode(tt, p); /* <= max_digest_size */
+      p.copy(tt, (char*)digest.data());
+      DECODE_FINISH(p);
+    }
   }; /* Cksum */
+  WRITE_CLASS_ENCODER(Cksum);
 
   static inline Type parse_cksum_type(const std::string& name)
   {
