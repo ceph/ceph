@@ -1474,7 +1474,7 @@ public:
   int cls_bucket_head_async(const DoutPrefixProvider *dpp,
 			    const RGWBucketInfo& bucket_info,
 			    const rgw::bucket_index_layout_generation& idx_layout,
-			    int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio);
+			    int shard_id, boost::intrusive_ptr<RGWGetDirHeader_CB> cb, int *num_aio);
   int bi_get_instance(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_dir_entry *dirent, optional_yield y);
   int bi_get_olh(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, rgw_bucket_olh_entry *olh, optional_yield y);
   int bi_get(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw_obj& obj, BIIndexType index_type, rgw_cls_bi_entry *entry, optional_yield y);
