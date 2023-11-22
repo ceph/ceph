@@ -6,6 +6,9 @@ set(rados_srcs
   ${PROJECT_SOURCE_DIR}/src/common/util.cc
   ${PROJECT_SOURCE_DIR}/src/common/obj_bencher.cc
   ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
+if(WIN32)
+  list(APPEND rados_srcs ../common/win32/code_page.rc)
+endif()
 add_executable(rados ${rados_srcs})
 
 target_link_libraries(rados librados global ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})

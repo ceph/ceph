@@ -276,7 +276,11 @@ void generate_crash_dump(char *base,
 	::close(fd);
       }
       snprintf(fn, sizeof(fn)-1, "%s/done", base);
+      #ifdef _WIN32
+      ::creat(fn, _S_IREAD);
+      #else
       ::creat(fn, 0444);
+      #endif
     }
   }
 }

@@ -55,6 +55,9 @@ set(rbd_srcs
   action/Ubbd.cc
   action/Watch.cc
   action/Wnbd.cc)
+if(WIN32)
+  list(APPEND rbd_srcs ../../common/win32/code_page.rc)
+endif()
 
 add_executable(rbd ${rbd_srcs}
   $<TARGET_OBJECTS:common_texttable_obj>)
