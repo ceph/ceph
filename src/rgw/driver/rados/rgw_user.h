@@ -30,8 +30,6 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
 
-class RGWGetUserStats_CB;
-
 /**
  * A string wrapper that includes encode/decode functions
  * for easily accessing a UID in all forms

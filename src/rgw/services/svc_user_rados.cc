@@ -927,11 +927,11 @@ int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp,
 }
 
 class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
-  RGWGetUserStats_CB *cb;
+  boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb;
 
 public:
-  explicit RGWGetUserStatsContext(RGWGetUserStats_CB * const cb)
-    : cb(cb) {}
+  explicit RGWGetUserStatsContext(boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb)
+    : cb(std::move(cb)) {}
 
   void handle_response(int r, cls_user_header& header) override {
     const cls_user_stats& hs = header.stats;
@@ -942,17 +942,17 @@ public:
     stats.num_objects = hs.total_entries;
 
     cb->handle_response(r, stats);
-
-    cb->put();
+    cb.reset();
   }
 };
 
 int RGWSI_User_RADOS::read_stats_async(const DoutPrefixProvider *dpp,
-                                       const rgw_user& user, RGWGetUserStats_CB *_cb)
+                                       const rgw_user& user,
+                                       boost::intrusive_ptr<rgw::sal::ReadStatsCB> _cb)
 {
   string user_str = user.to_str();
 
-  RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(_cb);
+  RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(std::move(_cb));
   int r = cls_user_get_header_async(dpp, user_str, cb);
   if (r < 0) {
     delete cb;

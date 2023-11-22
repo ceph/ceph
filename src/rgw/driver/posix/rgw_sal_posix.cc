@@ -959,7 +959,7 @@ int POSIXBucket::read_stats(const DoutPrefixProvider *dpp,
 
 int POSIXBucket::read_stats_async(const DoutPrefixProvider *dpp,
 				  const bucket_index_layout_generation& idx_layout,
-				  int shard_id, RGWGetBucketStats_CB* ctx)
+				  int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx)
 {
   return 0;
 }
