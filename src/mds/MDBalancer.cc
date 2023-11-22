@@ -38,6 +38,11 @@ using std::chrono::duration_cast;
 #include "common/config.h"
 #include "common/errno.h"
 
+/* Note, by default debug_mds_balancer is 1/5. For debug messages 1<lvl<=5,
+ * should_gather (below) will be true; so, debug_mds will be ignored even if
+ * set to 20/20. For this reason, some messages may not appear in the log.
+ * Increase both debug levels to get expected output!
+ */
 #define dout_context g_ceph_context
 #undef dout_prefix
 #define dout_prefix *_dout << "mds." << mds->get_nodeid() << ".bal " << __func__ << " "
