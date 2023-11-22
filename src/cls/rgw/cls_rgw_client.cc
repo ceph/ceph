@@ -751,12 +751,11 @@ int CLSRGWIssueBucketBILogStop::issue_op(const int shard_id, const string& oid)
 }
 
 class GetDirHeaderCompletion : public ObjectOperationCompletion {
-  RGWGetDirHeader_CB *ret_ctx;
+  boost::intrusive_ptr<RGWGetDirHeader_CB> cb;
 public:
-  explicit GetDirHeaderCompletion(RGWGetDirHeader_CB *_ctx) : ret_ctx(_ctx) {}
-  ~GetDirHeaderCompletion() override {
-    ret_ctx->put();
-  }
+  explicit GetDirHeaderCompletion(boost::intrusive_ptr<RGWGetDirHeader_CB> cb)
+    : cb(std::move(cb)) {}
+
   void handle_completion(int r, bufferlist& outbl) override {
     rgw_cls_list_ret ret;
     try {
@@ -765,20 +764,20 @@ public:
     } catch (ceph::buffer::error& err) {
       r = -EIO;
     }
-
-    ret_ctx->handle_response(r, ret.dir.header);
+    cb->handle_response(r, ret.dir.header);
   }
 };
 
-int cls_rgw_get_dir_header_async(IoCtx& io_ctx, string& oid, RGWGetDirHeader_CB *ctx)
+int cls_rgw_get_dir_header_async(IoCtx& io_ctx, const string& oid,
+                                 boost::intrusive_ptr<RGWGetDirHeader_CB> cb)
 {
   bufferlist in, out;
   rgw_cls_list_op call;
   call.num_entries = 0;
   encode(call, in);
   ObjectReadOperation op;
-  GetDirHeaderCompletion *cb = new GetDirHeaderCompletion(ctx);
-  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in, cb);
+  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,
+          new GetDirHeaderCompletion(std::move(cb)));
   AioCompletion *c = librados::Rados::aio_create_completion(nullptr, nullptr);
   int r = io_ctx.aio_operate(oid, c, &op, NULL);
   c->release();
