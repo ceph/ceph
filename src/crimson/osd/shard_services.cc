@@ -535,6 +535,7 @@ void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
          t.get_num_ops() < crimson::common::local_conf()->osd_target_transaction_size) {
     logger().debug("{}: removing old osdmap epoch {}", __func__, superblock.get_oldest_map());
     meta_coll->remove_map(t, superblock.get_oldest_map());
+    meta_coll->remove_inc_map(t, superblock.get_oldest_map());
     superblock.maps.erase(superblock.get_oldest_map());
   }
 
