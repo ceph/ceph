@@ -303,7 +303,22 @@ TEST(RGWCksum, DigestBL)
     auto cksum2 = rgw::cksum::finalize_digest(digest2, t);
 
     ASSERT_EQ(cksum1.to_string(), cksum2.to_string());
-  }
+
+    /* serialization */
+    buffer::list bl_out;
+    encode(cksum1, bl_out);
+
+    /* unserialization */
+    buffer::list bl_in;
+    bl_in.append(bl_out.c_str(), bl_out.length());
+
+    rgw::cksum::Cksum cksum3;
+    auto iter = bl_in.cbegin();
+    decode(cksum3, iter);
+
+    /* all that way for a Strohs */
+    ASSERT_EQ(cksum1.to_string(), cksum3.to_string());
+  } /* for t1, ... */
 }
 
 int main(int argc, char **argv)

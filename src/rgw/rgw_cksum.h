@@ -30,6 +30,7 @@
 #include "rgw_b64.h"
 
 #include "include/buffer.h"
+#include "include/encoding.h"
 
 #pragma once
 
@@ -88,7 +89,7 @@ namespace rgw { namespace cksum {
     Type type;
     value_type digest;
 
-    Cksum(Type _type) : type(_type) {}
+    Cksum(Type _type = Type::none) : type(_type) {}
 
     std::string hex() {
       std::string hs;
