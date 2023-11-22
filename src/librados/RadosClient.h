@@ -131,7 +131,7 @@ public:
   int get_pool_stats(std::list<std::string>& ls, std::map<std::string,::pool_stat_t> *result,
     bool *per_pool);
   int get_fs_stats(ceph_statfs& result);
-  bool get_pool_is_selfmanaged_snaps_mode(const std::string& pool);
+  int pool_is_in_selfmanaged_snaps_mode(const std::string& pool);
 
   /*
   -1 was set as the default value and monitor will pickup the right crush rule with below order:
