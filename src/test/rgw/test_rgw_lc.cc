@@ -235,13 +235,13 @@ TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeEndTimeInTheNextDay)
    std::unordered_map<std::string, bool> test_values_to_expectations = {
       {"01/01/23 13:59:00", false},
       {"01/01/23 13:59:59", false},
-      {"01/01/24 14:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 17:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 23:59:59", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 00:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 00:59:59", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 01:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 01:00:59", false}, // should have been true, expected to fail due to tracker issue #63613
+      {"01/01/24 14:00:00", true}, // used-to-fail
+      {"01/01/24 17:00:00", true}, // used-to-fail
+      {"01/01/24 23:59:59", true}, // used-to-fail
+      {"01/01/23 00:00:00", true}, // used-to-fail
+      {"01/01/23 00:59:59", true}, // used-to-fail
+      {"01/01/23 01:00:00", true}, // used-to-fail
+      {"01/01/23 01:00:59", true}, // used-to-fail
       {"01/01/23 01:01:00", false},
       {"01/01/23 05:00:00", false},
       {"01/01/23 12:00:00", false},
@@ -255,21 +255,22 @@ TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeEndTimeInTheNextDay24Hours)
 {
    cct->_conf->rgw_lifecycle_work_time = "14:00-13:59";
 
+   // all of the below cases used-to-fail
    std::unordered_map<std::string, bool> test_values_to_expectations = {
-      {"01/01/23 00:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 00:00:01", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 00:01:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 01:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 12:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 13:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 13:59:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 13:59:59", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 14:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 14:00:01", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 14:01:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 16:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 23:59:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 23:59:59", false}, // should have been true, expected to fail due to tracker issue #63613
+      {"01/01/23 00:00:00", true},
+      {"01/01/23 00:00:01", true},
+      {"01/01/23 00:01:00", true},
+      {"01/01/24 01:00:00", true},
+      {"01/01/24 12:00:00", true},
+      {"01/01/24 13:00:00", true},
+      {"01/01/24 13:59:00", true},
+      {"01/01/24 13:59:59", true},
+      {"01/01/23 14:00:00", true},
+      {"01/01/23 14:00:01", true},
+      {"01/01/23 14:01:00", true},
+      {"01/01/23 16:00:00", true},
+      {"01/01/23 23:59:00", true},
+      {"01/01/23 23:59:59", true},
    };
 
    run_should_work_test(test_values_to_expectations);
@@ -281,12 +282,12 @@ TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeEndTimeInTheNextDayIrregularMins
 
    std::unordered_map<std::string, bool> test_values_to_expectations = {
       {"01/01/23 22:14:59", false},
-      {"01/01/23 22:15:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 00:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 01:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/24 02:00:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 03:33:00", false}, // should have been true, expected to fail due to tracker issue #63613
-      {"01/01/23 03:33:59", false}, // should have been true, expected to fail due to tracker issue #63613
+      {"01/01/23 22:15:00", true}, // used-to-fail
+      {"01/01/24 00:00:00", true}, // used-to-fail
+      {"01/01/24 01:00:00", true}, // used-to-fail
+      {"01/01/24 02:00:00", true}, // used-to-fail
+      {"01/01/23 03:33:00", true}, // used-to-fail
+      {"01/01/23 03:33:59", true}, // used-to-fail
       {"01/01/23 03:34:00", false},
       {"01/01/23 04:00:00", false},
       {"01/01/23 12:00:00", false},
