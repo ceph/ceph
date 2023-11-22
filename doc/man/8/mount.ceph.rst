@@ -199,6 +199,50 @@ Advanced
     option is enabled, a namespace operation may complete before the MDS
     replies, if it has sufficient capabilities to do so.
 
+:command:`crush_location=x`
+    Specify the location of the client in terms of CRUSH hierarchy (since 5.8).
+    This is a set of key-value pairs separated from each other by '|', with
+    keys separated from values by ':'.  Note that '|' may need to be quoted
+    or escaped to avoid it being interpreted as a pipe by the shell. The key
+    is the bucket type name (e.g. rack, datacenter or region with default
+    bucket types) and the value is the bucket name. For example, to indicate
+    that the client is local to rack "myrack", data center "mydc" and region
+    "myregion"::
+
+      crush_location=rack:myrack|datacenter:mydc|region:myregion
+
+    Each key-value pair stands on its own: "myrack" doesn't need to reside in
+    "mydc", which in turn doesn't need to reside in "myregion".  The location
+    is not a path to the root of the hierarchy but rather a set of nodes that
+    are matched independently.  "Multipath" locations are supported, so it is
+    possible to indicate locality for multiple parallel hierarchies::
+
+      crush_location=rack:myrack1|rack:myrack2|datacenter:mydc
+
+
+:command:`read_from_replica=<no|balance|localize>`
+    - ``no``: Disable replica reads, always pick the primary OSD (since 5.8, default).
+
+    - ``balance``: When a replicated pool receives a read request, pick a random
+      OSD from the PG's acting set to serve it (since 5.8).
+
+      This mode is safe for general use only since Octopus (i.e. after "ceph osd
+      require-osd-release octopus"). Otherwise it should be limited to read-only
+      workloads such as snapshots.
+
+    - ``localize``: When a replicated pool receives a read request, pick the most
+      local OSD to serve it (since 5.8). The locality metric is calculated against
+      the location of the client given with crush_location; a match with the
+      lowest-valued bucket type wins.  For example, an OSD in a matching rack
+      is closer than an OSD in a matching data center, which in turn is closer
+      than an OSD in a matching region.
+
+      This mode is safe for general use only since Octopus (i.e. after "ceph osd
+      require-osd-release octopus").  Otherwise it should be limited to read-only
+      workloads such as snapshots.
+
+
+
 Examples
 ========
 
