@@ -195,7 +195,7 @@ public:
 			 bool* syncstopped = nullptr) override;
   virtual int read_stats_async(const DoutPrefixProvider *dpp,
 			       const bucket_index_layout_generation& idx_layout,
-			       int shard_id, RGWGetBucketStats_CB* ctx) override;
+			       int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
   virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
                               RGWBucketEnt* ent) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp,

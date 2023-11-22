@@ -247,16 +247,19 @@ void RGWQuotaCache<T>::adjust_stats(const rgw_user& user, rgw_bucket& bucket, in
 }
 
 class BucketAsyncRefreshHandler : public RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler,
-                                  public RGWGetBucketStats_CB {
+                                  public rgw::sal::ReadStatsCB {
   rgw_user user;
+  rgw_bucket bucket;
 public:
   BucketAsyncRefreshHandler(rgw::sal::Driver* _driver, RGWQuotaCache<rgw_bucket> *_cache,
-                            const rgw_user& _user, const rgw_bucket& _bucket) :
-                                      RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler(_driver, _cache),
-                                      RGWGetBucketStats_CB(_bucket), user(_user) {}
+                            const rgw_user& _user, const rgw_bucket& _bucket)
+    : RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler(_driver, _cache),
+      user(_user), bucket(_bucket) {}
 
-  void drop_reference() override { put(); }
-  void handle_response(int r) override;
+  void drop_reference() override {
+    intrusive_ptr_release(this);
+  }
+  void handle_response(int r, const RGWStorageStats& stats) override;
   int init_fetch() override;
 };
 
@@ -289,7 +292,7 @@ int BucketAsyncRefreshHandler::init_fetch()
   return 0;
 }
 
-void BucketAsyncRefreshHandler::handle_response(const int r)
+void BucketAsyncRefreshHandler::handle_response(const int r, const RGWStorageStats& stats)
 {
   if (r < 0) {
     ldout(driver->ctx(), 20) << "AsyncRefreshHandler::handle_response() r=" << r << dendl;
@@ -297,17 +300,7 @@ void BucketAsyncRefreshHandler::handle_response(const int r)
     return;
   }
 
-  RGWStorageStats bs;
-
-  for (const auto& pair : *stats) {
-    const RGWStorageStats& s = pair.second;
-
-    bs.size += s.size;
-    bs.size_rounded += s.size_rounded;
-    bs.num_objects += s.num_objects;
-  }
-
-  cache->async_refresh_response(user, bucket, bs);
+  cache->async_refresh_response(user, bucket, stats);
 }
 
 class RGWBucketStatsCache : public RGWQuotaCache<rgw_bucket> {
@@ -377,7 +370,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& _u, const rgw_
 }
 
 class UserAsyncRefreshHandler : public RGWQuotaCache<rgw_user>::AsyncRefreshHandler,
-                                public RGWGetUserStats_CB {
+                                public rgw::sal::ReadStatsCB {
   const DoutPrefixProvider *dpp;
   rgw_bucket bucket;
   rgw_user user;
@@ -389,7 +382,9 @@ class UserAsyncRefreshHandler : public RGWQuotaCache<rgw_user>::AsyncRefreshHand
         dpp(_dpp), bucket(_bucket), user(_user)
   {}
 
-  void drop_reference() override { put(); }
+  void drop_reference() override {
+    intrusive_ptr_release(this);
+  }
   int init_fetch() override;
   void handle_response(int r, const RGWStorageStats& stats) override;
 };

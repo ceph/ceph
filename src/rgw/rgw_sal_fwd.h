@@ -32,6 +32,9 @@ namespace rgw { namespace sal {
   class Zone;
   class LuaManager;
   struct RGWRoleInfo;
+  class DataProcessor;
+  class ObjectProcessor;
+  class ReadStatsCB;
 
   class ConfigStore;
   class RealmWriter;

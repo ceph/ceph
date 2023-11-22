@@ -508,7 +508,7 @@ int FilterUser::read_stats(const DoutPrefixProvider *dpp,
   return next->read_stats(dpp, y, stats, last_stats_sync, last_stats_update);
 }
 
-int FilterUser::read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB* cb)
+int FilterUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
 {
   return next->read_stats_async(dpp, cb);
 }
@@ -613,7 +613,7 @@ int FilterBucket::read_stats(const DoutPrefixProvider *dpp,
 
 int FilterBucket::read_stats_async(const DoutPrefixProvider *dpp,
 				   const bucket_index_layout_generation& idx_layout,
-				   int shard_id, RGWGetBucketStats_CB* ctx)
+				   int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx)
 {
   return next->read_stats_async(dpp, idx_layout, shard_id, ctx);
 }
