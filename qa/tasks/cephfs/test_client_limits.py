@@ -9,6 +9,7 @@ from textwrap import dedent
 from tasks.ceph_test_case import TestTimeoutError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase, needs_trimming
 from tasks.cephfs.fuse_mount import FuseMount
+from teuthology.exceptions import CommandFailedError
 import os
 from io import StringIO
 
@@ -239,6 +240,55 @@ class TestClientLimits(CephFSTestCase):
         # Client B should complete
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
         rproc.wait()
+
+    def test_client_blocklisted_oldest_tid(self):
+        """
+        that a client is blocklisted when its encoded session metadata exceeds the
+        configured threshold (due to ever growing `completed_requests` caused due
+        to an unidentified bug (in the client or the MDS)).
+        """
+
+        # num of requests client issues
+        max_requests = 10000
+
+        # The debug hook to inject the failure only exists in the fuse client
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client to inject client release failure")
+
+        self.config_set('client', 'client inject fixed oldest tid', 'true')
+        self.mount_a.teardown()
+        self.mount_a.mount_wait()
+
+        self.config_set('mds', 'mds_max_completed_requests', max_requests);
+
+        # Create lots of files
+        self.mount_a.create_n_files("testdir/file1", max_requests + 100)
+
+        # Create a few files synchronously. This makes sure previous requests are completed
+        self.mount_a.create_n_files("testdir/file2", 5, True)
+
+        # Wait for the health warnings. Assume mds can handle 10 request per second at least
+        self.wait_for_health("MDS_CLIENT_OLDEST_TID", max_requests // 10, check_in_detail=str(self.mount_a.client_id))
+
+        # set the threshold low so that it has a high probability of
+        # hitting.
+        self.config_set('mds', 'mds_session_metadata_threshold', 5000);
+
+        # Create lot many files synchronously. This would hit the session metadata threshold
+        # causing the client to get blocklisted.
+        with self.assertRaises(CommandFailedError):
+            self.mount_a.create_n_files("testdir/file2", 100000, True)
+
+        self.mds_cluster.is_addr_blocklisted(self.mount_a.get_global_addr())
+        # the mds should bump up the relevant perf counter
+        pd = self.perf_dump()
+        self.assertGreater(pd['mds_sessions']['mdthresh_evicted'], 0)
+
+        # reset the config
+        self.config_set('client', 'client inject fixed oldest tid', 'false')
+
+        self.mount_a.kill_cleanup()
+        self.mount_a.mount_wait()
 
     def test_client_oldest_tid(self):
         """
