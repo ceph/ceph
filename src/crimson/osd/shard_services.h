@@ -218,6 +218,7 @@ class OSDSingletonState : public md_config_obs_t {
   friend class OSD;
   using cached_map_t = OSDMapService::cached_map_t;
   using local_cached_map_t = OSDMapService::local_cached_map_t;
+  using read_errorator = crimson::os::FuturizedStore::Shard::read_errorator;
 
 public:
   OSDSingletonState(
@@ -236,6 +237,7 @@ private:
 
   SharedLRU<epoch_t, OSDMap> osdmaps;
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
+  SimpleLRU<epoch_t, bufferlist, false> inc_map_bl_cache;
 
   cached_map_t osdmap;
   cached_map_t &get_osdmap() { return osdmap; }
@@ -319,8 +321,11 @@ private:
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
   seastar::future<std::map<epoch_t, bufferlist>>
+  read_errorator::future<ceph::bufferlist> load_inc_map_bl(epoch_t e);
   load_map_bls(epoch_t first, epoch_t last);
   void store_map_bl(ceph::os::Transaction& t,
+                    epoch_t e, bufferlist&& bl);
+  void store_inc_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);

@@ -379,6 +379,14 @@ void OSDSingletonState::store_map_bl(
   map_bl_cache.insert(e, std::move(bl));
 }
 
+void OSDSingletonState::store_inc_map_bl(
+  ceph::os::Transaction& t,
+  epoch_t e, bufferlist&& bl)
+{
+  meta_coll->store_inc_map(t, e, bl);
+  inc_map_bl_cache.insert(e, std::move(bl));
+}
+
 seastar::future<bufferlist> OSDSingletonState::load_map_bl(
   epoch_t e)
 {
@@ -391,6 +399,21 @@ seastar::future<bufferlist> OSDSingletonState::load_map_bl(
       map_bl_cache.insert(e, bl);
       return seastar::make_ready_future<bufferlist>(std::move(bl));
     });
+  }
+}
+
+read_errorator::future<ceph::bufferlist> OSDSingletonState::load_inc_map_bl(
+  epoch_t e)
+{
+  if (std::optional<bufferlist> found = inc_map_bl_cache.find(e); found) {
+    logger().debug("{} inc map.{} found in cache", __func__, e);
+    return read_errorator::make_ready_future<bufferlist>(*found);
+  } else {
+    logger().debug("{} loading inc map.{} from disk", __func__, e);
+    return meta_coll->load_inc_map(e).safe_then([this, e](auto&& bl) {
+      inc_map_bl_cache.insert(e, bl);
+      return seastar::make_ready_future<bufferlist>(std::move(bl));
+    }, read_errorator::pass_further{});
   }
 }
 
