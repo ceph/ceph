@@ -5950,8 +5950,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     encode(m, osd_op.outdata); // re-encode since it might be modified
     ::encode_destructively(data_bl, osd_op.outdata);
 
-    dout(10) << " sparse_read got " << r << " bytes from object "
-	     << soid << dendl;
+    dout(10) << " sparse_read got " << m.size() << " extents and " << r
+             << " bytes from object " << soid << dendl;
   }
 
   ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
