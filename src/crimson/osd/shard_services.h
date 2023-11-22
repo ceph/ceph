@@ -270,6 +270,10 @@ private:
     superblock = std::move(_superblock);
   }
 
+  seastar::future<MURef<MOSDMap>> build_incremental_map_msg(
+    epoch_t first,
+    epoch_t last);
+
   seastar::future<> send_incremental_map(
     crimson::net::Connection &conn,
     epoch_t first);
@@ -320,8 +324,8 @@ private:
   seastar::future<local_cached_map_t> get_local_map(epoch_t e);
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);
   seastar::future<bufferlist> load_map_bl(epoch_t e);
-  seastar::future<std::map<epoch_t, bufferlist>>
   read_errorator::future<ceph::bufferlist> load_inc_map_bl(epoch_t e);
+  seastar::future<OSDMapService::bls_map_t>
   load_map_bls(epoch_t first, epoch_t last);
   void store_map_bl(ceph::os::Transaction& t,
                     epoch_t e, bufferlist&& bl);
@@ -510,6 +514,7 @@ public:
   FORWARD_TO_OSD_SINGLETON(get_pool_info)
   FORWARD(with_throttle_while, with_throttle_while, local_state.throttler)
 
+  FORWARD_TO_OSD_SINGLETON(build_incremental_map_msg)
   FORWARD_TO_OSD_SINGLETON(send_incremental_map)
   FORWARD_TO_OSD_SINGLETON(send_incremental_map_to_osd)
 
