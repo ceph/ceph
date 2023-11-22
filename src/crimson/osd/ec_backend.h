@@ -98,17 +98,11 @@ private:
   const bool fast_read;
   const bool allows_ecoverwrites;
 
-  using load_hashinfo_ertr = crimson::errorator<
-    crimson::ct_error::enoent,
-    crimson::ct_error::object_corrupted>;
-  using load_hashinfo_iertr =
-    ::crimson::interruptible::interruptible_errorator<
-      ::crimson::osd::IOInterruptCondition,
-      load_hashinfo_ertr>;
-  load_hashinfo_iertr::future<ECUtil::HashInfoRef> get_hash_info(
+  ECUtil::HashInfoRef get_hash_info(
     const hobject_t &hoid,
-    bool create = false,
-    const std::map<std::string, ceph::buffer::ptr, std::less<>> *attr = nullptr);
+    bool create,
+    const std::map<std::string, ceph::bufferlist, std::less<>> &attrs,
+    uint64_t size);
   SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
 
   ECCommon::ReadPipeline read_pipeline;
