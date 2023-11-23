@@ -129,8 +129,6 @@ public:
   FORWARD_TO_OSD_SINGLETON(init_meta_coll)
   FORWARD_TO_OSD_SINGLETON(get_meta_coll)
 
-  FORWARD_TO_OSD_SINGLETON(set_superblock)
-
   // Core OSDMap methods
   FORWARD_TO_OSD_SINGLETON(get_local_map)
   FORWARD_TO_OSD_SINGLETON(load_map_bl)
@@ -139,6 +137,8 @@ public:
   FORWARD_TO_OSD_SINGLETON(trim_maps)
 
   seastar::future<> set_up_epoch(epoch_t e);
+
+  seastar::future<> set_superblock(OSDSuperblock superblock);
 
   template <typename F>
   auto with_remote_shard_state(core_id_t core, F &&f) {

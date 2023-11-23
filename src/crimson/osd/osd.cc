@@ -403,7 +403,8 @@ seastar::future<> OSD::start()
     if (!superblock.cluster_osdmap_trim_lower_bound) {
       superblock.cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
     }
-    pg_shard_manager.set_superblock(superblock);
+    return pg_shard_manager.set_superblock(superblock);
+  }).then([this] {
     return pg_shard_manager.get_local_map(superblock.current_epoch);
   }).then([this](OSDMapService::local_cached_map_t&& map) {
     osdmap = make_local_shared_foreign(OSDMapService::local_cached_map_t(map));
@@ -989,11 +990,13 @@ seastar::future<> OSD::_handle_osd_map(Ref<MOSDMap> m)
         superblock.clean_thru = last;
       }
       pg_shard_manager.get_meta_coll().store_superblock(t, superblock);
-      pg_shard_manager.set_superblock(superblock);
-      logger().debug("OSD::handle_osd_map: do_transaction...");
-      return store.get_sharded_store().do_transaction(
-	pg_shard_manager.get_meta_coll().collection(),
-	std::move(t));
+      return pg_shard_manager.set_superblock(superblock).then(
+      [this, &t] {
+        logger().debug("OSD::handle_osd_map: do_transaction...");
+        return store.get_sharded_store().do_transaction(
+          pg_shard_manager.get_meta_coll().collection(),
+          std::move(t));
+      });
     });
   }).then([=, this] {
     // TODO: write to superblock and commit the transaction
