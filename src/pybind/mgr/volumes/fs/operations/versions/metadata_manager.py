@@ -112,7 +112,7 @@ class MetadataManager(object):
 
     def init(self, version, typ, path, state):
         # you may init just once before refresh (helps to overwrite conf)
-        if self.config.has_section(MetadataManager.GLOBAL_SECTION):
+        if self.has_section(MetadataManager.GLOBAL_SECTION):
             raise MetadataMgrException(-errno.EINVAL, "init called on an existing config")
 
         self.add_section(MetadataManager.GLOBAL_SECTION)
@@ -132,7 +132,7 @@ class MetadataManager(object):
             raise MetadataMgrException(-errno.EINVAL, "error adding section to config")
 
     def remove_option(self, section, key):
-        if not self.config.has_section(section):
+        if not self.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
         return self.config.remove_option(section, key)
 
@@ -140,32 +140,57 @@ class MetadataManager(object):
         self.config.remove_section(section)
 
     def update_section(self, section, key, value):
-        if not self.config.has_section(section):
+        if not self.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
-        self.config.set(section, key, str(value))
+        self.set_option(section, key, value)
 
     def update_section_multi(self, section, dct):
-        if not self.config.has_section(section):
+        if not self.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
         for key,value in dct.items():
-            self.config.set(section, key, str(value))
+            self.set_option(section, key, value)
 
     def update_global_section(self, key, value):
         self.update_section(MetadataManager.GLOBAL_SECTION, key, str(value))
 
-    def get_option(self, section, key):
-        if not self.config.has_section(section):
-            raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
+    def has_section(self, section):
+        return True if self.config.has_section(section) else False
+
+    def has_option(self, section, key, raise_ex=True):
+        if not self.has_section(section):
+            if raise_ex:
+                raise MetadataMgrException(
+                    -errno.ENOENT, f'section "{section}" does not exist')
+            else:
+                return False
         if not self.config.has_option(section, key):
-            raise MetadataMgrException(-errno.ENOENT, "no config '{0}' in section '{1}'".format(key, section))
-        return self.config.get(section, key)
+            if raise_ex:
+                raise MetadataMgrException(
+                    -errno.ENOENT, f'no "{key}" in section "{section}"')
+            else:
+                return False
+        return True
+
+    def get_option(self, section, key):
+        if self.has_option(section, key, raise_ex=True):
+            return self.config.get(section, key)
 
     def get_global_option(self, key):
         return self.get_option(MetadataManager.GLOBAL_SECTION, key)
 
+    def set_option(self, section, key, value):
+        if not isinstance(value, str):
+            value = str(value)
+        self.config.set(section, key, value)
+
+    def set_global_option(self, key, value):
+        if not isinstance(value, str):
+            value = str(value)
+        self.config.set(MetadataManager.GLOBAL_SECTION, key, value)
+
     def list_all_options_from_section(self, section):
         metadata_dict = {}
-        if self.config.has_section(section):
+        if self.has_section(section):
             options = self.config.options(section)
             for option in options:
                 metadata_dict[option] = self.config.get(section,option)
@@ -173,7 +198,7 @@ class MetadataManager(object):
 
     def list_all_keys_with_specified_values_from_section(self, section, value):
         keys = []
-        if self.config.has_section(section):
+        if self.has_section(section):
             options = self.config.options(section)
             for option in options:
                 if (value == self.config.get(section, option)) :
@@ -181,7 +206,7 @@ class MetadataManager(object):
         return keys
 
     def section_has_item(self, section, item):
-        if not self.config.has_section(section):
+        if not self.has_section(section):
             raise MetadataMgrException(-errno.ENOENT, "section '{0}' does not exist".format(section))
         return item in [v[1] for v in self.config.items(section)]
 
