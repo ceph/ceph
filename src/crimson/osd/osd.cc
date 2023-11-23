@@ -868,6 +868,25 @@ void OSD::handle_authentication(const EntityName& name,
   }
 }
 
+const char** OSD::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "osd_beacon_report_interval",
+    nullptr
+  };
+  return KEYS;
+}
+
+void OSD::handle_conf_change(
+  const crimson::common::ConfigProxy& conf,
+  const std::set <std::string> &changed)
+{
+  if (changed.count("osd_beacon_report_interval")) {
+    beacon_timer.rearm_periodic(
+      std::chrono::seconds(conf->osd_beacon_report_interval));
+  }
+}
+
 void OSD::update_stats()
 {
   osd_stat_seq++;

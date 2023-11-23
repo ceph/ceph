@@ -61,7 +61,8 @@ class PG;
 
 class OSD final : public crimson::net::Dispatcher,
 		  private crimson::common::AuthHandler,
-		  private crimson::mgr::WithStats {
+		  private crimson::mgr::WithStats,
+		  public md_config_obs_t {
   const int whoami;
   const uint32_t nonce;
   seastar::abort_source& abort_source;
@@ -125,6 +126,10 @@ class OSD final : public crimson::net::Dispatcher,
 
   std::unique_ptr<Heartbeat> heartbeat;
   seastar::timer<seastar::lowres_clock> tick_timer;
+
+  const char** get_tracked_conf_keys() const final;
+  void handle_conf_change(const ConfigProxy& conf,
+                          const std::set<std::string> &changed) final;
 
   // admin-socket
   seastar::lw_shared_ptr<crimson::admin::AdminSocket> asok;
