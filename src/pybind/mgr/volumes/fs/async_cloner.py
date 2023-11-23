@@ -193,7 +193,7 @@ def bulk_copy(fs_handle, src_path, dst_path, dst_sv_name, thread,
                             sync_attrs(fs_handle, d_full_dst, stx)
 
                     stats.log_handled_amount()
-                    thread.report_ongoing_job(dst_sv_name, stats)
+                    thread.report_ongoing_job(dst_sv_name, stats, clone_id)
                     d = fs_handle.readdir(dir_handle)
 
                 stx_root = fs_handle.statx(src_root_path, cephfs.CEPH_STATX_ATIME |
@@ -206,12 +206,12 @@ def bulk_copy(fs_handle, src_path, dst_path, dst_sv_name, thread,
                 raise VolumeException(-e.args[0], e.args[1])
 
     stats = Stats(src_path, 'copy', fs_handle, should_cancel)
-    thread.report_ongoing_job(dst_sv_name, stats)
+    clone_id = thread.report_ongoing_job(dst_sv_name, stats)
     cptree(src_path, dst_path)
-    thread.finish_job_reporting(dst_sv_name)
+    thread.finish_job_reporting(dst_sv_name, clone_id)
 
     if should_cancel():
-        thread.abort_job_reporting(dst_sv_name)
+        thread.abort_job_reporting(dst_sv_name, clone_id)
         raise VolumeException(-errno.EINTR, "user interrupted clone operation")
 
 def set_quota_on_clone(fs_handle, clone_volumes_pair):

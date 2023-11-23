@@ -3,6 +3,7 @@ import time
 import logging
 import threading
 import traceback
+from uuid import uuid4
 from collections import deque
 from mgr_util import lock_timeout_log, CephfsClient
 
@@ -125,6 +126,9 @@ class AsyncJobs(threading.Thread):
         # this will store subvol we are operating as key and misc_util.Stats
         # instance as value.
         self.job_stats = {}
+        # RemoteEvent ID ongoing clone jobs.
+        # mgr.progress.module.RemoteEvent is what prints the progress bar.
+        self.clone_ongoing_ev_id = None
         # lock, cv for kickstarting jobs
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
@@ -170,18 +174,43 @@ class AsyncJobs(threading.Thread):
 
         self.job_stats[subvolname] = 'pending'
 
-    def report_ongoing_job(self, subvolname, stats):
+    def report_ongoing_job(self, subvolname, stats, pev_id=None):
         assert stats is not None
         self.job_stats[subvolname] = stats
 
-    def finish_job_reporting(self, subvolname):
+        if pev_id is None:
+            pev_id = str(uuid4())
+
+        progress_percent = round(stats.percent, 3)
+        self.vc.mgr.remote(
+            'progress', 'update', ev_id=pev_id,
+            ev_msg=(f'Subvolume "{subvolname}" has been {progress_percent}% '
+                     'cloned'),
+            ev_progress=stats.progress_fraction,
+            refs=['mds', 'clone'],
+            add_to_ceph_s=True)
+
+        return pev_id
+
+    def finish_job_reporting(self, subvolname, pev_id):
+        if self.job_stats[subvolname].progress_fraction < 1.0:
+            log.critical('A job is being marked as finished but it is not'
+                         'complete. Progress should be 1.0 but it is only '
+                         f'{self.job_stats[subvolname].progress_fraction}.')
+
         self.job_stats.pop(subvolname)
 
-    def abort_job_reporting(self, subvolname):
-        log.critical('A job is being aborted. Progress made so far is '
-                     f'{self.job_stats[subvolname].progress_fraction}.')
+        self.vc.mgr.remote('progress', 'complete', pev_id)
+
+    def abort_job_reporting(self, subvolname, pev_id):
+        if self.job_stats[subvolname] != 'pending':
+            log.critical('A job is being aborted. Progress made so far is '
+                         f'{self.job_stats[subvolname].progress_fraction}.')
 
         self.job_stats.pop(subvolname)
+
+        msg = f'Cloning failed for {subvolname}'
+        self.vc.mgr.remote('progress', 'fail', pev_id, msg)
 
     def run(self):
         log.debug("tick thread {} starting".format(self.name))
