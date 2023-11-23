@@ -627,8 +627,8 @@ void _dump_extent_map(CephContext *cct, const BlueStore::ExtentMap &em)
     std::lock_guard l(e.blob->shared_blob->get_cache()->lock);
     for (auto& i : e.blob->get_bc().buffer_map) {
       dout(LogLevelV) << __func__ << "       0x" << std::hex << i.first
-		      << "~" << i.second->length << std::dec
-		      << " " << *i.second << dendl;
+		      << "~" << i.second.length << std::dec
+		      << " " << i.second << dendl;
     }
   }
 }
@@ -1714,7 +1714,7 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
   auto i = _data_lower_bound(offset);
   uint32_t end = offset + length;
   while (i != buffer_map.end()) {
-    Buffer *b = i->second.get();
+    Buffer *b = &i->second;
     if (b->offset >= end) {
       break;
     }
@@ -1729,13 +1729,9 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
 	if (b->data.length()) {
 	  bufferlist bl;
 	  bl.substr_of(b->data, b->length - tail, tail);
-	  Buffer *nb = new Buffer(this, b->state, b->seq, end, bl, b->flags);
-	  nb->maybe_rebuild();
-	  _add_buffer(cache, nb, 0, b);
+	  _add_buffer(cache, this, Buffer(this, b->state, b->seq, end, bl, b->flags), 0, 0, b);
 	} else {
-	  _add_buffer(cache, new Buffer(this, b->state, b->seq, end, tail,
-                                        b->flags),
-	              0, b);
+	  _add_buffer(cache, this, Buffer(this, b->state, b->seq, end, tail, b->flags), 0, 0, b);
 	}
 	if (!b->is_writing()) {
 	  cache->_adjust_size(b, front - (int64_t)b->length);
@@ -1765,13 +1761,11 @@ int BlueStore::BufferSpace::_discard(BufferCacheShard* cache, uint32_t offset, u
     if (b->data.length()) {
       bufferlist bl;
       bl.substr_of(b->data, b->length - keep, keep);
-      Buffer *nb = new Buffer(this, b->state, b->seq, end, bl, b->flags);
-      nb->maybe_rebuild();
-      _add_buffer(cache, nb, 0, b);
+      _add_buffer(cache, this,
+                  Buffer(this, b->state, b->seq, end, bl, b->flags), 0, 0, b);
     } else {
-      _add_buffer(cache, new Buffer(this, b->state, b->seq, end, keep,
-                                    b->flags),
-                  0, b);
+      _add_buffer(cache, this,
+                  Buffer(this, b->state, b->seq, end, keep, b->flags), 0, 0, b);
     }
     _rm_buffer(cache, i);
     cache->_audit("discard end 2");
@@ -1796,9 +1790,8 @@ void BlueStore::BufferSpace::read(
   {
     std::lock_guard l(cache->lock);
     for (auto i = _data_lower_bound(offset);
-         i != buffer_map.end() && offset < end && i->first < end;
-         ++i) {
-      Buffer *b = i->second.get();
+         i != buffer_map.end() && offset < end && i->first < end; ++i) {
+      Buffer *b = &i->second;
       ceph_assert(b->end() > offset);
 
       bool val = false;
@@ -1898,9 +1891,10 @@ bool BlueStore::BufferSpace::_dup_writing(BufferCacheShard* cache, BufferSpace* 
     copied = true;
     for (auto it = writing.begin(); it != writing.end(); ++it) {
       Buffer& b = *it;
-      Buffer* to_b = new Buffer(to, b.state, b.seq, b.offset, b.data, b.flags);
-      ceph_assert(to_b->is_writing());
-      to->_add_buffer(cache, to_b, 0, nullptr);
+      ceph_assert(b.is_writing());
+      to->_add_buffer(cache, to,
+                      Buffer(to, b.state, b.seq, b.offset, b.data, b.flags), 0,
+                      0, nullptr);
     }
   }
   return copied;
@@ -1914,39 +1908,42 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
 
   auto p = --buffer_map.end();
   while (true) {
-    if (p->second->end() <= pos)
-      break;
+    if (p->second.end() <= pos) break;
 
-    if (p->second->offset < pos) {
-      ldout(cache->cct, 30) << __func__ << " cut " << *p->second << dendl;
-      size_t left = pos - p->second->offset;
-      size_t right = p->second->length - left;
-      if (p->second->data.length()) {
-	bufferlist bl;
-	bl.substr_of(p->second->data, left, right);
-	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
-                                        0, bl, p->second->flags),
-		      0, p->second.get());
+    if (p->second.offset < pos) {
+      ldout(cache->cct, 30) << __func__ << " cut " << p->second << dendl;
+      size_t left = pos - p->second.offset;
+      size_t right = p->second.length - left;
+      if (p->second.data.length()) {
+        bufferlist bl;
+        bl.substr_of(p->second.data, left, right);
+        r._add_buffer(
+            cache, &r,
+            Buffer(&r, p->second.state, p->second.seq, 0, bl, p->second.flags),
+            0, 0, &p->second);
       } else {
-	r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
-                                        0, right, p->second->flags),
-		      0, p->second.get());
+        r._add_buffer(cache, &r, Buffer(&r, p->second.state, p->second.seq, 0, right,
+                      p->second.flags), 0, 0, &p->second);
       }
-      cache->_adjust_size(p->second.get(), -right);
-      p->second->truncate(left);
+      cache->_adjust_size(&p->second, -right);
+      p->second.truncate(left);
       break;
     }
 
-    ceph_assert(p->second->end() > pos);
-    ldout(cache->cct, 30) << __func__ << " move " << *p->second << dendl;
-    if (p->second->data.length()) {
-      r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
-                               p->second->offset - pos, p->second->data, p->second->flags),
-                    0, p->second.get());
+    ceph_assert(p->second.end() > pos);
+    ldout(cache->cct, 30) << __func__ << " move " << p->second << dendl;
+    if (p->second.data.length()) {
+      r._add_buffer(cache, &r,
+                    Buffer(&r, p->second.state, p->second.seq,
+                                     p->second.offset - pos, p->second.data,
+                                     p->second.flags),
+                    0, 0, &p->second);
     } else {
-      r._add_buffer(cache, new Buffer(&r, p->second->state, p->second->seq,
-                               p->second->offset - pos, p->second->length, p->second->flags),
-                    0, p->second.get());
+      r._add_buffer(cache, &r,
+                    Buffer(&r, p->second.state, p->second.seq,
+                                     p->second.offset - pos, p->second.length,
+                                     p->second.flags),
+                    0, 0, &p->second);
     }
     if (p == buffer_map.begin()) {
       _rm_buffer(cache, p);
@@ -1964,7 +1961,7 @@ void BlueStore::BufferSpace::split(BufferCacheShard* cache, size_t pos, BlueStor
 std::ostream& operator<<(std::ostream& out, const BlueStore::BufferSpace& bc)
 {
   for (auto& [i, j] : bc.buffer_map) {
-    out << " [0x" << std::hex << i << "]=" << *j << std::dec;
+    out << " [0x" << std::hex << i << "]=" << j << std::dec;
   }
   if (!bc.writing.empty()) {
     out << " writing:";
@@ -2908,9 +2905,9 @@ uint32_t BlueStore::Blob::merge_blob(CephContext* cct, Blob* blob_to_dissolve)
   // move BufferSpace buffers
   while(!src->bc.buffer_map.empty()) {
     auto buf = src->bc.buffer_map.extract(src->bc.buffer_map.cbegin());
-    buf.mapped()->space = &dst->bc;
+    buf.mapped().space = &dst->bc;
     if (dst->bc.buffer_map.count(buf.key()) == 0) {
-      dst->bc.buffer_map[buf.key()] = std::move(buf.mapped());
+      dst->bc.buffer_map.insert({buf.key(), std::move(buf.mapped())});
     }
   }
   // move BufferSpace writing
@@ -5202,12 +5199,12 @@ void BlueStore::Collection::split_cache(
 
       auto rehome_blob = [&](Blob* b) {
 	for (auto& i : b->bc.buffer_map) {
-	  if (!i.second->is_writing()) {
-	    ldout(store->cct, 1) << __func__ << "   moving " << *i.second
+	  if (!i.second.is_writing()) {
+	    ldout(store->cct, 1) << __func__ << "   moving " << i.second
 				 << dendl;
-	    dest->cache->_move(cache, i.second.get());
+	    dest->cache->_move(cache, &i.second);
 	  } else {
-	    ldout(store->cct, 1) << __func__ << "   not moving " << *i.second
+	    ldout(store->cct, 1) << __func__ << "   not moving " << i.second
 				 << dendl;
 	  }
 	}
@@ -5236,13 +5233,13 @@ void BlueStore::Collection::split_cache(
 	b.second->last_encoded_id = -1;
       }
       for (auto& e : o->extent_map.extent_map) {
-	cache->rm_extent();
-	dest->cache->add_extent();
+        cache->rm_extent();
+        dest->cache->add_extent();
 	Blob* tb = e.blob.get();
-	if (tb->last_encoded_id == -1) {
-	  rehome_blob(tb);
-	  tb->last_encoded_id = 0;
-	}
+        if (tb->last_encoded_id == -1) {
+          rehome_blob(tb);
+          tb->last_encoded_id = 0;
+        }
       }
       for (auto& b : o->extent_map.spanning_blob_map) {
 	Blob* tb = b.second.get();

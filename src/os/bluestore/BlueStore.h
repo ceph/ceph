@@ -17,6 +17,7 @@
 
 #include "acconfig.h"
 
+#include <tuple>
 #include <unistd.h>
 
 #include <atomic>
@@ -32,6 +33,7 @@
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 #include <boost/circular_buffer.hpp>
+#include <utility>
 
 #include "include/cpp-btree/btree_set.h"
 
@@ -366,7 +368,7 @@ public:
 	boost::intrusive::list_member_hook<>,
 	&Buffer::state_item> > state_list_t;
 
-    mempool::bluestore_cache_meta::map<uint32_t, std::unique_ptr<Buffer>>
+    mempool::bluestore_cache_meta::map<uint32_t, Buffer>
       buffer_map;
 
     // we use a bare intrusive list here instead of std::map because
@@ -379,56 +381,63 @@ public:
       ceph_assert(writing.empty());
     }
 
-    void _add_buffer(BufferCacheShard* cache, Buffer* b, int level, Buffer* near) {
+    void _add_buffer(BufferCacheShard *cache, BufferSpace *space, Buffer&& buffer,
+                     uint16_t cache_private, int level, Buffer *near) {
+      auto it = buffer_map.emplace(buffer.offset, std::move(buffer));
+      Buffer *cached_buffer = &it.first->second;
+      cached_buffer->cache_private = cache_private;
+      _add_buffer(cache, space, cached_buffer, level, near);
+    }
+
+    void _add_buffer(BufferCacheShard *cache, BufferSpace *space,
+                     Buffer *buffer, int level, Buffer *near) {
       cache->_audit("_add_buffer start");
-      buffer_map[b->offset].reset(b);
-      if (b->is_writing()) {
+      if (buffer->is_writing()) {
         // we might get already cached data for which resetting mempool is inppropriate
         // hence calling try_assign_to_mempool
-        b->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
-        if (writing.empty() || writing.rbegin()->seq <= b->seq) {
-          writing.push_back(*b);
+        buffer->data.try_assign_to_mempool(mempool::mempool_bluestore_writing);
+        if (writing.empty() || writing.rbegin()->seq <= buffer->seq) {
+          writing.push_back(*buffer);
         } else {
           auto it = writing.begin();
-          while (it->seq < b->seq) {
+          while (it->seq < buffer->seq) {
             ++it;
           }
 
-          ceph_assert(it->seq >= b->seq);
+          ceph_assert(it->seq >= buffer->seq);
           // note that this will insert b before it
           // hence the order is maintained
-          writing.insert(it, *b);
+          writing.insert(it, *buffer);
         }
       } else {
-        b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-        cache->_add(b, level, near);
+        buffer->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
+        cache->_add(buffer, level, near);
       }
       cache->_audit("_add_buffer end");
     }
     void _rm_buffer(BufferCacheShard* cache, Buffer *b) {
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
-    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator
+    std::map<uint32_t, Buffer>::iterator
     _rm_buffer(BufferCacheShard* cache,
-		    std::map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
+		    std::map<uint32_t, Buffer>::iterator p) {
       ceph_assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
-      if (p->second->is_writing()) {
-        writing.erase(writing.iterator_to(*p->second));
+      if (p->second.is_writing()) {
+        writing.erase(writing.iterator_to(p->second));
       } else {
-	cache->_rm(p->second.get());
+	cache->_rm(&p->second);
       }
       p = buffer_map.erase(p);
       cache->_audit("_rm_buffer end");
       return p;
     }
 
-    std::map<uint32_t,std::unique_ptr<Buffer>>::iterator _data_lower_bound(
-      uint32_t offset) {
+    std::map<uint32_t, Buffer>::iterator _data_lower_bound(uint32_t offset) {
       auto i = buffer_map.lower_bound(offset);
       if (i != buffer_map.begin()) {
 	--i;
-	if (i->first + i->second->length <= offset)
+	if (i->first + i->second.length <= offset)
 	  ++i;
       }
       return i;
@@ -449,18 +458,25 @@ public:
     void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
-      Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
+      Buffer b(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags);
-      b->cache_private = _discard(cache, offset, bl.length());
-      _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      uint16_t cache_private = _discard(cache, offset, bl.length());
+      _add_buffer(cache, this,
+                  Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
+                                   flags),
+                  cache_private, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1,
+                  nullptr);
       cache->_trim();
     }
     void _finish_write(BufferCacheShard* cache, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
-      Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
-      b->cache_private = _discard(cache, offset, bl.length());
-      _add_buffer(cache, b, 1, nullptr);
+      Buffer b(this, Buffer::STATE_CLEAN, 0, offset, bl);
+      uint16_t cache_private = _discard(cache, offset, bl.length());
+      _add_buffer(
+          cache, this,
+          Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl, 0),
+          cache_private, 1, nullptr);
       cache->_trim();
     }
 
@@ -481,8 +497,8 @@ public:
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
 	f->open_object_section("buffer");
-	ceph_assert(i.first == i.second->offset);
-	i.second->dump(f);
+	ceph_assert(i.first == i.second.offset);
+	i.second.dump(f);
 	f->close_section();
       }
       f->close_section();
