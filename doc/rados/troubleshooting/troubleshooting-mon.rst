@@ -673,7 +673,7 @@ Do I need to restart a monitor to adjust debug levels?
 No, restarting a monitor is not necessary. Debug levels may be adjusted by
 using two different methods, depending on whether or not there is a quorum:
 
-There is a quorum
+**If there is a quorum**
 
   Either inject the debug option into the specific monitor that needs to 
   be debugged::
@@ -685,7 +685,7 @@ There is a quorum
         ceph tell mon.* config set debug_mon 10/10
 
 
-There is no quorum
+**If there is no quorum**
 
   Use the admin socket of the specific monitor that needs to be debugged
   and directly adjust the monitor's configuration options::
