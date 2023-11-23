@@ -91,6 +91,9 @@ function(build_rocksdb)
     INSTALL_COMMAND ""
     LIST_SEPARATOR !)
 
+  # make sure all the link libraries are built first
+  add_dependencies(rocksdb_ext ${rocksdb_INTERFACE_LINK_LIBRARIES})
+
   add_library(RocksDB::RocksDB STATIC IMPORTED)
   add_dependencies(RocksDB::RocksDB rocksdb_ext)
   set(rocksdb_INCLUDE_DIR "${rocksdb_SOURCE_DIR}/include")
