@@ -104,7 +104,7 @@ An example of a role permission policy that uses aws:PrincipalTag is as follows:
 	    {
 	        "Effect":"Allow",
 	        "Action":["s3:*"],
-            "Resource":["arn:aws:s3::t1tenant:my-test-bucket","arn:aws:s3::t1tenant:my-test-bucket/*],"+
+            "Resource":["arn:aws:s3::t1tenant:my-test-bucket","arn:aws:s3::t1tenant:my-test-bucket/*"],
 	        "Condition":{"StringEquals":{"aws:PrincipalTag/Department":"Engineering"}}
 	    }]
 	}
