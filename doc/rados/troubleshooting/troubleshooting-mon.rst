@@ -481,12 +481,13 @@ Clock Skew Questions and Answers
 Client Can't Connect or Mount
 -----------------------------
 
-Check your IP tables. Some operating-system install utilities add a ``REJECT``
-rule to ``iptables``. ``iptables`` rules will reject all clients other than
-``ssh`` that try to connect to the host. If your monitor host's IP tables have
-a ``REJECT`` rule in place, clients that are connecting from a separate node
-will fail and will raise a timeout error. Any ``iptables`` rules that reject
-clients trying to connect to Ceph daemons must be addressed. For example::
+If a client can't connect to the cluster or mount, check your iptables. Some
+operating-system install utilities add a ``REJECT`` rule to ``iptables``.
+``iptables`` rules will reject all clients other than ``ssh`` that try to
+connect to the host. If your monitor host's iptables have a ``REJECT`` rule in
+place, clients that connect from a separate node will fail, and this will raise
+a timeout error. Look for ``iptables`` rules that reject clients that are
+trying to connect to Ceph daemons. For example::
 
     REJECT all -- anywhere anywhere reject-with icmp-host-prohibited
 
