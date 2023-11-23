@@ -90,22 +90,13 @@ public:
 
       auto set_fn = PyObject_GetAttrString(python_completion, "complete");
       ceph_assert(set_fn != nullptr);
-
-      auto pyR = PyLong_FromLong(r);
-      auto pyOutBl = PyUnicode_FromString(outbl.to_str().c_str());
-      auto pyOutS = PyUnicode_FromString(outs.c_str());
-      auto args = PyTuple_Pack(3, pyR, pyOutBl, pyOutS);
-      Py_DECREF(pyR);
-      Py_DECREF(pyOutBl);
-      Py_DECREF(pyOutS);
-
-      auto rtn = PyObject_CallObject(set_fn, args);
-      if (rtn != nullptr) {
-	Py_DECREF(rtn);
+      auto rtn = PyObject_CallFunction(set_fn, "(iss)", r, outbl.to_str().c_str(), outs.c_str());
+      if (rtn == nullptr) {
+        PyErr_Print();
+      } else {
+        Py_DECREF(rtn);
       }
-      Py_DECREF(args);
       Py_DECREF(set_fn);
-
       Py_DECREF(python_completion);
       python_completion = nullptr;
     }
