@@ -1762,11 +1762,6 @@ void BlueStore::BufferSpace::read(
         break;
       }
 
-      // If no overlap is found between what we want to read and what we have cached, then forget about continuing
-      if (std::max(b->end(), offset+length) - std::min(b->offset, offset) > length + b->length) {
-        break;
-      }
-
       bool val = false;
       if (flags & BYPASS_CLEAN_CACHE)
         val = b->is_writing();
@@ -15499,8 +15494,6 @@ void BlueStore::_do_write_small(
           dout(20) << __func__ << "  write to unused 0x" << std::hex << b_off
                    << "~" << b_len << " pad 0x" << head_pad << " + 0x"
                    << tail_pad << std::dec << " of mutable " << *b << dendl;
-          _buffer_cache_write(txc, b, o, offset - head_pad, bl,
-                              wctx->buffered ? 0 : Buffer::FLAG_NOCACHE);
 
           if (!g_conf()->bluestore_debug_omit_block_device_write) {
           if (b_len < prefer_deferred_size) {
