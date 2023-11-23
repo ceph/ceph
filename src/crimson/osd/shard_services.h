@@ -181,12 +181,16 @@ class PerShardState {
   HeartbeatStampsRef get_hb_stamps(int peer);
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
+  seastar::future<> update_shard_superblock(OSDSuperblock superblock);
+
   // Time state
   const ceph::mono_time startup_time;
   ceph::signedspan get_mnow() const {
     assert_core();
     return ceph::mono_clock::now() - startup_time;
   }
+
+  OSDSuperblock per_shard_superblock;
 
 public:
   PerShardState(
@@ -256,7 +260,7 @@ private:
   }
 
   OSDSuperblock superblock;
-  void set_superblock(OSDSuperblock _superblock) {
+  void set_singleton_superblock(OSDSuperblock _superblock) {
     superblock = std::move(_superblock);
   }
 
@@ -509,6 +513,7 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_pg_temp)
   FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
+  FORWARD_TO_LOCAL(update_shard_superblock)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
 

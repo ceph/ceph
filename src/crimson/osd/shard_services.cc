@@ -119,6 +119,13 @@ HeartbeatStampsRef PerShardState::get_hb_stamps(int peer)
   return stamps->second;
 }
 
+seastar::future<> PerShardState::update_shard_superblock(OSDSuperblock superblock)
+{
+  assert_core();
+  per_shard_superblock = std::move(superblock);
+  return seastar::now();
+}
+
 OSDSingletonState::OSDSingletonState(
   int whoami,
   crimson::net::Messenger &cluster_msgr,
