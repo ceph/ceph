@@ -1,19 +1,14 @@
-
-set(compressor_srcs
-  Compressor.cc)
-if (HAVE_QATZIP)
-  list(APPEND compressor_srcs QatAccel.cc)
-endif()
-add_library(compressor_objs OBJECT ${compressor_srcs})
+add_library(compressor_objs OBJECT Compressor.cc)
 add_dependencies(compressor_objs common-objs)
-if(HAVE_QATZIP AND HAVE_QATDRV)
-  target_link_libraries(compressor_objs PRIVATE
-                        QatDrv::qat_s
-                        QatDrv::usdm_drv_s
-                        qatzip::qatzip
-                       )
-endif()
 add_dependencies(compressor_objs legacy-option-headers)
+
+if(HAVE_QATZIP AND HAVE_QATDRV)
+  add_library(qat_compressor OBJECT QatAccel.cc)
+  target_link_libraries(qat_compressor PUBLIC
+    QatDrv::qat_s
+    QatDrv::usdm_drv_s
+    qatzip::qatzip)
+endif()
 
 ## compressor plugins
 
@@ -31,8 +26,8 @@ if(HAVE_BROTLI)
   add_subdirectory(brotli)
 endif()
 
-add_library(compressor STATIC $<TARGET_OBJECTS:compressor_objs>)
-target_link_libraries(compressor PRIVATE compressor_objs)
+add_library(compressor STATIC)
+target_link_libraries(compressor PUBLIC compressor_objs)
 
 set(ceph_compressor_libs
     ceph_snappy
