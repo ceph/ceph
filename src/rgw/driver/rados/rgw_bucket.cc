@@ -2874,6 +2874,14 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
     /* existing bucket, keep its placement */
     bci.info.bucket.explicit_placement = old_bci->info.bucket.explicit_placement;
     bci.info.placement_rule = old_bci->info.placement_rule;
+
+    //if the bucket is being deleted, create and store a special log type for
+    //bucket instance cleanup in multisite setup
+    const auto& log = bci.info.layout.logs.back();
+    if (bci.info.bucket_deleted() && log.layout.type != rgw::BucketLogType::Deleted) {
+      bci.info.layout.logs.push_back({0, {rgw::BucketLogType::Deleted}});
+      ldpp_dout(dpp, 10) << "store log layout type: " <<  bci.info.layout.logs.back().layout.type << dendl;
+    }
   }
 
   //always keep bucket versioning enabled on archive zone
@@ -2884,7 +2892,7 @@ int RGWBucketInstanceMetadataHandler::put_prepare(
   /* record the read version (if any), store the new version */
   bci.info.objv_tracker.read_version = objv_tracker.read_version;
   bci.info.objv_tracker.write_version = objv_tracker.write_version;
-
+  
   return 0;
 }
 
