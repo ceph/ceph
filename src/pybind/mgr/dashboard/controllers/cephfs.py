@@ -335,13 +335,16 @@ class CephFS(RESTController):
 
         standby_table = self.get_standby_table(fsmap['standbys'], mds_versions)
 
+        flags = mdsmap['flags_state']
+
         return {
             "cephfs": {
                 "id": fs_id,
                 "name": mdsmap['fs_name'],
                 "client_count": client_count,
                 "ranks": rank_table,
-                "pools": pools_table
+                "pools": pools_table,
+                "flags": flags,
             },
             "standbys": standby_table,
             "versions": mds_versions
