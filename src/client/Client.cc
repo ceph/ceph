@@ -15946,8 +15946,10 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
 {
     ceph_assert(onfinish != nullptr);
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-    if (!mref_reader.is_state_satisfied())
-      return -CEPHFS_ENOTCONN;
+    if (!mref_reader.is_state_satisfied()) {
+      onfinish->complete(-CEPHFS_ENOTCONN);
+      return 0;
+    }
 
     std::scoped_lock cl(client_lock);
     return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
