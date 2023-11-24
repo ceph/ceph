@@ -33,7 +33,7 @@ from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
 from .services.rgw_client import configure_rgw_credentials
 from .services.sso import SSO_COMMANDS, handle_sso_command
-from .settings import Settings, handle_option_command, options_command_list, options_schema_list
+from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
     prepare_url_prefix, str_to_bool
 
@@ -178,15 +178,9 @@ class CherryPyConfig(object):
             context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
             context.load_cert_chain(cert_fname, pkey_fname)
             if sys.version_info >= (3, 7):
-                if Settings.UNSAFE_TLS_v1_2:
-                    context.minimum_version = ssl.TLSVersion.TLSv1_2
-                else:
-                    context.minimum_version = ssl.TLSVersion.TLSv1_3
+                context.minimum_version = ssl.TLSVersion.TLSv1_3
             else:
-                if Settings.UNSAFE_TLS_v1_2:
-                    context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1
-                else:
-                    context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2
+                context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2
 
             config['server.ssl_module'] = 'builtin'
             config['server.ssl_certificate'] = cert_fname
