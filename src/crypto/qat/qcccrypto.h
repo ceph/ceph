@@ -16,8 +16,9 @@
 #include <vector>
 #include <functional>
 #include <span>
-#include "boost/circular_buffer.hpp"
-#include "boost/asio/thread_pool.hpp"
+#include <boost/circular_buffer.hpp>
+#include <boost/asio/thread_pool.hpp>
+#include <boost/asio/use_future.hpp>
 extern "C" {
 #include "cpa.h"
 #include "cpa_cy_sym_dp.h"
