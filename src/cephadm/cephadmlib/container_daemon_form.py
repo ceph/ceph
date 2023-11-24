@@ -120,6 +120,9 @@ class ContainerDaemonForm(DaemonForm):
         """
         return ''
 
+    def prepare_data_dir(self, data_dir: str, uid: int, gid: int) -> None:
+        pass
+
 
 def daemon_to_container(
     ctx: CephadmContext,
