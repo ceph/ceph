@@ -26,7 +26,7 @@ po::options_description make_usage() {
     ("min-chunk-size", po::value<int>(), ": min chunk size (byte)")
     ("max-chunk-size", po::value<int>(), ": max chunk size (byte)")
     ("dedup-cdc-chunk-size", po::value<unsigned int>(), ": set dedup chunk size for cdc")
-    ("snap", ": deduplciate snapshotted object")
+    ("no-snap", ": do not deduplciate snapshotted object")
     ("debug", ": enable debug")
     ("pgid", ": set pgid")
     ("chunk-dedup-threshold", po::value<int>(), ": set the threshold for chunk dedup (number of duplication) ")
@@ -607,9 +607,9 @@ int make_crawling_daemon(const po::variables_map &opts)
   } else {
     chunk_size = _cct->_conf.get_val<int64_t>("chunk_size");
   }
-  bool snap = false;
-  if (opts.count("snap")) {
-    snap = true;
+  bool snap = true;
+  if (opts.count("no-snap")) {
+    snap = false;
   }
 
   int chunk_dedup_threshold = 0;
