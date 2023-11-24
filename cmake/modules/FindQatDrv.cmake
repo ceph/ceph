@@ -74,7 +74,15 @@ foreach(component ${QatDrv_FIND_COMPONENTS})
     add_library(QatDrv::${component} STATIC IMPORTED GLOBAL)
     set_target_properties(QatDrv::${component} PROPERTIES
                           INTERFACE_INCLUDE_DIRECTORIES "${QatDrv_INCLUDE_DIRS}"
+                          INTERFACE_COMPILE_OPTIONS "-DHAVE_QATDRV"
                           IMPORTED_LINK_INTERFACE_LANGUAGES "C"
                           IMPORTED_LOCATION "${QatDrv_${component}_LIBRARIES}")
+  endif()
+
+  # add alias targets to match FindQAT.cmake
+  if(component STREQUAL "qat_s")
+    add_library(QAT::qat ALIAS QatDrv::qat_s)
+  elseif(component STREQUAL "usdm_drv_s")
+    add_library(QAT::usdm ALIAS QatDrv::usdm_drv_s)
   endif()
 endforeach()

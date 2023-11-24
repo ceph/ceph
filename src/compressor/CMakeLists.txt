@@ -6,10 +6,10 @@ if (HAVE_QATZIP)
 endif()
 add_library(compressor_objs OBJECT ${compressor_srcs})
 add_dependencies(compressor_objs common-objs)
-if(HAVE_QATZIP AND HAVE_QATDRV)
+if(HAVE_QATZIP AND HAVE_QAT)
   target_link_libraries(compressor_objs PRIVATE
-                        QatDrv::qat_s
-                        QatDrv::usdm_drv_s
+                        QAT::qat
+                        QAT::usdm
                         qatzip::qatzip
                        )
 endif()
