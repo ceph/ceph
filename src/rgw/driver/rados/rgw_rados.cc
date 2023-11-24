@@ -4658,7 +4658,9 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   RGWObjState *astate = NULL;
   RGWObjManifest *amanifest = nullptr;
 
-  ret = get_obj_state(dpp, &obj_ctx, src_bucket_info, src_obj, &astate, &amanifest, y);
+  constexpr bool follow_olh = true;
+  ret = get_obj_state(dpp, &obj_ctx, src_bucket_info, src_obj,
+                      &astate, &amanifest, follow_olh, y);
   if (ret < 0) {
     return ret;
   }
@@ -5885,48 +5887,38 @@ static bool has_olh_tag(map<string, bufferlist>& attrs)
 int RGWRados::get_olh_target_state(const DoutPrefixProvider *dpp, RGWObjectCtx&
 				   obj_ctx, RGWBucketInfo& bucket_info,
 				   const rgw_obj& obj, RGWObjState *olh_state,
-				   RGWObjState **target_state,
-				   RGWObjManifest **target_manifest, optional_yield y)
+				   RGWObjStateManifest **psm, optional_yield y)
 {
   ceph_assert(olh_state->is_olh);
 
   rgw_obj target;
-  int r = RGWRados::follow_olh(dpp, bucket_info, obj_ctx, olh_state, obj, &target, y); /* might return -EAGAIN */
+  int r = RGWRados::follow_olh(dpp, bucket_info, obj_ctx, olh_state,
+                               obj, &target, y); /* might return -EAGAIN */
   if (r < 0) {
     return r;
   }
 
-  r = get_obj_state(dpp, &obj_ctx, bucket_info, target, target_state,
-		    target_manifest, false, y);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
+  return get_obj_state(dpp, &obj_ctx, bucket_info, target, psm, false, y);
 }
 
 int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
-				 RGWBucketInfo& bucket_info, const rgw_obj& obj,
-                                 RGWObjState **state, RGWObjManifest** manifest,
-				 bool follow_olh, optional_yield y, bool assume_noent)
+                                 RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                                 RGWObjStateManifest** psm, bool follow_olh,
+                                 optional_yield y, bool assume_noent)
 {
   if (obj.empty()) {
     return -EINVAL;
   }
 
   bool need_follow_olh = follow_olh && obj.key.instance.empty();
-  *manifest = nullptr;
 
   RGWObjStateManifest *sm = octx->get_state(obj);
   RGWObjState *s = &(sm->state);
   ldpp_dout(dpp, 20) << "get_obj_state: octx=" << (void *)octx << " obj=" << obj << " state=" << (void *)s << " s->prefetch_data=" << s->prefetch_data << dendl;
-  *state = s;
-  if (sm->manifest) {
-    *manifest = &(*sm->manifest);
-  }
+  *psm = sm;
   if (s->has_attrs) {
     if (s->is_olh && need_follow_olh) {
-      return get_olh_target_state(dpp, *octx, bucket_info, obj, s, state, manifest, y);
+      return get_olh_target_state(dpp, *octx, bucket_info, obj, s, psm, y);
     }
     return 0;
   }
@@ -6018,7 +6010,6 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
       ldpp_dout(dpp, 0) << "ERROR: couldn't decode manifest" << dendl;
       return -EIO;
     }
-    *manifest = &(*sm->manifest);
     ldpp_dout(dpp, 10) << "manifest: total_size = " << sm->manifest->get_obj_size() << dendl;
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>() && \
 	sm->manifest->has_explicit_objs()) {
@@ -6078,7 +6069,7 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
     ldpp_dout(dpp, 20) << __func__ << ": setting s->olh_tag to " << string(s->olh_tag.c_str(), s->olh_tag.length()) << dendl;
 
     if (need_follow_olh) {
-      return get_olh_target_state(dpp, *octx, bucket_info, obj, s, state, manifest, y);
+      return get_olh_target_state(dpp, *octx, bucket_info, obj, s, psm, y);
     } else if (obj.key.have_null_instance() && !sm->manifest) {
       // read null version, and the head object only have olh info
       s->exists = false;
@@ -6089,16 +6080,43 @@ int RGWRados::get_obj_state_impl(const DoutPrefixProvider *dpp, RGWObjectCtx *oc
   return 0;
 }
 
-int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx, RGWBucketInfo& bucket_info, const rgw_obj& obj, RGWObjState **state, RGWObjManifest** manifest,
-                            bool follow_olh, optional_yield y, bool assume_noent)
+int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *octx,
+                            RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                            RGWObjStateManifest** psm, bool follow_olh,
+                            optional_yield y, bool assume_noent)
 {
   int ret;
 
   do {
-    ret = get_obj_state_impl(dpp, octx, bucket_info, obj, state, manifest, follow_olh, y, assume_noent);
+    ret = get_obj_state_impl(dpp, octx, bucket_info, obj, psm,
+                             follow_olh, y, assume_noent);
   } while (ret == -EAGAIN);
 
   return ret;
+}
+
+int RGWRados::get_obj_state(const DoutPrefixProvider *dpp, RGWObjectCtx *rctx,
+                            RGWBucketInfo& bucket_info, const rgw_obj& obj,
+                            RGWObjState** pstate, RGWObjManifest** pmanifest,
+                            bool follow_olh, optional_yield y, bool assume_noent)
+{
+  RGWObjStateManifest* sm = nullptr;
+  int r = get_obj_state(dpp, rctx, bucket_info, obj, &sm,
+                        follow_olh, y, assume_noent);
+  if (r < 0) {
+    return r;
+  }
+  if (pstate) {
+    *pstate = &sm->state;
+  }
+  if (pmanifest) {
+    if (sm->manifest) {
+      *pmanifest = &(*sm->manifest);
+    } else {
+      *pmanifest = nullptr;
+    }
+  }
+  return 0;
 }
 
 int RGWRados::Object::get_manifest(const DoutPrefixProvider *dpp, RGWObjManifest **pmanifest, optional_yield y)
@@ -6509,14 +6527,107 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   return 0;
 }
 
+static int get_part_obj_state(const DoutPrefixProvider* dpp, optional_yield y,
+                              RGWRados* store, RGWBucketInfo& bucket_info,
+                              RGWObjectCtx* rctx, RGWObjManifest* manifest,
+                              int part_num, int* parts_count, bool prefetch,
+                              RGWObjState** pstate, RGWObjManifest** pmanifest)
+{
+  if (!manifest) {
+    return -ERR_INVALID_PART;
+  }
+  // navigate to the requested part in the manifest
+  RGWObjManifest::obj_iterator end = manifest->obj_end(dpp);
+  if (end.get_cur_part_id() == 0) { // not multipart
+    ldpp_dout(dpp, 20) << "object does not have a multipart manifest" << dendl;
+    return -ERR_INVALID_PART;
+  }
+  if (parts_count) {
+    *parts_count = end.get_cur_part_id() - 1;
+  }
+  ldpp_dout(dpp, 20) << "seeking to part #" << part_num
+      << " in the object manifest" << dendl;
+  RGWObjManifest::obj_iterator iter = manifest->obj_find_part(dpp, part_num);
+  if (iter == end) { // part number not found
+    ldpp_dout(dpp, 20) << "failed to find part #" << part_num
+        << " in the object manifest" << dendl;
+    return -ERR_INVALID_PART;
+  }
+  auto head_obj = iter.get_location().get_head_obj();
+  if (!head_obj) { // iterator points to a tail object
+    ldpp_dout(dpp, 20) << "object manifest for part #" << part_num
+        << " points to a tail object" << dendl;
+    return -ERR_INVALID_PART;
+  }
+  const auto part_offset = iter.get_ofs();
+
+  // read the part's head object
+  if (prefetch) {
+    rctx->set_prefetch_data(*head_obj);
+  }
+  RGWObjStateManifest* sm = nullptr;
+  constexpr bool follow_olh = false; // parts aren't versioned
+  int r = store->get_obj_state(dpp, rctx, bucket_info, *head_obj,
+                               &sm, follow_olh, y);
+  if (r < 0) {
+    return r;
+  }
+  *pstate = &sm->state;
+
+  // if the part has its own manifest, use it directly
+  if (sm->manifest) {
+    *pmanifest = &*sm->manifest;
+    return 0;
+  }
+
+  // create a new manifest for just this part
+  sm->manifest.emplace();
+  RGWObjManifest& part_manifest = *sm->manifest;
+  part_manifest.set_multipart_part_rule(iter.get_stripe_size(), part_num);
+
+  if (auto& prefix = iter.get_cur_override_prefix(); !prefix.empty()) {
+    // the part was reuploaded with a different prefix
+    part_manifest.set_prefix(prefix);
+  } else {
+    part_manifest.set_prefix(manifest->get_prefix());
+  }
+
+  RGWObjManifest::generator gen;
+  gen.create_begin(store->ctx(), &part_manifest,
+                   manifest->get_head_placement_rule(),
+                   &manifest->get_tail_placement().placement_rule,
+                   head_obj->bucket, *head_obj);
+
+  // copy each of the part's stripes into the new manifest. the final call to
+  // create_next() uses the starting offset of the next part
+  do {
+    ++iter;
+    gen.create_next(iter.get_ofs() - part_offset);
+  } while (iter.get_cur_part_id() == part_num);
+
+  // update the object size
+  sm->state.size = part_manifest.get_obj_size();
+
+  *pmanifest = &part_manifest;
+  return 0;
+}
+
 int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *dpp)
 {
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
+  RGWObjectCtx& obj_ctx = source->get_ctx();
 
   bufferlist etag;
 
   map<string, bufferlist>::iterator iter;
+
+  bool part_prefetch = false;
+  if (params.part_num) {
+    // prefetch from the part's head object instead of the multipart head
+    auto sm = obj_ctx.get_state(source->get_obj());
+    part_prefetch = std::exchange(sm->state.prefetch_data, false);
+  }
 
   RGWObjState *astate;
   RGWObjManifest *manifest = nullptr;
@@ -6528,7 +6639,32 @@ int RGWRados::Object::Read::prepare(optional_yield y, const DoutPrefixProvider *
     return -ENOENT;
   }
 
-  const RGWBucketInfo& bucket_info = source->get_bucket_info();
+  RGWBucketInfo& bucket_info = source->get_bucket_info();
+
+  if (params.part_num) {
+    int parts_count = 0;
+    // use the manifest to redirect to the requested part number
+    r = get_part_obj_state(dpp, y, store, bucket_info, &source->get_ctx(),
+                           manifest, *params.part_num, &parts_count,
+                           part_prefetch, &astate, &manifest);
+    if (r == -ERR_INVALID_PART && *params.part_num == 1) {
+      // for non-multipart uploads, treat requests for the first part as a
+      // request for the entire range. this behavior is expected by the java
+      // sdk's TransferManager.download()
+      ldpp_dout(dpp, 4) << "requested part #" << *params.part_num
+          << ": " << cpp_strerror(r) << dendl;
+    } else if (r < 0) {
+      ldpp_dout(dpp, 4) << "failed to read part #" << *params.part_num
+          << ": " << cpp_strerror(r) << dendl;
+      return -ERR_INVALID_PART;
+    } else if (!astate->exists) {
+      ldpp_dout(dpp, 4) << "part #" << *params.part_num
+          << " does not exist" << dendl;
+      return -ERR_INVALID_PART;
+    } else {
+      params.parts_count = parts_count;
+    }
+  }
 
   state.obj = astate->obj;
   store->obj_to_raw(bucket_info.placement_rule, state.obj, &state.head_obj);

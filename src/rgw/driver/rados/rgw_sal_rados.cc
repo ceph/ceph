@@ -1946,6 +1946,7 @@ int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider
   parent_op.conds.if_nomatch = params.if_nomatch;
   parent_op.params.lastmod = params.lastmod;
   parent_op.params.target_obj = params.target_obj;
+  parent_op.params.part_num = params.part_num;
   parent_op.params.obj_size = &obj_size;
   parent_op.params.attrs = &source->get_attrs();
 
@@ -1953,8 +1954,9 @@ int RadosObject::RadosReadOp::prepare(optional_yield y, const DoutPrefixProvider
   if (ret < 0)
     return ret;
 
-  source->set_key(parent_op.state.obj.key);
+  source->set_instance(parent_op.state.obj.key.instance);
   source->set_obj_size(obj_size);
+  params.parts_count = parent_op.params.parts_count;
 
   return ret;
 }
