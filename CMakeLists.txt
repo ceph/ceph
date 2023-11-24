@@ -307,10 +307,15 @@ endif()
 
 option(WITH_BLUEFS "libbluefs library" OFF)
 
+option(WITH_QATLIB "Enable QAT with qatlib" OFF)
 option(WITH_QATDRV "Enable QAT with out-of-tree driver" OFF)
+
 if(WITH_QATDRV)
   find_package(QatDrv REQUIRED COMPONENTS qat_s usdm_drv_s)
-  set(HAVE_QATDRV TRUE)
+  set(HAVE_QAT TRUE)
+elseif(WITH_QATLIB)
+  find_package(QAT REQUIRED)
+  set(HAVE_QAT TRUE)
 endif()
 
 option(WITH_QATZIP "Enable QATZIP" OFF)
