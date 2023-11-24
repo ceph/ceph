@@ -505,9 +505,9 @@ Monitor Store Failures
 Symptoms of store corruption
 ----------------------------
 
-Ceph monitors store the :term:`Cluster Map` in a key-value store.  If key-value
-store corruption causes a monitor to fail, then the monitor log might contain
-one of the following error messages::
+Ceph Monitors maintain the :term:`Cluster Map` in a key-value store. If
+key-value store corruption causes a Monitor to fail, then the Monitor log might
+contain one of the following error messages::
 
   Corruption: error in middle of record
 
@@ -518,10 +518,10 @@ or::
 Recovery using healthy monitor(s)
 ---------------------------------
 
-If there are surviving monitors, we can always :ref:`replace
-<adding-and-removing-monitors>` the corrupted monitor with a new one. After the
-new monitor boots, it will synchronize with a healthy peer. After the new
-monitor is fully synchronized, it will be able to serve clients.
+If the cluster contains surviving Monitors, the corrupted Monitor can be
+:ref:`replaced <adding-and-removing-monitors>` with a new Monitor. After the
+new Monitor boots, it will synchronize with a healthy peer. After the new
+Monitor is fully synchronized, it will be able to serve clients.
 
 .. _mon-store-recovery-using-osds:
 
@@ -529,15 +529,14 @@ Recovery using OSDs
 -------------------
 
 Even if all monitors fail at the same time, it is possible to recover the
-monitor store by using information stored in OSDs. You are encouraged to deploy
-at least three (and preferably five) monitors in a Ceph cluster. In such a
-deployment, complete monitor failure is unlikely. However, unplanned power loss
-in a data center whose disk settings or filesystem settings are improperly
-configured could cause the underlying filesystem to fail and this could kill
-all of the monitors. In such a case, data in the OSDs can be used to recover
-the monitors.  The following is such a script and can be used to recover the
-monitors:
-
+Monitor store by using information that is stored in OSDs. You are encouraged
+to deploy at least three (and preferably five) Monitors in a Ceph cluster. In
+such a deployment, complete Monitor failure is unlikely. However, unplanned
+power loss in a data center whose disk settings or filesystem settings are
+improperly configured could cause the underlying filesystem to fail and this
+could kill all of the monitors. In such a case, data in the OSDs can be used to
+recover the Monitors. The following is a script that can be used in such a case
+to recover the Monitors:
 
 .. code-block:: bash
 
@@ -590,10 +589,10 @@ monitors:
 
 This script performs the following steps:
 
-#. Collects the map from each OSD host.
-#. Rebuilds the store.
-#. Fills the entities in the keyring file with appropriate capabilities.
-#. Replaces the corrupted store on ``mon.foo`` with the recovered copy.
+#. Collect the map from each OSD host.
+#. Rebuild the store.
+#. Fill the entities in the keyring file with appropriate capabilities.
+#. Replace the corrupted store on ``mon.foo`` with the recovered copy.
 
 
 Known limitations
@@ -605,15 +604,15 @@ The above recovery tool is unable to recover the following information:
   auth add`` command are recovered from the OSD's copy, and the
   ``client.admin`` keyring is imported using ``ceph-monstore-tool``. However,
   the MDS keyrings and all other keyrings will be missing in the recovered
-  monitor store. You might need to manually re-add them.
+  Monitor store. It might be necessary to manually re-add them.
 
 - **Creating pools**: If any RADOS pools were in the process of being created,
   that state is lost. The recovery tool operates on the assumption that all
   pools have already been created. If there are PGs that are stuck in the
-  'unknown' state after the recovery for a partially created pool, you can
+  ``unknown`` state after the recovery for a partially created pool, you can
   force creation of the *empty* PG by running the ``ceph osd force-create-pg``
-  command. Note that this will create an *empty* PG, so take this action only
-  if you know the pool is empty.
+  command. This creates an *empty* PG, so take this action only if you are
+  certain that the pool is empty.
 
 - **MDS Maps**: The MDS maps are lost.
 
