@@ -7,6 +7,6 @@ if(HAVE_INTEL AND HAVE_NASM_X64_AVX2 AND (NOT APPLE))
   add_subdirectory(isa-l)
 endif()
 
-if(WITH_QAT)
+if(WITH_QATDRV)
   add_subdirectory(qat)
 endif()
