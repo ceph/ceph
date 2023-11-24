@@ -66,7 +66,7 @@ auto QccCrypto::async_get_instance(CompletionToken&& token) {
       // keep a few objects to wait QAT instance to make sure qat full utilization as much as possible,
       // that is, QAT don't need to wait for new objects to ensure
       // that QAT will not be in a free state as much as possible
-      instance_completions.push_back([this, ex, handler2 = std::move(handler1)](int inst)mutable{
+      instance_completions.push_back([ex, handler2 = std::move(handler1)](int inst)mutable{
         boost::asio::post(ex, std::bind(handler2, inst));
       });
     } else {
@@ -479,7 +479,7 @@ auto QatCrypto::async_perform_op(int avail_inst, std::span<CpaCySymDpOpData*> pO
   using Signature = void(CpaStatus);
   async_completion<CompletionToken, Signature> init(token);
   auto ex = boost::asio::get_associated_executor(init.completion_handler);
-  completion_handler = [this, ex, handler = init.completion_handler](CpaStatus stat) {
+  completion_handler = [ex, handler = init.completion_handler](CpaStatus stat) {
     boost::asio::post(ex, std::bind(handler, stat));
   };
 
