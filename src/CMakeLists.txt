@@ -506,7 +506,8 @@ if(NOT WITH_SYSTEM_BOOST)
 endif()
 
 if(HAVE_QATZIP)
-  list(APPEND ceph_common_deps ${qatzip_LIBRARIES})
+  # TODO: only the compression plugins should depend on QAT
+  list(APPEND ceph_common_deps QAT::zip)
 endif()
 
 if(WITH_DPDK)

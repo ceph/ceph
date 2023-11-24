@@ -309,6 +309,7 @@ option(WITH_BLUEFS "libbluefs library" OFF)
 
 option(WITH_QATLIB "Enable QAT with qatlib" OFF)
 option(WITH_QATDRV "Enable QAT with out-of-tree driver" OFF)
+option(WITH_QATZIP "Enable QATzip" OFF)
 
 if(WITH_QATDRV)
   find_package(QatDrv REQUIRED COMPONENTS qat_s usdm_drv_s)
@@ -318,10 +319,9 @@ elseif(WITH_QATLIB)
   set(HAVE_QAT TRUE)
 endif()
 
-option(WITH_QATZIP "Enable QATZIP" OFF)
 if(WITH_QATZIP)
-  find_package(qatzip REQUIRED)
-  set(HAVE_QATZIP ${qatzip_FOUND})
+  find_package(QATzip REQUIRED)
+  set(HAVE_QATZIP TRUE)
 endif(WITH_QATZIP)
 
 # needs mds and? XXX
