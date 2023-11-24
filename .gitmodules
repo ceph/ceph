@@ -78,3 +78,6 @@
 [submodule "src/qatlib"]
 	path = src/qatlib
 	url = https://github.com/intel/qatlib.git
+[submodule "src/qatzip"]
+	path = src/qatzip
+	url = https://github.com/intel/qatzip.git

@@ -1,9 +1,6 @@
 function(build_qatzip)
-  set(QATzip_REPO https://github.com/intel/qatzip.git)
-  set(QATzip_TAG "v1.1.2")
-
-  set(QATzip_SOURCE_DIR ${CMAKE_BINARY_DIR}/src/qatzip)
-  set(QATzip_INSTALL_DIR ${QATzip_SOURCE_DIR}/install)
+  set(QATzip_BINARY_DIR ${CMAKE_BINARY_DIR}/src/qatzip)
+  set(QATzip_INSTALL_DIR ${QATzip_BINARY_DIR}/install)
   set(QATzip_INCLUDE_DIR ${QATzip_INSTALL_DIR}/include)
   set(QATzip_LIBRARY ${QATzip_INSTALL_DIR}/lib/libqatzip.a)
 
@@ -28,20 +25,14 @@ function(build_qatzip)
   # because it messes with the internal install paths of arrow's bundled deps
   set(NO_DESTDIR_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR)
 
-  set(source_dir_args
-    SOURCE_DIR ${QATzip_SOURCE_DIR}
-    GIT_REPOSITORY ${QATzip_REPO}
-    GIT_TAG ${QATzip_TAG}
-    GIT_SHALLOW TRUE
-    GIT_CONFIG advice.detachedHead=false)
-
   include(ExternalProject)
   ExternalProject_Add(qatzip_ext
-    ${source_dir_args}
+    SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/qatzip"
     CONFIGURE_COMMAND ./autogen.sh COMMAND ${configure_cmd}
     BUILD_COMMAND ${NO_DESTDIR_COMMAND} make -j3
     BUILD_IN_SOURCE 1
     BUILD_BYPRODUCTS ${QATzip_LIBRARY}
+    INSTALL_COMMAND ${NO_DESTDIR_COMMAND} make install
     UPDATE_COMMAND ""
     LOG_CONFIGURE ON
     LOG_BUILD ON
