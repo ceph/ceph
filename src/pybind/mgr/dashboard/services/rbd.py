@@ -289,7 +289,8 @@ class RbdService(object):
         return total_used_size, snap_map
 
     @classmethod
-    def _rbd_image(cls, ioctx, pool_name, namespace, image_name):  # pylint: disable=R0912
+    def _rbd_image(cls, ioctx, pool_name, namespace, image_name,  # pylint: disable=R0912
+                   omit_usage=False):
         with rbd.Image(ioctx, image_name) as img:
             stat = img.stat()
             mirror_mode = img.mirror_image_get_mode()
@@ -371,7 +372,7 @@ class RbdService(object):
 
             # disk usage
             img_flags = img.flags()
-            if 'fast-diff' in stat['features_name'] and \
+            if not omit_usage and 'fast-diff' in stat['features_name'] and \
                     not rbd.RBD_FLAG_FAST_DIFF_INVALID & img_flags and \
                     mirror_mode != rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
                 snaps = [(s['id'], s['size'], s['name'])
@@ -507,13 +508,13 @@ class RbdService(object):
         return result, len(image_refs)
 
     @classmethod
-    def get_image(cls, image_spec):
+    def get_image(cls, image_spec, omit_usage=False):
         pool_name, namespace, image_name = parse_image_spec(image_spec)
         ioctx = mgr.rados.open_ioctx(pool_name)
         if namespace:
             ioctx.set_namespace(namespace)
         try:
-            return cls._rbd_image(ioctx, pool_name, namespace, image_name)
+            return cls._rbd_image(ioctx, pool_name, namespace, image_name, omit_usage)
         except rbd.ImageNotFound:
             raise cherrypy.HTTPError(404, 'Image not found')
 
