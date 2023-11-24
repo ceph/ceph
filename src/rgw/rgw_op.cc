@@ -3592,7 +3592,7 @@ void RGWCreateBucket::execute(optional_yield y)
    * recover from a partial create by retrying it. */
   ldpp_dout(this, 20) << "Bucket::create() returned ret=" << op_ret << " bucket=" << s->bucket << dendl;
 
-  if (op_ret)
+  if (op_ret < 0 && op_ret != -EEXIST && op_ret != -ERR_BUCKET_EXISTS)
     return;
 
   const bool existed = s->bucket_exists;
