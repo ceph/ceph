@@ -2281,6 +2281,9 @@ void RGWGetObj::execute(optional_yield y)
   read_op->params.if_match = if_match;
   read_op->params.if_nomatch = if_nomatch;
   read_op->params.lastmod = &lastmod;
+  if (multipart_part_num) {
+    read_op->params.part_num = &*multipart_part_num;
+  }
 
   op_ret = read_op->prepare(s->yield, this);
   if (op_ret < 0)
@@ -2288,6 +2291,7 @@ void RGWGetObj::execute(optional_yield y)
   version_id = s->object->get_instance();
   s->obj_size = s->object->get_obj_size();
   attrs = s->object->get_attrs();
+  multipart_parts_count = read_op->params.parts_count;
 
   /* STAT ops don't need data, and do no i/o */
   if (get_type() == RGW_OP_STAT_OBJ) {

@@ -371,6 +371,11 @@ protected:
   bool get_retention;
   bool get_legal_hold;
 
+  // optional partNumber param for s3
+  std::optional<int> multipart_part_num;
+  // PartsCount response when partNumber is specified
+  std::optional<int> multipart_parts_count;
+
   int init_common();
 public:
   RGWGetObj() {
