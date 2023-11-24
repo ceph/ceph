@@ -3133,7 +3133,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	cerr << "    If you insist on making a broken copy, you can pass\n"
 	     << "    --yes-i-really-mean-it to proceed anyway."
 	     << std::endl;
-	exit(1);
+	return 1;
       }
     }
 
