@@ -39,7 +39,6 @@ static void symDpCallback(CpaCySymDpOpData *pOpData,
   }
 }
 
-static std::mutex qcc_alloc_mutex;
 static std::mutex qcc_eng_mutex;
 static std::atomic<bool> init_called = { false };
 static std::mutex poll_inst_mutex;
