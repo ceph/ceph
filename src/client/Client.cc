@@ -15948,12 +15948,21 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
                                   bool do_fsync, bool syncdataonly)
 {
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
-    if (!mref_reader.is_state_satisfied())
-      return -CEPHFS_ENOTCONN;
+    if (!mref_reader.is_state_satisfied()) {
+      int64_t rc = -CEPHFS_ENOTCONN;
+      if (onfinish != nullptr) {
+        onfinish->complete(rc);
+        /* async call should always return zero to caller and allow the
+        caller to wait on callback for the actual errno. */
+        rc = 0;
+      }
+      return rc;
+    }
 
     std::scoped_lock cl(client_lock);
     return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
     				  onfinish, bl, do_fsync, syncdataonly);
+
 }
 
 int Client::ll_flush(Fh *fh)
