@@ -1,9 +1,6 @@
 function(build_qat)
-  set(QAT_REPO https://github.com/intel/qatlib.git)
-  set(QAT_TAG "23.11.0")
-
-  set(QAT_SOURCE_DIR ${CMAKE_BINARY_DIR}/src/qatlib)
-  set(QAT_INSTALL_DIR ${QAT_SOURCE_DIR}/install)
+  set(QAT_BINARY_DIR ${CMAKE_BINARY_DIR}/src/qatlib)
+  set(QAT_INSTALL_DIR ${QAT_BINARY_DIR}/install)
   set(QAT_INCLUDE_DIR ${QAT_INSTALL_DIR}/include)
   set(QAT_LIBRARY_DIR ${QAT_INSTALL_DIR}/lib)
   set(QAT_LIBRARY ${QAT_LIBRARY_DIR}/libqat.a)
@@ -21,20 +18,13 @@ function(build_qat)
   # build a static library with -fPIC that we can link into crypto/compressor plugins
   list(APPEND configure_cmd --with-pic --enable-static --disable-shared)
 
-  set(source_dir_args
-    SOURCE_DIR ${QAT_SOURCE_DIR}
-    GIT_REPOSITORY ${QAT_REPO}
-    GIT_TAG ${QAT_TAG}
-    GIT_SHALLOW TRUE
-    GIT_CONFIG advice.detachedHead=false)
-
   # clear the DESTDIR environment variable from debian/rules,
   # because it messes with the internal install paths of arrow's bundled deps
   set(NO_DESTDIR_COMMAND ${CMAKE_COMMAND} -E env --unset=DESTDIR)
 
   include(ExternalProject)
   ExternalProject_Add(qatlib_ext
-    ${source_dir_args}
+    SOURCE_DIR "${PROJECT_SOURCE_DIR}/src/qatlib"
     CONFIGURE_COMMAND ./autogen.sh COMMAND ${configure_cmd}
     BUILD_COMMAND ${NO_DESTDIR_COMMAND} make -j3
     BUILD_IN_SOURCE 1
