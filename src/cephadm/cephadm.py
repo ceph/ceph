@@ -805,6 +805,11 @@ def create_daemon_dirs(
         node_proxy = NodeProxy.init(ctx, fsid, ident.daemon_id)
         node_proxy.create_daemon_dirs(data_dir, uid, gid)
 
+    else:
+        daemon = daemon_form_create(ctx, ident)
+        if isinstance(daemon, ContainerDaemonForm):
+            daemon.prepare_data_dir(data_dir, uid, gid)
+
     _write_custom_conf_files(ctx, ident, uid, gid)
 
 
