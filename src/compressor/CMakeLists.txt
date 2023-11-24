@@ -10,7 +10,7 @@ if(HAVE_QATZIP AND HAVE_QAT)
   target_link_libraries(compressor_objs PRIVATE
                         QAT::qat
                         QAT::usdm
-                        qatzip::qatzip
+                        QAT::zip
                        )
 endif()
 add_dependencies(compressor_objs legacy-option-headers)
