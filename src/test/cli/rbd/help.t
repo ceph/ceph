@@ -63,7 +63,8 @@
                                         associated.
       image-meta set                    Image metadata set key with value.
       import                            Import image from file.
-      import-diff                       Import an incremental diff.
+      import-diff                       Apply an incremental diff to image HEAD,
+                                        then create a snapshot.
       info                              Show information about image size,
                                         striping, etc.
       journal client disconnect         Flag image journal client as disconnected.
@@ -1254,7 +1255,7 @@
                          [--sparse-size <sparse-size>] [--no-progress] 
                          <path-name> <image-spec> 
   
-  Import an incremental diff.
+  Apply an incremental diff to image HEAD, then create a snapshot.
   
   Positional arguments
     <path-name>          import file (or '-' for stdin)
