@@ -23,6 +23,11 @@ GET_QUOTAS_SCHEMA = {
     'max_bytes': (int, ''),
     'max_files': (int, '')
 }
+GET_STATFS_SCHEMA = {
+    'bytes': (int, ''),
+    'files': (int, ''),
+    'subdirs': (int, '')
+}
 
 logger = logging.getLogger("controllers.rgw")
 
@@ -331,13 +336,16 @@ class CephFS(RESTController):
 
         standby_table = self.get_standby_table(fsmap['standbys'], mds_versions)
 
+        flags = mdsmap['flags_state']
+
         return {
             "cephfs": {
                 "id": fs_id,
                 "name": mdsmap['fs_name'],
                 "client_count": client_count,
                 "ranks": rank_table,
-                "pools": pools_table
+                "pools": pools_table,
+                "flags": flags,
             },
             "standbys": standby_table,
             "versions": mds_versions
@@ -360,7 +368,7 @@ class CephFS(RESTController):
                                      "No cephfs with id {0}".format(fs_id))
 
         # Decorate the metadata with some fields that will be
-        # indepdendent of whether it's a kernel or userspace
+        # independent of whether it's a kernel or userspace
         # client, so that the javascript doesn't have to grok that.
         for client in clients:
             if "ceph_version" in client['client_metadata']:  # pragma: no cover - no complexity
@@ -519,6 +527,47 @@ class CephFS(RESTController):
         cfs = self._cephfs_instance(fs_id)
         return cfs.get_quotas(path)
 
+    @RESTController.Resource('POST', path='/write_to_file')
+    @allow_empty_body
+    def write_to_file(self, fs_id, path, buf) -> None:
+        """
+        Write some data to the specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the file to write.
+        :param buf: The str to write to the buf.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.write_to_file(path, buf)
+
+    @RESTController.Resource('DELETE', path='/unlink')
+    def unlink(self, fs_id, path) -> None:
+        """
+        Removes a file, link, or symbolic link.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the file or link to unlink.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.unlink(path)
+
+    @RESTController.Resource('GET', path='/statfs')
+    @EndpointDoc("Get Cephfs statfs of the specified path",
+                 parameters={
+                     'fs_id': (str, 'File System Identifier'),
+                     'path': (str, 'File System Path'),
+                 },
+                 responses={200: GET_STATFS_SCHEMA})
+    def statfs(self, fs_id, path) -> dict:
+        """
+        Get the statfs of the specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory/file.
+        :return: Returns a dictionary containing 'bytes',
+        'files' and 'subdirs'.
+        :rtype: dict
+        """
+        cfs = self._cephfs_instance(fs_id)
+        return cfs.statfs(path)
+
     @RESTController.Resource('POST', path='/snapshot')
     @allow_empty_body
     def snapshot(self, fs_id, path, name=None):
@@ -561,7 +610,11 @@ class CephFSClients(object):
 
     @ViewCache()
     def get(self):
-        return CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
+        try:
+            ret = CephService.send_command('mds', 'session ls', srv_spec='{0}:0'.format(self.fscid))
+        except RuntimeError:
+            ret = []
+        return ret
 
 
 @UIRouter('/cephfs', Scope.CEPHFS)
@@ -886,3 +939,32 @@ class CephFsSnapshotClone(RESTController):
                 f'Failed to create clone {clone_name}: {err}'
             )
         return f'Clone {clone_name} created successfully'
+
+@APIRouter('/cephfs/snaphost/schedule', Scope.CEPHFS)
+@APIDoc("Cephfs Snapshot Scheduling API", "CephFSSnapshotSchedule")
+class CephFSSnapshotSchedule(RESTController):
+
+    def list(self, fs: str, path: str = '/', recursive: bool = True):
+        error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                          path, recursive, fs, 'plain')
+
+        if len(out) == 0:
+            return []
+
+        snapshot_schedule_list = out.split('\n')
+        output = []
+
+        for snap in snapshot_schedule_list:
+            current_path = snap.strip().split(' ')[0]
+            error_code, status_out, err = mgr.remote('snap_schedule', 'snap_schedule_get',
+                                                     current_path, fs, 'plain')
+            output.append(json.loads(status_out))
+
+        output_json = json.dumps(output)
+
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get list of snapshot schedules for path {path}: {err}'
+            )
+
+        return json.loads(output_json)
