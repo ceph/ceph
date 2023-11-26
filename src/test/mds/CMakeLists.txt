@@ -24,3 +24,11 @@ add_executable(unittest_mds_quiesce_db
 add_ceph_unittest(unittest_mds_quiesce_db)
 target_link_libraries(unittest_mds_quiesce_db ceph-common global)
 
+# unittest_mds_quiesce_agent
+add_executable(unittest_mds_quiesce_agent
+  TestQuiesceAgent.cc
+  ../../../src/mds/QuiesceAgent.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_mds_quiesce_agent)
+target_link_libraries(unittest_mds_quiesce_agent ceph-common global)
