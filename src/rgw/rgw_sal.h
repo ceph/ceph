@@ -44,7 +44,7 @@ class RGWCompressionInfo;
 struct rgw_pubsub_topics;
 struct rgw_pubsub_bucket_topics;
 class RGWZonePlacementInfo;
-
+struct rgw_pubsub_topic;
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
 
@@ -314,6 +314,24 @@ class Driver {
     /** Remove the topic config, optionally a specific version */
     virtual int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
         optional_yield y,const DoutPrefixProvider *dpp) = 0;
+    /** Read the topic config entry into data and (optionally) objv_tracker */
+    virtual int read_topic_v2(const std::string& topic_name,
+                              const std::string& tenant,
+                              rgw_pubsub_topic& topic,
+                              RGWObjVersionTracker* objv_tracker,
+                              optional_yield y,
+                              const DoutPrefixProvider* dpp) = 0;
+    /** Write topic info and (optionally) @a objv_tracker into the config */
+    virtual int write_topic_v2(const rgw_pubsub_topic& topic,
+                               RGWObjVersionTracker* objv_tracker,
+                               optional_yield y,
+                               const DoutPrefixProvider* dpp) = 0;
+    /** Remove the topic config, optionally a specific version */
+    virtual int remove_topic_v2(const std::string& topic_name,
+                                const std::string& tenant,
+                                RGWObjVersionTracker* objv_tracker,
+                                optional_yield y,
+                                const DoutPrefixProvider* dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
@@ -1442,6 +1460,8 @@ public:
   virtual int list_zones(std::list<std::string>& zone_ids) = 0;
   /** Clone a copy of this zonegroup. */
   virtual std::unique_ptr<ZoneGroup> clone() = 0;
+  /** Determine if zonegroup |feature| is supported.*/
+  virtual bool supports_feature(std::string_view feature) const = 0;
 };
 
 /**

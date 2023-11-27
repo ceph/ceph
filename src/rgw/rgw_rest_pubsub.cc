@@ -17,6 +17,7 @@
 #include "services/svc_zone.h"
 #include "common/dout.h"
 #include "rgw_url.h"
+#include "rgw_process_env.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -138,21 +139,13 @@ class RGWPSCreateTopicOp : public RGWOp {
       return -EINVAL;
     }
 
-    // Remove the args that are parsed, so the push_endpoint_args only contains
-    // necessary one's.
     opaque_data = s->info.args.get("OpaqueData");
-    s->info.args.remove("OpaqueData");
 
     dest.push_endpoint = s->info.args.get("push-endpoint");
-    s->info.args.remove("push-endpoint");
     s->info.args.get_bool("persistent", &dest.persistent, false);
-    s->info.args.remove("persistent");
     s->info.args.get_int("time_to_live", reinterpret_cast<int *>(&dest.time_to_live), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("time_to_live");
     s->info.args.get_int("max_retries", reinterpret_cast<int *>(&dest.max_retries), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("max_retries");
     s->info.args.get_int("retry_sleep_duration", reinterpret_cast<int *>(&dest.retry_sleep_duration), rgw::notify::DEFAULT_GLOBAL_VALUE);
-    s->info.args.remove("retry_sleep_duration");
 
     if (!validate_and_update_endpoint_secret(dest, s->cct, *(s->info.env))) {
       return -EINVAL;
@@ -162,8 +155,19 @@ class RGWPSCreateTopicOp : public RGWOp {
     if (!policy_text.empty() && !get_policy_from_text(s, policy_text)) {
       return -ERR_MALFORMED_DOC;
     }
-    s->info.args.remove("Policy");
 
+    // Remove the args that are parsed, so the push_endpoint_args only contains
+    // necessary one's which is parsed after this if. but only if master zone,
+    // else we do not remove as request is forwarded to master.
+    if (driver->is_meta_master()) {
+      s->info.args.remove("OpaqueData");
+      s->info.args.remove("push-endpoint");
+      s->info.args.remove("persistent");
+      s->info.args.remove("time_to_live");
+      s->info.args.remove("max_retries");
+      s->info.args.remove("retry_sleep_duration");
+      s->info.args.remove("Policy");
+    }
     for (const auto& param : s->info.args.get_params()) {
       if (param.first == "Action" || param.first == "Name" || param.first == "PayloadHash") {
         continue;
@@ -193,7 +197,8 @@ class RGWPSCreateTopicOp : public RGWOp {
       return ret;
     }
 
-    const RGWPubSub ps(driver, s->owner.id.tenant);
+    const RGWPubSub ps(driver, s->owner.id.tenant,
+                       &s->penv.site->get_period()->get_map().zonegroups);
     rgw_pubsub_topic result;
     ret = ps.get_topic(this, topic_name, result, y);
     if (ret == -ENOENT) {
@@ -252,6 +257,18 @@ class RGWPSCreateTopicOp : public RGWOp {
 };
 
 void RGWPSCreateTopicOp::execute(optional_yield y) {
+  // master request will replicate the topic creation.
+  bufferlist indata;
+  if (!driver->is_meta_master()) {
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1)
+          << "CreateTopic forward_request_to_master returned ret = " << op_ret
+          << dendl;
+      return;
+    }
+  }
   if (!dest.push_endpoint.empty() && dest.persistent) {
     op_ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
     if (op_ret < 0) {
@@ -261,7 +278,8 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->owner.id.tenant,
+                     &s->penv.site->get_period()->get_map().zonegroups);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            s->owner.id, policy_text, y);
   if (op_ret < 0) {
@@ -316,7 +334,8 @@ public:
 };
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->owner.id.tenant,
+                     &s->penv.site->get_period()->get_map().zonegroups);
   op_ret = ps.get_topics(this, result, y);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
@@ -403,7 +422,8 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->owner.id.tenant,
+                     &s->penv.site->get_period()->get_map().zonegroups);
   op_ret = ps.get_topic(this, topic_name, result, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -487,7 +507,8 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->owner.id.tenant,
+                     &s->penv.site->get_period()->get_map().zonegroups);
   op_ret = ps.get_topic(this, topic_name, result, y);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -615,7 +636,8 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       return ret;
     }
     rgw_pubsub_topic result;
-    const RGWPubSub ps(driver, s->owner.id.tenant);
+    const RGWPubSub ps(driver, s->owner.id.tenant,
+                       &s->penv.site->get_period()->get_map().zonegroups);
     ret = ps.get_topic(this, topic_name, result, y);
     if (ret < 0) {
       ldpp_dout(this, 1) << "failed to get topic '" << topic_name
@@ -664,6 +686,17 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
 };
 
 void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
+  if (!driver->is_meta_master()) {
+    bufferlist indata;
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1)
+          << "SetTopicAttributes forward_request_to_master returned ret = "
+          << op_ret << dendl;
+      return;
+    }
+  }
   if (!dest.push_endpoint.empty() && dest.persistent) {
     op_ret = rgw::notify::add_persistent_topic(topic_name, s->yield);
     if (op_ret < 0) {
@@ -682,7 +715,8 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->owner.id.tenant,
+                     &s->penv.site->get_period()->get_map().zonegroups);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            topic_owner, policy_text, y);
   if (op_ret < 0) {
@@ -752,7 +786,20 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  if (!driver->is_meta_master()) {
+    bufferlist indata;
+    op_ret = rgw_forward_request_to_master(
+        this, *s->penv.site, s->user->get_id(), &indata, nullptr, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 1)
+          << "DeleteTopic forward_request_to_master returned ret = " << op_ret
+          << dendl;
+      return;
+    }
+  }
+  const RGWPubSub ps(driver, s->owner.id.tenant,
+                     &s->penv.site->get_period()->get_map().zonegroups);
+
   rgw_pubsub_topic result;
   op_ret = ps.get_topic(this, topic_name, result, y);
   if (op_ret == 0) {
@@ -805,6 +852,13 @@ bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_state* s)
 {
   if (s->info.args.exists("Action")) {
     const std::string action_name = s->info.args.get("Action");
+    return op_generators.contains(action_name);
+  }
+  return false;
+}
+bool RGWHandler_REST_PSTopic_AWS::action_exists(const req_info& info) {
+  if (info.args.exists("Action")) {
+    const std::string action_name = info.args.get("Action");
     return op_generators.contains(action_name);
   }
   return false;

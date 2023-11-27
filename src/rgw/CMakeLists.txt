@@ -53,6 +53,7 @@ set(librgw_common_srcs
   services/svc_sys_obj_cache.cc
   services/svc_sys_obj_core.cc
   services/svc_tier_rados.cc
+  services/svc_topic_rados.cc
   services/svc_user.cc
   services/svc_user_rados.cc
   services/svc_zone.cc
