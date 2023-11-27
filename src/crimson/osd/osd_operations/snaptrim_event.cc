@@ -39,31 +39,6 @@ PG::BackgroundProcessLock::lock_with_op(SnapTrimEvent &st_event) noexcept
   });
 }
 
-void SnapTrimEvent::SubOpBlocker::dump_detail(Formatter *f) const
-{
-  f->open_array_section("dependent_operations");
-  {
-    for (const auto &kv : subops) {
-      f->dump_unsigned("op_id", kv.first->get_id());
-    }
-  }
-  f->close_section();
-}
-
-template <class... Args>
-void SnapTrimEvent::SubOpBlocker::emplace_back(Args&&... args)
-{
-  subops.emplace_back(std::forward<Args>(args)...);
-};
-
-SnapTrimEvent::remove_or_update_iertr::future<>
-SnapTrimEvent::SubOpBlocker::wait_completion()
-{
-  return interruptor::do_for_each(subops, [](auto&& kv) {
-    return std::move(kv.second);
-  });
-}
-
 void SnapTrimEvent::print(std::ostream &lhs) const
 {
   lhs << "SnapTrimEvent("
@@ -161,7 +136,7 @@ SnapTrimEvent::start()
 	  return enter_stage<interruptor>(wait_subop);
 	}).then_interruptible([this] {
           logger().debug("{}: awaiting completion", *this);
-          return subop_blocker.wait_completion();
+          return subop_blocker.interruptible_wait_completion();
         }).finally([this] {
 	  pg->background_process_lock.unlock();
 	}).si_then([this] {
