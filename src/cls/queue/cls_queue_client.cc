@@ -48,16 +48,9 @@ void cls_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, vecto
   op.exec(QUEUE_CLASS, QUEUE_ENQUEUE, in);
 }
 
-int cls_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max,
-                            vector<cls_queue_entry>& entries,
-                            bool *truncated, string& next_marker)
+int cls_queue_list_entries_inner(IoCtx& io_ctx, const string& oid, vector<cls_queue_entry>& entries,
+                                 bool *truncated, string& next_marker, bufferlist& in, bufferlist& out)
 {
-  bufferlist in, out;
-  cls_queue_list_op op;
-  op.start_marker = marker;
-  op.max = max;
-  encode(op, in);
-
   int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_LIST_ENTRIES, in, out);
   if (r < 0)
     return r;
@@ -76,6 +69,33 @@ int cls_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marke
   next_marker = std::move(ret.next_marker);
 
   return 0;
+}
+
+int cls_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max,
+                            vector<cls_queue_entry>& entries,
+                            bool *truncated, string& next_marker)
+{
+  bufferlist in, out;
+  cls_queue_list_op op;
+  op.start_marker = marker;
+  op.max = max;
+  encode(op, in);
+
+  return cls_queue_list_entries_inner(io_ctx, oid, entries, truncated, next_marker, in, out);
+}
+
+int cls_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, const string& end_marker,
+                           vector<cls_queue_entry>& entries,
+                           bool *truncated, string& next_marker)
+{
+  bufferlist in, out;
+  cls_queue_list_op op;
+  op.start_marker = marker;
+  op.max = std::numeric_limits<uint64_t>::max();
+  op.end_marker = end_marker;
+  encode(op, in);
+
+  return cls_queue_list_entries_inner(io_ctx, oid, entries, truncated, next_marker, in, out);
 }
 
 void cls_queue_remove_entries(ObjectWriteOperation& op, const string& end_marker)
