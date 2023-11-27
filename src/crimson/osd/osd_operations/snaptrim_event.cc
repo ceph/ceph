@@ -196,6 +196,8 @@ SnapTrimEvent::start()
     logger().debug("{}: interrupted {}", *this, eptr);
     return crimson::ct_error::eagain::make();
   }, pg).finally([this] {
+    // This SnapTrimEvent op lifetime is maintained within
+    // PerShardState::start_operation() implementation.
     logger().debug("{}: exit", *this);
     handle.exit();
   });
