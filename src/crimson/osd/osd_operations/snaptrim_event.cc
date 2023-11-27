@@ -60,7 +60,7 @@ CommonPGPipeline& SnapTrimEvent::client_pp()
   return pg->request_pg_pipeline;
 }
 
-SnapTrimEvent::snap_trim_ertr::future<seastar::stop_iteration>
+SnapTrimEvent::snap_trim_event_ret_t
 SnapTrimEvent::start()
 {
   ShardServices &shard_services = pg->get_shard_services();
@@ -167,7 +167,7 @@ SnapTrimEvent::start()
         });
       });
     });
-  }, [this](std::exception_ptr eptr) -> snap_trim_ertr::future<seastar::stop_iteration> {
+  }, [this](std::exception_ptr eptr) -> snap_trim_event_ret_t {
     logger().debug("{}: interrupted {}", *this, eptr);
     return crimson::ct_error::eagain::make();
   }, pg).finally([this] {
@@ -184,7 +184,7 @@ CommonPGPipeline& SnapTrimObjSubEvent::client_pp()
   return pg->request_pg_pipeline;
 }
 
-SnapTrimObjSubEvent::remove_or_update_iertr::future<>
+SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t
 SnapTrimObjSubEvent::remove_clone(
   ObjectContextRef obc,
   ObjectContextRef head_obc,
@@ -431,7 +431,7 @@ SnapTrimObjSubEvent::remove_or_update(
   });
 }
 
-SnapTrimObjSubEvent::remove_or_update_iertr::future<>
+SnapTrimObjSubEvent::snap_trim_obj_subevent_ret_t
 SnapTrimObjSubEvent::start()
 {
   return enter_stage<interruptor>(
