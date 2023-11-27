@@ -3949,7 +3949,7 @@ class CephadmAgent(DaemonForm):
         )
         name_id_mapping: Dict[str, str] = self._parse_container_id_name(code, out)
         for i in os.listdir(data_dir):
-            if i in ['mon', 'osd', 'mds', 'mgr']:
+            if i in ['mon', 'osd', 'mds', 'mgr', 'rgw']:
                 daemon_type = i
                 for j in os.listdir(os.path.join(data_dir, i)):
                     if '-' not in j:
@@ -5813,7 +5813,7 @@ def list_daemons(ctx, detail=True, legacy_dir=None):
     # /var/lib/ceph
     if os.path.exists(data_dir):
         for i in os.listdir(data_dir):
-            if i in ['mon', 'osd', 'mds', 'mgr']:
+            if i in ['mon', 'osd', 'mds', 'mgr', 'rgw']:
                 daemon_type = i
                 for j in os.listdir(os.path.join(data_dir, i)):
                     if '-' not in j:
