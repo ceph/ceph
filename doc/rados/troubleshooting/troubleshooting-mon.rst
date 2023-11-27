@@ -505,9 +505,9 @@ Monitor Store Failures
 Symptoms of store corruption
 ----------------------------
 
-Ceph monitors store the :term:`Cluster Map` in a key-value store.  If key-value
-store corruption causes a monitor to fail, then the monitor log might contain
-one of the following error messages::
+Ceph Monitors maintain the :term:`Cluster Map` in a key-value store. If
+key-value store corruption causes a Monitor to fail, then the Monitor log might
+contain one of the following error messages::
 
   Corruption: error in middle of record
 
@@ -518,10 +518,10 @@ or::
 Recovery using healthy monitor(s)
 ---------------------------------
 
-If there are surviving monitors, we can always :ref:`replace
-<adding-and-removing-monitors>` the corrupted monitor with a new one. After the
-new monitor boots, it will synchronize with a healthy peer. After the new
-monitor is fully synchronized, it will be able to serve clients.
+If the cluster contains surviving Monitors, the corrupted Monitor can be
+:ref:`replaced <adding-and-removing-monitors>` with a new Monitor. After the
+new Monitor boots, it will synchronize with a healthy peer. After the new
+Monitor is fully synchronized, it will be able to serve clients.
 
 .. _mon-store-recovery-using-osds:
 
@@ -529,15 +529,14 @@ Recovery using OSDs
 -------------------
 
 Even if all monitors fail at the same time, it is possible to recover the
-monitor store by using information stored in OSDs. You are encouraged to deploy
-at least three (and preferably five) monitors in a Ceph cluster. In such a
-deployment, complete monitor failure is unlikely. However, unplanned power loss
-in a data center whose disk settings or filesystem settings are improperly
-configured could cause the underlying filesystem to fail and this could kill
-all of the monitors. In such a case, data in the OSDs can be used to recover
-the monitors.  The following is such a script and can be used to recover the
-monitors:
-
+Monitor store by using information that is stored in OSDs. You are encouraged
+to deploy at least three (and preferably five) Monitors in a Ceph cluster. In
+such a deployment, complete Monitor failure is unlikely. However, unplanned
+power loss in a data center whose disk settings or filesystem settings are
+improperly configured could cause the underlying filesystem to fail and this
+could kill all of the monitors. In such a case, data in the OSDs can be used to
+recover the Monitors. The following is a script that can be used in such a case
+to recover the Monitors:
 
 .. code-block:: bash
 
@@ -590,10 +589,10 @@ monitors:
 
 This script performs the following steps:
 
-#. Collects the map from each OSD host.
-#. Rebuilds the store.
-#. Fills the entities in the keyring file with appropriate capabilities.
-#. Replaces the corrupted store on ``mon.foo`` with the recovered copy.
+#. Collect the map from each OSD host.
+#. Rebuild the store.
+#. Fill the entities in the keyring file with appropriate capabilities.
+#. Replace the corrupted store on ``mon.foo`` with the recovered copy.
 
 
 Known limitations
@@ -605,18 +604,17 @@ The above recovery tool is unable to recover the following information:
   auth add`` command are recovered from the OSD's copy, and the
   ``client.admin`` keyring is imported using ``ceph-monstore-tool``. However,
   the MDS keyrings and all other keyrings will be missing in the recovered
-  monitor store. You might need to manually re-add them.
+  Monitor store. It might be necessary to manually re-add them.
 
 - **Creating pools**: If any RADOS pools were in the process of being created,
   that state is lost. The recovery tool operates on the assumption that all
   pools have already been created. If there are PGs that are stuck in the
-  'unknown' state after the recovery for a partially created pool, you can
+  ``unknown`` state after the recovery for a partially created pool, you can
   force creation of the *empty* PG by running the ``ceph osd force-create-pg``
-  command. Note that this will create an *empty* PG, so take this action only
-  if you know the pool is empty.
+  command. This creates an *empty* PG, so take this action only if you are
+  certain that the pool is empty.
 
 - **MDS Maps**: The MDS maps are lost.
-
 
 Everything Failed! Now What?
 ============================
@@ -629,16 +627,20 @@ irc.oftc.net), or at ``dev@ceph.io`` and ``ceph-users@lists.ceph.com``. Make
 sure that you have prepared your logs and that you have them ready upon
 request.
 
-See https://ceph.io/en/community/connect/ for current (as of October 2023)
-information on getting in contact with the upstream Ceph community.
+The upstream Ceph Slack workspace can be joined at this address:
+https://ceph-storage.slack.com/
 
+See https://ceph.io/en/community/connect/ for current (as of December 2023)
+information on getting in contact with the upstream Ceph community.
 
 Preparing your logs
 -------------------
 
-The default location for monitor logs is ``/var/log/ceph/ceph-mon.FOO.log*``.
-However, if they are not there, you can find their current location by running
-the following command:
+The default location for Monitor logs is ``/var/log/ceph/ceph-mon.FOO.log*``.
+It is possible that the location of the Monitor logs has been changed from the
+default. If the location of the Monitor logs has been changed from the default
+location, find the location of the Monitor logs by running the following
+command:
 
 .. prompt:: bash
 
@@ -649,21 +651,21 @@ cluster's configuration files. If Ceph is using the default debug levels, then
 your logs might be missing important information that would help the upstream
 Ceph community address your issue.
 
-To make sure your monitor logs contain relevant information, you can raise
-debug levels. Here we are interested in information from the monitors.  As with
-other components, the monitors have different parts that output their debug
+Raise debug levels to make sure that your Monitor logs contain relevant
+information. Here we are interested in information from the Monitors.  As with
+other components, the Monitors have different parts that output their debug
 information on different subsystems.
 
 If you are an experienced Ceph troubleshooter, we recommend raising the debug
-levels of the most relevant subsystems. Of course, this approach might not be
-easy for beginners. In most cases, however, enough information to address the
-issue will be secured if the following debug levels are entered::
+levels of the most relevant subsystems. This approach might not be easy for
+beginners. In most cases, however, enough information to address the issue will
+be logged if the following debug levels are entered::
 
       debug_mon = 10
       debug_ms = 1
 
 Sometimes these debug levels do not yield enough information. In such cases,
-members of the upstream Ceph community might ask you to make additional changes
+members of the upstream Ceph community will ask you to make additional changes
 to these or to other debug levels. In any case, it is better for us to receive
 at least some useful information than to receive an empty log.
 
@@ -671,10 +673,12 @@ at least some useful information than to receive an empty log.
 Do I need to restart a monitor to adjust debug levels?
 ------------------------------------------------------
 
-No, restarting a monitor is not necessary. Debug levels may be adjusted by
-using two different methods, depending on whether or not there is a quorum:
+No. It is not necessary to restart a Monitor when adjusting its debug levels. 
 
-**If there is a quorum**
+There are two different methods for adjusting debug levels. One method is used
+when there is quorum. The other is used when there is no quorum. 
+
+**Adjusting debug levels when there is a quorum**
 
   Either inject the debug option into the specific monitor that needs to 
   be debugged::
@@ -686,17 +690,19 @@ using two different methods, depending on whether or not there is a quorum:
         ceph tell mon.* config set debug_mon 10/10
 
 
-**If there is no quorum**
+**Adjusting debug levels when there is no quorum**
 
   Use the admin socket of the specific monitor that needs to be debugged
   and directly adjust the monitor's configuration options::
 
       ceph daemon mon.FOO config set debug_mon 10/10
 
+**Returning debug levels to their default values**
 
 To return the debug levels to their default values, run the above commands
-using the debug level ``1/10`` rather than ``10/10``. To check a monitor's
-current values, use the admin socket and run either of the following commands:
+using the debug level ``1/10`` rather than the debug level ``10/10``. To check
+a Monitor's current values, use the admin socket and run either of the
+following commands:
 
   .. prompt:: bash
 
@@ -713,17 +719,17 @@ or:
 I Reproduced the problem with appropriate debug levels. Now what?
 -----------------------------------------------------------------
 
-We prefer that you send us only the portions of your logs that are relevant to
-your monitor problems. Of course, it might not be easy for you to determine
-which portions are relevant so we are willing to accept complete and
-unabridged logs. However, we request that you avoid sending logs containing
-hundreds of thousands of lines with no additional clarifying information. One
-common-sense way of making our task easier is to write down the current time
-and date when you are reproducing the problem and then extract portions of your
+Send the upstream Ceph community only the portions of your logs that are
+relevant to your Monitor problems. Because it might not be easy for you to
+determine which portions are relevant, the upstream Ceph community accepts
+complete and unabridged logs. But don't send logs containing hundreds of
+thousands of lines with no additional clarifying information. One common-sense
+way to help the Ceph community help you is to write down the current time and
+date when you are reproducing the problem and then extract portions of your
 logs based on that information.
 
-Finally, reach out to us on the mailing lists or IRC or Slack, or by filing a
-new issue on the `tracker`_.
+Contact the upstream Ceph community on the mailing lists or IRC or Slack, or by
+filing a new issue on the `tracker`_.
 
 .. _tracker: http://tracker.ceph.com/projects/ceph/issues/new
 

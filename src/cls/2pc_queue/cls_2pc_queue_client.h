@@ -87,5 +87,8 @@ void cls_2pc_queue_expire_reservations(librados::ObjectWriteOperation& op,
         ceph::coarse_real_time stale_time);
 
 // remove all entries up to the given marker
-void cls_2pc_queue_remove_entries(librados::ObjectWriteOperation& op, const std::string& end_marker, uint64_t entries_to_remove);
+// if there is no race condition, providing the number of entries_to_remove is recommended, as it is more efficient.
+// if there is no guarantee against two clienst deleting entries at the same time, you can leave the entries_to_remove unprovided or input zero entries_to_remove
+// the function will count how many entries it needs to removed
+void cls_2pc_queue_remove_entries(librados::ObjectWriteOperation& op, const std::string& end_marker, uint64_t entries_to_remove=0);
 

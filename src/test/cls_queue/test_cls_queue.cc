@@ -137,6 +137,51 @@ TEST_F(TestClsQueue, List)
   ASSERT_EQ(total_elements, number_of_ops*number_of_elements);
 }
 
+TEST_F(TestClsQueue, ListByEndMarker)
+{
+  const std::string queue_name = "my-queue";
+  const uint64_t queue_size = 1024*1024;
+  librados::ObjectWriteOperation op;
+  op.create(true);
+  cls_queue_init(op, queue_name, queue_size);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &op));
+  const auto number_of_ops = 10;
+  const auto number_of_elements = 100;
+
+  // test multiple enqueues
+  test_enqueue(queue_name, number_of_ops, number_of_elements, 0);
+
+  const auto max_elements = 42;
+  std::string marker, end_marker;
+  bool truncated = false;
+  std::string max_op_next_marker;
+  auto total_elements = 0;
+  do {
+    std::vector<cls_queue_entry> entries;
+    auto ret = cls_queue_list_entries(ioctx, queue_name, marker, max_elements, entries, &truncated, max_op_next_marker);
+    ASSERT_EQ(0, ret);
+    end_marker = max_op_next_marker;
+
+    std::vector<cls_queue_entry> end_marker_entries;
+    std::string end_marker_next_marker;
+    bool end_marker_truncated = false;
+    ret = cls_queue_list_entries(ioctx, queue_name, marker, end_marker, end_marker_entries,
+                                 &end_marker_truncated, end_marker_next_marker);
+    ASSERT_EQ(0, ret);
+
+    ASSERT_EQ(end_marker_next_marker, end_marker);
+    ASSERT_EQ(end_marker_entries.size(), entries.size());
+    for (auto i = 0U; i < end_marker_entries.size() && i < entries.size(); ++i) {
+      ASSERT_EQ(end_marker_entries[i].marker, entries[i].marker);
+    }
+
+    marker = max_op_next_marker;
+    total_elements += entries.size();
+  } while (truncated);
+
+  ASSERT_EQ(total_elements, number_of_ops*number_of_elements);
+}
+
 TEST_F(TestClsQueue, Dequeue)
 {
   const std::string queue_name = "my-queue";

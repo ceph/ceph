@@ -118,21 +118,23 @@ WRITE_CLASS_ENCODER(cls_2pc_queue_reservations_ret)
 
 struct cls_2pc_queue_remove_op {
   std::string end_marker;
-  uint32_t entries_to_remove;
+  uint32_t entries_to_remove = 0;
 
   cls_2pc_queue_remove_op() {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(end_marker, bl);
     encode(entries_to_remove, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(end_marker, bl);
-    decode(entries_to_remove, bl);
+    if (struct_v > 1) {
+      decode(entries_to_remove, bl);
+    }
     DECODE_FINISH(bl);
   }
 };

@@ -11,6 +11,8 @@ int cls_queue_get_capacity(librados::IoCtx& io_ctx, const std::string& oid, uint
 void cls_queue_enqueue(librados::ObjectWriteOperation& op, uint32_t expiration_secs, std::vector<bufferlist> bl_data_vec);
 int cls_queue_list_entries(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, uint32_t max,
                     std::vector<cls_queue_entry>& entries, bool *truncated, std::string& next_marker);
+int cls_queue_list_entries(librados::IoCtx& io_ctx, const std::string& oid, const std::string& marker, const std::string& end_marker,
+                           std::vector<cls_queue_entry>& entries, bool *truncated, std::string& next_marker);
 void cls_queue_remove_entries(librados::ObjectWriteOperation& op, const std::string& end_marker);
 
 #endif
