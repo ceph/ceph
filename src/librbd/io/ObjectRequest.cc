@@ -837,6 +837,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
     if (read_whole_object) {
       ldout(cct, 1) << "need to read full object" << dendl;
       diff.insert(0, image_ctx->layout.object_size);
+      exists = true;
       end_size = image_ctx->layout.object_size;
       clone_end_snap_id = end_snap_id;
     } else if ((m_list_snaps_flags & LIST_SNAPS_FLAG_WHOLE_OBJECT) != 0 &&
@@ -884,7 +885,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
                    << "end_size=" << end_size << ", "
                    << "prev_end_size=" << prev_end_size << ", "
                    << "exists=" << exists << ", "
-                   << "whole_object=" << read_whole_object << dendl;
+                   << "read_whole_object=" << read_whole_object << dendl;
 
     // check if object exists prior to start of incremental snap delta so that
     // we don't DNE the object if no additional deltas exist

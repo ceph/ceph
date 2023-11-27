@@ -2034,6 +2034,42 @@ TEST_F(TestMockIoObjectRequest, ListSnapsWholeObjectEndSize) {
   }
 }
 
+TEST_F(TestMockIoObjectRequest, ListSnapsNoSnapsInSnapSet) {
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  MockTestImageCtx mock_image_ctx(*ictx);
+  mock_image_ctx.snaps = {3};
+
+  InSequence seq;
+
+  librados::snap_set_t snap_set;
+  snap_set.seq = 3;
+  librados::clone_info_t clone_info;
+
+  clone_info.cloneid = 3;
+  clone_info.snaps = {};
+  clone_info.overlap = {};
+  clone_info.size = 0;
+  snap_set.clones.push_back(clone_info);
+
+  expect_list_snaps(mock_image_ctx, snap_set, 0);
+
+  SnapshotDelta snapshot_delta;
+  C_SaferCond ctx;
+  auto req = MockObjectListSnapsRequest::create(
+    &mock_image_ctx, 0, {{0, mock_image_ctx.layout.object_size - 1}},
+    {0, CEPH_NOSNAP}, 0, {}, &snapshot_delta, &ctx);
+  req->send();
+  ASSERT_EQ(0, ctx.wait());
+
+  SnapshotDelta expected_snapshot_delta;
+  expected_snapshot_delta[{CEPH_NOSNAP,CEPH_NOSNAP}].insert(
+    0, mock_image_ctx.layout.object_size - 1,
+    {SPARSE_EXTENT_STATE_DATA, mock_image_ctx.layout.object_size - 1});
+  EXPECT_EQ(expected_snapshot_delta, snapshot_delta);
+}
+
 } // namespace io
 } // namespace librbd
 
