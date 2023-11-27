@@ -39,6 +39,10 @@ public:
     crimson::ct_error::eagain>;
   using snap_trim_iertr = remove_or_update_iertr::extend<
     crimson::ct_error::eagain>;
+  using snap_trim_event_ret_t =
+    snap_trim_ertr::future<seastar::stop_iteration>;
+  using snap_trim_obj_subevent_ret_t =
+      remove_or_update_iertr::future<>;
 
   static constexpr OperationTypeCode type = OperationTypeCode::snaptrim_event;
 
@@ -53,12 +57,12 @@ public:
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
-  snap_trim_ertr::future<seastar::stop_iteration> start();
+  snap_trim_event_ret_t start();
 
 private:
   CommonPGPipeline& client_pp();
 
-  SubOpBlocker<remove_or_update_iertr::future<>> subop_blocker;
+  SubOpBlocker<snap_trim_obj_subevent_ret_t> subop_blocker;
 
   // we don't need to synchronize with other instances of SnapTrimEvent;
   // it's here for the sake of op tracking.
@@ -108,6 +112,8 @@ public:
   using remove_or_update_iertr =
     crimson::interruptible::interruptible_errorator<
       IOInterruptCondition, remove_or_update_ertr>;
+  using snap_trim_obj_subevent_ret_t =
+      remove_or_update_iertr::future<>;
 
   static constexpr OperationTypeCode type =
     OperationTypeCode::snaptrimobj_subevent;
@@ -123,14 +129,14 @@ public:
 
   void print(std::ostream &) const final;
   void dump_detail(ceph::Formatter* f) const final;
-  remove_or_update_iertr::future<> start();
+  snap_trim_obj_subevent_ret_t start();
 
   CommonPGPipeline& client_pp();
 
 private:
   object_stat_sum_t delta_stats;
 
-  remove_or_update_iertr::future<> remove_clone(
+  snap_trim_obj_subevent_ret_t remove_clone(
     ObjectContextRef obc,
     ObjectContextRef head_obc,
     ceph::os::Transaction& txn);
