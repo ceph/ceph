@@ -5206,8 +5206,12 @@ void parse_post_action(const std::string& post_body, req_state* s)
       }
     }
   }
-  const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
-  s->info.args.append("PayloadHash", payload_hash);
+  // PayloadHash is present if request is fwd from secondary site in multisite
+  // environment, so then do not calculate and append.
+  if (!s->info.args.exists("PayloadHash")) {
+    const auto payload_hash = rgw::auth::s3::calc_v4_payload_hash(post_body);
+    s->info.args.append("PayloadHash", payload_hash);
+  }
 }
 
 RGWHandler_REST* RGWRESTMgr_S3::get_handler(rgw::sal::Driver* driver,
@@ -5623,7 +5627,9 @@ AWSSignerV4::prepare(const DoutPrefixProvider *dpp,
 
   const char* exp_payload_hash = nullptr;
   string payload_hash;
-  if (is_non_s3_op) {
+  // if the request is related to topics (bucket notification), they are part of
+  // sns service and hence it's a no_s3_op,
+  if (is_non_s3_op || RGWHandler_REST_PSTopic_AWS::action_exists(info)) {
     //For non s3 ops, we need to calculate the payload hash
     payload_hash = info.args.get("PayloadHash");
     exp_payload_hash = payload_hash.c_str();

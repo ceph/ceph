@@ -75,6 +75,9 @@ public:
     std::unique_ptr<ZoneGroup> nzg = next->clone();
     return std::make_unique<FilterZoneGroup>(std::move(nzg));
   }
+  virtual bool supports_feature(std::string_view feature) const override {
+    return next->supports_feature(feature);
+  }
 };
 
 class FilterZone : public Zone {
@@ -193,6 +196,27 @@ public:
   int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker, 
       optional_yield y, const DoutPrefixProvider *dpp) override {
     return next->remove_topics(tenant, objv_tracker, y, dpp);
+  }
+  int read_topic_v2(const std::string& topic_name,
+                    const std::string& tenant,
+                    rgw_pubsub_topic& topic,
+                    RGWObjVersionTracker* objv_tracker,
+                    optional_yield y,
+                    const DoutPrefixProvider* dpp) override {
+    return next->read_topic_v2(topic_name, tenant, topic, objv_tracker, y, dpp);
+  }
+  int write_topic_v2(const rgw_pubsub_topic& topic,
+                     RGWObjVersionTracker* objv_tracker,
+                     optional_yield y,
+                     const DoutPrefixProvider* dpp) override {
+    return next->write_topic_v2(topic, objv_tracker, y, dpp);
+  }
+  int remove_topic_v2(const std::string& topic_name,
+                      const std::string& tenant,
+                      RGWObjVersionTracker* objv_tracker,
+                      optional_yield y,
+                      const DoutPrefixProvider* dpp) override {
+    return next->remove_topic_v2(topic_name, tenant, objv_tracker, y, dpp);
   }
 
   virtual RGWLC* get_rgwlc(void) override;

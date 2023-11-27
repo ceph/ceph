@@ -15,11 +15,13 @@ namespace rgw::zone_features {
 // zone feature names
 inline constexpr std::string_view resharding = "resharding";
 inline constexpr std::string_view compress_encrypted = "compress-encrypted";
+inline constexpr std::string_view notification_v2 = "notification_v2";
 
 // static list of features supported by this release
 inline constexpr std::initializer_list<std::string_view> supported = {
-  resharding,
-  compress_encrypted,
+    resharding,
+    compress_encrypted,
+    notification_v2,
 };
 
 inline constexpr bool supports(std::string_view feature) {
@@ -33,7 +35,8 @@ inline constexpr bool supports(std::string_view feature) {
 
 // static list of features enabled by default on new zonegroups
 inline constexpr std::initializer_list<std::string_view> enabled = {
-  resharding,
+    resharding,
+    notification_v2,
 };
 
 
