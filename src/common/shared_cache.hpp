@@ -209,6 +209,11 @@ public:
     }
   }
 
+  int get_max_size() {
+    std::lock_guard locker{lock};
+    return max_size;
+  }
+
   // Returns K key s.t. key <= k for all currently cached k,v
   K cached_key_lower_bound() {
     std::lock_guard l{lock};

@@ -757,12 +757,42 @@ options:
   level: advanced
   default: 40
   with_legacy: true
+- name: osd_map_bl_cache_size
+  type: int
+  level: advanced
+  default: 50
+  fmt_desc: OSDMap bufferlist max cache size.
+  with_legacy: true
+- name: osd_map_bl_inc_cache_size
+  type: int
+  level: advanced
+  default: 50
+  fmt_desc: OSDMap inc bufferlist max cache size.
+  with_legacy: true
 - name: osd_map_cache_size
   type: int
   level: advanced
   default: 50
   fmt_desc: The number of OSD maps to keep cached.
   with_legacy: true
+- name: osd_map_cache_burst_size
+  type: int
+  level: advanced
+  default: 500
+  fmt_desc: when osd receives osdmap, osd is allowed to temporarily increase
+    the size of map_cache to improve the cache hit rate and reduce latency
+    when reading osdmap during advance_pg.
+  with_legacy: true
+  see_also:
+  - osd_map_cache_size
+- name: osd_map_cache_reduce_step
+  type: int
+  level: advanced
+  default: 10
+  fmt_desc: reduce the number of map_cache at one time.
+  with_legacy: true
+  see_also:
+  - osd_map_cache_size
 - name: osd_pg_epoch_max_lag_factor
   type: float
   level: advanced

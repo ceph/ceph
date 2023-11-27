@@ -277,8 +277,8 @@ OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
   recovery_ops_reserved(0),
   recovery_paused(false),
   map_cache(cct, cct->_conf->osd_map_cache_size),
-  map_bl_cache(cct->_conf->osd_map_cache_size),
-  map_bl_inc_cache(cct->_conf->osd_map_cache_size),
+  map_bl_cache(cct->_conf->osd_map_bl_cache_size),
+  map_bl_inc_cache(cct->_conf->osd_map_bl_inc_cache_size),
   cur_state(NONE),
   cur_ratio(0), physical_ratio(0),
   boot_epoch(0), up_epoch(0), bind_epoch(0)
@@ -6266,6 +6266,31 @@ void OSD::tick()
     }
   }
 
+  int map_cache_max_size = service.map_cache.get_max_size();
+  if (map_cache_max_size > cct->_conf->osd_map_cache_size) {
+    epoch_t osd_min = 0;
+    for (auto shard : shards) {
+      epoch_t min = shard->get_min_pg_epoch();
+      if (osd_min == 0 || min < osd_min) {
+        osd_min = min;
+      }
+    }
+    if (osd_min == superblock.get_newest_map()) {
+      map_cache_max_size -= cct->_conf->osd_map_cache_reduce_step;
+      if (map_cache_max_size < cct->_conf->osd_map_cache_size) {
+        map_cache_max_size = cct->_conf->osd_map_cache_size;
+      }
+      service.map_cache.set_size(map_cache_max_size);
+      dout(20) << __func__ << " osd_map_cache_reduce_step="
+               << cct->_conf->osd_map_cache_reduce_step
+               << " map_cache_curr_size=" << service.map_cache.get_count()
+               << " map_cache_max_size=" << map_cache_max_size
+               << " osd_min=" << osd_min
+               << " superblock has newest_map=" << superblock.get_newest_map()
+               << dendl;
+    }
+  }
+
   tick_timer.add_event_after(get_tick_interval(), new C_Tick(this));
 }
 
@@ -8003,6 +8028,16 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
 
+  int map_cache_burst_size = cct->_conf->osd_map_cache_burst_size;
+  int map_cache_max_size = service.map_cache.get_max_size();
+  if (map_cache_max_size < map_cache_burst_size) {
+    service.map_cache.set_size(map_cache_burst_size);
+    dout(20) << __func__
+             << " map_cache_curr_size=" << service.map_cache.get_count()
+             << " map_cache_max_size=" << service.map_cache.get_max_size()
+             << dendl;
+  }
+
   // store new maps: queue for disk and put in the osdmap cache
   epoch_t start = std::max(superblock.get_newest_map() + 1, first);
   for (epoch_t e = start; e <= last; e++) {
@@ -9687,6 +9722,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_op_history_slow_op_threshold",
     "osd_enable_op_tracker",
     "osd_map_cache_size",
+    "osd_map_bl_cache_size",
+    "osd_map_bl_inc_cache_size",
     "osd_pg_epoch_max_lag_factor",
     "osd_pg_epoch_persisted_max_stale",
     "osd_recovery_sleep",
@@ -9792,8 +9829,12 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("osd_map_cache_size")) {
     service.map_cache.set_size(cct->_conf->osd_map_cache_size);
-    service.map_bl_cache.set_size(cct->_conf->osd_map_cache_size);
-    service.map_bl_inc_cache.set_size(cct->_conf->osd_map_cache_size);
+  }
+  if (changed.count("osd_map_bl_cache_size")) {
+    service.map_bl_cache.set_size(cct->_conf->osd_map_bl_cache_size);
+  }
+  if (changed.count("osd_map_bl_inc_cache_size")) {
+    service.map_bl_inc_cache.set_size(cct->_conf->osd_map_bl_inc_cache_size);
   }
   if (changed.count("clog_to_monitors") ||
       changed.count("clog_to_syslog") ||
