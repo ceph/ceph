@@ -834,14 +834,16 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
                        end_snap_id, &diff, &end_size, &exists,
                        &clone_end_snap_id, &read_whole_object);
 
-    if (read_whole_object ||
-        (!diff.empty() &&
-         ((m_list_snaps_flags & LIST_SNAPS_FLAG_WHOLE_OBJECT) != 0))) {
+    if (read_whole_object) {
       ldout(cct, 1) << "need to read full object" << dendl;
-      diff.clear();
       diff.insert(0, image_ctx->layout.object_size);
       end_size = image_ctx->layout.object_size;
       clone_end_snap_id = end_snap_id;
+    } else if ((m_list_snaps_flags & LIST_SNAPS_FLAG_WHOLE_OBJECT) != 0 &&
+               !diff.empty()) {
+      ldout(cct, 20) << "expanding diff from " << diff << dendl;
+      diff.clear();
+      diff.insert(0, image_ctx->layout.object_size);
     }
 
     if (exists) {
