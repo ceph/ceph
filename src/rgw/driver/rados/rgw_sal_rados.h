@@ -85,6 +85,9 @@ public:
   virtual std::unique_ptr<ZoneGroup> clone() override {
     return std::make_unique<RadosZoneGroup>(store, group);
   }
+  virtual bool supports_feature(std::string_view feature) const override {
+    return group.supports(feature);
+  }
   const RGWZoneGroup& get_group() const { return group; }
 };
 
@@ -166,6 +169,21 @@ class RadosStore : public StoreDriver {
 	optional_yield y, const DoutPrefixProvider *dpp) override;
     int remove_topics(const std::string& tenant, RGWObjVersionTracker* objv_tracker,
         optional_yield y, const DoutPrefixProvider *dpp) override;
+    int read_topic_v2(const std::string& topic_name,
+                      const std::string& tenant,
+                      rgw_pubsub_topic& topic,
+                      RGWObjVersionTracker* objv_tracker,
+                      optional_yield y,
+                      const DoutPrefixProvider* dpp) override;
+    int write_topic_v2(const rgw_pubsub_topic& topic,
+                       RGWObjVersionTracker* objv_tracker,
+                       optional_yield y,
+                       const DoutPrefixProvider* dpp) override;
+    int remove_topic_v2(const std::string& topic_name,
+                        const std::string& tenant,
+                        RGWObjVersionTracker* objv_tracker,
+                        optional_yield y,
+                        const DoutPrefixProvider* dpp) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
