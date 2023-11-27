@@ -11253,6 +11253,11 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     if (write) {
         int64_t w = _write(fh, offset, totallen, NULL, iov, iovcnt, onfinish, do_fsync, syncdataonly);
         ldout(cct, 3) << "pwritev(" << fh << ", \"...\", " << totallen << ", " << offset << ") = " << w << dendl;
+        if (w < 0 && onfinish != nullptr) {
+          client_lock.unlock();
+          onfinish->complete(w);
+          client_lock.lock();
+        }
         return w;
     } else {
         bufferlist bl;
