@@ -3352,7 +3352,6 @@ int main(int argc, char **argv)
   string dpath, jpath, pgidstr, op, file, mountpoint, mon_store_path, object;
   string target_data_path, fsid;
   string objcmd, arg1, arg2, type, format, argnspace, pool, rmtypestr, dump_data_dir;
-  string key_oid = "oid";
   boost::optional<std::string> nspace;
   spg_t pgid;
   unsigned epoch = 0;
@@ -3364,9 +3363,6 @@ int main(int argc, char **argv)
 
   po::options_description desc("Allowed options");
   desc.add_options()
-    ("get-attrs", po::value<string>(&key_oid), "Get the object's attributes")
-    ("set-attrs", po::value<string>(&key_oid), "Set an object’s attributes")
-    ("rm-attrs", po::value<string>(&key_oid), "Remove an object’s attributes")
     ("help", "produce help message")
     ("type", po::value<string>(&type),
      "Arg is one of [bluestore (default), memstore]")
