@@ -307,10 +307,12 @@ endif()
 
 option(WITH_BLUEFS "libbluefs library" OFF)
 
-option(WITH_QATLIB "Enable QAT with qatlib" ON)
+CMAKE_DEPENDENT_OPTION(WITH_QATLIB "Enable QAT with qatlib" ON
+  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
 option(WITH_SYSTEM_QATLIB "Use system packages for qatlib" OFF)
 option(WITH_QATDRV "Enable QAT with out-of-tree driver" OFF)
-option(WITH_QATZIP "Enable QATzip" ON)
+CMAKE_DEPENDENT_OPTION(WITH_QATZIP "Enable QATzip" ON
+  "NOT CMAKE_SYSTEM_PROCESSOR MATCHES aarch64" OFF)
 option(WITH_SYSTEM_QATZIP "Use system packages for QATzip" OFF)
 
 if(WITH_QATDRV)

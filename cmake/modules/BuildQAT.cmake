@@ -13,8 +13,6 @@ function(build_qat)
   set(configure_cmd env CC=${CMAKE_C_COMPILER} ./configure --prefix=${QAT_INSTALL_DIR})
   # disable systemd or 'make install' tries to write /usr/lib/systemd/system/qat.service
   list(APPEND configure_cmd --disable-systemd)
-  # samples don't build on arm64
-  list(APPEND configure_cmd --disable-samples)
   # build a static library with -fPIC that we can link into crypto/compressor plugins
   list(APPEND configure_cmd --with-pic --enable-static --disable-shared)
 
