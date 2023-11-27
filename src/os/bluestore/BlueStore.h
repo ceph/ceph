@@ -728,7 +728,7 @@ public:
       return shared_blob && shared_blob->is_loaded();
     }
     inline BufferCacheShard* get_cache() {
-      return collection->cache;
+      return collection ? collection->cache : nullptr;
     }
     uint64_t get_sbid() const {
       return shared_blob ? shared_blob->get_sbid() : 0;

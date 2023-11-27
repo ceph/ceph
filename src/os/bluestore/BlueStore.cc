@@ -4023,7 +4023,8 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_extent(
     if (blobid) {
       consume_blobid(le, false, blobid - 1);
     } else {
-      BlobRef b = c->new_blob();
+      // dummy onodes might not have collections, we need a check for it.
+      BlobRef b = c ? c->new_blob() : new Blob(nullptr);
       uint64_t sbid = 0;
       b->decode(p, struct_v, &sbid, false, c);
       consume_blob(le, extent_pos, sbid, b);
@@ -4071,7 +4072,7 @@ void BlueStore::ExtentMap::ExtentDecoder::decode_spanning_blobs(
   unsigned n;
   denc_varint(n, p);
   while (n--) {
-    BlueStore::BlobRef b = c->new_blob();
+    BlobRef b = c ? c->new_blob() : new Blob(nullptr);
     denc_varint(b->id, p);
     uint64_t sbid = 0;
     b->decode(p, struct_v, &sbid, true, c);
@@ -11051,7 +11052,7 @@ void BlueStore::inject_zombie_spanning_blob(coll_t cid, ghobject_t oid,
     o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
   }
 
-  BlobRef b = c->new_blob();
+  BlobRef b = c ? c->new_blob() : new Blob(nullptr);
   b->id = blob_id;
   o->extent_map.spanning_blob_map[blob_id] = b;
 
