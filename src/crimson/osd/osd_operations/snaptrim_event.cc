@@ -121,15 +121,12 @@ SnapTrimEvent::start()
         return [&shard_services, this](const auto &to_trim) {
 	  for (const auto& object : to_trim) {
 	    logger().debug("{}: trimming {}", *this, object);
-	    auto [op, fut] = shard_services.start_operation_may_interrupt<
-	      interruptor, SnapTrimObjSubEvent>(
-	      pg,
-	      object,
-	      snapid);
 	    subop_blocker.emplace_back(
-	      std::move(op),
-	      std::move(fut)
-	    );
+	      shard_services.start_operation_may_interrupt<
+	      interruptor, SnapTrimObjSubEvent>(
+	        pg,
+	        object,
+	        snapid));
 	  }
 	  return interruptor::now();
 	}(to_trim).then_interruptible([this] {
