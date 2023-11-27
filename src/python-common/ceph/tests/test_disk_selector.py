@@ -558,3 +558,42 @@ class TestDriveSelection(object):
         m = 'Failed to validate OSD spec "foobar.data_devices": No filters applied'
         with pytest.raises(DriveGroupValidationError, match=m):
             drive_selection.DriveSelection(spec, inventory)
+
+
+class TestDeviceSelectionLimit:
+
+    def test_limit_existing_devices(self):
+        # Initial setup for this test is meant to be that /dev/sda
+        # is already being used for an OSD, hence it being marked
+        # as a ceph_device. /dev/sdb and /dev/sdc are not being used
+        # for OSDs yet. The limit will be set to 2 and the DriveSelection
+        # is set to have 1 pre-existing device (corresponding to /dev/sda)
+        dev_a = Device('/dev/sda', ceph_device=True, available=False)
+        dev_b = Device('/dev/sdb', ceph_device=False, available=True)
+        dev_c = Device('/dev/sdc', ceph_device=False, available=True)
+        all_devices: List[Device] = [dev_a, dev_b, dev_c]
+        processed_devices: List[Device] = []
+        filter = DeviceSelection(all=True, limit=2)
+        dgs = DriveGroupSpec(data_devices=filter)
+        ds = drive_selection.DriveSelection(dgs, all_devices, existing_daemons=1)
+
+        # Check /dev/sda. It's already being used for an OSD and will
+        # be counted in existing_daemons. This check should return False
+        # as we are not over the limit.
+        assert not ds._limit_reached(filter, processed_devices, '/dev/sda')
+        processed_devices.append(dev_a)
+
+        # We should still not be over the limit here with /dev/sdb since
+        # we will have only one pre-existing daemon /dev/sdb itself. This
+        # case previously failed as devices that contributed to existing_daemons
+        # would be double counted both as devices and daemons.
+        assert not ds._limit_reached(filter, processed_devices, '/dev/sdb')
+        processed_devices.append(dev_b)
+
+        # Now, with /dev/sdb and the pre-existing daemon taking up the 2
+        # slots, /dev/sdc should be rejected for us being over the limit.
+        assert ds._limit_reached(filter, processed_devices, '/dev/sdc')
+
+        # DriveSelection does device assignment on initialization. Let's check
+        # it picked up the expected devices
+        assert ds._data == [dev_a, dev_b]
