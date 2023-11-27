@@ -10,6 +10,8 @@
 #include <system_error>
 #include <utility>
 
+#include "include/function2.hpp"
+
 #include "rgw_common.h"
 #include "rgw_web_idp.h"
 
