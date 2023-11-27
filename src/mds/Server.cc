@@ -2446,7 +2446,16 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
       realm = in->find_snaprealm();
     else
       realm = dn->get_dir()->get_inode()->find_snaprealm();
-    reply->snapbl = get_snap_trace(session, realm);
+
+    vector<SnapRealm*> related_realms;
+    if (in) {
+      for (const auto& ri : in->get_inode()->referent_inodes) {
+         CInode *cur = try_get_auth_inode(mdr, ri); //TODO auth is required ?
+         SnapRealm *cur_realm = cur->find_snaprealm();
+         related_realms.push_back(cur_realm);
+      }
+    }
+    reply->snapbl = get_snap_trace(session, realm, related_realms);
     dout(10) << "set_trace_dist snaprealm " << *realm << " len=" << reply->snapbl.length() << dendl;
   }
 
@@ -12052,6 +12061,16 @@ void Server::dump_reconnect_status(Formatter *f) const
   f->open_object_section("reconnect_status");
   f->dump_stream("client_reconnect_gather") << client_reconnect_gather;
   f->close_section();
+}
+
+const bufferlist& Server::get_snap_trace(Session *session, SnapRealm *realm, vector<SnapRealm*>& related_realms) const {
+  ceph_assert(session);
+  ceph_assert(realm);
+  if (session->info.has_feature(CEPHFS_FEATURE_NEW_SNAPREALM_INFO)) {
+    return realm->get_snap_trace_new(related_realms);
+  } else {
+    return realm->get_snap_trace();
+  }
 }
 
 const bufferlist& Server::get_snap_trace(Session *session, SnapRealm *realm) const {

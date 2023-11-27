@@ -343,6 +343,7 @@ public:
     laggy_clients.clear();
   }
 
+  const bufferlist& get_snap_trace(Session *session, SnapRealm *realm, std::vector<SnapRealm*>& related_realms) const;
   const bufferlist& get_snap_trace(Session *session, SnapRealm *realm) const;
   const bufferlist& get_snap_trace(client_t client, SnapRealm *realm) const;
 
