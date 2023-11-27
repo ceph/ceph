@@ -62,6 +62,7 @@
 #include "services/svc_role_rados.h"
 #include "services/svc_user.h"
 #include "services/svc_sys_obj_cache.h"
+#include "services/svc_topic_rados.h"
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_pubsub.h"
@@ -1109,6 +1110,66 @@ int RadosStore::remove_topics(const std::string& tenant, RGWObjVersionTracker* o
       svc()->zone->get_zone_params().log_pool,
       topics_oid(tenant),
       objv_tracker, y);
+}
+
+int RadosStore::read_topic_v2(const std::string& topic_name,
+                              const std::string& tenant,
+                              rgw_pubsub_topic& topic,
+                              RGWObjVersionTracker* objv_tracker,
+                              optional_yield y,
+                              const DoutPrefixProvider* dpp) {
+  bufferlist bl;
+  auto mtime = ceph::real_clock::zero();
+  RGWSI_MBSObj_GetParams params(&bl, nullptr, &mtime);
+  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(
+      svc()->topic->svc.meta_be->alloc_ctx());
+  ctx->init(svc()->topic->get_be_handler());
+  const int ret = svc()->topic->svc.meta_be->get(
+      ctx.get(), get_topic_key(topic_name, tenant), params, objv_tracker, y,
+      dpp);
+  if (ret < 0) {
+    return ret;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(topic, iter);
+  } catch (buffer::error& err) {
+    ldpp_dout(dpp, 20) << " failed to decode topic: " << topic_name
+                       << ". error: " << err.what() << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+
+int RadosStore::write_topic_v2(const rgw_pubsub_topic& topic,
+                               RGWObjVersionTracker* objv_tracker,
+                               optional_yield y,
+                               const DoutPrefixProvider* dpp) {
+  bufferlist bl;
+  encode(topic, bl);
+  RGWSI_MBSObj_PutParams params(bl, nullptr, ceph::real_clock::zero(),
+                                /*exclusive*/ false);
+  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(
+      svc()->topic->svc.meta_be->alloc_ctx());
+  ctx->init(svc()->topic->get_be_handler());
+  return svc()->topic->svc.meta_be->put(
+      ctx.get(), get_topic_key(topic.name, topic.user.tenant), params,
+      objv_tracker, y, dpp);
+}
+
+int RadosStore::remove_topic_v2(const std::string& topic_name,
+                                const std::string& tenant,
+                                RGWObjVersionTracker* objv_tracker,
+                                optional_yield y,
+                                const DoutPrefixProvider* dpp) {
+  RGWSI_MBSObj_RemoveParams params;
+  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(
+      svc()->topic->svc.meta_be->alloc_ctx());
+  ctx->init(svc()->topic->get_be_handler());
+  return svc()->topic->svc.meta_be->remove(ctx.get(),
+                                           get_topic_key(topic_name, tenant),
+                                           params, objv_tracker, y, dpp);
 }
 
 int RadosStore::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, optional_yield y)

@@ -430,6 +430,9 @@ class DaosZoneGroup : public StoreZoneGroup {
     return std::make_unique<DaosZoneGroup>(store, group);
   }
   const RGWZoneGroup& get_group() { return group; }
+  virtual bool supports_feature(std::string_view feature) const override {
+    return group.supports(feature);
+  }
 };
 
 class DaosZone : public StoreZone {

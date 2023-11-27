@@ -34,5 +34,6 @@ public:
   int postauth_init(optional_yield) override { return 0; }
   int authorize(const DoutPrefixProvider* dpp, optional_yield y) override;
   static bool action_exists(const req_state* s);
+  static bool action_exists(const req_info& info);
 };
 

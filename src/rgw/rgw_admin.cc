@@ -10639,10 +10639,15 @@ next:
   }
 
   if (opt_cmd == OPT::PUBSUB_TOPIC_LIST) {
-    RGWPubSub ps(driver, tenant);
-
+    auto site = std::make_unique<rgw::SiteConfig>();
+    ret = site->load(dpp(), null_yield, cfgstore.get());
+    if (ret < 0) {
+      std::cerr << "Unable to initialize site config." << std::endl;
+      exit(1);
+    }
+    RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
     rgw_pubsub_topics result;
-    int ret = ps.get_topics(dpp(), result, null_yield);
+    ret = ps.get_topics(dpp(), result, null_yield);
     if (ret < 0 && ret != -ENOENT) {
       cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -10666,8 +10671,13 @@ next:
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
     }
-
-    RGWPubSub ps(driver, tenant);
+    auto site = std::make_unique<rgw::SiteConfig>();
+    ret = site->load(dpp(), null_yield, cfgstore.get());
+    if (ret < 0) {
+      std::cerr << "Unable to initialize site config." << std::endl;
+      exit(1);
+    }
+    RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
 
     rgw_pubsub_topic topic;
     ret = ps.get_topic(dpp(), topic_name, topic, null_yield);
@@ -10728,7 +10738,13 @@ next:
       return -ret;
     }
 
-    RGWPubSub ps(driver, tenant);
+    auto site = std::make_unique<rgw::SiteConfig>();
+    ret = site->load(dpp(), null_yield, cfgstore.get());
+    if (ret < 0) {
+      std::cerr << "Unable to initialize site config." << std::endl;
+      exit(1);
+    }
+    RGWPubSub ps(driver, tenant, &site->get_period()->get_map().zonegroups);
 
     ret = ps.remove_topic(dpp(), topic_name, null_yield);
     if (ret < 0) {

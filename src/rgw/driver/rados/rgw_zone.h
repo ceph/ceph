@@ -114,6 +114,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool otp_pool;
   rgw_pool oidc_pool;
   rgw_pool notif_pool;
+  rgw_pool topics_pool;
 
   RGWAccessKey system_key;
 
@@ -150,7 +151,7 @@ struct RGWZoneParams : RGWSystemMetaObj {
   const std::string& get_compression_type(const rgw_placement_rule& placement_rule) const;
   
   void encode(bufferlist& bl) const override {
-    ENCODE_START(14, 1, bl);
+    ENCODE_START(15, 1, bl);
     encode(domain_root, bl);
     encode(control_pool, bl);
     encode(gc_pool, bl);
@@ -176,11 +177,12 @@ struct RGWZoneParams : RGWSystemMetaObj {
     encode(tier_config, bl);
     encode(oidc_pool, bl);
     encode(notif_pool, bl);
+    encode(topics_pool, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) override {
-    DECODE_START(14, bl);
+    DECODE_START(15, bl);
     decode(domain_root, bl);
     decode(control_pool, bl);
     decode(gc_pool, bl);
@@ -248,6 +250,11 @@ struct RGWZoneParams : RGWSystemMetaObj {
       decode(notif_pool, bl);
     } else {
       notif_pool = log_pool.name + ":notif";
+    }
+    if (struct_v >= 15) {
+      decode(topics_pool, bl);
+    } else {
+      topics_pool = name + ".rgw.meta:topics";
     }
     DECODE_FINISH(bl);
   }
