@@ -89,7 +89,6 @@ SnapTrimEvent::snap_trim_ertr::future<seastar::stop_iteration>
 SnapTrimEvent::start()
 {
   ShardServices &shard_services = pg->get_shard_services();
-  IRef ref = this;
   return interruptor::with_interruption([&shard_services, this] {
     return enter_stage<interruptor>(
       client_pp().wait_for_active
@@ -196,7 +195,7 @@ SnapTrimEvent::start()
   }, [this](std::exception_ptr eptr) -> snap_trim_ertr::future<seastar::stop_iteration> {
     logger().debug("{}: interrupted {}", *this, eptr);
     return crimson::ct_error::eagain::make();
-  }, pg).finally([this, ref=std::move(ref)] {
+  }, pg).finally([this] {
     logger().debug("{}: exit", *this);
     handle.exit();
   });
