@@ -11233,8 +11233,14 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
     ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 
 #if defined(__linux__) && defined(O_PATH)
-    if (fh->flags & O_PATH)
-        return -CEPHFS_EBADF;
+    if (fh->flags & O_PATH) {
+      if(onfinish != nullptr) {
+        client_lock.unlock();
+        onfinish->complete(-CEPHFS_EBADF);
+        client_lock.lock();
+      }
+      return -CEPHFS_EBADF;
+    }
 #endif
     loff_t totallen = 0;
     for (unsigned i = 0; i < iovcnt; i++) {
