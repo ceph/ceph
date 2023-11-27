@@ -794,7 +794,12 @@ class RookCluster(object):
                 else:
                     fetcher = DefaultFetcher(sc.metadata.name, self.coreV1_api, self.rook_env)
                 fetcher.fetch()
-                discovered_devices.update(fetcher.devices())
+                nodename_to_devices = fetcher.devices()
+                for node, devices in nodename_to_devices.items():
+                    if node in discovered_devices:
+                        discovered_devices[node].extend(devices)
+                    else:
+                        discovered_devices[node] = devices
 
         return discovered_devices
 
