@@ -1080,7 +1080,7 @@ int RGWPutObj_ObjStore::get_data(bufferlist& bl)
   }
 
   return len;
-}
+} /* RGWPutObj_ObjStore::get_data(bufferlist& bl) */
 
 
 /*
@@ -2008,23 +2008,6 @@ RGWRESTMgr::~RGWRESTMgr()
     delete iter->second;
   }
   delete default_mgr;
-}
-
-int64_t parse_content_length(const char *content_length)
-{
-  int64_t len = -1;
-
-  if (*content_length == '\0') {
-    len = 0;
-  } else {
-    string err;
-    len = strict_strtoll(content_length, 10, &err);
-    if (!err.empty()) {
-      len = -1;
-    }
-  }
-
-  return len;
 }
 
 int RGWREST::preprocess(req_state *s, rgw::io::BasicClient* cio)

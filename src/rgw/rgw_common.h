@@ -446,8 +446,10 @@ public:
   }
 };
 
+using env_map_t = std::map<std::string, std::string, ltstr_nocase>;
+
 class RGWEnv {
-  std::map<std::string, std::string, ltstr_nocase> env_map;
+  env_map_t env_map;
   RGWConf conf;
 public:
   void init(CephContext *cct);
@@ -1848,6 +1850,18 @@ int decode_bl(bufferlist& bl, T& t)
   }
   return 0;
 }
+
+static inline std::string ys_header_mangle(std::string_view name)
+{
+  /* can we please stop doing this? */
+  std::string out;
+  out.reserve(name.length());
+  std::transform(std::begin(name), std::end(name),
+		 std::back_inserter(out), [](const int c) {
+		   return c == '-' ? '_' : c == '_' ? '-' : std::toupper(c);
+		 });
+  return out;
+} /* ys_header_mangle */
 
 extern int rgw_bucket_parse_bucket_instance(const std::string& bucket_instance, std::string *bucket_name, std::string *bucket_id, int *shard_id);
 
