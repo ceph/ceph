@@ -8,6 +8,7 @@
 
 #include "crimson/osd/osdmap_gate.h"
 #include "crimson/osd/osd_operation.h"
+#include "crimson/osd/osd_operations/common/pg_subop_blocker.h"
 #include "crimson/osd/osd_operations/common/pg_pipeline.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_activation_blocker.h"
@@ -57,22 +58,7 @@ public:
 private:
   CommonPGPipeline& client_pp();
 
-  // bases on 998cb8c141bb89aafae298a9d5e130fbd78fe5f2
-  struct SubOpBlocker : crimson::BlockerT<SubOpBlocker> {
-    static constexpr const char* type_name = "CompoundOpBlocker";
-
-    using id_done_t = std::pair<crimson::OperationRef,
-                                remove_or_update_iertr::future<>>;
-
-    void dump_detail(Formatter *f) const final;
-
-    template <class... Args>
-    void emplace_back(Args&&... args);
-
-    remove_or_update_iertr::future<> wait_completion();
-  private:
-    std::vector<id_done_t> subops;
-  } subop_blocker;
+  SubOpBlocker<remove_or_update_iertr::future<>> subop_blocker;
 
   // we don't need to synchronize with other instances of SnapTrimEvent;
   // it's here for the sake of op tracking.
