@@ -208,3 +208,67 @@ TEST_F(TestClient, LlreadvLlwritevNullContext) {
   client->ll_release(fh);
   ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
 }
+
+TEST_F(TestClient, LlreadvLlwritevOPathFileHandle) {
+  /* Test that async I/O fails if the file has been created with O_PATH flag;
+  EBADF is returned and the callback is finished*/
+
+  int mypid = getpid();
+  char filename[256];
+
+  client->unmount();
+  TearDown();
+  SetUp();
+
+  sprintf(filename, "test_llreadvllwritevopathfilehandlefile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+          O_RDWR | O_CREAT | O_PATH,
+          &file, &fh, &stx, 0, 0, myperm));
+
+  char out0[] = "hello ";
+  char out1[] = "world\n";  
+  struct iovec iov_out[2] = {
+    {out0, sizeof(out0)},
+    {out1, sizeof(out1)}
+  };
+
+  char in0[sizeof(out0)];
+  char in1[sizeof(out1)];
+  struct iovec iov_in[2] = {
+    {in0, sizeof(in0)},
+    {in1, sizeof(in1)}
+  };
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-opath-filehandle"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-opath-filehandle"));
+
+  int64_t rc;
+  bufferlist bl;
+
+  rc = client->ll_preadv_pwritev(fh, iov_out, 2, 0, true, writefinish.get(),
+                                 nullptr);
+  ASSERT_EQ(rc, 0);
+  rc = writefinish->wait();
+  ASSERT_EQ(rc, -CEPHFS_EBADF);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(),
+                                 &bl);
+  ASSERT_EQ(rc, 0);
+  rc = readfinish->wait();
+  ASSERT_EQ(rc, -CEPHFS_EBADF);
+  ASSERT_EQ(bl.length(), 0);
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
+}
