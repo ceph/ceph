@@ -157,7 +157,12 @@ int main(int argc, char *argv[])
   main.init_opslog();
   main.init_tracepoints();
   main.init_lua();
-  main.init_frontends2(nullptr /* RGWLib */);
+  r = main.init_frontends2(nullptr /* RGWLib */);
+  if (r != 0) {
+    derr << "ERROR:  initialize frontend fail, r = " << r << dendl;
+    main.shutdown();
+    return r;
+  }
   main.init_notification_endpoints();
 
 #if defined(HAVE_SYS_PRCTL_H)
