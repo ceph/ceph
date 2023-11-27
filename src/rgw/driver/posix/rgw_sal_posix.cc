@@ -34,7 +34,6 @@ const std::string ATTR_PREFIX = "user.X-RGW-";
 #define RGW_POSIX_ATTR_OWNER "POSIX-Owner"
 const std::string mp_ns = "multipart";
 const std::string MP_OBJ_PART_PFX = "part-";
-const std::string MP_OBJ_PART_FMT = "{:0>5}";
 const std::string MP_OBJ_HEAD_NAME = MP_OBJ_PART_PFX + "00000";
 
 static inline bool get_attr(Attrs& attrs, const char* name, bufferlist& bl)
