@@ -98,12 +98,7 @@ private:
   const bool fast_read;
   const bool allows_ecoverwrites;
 
-  ECUtil::HashInfoRef get_hash_info(
-    const hobject_t &hoid,
-    bool create,
-    const std::map<std::string, ceph::bufferlist, std::less<>> &attrs,
-    uint64_t size);
-  SharedPtrRegistry<hobject_t, ECUtil::HashInfo> unstable_hashinfo_registry;
+  ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
 
   ECCommon::ReadPipeline read_pipeline;
   ECCommon::RMWPipeline rmw_pipeline;
