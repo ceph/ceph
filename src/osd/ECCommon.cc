@@ -58,6 +58,11 @@ static ostream& _prefix(std::ostream *_dout, ECCommon::RMWPipeline *rmw_pipeline
 static ostream& _prefix(std::ostream *_dout, ECCommon::ReadPipeline *read_pipeline) {
   return read_pipeline->get_parent()->gen_dbg_prefix(*_dout);
 }
+static ostream& _prefix(std::ostream *_dout,
+			ECCommon::UnstableHashInfoRegistry *unstable_hash_info_registry) {
+  // TODO: backref to ECListener?
+  return *_dout;
+}
 
 ostream &operator<<(ostream &lhs, const ECCommon::RMWPipeline::pipeline_state_t &rhs) {
   switch (rhs.pipeline_state) {
@@ -1073,4 +1078,52 @@ void ECCommon::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
     // Nothing earlier in the pipeline, just call it
     cb();
   }
+}
+
+ECUtil::HashInfoRef ECCommon::UnstableHashInfoRegistry::maybe_put_hash_info(
+  const hobject_t &hoid,
+  ECUtil::HashInfo &&hinfo)
+{
+  return registry.lookup_or_create(hoid, hinfo);
+}
+
+ECUtil::HashInfoRef ECCommon::UnstableHashInfoRegistry::get_hash_info(
+  const hobject_t &hoid,
+  bool create,
+  const map<string, bufferlist, less<>>& attrs,
+  uint64_t size)
+{
+  dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
+  ECUtil::HashInfoRef ref = registry.lookup(hoid);
+  if (!ref) {
+    dout(10) << __func__ << ": not in cache " << hoid << dendl;
+    ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
+    bufferlist bl;
+    map<string, bufferlist>::const_iterator k = attrs.find(ECUtil::get_hinfo_key());
+    if (k == attrs.end()) {
+      dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
+    } else {
+      bl = k->second;
+    }
+    if (bl.length() > 0) {
+      auto bp = bl.cbegin();
+      try {
+        decode(hinfo, bp);
+      } catch(...) {
+        dout(0) << __func__ << ": Can't decode hinfo for " << hoid << dendl;
+        return ECUtil::HashInfoRef();
+      }
+      if (hinfo.get_total_chunk_size() != size) {
+        dout(0) << __func__ << ": Mismatch of total_chunk_size "
+      		       << hinfo.get_total_chunk_size() << dendl;
+        return ECUtil::HashInfoRef();
+      }
+    } else if (size == 0) { // If empty object and no hinfo, create it
+      create = true;
+    }
+    if (create) {
+      ref = registry.lookup_or_create(hoid, hinfo);
+    }
+  }
+  return ref;
 }

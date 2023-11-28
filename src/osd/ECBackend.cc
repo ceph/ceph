@@ -1408,54 +1408,6 @@ void ECBackend::submit_transaction(
   rmw_pipeline.start_rmw(std::move(op));
 }
 
-ECUtil::HashInfoRef ECBackend::UnstableHashInfoRegistry::maybe_put_hash_info(
-  const hobject_t &hoid,
-  ECUtil::HashInfo &&hinfo)
-{
-  return registry.lookup_or_create(hoid, hinfo);
-}
-
-ECUtil::HashInfoRef ECBackend::UnstableHashInfoRegistry::get_hash_info(
-  const hobject_t &hoid,
-  bool create,
-  const map<string, bufferlist, less<>>& attrs,
-  uint64_t size)
-{
-  dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
-  ECUtil::HashInfoRef ref = registry.lookup(hoid);
-  if (!ref) {
-    dout(10) << __func__ << ": not in cache " << hoid << dendl;
-    ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-    bufferlist bl;
-    map<string, bufferlist>::const_iterator k = attrs.find(ECUtil::get_hinfo_key());
-    if (k == attrs.end()) {
-      dout(5) << __func__ << " " << hoid << " missing hinfo attr" << dendl;
-    } else {
-      bl = k->second;
-    }
-    if (bl.length() > 0) {
-      auto bp = bl.cbegin();
-      try {
-        decode(hinfo, bp);
-      } catch(...) {
-        dout(0) << __func__ << ": Can't decode hinfo for " << hoid << dendl;
-        return ECUtil::HashInfoRef();
-      }
-      if (hinfo.get_total_chunk_size() != size) {
-        dout(0) << __func__ << ": Mismatch of total_chunk_size "
-      		       << hinfo.get_total_chunk_size() << dendl;
-        return ECUtil::HashInfoRef();
-      }
-    } else if (size == 0) { // If empty object and no hinfo, create it
-      create = true;
-    }
-    if (create) {
-      ref = registry.lookup_or_create(hoid, hinfo);
-    }
-  }
-  return ref;
-}
-
 int ECBackend::objects_read_sync(
   const hobject_t &hoid,
   uint64_t off,
