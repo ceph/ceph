@@ -4966,10 +4966,7 @@ WantedBy=ceph-{fsid}.target
             'password': result_json['result']['password'],
             'cephx': node_proxy_meta['cephx'],
             'mgr_target_ip': self.target_ip,
-            'mgr_target_port': self.target_port,
-            # re-use listener ssl certificate instead of generating new ones...
-            'ssl_crt_path': self.listener_cert_path,
-            'ssl_key_path': self.listener_key_path
+            'mgr_target_port': self.target_port
         }
         if result_json['result'].get('port'):
             kwargs['port'] = result_json['result']['port']

@@ -13,7 +13,6 @@ import ssl
 import tempfile
 import threading
 import time
-import base64
 
 from orchestrator import DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
@@ -25,8 +24,9 @@ from cephadm.ssl_cert_utils import SSLCerts
 from mgr_util import test_port_allocation, PortAlreadyInUse
 from urllib.request import urlopen, Request
 from urllib.error import HTTPError, URLError
+from contextlib import contextmanager
 
-from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING, Optional
+from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING, Optional, Generator
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -99,10 +99,15 @@ class NodeProxy:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
         self.ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
-        self.ssl_ctx = ssl.create_default_context()
-        self.ssl_ctx.check_hostname = True
-        self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        self.ssl_ctx.load_verify_locations(cadata=self.ssl_root_crt)
+        self.ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        self.ssl_ctx.check_hostname = False
+        self.ssl_ctx.verify_mode = ssl.CERT_NONE
+        # self.ssl_ctx = ssl.create_default_context()
+        # self.ssl_ctx.check_hostname = True
+        # self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        # self.ssl_ctx.load_verify_locations(cadata=self.ssl_root_crt)
+        self.redfish_token: str = ''
+        self.redfish_session_location: str = ''
 
     def _cp_dispatch(self, vpath: List[str]) -> "NodeProxy":
         if len(vpath) == 2:
@@ -252,15 +257,77 @@ class NodeProxy:
         self.mgr.node_proxy.save(host, data['patch'])
         self.raise_alert(data)
 
-    def query_endpoint(self,
-                       addr: str = '',
-                       port: str = '',
-                       method: Optional[str] = None,
-                       headers: Optional[Dict[str, str]] = {},
-                       data: Optional[bytes] = None,
-                       endpoint: str = '',
-                       ssl_ctx: Optional[Any] = None,
-                       timeout: Optional[int] = 10) -> Tuple[int, Dict[str, Any]]:
+    def login(self,
+              addr: str,
+              username: str,
+              password: str,
+              port: str = '443') -> None:
+        self.mgr.log.info("Logging in to "
+                          f"{addr}:{port} as '{username}'")
+        oob_credentials = json.dumps({"UserName": username,
+                                      "Password": password})
+        headers = {"Content-Type": "application/json"}
+
+        try:
+            _status_code, _data, _headers = self.query(addr=addr,
+                                                       port=port,
+                                                       data=oob_credentials,
+                                                       headers=headers,
+                                                       endpoint="/redfish/v1/SessionService/Sessions/",
+                                                       method="POST")
+            if _status_code != 201:
+                self.mgr.log.error(f"Can't log in to {addr}:{port} as '{username}': {_status_code}")
+                raise RuntimeError
+            self.redfish_token = _headers['X-Auth-Token']
+            self.redfish_session_location = _headers['Location']
+        except URLError as e:
+            msg = f"Can't log in to {addr}:{port} as '{username}': {e}"
+            self.mgr.log.error(msg)
+            raise RuntimeError
+
+    def logout(self,
+               addr: str,
+               port: str = '443') -> None:
+        try:
+            _status_code, _data, _ = self.query(addr=addr,
+                                                port=port,
+                                                method='DELETE',
+                                                headers={"X-Auth-Token": self.redfish_token},
+                                                endpoint=self.redfish_session_location)
+        except URLError:
+            msg = f"Can't log out from {addr}:{port}"
+            self.mgr.log.error(msg)
+            raise cherrypy.HTTPError(502, msg)
+
+    @contextmanager
+    def redfish_session(self,
+                        addr: str,
+                        username: str,
+                        password: str,
+                        port: str = '443') -> Generator:
+        try:
+            self.login(addr=addr,
+                       port=port,
+                       username=username,
+                       password=password)
+            yield
+        except Exception:
+            raise
+        else:
+            self.logout(addr=addr,
+                        port=port)
+
+    def query(self,
+              addr: str = '',
+              port: str = '',
+              method: Optional[str] = None,
+              headers: Dict[str, str] = {},
+              data: Optional[bytes] = None,
+              endpoint: str = '',
+              ssl_ctx: Optional[Any] = None,
+              timeout: Optional[int] = 10) -> Tuple[int, Dict[str, Any], Dict[str, Any]]:
+        if not ssl_ctx:
+            ssl_ctx = self.ssl_ctx
         url = f'https://{addr}:{port}{endpoint}'
         _headers = headers
         response_json = {}
@@ -272,18 +339,19 @@ class NodeProxy:
             req = Request(url, _data, _headers, method=method)
             with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
                 response_str = response.read()
+                response_headers = response.headers
                 response_json = json.loads(response_str)
                 response_status = response.status
         except HTTPError as e:
-            self.mgr.log.debug(f"{e.code} {e.reason}")
+            self.mgr.log.error(f"{e.code} {e.reason}")
             response_status = e.code
         except URLError as e:
-            self.mgr.log.debug(f"{e.reason}")
+            self.mgr.log.error(f"{e.reason}")
             raise
         except Exception as e:
             self.mgr.log.error(f"{e}")
             raise
-        return (response_status, response_json)
+        return (response_status, response_json, response_headers)
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET', 'PATCH'])
@@ -311,37 +379,37 @@ class NodeProxy:
         """
         method: str = cherrypy.request.method
         hostname: Optional[str] = kw.get('hostname')
-        headers: Dict[str, str] = {}
 
         if not hostname:
             msg: str = "listing enclosure LED status for all nodes is not implemented."
             self.mgr.log.debug(msg)
             raise cherrypy.HTTPError(501, msg)
 
-        addr = self.mgr.inventory.get_addr(hostname)
+        addr = self.mgr.node_proxy.oob[hostname]['addr']
+        port = self.mgr.node_proxy.oob[hostname]['port']
+        username = self.mgr.node_proxy.oob[hostname]['username']
+        password = self.mgr.node_proxy.oob[hostname]['password']
 
         if method == 'PATCH':
             # TODO(guits): need to check the request is authorized
             # allowing a specific keyring only ? (client.admin or client.agent.. ?)
             data: str = json.dumps(cherrypy.request.json)
-            username = self.mgr.node_proxy.oob[hostname]['username']
-            password = self.mgr.node_proxy.oob[hostname]['password']
-            auth = f"{username}:{password}".encode("utf-8")
-            auth = base64.b64encode(auth).decode("utf-8")
-            headers = {"Authorization": f"Basic {auth}"}
 
-        try:
-            status, result = self.query_endpoint(data=data,
-                                                headers=headers,
-                                                addr=addr,
-                                                method=method,
-                                                port=8080,
-                                                endpoint='/led',
-                                                ssl_ctx=self.ssl_ctx)
-        except URLError as e:
-            raise cherrypy.HTTPError(502, f"{e}")
-        cherrypy.response.status = status
-        return result
+        with self.redfish_session(addr, username, password, port=port):
+            try:
+                status, result, _ = self.query(data=bytes(data, 'ascii'),
+                                               addr=addr,
+                                               method=method,
+                                               headers={"X-Auth-Token": self.redfish_token},
+                                               port=port,
+                                               endpoint='/redfish/v1/Chassis/System.Embedded.1',
+                                               ssl_ctx=self.ssl_ctx)
+            except (URLError, HTTPError) as e:
+                raise cherrypy.HTTPError(502, f"{e}")
+            if method == 'GET':
+                result = {"LocationIndicatorActive": result['LocationIndicatorActive']}
+            cherrypy.response.status = status
+            return result
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
