@@ -17,6 +17,21 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+int fetch_access_keys_from_master(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore* store, RGWUserAdminOpState &op_state, req_state *s, optional_yield y) {
+    bufferlist data;
+    JSONParser jp;
+    RGWUserInfo ui;
+    int op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, &jp, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(dpp, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return op_ret;
+    }
+    ui.decode_json(&jp);
+    op_state.op_access_keys = std::move(ui.access_keys);
+
+    return 0;
+}
+
 class RGWOp_User_List : public RGWRESTOp {
 
 public:
@@ -204,9 +219,6 @@ void RGWOp_User_Create::execute(optional_yield y)
   if (s->info.args.exists("exclusive"))
     op_state.set_exclusive(exclusive);
 
-  if (gen_key)
-    op_state.set_generate_key();
-
   if (!default_placement_str.empty()) {
     rgw_placement_rule target_rule;
     target_rule.from_str(default_placement_str);
@@ -224,12 +236,21 @@ void RGWOp_User_Create::execute(optional_yield y)
     op_state.set_placement_tags(placement_tags_list);
   }
 
-  bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-    return;
+  if(!(store->is_meta_master())) {
+    op_ret = fetch_access_keys_from_master(this, store, op_state, s, y);
+
+    if(op_ret < 0) {
+      return;
+    } else {
+      // set_generate_key() is not set if keys have already been fetched from master zone
+      gen_key = false;
+    }
   }
+
+  if (gen_key) {
+    op_state.set_generate_key();
+  }
+
   op_ret = RGWUserAdminOp_User::create(s, store, op_state, flusher, y);
 }
 
@@ -309,8 +330,6 @@ void RGWOp_User_Modify::execute(optional_yield y)
     }
     op_state.set_max_buckets(max_buckets);
   }
-  if (gen_key)
-    op_state.set_generate_key();
 
   if (!key_type_str.empty()) {
     int32_t key_type = KEY_TYPE_UNDEFINED;
@@ -366,12 +385,21 @@ void RGWOp_User_Modify::execute(optional_yield y)
     op_state.set_placement_tags(placement_tags_list);
   }
   
-  bufferlist data;
-  op_ret = store->forward_request_to_master(s, s->user.get(), nullptr, data, nullptr, s->info, y);
-  if (op_ret < 0) {
-    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
-    return;
+  if(!(store->is_meta_master())) {
+    op_ret = fetch_access_keys_from_master(this, store, op_state, s, y);
+
+    if(op_ret < 0) {
+      return;
+    } else {
+      // set_generate_key() is not set if keys have already been fetched from master zone
+      gen_key = false;
+    }
   }
+
+  if (gen_key) {
+    op_state.set_generate_key();
+  }
+
   op_ret = RGWUserAdminOp_User::modify(s, store, op_state, flusher, y);
 }
 
