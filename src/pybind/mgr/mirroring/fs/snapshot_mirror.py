@@ -558,14 +558,11 @@ class FSSnapshotMirror:
                 peers = self.get_filesystem_peers(filesystem)
                 peer_res = {}
                 for peer_uuid, rem in peers.items():
-                    conf = self.config_get(FSSnapshotMirror.peer_config_key(filesystem, peer_uuid))
                     remote = rem['remote']
                     peer_res[peer_uuid] = {'client_name': remote['client_name'],
                                            'site_name': remote['cluster_name'],
                                            'fs_name': remote['fs_name']
                                            }
-                    if 'mon_host' in conf:
-                        peer_res[peer_uuid]['mon_host'] = conf['mon_host']
                 return 0, json.dumps(peer_res), ''
         except MirrorException as me:
             return me.args[0], '', me.args[1]
