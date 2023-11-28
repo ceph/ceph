@@ -1230,14 +1230,15 @@ int PgScrubber::build_replica_map_chunk()
     break;
 
     default:
-      // negative retval: build_scrub_map_chunk() signalled an error
+      // build_scrub_map_chunk() signalled an error
       // Pre-Pacific code ignored this option, treating it as a success.
-      // \todo Add an error flag in the returning message.
-      // \todo: must either abort, send a reply, or return some error message
+      // Now: "regular" I/O errors were already handled by the backend (by
+      // setting the error flag in the scrub-map). We are left with the
+      // "unknown" error case - and we have no mechanism to handle it.
+      // Thus - we must abort.
       dout(1) << "Error! Aborting. ActiveReplica::react(SchedReplica) Ret: "
 	      << ret << dendl;
-      // only in debug mode for now:
-      assert(false && "backend error");
+      ceph_abort_msg("backend error");
       break;
   };
 

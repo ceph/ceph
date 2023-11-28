@@ -156,8 +156,6 @@ MEV(GotReplicas)
 /// internal - BuildMap preempted. Required, as detected within the ctor
 MEV(IntBmPreempted)
 
-MEV(InternalError)
-
 MEV(IntLocalMapDone)
 
 /// external. called upon success of a MODIFY op. See
@@ -481,10 +479,6 @@ struct ActiveScrubbing
 
   explicit ActiveScrubbing(my_context ctx);
   ~ActiveScrubbing();
-
-  using reactions = mpl::list<sc::custom_reaction<InternalError>>;
-
-  sc::result react(const InternalError&);
 };
 
 struct RangeBlocked : sc::state<RangeBlocked, ActiveScrubbing>, NamedSimply {
@@ -566,12 +560,13 @@ struct BuildMap : sc::state<BuildMap, ActiveScrubbing>, NamedSimply {
   explicit BuildMap(my_context ctx);
 
   // possible error scenarios:
-  // - an error reported by the backend will trigger an 'InternalError' event,
-  //   handled by our parent state;
+  // - an error reported by the backend will cause the scrubber to
+  //   ceph_abort() the OSD. No need to handle it here.
   // - if preempted, we switch to DrainReplMaps, where we will wait for all
   //   replicas to send their maps before acknowledging the preemption;
   // - an interval change will be handled by the relevant 'send-event'
-  //   functions, and will translated into a 'FullReset' event.
+  //   functions, translated into an IntervalChanged event (handled by
+  //   the 'Session' state).
   using reactions = mpl::list<sc::transition<IntBmPreempted, DrainReplMaps>,
 			      // looping, waiting for the backend to finish:
 			      sc::transition<InternalSchedScrub, BuildMap>,
