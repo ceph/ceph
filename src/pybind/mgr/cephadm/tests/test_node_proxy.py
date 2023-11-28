@@ -38,10 +38,10 @@ class TestNodeProxy(helper.CPWebCase):
     app = NodeProxy(mgr)
     mgr.agent_cache.agent_keys = {"host01": "fake-secret01",
                                   "host02": "fake-secret02"}
-    mgr.node_proxy.idrac = {"host01": {"username": "idrac-user01",
-                                       "password": "idrac-pass01"},
-                            "host02": {"username": "idrac-user02",
-                                       "password": "idrac-pass02"}}
+    mgr.node_proxy.oob = {"host01": {"username": "oob-user01",
+                                     "password": "oob-pass01"},
+                          "host02": {"username": "oob-user02",
+                                     "password": "oob-pass02"}}
     mgr.node_proxy.data = node_proxy_data.full_set
 
     @classmethod
@@ -56,39 +56,39 @@ class TestNodeProxy(helper.CPWebCase):
         self.PORT = PORT
         self.monkeypatch = MonkeyPatch()
 
-    def test_idrac_data_misses_cephx_field(self):
+    def test_oob_data_misses_cephx_field(self):
         data = '{}'
-        self.getPage("/idrac", method="POST", body=data, headers=[('Content-Type', 'application/json'),
+        self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                   ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
 
-    def test_idrac_data_misses_name_field(self):
+    def test_oob_data_misses_name_field(self):
         data = '{"cephx": {"secret": "fake-secret"}}'
-        self.getPage("/idrac", method="POST", body=data, headers=[('Content-Type', 'application/json'),
+        self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                   ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
 
-    def test_idrac_data_misses_secret_field(self):
+    def test_oob_data_misses_secret_field(self):
         data = '{"cephx": {"name": "host01"}}'
-        self.getPage("/idrac", method="POST", body=data, headers=[('Content-Type', 'application/json'),
+        self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                   ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
 
-    def test_idrac_agent_not_running(self):
+    def test_oob_agent_not_running(self):
         data = '{"cephx": {"name": "host03", "secret": "fake-secret03"}}'
-        self.getPage("/idrac", method="POST", body=data, headers=[('Content-Type', 'application/json'),
+        self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                   ('Content-Length', str(len(data)))])
         self.assertStatus('502 Bad Gateway')
 
-    def test_idrac_wrong_keyring(self):
+    def test_oob_wrong_keyring(self):
         data = '{"cephx": {"name": "host01", "secret": "wrong-keyring"}}'
-        self.getPage("/idrac", method="POST", body=data, headers=[('Content-Type', 'application/json'),
+        self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                   ('Content-Length', str(len(data)))])
         self.assertStatus('403 Forbidden')
 
-    def test_idrac_ok(self):
+    def test_oob_ok(self):
         data = '{"cephx": {"name": "host01", "secret": "fake-secret01"}}'
-        self.getPage("/idrac", method="POST", body=data, headers=[('Content-Type', 'application/json'),
+        self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                   ('Content-Length', str(len(data)))])
         self.assertStatus('200 OK')
 

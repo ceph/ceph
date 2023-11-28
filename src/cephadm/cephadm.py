@@ -40,7 +40,7 @@ from threading import Thread, Event
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
 from pathlib import Path
-from cephadmlib.node_proxy.main import NodeProxy, NodeProxyInitialization, NodeProxyFetchIdracError
+from cephadmlib.node_proxy.main import NodeProxy, NodeProxyInitialization, NodeProxyFetchOobError
 
 FuncT = TypeVar('FuncT', bound=Callable)
 
@@ -4939,8 +4939,8 @@ WantedBy=ceph-{fsid}.target
                 logger.error(f'node-proxy not running: {e.__class__.__name__}: {e}')
                 try:
                     self.init_node_proxy(ssl_ctx)
-                except NodeProxyFetchIdracError:
-                    logger.info("No iDrac details could be loaded. "
+                except NodeProxyFetchOobError:
+                    logger.info("No oob details could be loaded. "
                                 "Aborting node-proxy initialization. "
                                 "Will retry in 120s.")
                     time.sleep(120)
@@ -4953,12 +4953,12 @@ WantedBy=ceph-{fsid}.target
             }
         }
         status, result = self.query_endpoint(data=json.dumps(node_proxy_meta).encode('ascii'),
-                                             endpoint='/node-proxy/idrac',
+                                             endpoint='/node-proxy/oob',
                                              ssl_ctx=ssl_ctx)
         if status != 200:
-            msg = f"Couldn't load iDrac details: {status}, {result}"
+            msg = f"Couldn't load oob details: {status}, {result}"
             logger.debug(msg)
-            raise NodeProxyFetchIdracError(msg)
+            raise NodeProxyFetchOobError(msg)
         result_json = json.loads(result)
         kwargs = {
             'host': result_json['result']['addr'],
