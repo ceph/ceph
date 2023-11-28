@@ -27,12 +27,12 @@ class RedFishClient(BaseClient):
         if not self.is_logged_in():
             self.log.logger.info("Logging in to "
                                  f"{self.url} as '{self.username}'")
-            idrac_credentials = json.dumps({"UserName": self.username,
-                                            "Password": self.password})
+            oob_credentials = json.dumps({"UserName": self.username,
+                                          "Password": self.password})
             headers = {"Content-Type": "application/json"}
 
             try:
-                _headers, _data, _status_code = self.query(data=idrac_credentials,
+                _headers, _data, _status_code = self.query(data=oob_credentials,
                                                            headers=headers,
                                                            endpoint='/redfish/v1/SessionService/Sessions/')
                 if _status_code != 201:

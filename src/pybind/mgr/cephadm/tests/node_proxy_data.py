@@ -89,16 +89,16 @@ mgr_inventory_cache = {"host01": {"hostname": "host01",
                                   "addr": "10.10.10.11",
                                   "labels": ["_admin"],
                                   "status": "",
-                                  "idrac": {"hostname": "10.10.10.11",
-                                            "username": "root",
-                                            "password": "ceph123"}},
+                                  "oob": {"hostname": "10.10.10.11",
+                                          "username": "root",
+                                          "password": "ceph123"}},
                        "host02": {"hostname": "host02",
                                   "addr": "10.10.10.12",
                                   "labels": [],
                                   "status": "",
-                                  "idrac": {"hostname": "10.10.10.12",
-                                            "username": "root",
-                                            "password": "ceph123"}}}
+                                  "oob": {"hostname": "10.10.10.12",
+                                          "username": "root",
+                                          "password": "ceph123"}}}
 
 full_set = {
   "host01": {

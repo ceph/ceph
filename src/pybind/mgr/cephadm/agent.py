@@ -114,11 +114,11 @@ class NodeProxy:
     @cherrypy.tools.allow(methods=['POST'])
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
-    def idrac(self) -> Dict[str, Any]:
+    def oob(self) -> Dict[str, Any]:
         """
-        Get the iDrac details for a given host.
+        Get the out-of-band management tool details for a given host.
 
-        :return: idrac details.
+        :return: oob details.
         :rtype: dict
         """
         data: Dict[str, Any] = cherrypy.request.json
@@ -127,7 +127,7 @@ class NodeProxy:
         self.validate_node_proxy_data(data)
 
         host = data["cephx"]["name"]
-        results['result'] = self.mgr.node_proxy.idrac.get(host)
+        results['result'] = self.mgr.node_proxy.oob.get(host)
         if not results['result']:
             raise cherrypy.HTTPError(400, 'The provided host has no iDrac details.')
         return results
@@ -324,8 +324,8 @@ class NodeProxy:
             # TODO(guits): need to check the request is authorized
             # allowing a specific keyring only ? (client.admin or client.agent.. ?)
             data: str = json.dumps(cherrypy.request.json)
-            username = self.mgr.node_proxy.idrac[hostname]['username']
-            password = self.mgr.node_proxy.idrac[hostname]['password']
+            username = self.mgr.node_proxy.oob[hostname]['username']
+            password = self.mgr.node_proxy.oob[hostname]['password']
             auth = f"{username}:{password}".encode("utf-8")
             auth = base64.b64encode(auth).decode("utf-8")
             headers = {"Authorization": f"Basic {auth}"}

@@ -30,7 +30,7 @@ class NodeProxyInitialization(Exception):
     pass
 
 
-class NodeProxyFetchIdracError(Exception):
+class NodeProxyFetchOobError(Exception):
     pass
 
 
