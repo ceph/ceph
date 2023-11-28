@@ -299,18 +299,6 @@ ActiveScrubbing::~ActiveScrubbing()
   }
 }
 
-/*
- * The only source of an InternalError event as of now is the BuildMap state,
- * when encountering a backend error.
- * We kill the scrub and reset the FSM.
- */
-sc::result ActiveScrubbing::react(const InternalError&)
-{
-  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << __func__ << dendl;
-  return transit<NotActive>();
-}
-
 // ----------------------- RangeBlocked -----------------------------------
 
 /*
@@ -535,17 +523,12 @@ BuildMap::BuildMap(my_context ctx)
 
   } else {
 
-    auto ret = scrbr->build_primary_map_chunk();
-
-    if (ret == -EINPROGRESS) {
+    // note that build_primary_map_chunk() may return -EINPROGRESS, but no
+    // other error value (as those errors would cause it to crash the OSD).
+    if (scrbr->build_primary_map_chunk() == -EINPROGRESS) {
       // must wait for the backend to finish. No specific event provided.
       // build_primary_map_chunk() has already requeued us.
       dout(20) << "waiting for the backend..." << dendl;
-
-    } else if (ret < 0) {
-
-      dout(10) << "BuildMap::BuildMap() Error! Aborting. Ret: " << ret << dendl;
-      post_event(InternalError{});
 
     } else {
 
