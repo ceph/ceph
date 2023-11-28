@@ -278,8 +278,8 @@ class TestMisc(CephFSTestCase):
 
     def test_filesystem_sync_stuck_for_around_5s(self):
         """
-        To check whether the fsync will be stuck to wait for the mdlog to be
-        flushed for at most 5 seconds.
+        To check whether the filesystem sync will be stuck to wait for the
+        mdlog to be flushed for at most 5 seconds.
         """
 
         dir_path = "filesystem_sync_do_not_wait_mdlog_testdir"
@@ -287,8 +287,8 @@ class TestMisc(CephFSTestCase):
 
     def test_file_sync_stuck_for_around_5s(self):
         """
-        To check whether the filesystem sync will be stuck to wait for the
-        mdlog to be flushed for at most 5 seconds.
+        To check whether the fsync will be stuck to wait for the mdlog to
+        be flushed for at most 5 seconds.
         """
 
         dir_path = "file_sync_do_not_wait_mdlog_testdir"
