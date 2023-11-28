@@ -131,11 +131,11 @@ The output will resemble the following::
   if a ``pg_num`` change is in progress, the current number of PGs that the
   pool is working towards. 
 
-- **NEW PG_NUM** (if present) is the value that the system is recommending the
-  ``pg_num`` of the pool to be changed to. It is always a power of 2, and it is
-  present only if the recommended value varies from the current value by more
-  than the default factor of ``3``. To adjust this factor (in the following
-  example, it is changed to ``2``), run the following command:
+- **NEW PG_NUM** (if present) is the value that the system recommends that the
+  ``pg_num`` of the pool should be. It is always a power of two, and it
+  is present only if the recommended value varies from the current value by
+  more than the default factor of ``3``. To adjust this multiple (in the
+  following example, it is changed to ``2``), run the following command:
 
   .. prompt:: bash #
 
