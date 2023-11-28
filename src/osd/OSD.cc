@@ -6432,6 +6432,18 @@ void OSD::tick()
     }
   }
 
+  // periodic trim osdmaps
+  {
+    auto map_trim_min_interval = cct->_conf.get_val<int64_t>(
+                                            "osd_map_trim_min_interval");
+    auto now = ceph::coarse_mono_clock::now();
+    const auto elapsed = now - last_trim_maps;
+    if (std::chrono::duration_cast<std::chrono::seconds>(elapsed).count()
+      > map_trim_min_interval) {
+      trim_maps(superblock.cluster_osdmap_trim_lower_bound);
+    }
+  }
+
   tick_timer.add_event_after(get_tick_interval(), new C_Tick(this));
 }
 
@@ -8069,6 +8081,7 @@ void OSD::osdmap_subscribe(version_t epoch, bool force_request)
 
 void OSD::trim_maps(epoch_t oldest)
 {
+  last_trim_maps = ceph::coarse_mono_clock::now();
   epoch_t min = std::min(oldest, service.map_cache.cached_key_lower_bound());
   dout(20) <<  __func__ << ": min=" << min << " oldest_map="
            << superblock.get_oldest_map() << dendl;

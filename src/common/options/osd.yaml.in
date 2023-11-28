@@ -829,6 +829,14 @@ options:
   services:
   - osd
   with_legacy: true
+# osd trim osdmaps periodicity
+- name: osd_map_trim_min_interval
+  type: int
+  level: advanced
+  desc: The desired interval seconds between trim_maps of OSD::tick.
+  default: 10_min
+  min: 1_min
+  with_legacy: false
 # cap on # of inc maps we send to peers, clients
 - name: osd_map_share_max_epochs
   type: int
