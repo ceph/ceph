@@ -1059,12 +1059,11 @@ Effect eval_or_pass(const boost::optional<Policy>& policy,
 
 Effect eval_identity_or_session_policies(const vector<Policy>& policies,
                           const rgw::IAM::Environment& env,
-                          boost::optional<const rgw::auth::Identity&> id,
                           const uint64_t op,
                           const ARN& arn) {
   auto policy_res = Effect::Pass, prev_res = Effect::Pass;
   for (auto& policy : policies) {
-    if (policy_res = eval_or_pass(policy, env, id, op, arn); policy_res == Effect::Deny)
+    if (policy_res = eval_or_pass(policy, env, boost::none, op, arn); policy_res == Effect::Deny)
       return policy_res;
     else if (policy_res == Effect::Allow)
       prev_res = Effect::Allow;
@@ -1081,7 +1080,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             const rgw::ARN& res,
                             const uint64_t op)
 {
-  auto usr_policy_res = eval_identity_or_session_policies(user_policies, s->env, boost::none, op, res);
+  auto usr_policy_res = eval_identity_or_session_policies(user_policies, s->env, op, res);
   if (usr_policy_res == Effect::Deny) {
     return false;
   }
@@ -1167,7 +1166,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
   if (!verify_requester_payer_permission(s))
     return false;
 
-  auto identity_policy_res = eval_identity_or_session_policies(identity_policies, s->env, boost::none, op, ARN(bucket));
+  auto identity_policy_res = eval_identity_or_session_policies(identity_policies, s->env, op, ARN(bucket));
   if (identity_policy_res == Effect::Deny)
     return false;
 
@@ -1179,7 +1178,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 
   //Take into account session policies, if the identity making a request is a role
   if (!session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, boost::none, op, ARN(bucket));
+    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, op, ARN(bucket));
     if (session_policy_res == Effect::Deny) {
         return false;
     }
@@ -1302,7 +1301,7 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, struct req_state * 
 int verify_bucket_owner_or_policy(struct req_state* const s,
 				  const uint64_t op)
 {
-  auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env, boost::none, op, ARN(s->bucket->get_key()));
+  auto identity_policy_res = eval_identity_or_session_policies(s->iam_user_policies, s->env, op, ARN(s->bucket->get_key()));
   if (identity_policy_res == Effect::Deny) {
     return -EACCES;
   }
@@ -1316,7 +1315,7 @@ int verify_bucket_owner_or_policy(struct req_state* const s,
   }
 
   if (!s->session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env, boost::none, op, ARN(s->bucket->get_key()));
+    auto session_policy_res = eval_identity_or_session_policies(s->session_policies, s->env, op, ARN(s->bucket->get_key()));
     if (session_policy_res == Effect::Deny) {
         return -EACCES;
     }
@@ -1387,7 +1386,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   if (!verify_requester_payer_permission(s))
     return false;
 
-  auto identity_policy_res = eval_identity_or_session_policies(identity_policies, s->env, boost::none, op, ARN(obj));
+  auto identity_policy_res = eval_identity_or_session_policies(identity_policies, s->env, op, ARN(obj));
   if (identity_policy_res == Effect::Deny)
     return false;
 
@@ -1397,7 +1396,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
     return false;
 
   if (!session_policies.empty()) {
-    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, boost::none, op, ARN(obj));
+    auto session_policy_res = eval_identity_or_session_policies(session_policies, s->env, op, ARN(obj));
     if (session_policy_res == Effect::Deny) {
         return false;
     }
