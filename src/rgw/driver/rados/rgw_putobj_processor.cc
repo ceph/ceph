@@ -189,7 +189,7 @@ RadosWriter::~RadosWriter()
    * Such race condition is caused by the fact that the multipart object is the gatekeeper of a multipart
    * upload, when it is deleted, a second upload would start with the same suffix("2/"), therefore, objects
    * written by the second upload may be deleted by the first upload.
-   * details is describled on #11749
+   * details is described on #11749
    *
    * The above comment still stands, but instead of searching for a specific object in the multipart
    * namespace, we just make sure that we remove the object that is marked as the head object after

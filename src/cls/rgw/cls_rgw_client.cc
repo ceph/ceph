@@ -79,7 +79,7 @@ int CLSRGWConcurrentIO::operator()() {
     cleanup();
   }
   return ret;
-} // CLSRGWConcurrintIO::operator()()
+} // CLSRGWConcurrentIO::operator()()
 
 
 /**
@@ -186,7 +186,7 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   return true;
 }
 
-// note: currently only called by tesing code
+// note: currently only called by testing code
 void cls_rgw_bucket_init_index(ObjectWriteOperation& o)
 {
   bufferlist in;

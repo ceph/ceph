@@ -132,7 +132,7 @@ inline uint64_t cls_rgw_get_rounded_size(uint64_t size) {
  * path that ends with a delimiter and appends a new character to the
  * end such that when a we request bucket-index entries *after* this,
  * we'll get the next object after the "subdirectory". This works
- * because we append a '\xFF' charater, and no valid UTF-8 character
+ * because we append a '\xFF' character, and no valid UTF-8 character
  * can contain that byte, so no valid entries can be skipped.
  */
 inline std::string cls_rgw_after_delim(const std::string& path) {
@@ -181,7 +181,7 @@ enum class RGWObjCategory : uint8_t {
 
   Main      = 1,  // b-i entries for standard objs
 
-  Shadow    = 2,  // presumfably intended for multipart shadow
+  Shadow    = 2,  // presumably intended for multipart shadow
                   // uploads; not currently used in the codebase
 
   MultiMeta = 3,  // b-i entries for multipart upload metadata objs

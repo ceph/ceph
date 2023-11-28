@@ -1035,7 +1035,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     
     // create unique topic name. this has 2 reasons:
     // (1) topics cannot be shared between different S3 notifications because they hold the filter information
-    // (2) make topic clneaup easier, when notification is removed
+    // (2) make topic cleanup easier, when notification is removed
     const auto unique_topic_name = topic_to_unique(topic_name, notif_name);
     // generate the internal topic. destination is stored here for the "push-only" case
     // when no subscription exists

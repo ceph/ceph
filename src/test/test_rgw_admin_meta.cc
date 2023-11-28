@@ -697,7 +697,7 @@ TEST(TestRGWAdmin, meta_get){
   p2 = RGW_CAP_WRITE;
   EXPECT_TRUE (obt_info.caps.check_cap(meta_caps, p2) != 0);
 
-  /*Version and tag infromation*/
+  /*Version and tag information*/
   EXPECT_TRUE(objv1->ver > objv->ver);
   EXPECT_EQ(objv1->tag, objv->tag);
   

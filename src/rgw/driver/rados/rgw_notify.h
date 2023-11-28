@@ -23,7 +23,7 @@ struct rgw_obj_key;
 namespace rgw::notify {
 
 // initialize the notification manager
-// notification manager is dequeing the 2-phase-commit queues
+// notification manager is dequeuing the 2-phase-commit queues
 // and send the notifications to the endpoints
 bool init(CephContext* cct, rgw::sal::RadosStore* store, const DoutPrefixProvider *dpp);
 

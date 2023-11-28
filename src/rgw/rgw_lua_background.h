@@ -180,5 +180,5 @@ public:
   void resume(rgw::sal::Driver* _driver) override;
 };
 
-} //namepsace rgw::lua
+} //namespace rgw::lua
 

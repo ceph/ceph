@@ -110,7 +110,7 @@ public:
 };
 
 /**
- * store a list of the user's buckets, with associated functinos.
+ * store a list of the user's buckets, with associated functions.
  */
 class RGWUserBuckets {
   std::map<std::string, RGWBucketEnt> buckets;

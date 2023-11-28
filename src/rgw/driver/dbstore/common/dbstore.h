@@ -156,7 +156,7 @@ struct DBOpParams {
  * Difference with above structure is that all 
  * the fields are strings here to accommodate any
  * style identifiers used by backend db. By default
- * initialized with sqlitedb style, can be overriden
+ * initialized with sqlitedb style, can be overridden
  * using InitPrepareParams()
  *
  * These identifiers are used in prepare and bind statements
@@ -605,7 +605,7 @@ class DBOp {
       REFERENCES '{}' (BucketName) ON DELETE CASCADE ON UPDATE CASCADE \n);";
 
     static constexpr std::string_view CreateObjectViewQ =
-      /* This query creats temporary view with entries from ObjectData table which have
+      /* This query creates temporary view with entries from ObjectData table which have
        * corresponding head object (i.e, with same ObjName, ObjInstance, ObjNS, ObjID)
        * in the Object table.
        *
@@ -711,8 +711,8 @@ class InsertUserOp : virtual public DBOp {
   private:
     /* For existing entires, -
      * (1) INSERT or REPLACE - it will delete previous entry and then
-     * inserts new one. Since it deletes previos enties, it will
-     * trigger all foriegn key cascade deletes or other triggers.
+     * inserts new one. Since it deletes previous entries, it will
+     * trigger all foreign key cascade deletes or other triggers.
      * (2) INSERT or UPDATE - this will set NULL values to unassigned
      * fields.
      * more info: https://code-examples.net/en/q/377728

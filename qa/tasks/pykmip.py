@@ -106,7 +106,7 @@ def install_packages(ctx, config):
     passed in to the main task.
     """
     assert isinstance(config, dict)
-    log.info('Installing system dependenies for PyKMIP...')
+    log.info('Installing system dependencies for PyKMIP...')
 
     packages = {}
     for (client, _) in config.items():

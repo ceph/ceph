@@ -182,7 +182,7 @@ namespace rgw {
     LookupFHResult fhr{nullptr, 0};
 
     /* XXX the need for two round-trip operations to identify file or
-     * directory leaf objects is unecessary--the current proposed
+     * directory leaf objects is unnecessary--the current proposed
      * mechanism to avoid this is to store leaf object names with an
      * object locator w/o trailing slash */
 
@@ -415,7 +415,7 @@ namespace rgw {
        * leaf object
        */
       if (! rgw_fh) {
-	/* XXX for now, peform a hard lookup to deduce the type of
+	/* XXX for now, perform a hard lookup to deduce the type of
 	 * object to be deleted ("foo" vs. "foo/")--also, ensures
 	 * atomicity at this endpoint */
 	struct rgw_file_handle *fh;
@@ -1510,7 +1510,7 @@ namespace rgw {
     if (factory == nullptr) {
       return false;
     }
-    /* make sure the reclaiming object is the same partiton with newobject factory,
+    /* make sure the reclaiming object is the same partition with newobject factory,
      * then we can recycle the object, and replace with newobject */
     if (!fs->fh_cache.is_same_partition(factory->fhk.fh_hk.object, fh.fh_hk.object)) {
       return false;

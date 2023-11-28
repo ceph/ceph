@@ -119,9 +119,9 @@ size_t ClientIO::send_status(int status, const char* status_name)
 
 size_t ClientIO::send_100_continue()
 {
-  const char HTTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
-  const size_t sent = txbuf.sputn(HTTTP_100_CONTINUE,
-                                  sizeof(HTTTP_100_CONTINUE) - 1);
+  const char HTTP_100_CONTINUE[] = "HTTP/1.1 100 CONTINUE\r\n\r\n";
+  const size_t sent = txbuf.sputn(HTTP_100_CONTINUE,
+                                  sizeof(HTTP_100_CONTINUE) - 1);
   flush();
   sent100continue = true;
   return sent;

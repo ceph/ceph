@@ -1767,7 +1767,7 @@ public:
                                                          sync_marker, tn));
 
       /*
-       * mdlog_marker: the remote sync marker positiion
+       * mdlog_marker: the remote sync marker position
        * sync_marker: the local sync marker position
        * max_marker: the max mdlog position that we fetched
        * marker: the current position we try to sync

@@ -16,7 +16,7 @@ Examples:
 
 =head1 DESCRIPTION
 
-This script intends to test the rgw user quota funcionality using s3 interface
+This script intends to test the rgw user quota functionality using s3 interface
 and reports the test results
 
 =head1 ARGUMENTS

@@ -19,7 +19,7 @@ fi
 
 # nfsns is the main suite
 
-# create herarchy, and then list it
+# create hierarchy, and then list it
 echo "phase 1.1"
 ceph_test_librgw_file_nfsns ${K} --hier1 --dirs1 --create --rename --verbose
 

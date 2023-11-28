@@ -106,7 +106,7 @@ class RGWPeriodHistory::Impl final {
   /// and return an iterator to the merged history
   Set::iterator merge(Set::iterator dst, Set::iterator src);
 
-  /// construct a Cursor object using Cursor's private constuctor
+  /// construct a Cursor object using Cursor's private constructor
   Cursor make_cursor(Set::const_iterator history, epoch_t epoch);
 
   CephContext *const cct;

@@ -37,7 +37,7 @@ cuttlefish
 fox
 llama
 octopus
-penguine
+penguin
 seal
 squid
 whale

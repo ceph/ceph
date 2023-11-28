@@ -222,7 +222,7 @@ void create_metatable(lua_State* L, const std::string_view parent_name, const st
 // following struct may be used as a base class for other MetaTable classes
 // note, however, this is not mandatory to use it as a base
 struct EmptyMetaTable {
-  // by default everythinmg is "readonly"
+  // by default everything is "readonly"
   // to change, overload this function in the derived
   static int NewIndexClosure(lua_State* L) {
     return luaL_error(L, "trying to write to readonly field");
