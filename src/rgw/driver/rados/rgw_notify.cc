@@ -199,7 +199,7 @@ private:
   std::vector<std::string> entryProcessingResultString = {"Failure", "Successful", "Sleeping", "Expired", "Migrating"};
 
   // processing of a specific entry
-  // return whether processing was successfull (true) or not (false)
+  // return whether processing was successful (true) or not (false)
   EntryProcessingResult process_entry(const ConfigProxy& conf, persistency_tracker& entry_persistency_tracker,
                                       const cls_queue_entry& entry, yield_context yield) {
     event_entry_t event_entry;
@@ -577,7 +577,7 @@ private:
 
       for (const auto& queue_name : queues) {
         // try to lock the queue to check if it is owned by this rgw
-        // or if ownershif needs to be taken
+        // or if ownership needs to be taken
         librados::ObjectWriteOperation op;
         op.assert_exists();
         rados::cls::lock::lock(&op, queue_name+"_lock", 
@@ -612,7 +612,7 @@ private:
           // start processing this queue
           spawn::spawn(io_context, [this, &queue_gc, &queue_gc_lock, queue_name](yield_context yield) {
             process_queue(queue_name, yield);
-            // if queue processing ended, it measn that the queue was removed or not owned anymore
+            // if queue processing ended, it means that the queue was removed or not owned anymore
             // mark it for deletion
             std::lock_guard lock_guard(queue_gc_lock);
             queue_gc.push_back(queue_name);
@@ -790,7 +790,7 @@ int remove_persistent_topic(const std::string& topic_name, optional_yield y) {
   return remove_persistent_topic(s_manager, s_manager->rados_store.getRados()->get_notif_pool_ctx(), topic_name, y);
 }
 
-rgw::sal::Object* get_object_with_atttributes(
+rgw::sal::Object* get_object_with_attributes(
   const reservation_t& res, rgw::sal::Object* obj) {
   // in case of copy obj, the tags and metadata are taken from source
   const auto src_obj = res.src_object ? res.src_object : obj;
@@ -820,7 +820,7 @@ static inline void filter_amz_meta(meta_map_t& dest, const meta_map_t& src) {
 static inline void metadata_from_attributes(
   reservation_t& res, rgw::sal::Object* obj) {
   auto& metadata = res.x_meta_map;
-  const auto src_obj = get_object_with_atttributes(res, obj);
+  const auto src_obj = get_object_with_attributes(res, obj);
   if (!src_obj) {
     return;
   }
@@ -838,7 +838,7 @@ static inline void metadata_from_attributes(
 
 static inline void tags_from_attributes(
   const reservation_t& res, rgw::sal::Object* obj, KeyMultiValueMap& tags) {
-  const auto src_obj = get_object_with_atttributes(res, obj);
+  const auto src_obj = get_object_with_attributes(res, obj);
   if (!src_obj) {
     return;
   }

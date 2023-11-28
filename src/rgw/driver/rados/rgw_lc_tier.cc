@@ -454,7 +454,7 @@ int RGWLCStreamRead::init_rest_obj() {
     rest_obj.content_len = m_part_size;
   }
 
-  /* For mulitpart attrs are sent as part of InitMultipartCR itself */
+  /* For multipart attrs are sent as part of InitMultipartCR itself */
   if (multipart) {
     return 0;
   }

@@ -1535,7 +1535,7 @@ int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y)
 *	I've left some commented out lines above.  They are there for
 *	a reason, which I will explain.  The "canonical" json constructed
 *	by the code above as a crypto context must take a json object and
-*	turn it into a unique determinstic fixed form.  For most json
+*	turn it into a unique deterministic fixed form.  For most json
 *	types this is easy.  The hardest problem that is handled above is
 *	detailing with unicode strings; they must be turned into
 *	NFC form and sorted in a fixed order.  Numbers, however,

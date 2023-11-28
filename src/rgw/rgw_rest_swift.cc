@@ -1620,7 +1620,7 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
     const size_t start_pos = path_str.find_first_not_of('/');
 
     if (string::npos != start_pos) {
-      /* Seperator is the first slash after the leading ones. */
+      /* Separator is the first slash after the leading ones. */
       const size_t sep_pos = path_str.find('/', start_pos);
 
       if (string::npos != sep_pos) {

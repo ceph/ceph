@@ -259,7 +259,7 @@ object_map::iterator simulator::find_or_create(const cls_rgw_obj_key& key)
 
 int simulator::try_start(const cls_rgw_obj_key& key, const std::string& tag)
 {
-  // choose randomly betwen create and delete
+  // choose randomly between create and delete
   const auto type = static_cast<RGWModifyOp>(
       ceph::util::generate_random_number<size_t, size_t>(CLS_RGW_OP_ADD,
                                                          CLS_RGW_OP_DEL));

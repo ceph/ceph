@@ -1531,14 +1531,14 @@ struct perm_state_base {
                   const RGWBucketInfo& _bucket_info,
                   int _perm_mask,
                   bool _defer_to_bucket_acls,
-                  boost::optional<PublicAccessBlockConfiguration> _bucket_acess_conf = boost::none) :
+                  boost::optional<PublicAccessBlockConfiguration> _bucket_access_conf = boost::none) :
                                                 cct(_cct),
                                                 env(_env),
                                                 identity(_identity),
                                                 bucket_info(_bucket_info),
                                                 perm_mask(_perm_mask),
                                                 defer_to_bucket_acls(_defer_to_bucket_acls),
-                                                bucket_access_conf(_bucket_acess_conf)
+                                                bucket_access_conf(_bucket_access_conf)
   {}
 
   virtual ~perm_state_base() {}
@@ -1684,7 +1684,7 @@ extern std::string url_decode(const std::string_view& src_str,
 extern void url_encode(const std::string& src, std::string& dst,
                        bool encode_slash = true);
 extern std::string url_encode(const std::string& src, bool encode_slash = true);
-extern std::string url_remove_prefix(const std::string& url); // Removes hhtp, https and www from url
+extern std::string url_remove_prefix(const std::string& url); // Removes http, https and www from url
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);

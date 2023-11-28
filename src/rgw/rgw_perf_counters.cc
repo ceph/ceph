@@ -56,7 +56,7 @@ void add_rgw_frontend_counters(PerfCountersBuilder *pcb) {
   pcb->add_u64(l_rgw_pubsub_push_pending, "pubsub_push_pending", "Pubsub events pending reply from endpoint");
   pcb->add_u64_counter(l_rgw_pubsub_missing_conf, "pubsub_missing_conf", "Pubsub events could not be handled because of missing configuration");
   
-  pcb->add_u64_counter(l_rgw_lua_script_ok, "lua_script_ok", "Successfull executions of Lua scripts");
+  pcb->add_u64_counter(l_rgw_lua_script_ok, "lua_script_ok", "Successful executions of Lua scripts");
   pcb->add_u64_counter(l_rgw_lua_script_fail, "lua_script_fail", "Failed executions of Lua scripts");
   pcb->add_u64(l_rgw_lua_current_vms, "lua_current_vms", "Number of Lua VMs currently being executed");
 }

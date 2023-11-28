@@ -405,7 +405,7 @@ int cls_rgw_usage_log_trim(librados::IoCtx& io_ctx, const std::string& oid, cons
 /**
  * Std::list the bucket with the starting object and filter prefix.
  * NOTE: this method do listing requests for each bucket index shards identified by
- *       the keys of the *list_results* std::map, which means the std::map should be popludated
+ *       the keys of the *list_results* std::map, which means the std::map should be populated
  *       by the caller to fill with each bucket index object id.
  *
  * io_ctx        - IO context for rados.

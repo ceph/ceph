@@ -2198,7 +2198,7 @@ inline int rgw_get_request_metadata(const DoutPrefixProvider *dpp,
         return -ENAMETOOLONG;
       }
 
-      /* Similar remarks apply to the check for value size. We're veryfing
+      /* Similar remarks apply to the check for value size. We're verifying
        * it early at the RGW's side as it's being claimed in /info. */
       const auto max_attr_size = cct->_conf->rgw_max_attr_size;
       if (max_attr_size && xattr.length() > max_attr_size) {

@@ -384,7 +384,7 @@ boost::optional<std::string> RGWAccessControlPolicy_SWIFTAcct::to_str() const
   std::vector<std::string> readwrite;
   std::vector<std::string> readonly;
 
-  /* Parition the grant map into three not-overlapping groups. */
+  /* Partition the grant map into three not-overlapping groups. */
   for (const auto& item : get_acl().get_grant_map()) {
     const ACLGrant& grant = item.second;
     const uint32_t perm = grant.get_permission().get_permissions();

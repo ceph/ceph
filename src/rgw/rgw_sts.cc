@@ -72,7 +72,7 @@ int Credentials::generateCredentials(const DoutPrefixProvider *dpp,
   //Session Token - Encrypt using AES
   auto* cryptohandler = cct->get_crypto_handler(CEPH_CRYPTO_AES);
   if (! cryptohandler) {
-    ldpp_dout(dpp, 0) << "ERROR: No AES cryto handler found !" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: No AES crypto handler found !" << dendl;
     return -EINVAL;
   }
   string secret_s = cct->_conf->rgw_sts_key;

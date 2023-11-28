@@ -221,7 +221,7 @@ void RGWOp_Ratelimit_Set::execute(optional_yield y)
   sval = s->info.args.get("global", &exists);
   if (exists) {
     if (!boost::iequals(sval,"true") && !boost::iequals(sval,"false")) {
-      ldpp_dout(this, 20) << "global is not equal to true or faslse" << dendl;
+      ldpp_dout(this, 20) << "global is not equal to true or false" << dendl;
       op_ret = -EINVAL;
       return;
     }

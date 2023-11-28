@@ -310,7 +310,7 @@ namespace rgw::sal {
 
   int DBBucket::remove_objs_from_index(const DoutPrefixProvider *dpp, std::list<rgw_obj_index_key>& objs_to_unlink)
   {
-    /* XXX: CHECK: Unlike RadosStore, there is no seperate bucket index table.
+    /* XXX: CHECK: Unlike RadosStore, there is no separate bucket index table.
      * Delete all the object in the list from the object table of this
      * bucket
      */
@@ -1206,7 +1206,7 @@ namespace rgw::sal {
         return 0; /* nothing more to write */
       }
 
-      /* flush watever tail data is present */
+      /* flush whatever tail data is present */
       int ret = parent_op.write_data(dpp, tail_part_data, tail_part_offset);
       if (ret < 0) {
         return ret;
@@ -1360,7 +1360,7 @@ namespace rgw::sal {
         return 0; /* nothing more to write */
       }
 
-      /* flush watever tail data is present */
+      /* flush whatever tail data is present */
       int ret = parent_op.write_data(dpp, tail_part_data, tail_part_offset);
       if (ret < 0) {
         return ret;

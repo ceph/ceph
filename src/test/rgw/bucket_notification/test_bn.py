@@ -277,7 +277,7 @@ def stop_amqp_receiver(receiver, task):
         receiver.channel.stop_consuming()
         log.info('stopping AMQP receiver')
     except Exception as error:
-        log.info('failed to gracefuly stop AMQP receiver: %s', str(error))
+        log.info('failed to gracefully stop AMQP receiver: %s', str(error))
     task.join(5)
 
 
@@ -487,7 +487,7 @@ def stop_kafka_receiver(receiver, task):
         receiver.consumer.unsubscribe()
         receiver.consumer.close()
     except Exception as error:
-        log.info('failed to gracefuly stop Kafka receiver: %s', str(error))
+        log.info('failed to gracefully stop Kafka receiver: %s', str(error))
 
 
 def get_ip():

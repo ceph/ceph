@@ -66,12 +66,12 @@ struct rgw_zone_id {
   rgw_zone_id(std::string&& _id) : id(std::move(_id)) {}
 
   void encode(ceph::buffer::list& bl) const {
-    /* backward compatiblity, not using ENCODE_{START,END} macros */
+    /* backward compatibility, not using ENCODE_{START,END} macros */
     ceph::encode(id, bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    /* backward compatiblity, not using DECODE_{START,END} macros */
+    /* backward compatibility, not using DECODE_{START,END} macros */
     ceph::decode(id, bl);
   }
 

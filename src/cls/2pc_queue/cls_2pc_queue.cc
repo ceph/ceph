@@ -135,7 +135,7 @@ static int cls_2pc_queue_reserve(cls_method_context_t hctx, bufferlist *in, buff
   }
 
   urgent_data.reserved_size += res_op.size + overhead;
-  // note that last id is incremented regadless of failures
+  // note that last id is incremented regardless of failures
   // to avoid "old reservation" issues below
   ++urgent_data.last_id;
   bool result;

@@ -430,7 +430,7 @@ struct rgw_cls_list_ret {
   // if is_truncated is true, starting marker for next iteration; this
   // is necessary as it's possible after maximum number of tries we
   // still might have zero entries to return, in which case we have to
-  // at least move the ball foward
+  // at least move the ball forward
   cls_rgw_obj_key marker;
 
   // cls_filtered is not transmitted; it is assumed true for versions
@@ -758,7 +758,7 @@ WRITE_CLASS_ENCODER(rgw_cls_bi_put_op)
 
 struct rgw_cls_bi_list_op {
   uint32_t max;
-  std::string name_filter; // limit resultto one object and its instances
+  std::string name_filter; // limit result to one object and its instances
   std::string marker;
 
   rgw_cls_bi_list_op() : max(0) {}

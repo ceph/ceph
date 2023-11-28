@@ -142,7 +142,7 @@ int Service::get_admin_token(const DoutPrefixProvider *dpp,
                              optional_yield y,
                              std::string& token)
 {
-  /* Let's check whether someone uses the deprecated "admin token" feauture
+  /* Let's check whether someone uses the deprecated "admin token" feature
    * based on a shared secret from keystone.conf file. */
   const auto& admin_token = config.get_admin_token();
   if (! admin_token.empty()) {
@@ -345,7 +345,7 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
          * speaks in v2 disregarding the promise to go with v3. */
         decode_v3(*token_iter);
 
-        /* Identity v3 conveys the token inforamtion not as a part of JSON but
+        /* Identity v3 conveys the token information not as a part of JSON but
          * in the X-Subject-Token HTTP header we're getting from caller. */
         token.id = token_str;
       } else {
@@ -354,7 +354,7 @@ int TokenEnvelope::parse(const DoutPrefixProvider *dpp,
     } else if (version == rgw::keystone::ApiVersion::VER_3) {
       if (! token_iter.end()) {
         decode_v3(*token_iter);
-        /* v3 suceeded. We have to fill token.id from external input as it
+        /* v3 succeeded. We have to fill token.id from external input as it
          * isn't a part of the JSON response anymore. It has been moved
          * to X-Subject-Token HTTP header instead. */
         token.id = token_str;
