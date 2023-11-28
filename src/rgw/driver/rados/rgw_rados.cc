@@ -5508,6 +5508,32 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
 
   return 0;
 }
+
+int RGWRados::store_delete_bucket_info_flag(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, optional_yield y, const DoutPrefixProvider *dpp) {
+  const rgw_bucket& bucket = bucket_info.bucket;
+  static constexpr auto max_retries = 10;
+  int retries = 0;
+  int r = 0;
+  do {
+    bucket_info.flags |= BUCKET_DELETED;
+    r = ctl.bucket->store_bucket_instance_info(bucket, bucket_info, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
+                                                                    .set_exclusive(false)
+                                                                    .set_mtime(real_time())
+                                                                    .set_attrs(&attrs)
+                                                                    .set_orig_info(&bucket_info));
+    if (r == -ECANCELED) {
+      //racing write. re-read bucket info
+      int ret = get_bucket_instance_info(bucket, bucket_info, nullptr, &attrs, y, dpp);
+      if (ret < 0) {
+        ldpp_dout(dpp, 5) << "ERROR: failed to get bucket instance info for bucket=" << bucket.name << " ret=" << ret << dendl;
+        r = ret;
+        break;
+      }
+    }
+  } while (r == -ECANCELED && ++retries < max_retries);
+
+  return r;
+}
   
 /**
  * Delete a bucket.
@@ -5577,29 +5603,11 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, std::map<std::string, bu
 				       bucket_objs,
 				       cct->_conf->rgw_bucket_index_max_aio)();
   } else {
-    bucket_info.flags |= BUCKET_DELETED;
-    static constexpr auto max_retries = 10;
-    int retries = 0;
-    do {
-      r = ctl.bucket->store_bucket_instance_info(bucket, bucket_info, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
-                                                                      .set_exclusive(false)
-                                                                      .set_mtime(real_time())
-                                                                      .set_attrs(&attrs)
-                                                                      .set_orig_info(&bucket_info));
-      if (r == -ECANCELED) {
-        //racing write. re-read bucket info
-        map<string, bufferlist> attrs;
-        int ret = get_bucket_instance_info(bucket, bucket_info, nullptr, &attrs, y, dpp);
-        if (ret < 0) {
-          ldpp_dout(dpp, 5) << "ERROR: failed to get bucket instance info for bucket=" << bucket.name << " ret=" << ret << dendl;
-          r = ret;
-          break;
-        }
-      }
-    } while (r == -ECANCELED && ++retries < max_retries);
-
+    // set 'deleted' flag for multisite replication to handle bucket instance removal
+    r = store_delete_bucket_info_flag(bucket_info, attrs, y, dpp);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: failed to store bucket instance info for bucket: " << bucket.name << " r=" << r << dendl;
+      // no need to treat this as an error
+      ldpp_dout(dpp, 0) << "WARNING: failed to store bucket info flag 'deleted' on bucket: " << bucket.name << " r=" << r << dendl;
     } else {
       ldpp_dout(dpp, 20) << "INFO: setting bucket info flag to deleted for bucket: " << bucket.name << dendl;
     }
