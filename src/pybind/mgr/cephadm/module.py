@@ -1616,18 +1616,18 @@ Then run the following:
         if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
             self.cache.refresh_all_host_info(spec.hostname)
 
-        if spec.idrac:
-            if not spec.idrac.get('addr'):
-                spec.idrac['addr'] = spec.hostname
-            if not spec.idrac.get('port'):
-                spec.idrac['port'] = '443'
-            data = json.loads(self.get_store('node_proxy/idrac', '{}'))
+        if spec.oob:
+            if not spec.oob.get('addr'):
+                spec.oob['addr'] = spec.hostname
+            if not spec.oob.get('port'):
+                spec.oob['port'] = '443'
+            data = json.loads(self.get_store('node_proxy/oob', '{}'))
             data[spec.hostname] = dict()
-            data[spec.hostname]['addr'] = spec.idrac['addr']
-            data[spec.hostname]['port'] = spec.idrac['port']
-            data[spec.hostname]['username'] = spec.idrac['username']
-            data[spec.hostname]['password'] = spec.idrac['password']
-            self.set_store('node_proxy/idrac', json.dumps(data))
+            data[spec.hostname]['addr'] = spec.oob['addr']
+            data[spec.hostname]['port'] = spec.oob['port']
+            data[spec.hostname]['username'] = spec.oob['username']
+            data[spec.hostname]['password'] = spec.oob['password']
+            self.set_store('node_proxy/oob', json.dumps(data))
 
         # prime crush map?
         if spec.location:
