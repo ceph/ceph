@@ -12,6 +12,7 @@ import threading
 import traceback
 import socket
 import fcntl
+from typing import cast
 
 from . import common
 from . import context
@@ -197,6 +198,7 @@ class Module(MgrModule):
         {'name': 'server_port'},
         {'name': 'key_file'},
         {'name': 'enable_auth', 'type': 'bool', 'default': True},
+        {'name': 'max_requests', 'type': 'int', 'default': 500},
     ]
 
     COMMANDS = [
@@ -243,6 +245,7 @@ class Module(MgrModule):
 
         self.stop_server = False
         self.serve_event = threading.Event()
+        self.max_requests = cast(int, self.get_localized_module_option('max_requests', 500))
 
 
     def serve(self):
@@ -599,6 +602,16 @@ class Module(MgrModule):
         with self.requests_lock:
             request = CommandsRequest(_request)
             self.requests.append(request)
+            if len(self.requests) > self.max_requests:
+                req_to_trim = 0
+                for i, req in enumerate(self.requests):
+                    if req.is_finished():
+                        self.log.error("Trimmed one finished request due to exceeded maximum requests limit")
+                        req_to_trim = i
+                        break
+                    else:
+                        self.log.error("Trimmed the oldest unfinished request due to exceeded maximum requests limit")
+                self.requests.pop(req_to_trim)
         if kwargs.get('wait', 0):
             while not request.is_finished():
                 time.sleep(0.001)
