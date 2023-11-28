@@ -126,6 +126,7 @@ ECBackend::ECBackend(
   : PGBackend(cct, pg, store, coll, ch),
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
+    unstable_hashinfo_registry(cct, ec_impl),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   ceph_assert((ec_impl->get_data_chunk_count() *
@@ -375,7 +376,7 @@ void ECBackend::handle_recovery_read_complete(
       auto bp = op.xattrs[ECUtil::get_hinfo_key()].cbegin();
       decode(hinfo, bp);
     }
-    op.hinfo = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
+    op.hinfo = unstable_hashinfo_registry.maybe_put_hash_info(hoid, std::move(hinfo));
   }
   ceph_assert(op.xattrs.size());
   ceph_assert(op.obc);
@@ -501,6 +502,12 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     std::make_unique<RecoveryReadCompleter>(*this));
 }
 
+void ECBackend::RecoveryBackend::continue_recovery_op(
+  RecoveryBackend::RecoveryOp &op,
+  RecoveryMessages *m)
+{
+}
+
 void ECBackend::continue_recovery_op(
   RecoveryOp &op,
   RecoveryMessages *m)
@@ -518,7 +525,7 @@ void ECBackend::continue_recovery_op(
 
       if (op.recovery_progress.first && op.obc) {
 	/* We've got the attrs and the hinfo, might as well use them */
-	op.hinfo = get_hash_info(op.hoid, false, op.obc->attr_cache, op.obc->obs.oi.size);
+	op.hinfo = unstable_hashinfo_registry.get_hash_info(op.hoid, false, op.obc->attr_cache, op.obc->obs.oi.size);
 	if (!op.hinfo) {
           derr << __func__ << ": " << op.hoid << " has inconsistent hinfo"
                << dendl;
@@ -1020,7 +1027,7 @@ void ECBackend::handle_sub_read(
 	  r = PGBackend::objects_get_attrs(i->first, &attrs);
 	}
 	if (r >= 0) {
-	  hinfo = get_hash_info(i->first, false, attrs, st.st_size);
+	  hinfo = unstable_hashinfo_registry.get_hash_info(i->first, false, attrs, st.st_size);
 	} else {
 	  derr << __func__ << ": access (attrs) on " << i->first << " failed: "
 	       << cpp_strerror(r) << dendl;
@@ -1382,7 +1389,7 @@ void ECBackend::submit_transaction(
     sinfo,
     *(op->t),
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = get_hash_info(
+      ECUtil::HashInfoRef ref = unstable_hashinfo_registry.get_hash_info(
 	i,
 	true,
 	op->t->obc_map[hoid]->attr_cache,
@@ -1401,15 +1408,21 @@ void ECBackend::submit_transaction(
   rmw_pipeline.start_rmw(std::move(op));
 }
 
+ECUtil::HashInfoRef ECBackend::UnstableHashInfoRegistry::maybe_put_hash_info(
+  const hobject_t &hoid,
+  ECUtil::HashInfo &&hinfo)
+{
+  return registry.lookup_or_create(hoid, hinfo);
+}
 
-ECUtil::HashInfoRef ECBackend::get_hash_info(
+ECUtil::HashInfoRef ECBackend::UnstableHashInfoRegistry::get_hash_info(
   const hobject_t &hoid,
   bool create,
   const map<string, bufferlist, less<>>& attrs,
   uint64_t size)
 {
   dout(10) << __func__ << ": Getting attr on " << hoid << dendl;
-  ECUtil::HashInfoRef ref = unstable_hashinfo_registry.lookup(hoid);
+  ECUtil::HashInfoRef ref = registry.lookup(hoid);
   if (!ref) {
     dout(10) << __func__ << ": not in cache " << hoid << dendl;
     ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
@@ -1437,7 +1450,7 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
       create = true;
     }
     if (create) {
-      ref = unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
+      ref = registry.lookup_or_create(hoid, hinfo);
     }
   }
   return ref;
@@ -1688,7 +1701,7 @@ int ECBackend::be_deep_scrub(
     return -EINPROGRESS;
   }
 
-  ECUtil::HashInfoRef hinfo = get_hash_info(poid, false, o.attrs, o.size);
+  ECUtil::HashInfoRef hinfo = unstable_hashinfo_registry.get_hash_info(poid, false, o.attrs, o.size);
   if (!hinfo) {
     dout(0) << "_scan_list  " << poid << " could not retrieve hash info" << dendl;
     o.read_error = true;
