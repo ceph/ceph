@@ -304,6 +304,8 @@ public:
   }
 
   /// Listener methods
+  void add_temp_obj(const hobject_t &oid) override { get_pgbackend()->add_temp_obj(oid); }
+  void clear_temp_obj(const hobject_t &oid) override { get_pgbackend()->clear_temp_obj(oid); }
   DoutPrefixProvider *get_dpp() override {
     return this;
   }

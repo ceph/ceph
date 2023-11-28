@@ -158,11 +158,6 @@ private:
 
   void kick_reads();
 
-  uint64_t get_recovery_chunk_size() const {
-    return round_up_to(cct->_conf->osd_recovery_max_chunk,
-			sinfo.get_stripe_width());
-  }
-
   /**
    * Recovery
    *
@@ -193,6 +188,40 @@ private:
    * Transaction, and reads in a RecoveryMessages object which is passed
    * among the recovery methods.
    */
+public:
+  struct RecoveryBackend {
+    CephContext* cct;
+    const coll_t &coll;
+    ceph::ErasureCodeInterfaceRef ec_impl;
+    const ECUtil::stripe_info_t& sinfo;
+    ReadPipeline& read_pipeline;
+    UnstableHashInfoRegistry& unstable_hashinfo_registry;
+    // TODO: lay an interface down here
+    ECListener* parent;
+
+    ECListener *get_parent() const { return parent; }
+    const OSDMapRef& get_osdmap() const { return get_parent()->pgb_get_osdmap(); }
+    epoch_t get_osdmap_epoch() const { return get_parent()->pgb_get_osdmap_epoch(); }
+    const pg_info_t &get_info() { return get_parent()->get_info(); }
+    void add_temp_obj(const hobject_t &oid) { get_parent()->add_temp_obj(oid); }
+    void clear_temp_obj(const hobject_t &oid) { get_parent()->clear_temp_obj(oid); }
+
+    RecoveryBackend(CephContext* cct,
+		    const coll_t &coll,
+                ceph::ErasureCodeInterfaceRef ec_impl,
+                const ECUtil::stripe_info_t& sinfo,
+		ReadPipeline& read_pipeline,
+		UnstableHashInfoRegistry& unstable_hashinfo_registry,
+                ECListener* parent)
+      : cct(cct),
+        coll(coll),
+        ec_impl(std::move(ec_impl)),
+        sinfo(sinfo),
+	read_pipeline(read_pipeline),
+	unstable_hashinfo_registry(unstable_hashinfo_registry),
+        parent(parent) {
+    }
+  // <<<----
   struct RecoveryOp {
     hobject_t hoid;
     eversion_t v;
@@ -206,13 +235,13 @@ private:
 
     static const char* tostr(state_t state) {
       switch (state) {
-      case ECBackend::RecoveryOp::IDLE:
+      case RecoveryOp::IDLE:
 	return "IDLE";
-      case ECBackend::RecoveryOp::READING:
+      case RecoveryOp::READING:
 	return "READING";
-      case ECBackend::RecoveryOp::WRITING:
+      case RecoveryOp::WRITING:
 	return "WRITING";
-      case ECBackend::RecoveryOp::COMPLETE:
+      case RecoveryOp::COMPLETE:
 	return "COMPLETE";
       default:
 	ceph_abort();
@@ -237,13 +266,26 @@ private:
   friend ostream &operator<<(ostream &lhs, const RecoveryOp &rhs);
   std::map<hobject_t, RecoveryOp> recovery_ops;
 
-  void continue_recovery_op(
-    RecoveryOp &op,
-    RecoveryMessages *m);
-  friend struct RecoveryMessages;
+  uint64_t get_recovery_chunk_size() const {
+    return round_up_to(cct->_conf->osd_recovery_max_chunk,
+			sinfo.get_stripe_width());
+  }
+
   void dispatch_recovery_messages(RecoveryMessages &m, int priority);
-  friend struct OnRecoveryReadComplete;
-  friend struct RecoveryReadCompleter;
+
+  RecoveryHandle *open_recovery_op();
+  void run_recovery_op(
+    struct ECRecoveryHandle &h,
+    int priority);
+  int recover_object(
+    const hobject_t &hoid,
+    eversion_t v,
+    ObjectContextRef head,
+    ObjectContextRef obc,
+    RecoveryHandle *h);
+  void continue_recovery_op(
+    RecoveryBackend::RecoveryOp &op,
+    RecoveryMessages *m);
   void handle_recovery_read_complete(
     const hobject_t &hoid,
     boost::tuple<uint64_t, uint64_t, std::map<pg_shard_t, ceph::buffer::list> > &to_read,
@@ -257,10 +299,26 @@ private:
     const PushReplyOp &op,
     pg_shard_t from,
     RecoveryMessages *m);
+  friend struct RecoveryMessages;
+  int get_ec_data_chunk_count() const {
+    return ec_impl->get_data_chunk_count();
+  }
+  void _failed_push(const hobject_t &hoid, ECCommon::read_result_t &res);
+  };
+  friend ostream &operator<<(ostream &lhs, const RecoveryBackend::RecoveryOp &rhs);
+  friend struct RecoveryMessages;
+  friend struct OnRecoveryReadComplete;
+  friend struct RecoveryReadCompleter;
+
+  void handle_recovery_push(
+    const PushOp &op,
+    RecoveryMessages *m,
+    bool is_repair);
 
 public:
   struct ReadPipeline read_pipeline;
   struct RMWPipeline rmw_pipeline;
+  struct RecoveryBackend recovery_backend;
 
   ceph::ErasureCodeInterfaceRef ec_impl;
 
@@ -358,7 +416,6 @@ public:
   uint64_t be_get_ondisk_size(uint64_t logical_size) const final {
     return sinfo.logical_to_next_chunk_offset(logical_size);
   }
-  void _failed_push(const hobject_t &hoid, ECBackend::read_result_t &res);
 };
 ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs);
 
