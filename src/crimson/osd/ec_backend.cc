@@ -43,6 +43,7 @@ ECBackend::ECBackend(pg_shard_t p_shard,
     sinfo{ec_impl->get_data_chunk_count(), stripe_width},
     fast_read{fast_read},
     allows_ecoverwrites{allows_ecoverwrites},
+    unstable_hashinfo_registry{shard_services.get_cct(), ec_impl},
     read_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener},
     rmw_pipeline{shard_services.get_cct(), ec_impl, sinfo, &eclistener, *this}
 {
@@ -289,7 +290,7 @@ ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
     *(op->t),
     [&op, this](const hobject_t &i) {
       ECUtil::HashInfoRef ref =
-        get_hash_info(i, true, op->t->obc_map[i]->attr_cache, 0);
+        unstable_hashinfo_registry.get_hash_info(i, true, op->t->obc_map[i]->attr_cache, 0);
   logger().debug("ECBackend::{} LINE {}", "_submit_transaction", __LINE__);
       ceph_assert_always(ref);
       return ref;
@@ -306,47 +307,6 @@ ECBackend::_submit_transaction(std::set<pg_shard_t>&& pg_shards,
       return seastar::make_ready_future<crimson::osd::acked_peers_t>();
     })
   };
-}
-
-ECUtil::HashInfoRef ECBackend::get_hash_info(
-  const hobject_t &hoid,
-  bool create,
-  const std::map<std::string, ceph::bufferlist, std::less<>> &attrs,
-  const uint64_t size)
-{
-  logger().debug("{}: getting hashinfo attr on {}", __func__, hoid);
-  ceph::bufferlist valbl;
-  if (auto ref = unstable_hashinfo_registry.lookup(hoid); ref) {
-    logger().info("{}: found in cache {}", __func__, hoid);
-    return ref;
-  }
-  if (const auto& attr_it = attrs.find(ECUtil::get_hinfo_key());
-      attr_it != std::end(attrs)) {
-    logger().debug("{}: found obj+attr in attrs {}", "get_hash_info", hoid);
-    valbl = attr_it->second;
-  }
-  ECUtil::HashInfo hinfo(ec_impl->get_chunk_count());
-  if (valbl.length() > 0) {
-    auto bp = valbl.cbegin();
-    try {
-      decode(hinfo, bp);
-    } catch(...) {
-      ceph_abort_msg("can't decode hinfo");
-    }
-    if (hinfo.get_total_chunk_size() != (uint64_t)size) {
-      logger().error("{}: mismatch of total_chunk_size {}",
-		      "get_hash_info", hinfo.get_total_chunk_size());
-      return ECUtil::HashInfoRef();
-    }
-  } else if (!size) {
-    logger().debug("{}: empty hinfo and size on {}, creating",
-		    "get_hash_info", hoid);
-    create = true;
-  }
-  if (create) {
-    return unstable_hashinfo_registry.lookup_or_create(hoid, hinfo);
-  }
-  return ECUtil::HashInfoRef{};
 }
 
 ECBackend::write_iertr::future<>
