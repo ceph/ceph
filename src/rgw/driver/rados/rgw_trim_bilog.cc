@@ -763,7 +763,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
   //remove bucket instance metadata
   if (clean_info->first.layout.logs.front().layout.type == rgw::BucketLogType::Deleted) {
     yield call(new RGWRemoveBucketInstanceInfoCR(
-      store->svc()->rados->get_async_processor(),
+      store->svc()->async_processor,
       store, clean_info->first.bucket,
       clean_info->first, nullptr, dpp));
     if (retcode < 0) {
