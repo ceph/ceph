@@ -77,8 +77,8 @@ private:
     static constexpr auto type_name = "SnapTrimEvent::wait_trim_timer";
   } wait_trim_timer;
 
-  PipelineHandle handle;
   Ref<PG> pg;
+  PipelineHandle handle;
   SnapMapper& snap_mapper;
   const snapid_t snapid;
   const bool needs_pause;
