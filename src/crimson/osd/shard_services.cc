@@ -97,8 +97,9 @@ seastar::future<> PerShardState::broadcast_map_to_pgs(
     pgs.begin(), pgs.end(),
     [=, &shard_services](auto& pg) {
       return shard_services.start_operation<PGAdvanceMap>(
+	pg.second,
 	shard_services,
-	pg.second, epoch,
+	epoch,
 	PeeringCtx{}, false).second;
     });
 }
@@ -652,7 +653,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	    rctx.transaction);
 
 	  return start_operation<PGAdvanceMap>(
-	    *this, pg, get_map()->get_epoch(), std::move(rctx), true
+	    pg, *this, get_map()->get_epoch(), std::move(rctx), true
 	  ).second.then([pg=pg] {
 	    return seastar::make_ready_future<Ref<PG>>(pg);
 	  });
