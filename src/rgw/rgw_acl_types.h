@@ -182,7 +182,6 @@ protected:
   __u32 type;
 public:
   ACLGranteeType(ACLGranteeTypeEnum t = ACL_TYPE_UNKNOWN) : type(t) {}
-  virtual ~ACLGranteeType() {}
 
   ACLGranteeTypeEnum get_type() const { return (ACLGranteeTypeEnum)type; }
   operator ACLGranteeTypeEnum() const { return get_type(); }
