@@ -238,7 +238,6 @@ class STSService {
   rgw_user user_id;
   RGWRole role;
   rgw::auth::Identity* identity;
-  int storeARN(const DoutPrefixProvider *dpp, string& arn, optional_yield y);
 public:
   STSService() = default;
   STSService(CephContext* cct, rgw::sal::RGWRadosStore *store, rgw_user user_id,
