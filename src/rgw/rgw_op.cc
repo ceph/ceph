@@ -2457,6 +2457,8 @@ void RGWListBuckets::execute(optional_yield y)
       break;
     }
 
+    is_truncated = buckets.is_truncated();
+
     /* We need to have stats for all our policies - even if a given policy
      * isn't actually used in a given account. In such situation its usage
      * stats would be simply full of zeros. */
