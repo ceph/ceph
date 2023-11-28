@@ -30,6 +30,16 @@ po::options_description make_usage() {
     ("sampling-ratio", po::value<int>(), ": set the sampling ratio (percentile)")
     ("wakeup-period", po::value<int>(), ": set the wakeup period of crawler thread (sec)")
     ("fpstore-threshold", po::value<size_t>()->default_value(100_M), ": set max size of in-memory fingerprint store (bytes)")
+    ("conf,c", po::value<std::string>(), "read configuration from the given configuration file")
+    ("id,i", po::value<std::string>(), "set ID portion of my name")
+    ("name,n", po::value<std::string>(), "set name")
+    ("cluster", po::value<std::string>(), "set cluster name (default: ceph)")
+    ("setuser", po::value<std::string>(), "set uid to user or uid (and gid to user's gid)")
+    ("setgroup", po::value<std::string>(), "set gid to group or gid")
+    ("version", "show version and quit")
+    (",d", "run in foreground, log to stderr")
+    (",f", "run in foreground, log to usual location")
+    ("debug_ms", po::value<std::string>(), "set message debug level (e.g. 1)")
   ;
   desc.add(op_desc);
   return desc;
