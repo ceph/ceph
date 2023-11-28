@@ -6987,9 +6987,11 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, const RGWBuck
     return r;
   }
 
-  r = svc.datalog_rados->add_entry(dpp, bucket_info, bs.shard_id);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed writing data log" << dendl;
+  if (log_data_change) {
+    r = svc.datalog_rados->add_entry(dpp, bucket_info, bs.shard_id);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: failed writing data log" << dendl;
+    }
   }
 
   return 0;
