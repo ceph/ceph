@@ -256,23 +256,23 @@ class TestMisc(CephFSTestCase):
                 self.mount_a.run_shell(["mkdir", os.path.join(dir_path, f"{i}_{j}")])
             start = time.time()
             if file_sync:
-                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript])
+                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript], timeout=4)
             else:
-                self.mount_a.run_shell(["sync"])
+                self.mount_a.run_shell(["sync"], timeout=4)
+            # the real duration should be less than the rough one
             duration = time.time() - start
-            log.info(f"sync mkdir i = {i}, duration = {duration}")
-            self.assertLess(duration, 4)
+            log.info(f"sync mkdir i = {i}, rough duration = {duration}")
 
             for j in range(5):
                 self.mount_a.run_shell(["rm", "-rf", os.path.join(dir_path, f"{i}_{j}")])
             start = time.time()
             if file_sync:
-                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript])
+                self.mount_a.run_shell(['python3', '-c', sync_dir_pyscript], timeout=4)
             else:
-                self.mount_a.run_shell(["sync"])
+                self.mount_a.run_shell(["sync"], timeout=4)
+            # the real duration should be less than the rough one
             duration = time.time() - start
-            log.info(f"sync rmdir i = {i}, duration = {duration}")
-            self.assertLess(duration, 4)
+            log.info(f"sync rmdir i = {i}, rough duration = {duration}")
 
         self.mount_a.run_shell(["rm", "-rf", dir_path])
 
