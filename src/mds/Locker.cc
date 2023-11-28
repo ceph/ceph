@@ -5765,6 +5765,7 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
   case LOCK_AC_SYNC:
     ceph_assert(lock->get_state() == LOCK_LOCK ||
 	   lock->get_state() == LOCK_MIX ||
+	   lock->get_state() == LOCK_MIX_SYNC ||
 	   lock->get_state() == LOCK_MIX_SYNC2);
     
     if (lock->get_state() == LOCK_MIX) {
