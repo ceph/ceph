@@ -1481,11 +1481,14 @@ class NodeProxyCache:
 
         for host in hosts:
             _result[host] = {}
+            _result[host]['status'] = {}
             data = self.data[host]
             for component, details in data['status'].items():
                 res = any([member['status']['health'].lower() != 'ok' for member in data['status'][component].values()])
-                _result[host][component] = mapper[res]
-
+                _result[host]['status'][component] = mapper[res]
+            _result[host]['sn'] = data['sn']
+            _result[host]['host'] = data['host']
+            _result[host]['firmwares'] = data['firmwares']
         return _result
 
     def common(self, endpoint: str, **kw: Any) -> Dict[str, Any]:

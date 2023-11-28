@@ -1684,7 +1684,7 @@ Then run the following:
             data = self.node_proxy.summary(hostname=hostname)
             for k, v in data.items():
                 row = [k]
-                row.extend([v[key] for key in ['storage', 'processors', 'network', 'memory', 'power', 'fans']])
+                row.extend([v['status'][key] for key in ['storage', 'processors', 'network', 'memory', 'power', 'fans']])
                 table.add_row(row)
             output = table.get_string()
         elif category == 'firmwares':
