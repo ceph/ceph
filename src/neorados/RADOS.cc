@@ -849,54 +849,6 @@ void RADOS::execute(const Object& o, const IOContext& _ioc, WriteOp&& _op,
   trace.event("submitted");
 }
 
-void RADOS::execute(const Object& o, std::int64_t pool, ReadOp&& _op,
-		    cb::list* bl,
-		    std::unique_ptr<ReadOp::Completion> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key,
-		    version_t* objver) {
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = op->op.flags;
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  impl->objecter->read(
-    *oid, oloc, std::move(op->op), CEPH_NOSNAP, bl, flags,
-    std::move(c), objver);
-}
-
-void RADOS::execute(const Object& o, std::int64_t pool, WriteOp&& _op,
-		    std::unique_ptr<WriteOp::Completion> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key,
-		    version_t* objver) {
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  auto op = reinterpret_cast<OpImpl*>(&_op.impl);
-  auto flags = op->op.flags;
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  ceph::real_time mtime;
-  if (op->mtime)
-    mtime = *op->mtime;
-  else
-    mtime = ceph::real_clock::now();
-
-  impl->objecter->mutate(
-    *oid, oloc, std::move(op->op), {},
-    mtime, flags,
-    std::move(c), objver);
-}
-
 boost::uuids::uuid RADOS::get_fsid() const noexcept {
   return impl->monclient.get_fsid().uuid;
 }
@@ -1130,35 +1082,6 @@ void RADOS::watch(const Object& o, const IOContext& _ioc,
       }), nullptr);
 }
 
-void RADOS::watch(const Object& o, std::int64_t pool,
-		  std::optional<std::chrono::seconds> timeout, WatchCB&& cb,
-		  std::unique_ptr<WatchComp> c,
-		  std::optional<std::string_view> ns,
-		  std::optional<std::string_view> key) {
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  ObjectOperation op;
-
-  Objecter::LingerOp *linger_op = impl->objecter->linger_register(*oid, oloc, 0);
-  uint64_t cookie = linger_op->get_cookie();
-  linger_op->handle = std::move(cb);
-  op.watch(cookie, CEPH_OSD_WATCH_OP_WATCH, timeout.value_or(0s).count());
-  bufferlist bl;
-  impl->objecter->linger_watch(
-    linger_op, op, {}, ceph::real_clock::now(), bl,
-    Objecter::LingerOp::OpComp::create(
-      get_executor(),
-      [c = std::move(c), cookie](bs::error_code e, bufferlist) mutable {
-	ca::dispatch(std::move(c), e, cookie);
-      }), nullptr);
-}
-
 void RADOS::notify_ack(const Object& o,
 		       const IOContext& _ioc,
 		       uint64_t notify_id,
@@ -1174,28 +1097,6 @@ void RADOS::notify_ack(const Object& o,
 
   impl->objecter->read(*oid, ioc->oloc, std::move(op), ioc->snap_seq,
 		       nullptr, ioc->extra_op_flags, std::move(c));
-}
-
-void RADOS::notify_ack(const Object& o,
-		       std::int64_t pool,
-		       uint64_t notify_id,
-		       uint64_t cookie,
-		       bufferlist&& bl,
-		       std::unique_ptr<SimpleOpComp> c,
-		       std::optional<std::string_view> ns,
-		       std::optional<std::string_view> key) {
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  ObjectOperation op;
-  op.notify_ack(notify_id, cookie, bl);
-  impl->objecter->read(*oid, oloc, std::move(op), CEPH_NOSNAP, nullptr, 0,
-		       std::move(c));
 }
 
 tl::expected<ceph::timespan, bs::error_code> RADOS::watch_check(uint64_t cookie)
@@ -1215,34 +1116,6 @@ void RADOS::unwatch(uint64_t cookie, const IOContext& _ioc,
   op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
   impl->objecter->mutate(linger_op->target.base_oid, ioc->oloc, std::move(op),
 			 ioc->snapc, ceph::real_clock::now(), ioc->extra_op_flags,
-			 Objecter::Op::OpComp::create(
-			   get_executor(),
-			   [objecter = impl->objecter,
-			    linger_op, c = std::move(c)]
-			   (bs::error_code ec) mutable {
-			     objecter->linger_cancel(linger_op);
-			     ca::dispatch(std::move(c), ec);
-			   }));
-}
-
-void RADOS::unwatch(uint64_t cookie, std::int64_t pool,
-		    std::unique_ptr<SimpleOpComp> c,
-		    std::optional<std::string_view> ns,
-		    std::optional<std::string_view> key)
-{
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-
-  Objecter::LingerOp *linger_op = reinterpret_cast<Objecter::LingerOp*>(cookie);
-
-  ObjectOperation op;
-  op.watch(cookie, CEPH_OSD_WATCH_OP_UNWATCH);
-  impl->objecter->mutate(linger_op->target.base_oid, oloc, std::move(op),
-			 {}, ceph::real_clock::now(), 0,
 			 Objecter::Op::OpComp::create(
 			   get_executor(),
 			   [objecter = impl->objecter,
@@ -1342,45 +1215,6 @@ void RADOS::notify(const Object& o, const IOContext& _ioc, bufferlist&& bl,
     Objecter::LingerOp::OpComp::create(
       get_executor(),
       [cb](bs::error_code ec, ceph::bufferlist bl) mutable {
-	cb->handle_ack(ec, std::move(bl));
-      }), nullptr);
-}
-
-void RADOS::notify(const Object& o, std::int64_t pool, bufferlist&& bl,
-		   std::optional<std::chrono::milliseconds> timeout,
-		   std::unique_ptr<NotifyComp> c,
-		   std::optional<std::string_view> ns,
-		   std::optional<std::string_view> key)
-{
-  auto oid = reinterpret_cast<const object_t*>(&o.impl);
-  object_locator_t oloc;
-  oloc.pool = pool;
-  if (ns)
-    oloc.nspace = *ns;
-  if (key)
-    oloc.key = *key;
-  auto linger_op = impl->objecter->linger_register(*oid, oloc, 0);
-
-  auto cb = std::make_shared<NotifyHandler>(impl->ioctx, impl->objecter,
-                                            linger_op, std::move(c));
-  linger_op->on_notify_finish =
-    Objecter::LingerOp::OpComp::create(
-      get_executor(),
-      [cb](bs::error_code ec, ceph::bufferlist&& bl) mutable {
-	(*cb)(ec, std::move(bl));
-      });
-  ObjectOperation rd;
-  bufferlist inbl;
-  rd.notify(
-    linger_op->get_cookie(), 1,
-    timeout ? timeout->count() : impl->cct->_conf->client_notify_timeout,
-    bl, &inbl);
-
-  impl->objecter->linger_notify(
-    linger_op, rd, CEPH_NOSNAP, inbl,
-    Objecter::LingerOp::OpComp::create(
-      get_executor(),
-      [cb](bs::error_code ec, bufferlist&& bl) mutable {
 	cb->handle_ack(ec, std::move(bl));
       }), nullptr);
 }
@@ -1508,30 +1342,6 @@ void RADOS::enumerate_objects(const IOContext& _ioc,
 		   Cursor(static_cast<void*>(&n)));
     });
 }
-
-void RADOS::enumerate_objects(std::int64_t pool,
-			      const Cursor& begin,
-			      const Cursor& end,
-			      const std::uint32_t max,
-			      const bufferlist& filter,
-			      std::unique_ptr<EnumerateComp> c,
-			      std::optional<std::string_view> ns,
-			      std::optional<std::string_view> key) {
-  impl->objecter->enumerate_objects<Entry>(
-    pool,
-    ns ? *ns : std::string_view{},
-    *reinterpret_cast<const hobject_t*>(&begin.impl),
-    *reinterpret_cast<const hobject_t*>(&end.impl),
-    max,
-    filter,
-    [c = std::move(c)]
-    (bs::error_code ec, std::vector<Entry>&& v,
-     hobject_t&& n) mutable {
-      ca::dispatch(std::move(c), ec, std::move(v),
-		   Cursor(static_cast<void*>(&n)));
-    });
-}
-
 
 void RADOS::osd_command(int osd, std::vector<std::string>&& cmd,
 			ceph::bufferlist&& in, std::unique_ptr<CommandComp> c) {
