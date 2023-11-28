@@ -395,7 +395,7 @@ struct TestMockIoObjectRequest : public TestMockFixture {
   void expect_list_snaps(MockTestImageCtx &mock_image_ctx,
                         const librados::snap_set_t& snap_set, int r) {
     auto io_context = *mock_image_ctx.get_data_io_context();
-    io_context.read_snap(CEPH_SNAPDIR);
+    io_context.set_read_snap(CEPH_SNAPDIR);
     auto& mock_io_ctx = librados::get_mock_io_ctx(mock_image_ctx.rados_api,
                                                   io_context);
     EXPECT_CALL(mock_io_ctx, list_snaps(_, _))

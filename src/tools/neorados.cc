@@ -92,8 +92,7 @@ void lspools(R::RADOS& r, const std::vector<std::string>&,
 void ls(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
 {
   const auto& pname = p[0];
-  auto pool = lookup_pool(r, pname, y);
-  pool.ns(R::all_nspaces);
+  const auto pool = lookup_pool(r, pname, y).set_ns(R::all_nspaces);
 
   std::vector<R::Entry> ls;
   R::Cursor next = R::Cursor::begin();
@@ -213,7 +212,7 @@ void read(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
       throw bs::system_error(
 	ec,
 	fmt::format("when reading from object '{}' in pool '{}'",
-		    obj, pool.pool()));
+		    obj, pool));
 
     off += bl.length();
     bl.write_stream(std::cout);

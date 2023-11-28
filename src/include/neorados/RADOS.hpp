@@ -24,6 +24,9 @@
 #include <type_traits>
 #include <variant>
 
+#include <fmt/format.h>
+#include <fmt/ostream.h>
+
 #include <boost/asio/async_result.hpp>
 #include <boost/asio/io_context.hpp>
 
@@ -129,8 +132,7 @@ public:
 
   IOContext();
   explicit IOContext(std::int64_t pool);
-  IOContext(std::int64_t _pool, std::string_view _ns);
-  IOContext(std::int64_t _pool, std::string&& _ns);
+  IOContext(std::int64_t pool, std::string ns, std::string key = {});
   ~IOContext();
 
   IOContext(const IOContext& rhs);
@@ -139,36 +141,41 @@ public:
   IOContext(IOContext&& rhs);
   IOContext& operator =(IOContext&& rhs);
 
-  std::int64_t pool() const;
-  void pool(std::int64_t _pool);
+  std::int64_t get_pool() const;
+  void set_pool(std::int64_t _pool) &;
+  IOContext&& set_pool(std::int64_t _pool) &&;
 
-  std::string_view ns() const;
-  void ns(std::string_view _ns);
-  void ns(std::string&& _ns);
+  std::string_view get_ns() const;
+  void set_ns(std::string ns) &;
+  IOContext&& set_ns(std::string ns) &&;
 
-  std::optional<std::string_view> key() const;
-  void key(std::string_view _key);
-  void key(std::string&& _key);
-  void clear_key();
+  std::string_view get_key() const;
+  void set_key(std::string key) &;
+  IOContext&& set_key(std::string key) &&;
 
-  std::optional<std::int64_t> hash() const;
-  void hash(std::int64_t _hash);
-  void clear_hash();
+  std::int64_t get_hash() const;
+  void set_hash(std::int64_t hash) &;
+  IOContext&& set_hash(std::int64_t hash) &&;
 
-  std::optional<std::uint64_t> read_snap() const;
-  void read_snap(std::optional<std::uint64_t> _snapid);
+  std::uint64_t get_read_snap() const;
+  void set_read_snap(std::uint64_t snapid) &;
+  IOContext&& set_read_snap(std::uint64_t snapid) &&;
 
   // I can't actually move-construct here since snapid_t is its own
   // separate class type, not an alias.
   std::optional<
     std::pair<std::uint64_t,
-	      std::vector<std::uint64_t>>> write_snap_context() const;
-  void write_snap_context(std::optional<
-			  std::pair<std::uint64_t,
-			              std::vector<std::uint64_t>>> snapc);
+	      std::vector<std::uint64_t>>> get_write_snap_context() const;
+  void set_write_snap_context(
+    std::optional<std::pair<std::uint64_t,
+                            std::vector<std::uint64_t>>> snapc) &;
+  IOContext&& set_write_snap_context(
+    std::optional<std::pair<std::uint64_t,
+                            std::vector<std::uint64_t>>> snapc) &&;
 
-  bool full_try() const;
-  void full_try(bool _full_try);
+  bool get_full_try() const;
+  void set_full_try(bool full_try) &;
+  IOContext&& set_full_try(bool full_try) &&;
 
   friend std::ostream& operator <<(std::ostream& m, const IOContext& o);
   friend bool operator <(const IOContext& lhs, const IOContext& rhs);
@@ -185,7 +192,7 @@ private:
   std::aligned_storage_t<impl_size> impl;
 };
 
-inline constexpr std::string_view all_nspaces("\001");
+inline const std::string all_nspaces("\001");
 
 enum class cmpxattr_op : std::uint8_t {
   eq  = 1,
@@ -994,5 +1001,11 @@ struct hash<neorados::IOContext> {
   size_t operator ()(const neorados::IOContext& r) const;
 };
 } // namespace std
+
+#if FMT_VERSION >= 90000
+template<> struct fmt::formatter<neorados::Object> : fmt::ostream_formatter {};
+template<> struct fmt::formatter<neorados::IOContext>
+  : fmt::ostream_formatter {};
+#endif // FMT_VERSION
 
 #endif // NEORADOS_RADOS_HPP

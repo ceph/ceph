@@ -143,20 +143,15 @@ IOContext::IOContext() {
   new (&impl) IOContextImpl();
 }
 
-IOContext::IOContext(std::int64_t _pool) : IOContext() {
-  pool(_pool);
+IOContext::IOContext(std::int64_t pool) : IOContext() {
+  set_pool(pool);
 }
 
-IOContext::IOContext(std::int64_t _pool, std::string_view _ns)
+IOContext::IOContext(std::int64_t pool, std::string ns, std::string key)
   : IOContext() {
-  pool(_pool);
-  ns(_ns);
-}
-
-IOContext::IOContext(std::int64_t _pool, std::string&& _ns)
-  : IOContext() {
-  pool(_pool);
-  ns(std::move(_ns));
+  set_pool(pool);
+  set_ns(std::move(ns));
+  set_key(std::move(key));
 }
 
 IOContext::~IOContext() {
@@ -186,88 +181,77 @@ IOContext& IOContext::operator =(IOContext&& rhs) {
   return *this;
 }
 
-std::int64_t IOContext::pool() const {
+std::int64_t IOContext::get_pool() const {
   return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.pool;
 }
 
-void IOContext::pool(std::int64_t _pool) {
-  reinterpret_cast<IOContextImpl*>(&impl)->oloc.pool = _pool;
+void IOContext::set_pool(std::int64_t pool) & {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.pool = pool;
 }
 
-std::string_view IOContext::ns() const {
+IOContext&& IOContext::set_pool(std::int64_t pool) && {
+  set_pool(pool);
+  return std::move(*this);
+}
+
+std::string_view IOContext::get_ns() const {
   return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.nspace;
 }
 
-void IOContext::ns(std::string_view _ns) {
-  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace = _ns;
+void IOContext::set_ns(std::string ns) & {
+  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace = std::move(ns);
 }
 
-void IOContext::ns(std::string&& _ns) {
-  reinterpret_cast<IOContextImpl*>(&impl)->oloc.nspace = std::move(_ns);
+IOContext&& IOContext::set_ns(std::string ns) && {
+  set_ns(std::move(ns));
+  return std::move(*this);
 }
 
-std::optional<std::string_view> IOContext::key() const {
-  auto& oloc = reinterpret_cast<const IOContextImpl*>(&impl)->oloc;
-  if (oloc.key.empty())
-    return std::nullopt;
-  else
-    return std::string_view(oloc.key);
+std::string_view IOContext::get_key() const {
+  return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.key;
 }
 
-void IOContext::key(std::string_view _key) {
+void IOContext::set_key(std::string key) & {
   auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
   oloc.hash = -1;
-  oloc.key = _key;
+  oloc.key = std::move(key);
 }
 
-void IOContext::key(std::string&&_key) {
-  auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
-  oloc.hash = -1;
-  oloc.key = std::move(_key);
+IOContext&& IOContext::set_key(std::string key) && {
+  set_key(std::move(key));
+  return std::move(*this);
 }
 
-void IOContext::clear_key() {
+std::int64_t IOContext::get_hash() const {
+  return reinterpret_cast<const IOContextImpl*>(&impl)->oloc.hash;
+}
+
+void IOContext::set_hash(std::int64_t hash) & {
   auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
-  oloc.hash = -1;
+  oloc.hash = hash;
   oloc.key.clear();
 }
 
-std::optional<std::int64_t> IOContext::hash() const {
-  auto& oloc = reinterpret_cast<const IOContextImpl*>(&impl)->oloc;
-  if (oloc.hash < 0)
-    return std::nullopt;
-  else
-    return oloc.hash;
+IOContext&& IOContext::set_hash(std::int64_t hash) && {
+  set_hash(hash);
+  return std::move(*this);
 }
 
-void IOContext::hash(std::int64_t _hash) {
-  auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
-  oloc.hash = _hash;
-  oloc.key.clear();
+std::uint64_t IOContext::get_read_snap() const {
+  return reinterpret_cast<const IOContextImpl*>(&impl)->snap_seq;
 }
 
-void IOContext::clear_hash() {
-  auto& oloc = reinterpret_cast<IOContextImpl*>(&impl)->oloc;
-  oloc.hash = -1;
-  oloc.key.clear();
+void IOContext::set_read_snap(std::uint64_t snapid) & {
+  reinterpret_cast<IOContextImpl*>(&impl)->snap_seq = snapid;
 }
 
-
-std::optional<std::uint64_t> IOContext::read_snap() const {
-  auto& snap_seq = reinterpret_cast<const IOContextImpl*>(&impl)->snap_seq;
-  if (snap_seq == CEPH_NOSNAP)
-    return std::nullopt;
-  else
-    return snap_seq;
-}
-void IOContext::read_snap(std::optional<std::uint64_t> _snapid) {
-  auto& snap_seq = reinterpret_cast<IOContextImpl*>(&impl)->snap_seq;
-  snap_seq = _snapid.value_or(CEPH_NOSNAP);
+IOContext&& IOContext::set_read_snap(std::uint64_t snapid) && {
+  set_read_snap(snapid);
+  return std::move(*this);
 }
 
-std::optional<
-  std::pair<std::uint64_t,
-	    std::vector<std::uint64_t>>> IOContext::write_snap_context() const {
+std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>>
+IOContext::get_write_snap_context() const {
   auto& snapc = reinterpret_cast<const IOContextImpl*>(&impl)->snapc;
   if (snapc.empty()) {
     return std::nullopt;
@@ -277,8 +261,9 @@ std::optional<
   }
 }
 
-void IOContext::write_snap_context(
-  std::optional<std::pair<std::uint64_t, std::vector<std::uint64_t>>> _snapc) {
+void IOContext::set_write_snap_context(
+  std::optional<std::pair<std::uint64_t,
+                          std::vector<std::uint64_t>>> _snapc) & {
   auto& snapc = reinterpret_cast<IOContextImpl*>(&impl)->snapc;
   if (!_snapc) {
     snapc.clear();
@@ -295,18 +280,30 @@ void IOContext::write_snap_context(
   }
 }
 
-bool IOContext::full_try() const {
+IOContext&& IOContext::set_write_snap_context(
+  std::optional<std::pair<std::uint64_t,
+                          std::vector<std::uint64_t>>> snapc) && {
+  set_write_snap_context(std::move(snapc));
+  return std::move(*this);
+}
+
+bool IOContext::get_full_try() const {
   const auto ioc = reinterpret_cast<const IOContextImpl*>(&impl);
   return (ioc->extra_op_flags & CEPH_OSD_FLAG_FULL_TRY) != 0;
 }
 
-void IOContext::full_try(bool _full_try) {
+void IOContext::set_full_try(bool full_try) & {
   auto ioc = reinterpret_cast<IOContextImpl*>(&impl);
-  if (_full_try) {
+  if (full_try) {
     ioc->extra_op_flags |= CEPH_OSD_FLAG_FULL_TRY;
   } else {
     ioc->extra_op_flags &= ~CEPH_OSD_FLAG_FULL_TRY;
   }
+}
+
+IOContext&& IOContext::set_full_try(bool full_try) && {
+  set_full_try(full_try);
+  return std::move(*this);
 }
 
 bool operator <(const IOContext& lhs, const IOContext& rhs) {
