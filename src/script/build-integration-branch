@@ -65,7 +65,11 @@ url = baseurl.format(label=label,
                      repo=repo)
 r = requests.get(url,
                  headers={'Authorization': 'token %s' % token})
-assert(r.ok)
+if not r.ok:
+    print("Failed to access github api")
+    print("(Do you have a valid, unexpired github api token?)")
+    sys.exit(1)
+
 j = json.loads(r.text or r.content)
 print("--- found %d issues tagged with %s" % (len(j), label))
 
