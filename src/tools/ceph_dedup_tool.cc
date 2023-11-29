@@ -581,9 +581,9 @@ public:
       } entry_into = NONE;
 
       /// Valid iterator into map for UNDER|OVER, default for NONE
-      map_t::iterator iter;
+      typename map_t::iterator iter;
 
-      entry_t(entry_into_t entry_into, map_t::iterator iter) :
+      entry_t(entry_into_t entry_into, typename map_t::iterator iter) :
 	entry_into(entry_into), iter(iter) {
 	ceph_assert(entry_into != NONE);
       }
