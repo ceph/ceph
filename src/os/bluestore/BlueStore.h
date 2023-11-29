@@ -275,14 +275,16 @@ public:
   };
 
   struct printer {
-    static constexpr uint8_t ptr = 1;   // pointer to Blob
-    static constexpr uint8_t nick = 2;  // a nickname of this Blob
-    static constexpr uint8_t disk = 4;  // disk allocations of Blob
-    static constexpr uint8_t sdisk = 8; // shortened version of disk allocaitons
-    static constexpr uint8_t use = 16;  // use tracker
-    static constexpr uint8_t suse = 32; // shortened use tracker
-    static constexpr uint8_t chk = 64;  // checksum, full dump
-    static constexpr uint8_t schk = 128; // only base checksum info
+    static constexpr uint16_t ptr = 1;   // pointer to Blob
+    static constexpr uint16_t nick = 2;  // a nickname of this Blob
+    static constexpr uint16_t disk = 4;  // disk allocations of Blob
+    static constexpr uint16_t sdisk = 8; // shortened version of disk allocaitons
+    static constexpr uint16_t use = 16;  // use tracker
+    static constexpr uint16_t suse = 32; // shortened use tracker
+    static constexpr uint16_t chk = 64;  // checksum, full dump
+    static constexpr uint16_t schk = 128; // only base checksum info
+    static constexpr uint16_t buf = 256;  // print Blob's buffers (takes cache lock)
+    static constexpr uint16_t sbuf = 512; // short print Blob's buffers (takes cache lock)
   };
 
   /// cached buffer
@@ -298,6 +300,16 @@ public:
       switch (s) {
       case STATE_EMPTY: return "empty";
       case STATE_CLEAN: return "clean";
+      case STATE_WRITING: return "writing";
+      default: return "???";
+      }
+    }
+    // Short version of state name.
+    // Not print "clean", as it is most frequent.
+    static const char *get_state_name_short(int s) {
+      switch (s) {
+      case STATE_EMPTY: return "empty";
+      case STATE_CLEAN: return "";
       case STATE_WRITING: return "writing";
       default: return "???";
       }
@@ -650,12 +662,12 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const Blob &b);
     struct printer : public BlueStore::printer {
       const Blob& blob;
-      uint8_t mode;
-      printer(const Blob& blob, uint8_t mode)
+      uint16_t mode;
+      printer(const Blob& blob, uint16_t mode)
       :blob(blob), mode(mode) {}
     };
     friend std::ostream& operator<<(std::ostream& out, const printer &p);
-    printer print(uint8_t mode) const {
+    printer print(uint16_t mode) const {
       return printer(*this, mode);
     }
     const bluestore_blob_use_tracker_t& get_blob_use_tracker() const {
