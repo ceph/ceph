@@ -179,10 +179,12 @@ subsystem. Ceph's logging levels operate on a scale of ``1`` to ``20``, where
 logs are not sent to the output log unless one or more of the following
 conditions obtain:
 
-- a fatal signal is raised or
-- an ``assert`` in source code is triggered or
-- upon requested. Please consult `document on admin socket
-  <http://docs.ceph.com/en/latest/man/8/ceph/#daemon>`_ for more details.
+- a fatal signal has been raised or
+- an assertion within Ceph code has been triggered or
+- the sending of in-memory logs to the output log has been manually triggered.
+  Consult `the portion of the "Ceph Administration Tool documentation
+  that provides an example of how to submit admin socket commands
+  <http://docs.ceph.com/en/latest/man/8/ceph/#daemon>`_ for more detail.
 
 .. warning ::
    .. [#f1] In certain rare cases, there are logging levels that can take a value greater than 20. The resulting logs are extremely verbose.
