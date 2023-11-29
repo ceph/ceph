@@ -283,6 +283,7 @@ public:
     static constexpr uint16_t schk = 128; // only base checksum info
     static constexpr uint16_t buf = 256;  // print Blob's buffers (takes cache lock)
     static constexpr uint16_t sbuf = 512; // short print Blob's buffers (takes cache lock)
+    static constexpr uint16_t attrs = 1024; // print attrs in onode
   };
 
   /// cached buffer
@@ -1445,6 +1446,16 @@ public:
 
     void finish_write(TransContext* txc, uint32_t offset, uint32_t length);
 
+    struct printer : public BlueStore::printer {
+      const Onode& onode;
+      uint16_t mode;
+      printer(const Onode& onode, uint16_t mode)
+      :onode(onode), mode(mode) {}
+    };
+    friend std::ostream& operator<<(std::ostream& out, const printer &p);
+    printer print(uint16_t mode) const {
+      return printer(*this, mode);
+    }
 private:
     void _decode(const ceph::buffer::list& v);
   };
