@@ -332,6 +332,8 @@ public:
 
   void on_removal(ceph::os::Transaction &t) final;
 
+  void clear_log_entry_maps();
+
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
@@ -537,8 +539,7 @@ public:
     const OpInfo &op_info,
     ObjectContextRef obc,
     const std::error_code e,
-    ceph_tid_t rep_tid,
-    eversion_t &version);
+    ceph_tid_t rep_tid);
 
 private:
 
@@ -571,10 +572,7 @@ private:
     ObjectContextRef obc,
     const OpInfo &op_info,
     const SnapContext& snapc);
-  using do_osd_ops_success_func_t =
-    std::function<do_osd_ops_iertr::future<>()>;
-  using do_osd_ops_failure_func_t =
-    std::function<do_osd_ops_iertr::future<>(const std::error_code&)>;
+
   struct do_osd_ops_params_t;
   do_osd_ops_iertr::future<MURef<MOSDOpReply>> log_reply(
     Ref<MOSDOp> m,
@@ -583,12 +581,13 @@ private:
     ObjectContextRef obc,
     std::vector<OSDOp>& ops,
     const OpInfo &op_info,
-    const do_osd_ops_params_t &&params,
-    do_osd_ops_success_func_t success_func,
-    do_osd_ops_failure_func_t failure_func);
+    const do_osd_ops_params_t &&params);
   template <class Ret, class SuccessFunc, class FailureFunc>
   do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
     seastar::lw_shared_ptr<OpsExecuter> ox,
+    ObjectContextRef obc,
+    const OpInfo &op_info,
+    Ref<MOSDOp> m,
     std::vector<OSDOp>& ops,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
@@ -774,6 +773,7 @@ private:
   };
 
   std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
+  std::map<ceph_tid_t, eversion_t> log_entry_version;
   // snap trimming
   interval_set<snapid_t> snap_trimq;
 };
