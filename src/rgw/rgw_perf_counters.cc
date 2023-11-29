@@ -211,7 +211,7 @@ const std::string rgw_topic_counters_key = "rgw_topic";
 CountersManager::CountersManager(const std::string& topic_name, CephContext *cct)
     : cct(cct)
 {
-  const std::string topic_key = ceph::perf_counters::key_create(rgw_topic_counters_key, {{"Topic", topic_name}});
+  const std::string topic_key = ceph::perf_counters::key_create(rgw_topic_counters_key, {{"topic", topic_name}});
   PerfCountersBuilder pcb(cct, topic_key, l_rgw_topic_first, l_rgw_topic_last);
   add_rgw_topic_counters(&pcb);
   topic_counters = std::unique_ptr<PerfCounters>(pcb.create_perf_counters());
