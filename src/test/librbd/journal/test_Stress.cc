@@ -46,6 +46,10 @@ TEST_F(TestJournalStress, DiscardWithPruneWriteOverlap) {
   // Write-around cache required for overlapping I/O delays.
   cct->_conf.set_val_or_die("rbd_cache_writethrough_until_flush", "false");
   cct->_conf.set_val_or_die("rbd_cache_policy", "writearound");
+  // XXX: Work around https://tracker.ceph.com/issues/63681, which this test
+  // exposes when run under Valgrind.
+  cct->_conf.set_val_or_die("librados_thread_count", "15");
+  cct->_conf.apply_changes(nullptr);
 
   auto image_name = get_temp_image_name();
   ASSERT_EQ(0, create_image_pp(m_rbd, m_ioctx, image_name, image_size));
