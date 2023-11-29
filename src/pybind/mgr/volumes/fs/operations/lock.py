@@ -22,10 +22,10 @@ class GlobalLock(object):
 
     See: https://people.eecs.berkeley.edu/~kubitron/courses/cs262a-F14/projects/reports/project6_report.pdf
     """
-    _shared_state = {
+    _shared_state: Dict = {
         'lock' : Lock(),
         'init' : False
-    } # type: Dict
+    }
 
     def __init__(self):
         with self._shared_state['lock']:
