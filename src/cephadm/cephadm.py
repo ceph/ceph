@@ -169,7 +169,10 @@ from cephadmlib.daemon_form import (
     register as register_daemon_form,
 )
 from cephadmlib.deploy import DeploymentType
-from cephadmlib.container_daemon_form import ContainerDaemonForm
+from cephadmlib.container_daemon_form import (
+    ContainerDaemonForm,
+    daemon_to_container,
+)
 from cephadmlib.sysctl import install_sysctl, migrate_sysctl_dir
 from cephadmlib.firewalld import Firewalld, update_firewalld
 from cephadmlib import templating
@@ -246,7 +249,9 @@ class Ceph(ContainerDaemonForm):
         uid, gid = self.uid_gid(ctx)
         make_var_run(ctx, ctx.fsid, uid, gid)
 
-        ctr = get_container(ctx, self.identity)
+        # mon and osd need privileged in order for libudev to query devices
+        privileged = self.identity.daemon_type in ['mon', 'osd']
+        ctr = daemon_to_container(ctx, self, privileged=privileged)
         ctr = to_deployment_container(ctx, ctr)
         config_json = fetch_configs(ctx)
         if self.identity.daemon_type == 'mon' and config_json is not None:
@@ -344,10 +349,13 @@ class Ceph(ContainerDaemonForm):
     def customize_container_mounts(
         self, ctx: CephadmContext, mounts: Dict[str, str]
     ) -> None:
+        no_config = bool(
+            getattr(ctx, 'config', None) and self.user_supplied_config
+        )
         cm = self.get_ceph_mounts(
             ctx,
             self.identity,
-            no_config=self.ctx.config and self.user_supplied_config,
+            no_config=no_config,
         )
         mounts.update(cm)
 
@@ -592,7 +600,7 @@ class SNMPGateway(ContainerDaemonForm):
             raise Error('config is missing destination attribute(<ip>:<port>) of the target SNMP listener')
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
@@ -766,7 +774,7 @@ class Monitoring(ContainerDaemonForm):
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         self._prevalidate(ctx)
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
@@ -1097,7 +1105,7 @@ class NFSGanesha(ContainerDaemonForm):
         return 'nfs'
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def customize_container_endpoints(
@@ -1151,15 +1159,12 @@ class CephIscsi(ContainerDaemonForm):
         return cls.daemon_type == daemon_type
 
     def __init__(self,
-                 ctx,
-                 fsid,
-                 daemon_id,
-                 config_json,
-                 image=DEFAULT_IMAGE):
-        # type: (CephadmContext, str, Union[int, str], Dict, str) -> None
+                 ctx: CephadmContext,
+                 ident: DaemonIdentity,
+                 config_json: Dict,
+                 image: str = DEFAULT_IMAGE):
         self.ctx = ctx
-        self.fsid = fsid
-        self.daemon_id = daemon_id
+        self._identity = ident
         self.image = image
 
         # config-json options
@@ -1169,18 +1174,24 @@ class CephIscsi(ContainerDaemonForm):
         self.validate()
 
     @classmethod
-    def init(cls, ctx, fsid, daemon_id):
-        # type: (CephadmContext, str, Union[int, str]) -> CephIscsi
-        return cls(ctx, fsid, daemon_id,
-                   fetch_configs(ctx), ctx.image)
+    def init(cls, ctx: CephadmContext, fsid: str, daemon_id: str) -> 'CephIscsi':
+        return cls.create(ctx, DaemonIdentity(fsid, cls.daemon_type, daemon_id))
 
     @classmethod
     def create(cls, ctx: CephadmContext, ident: DaemonIdentity) -> 'CephIscsi':
-        return cls.init(ctx, ident.fsid, ident.daemon_id)
+        return cls(ctx, ident, fetch_configs(ctx), ctx.image)
 
     @property
     def identity(self) -> DaemonIdentity:
-        return DaemonIdentity(self.fsid, self.daemon_type, self.daemon_id)
+        return self._identity
+
+    @property
+    def fsid(self) -> str:
+        return self._identity.fsid
+
+    @property
+    def daemon_id(self) -> str:
+        return self._identity.daemon_id
 
     @staticmethod
     def _get_container_mounts(data_dir, log_dir):
@@ -1336,8 +1347,9 @@ done
         subident = DaemonSubIdentity(
             self.fsid, self.daemon_type, self.daemon_id, 'tcmu'
         )
+        tcmu_dmn = self.create(self.ctx, subident)
         tcmu_container = to_deployment_container(
-            self.ctx, get_container(self.ctx, subident)
+            self.ctx, daemon_to_container(self.ctx, tcmu_dmn, privileged=True)
         )
         # TODO: Eventually we don't want to run tcmu-runner through this script.
         # This is intended to be a workaround backported to older releases
@@ -1347,7 +1359,9 @@ done
         return tcmu_container
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        # So the container can modprobe iscsi_target_mod and have write perms
+        # to configfs we need to make this a privileged container.
+        ctr = daemon_to_container(ctx, self, privileged=True)
         return to_deployment_container(ctx, ctr)
 
     def config_and_keyring(
@@ -1510,7 +1524,7 @@ class CephNvmeof(ContainerDaemonForm):
         ]
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
@@ -1597,7 +1611,7 @@ class CephExporter(ContainerDaemonForm):
             raise Error(f'Directory does not exist. Got: {self.sock_dir}')
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
@@ -1743,7 +1757,7 @@ class HAproxy(ContainerDaemonForm):
         ]
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def customize_container_args(
@@ -1875,7 +1889,7 @@ class Keepalived(ContainerDaemonForm):
         mounts.update(self._get_container_mounts(data_dir))
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def customize_container_envs(
@@ -1954,7 +1968,7 @@ class Tracing(ContainerDaemonForm):
         return self._identity
 
     def container(self, ctx: CephadmContext) -> CephContainer:
-        ctr = get_container(ctx, self.identity)
+        ctr = daemon_to_container(ctx, self)
         return to_deployment_container(ctx, ctr)
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
@@ -2132,9 +2146,10 @@ class CustomContainer(ContainerDaemonForm):
 
     def container(self, ctx: CephadmContext) -> CephContainer:
         if self._container is None:
-            ctr = get_container(
+            ctr = daemon_to_container(
                 ctx,
-                self.identity,
+                self,
+                host_network=False,
                 privileged=self.privileged,
                 ptrace=ctx.allow_ptrace,
             )
@@ -2961,107 +2976,13 @@ def get_ceph_volume_container(ctx: CephadmContext,
 def get_container(
     ctx: CephadmContext,
     ident: 'DaemonIdentity',
-    privileged: bool = False,
-    ptrace: bool = False,
-    container_args: Optional[List[str]] = None,
 ) -> 'CephContainer':
-    entrypoint: str = ''
-    d_args: List[str] = []
-    envs: List[str] = []
-    host_network: bool = True
-    binds: List[List[str]] = []
-    mounts: Dict[str, str] = {}
-
-    daemon_type = ident.daemon_type
-    if container_args is None:
-        container_args = []
-    if Ceph.for_daemon_type(daemon_type) or OSD.for_daemon_type(daemon_type):
-        ceph_daemon = daemon_form_create(ctx, ident)
-        assert isinstance(ceph_daemon, ContainerDaemonForm)
-        entrypoint = ceph_daemon.default_entrypoint()
-        ceph_daemon.customize_container_envs(ctx, envs)
-        ceph_daemon.customize_container_args(ctx, container_args)
-        ceph_daemon.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
-    if daemon_type in ['mon', 'osd']:
-        # mon and osd need privileged in order for libudev to query devices
-        privileged = True
-    if daemon_type in Monitoring.components:
-        monitoring = Monitoring.create(ctx, ident)
-        entrypoint = monitoring.default_entrypoint()
-        monitoring.customize_container_args(ctx, container_args)
-        monitoring.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
-    elif daemon_type in Tracing.components:
-        tracing = Tracing.create(ctx, ident)
-        entrypoint = tracing.default_entrypoint()
-        tracing.customize_container_envs(ctx, envs)
-        tracing.customize_process_args(ctx, d_args)
-    elif daemon_type == NFSGanesha.daemon_type:
-        nfs_ganesha = NFSGanesha.create(ctx, ident)
-        entrypoint = nfs_ganesha.default_entrypoint()
-        nfs_ganesha.customize_container_envs(ctx, envs)
-        nfs_ganesha.customize_container_args(ctx, container_args)
-        nfs_ganesha.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
-    elif daemon_type == CephExporter.daemon_type:
-        ceph_exporter = CephExporter.create(ctx, ident)
-        entrypoint = ceph_exporter.default_entrypoint()
-        ceph_exporter.customize_container_envs(ctx, envs)
-        ceph_exporter.customize_container_args(ctx, container_args)
-        ceph_exporter.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
-    elif daemon_type == HAproxy.daemon_type:
-        haproxy = HAproxy.create(ctx, ident)
-        haproxy.customize_container_args(ctx, container_args)
-        haproxy.customize_process_args(ctx, d_args)
-        mounts = get_container_mounts(ctx, ident)
-    elif daemon_type == Keepalived.daemon_type:
-        keepalived = Keepalived.create(ctx, ident)
-        keepalived.customize_container_envs(ctx, envs)
-        keepalived.customize_container_args(ctx, container_args)
-        mounts = get_container_mounts(ctx, ident)
-    elif daemon_type == CephNvmeof.daemon_type:
-        nvmeof = CephNvmeof.create(ctx, ident)
-        nvmeof.customize_container_args(ctx, container_args)
-        binds = get_container_binds(ctx, ident)
-        mounts = get_container_mounts(ctx, ident)
-    elif daemon_type == CephIscsi.daemon_type:
-        iscsi = CephIscsi.create(ctx, ident)
-        entrypoint = iscsi.default_entrypoint()
-        iscsi.customize_container_args(ctx, container_args)
-        # So the container can modprobe iscsi_target_mod and have write perms
-        # to configfs we need to make this a privileged container.
-        privileged = True
-        binds = get_container_binds(ctx, ident)
-        mounts = get_container_mounts(ctx, ident)
-    elif daemon_type == CustomContainer.daemon_type:
-        cc = CustomContainer.init(ctx, ident.fsid, ident.daemon_id)
-        entrypoint = cc.default_entrypoint()
-        host_network = False
-        cc.customize_container_envs(ctx, envs)
-        cc.customize_container_args(ctx, container_args)
-        cc.customize_process_args(ctx, d_args)
-        binds = get_container_binds(ctx, ident)
-        mounts = get_container_mounts(ctx, ident)
-    elif daemon_type == SNMPGateway.daemon_type:
-        sg = SNMPGateway.create(ctx, ident)
-        sg.customize_container_args(ctx, container_args)
-        sg.customize_process_args(ctx, d_args)
-
-    _update_container_args_for_podman(ctx, ident, container_args)
-    return CephContainer.for_daemon(
-        ctx,
-        ident=ident,
-        entrypoint=entrypoint,
-        args=d_args,
-        container_args=container_args,
-        volume_mounts=mounts,
-        bind_mounts=binds,
-        envs=envs,
-        privileged=privileged,
-        ptrace=ptrace,
-        host_network=host_network,
+    daemon = daemon_form_create(ctx, ident)
+    assert isinstance(daemon, ContainerDaemonForm)
+    privileged = ident.daemon_type in {'mon', 'osd', CephIscsi.daemon_type}
+    host_network = ident.daemon_type != CustomContainer.daemon_type
+    return daemon_to_container(
+        ctx, daemon, privileged=privileged, host_network=host_network
     )
 
 
