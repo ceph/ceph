@@ -17,7 +17,7 @@ class RGWSI_SysObj_Cache_ASocketHook;
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
   friend class RGWSI_SysObj_Cache_CB;
-  friend class RGWServices_Def;
+  friend RGWServices_Def;
   friend class ASocketHandler;
 
   RGWSI_Notify *notify_svc{nullptr};
@@ -27,10 +27,10 @@ class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 
   void normalize_pool_and_obj(const rgw_pool& src_pool, const std::string& src_obj, rgw_pool& dst_pool, std::string& dst_obj);
 protected:
-  void init(RGWSI_RADOS *_rados_svc,
+  void init(librados::Rados* rados_,
             RGWSI_Zone *_zone_svc,
             RGWSI_Notify *_notify_svc) {
-    core_init(_rados_svc, _zone_svc);
+    core_init(rados_, _zone_svc);
     notify_svc = _notify_svc;
   }
 
@@ -80,12 +80,12 @@ protected:
             real_time set_mtime,
             optional_yield y) override;
 
-  int write_data(const DoutPrefixProvider *dpp, 
+  int write_data(const DoutPrefixProvider *dpp,
                  const rgw_raw_obj& obj,
                  const bufferlist& bl,
                  bool exclusive,
                  RGWObjVersionTracker *objv_tracker,
-                 optional_yield y);
+                 optional_yield y) override;
 
   int distribute_cache(const DoutPrefixProvider *dpp, const std::string& normal_name, const rgw_raw_obj& obj,
                        ObjectCacheInfo& obj_info, int op,

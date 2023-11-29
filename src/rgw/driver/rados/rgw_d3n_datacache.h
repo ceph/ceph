@@ -195,10 +195,10 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
         return 0;
     }
 
-    auto obj = d->rgwrados->svc.rados->obj(read_obj);
-    r = obj.open(dpp);
+    rgw_rados_ref ref;
+    r = rgw_get_rados_ref(dpp, d->rgwrados->get_rados_handle(), read_obj, &ref);
     if (r < 0) {
-      lsubdout(g_ceph_context, rgw, 4) << "failed to open rados context for " << read_obj << dendl;
+      ldpp_dout(dpp, 4) << "failed to open rados context for " << read_obj << dendl;
       return r;
     }
 
@@ -208,8 +208,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
     const uint64_t cost = len;
     const uint64_t id = obj_ofs; // use logical object offset for sorting replies
 
-    auto& ref = obj.get_ref();
-    auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.pool.ioctx(), std::move(op), d->yield), cost, id);
+    auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.ioctx, std::move(op), d->yield), cost, id);
     return d->flush(std::move(completed));
   } else {
     ldpp_dout(dpp, 20) << "D3nDataCache::" << __func__ << "(): oid=" << read_obj.oid << ", is_head_obj=" << is_head_obj << ", obj-ofs=" << obj_ofs << ", read_ofs=" << read_ofs << ", len=" << len << dendl;
@@ -221,20 +220,19 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
     const uint64_t id = obj_ofs; // use logical object offset for sorting replies
     oid = read_obj.oid;
 
-    auto obj = d->rgwrados->svc.rados->obj(read_obj);
-    r = obj.open(dpp);
+    rgw_rados_ref ref;
+    r = rgw_get_rados_ref(dpp, d->rgwrados->get_rados_handle(), read_obj, &ref);
     if (r < 0) {
-      lsubdout(g_ceph_context, rgw, 0) << "D3nDataCache: Error: failed to open rados context for " << read_obj << ", r=" << r << dendl;
+      ldpp_dout(dpp, 4) << "failed to open rados context for " << read_obj << dendl;
       return r;
     }
-    auto& ref = obj.get_ref();
 
     const bool is_compressed = (astate->attrset.find(RGW_ATTR_COMPRESSION) != astate->attrset.end());
     const bool is_encrypted = (astate->attrset.find(RGW_ATTR_CRYPT_MODE) != astate->attrset.end());
     if (read_ofs != 0 || astate->size != astate->accounted_size || is_compressed || is_encrypted) {
       d->d3n_bypass_cache_write = true;
       lsubdout(g_ceph_context, rgw, 5) << "D3nDataCache: " << __func__ << "(): Note - bypassing datacache: oid=" << read_obj.oid << ", read_ofs!=0 = " << read_ofs << ", size=" << astate->size << " != accounted_size=" << astate->accounted_size << ", is_compressed=" << is_compressed << ", is_encrypted=" << is_encrypted  << dendl;
-      auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.pool.ioctx(), std::move(op), d->yield), cost, id);
+      auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.ioctx, std::move(op), d->yield), cost, id);
       r = d->flush(std::move(completed));
       return r;
     }
@@ -251,7 +249,7 @@ int D3nRGWDataCache<T>::get_obj_iterate_cb(const DoutPrefixProvider *dpp, const 
     } else {
       // Write To Cache
       ldpp_dout(dpp, 20) << "D3nDataCache: " << __func__ << "(): WRITE TO CACHE: oid=" << read_obj.oid << ", obj-ofs=" << obj_ofs << ", read_ofs=" << read_ofs << " len=" << len << dendl;
-      auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.pool.ioctx(), std::move(op), d->yield), cost, id);
+      auto completed = d->aio->get(ref.obj, rgw::Aio::librados_op(ref.ioctx, std::move(op), d->yield), cost, id);
       return d->flush(std::move(completed));
     }
   }

@@ -446,8 +446,7 @@ public:
     op.read(0, -1, &bl, nullptr);
 
     cn = stack->create_completion_notifier();
-    return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op,
-					nullptr);
+    return ref.ioctx.aio_operate(ref.obj.oid, cn->completion(), &op, nullptr);
   }
 
   int request_complete() {
@@ -557,7 +556,7 @@ public:
     op.write_full(bl);
 
     cn = stack->create_completion_notifier();
-    return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op);
+    return ref.ioctx.aio_operate(ref.obj.oid, cn->completion(), &op);
   }
 
   int request_complete() override {
@@ -624,7 +623,7 @@ public:
       return 0;
     }
 
-    return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op);
+    return ref.ioctx.aio_operate(ref.obj.oid, cn->completion(), &op);
   }
 
   int request_complete() override {
@@ -754,11 +753,7 @@ public:
 		      RGWObjVersionTracker* objv_tracker = nullptr);
 
   RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
-		      RGWSI_RADOS::Obj& obj,
-		      RGWObjVersionTracker* objv_tracker = nullptr);
-
-  RGWRadosRemoveOidCR(rgw::sal::RadosStore* store,
-		      RGWSI_RADOS::Obj&& obj,
+		      rgw_rados_ref obj,
 		      RGWObjVersionTracker* objv_tracker = nullptr);
 
   int send_request(const DoutPrefixProvider *dpp) override;
