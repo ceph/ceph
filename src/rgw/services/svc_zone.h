@@ -6,7 +6,6 @@
 #include "rgw_service.h"
 
 
-class RGWSI_RADOS;
 class RGWSI_SysObj;
 class RGWSI_SyncModules;
 class RGWSI_Bucket_Sync;
@@ -29,7 +28,7 @@ class RGWSI_Zone : public RGWServiceInstance
   friend struct RGWServices_Def;
 
   RGWSI_SysObj *sysobj_svc{nullptr};
-  RGWSI_RADOS *rados_svc{nullptr};
+  librados::Rados* rados{nullptr};
   RGWSI_SyncModules *sync_modules_svc{nullptr};
   RGWSI_Bucket_Sync *bucket_sync_svc{nullptr};
 
@@ -58,7 +57,7 @@ class RGWSI_Zone : public RGWServiceInstance
   std::unique_ptr<rgw_sync_policy_info> sync_policy;
 
   void init(RGWSI_SysObj *_sysobj_svc,
-	    RGWSI_RADOS *_rados_svc,
+	    librados::Rados* rados_,
 	    RGWSI_SyncModules *_sync_modules_svc,
 	    RGWSI_Bucket_Sync *_bucket_sync_svc);
   int do_start(optional_yield y, const DoutPrefixProvider *dpp) override;

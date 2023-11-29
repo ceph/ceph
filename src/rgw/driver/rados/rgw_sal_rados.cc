@@ -751,13 +751,12 @@ int RadosBucket::list_multiparts(const DoutPrefixProvider *dpp,
 {
   rgw::sal::Bucket::ListParams params;
   rgw::sal::Bucket::ListResults results;
-  MultipartMetaFilter mp_filter;
 
   params.prefix = prefix;
   params.delim = delim;
   params.marker = marker;
   params.ns = RGW_OBJ_NS_MULTIPART;
-  params.access_list_filter = &mp_filter;
+  params.access_list_filter = MultipartMetaFilter;
 
   int ret = list(dpp, params, max_uploads, results, y);
 
@@ -1591,7 +1590,7 @@ int RadosObject::get_torrent_info(const DoutPrefixProvider* dpp,
   librados::ObjectReadOperation op;
   op.omap_get_vals_by_keys(keys, &result, nullptr);
 
-  ret = rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, nullptr, y);
+  ret = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, nullptr, y);
   if (ret < 0) {
     return ret;
   }

@@ -3,7 +3,9 @@
 
 #pragma once
 
+#include <functional>
 #include <string>
+#include <string_view>
 
 #include "include/types.h"
 #include "include/ceph_hash.h"
@@ -20,7 +22,6 @@ struct RGWObjVersionTracker;
 class optional_yield;
 
 struct obj_version;
-
 
 int rgw_init_ioctx(const DoutPrefixProvider *dpp,
                    librados::Rados *rados, const rgw_pool& pool,
@@ -103,6 +104,63 @@ int rgw_rados_operate(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, con
 int rgw_rados_notify(const DoutPrefixProvider *dpp, librados::IoCtx& ioctx, const std::string& oid,
                      bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
                      optional_yield y);
+
+struct rgw_rados_ref {
+  librados::IoCtx ioctx;
+  rgw_raw_obj obj;
+
+
+  int operate(const DoutPrefixProvider* dpp, librados::ObjectReadOperation* op,
+	      bufferlist* pbl, optional_yield y, int flags = 0) {
+    return rgw_rados_operate(dpp, ioctx, obj.oid, op, pbl, y, flags);
+  }
+
+  int operate(const DoutPrefixProvider* dpp, librados::ObjectWriteOperation* op,
+	      optional_yield y, int flags = 0) {
+    return rgw_rados_operate(dpp, ioctx, obj.oid, op, y, flags);
+  }
+
+  int aio_operate(librados::AioCompletion* c,
+		  librados::ObjectWriteOperation* op) {
+    return ioctx.aio_operate(obj.oid, c, op);
+  }
+
+  int aio_operate(librados::AioCompletion* c, librados::ObjectReadOperation* op,
+		  bufferlist *pbl) {
+    return ioctx.aio_operate(obj.oid, c, op, pbl);
+  }
+
+  int watch(uint64_t* handle, librados::WatchCtx2* ctx) {
+    return ioctx.watch2(obj.oid, handle, ctx);
+  }
+
+  int aio_watch(librados::AioCompletion* c, uint64_t* handle,
+		librados::WatchCtx2 *ctx) {
+    return ioctx.aio_watch(obj.oid, c, handle, ctx);
+  }
+
+  int unwatch(uint64_t handle) {
+    return ioctx.unwatch2(handle);
+  }
+
+  int notify(const DoutPrefixProvider* dpp, bufferlist& bl, uint64_t timeout_ms,
+	     bufferlist* pbl, optional_yield y) {
+    return rgw_rados_notify(dpp, ioctx, obj.oid, bl, timeout_ms, pbl, y);
+  }
+
+  void notify_ack(uint64_t notify_id, uint64_t cookie, bufferlist& bl) {
+    ioctx.notify_ack(obj.oid, notify_id, cookie, bl);
+  }
+};
+
+inline std::ostream& operator <<(std::ostream& m, const rgw_rados_ref& ref) {
+  return m << ref.obj;
+}
+
+int rgw_get_rados_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
+		      rgw_raw_obj obj, rgw_rados_ref* ref);
+
+
 
 int rgw_tools_init(const DoutPrefixProvider *dpp, CephContext *cct);
 void rgw_tools_cleanup();
@@ -274,3 +332,14 @@ void rgw_complete_aio_completion(librados::AioCompletion* c, int r);
 // (Currently providing nullptr will wipe all attributes.)
 
 std::map<std::string, ceph::buffer::list>* no_change_attrs();
+
+bool rgw_check_secure_mon_conn(const DoutPrefixProvider *dpp);
+int rgw_clog_warn(librados::Rados* h, const std::string& msg);
+
+int rgw_list_pool(const DoutPrefixProvider *dpp,
+		  librados::IoCtx& ioctx,
+		  uint32_t max,
+		  const rgw::AccessListFilter& filter,
+		  std::string& marker,
+		  std::vector<std::string> *oids,
+		  bool *is_truncated);

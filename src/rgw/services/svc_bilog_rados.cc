@@ -26,7 +26,7 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp,
 				std::string_view start_marker,
 				std::string_view end_marker)
 {
-  RGWSI_RADOS::Pool index_pool;
+  librados::IoCtx index_pool;
   map<int, string> bucket_objs;
 
   BucketIndexShardsManager start_marker_mgr;
@@ -48,32 +48,32 @@ int RGWSI_BILog_RADOS::log_trim(const DoutPrefixProvider *dpp,
     return r;
   }
 
-  return CLSRGWIssueBILogTrim(index_pool.ioctx(), start_marker_mgr, end_marker_mgr, bucket_objs,
+  return CLSRGWIssueBILogTrim(index_pool, start_marker_mgr, end_marker_mgr, bucket_objs,
 			      cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 int RGWSI_BILog_RADOS::log_start(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
 {
-  RGWSI_RADOS::Pool index_pool;
+  librados::IoCtx index_pool;
   map<int, string> bucket_objs;
   const auto& current_index = rgw::log_to_index_layout(log_layout);
   int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, current_index, &index_pool, &bucket_objs, nullptr);
   if (r < 0)
     return r;
 
-  return CLSRGWIssueResyncBucketBILog(index_pool.ioctx(), bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueResyncBucketBILog(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 int RGWSI_BILog_RADOS::log_stop(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_log_layout_generation& log_layout, int shard_id)
 {
-  RGWSI_RADOS::Pool index_pool;
+  librados::IoCtx index_pool;
   map<int, string> bucket_objs;
   const auto& current_index = rgw::log_to_index_layout(log_layout);
   int r = svc.bi->open_bucket_index(dpp, bucket_info, shard_id, current_index, &index_pool, &bucket_objs, nullptr);
   if (r < 0)
     return r;
 
-  return CLSRGWIssueBucketBILogStop(index_pool.ioctx(), bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
+  return CLSRGWIssueBucketBILogStop(index_pool, bucket_objs, cct->_conf->rgw_bucket_index_max_aio)();
 }
 
 static void build_bucket_index_marker(const string& shard_id_str,
@@ -95,7 +95,7 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp,
   ldpp_dout(dpp, 20) << __func__ << ": " << bucket_info.bucket << " marker " << marker << " shard_id=" << shard_id << " max " << max << dendl;
   result.clear();
 
-  RGWSI_RADOS::Pool index_pool;
+  librados::IoCtx index_pool;
   map<int, string> oids;
   map<int, cls_rgw_bi_log_list_ret> bi_log_lists;
   const auto& current_index = rgw::log_to_index_layout(log_layout);
@@ -112,8 +112,8 @@ int RGWSI_BILog_RADOS::log_list(const DoutPrefixProvider *dpp,
   r = marker_mgr.from_string(marker, shard_id);
   if (r < 0)
     return r;
- 
-  r = CLSRGWIssueBILogList(index_pool.ioctx(), marker_mgr, max, oids, bi_log_lists, cct->_conf->rgw_bucket_index_max_aio)();
+
+  r = CLSRGWIssueBILogList(index_pool, marker_mgr, max, oids, bi_log_lists, cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0)
     return r;
 

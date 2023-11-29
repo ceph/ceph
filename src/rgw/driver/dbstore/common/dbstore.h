@@ -1771,14 +1771,13 @@ class DB {
           rgw_obj_key end_marker;
           std::string ns;
           bool enforce_ns;
-          RGWAccessListFilter* access_list_filter;
+	  rgw::AccessListFilter access_list_filter;
           RGWBucketListNameFilter force_check_filter;
           bool list_versions;
 	  bool allow_unordered;
 
           Params() :
 	        enforce_ns(true),
-	        access_list_filter(nullptr),
 	        list_versions(false),
 	        allow_unordered(false)
 	        {}

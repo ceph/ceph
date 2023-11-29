@@ -33,13 +33,13 @@
 #include "rgw_aio.h"
 #include "rgw_d3n_cacherequest.h"
 
-#include "services/svc_rados.h"
 #include "services/svc_bi_rados.h"
 #include "common/Throttle.h"
 #include "common/ceph_mutex.h"
 #include "rgw_cache.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_pubsub.h"
+#include "rgw_tools.h"
 
 struct D3nDataCache;
 
@@ -576,7 +576,7 @@ public:
   }
 
 
-  int get_raw_obj_ref(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, rgw_rados_ref *ref);
+  int get_raw_obj_ref(const DoutPrefixProvider *dpp, rgw_raw_obj obj, rgw_rados_ref *ref);
 
   int list_raw_objects_init(const DoutPrefixProvider *dpp, const rgw_pool& pool, const std::string& marker, RGWListRawObjsCtx *ctx);
   int list_raw_objects_next(const DoutPrefixProvider *dpp, const std::string& prefix_filter, int max,
@@ -651,7 +651,7 @@ public:
     RGWRados *store;
     rgw_bucket bucket;
     int shard_id;
-    RGWSI_RADOS::Obj bucket_obj;
+    rgw_rados_ref bucket_obj;
 
     explicit BucketShard(RGWRados *_store) : store(_store), shard_id(-1) {}
     int init(const rgw_bucket& _bucket, const rgw_obj& obj,
@@ -664,7 +664,7 @@ public:
     friend std::ostream& operator<<(std::ostream& out, const BucketShard& bs) {
       out << "BucketShard:{ bucket=" << bs.bucket <<
 	", shard_id=" << bs.shard_id <<
-	", bucket_ojb=" << bs.bucket_obj << "}";
+	", bucket_obj=" << bs.bucket_obj << "}";
       return out;
     }
   };
@@ -1023,14 +1023,13 @@ public:
         rgw_obj_key end_marker;
         std::string ns;
         bool enforce_ns;
-        RGWAccessListFilter* access_list_filter;
+	rgw::AccessListFilter access_list_filter;
 	RGWBucketListNameFilter force_check_filter;
         bool list_versions;
 	bool allow_unordered;
 
         Params() :
 	  enforce_ns(true),
-	  access_list_filter(nullptr),
 	  list_versions(false),
 	  allow_unordered(false)
 	{}
@@ -1638,7 +1637,7 @@ public:
    */
   int pool_iterate(const DoutPrefixProvider *dpp, RGWPoolIterCtx& ctx, uint32_t num,
 		   std::vector<rgw_bucket_dir_entry>& objs,
-                   bool *is_truncated, RGWAccessListFilter *filter);
+                   bool *is_truncated, const rgw::AccessListFilter& filter);
 
   uint64_t next_bucket_id();
 

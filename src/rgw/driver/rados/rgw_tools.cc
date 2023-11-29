@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "auth/AuthRegistry.h"
+
 #include "common/errno.h"
 #include "librados/librados_asio.h"
 
@@ -94,6 +96,24 @@ int rgw_init_ioctx(const DoutPrefixProvider *dpp,
   }
   return 0;
 }
+
+int rgw_get_rados_ref(const DoutPrefixProvider* dpp, librados::Rados* rados,
+		      rgw_raw_obj obj, rgw_rados_ref* ref)
+{
+  ref->obj = std::move(obj);
+
+  int r = rgw_init_ioctx(dpp, rados, ref->obj.pool,
+			 ref->ioctx, true, false);
+  if (r < 0) {
+    ldpp_dout(dpp, 0) << "ERROR: creating ioctx (pool=" << ref->obj.pool
+        << "); r=" << r << dendl;
+    return r;
+  }
+
+  ref->ioctx.locator_set_key(ref->obj.loc);
+  return 0;
+}
+
 
 map<string, bufferlist>* no_change_attrs() {
   static map<string, bufferlist> no_change;
@@ -434,4 +454,85 @@ void rgw_complete_aio_completion(librados::AioCompletion* c, int r) {
   auto pc = c->pc;
   librados::CB_AioCompleteAndSafe cb(pc);
   cb(r);
+}
+
+bool rgw_check_secure_mon_conn(const DoutPrefixProvider *dpp)
+{
+  AuthRegistry reg(dpp->get_cct());
+
+  reg.refresh_config();
+
+  std::vector<uint32_t> methods;
+  std::vector<uint32_t> modes;
+
+  reg.get_supported_methods(CEPH_ENTITY_TYPE_MON, &methods, &modes);
+  ldpp_dout(dpp, 20) << __func__ << "(): auth registy supported: methods=" << methods << " modes=" << modes << dendl;
+
+  for (auto method : methods) {
+    if (!reg.is_secure_method(method)) {
+      ldpp_dout(dpp, 20) << __func__ << "(): method " << method << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  for (auto mode : modes) {
+    if (!reg.is_secure_mode(mode)) {
+      ldpp_dout(dpp, 20) << __func__ << "(): mode " << mode << " is insecure" << dendl;
+      return false;
+    }
+  }
+
+  return true;
+}
+
+int rgw_clog_warn(librados::Rados* h, const string& msg)
+{
+  string cmd =
+    "{"
+      "\"prefix\": \"log\", "
+      "\"level\": \"warn\", "
+      "\"logtext\": [\"" + msg + "\"]"
+    "}";
+
+  bufferlist inbl;
+  return h->mon_command(cmd, inbl, nullptr, nullptr);
+}
+
+int rgw_list_pool(const DoutPrefixProvider *dpp,
+		  librados::IoCtx& ioctx,
+		  uint32_t max,
+		  const rgw::AccessListFilter& filter,
+		  std::string& marker,
+		  std::vector<string> *oids,
+		  bool *is_truncated)
+{
+  librados::ObjectCursor oc;
+  if (!oc.from_str(marker)) {
+    ldpp_dout(dpp, 10) << "failed to parse cursor: " << marker << dendl;
+    return -EINVAL;
+  }
+
+  auto iter = ioctx.nobjects_begin(oc);
+  /// Pool_iterate
+  if (iter == ioctx.nobjects_end())
+    return -ENOENT;
+
+  uint32_t i;
+
+  for (i = 0; i < max && iter != ioctx.nobjects_end(); ++i, ++iter) {
+    string oid = iter->get_oid();
+    ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
+
+    // fill it in with initial values; we may correct later
+    if (filter && !filter(oid, oid))
+      continue;
+
+    oids->push_back(oid);
+  }
+
+  marker = iter.get_cursor().to_str();
+  if (is_truncated)
+    *is_truncated = (iter != ioctx.nobjects_end());
+
+  return oids->size();
 }
