@@ -6,7 +6,6 @@ from contextlib import contextmanager
 import cephfs
 
 from .template import GroupTemplate
-from ..fs_util import listdir
 from ..exception import VolumeException
 
 log = logging.getLogger(__name__)

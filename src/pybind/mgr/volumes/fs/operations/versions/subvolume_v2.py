@@ -10,7 +10,6 @@ from .metadata_manager import MetadataManager
 from .subvolume_attrs import SubvolumeTypes, SubvolumeStates, SubvolumeFeatures
 from .op_sm import SubvolumeOpSm
 from .subvolume_v1 import SubvolumeV1
-from ..template import SubvolumeTemplate
 from ...exception import OpSmException, VolumeException, MetadataMgrException
 from ...fs_util import listdir, create_base_dir
 from ..template import SubvolumeOpType
@@ -99,7 +98,7 @@ class SubvolumeV2(SubvolumeV1):
         try:
             # MDS treats this as a noop for already marked subvolume
             self.fs.setxattr(self.base_path, 'ceph.dir.subvolume', b'1', 0)
-        except cephfs.InvalidValue as e:
+        except cephfs.InvalidValue:
             raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.dir.subvolume")
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
@@ -159,7 +158,7 @@ class SubvolumeV2(SubvolumeV1):
         subvolume_type = SubvolumeTypes.TYPE_NORMAL
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
-        except OpSmException as oe:
+        except OpSmException:
             raise VolumeException(-errno.EINVAL, "subvolume creation failed: internal error")
 
         retained = self.retained
@@ -207,7 +206,7 @@ class SubvolumeV2(SubvolumeV1):
         subvolume_type = SubvolumeTypes.TYPE_CLONE
         try:
             initial_state = SubvolumeOpSm.get_init_state(subvolume_type)
-        except OpSmException as oe:
+        except OpSmException:
             raise VolumeException(-errno.EINVAL, "clone failed: internal error")
 
         retained = self.retained
