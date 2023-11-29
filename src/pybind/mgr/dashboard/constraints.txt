@@ -1,6 +1,5 @@
 CherryPy~=13.1
 more-itertools~=8.14
-PyJWT~=2.0
 bcrypt~=3.1
 python3-saml~=1.4
 requests~=2.26
