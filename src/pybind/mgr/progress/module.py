@@ -738,6 +738,12 @@ class Module(MgrModule):
         self._shutdown.set()
         self.clear_all_progress_events()
 
+    def _create_new_remote_event(self, rev_id, rev_msg, refs, add_to_ceph_s):
+        rev = RemoteEvent(rev_id, rev_msg, refs, add_to_ceph_s)
+        self._events[rev_id] = rev
+        self.log.info(f'update: starting ev {rev_id} ({rev_msg})')
+        return rev
+
     def update(self, ev_id, ev_msg, ev_progress, refs=None, add_to_ceph_s=False):
         # type: (str, str, float, Optional[list], bool) -> None
         """
@@ -748,21 +754,20 @@ class Module(MgrModule):
 
         if refs is None:
             refs = []
+
         try:
             ev = self._events[ev_id]
             assert isinstance(ev, RemoteEvent)
         except KeyError:
             # if key doesn't exist we create an event
-            ev = RemoteEvent(ev_id, ev_msg, refs, add_to_ceph_s)
-            self._events[ev_id] = ev
-            self.log.info("update: starting ev {0} ({1})".format(
-                ev_id, ev_msg))
+            ev = self._create_new_remote_event(ev_id, ev_msg, refs, add_to_ceph_s)
         else:
             self.log.debug("update: {0} on {1}".format(
                 ev_progress, ev_msg))
 
-        ev.set_progress(ev_progress)
-        ev.set_message(ev_msg)
+        if isinstance(ev, RemoteEvent):
+            ev.set_progress(ev_progress)
+            ev.set_message(ev_msg)
 
     def _complete(self, ev):
         # type: (Event) -> None

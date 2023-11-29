@@ -174,25 +174,36 @@ class AsyncJobs(threading.Thread):
 
         self.job_stats[subvolname] = 'pending'
 
-    def report_ongoing_job(self, subvolname, stats, pev_id=None):
+    def report_ongoing_job(self, subvolname, stats):
         assert stats is not None
         self.job_stats[subvolname] = stats
 
-        if pev_id is None:
-            pev_id = str(uuid4())
+        total_jobs = len(self.job_stats)
+        progress_sum = 0.0
+        for subvolname, subvol_stats in self.job_stats.items():
+            if subvol_stats is not None:
+                progress_sum += subvol_stats.progress_fraction
+        progress_avg = progress_sum / total_jobs
+        progress_percent = round(progress_avg * 100, 3)
 
-        progress_percent = round(stats.percent, 3)
+        if self.clone_ongoing_ev_id is None:
+            self.clone_ongoing_ev_id = str(uuid4())
+
+        if total_jobs == 1:
+            msg = (f'Subvolume "{subvolname}" has been '
+                    '{progress_percent}% cloned')
+        else:
+            msg = (f'{total_jobs} ongoing cloning jobs; Avg progress = '
+                   f'{progress_percent}%')
+
         self.vc.mgr.remote(
-            'progress', 'update', ev_id=pev_id,
-            ev_msg=(f'Subvolume "{subvolname}" has been {progress_percent}% '
-                     'cloned'),
-            ev_progress=stats.progress_fraction,
-            refs=['mds', 'clone'],
+            'progress', 'update', ev_id=self.clone_ongoing_ev_id, ev_msg=msg,
+            ev_progress=stats.progress_fraction, refs=['mds', 'clone'],
             add_to_ceph_s=True)
 
-        return pev_id
+    def finish_job_reporting(self, subvolname):
+        assert self.clone_ongoing_ev_id is not None
 
-    def finish_job_reporting(self, subvolname, pev_id):
         if self.job_stats[subvolname].progress_fraction < 1.0:
             log.critical('A job is being marked as finished but it is not'
                          'complete. Progress should be 1.0 but it is only '
@@ -200,9 +211,17 @@ class AsyncJobs(threading.Thread):
 
         self.job_stats.pop(subvolname)
 
-        self.vc.mgr.remote('progress', 'complete', pev_id)
+        total_ongoing_jobs = 0
+        for subvolname, stats in self.job_stats.items():
+            if stats is not None:
+                total_ongoing_jobs += 1
 
-    def abort_job_reporting(self, subvolname, pev_id):
+        if total_ongoing_jobs == 0:
+            self.vc.mgr.remote('progress', 'complete', self.clone_ongoing_ev_id)
+
+    def abort_job_reporting(self, subvolname):
+        assert self.clone_ongoing_ev_id is not None
+
         if self.job_stats[subvolname] != 'pending':
             log.critical('A job is being aborted. Progress made so far is '
                          f'{self.job_stats[subvolname].progress_fraction}.')
@@ -210,7 +229,7 @@ class AsyncJobs(threading.Thread):
         self.job_stats.pop(subvolname)
 
         msg = f'Cloning failed for {subvolname}'
-        self.vc.mgr.remote('progress', 'fail', pev_id, msg)
+        self.vc.mgr.remote('progress', 'fail', self.clone_ongoing_ev_id, msg)
 
     def run(self):
         log.debug("tick thread {} starting".format(self.name))
