@@ -489,9 +489,9 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
         return self._apply_misc([s], False, Format.plain)
 
     @_cli_write_command('orch hardware status')
-    def _hardware_status(self, hostname: Optional[str] = None, _end_positional_: int = 0, category: str = 'summary') -> HandleCommandResult:
+    def _hardware_status(self, hostname: Optional[str] = None, _end_positional_: int = 0, category: str = 'summary', format: Format = Format.plain) -> HandleCommandResult:
         """Display hardware status"""
-        completion = self.hardware_status(hostname, category)
+        completion = self.hardware_status(hostname, category, format)
         raise_if_exception(completion)
         return HandleCommandResult(stdout=completion.result_str())
 
