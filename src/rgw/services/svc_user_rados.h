@@ -34,7 +34,6 @@ class RGWSI_MetaBackend_Handler;
 struct rgw_cache_entry_info;
 
 class RGWGetUserHeader_CB;
-class RGWGetUserStats_CB;
 
 template <class T>
 class RGWChainedCacheImpl;
@@ -207,6 +206,6 @@ public:
                  optional_yield y) override;  /* last time a stats update was done */
 
   int read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& user,
-                       RGWGetUserStats_CB *cb) override;
+                       boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb) override;
 };
 

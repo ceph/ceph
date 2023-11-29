@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <boost/intrusive_ptr.hpp>
+#include <boost/smart_ptr/intrusive_ref_counter.hpp>
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
 #include "cls_rgw_ops.h"
@@ -151,10 +153,10 @@ public:
   }
 };
 
-class RGWGetDirHeader_CB : public RefCountedObject {
+class RGWGetDirHeader_CB : public boost::intrusive_ref_counter<RGWGetDirHeader_CB> {
 public:
-  ~RGWGetDirHeader_CB() override {}
-  virtual void handle_response(int r, rgw_bucket_dir_header& header) = 0;
+  virtual ~RGWGetDirHeader_CB() {}
+  virtual void handle_response(int r, const rgw_bucket_dir_header& header) = 0;
 };
 
 class BucketIndexShardsManager {
@@ -572,7 +574,8 @@ public:
   virtual ~CLSRGWIssueBucketBILogStop() override {}
 };
 
-int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, std::string& oid, RGWGetDirHeader_CB *ctx);
+int cls_rgw_get_dir_header_async(librados::IoCtx& io_ctx, const std::string& oid,
+                                 boost::intrusive_ptr<RGWGetDirHeader_CB> cb);
 
 void cls_rgw_encode_suggestion(char op, rgw_bucket_dir_entry& dirent, ceph::buffer::list& updates);
 

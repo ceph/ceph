@@ -90,7 +90,7 @@ namespace rgw::sal {
   }
 
   /* stats - Not for first pass */
-  int DBUser::read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB *cb)
+  int DBUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
   {
     return 0;
   }
@@ -221,7 +221,7 @@ namespace rgw::sal {
     return 0;
   }
 
-  int DBBucket::read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *ctx)
+  int DBBucket::read_stats_async(const DoutPrefixProvider *dpp, const bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx)
   {
     return 0;
   }

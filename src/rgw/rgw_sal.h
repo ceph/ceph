@@ -15,6 +15,9 @@
 
 #pragma once
 
+#include <boost/intrusive_ptr.hpp>
+#include <boost/smart_ptr/intrusive_ref_counter.hpp>
+
 #include "common/tracer.h"
 #include "rgw_sal_fwd.h"
 #include "rgw_lua.h"
@@ -79,32 +82,6 @@ struct RGWClusterStat {
   uint64_t kb_avail;
   /// number of objects
   uint64_t num_objects;
-};
-
-class RGWGetBucketStats_CB : public RefCountedObject {
-protected:
-  rgw_bucket bucket;
-  std::map<RGWObjCategory, RGWStorageStats>* stats;
-public:
-  explicit RGWGetBucketStats_CB(const rgw_bucket& _bucket) : bucket(_bucket), stats(NULL) {}
-  ~RGWGetBucketStats_CB() override {}
-  virtual void handle_response(int r) = 0;
-  virtual void set_response(std::map<RGWObjCategory, RGWStorageStats>* _stats) {
-    stats = _stats;
-  }
-};
-
-class RGWGetUserStats_CB : public RefCountedObject {
-protected:
-  rgw_user user;
-  RGWStorageStats stats;
-public:
-  explicit RGWGetUserStats_CB(const rgw_user& _user) : user(_user) {}
-  ~RGWGetUserStats_CB() override {}
-  virtual void handle_response(int r) = 0;
-  virtual void set_response(RGWStorageStats& _stats) {
-    stats = _stats;
-  }
 };
 
 struct RGWObjState {
@@ -449,6 +426,14 @@ class Driver {
     virtual void register_admin_apis(RGWRESTMgr* mgr) = 0;
 };
 
+
+/// \brief Ref-counted callback object for User/Bucket read_stats_async().
+class ReadStatsCB : public boost::intrusive_ref_counter<ReadStatsCB> {
+ public:
+  virtual ~ReadStatsCB() {}
+  virtual void handle_response(int r, const RGWStorageStats& stats) = 0;
+};
+
 /**
  * @brief A list of buckets
  *
@@ -530,7 +515,8 @@ class User {
 			   ceph::real_time* last_stats_sync = nullptr,
 			   ceph::real_time* last_stats_update = nullptr) = 0;
     /** Read the User stats from the backing Store, asynchronous */
-    virtual int read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB* cb) = 0;
+    virtual int read_stats_async(const DoutPrefixProvider *dpp,
+                                 boost::intrusive_ptr<ReadStatsCB> cb) = 0;
     /** Flush accumulated stat changes for this User to the backing store */
     virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Read detailed usage stats for this User from the backing store */
@@ -683,7 +669,7 @@ class Bucket {
     /** Read the bucket stats from the backing Store, asynchronous */
     virtual int read_stats_async(const DoutPrefixProvider *dpp,
 				 const bucket_index_layout_generation& idx_layout,
-				 int shard_id, RGWGetBucketStats_CB* ctx) = 0;
+				 int shard_id, boost::intrusive_ptr<ReadStatsCB> cb) = 0;
     /** Sync this bucket's stats to the owning user's stats in the backing store */
     virtual int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
                                 RGWBucketEnt* optional_ent) = 0;

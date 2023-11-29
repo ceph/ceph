@@ -187,7 +187,7 @@ int RadosUser::read_stats(const DoutPrefixProvider *dpp,
   return store->ctl()->user->read_stats(dpp, get_id(), stats, y, last_stats_sync, last_stats_update);
 }
 
-int RadosUser::read_stats_async(const DoutPrefixProvider *dpp, RGWGetUserStats_CB* cb)
+int RadosUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
 {
   return store->svc()->user->read_stats_async(dpp, get_id(), cb);
 }
@@ -531,7 +531,7 @@ int RadosBucket::read_stats(const DoutPrefixProvider *dpp,
 
 int RadosBucket::read_stats_async(const DoutPrefixProvider *dpp,
 				  const bucket_index_layout_generation& idx_layout,
-				  int shard_id, RGWGetBucketStats_CB* ctx)
+				  int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx)
 {
   return store->getRados()->get_bucket_stats_async(dpp, get_info(), idx_layout, shard_id, ctx);
 }
