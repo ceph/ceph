@@ -973,6 +973,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     r = 0;
   } else if (prefix == "mds ok-to-stop") {
     vector<string> ids;
+    ostringstream ess;
     if (!cmd_getval(cmdmap, "ids", ids)) {
       r = -EINVAL;
       ss << "must specify mds id";
@@ -985,14 +986,16 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
     }
     set<mds_gid_t> stopping;
     for (auto& id : ids) {
-      ostringstream ess;
       mds_gid_t gid = gid_from_arg(fsmap, id, ess);
       if (gid == MDS_GID_NONE) {
-	// the mds doesn't exist, but no file systems are unhappy, so losing it
-	// can't have any effect.
-	continue;
+        r = -ENOENT;
+        continue;
       }
       stopping.insert(gid);
+    }
+    if (r == -ENOENT) {
+      ss << ess.str();
+      goto out;
     }
     set<mds_gid_t> active;
     set<mds_gid_t> standby;
@@ -1250,9 +1253,7 @@ bool MDSMonitor::preprocess_command(MonOpRequestRef op)
 out:
   if (r != -1) {
     rdata.append(ds);
-    string rs;
-    getline(ss, rs);
-    mon.reply_command(op, r, rs, rdata, get_last_committed());
+    mon.reply_command(op, r, ss.str(), rdata, get_last_committed());
     return true;
   } else
     return false;
@@ -1308,7 +1309,7 @@ mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const string &arg, ostrea
     // Not a role or a GID, try as a daemon name
     const MDSMap::mds_info_t *mds_info = fsmap.find_by_name(arg);
     if (!mds_info) {
-      ss << "MDS named '" << arg
+      ss << std::endl << "MDS named '" << arg
 	 << "' does not exist, or is not up";
       return MDS_GID_NONE;
     }
@@ -1327,6 +1328,8 @@ mds_gid_t MDSMonitor::gid_from_arg(const FSMap &fsmap, const string &arg, ostrea
 
   dout(1) << __func__ << ": rank/GID " << arg
 	  << " not a existent rank or GID" << dendl;
+  ss << std::endl << "rank/GID '" << arg
+	 << "' does not exist";
   return MDS_GID_NONE;
 }
 
