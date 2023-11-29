@@ -48,39 +48,54 @@ namespace mpl = ::boost::mpl;
 void on_event_creation(std::string_view nm);
 void on_event_discard(std::string_view nm);
 
-// reservation grant/reject events carry the peer's response:
+
+template <typename EV>
+struct OpCarryingEvent : sc::event<EV> {
+  static constexpr const char* event_name = "<>";
+  const OpRequestRef m_op;
+  const pg_shard_t m_from;
+  OpCarryingEvent(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
+  {
+    on_event_creation(static_cast<EV*>(this)->event_name);
+  }
+
+  OpCarryingEvent(const OpCarryingEvent&) = default;
+  OpCarryingEvent(OpCarryingEvent&&) = default;
+  OpCarryingEvent& operator=(const OpCarryingEvent&) = default;
+  OpCarryingEvent& operator=(OpCarryingEvent&&) = default;
+
+  void print(std::ostream* out) const
+  {
+    *out << fmt::format("{} (from: {})", EV::event_name, m_from);
+  }
+  std::string_view print() const { return EV::event_name; }
+  ~OpCarryingEvent() { on_event_discard(EV::event_name); }
+};
+
+#define OP_EV(T)                                                     \
+  struct T : OpCarryingEvent<T> {                                    \
+    static constexpr const char* event_name = #T;                    \
+    template <typename... Args>                                      \
+    T(Args&&... args) : OpCarryingEvent(std::forward<Args>(args)...) \
+    {                                                                \
+    }                                                                \
+  }
+
+
+// reservation events carry peer's request/response data:
 
 /// a replica has granted our reservation request
-struct ReplicaGrant : sc::event<ReplicaGrant> {
-  OpRequestRef m_op;
-  pg_shard_t m_from;
-  ReplicaGrant(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
-  {
-    on_event_creation("ReplicaGrant");
-  }
-  void print(std::ostream* out) const
-  {
-    *out << fmt::format("ReplicaGrant(from: {})", m_from);
-  }
-  std::string_view print() const { return "ReplicaGrant"; }
-  ~ReplicaGrant() { on_event_discard("ReplicaGrant"); }
-};
+OP_EV(ReplicaGrant);
 
 /// a replica has denied our reservation request
-struct ReplicaReject : sc::event<ReplicaReject> {
-  OpRequestRef m_op;
-  pg_shard_t m_from;
-  ReplicaReject(OpRequestRef op, pg_shard_t from) : m_op{op}, m_from{from}
-  {
-    on_event_creation("ReplicaReject");
-  }
-  void print(std::ostream* out) const
-  {
-    *out << fmt::format("ReplicaReject(from: {})", m_from);
-  }
-  std::string_view print() const { return "ReplicaReject"; }
-  ~ReplicaReject() { on_event_discard("ReplicaReject"); }
-};
+OP_EV(ReplicaReject);
+
+/// received Primary request for scrub reservation
+OP_EV(ReplicaReserveReq);
+
+/// explicit release request from the Primary
+OP_EV(ReplicaRelease);
+
 
 #define MEV(E)                                          \
   struct E : sc::event<E> {                             \
