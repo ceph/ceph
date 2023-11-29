@@ -179,7 +179,7 @@ int DaosUser::read_stats(const DoutPrefixProvider* dpp, optional_yield y,
 
 /* stats - Not for first pass */
 int DaosUser::read_stats_async(const DoutPrefixProvider* dpp,
-                               RGWGetUserStats_CB* cb) {
+                               boost::intrusive_ptr<ReadStatsCB> cb) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -495,7 +495,7 @@ int DaosBucket::read_stats(const DoutPrefixProvider* dpp,
 int DaosBucket::read_stats_async(
     const DoutPrefixProvider* dpp,
     const bucket_index_layout_generation& idx_layout, int shard_id,
-    RGWGetBucketStats_CB* ctx) {
+    boost::intrusive_ptr<ReadStatsCB> ctx) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 

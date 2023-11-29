@@ -8603,34 +8603,36 @@ int RGWRados::get_bucket_stats(const DoutPrefixProvider *dpp,
 }
 
 class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
-  RGWGetBucketStats_CB *cb;
+  boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb;
   uint32_t pendings;
-  map<RGWObjCategory, RGWStorageStats> stats;
+  RGWStorageStats stats;
   int ret_code;
   bool should_cb;
   ceph::mutex lock = ceph::make_mutex("RGWGetBucketStatsContext");
 
 public:
-  RGWGetBucketStatsContext(RGWGetBucketStats_CB *_cb, uint32_t _pendings)
-    : cb(_cb), pendings(_pendings), stats(), ret_code(0), should_cb(true)
+  RGWGetBucketStatsContext(boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb, uint32_t _pendings)
+    : cb(std::move(cb)), pendings(_pendings), stats(), ret_code(0), should_cb(true)
   {}
 
-  void handle_response(int r, rgw_bucket_dir_header& header) override {
+  void handle_response(int r, const rgw_bucket_dir_header& header) override {
     std::lock_guard l{lock};
     if (should_cb) {
-      if ( r >= 0) {
-        accumulate_raw_stats(header, stats);
+      if (r >= 0) {
+        for (const auto& [c, s] : header.stats) {
+          stats.size += s.total_size;
+          stats.size_rounded += s.total_size_rounded;
+          stats.size_utilized += s.actual_size;
+          stats.num_objects += s.num_entries;
+        }
       } else {
         ret_code = r;
       }
 
       // Are we all done?
       if (--pendings == 0) {
-        if (!ret_code) {
-          cb->set_response(&stats);
-        }
-        cb->handle_response(ret_code);
-        cb->put();
+        cb->handle_response(ret_code, stats);
+        cb.reset();
       }
     }
   }
@@ -8641,19 +8643,16 @@ public:
   }
 };
 
-int RGWRados::get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetBucketStats_CB *ctx)
+int RGWRados::get_bucket_stats_async(const DoutPrefixProvider *dpp, RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb)
 {
   int num_aio = 0;
-  RGWGetBucketStatsContext *get_ctx = new RGWGetBucketStatsContext(ctx, bucket_info.layout.current_index.layout.normal.num_shards ? : 1);
-  ceph_assert(get_ctx);
-  int r = cls_bucket_head_async(dpp, bucket_info, idx_layout, shard_id, get_ctx, &num_aio);
+  boost::intrusive_ptr headercb = new RGWGetBucketStatsContext(std::move(cb), bucket_info.layout.current_index.layout.normal.num_shards ? : 1);
+  int r = cls_bucket_head_async(dpp, bucket_info, idx_layout, shard_id, headercb, &num_aio);
   if (r < 0) {
-    ctx->put();
     if (num_aio) {
-      get_ctx->unset_cb();
+      headercb->unset_cb();
     }
   }
-  get_ctx->put();
   return r;
 }
 
@@ -10180,7 +10179,9 @@ int RGWRados::cls_bucket_head(const DoutPrefixProvider *dpp, const RGWBucketInfo
   return 0;
 }
 
-int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info, const rgw::bucket_index_layout_generation& idx_layout, int shard_id, RGWGetDirHeader_CB *ctx, int *num_aio)
+int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBucketInfo& bucket_info,
+                                    const rgw::bucket_index_layout_generation& idx_layout, int shard_id,
+                                    boost::intrusive_ptr<RGWGetDirHeader_CB> cb, int *num_aio)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> bucket_objs;
@@ -10188,17 +10189,14 @@ int RGWRados::cls_bucket_head_async(const DoutPrefixProvider *dpp, const RGWBuck
   if (r < 0)
     return r;
 
-  map<int, string>::iterator iter = bucket_objs.begin();
-  for (; iter != bucket_objs.end(); ++iter) {
-    r = cls_rgw_get_dir_header_async(index_pool.ioctx(), iter->second, static_cast<RGWGetDirHeader_CB*>(ctx->get()));
+  for (auto& pair : bucket_objs) {
+    r = cls_rgw_get_dir_header_async(index_pool.ioctx(), pair.second, cb);
     if (r < 0) {
-      ctx->put();
-      break;
-    } else {
-      (*num_aio)++;
+      return r;
     }
+    (*num_aio)++;
   }
-  return r;
+  return 0;
 }
 
 int RGWRados::check_bucket_shards(const RGWBucketInfo& bucket_info,

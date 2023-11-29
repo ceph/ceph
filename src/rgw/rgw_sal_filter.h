@@ -338,7 +338,7 @@ public:
 			 ceph::real_time* last_stats_sync = nullptr,
 			 ceph::real_time* last_stats_update = nullptr) override;
   virtual int read_stats_async(const DoutPrefixProvider *dpp,
-			       RGWGetUserStats_CB* cb) override;
+			       boost::intrusive_ptr<ReadStatsCB> cb) override;
   virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
   virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			 uint64_t end_epoch, uint32_t max_entries,
@@ -397,7 +397,7 @@ public:
 			 bool* syncstopped = nullptr) override;
   virtual int read_stats_async(const DoutPrefixProvider *dpp,
 			       const bucket_index_layout_generation& idx_layout,
-			       int shard_id, RGWGetBucketStats_CB* ctx) override;
+			       int shard_id, boost::intrusive_ptr<ReadStatsCB> ctx) override;
   int sync_user_stats(const DoutPrefixProvider *dpp, optional_yield y,
                       RGWBucketEnt* ent) override;
   int check_bucket_shards(const DoutPrefixProvider* dpp,

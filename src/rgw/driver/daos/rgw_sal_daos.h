@@ -187,7 +187,7 @@ class DaosUser : public StoreUser {
                          ceph::real_time* last_stats_sync = nullptr,
                          ceph::real_time* last_stats_update = nullptr) override;
   virtual int read_stats_async(const DoutPrefixProvider* dpp,
-                               RGWGetUserStats_CB* cb) override;
+                               boost::intrusive_ptr<ReadStatsCB> cb) override;
   virtual int complete_flush_stats(const DoutPrefixProvider* dpp,
                                    optional_yield y) override;
   virtual int read_usage(
@@ -309,7 +309,7 @@ class DaosBucket : public StoreBucket {
   virtual int read_stats_async(const DoutPrefixProvider* dpp,
                                const bucket_index_layout_generation& idx_layout,
                                int shard_id,
-                               RGWGetBucketStats_CB* ctx) override;
+                               boost::intrusive_ptr<ReadStatsCB> ctx) override;
   virtual int sync_user_stats(const DoutPrefixProvider* dpp,
                               optional_yield y) override;
   virtual int check_bucket_shards(const DoutPrefixProvider* dpp) override;
