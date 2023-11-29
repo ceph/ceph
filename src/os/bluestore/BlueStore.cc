@@ -631,6 +631,43 @@ void _dump_onode(CephContext *cct, const BlueStore::Onode& o)
   }
 }
 
+std::ostream& operator<<(std::ostream& out, const BlueStore::Onode::printer &p)
+{
+  using P = BlueStore::printer;
+  const BlueStore::Onode& o = p.onode;
+  uint16_t mode = p.mode;
+  out << &o << " " << o.oid
+      << " nid " << o.onode.nid
+      << " size 0x" << std::hex << o.onode.size
+      << " (" << std::dec << o.onode.size << ")"
+      << " expected_object_size " << o.onode.expected_object_size
+      << " expected_write_size " << o.onode.expected_write_size
+      << " in " << o.onode.extent_map_shards.size() << " shards"
+      << ", " << o.extent_map.spanning_blob_map.size()
+      << " spanning blobs" << std::endl;
+  const BlueStore::ExtentMap& map = o.extent_map;
+  std::set<BlueStore::Blob*> visited;
+  for (const auto& e : map.extent_map) {
+    BlueStore::Blob* b = e.blob.get();
+    if (!visited.contains(b)) {
+      out << b->print(mode) << std::endl;
+      visited.insert(b);
+    }
+  }
+  // to make printing extents in-sync with blobs
+  bool mode_extent = mode & (P::ptr | P::nick);
+  for (const auto& e : map.extent_map) {
+    out << e.print(mode_extent) << std::endl;
+  }
+  if (mode & P::attrs) {
+    for (const auto& p : o.onode.attrs) {
+      out << "  attr " << p.first
+        << " len " << p.second.length() << std::endl;
+    }
+  }
+  return out;
+}
+
 template <int LogLevelV>
 void _dump_transaction(CephContext *cct, ObjectStore::Transaction *t)
 {
