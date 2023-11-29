@@ -307,13 +307,17 @@ class SubvolumeV2(SubvolumeV1):
                                       op_type.value, self.subvolname, etype.value))
 
             estate = self.state
-            if op_type not in self.allowed_ops_by_state(estate) and estate == SubvolumeStates.STATE_RETAINED:
-                raise VolumeException(-errno.ENOENT, "subvolume '{0}' is removed and has only snapshots retained".format(
-                                      self.subvolname))
-
-            if op_type not in self.allowed_ops_by_state(estate) and estate != SubvolumeStates.STATE_RETAINED:
-                raise VolumeException(-errno.EAGAIN, "subvolume '{0}' is not ready for operation {1}".format(
-                                      self.subvolname, op_type.value))
+            if op_type not in self.allowed_ops_by_state(estate):
+                if estate == SubvolumeStates.STATE_RETAINED:
+                    raise VolumeException(
+                        -errno.ENOENT,
+                        f'subvolume "{self.subvolname}" is removed and has '
+                        'only snapshots retained')
+                else:
+                    raise VolumeException(
+                        -errno.EAGAIN,
+                        f'subvolume "{self.subvolname}" is not ready for '
+                        f'operation "{op_type.value}"')
 
             if estate != SubvolumeStates.STATE_RETAINED:
                 subvol_path = self.path

@@ -684,16 +684,16 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
     def status(self):
         state = SubvolumeStates.from_value(self.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_STATE))
         subvolume_type = self.subvol_type
-        subvolume_status = {
-            'state' : state.value
-        }
-        if not SubvolumeOpSm.is_complete_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
-            subvolume_status["source"] = self._get_clone_source()
-        if SubvolumeOpSm.is_failed_state(state) and subvolume_type == SubvolumeTypes.TYPE_CLONE:
-            try:
-                subvolume_status["failure"] = self._get_clone_failure()
-            except MetadataMgrException:
-                pass
+        subvolume_status = {'state' : state.value}
+
+        if subvolume_type == SubvolumeTypes.TYPE_CLONE:
+            if not SubvolumeOpSm.is_complete_state(state):
+                subvolume_status["source"] = self._get_clone_source()
+            if SubvolumeOpSm.is_failed_state(state):
+                try:
+                    subvolume_status["failure"] = self._get_clone_failure()
+                except MetadataMgrException:
+                    pass
 
         return subvolume_status
 
