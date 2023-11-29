@@ -5430,20 +5430,21 @@ void OSD::resume_creating_pg()
     }
   }
   version_t start = get_osdmap_epoch() + 1;
-  if (have_pending_creates) {
-    // don't miss any new osdmap deleting PGs
+  if (have_pending_creates || do_sub_pg_creates) {
     if (monc->sub_want("osdmap", start, 0)) {
-      dout(4) << __func__ << ": resolicit osdmap from mon since "
-	      << start << dendl;
-      do_renew_subs = true;
-    }
-  } else if (do_sub_pg_creates) {
-    // no need to subscribe the osdmap continuously anymore
-    // once the pgtemp and/or mon_subscribe(pg_creates) is sent
-    if (monc->sub_want_increment("osdmap", start, CEPH_SUBSCRIBE_ONETIME)) {
-      dout(4) << __func__ << ": re-subscribe osdmap(onetime) since "
-	      << start << dendl;
-      do_renew_subs = true;
+        dout(4) << __func__ << ": resolicit osdmap from mon since "
+                << start << dendl;
+        do_renew_subs = true;
+    } else {
+        // No need to subscribe the osdmap continuously anymore
+        // once the pgtemp and/or mon_subscribe(pg_creates) is sent
+        if (do_sub_pg_creates) {
+            if (monc->sub_want_increment("osdmap", start, CEPH_SUBSCRIBE_ONETIME)) {
+                dout(4) << __func__ << ": re-subscribe osdmap(onetime) since "
+                        << start << dendl;
+                do_renew_subs = true;
+            }
+        }
     }
   }
 
