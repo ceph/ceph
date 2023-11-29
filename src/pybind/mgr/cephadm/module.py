@@ -1658,37 +1658,46 @@ Then run the following:
             'power': ['HOST', 'ID', 'NAME', 'MODEL', 'MANUFACTURER', 'STATUS', 'STATE'],
             'fans': ['HOST', 'ID', 'NAME', 'STATUS', 'STATE']
         }
-        table_headings = table_heading_mapping.get(category, [])
-        table = PrettyTable(
-            table_headings,
-            border=True)
+
         if category not in table_heading_mapping.keys():
             return f"'{category}' is not a valid category."
+
+        table_headings = table_heading_mapping.get(category, [])
+        table = PrettyTable(table_headings,border=True)
+        output = None
+
         if category == 'summary':
             data = self.node_proxy.summary(hostname=hostname)
-            for k, v in data.items():
-                row = [k]
-                row.extend([v['status'][key] for key in ['storage', 'processors', 'network', 'memory', 'power', 'fans']])
-                table.add_row(row)
-            output = table.get_string()
+            if format == Format.json:
+                output = json.dumps(data)
+            else:
+                for k, v in data.items():
+                    row = [k]
+                    row.extend([v['status'][key] for key in ['storage', 'processors', 'network', 'memory', 'power', 'fans']])
+                    table.add_row(row)
+                output = table.get_string()
         elif category == 'firmwares':
-            output = "Missing host name" if hostname is None else self._firmwares_table(hostname, table)
+            output = "Missing host name" if hostname is None else self._firmwares_table(hostname, table, format)
         elif category == 'criticals':
-            output = self._criticals_table(hostname, table)
+            output = self._criticals_table(hostname, table, format)
         else:
-            output = self._common_table(category, hostname, table)
+            output = self._common_table(category, hostname, table, format)
 
-        return output if 'output' in locals() else table.get_string()
+        return output if output else table.get_string()
 
-    def _firmwares_table(self, hostname, table):
+    def _firmwares_table(self, hostname, table, format):
         data = self.node_proxy.firmwares(hostname=hostname)
+        if format == Format.json:
+            return json.dumps(data)
         for host, details in data.items():
             for k, v in details.items():
                 table.add_row((host, k, v['name'], v['release_date'], v['version'], v['status']['health']))
         return table.get_string()
 
-    def _criticals_table(self, hostname, table):
+    def _criticals_table(self, hostname, table, format):
         data = self.node_proxy.criticals(hostname=hostname)
+        if format == Format.json:
+            return json.dumps(data)
         for host, host_details in data.items():
             for component, component_details in host_details.items():
                 for member, member_details in component_details.items():
@@ -1696,8 +1705,10 @@ Then run the following:
                     table.add_row((host, component, description, member_details['status']['health'], member_details['status']['state']))
         return table.get_string()
 
-    def _common_table(self, category, hostname, table):
+    def _common_table(self, category, hostname, table, format):
         data = self.node_proxy.common(endpoint=category, hostname=hostname)
+        if format == Format.json:
+            return json.dumps(data)
         mapping = {
             'memory': ('description', 'health', 'state'),
             'storage': ('description', 'model', 'capacity_bytes', 'protocol', 'serial_number', 'health', 'state'),
