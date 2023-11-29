@@ -80,6 +80,7 @@ std::ostream &operator<<(std::ostream &out, const maybe_K &k) {
   return out;
 }
 
+std::ostream& operator<<(std::ostream& out, const BlueStore::Buffer& b);
 std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
 {
   using P = BlueStore::printer;
@@ -211,6 +212,29 @@ std::ostream& operator<<(std::ostream& out, const BlueStore::Blob::printer &p)
     out << " (shared_blob=NULL)";
   }
   out << ")";
+  // here printing Buffers
+  if (p.mode & (P::buf | P::sbuf)) {
+    std::lock_guard l(p.blob.shared_blob->get_cache()->lock);
+    if (p.mode & P::sbuf) {
+      // summary buf mode, only print what is mapped what options are, one liner
+      out << "bufs(";
+      for (auto& i : p.blob.get_bc().buffer_map) {
+        out << "0x" << std::hex << i.first << "~" << i.second->length << std::dec
+          << "," << BlueStore::Buffer::get_state_name_short(i.second->state);
+        if (i.second->flags) {
+          out << "," << BlueStore::Buffer::get_flag_name(i.second->flags);
+        }
+        out << " ";
+      }
+      out << ")";
+    } else {
+      for (auto& i : p.blob.get_bc().buffer_map) {
+        out << std::endl << "  0x" << std::hex << i.first
+          << "~" << i.second->length << std::dec
+          << " " << *(i.second);
+      }
+    }
+  }
   return out;
 }
 
