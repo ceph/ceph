@@ -79,16 +79,13 @@ bool SocketConnection::peer_wins() const
   return (messenger.get_myaddr() > peer_addr || policy.server);
 }
 
-seastar::future<> SocketConnection::send(MessageURef _msg)
+seastar::future<> SocketConnection::send(MessageURef msg)
 {
-  // may be invoked from any core
-  MessageFRef msg = seastar::make_foreign(std::move(_msg));
   return io_handler->send(std::move(msg));
 }
 
 seastar::future<> SocketConnection::send_keepalive()
 {
-  // may be invoked from any core
   return io_handler->send_keepalive();
 }
 

@@ -168,7 +168,8 @@ seastar::future<> OSDSingletonState::send_to_osd(
   } else {
     auto conn = cluster_msgr.connect(
         osdmap->get_cluster_addrs(peer).front(), CEPH_ENTITY_TYPE_OSD);
-    return conn->send(std::move(m));
+    // TODO: gate the crosscore sending
+    return conn->send_with_throttling(std::move(m));
   }
 }
 
