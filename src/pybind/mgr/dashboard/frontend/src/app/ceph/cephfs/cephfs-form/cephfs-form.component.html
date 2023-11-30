@@ -23,16 +23,8 @@
                       *ngIf="editing && disableRename">
         <p>The File System can only be renamed if it is shutdown and `refuse_client_session` is set to true.
            Follow the steps below in the command line and refresh the page:</p>
-        <pre class="d-flex">{{ fsFailCmd }}
-          <cd-copy-2-clipboard-button [source]="fsFailCmd"
-                                      [byId]="false"
-                                      [showIconOnly]="true"></cd-copy-2-clipboard-button>
-        </pre>
-        <pre class="d-flex">{{ fsSetCmd }}
-          <cd-copy-2-clipboard-button [source]="fsSetCmd"
-                                      [byId]="false"
-                                      [showIconOnly]="true"></cd-copy-2-clipboard-button>
-        </pre>
+        <cd-code-block [codes]="[fsFailCmd]"></cd-code-block>
+        <cd-code-block [codes]="[fsSetCmd]"></cd-code-block>
       </cd-alert-panel>
 
       <div class="card-body">
