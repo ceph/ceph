@@ -797,6 +797,22 @@ ReplicaActiveOp::~ReplicaActiveOp()
   scrbr->replica_handling_done();
 }
 
+sc::result ReplicaActiveOp::react(const StartReplica&)
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "ReplicaActiveOp::react(const StartReplica&)" << dendl;
+
+  const auto msg = fmt::format(
+      "osd.{} pg[{}]: new chunk request while still handling the previous one",
+      scrbr->get_whoami(), scrbr->get_spgid());
+  dout(1) << msg << dendl;
+  scrbr->get_clog()->warn() << msg;
+
+  post_event(ReplicaPushesUpd{});
+
+  // exit & re-enter the state
+  return transit<ReplicaActiveOp>();
+}
 
 // ------------- ReplicaActive/ReplicaWaitUpdates ------------------------
 

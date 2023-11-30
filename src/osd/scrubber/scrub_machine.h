@@ -704,6 +704,20 @@ struct ReplicaActiveOp
       NamedSimply {
   explicit ReplicaActiveOp(my_context ctx);
   ~ReplicaActiveOp();
+
+  using reactions = mpl::list<sc::custom_reaction<StartReplica>>;
+
+  /**
+   * Handling the unexpected (read - caused by a bug) case of receiving a
+   * new chunk request while still handling the previous one.
+   * To note:
+   * - the primary is evidently no longer waiting for the results of the
+   *   previous request. On the other hand
+   * - we must respond to the new request, as the primary would wait for
+   *   it "forever"`,
+   * - and we should log this unexpected scenario clearly in the cluster log.
+   */
+  sc::result react(const StartReplica&);
 };
 
 /*

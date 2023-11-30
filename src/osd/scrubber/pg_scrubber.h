@@ -673,10 +673,18 @@ class PgScrubber : public ScrubPgIF,
   /**
    * (replica) a tag identifying a specific replica operation, i.e. the
    * creation of the replica scrub map for a single chunk.
-   * Incremented immediately before sending a response to the primary,
-   * so that the next request would be identified as such. Also changed
-   * on reservation release.
-   * Used to identify stale scrub-re-sched messages triggered by the backend.
+   *
+   * Background: the backend is asynchronous, and the specific
+   * operations are size-limited. While the scrubber handles a specific
+   * request, it is continuously triggered to poll the backend for the
+   * full results for the chunk handled.
+   * Once the chunk request becomes obsolete, either following an interval
+   * change or if a new request was received, we must not send the stale
+   * data to the primary. The polling of the obsolete chunk request must
+   * stop, and the stale backend response should be discarded.
+   * In other words - the token should be read as saying "the primary has
+   * lost interest in the results of all operations identified by mismatched
+   * token values".
    */
   Scrub::act_token_t m_current_token{1};
 
