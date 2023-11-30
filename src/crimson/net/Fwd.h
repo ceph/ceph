@@ -21,7 +21,7 @@
 #include <seastar/core/sharded.hh>
 
 #include "msg/Connection.h"
-#include "msg/MessageRef.h"
+#include "msg/Message.h"
 #include "msg/msg_types.h"
 
 #include "crimson/common/errorator.h"

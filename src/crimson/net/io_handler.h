@@ -5,63 +5,15 @@
 
 #include <vector>
 
-#include <seastar/core/shared_future.hh>
 #include <seastar/util/later.hh>
 
 #include "crimson/common/gated.h"
+#include "crimson/common/smp_helpers.h"
 #include "Fwd.h"
 #include "SocketConnection.h"
 #include "FrameAssemblerV2.h"
 
 namespace crimson::net {
-
-/**
- * crosscore_t
- *
- * To preserve the event order across cores.
- */
-class crosscore_t {
-public:
-  using seq_t = uint64_t;
-
-  crosscore_t() = default;
-  ~crosscore_t() = default;
-
-  seq_t get_in_seq() const {
-    return in_seq;
-  }
-
-  seq_t prepare_submit() {
-    ++out_seq;
-    return out_seq;
-  }
-
-  bool proceed_or_wait(seq_t seq) {
-    if (seq == in_seq + 1) {
-      ++in_seq;
-      if (unlikely(in_pr_wait.has_value())) {
-        in_pr_wait->set_value();
-        in_pr_wait = std::nullopt;
-      }
-      return true;
-    } else {
-      return false;
-    }
-  }
-
-  seastar::future<> wait(seq_t seq) {
-    assert(seq != in_seq + 1);
-    if (!in_pr_wait.has_value()) {
-      in_pr_wait = seastar::shared_promise<>();
-    }
-    return in_pr_wait->get_shared_future();
-  }
-
-private:
-  seq_t out_seq = 0;
-  seq_t in_seq = 0;
-  std::optional<seastar::shared_promise<>> in_pr_wait;
-};
 
 /**
  * io_handler_state
@@ -118,6 +70,9 @@ struct io_handler_state {
  */
 class HandshakeListener {
 public:
+  using proto_crosscore_ordering_t = smp_crosscore_ordering_t<crosscore_type_t::ONE>;
+  using cc_seq_t = proto_crosscore_ordering_t::seq_t;
+
   virtual ~HandshakeListener() = default;
 
   HandshakeListener(const HandshakeListener&) = delete;
@@ -126,16 +81,16 @@ public:
   HandshakeListener &operator=(HandshakeListener &&) = delete;
 
   virtual seastar::future<> notify_out(
-      crosscore_t::seq_t cc_seq) = 0;
+      cc_seq_t cc_seq) = 0;
 
   virtual seastar::future<> notify_out_fault(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       const char *where,
       std::exception_ptr,
       io_handler_state) = 0;
 
   virtual seastar::future<> notify_mark_down(
-      crosscore_t::seq_t cc_seq) = 0;
+      cc_seq_t cc_seq) = 0;
 
 protected:
   HandshakeListener() = default;
@@ -150,6 +105,10 @@ protected:
  */
 class IOHandler final : public ConnectionHandler {
 public:
+  using io_crosscore_ordering_t = smp_crosscore_ordering_t<crosscore_type_t::N_ONE>;
+  using proto_crosscore_ordering_t = smp_crosscore_ordering_t<crosscore_type_t::ONE>;
+  using cc_seq_t = proto_crosscore_ordering_t::seq_t;
+
   IOHandler(ChainedDispatchers &,
             SocketConnection &);
 
@@ -173,7 +132,7 @@ public:
     return protocol_is_connected;
   }
 
-  seastar::future<> send(MessageFRef msg) final;
+  seastar::future<> send(MessageURef msg) final;
 
   seastar::future<> send_keepalive() final;
 
@@ -221,7 +180,7 @@ public:
   void print_io_stat(std::ostream &out) const;
 
   seastar::future<> set_accepted_sid(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       seastar::shard_id sid,
       ConnectionFRef conn_fref);
 
@@ -230,7 +189,7 @@ public:
    */
 
   seastar::future<> close_io(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       bool is_dispatch_reset,
       bool is_replace);
 
@@ -251,7 +210,7 @@ public:
   friend class fmt::formatter<io_state_t>;
 
   seastar::future<> set_io_state(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       io_state_t new_state,
       FrameAssemblerV2Ref fa,
       bool set_notify_out);
@@ -262,30 +221,30 @@ public:
   };
   seastar::future<exit_dispatching_ret>
   wait_io_exit_dispatching(
-      crosscore_t::seq_t cc_seq);
+      cc_seq_t cc_seq);
 
   seastar::future<> reset_session(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       bool full);
 
   seastar::future<> reset_peer_state(
-      crosscore_t::seq_t cc_seq);
+      cc_seq_t cc_seq);
 
   seastar::future<> requeue_out_sent_up_to(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       seq_num_t msg_seq);
 
   seastar::future<> requeue_out_sent(
-      crosscore_t::seq_t cc_seq);
+      cc_seq_t cc_seq);
 
   seastar::future<> dispatch_accept(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       seastar::shard_id new_sid,
       ConnectionFRef,
       bool is_replace);
 
   seastar::future<> dispatch_connect(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       seastar::shard_id new_sid,
       ConnectionFRef);
 
@@ -426,7 +385,7 @@ public:
 
   void do_set_io_state(
       io_state_t new_state,
-      std::optional<crosscore_t::seq_t> cc_seq = std::nullopt,
+      std::optional<cc_seq_t> cc_seq = std::nullopt,
       FrameAssemblerV2Ref fa = nullptr,
       bool set_notify_out = false);
 
@@ -440,16 +399,16 @@ public:
 
   void assign_frame_assembler(FrameAssemblerV2Ref);
 
-  seastar::future<> send_redirected(MessageFRef msg);
+  seastar::future<> send_recheck_shard(cc_seq_t, core_id_t, MessageFRef);
 
-  seastar::future<> do_send(MessageFRef msg);
+  seastar::future<> do_send(cc_seq_t, core_id_t, MessageFRef);
 
-  seastar::future<> send_keepalive_redirected();
+  seastar::future<> send_keepalive_recheck_shard(cc_seq_t, core_id_t);
 
-  seastar::future<> do_send_keepalive();
+  seastar::future<> do_send_keepalive(cc_seq_t, core_id_t);
 
   seastar::future<> to_new_sid(
-      crosscore_t::seq_t cc_seq,
+      cc_seq_t cc_seq,
       seastar::shard_id new_sid,
       ConnectionFRef,
       std::optional<bool> is_replace);
@@ -509,7 +468,9 @@ public:
 private:
   shard_states_ref_t shard_states;
 
-  crosscore_t crosscore;
+  proto_crosscore_ordering_t proto_crosscore;
+
+  io_crosscore_ordering_t io_crosscore;
 
   // drop was happening in the previous sid
   std::optional<seastar::shard_id> maybe_dropped_sid;
