@@ -2,12 +2,6 @@ os_type: centos
 os_version: "9.stream"
 
 tasks:
-- pexec:
-    all:
-    - sudo cp /etc/containers/registries.conf /etc/containers/registries.conf.backup
-    - sudo dnf -y  module reset container-tools
-    - sudo dnf -y  module install container-tools
-    - sudo cp /etc/containers/registries.conf.backup /etc/containers/registries.conf
 - cephadm:
     image: quay.io/ceph/ceph:v17.2.0
     cephadm_branch: v17.2.0
