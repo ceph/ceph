@@ -621,18 +621,29 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
       }
     } catch (const std::exception& e) {
       ldpp_dout(dpp, -1) << "Error reading IAM User Policy: " << e.what() << dendl;
-      ret = -EACCES;
+      if (!s->system_request) {
+        ret = -EACCES;
+      }
     }
   }
 
   try {
     s->iam_policy = get_iam_policy_from_attr(s->cct, s->bucket_attrs, s->bucket_tenant);
   } catch (const std::exception& e) {
-    // Really this is a can't happen condition. We parse the policy
-    // when it's given to us, so perhaps we should abort or otherwise
-    // raise bloody murder.
     ldpp_dout(dpp, 0) << "Error reading IAM Policy: " << e.what() << dendl;
-    ret = -EACCES;
+
+    // This really shouldn't happen. We parse the policy when it's given to us,
+    // so a parsing failure here means we broke backward compatibility. The only
+    // sensible thing to do in this case is to deny access, because the policy
+    // may have.
+    //
+    // However, the only way for an administrator to repair such a bucket is to
+    // send a PutBucketPolicy or DeleteBucketPolicy request as an admin/system
+    // user. We can allow such requests, because even if the policy denied
+    // access, admin/system users override that error from verify_permission().
+    if (!s->system_request) {
+      ret = -EACCES;
+    }
   }
 
   bool success = driver->get_zone()->get_redirect_endpoint(&s->redirect_zone_endpoint);
