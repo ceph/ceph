@@ -43,7 +43,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
-         "description": "",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -136,7 +136,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
-         "description": "",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
@@ -229,7 +229,7 @@
          "dashLength": 10,
          "dashes": false,
          "datasource": "$datasource",
-         "description": "",
+         "description": "RBD per-image IO statistics are disabled by default.\n\nPlease refer to https://docs.ceph.com/en/latest/mgr/prometheus/#rbd-io-statistics for information about how to enable those optionally.",
          "fill": 1,
          "fillGradient": 0,
          "gridPos": {
