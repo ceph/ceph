@@ -31,31 +31,28 @@ class RGWBucketCtl;
 class RGWUserBuckets;
 
 /**
- * A string wrapper that includes encode/decode functions
- * for easily accessing a UID in all forms
+ * A string wrapper that includes encode/decode functions for easily accessing
+ * a UID in all forms. In some objects, this may refer to an account id instead
+ * of a user.
  */
 struct RGWUID
 {
-  rgw_user user_id;
+  std::string id;
   void encode(bufferlist& bl) const {
-    std::string s;
-    user_id.to_str(s);
     using ceph::encode;
-    encode(s, bl);
+    encode(id, bl);
   }
   void decode(bufferlist::const_iterator& bl) {
-    std::string s;
     using ceph::decode;
-    decode(s, bl);
-    user_id.from_str(s);
+    decode(id, bl);
   }
   void dump(Formatter *f) const {
-    f->dump_string("user_id", user_id.to_str());
+    f->dump_string("user_id", id);
   }
   static void generate_test_instances(std::list<RGWUID*>& o) {
     o.push_back(new RGWUID);
     o.push_back(new RGWUID);
-    o.back()->user_id.from_str("test:tester");
+    o.back()->id = "test:tester";
   }
 };
 WRITE_CLASS_ENCODER(RGWUID)
