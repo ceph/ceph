@@ -186,6 +186,12 @@ class CephFSMount(object):
                               sudo=True).decode())
 
     def is_blocked(self):
+        if not self.addr:
+            # can't infer if our addr is blocklisted - let the caller try to
+            # umount without lazy/force. If the client was blocklisted, then
+            # the umount would be stuck and the test would fail on timeout.
+            # happens only with Ubuntu 20.04 (missing kclient patches :/).
+            return False
         self.fs = Filesystem(self.ctx, name=self.cephfs_name)
 
         try:
