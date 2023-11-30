@@ -13,6 +13,7 @@
 #include "svc_sync_modules.h"
 
 #include "rgw_user.h"
+#include "rgw_account.h"
 #include "rgw_bucket.h"
 #include "rgw_tools.h"
 #include "rgw_zone.h"
@@ -136,8 +137,8 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
   auto iter = bl.cbegin();
   try {
     decode(user_id, iter);
-    if (user_id.user_id != user) {
-      ldpp_dout(dpp, -1)  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.user_id << " != " << user << dendl;
+    if (rgw_user{user_id.id} != user) {
+      ldpp_dout(dpp, -1)  << "ERROR: rgw_get_user_info_by_uid(): user id mismatch: " << user_id.id << " != " << user << dendl;
       return -EIO;
     }
     if (!iter.end()) {
@@ -202,7 +203,7 @@ public:
       objv_tracker(objv_tracker), mtime(mtime),
       exclusive(exclusive), pattrs(pattrs), y(y) {
     ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
-    ui.user_id = info.user_id;
+    ui.id = info.user_id.to_str();
   }
 
   int prepare(const DoutPrefixProvider *dpp) {
@@ -545,19 +546,23 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
 
   rgw_cache_entry_info cache_info;
 
-  auto iter = bl.cbegin();
   try {
+    auto iter = bl.cbegin();
     decode(uid, iter);
-
-    int ret = read_user_info(ctx, uid.user_id,
-                             &e.info, &e.objv_tracker, nullptr, &cache_info, nullptr,
-                             y, dpp);
-    if (ret < 0) {
-      return ret;
-    }
-  } catch (buffer::error& err) {
+  } catch (const buffer::error&) {
     ldpp_dout(dpp, 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
     return -EIO;
+  }
+
+  if (rgw::account::validate_id(uid.id)) {
+    // this index is used for an account, not a user
+    return -ENOENT;
+  }
+
+  ret = read_user_info(ctx, rgw_user{uid.id}, &e.info, &e.objv_tracker,
+                       nullptr, &cache_info, nullptr, y, dpp);
+  if (ret < 0) {
+    return ret;
   }
 
   uinfo_cache->put(dpp, svc.cache, cache_key, &e, { &cache_info });
