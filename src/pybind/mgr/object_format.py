@@ -228,9 +228,18 @@ class YAMLFormatter(Protocol):
 
 class ReturnValueProvider(Protocol):
     def mgr_return_value(self) -> int:
-        """Return an integer value to provide the Ceph MGR with a error code
-        for the MGR's response tuple. Zero means success. Return an negative
+        """Return an integer value to provide the Ceph MGR with an error code
+        for the MGR's response tuple. Zero means success. Return a negative
         errno otherwise.
+        """
+        ...  # pragma: no cover
+
+
+class StatusValueProvider(Protocol):
+    def mgr_status_value(self) -> str:
+        """Return a string value to provide the Ceph MGR with an error status
+        for the MGR's response tuple. Empty string means success. Return a string
+        containing error info otherwise.
         """
         ...  # pragma: no cover
 
@@ -272,8 +281,13 @@ def _is_yaml_data_provider(obj: YAMLDataProvider) -> bool:
 
 
 def _is_return_value_provider(obj: ReturnValueProvider) -> bool:
-    """Return true if obj is usable as a YAMLDataProvider."""
+    """Return true if obj is usable as a ReturnValueProvider."""
     return callable(getattr(obj, 'mgr_return_value', None))
+
+
+def _is_status_value_provider(obj: StatusValueProvider) -> bool:
+    """Return true if obj is usable as a StatusValueProvider"""
+    return callable(getattr(obj, 'mgr_status_value', None))
 
 
 class ObjectFormatAdapter:
@@ -366,6 +380,27 @@ class ReturnValueAdapter:
         return self.default_return_value
 
 
+class StatusValueAdapter:
+    """A status-value adapter for an object.
+    Given an input object, this type will attempt to get a mgr status value
+    from the object if provides a `mgr_status_value` function.
+    If not it returns a default status value, typically an empty string.
+    """
+
+    def __init__(
+            self,
+            obj: Any,
+            default: str = "",
+    ) -> None:
+        self.obj = obj
+        self.default_status = default
+
+    def mgr_status_value(self) -> str:
+        if _is_status_value_provider(self.obj):
+            return str(self.obj.mgr_status_value())
+        return self.default_status
+
+
 class ErrorResponseBase(Exception):
     """An exception that can directly be converted to a mgr reponse."""
 
@@ -448,6 +483,7 @@ ObjectResponseFuncType = Union[
     Callable[..., JSONDataProvider],
     Callable[..., YAMLDataProvider],
     Callable[..., ReturnValueProvider],
+    Callable[..., StatusValueProvider],
 ]
 
 
@@ -487,6 +523,10 @@ class Responder:
         """Return a ReturnValueProvider for the given object."""
         return ReturnValueAdapter(obj)
 
+    def _statusval_provider(self, obj: Any) -> StatusValueProvider:
+        """Return a StatusValueProvider for the given object."""
+        return StatusValueAdapter(obj)
+
     def _get_format_func(
         self, obj: Any, format_req: Optional[str] = None
     ) -> Callable:
@@ -515,6 +555,12 @@ class Responder:
         """Return a mgr return-value for the given object (usually zero)."""
         return self._retval_provider(obj).mgr_return_value()
 
+    def _return_status(self, obj: Any) -> str:
+        """Return a mgr status-value for the given object (usually empty
+        string).
+        """
+        return self._statusval_provider(obj).mgr_status_value()
+
     def __call__(self, f: ObjectResponseFuncType) -> HandlerFuncType:
         """Wrap a python function so that the original function's return value
         becomes the source for an automatically formatted mgr response.
@@ -528,9 +574,10 @@ class Responder:
                 robj = f(*args, **kwargs)
                 body = self._formatted(robj, format_req)
                 retval = self._return_value(robj)
+                statusval = self._return_status(robj)
             except ErrorResponseBase as e:
                 return e.format_response()
-            return retval, body, ""
+            return retval, body, statusval
 
         # set the extra args on our wrapper function. this will be consumed by
         # the CLICommand decorator and added to the set of optional arguments
