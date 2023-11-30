@@ -15,6 +15,7 @@
 #define CEPH_MDCACHE_H
 
 #include <atomic>
+#include <chrono>
 #include <string_view>
 #include <thread>
 
@@ -136,6 +137,8 @@ static const int MDS_TRAVERSE_WANT_INODE	= (1 << 11);
 static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
 static const int PREDIRTY_DIR = 2;     // update parent dir mtime/size
 static const int PREDIRTY_SHALLOW = 4; // only go to immediate parent (for easier rollback)
+
+using namespace std::literals::chrono_literals;
 
 class MDCache {
  public:
@@ -524,6 +527,73 @@ class MDCache {
   void _move_subtree_map_bound(dirfrag_t df, dirfrag_t oldparent, dirfrag_t newparent,
 			       std::map<dirfrag_t,std::vector<dirfrag_t> >& subtrees);
   ESubtreeMap *create_subtree_map();
+
+  class QuiesceStatistics {
+public:
+    void inc_inodes() {
+      inodes++;
+    }
+    void inc_inodes_quiesced() {
+      inodes_quiesced++;
+    }
+    uint64_t get_inodes() const {
+      return inodes;
+    }
+    uint64_t get_inodes_quiesced() const {
+      return inodes_quiesced;
+    }
+    void add_failed(const MDRequestRef& mdr, int rc) {
+      failed[mdr] = rc;
+    }
+    int get_failed(const MDRequestRef& mdr) const {
+      auto it = failed.find(mdr);
+      return it == failed.end() ? 0 : it->second;
+    }
+    const auto& get_failed() const {
+      return failed;
+    }
+    void dump(Formatter* f) const {
+      f->dump_unsigned("inodes", inodes);
+      f->dump_unsigned("inodes_quiesced", inodes_quiesced);
+      f->open_array_section("failed");
+      for (auto& [mdr, rc] : failed) {
+        f->open_object_section("failure");
+        f->dump_object("request", *mdr);
+        f->dump_int("result", rc);
+        f->close_section();
+      }
+      f->close_section();
+    }
+private:
+    uint64_t inodes = 0;
+    uint64_t inodes_quiesced = 0;
+    std::map<MDRequestRef, int> failed;
+  };
+  class C_MDS_QuiescePath : public MDSInternalContext {
+  public:
+    C_MDS_QuiescePath(MDCache *c, Context* _finisher=nullptr) :
+      MDSInternalContext(c->mds), cache(c), finisher(_finisher) {}
+    ~C_MDS_QuiescePath() {
+      if (finisher) {
+        finisher->complete(-ECANCELED);
+        finisher = nullptr;
+      }
+    }
+    void set_req(const MDRequestRef& _mdr) {
+      mdr = _mdr;
+    }
+    void finish(int r) override {
+      if (finisher) {
+        finisher->complete(r);
+        finisher = nullptr;
+      }
+    }
+    QuiesceStatistics qs;
+    MDCache *cache;
+    MDRequestRef mdr;
+    Context* finisher = nullptr;
+  };
+  MDRequestRef quiesce_path(filepath p, C_MDS_QuiescePath* c, Formatter *f = nullptr, std::chrono::milliseconds delay = 0ms) { c->complete(-ENOTSUP); return nullptr; }
 
   void clean_open_file_lists();
   void dump_openfiles(Formatter *f);
@@ -1347,6 +1417,9 @@ class MDCache {
 				LogSegment *ls, bufferlist *rollback=NULL);
   void finish_uncommitted_fragment(dirfrag_t basedirfrag, int op);
   void rollback_uncommitted_fragment(dirfrag_t basedirfrag, frag_vec_t&& old_frags);
+
+  void dispatch_quiesce_path(const MDRequestRef& mdr) { }
+  void dispatch_quiesce_inode(const MDRequestRef& mdr) { }
 
   void upkeep_main(void);
 
