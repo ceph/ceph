@@ -42,6 +42,10 @@ set(mds_srcs
   MDSPinger.cc
   MetricAggregator.cc
   MetricsHandler.cc
+  QuiesceDbManager.cc
+  QuiesceAgent.cc
+  MDSRankQuiesce.cc
+  BoostUrlImpl.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/common/MemoryModel.cc
   ${CMAKE_SOURCE_DIR}/src/osdc/Journaler.cc
