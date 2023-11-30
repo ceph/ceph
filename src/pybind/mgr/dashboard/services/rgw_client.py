@@ -702,6 +702,19 @@ class RgwClient(RestClient):
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
+    @RestClient.api_put('/{bucket_name}?tagging')
+    def set_tags(self, bucket_name, tags, request=None):
+        # pylint: disable=unused-argument
+        try:
+            ET.fromstring(tags)
+        except ET.ParseError:
+            return "Data must be properly formatted"
+        try:
+            result = request(data=tags)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
     @RestClient.api_get('/{bucket_name}?object-lock')
     def get_bucket_locking(self, bucket_name, request=None):
         # type: (str, Optional[object]) -> dict
