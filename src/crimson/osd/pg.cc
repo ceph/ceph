@@ -309,7 +309,7 @@ unsigned PG::get_target_pg_log_entries() const
 }
 
 void PG::on_removal(ceph::os::Transaction &t) {
-  clear_log_entry_maps();
+  ceph_assert(log_entry_update_waiting_on.empty());
   t.register_on_commit(
     new LambdaContext(
       [this](int r) {
