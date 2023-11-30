@@ -3779,3 +3779,46 @@ TEST(LibCephFS, SnapdirAttrsOnSnapRename) {
   ASSERT_EQ(0, ceph_unmount(cmount));
   ceph_shutdown(cmount);
 }
+
+TEST(LibCephFS, PreadvPwritevZeroBytesSyncIO) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(ceph_create(&cmount, NULL), 0);
+  ASSERT_EQ(ceph_conf_read_file(cmount, NULL), 0);
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(ceph_mount(cmount, NULL), 0);
+
+  int mypid = getpid();
+  char testf[256];
+
+  sprintf(testf, "test_preadvpwritevzerobytessynciofile%d", mypid);
+  int fd = ceph_open(cmount, testf, O_CREAT|O_RDWR, 0666);
+  ASSERT_GT(fd, 0);
+
+  char out_empty_buf_0[0];
+  char out_empty_buf_1[0];
+  struct iovec iov_out[2] = {
+    {out_empty_buf_0, sizeof(out_empty_buf_0)},
+    {out_empty_buf_1, sizeof(out_empty_buf_1)}
+  };
+
+  char in_empty_buf_0[sizeof(out_empty_buf_0)];
+  char in_empty_buf_1[sizeof(out_empty_buf_1)];
+  struct iovec iov_in[2] = {
+    {in_empty_buf_0, sizeof(in_empty_buf_0)},
+    {in_empty_buf_1, sizeof(in_empty_buf_1)}
+  }; 
+
+  int64_t rc;
+  rc = ceph_pwritev(cmount, fd, iov_out, 2, 0);
+  ASSERT_EQ(rc, 0);
+  rc = ceph_preadv(cmount, fd, iov_in, 2, 0);
+  ASSERT_EQ(rc, 0);
+
+  ASSERT_EQ(strncmp((const char*)iov_in[0].iov_base,
+                    (const char*)iov_out[0].iov_base, iov_out[0].iov_len), 0);
+  ASSERT_EQ(strncmp((const char*)iov_in[1].iov_base,
+                    (const char*)iov_out[1].iov_base, iov_out[1].iov_len), 0);
+
+  ceph_close(cmount, fd);
+  ceph_shutdown(cmount);
+}
