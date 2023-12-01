@@ -24,8 +24,8 @@ class Reporter:
         self.reporter_port: int = reporter_port
         self.reporter_endpoint: str = reporter_endpoint
         self.log = Logger(__name__)
-        self.reporter_url: str = (f"{reporter_scheme}:{reporter_hostname}:"
-                                  f"{reporter_port}{reporter_endpoint}")
+        self.reporter_url: str = (f'{reporter_scheme}:{reporter_hostname}:'
+                                  f'{reporter_port}{reporter_endpoint}')
         self.log.logger.info(f'Reporter url set to {self.reporter_url}')
 
     def stop(self) -> None:
@@ -43,9 +43,9 @@ class Reporter:
             # scenario probably we should just send the sub-parts
             # that have changed to minimize the traffic in
             # dense clusters
-            self.log.logger.debug("waiting for a lock.")
+            self.log.logger.debug('waiting for a lock.')
             self.system.lock.acquire()
-            self.log.logger.debug("lock acquired.")
+            self.log.logger.debug('lock acquired.')
             if self.system.data_ready:
                 self.log.logger.info('data ready to be sent to the mgr.')
                 if not self.system.get_system() == self.system.previous_data:
@@ -53,7 +53,7 @@ class Reporter:
                     self.data['patch'] = self.system.get_system()
                     try:
                         # TODO: add a timeout parameter to the reporter in the config file
-                        self.log.logger.info(f"sending data to {self.reporter_url}")
+                        self.log.logger.info(f'sending data to {self.reporter_url}')
                         http_req(hostname=self.reporter_hostname,
                                  port=self.reporter_port,
                                  method='POST',
@@ -70,5 +70,5 @@ class Reporter:
                 else:
                     self.log.logger.info('no diff, not sending data to the mgr.')
             self.system.lock.release()
-            self.log.logger.debug("lock released.")
+            self.log.logger.debug('lock released.')
             time.sleep(5)
