@@ -105,27 +105,8 @@ int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
 			       const std::string& end_marker, uint64_t max, bool need_stats,
 			       BucketList &result, optional_yield y)
 {
-  RGWUserBuckets ulist;
-  bool is_truncated = false;
-
-  int ret = store->ctl()->user->list_buckets(dpp, get_id(), marker, end_marker,
-                                             max, need_stats, &ulist,
-                                             &is_truncated, y);
-  if (ret < 0)
-    return ret;
-
-  result.buckets.clear();
-
-  for (auto& ent : ulist.get_buckets()) {
-    result.buckets.push_back(std::move(ent.second));
-  }
-
-  if (is_truncated && !result.buckets.empty()) {
-    result.next_marker = result.buckets.back().bucket.name;
-  } else {
-    result.next_marker.clear();
-  }
-  return 0;
+  return store->ctl()->user->list_buckets(dpp, get_id(), marker, end_marker,
+                                          max, need_stats, result, y);
 }
 
 int RadosBucket::create(const DoutPrefixProvider* dpp,

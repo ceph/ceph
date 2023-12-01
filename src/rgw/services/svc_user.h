@@ -102,8 +102,7 @@ public:
                            const std::string& marker,
                            const std::string& end_marker,
                            uint64_t max,
-                           RGWUserBuckets *buckets,
-                           bool *is_truncated,
+                           rgw::sal::BucketList& listing,
                            optional_yield y) = 0;
 
   virtual int flush_bucket_stats(const DoutPrefixProvider *dpp, 
