@@ -53,7 +53,7 @@ class RGWSI_User_RADOS : public RGWSI_User
   using RGWChainedCacheImpl_user_info_cache_entry = RGWChainedCacheImpl<user_info_cache_entry>;
   std::unique_ptr<RGWChainedCacheImpl_user_info_cache_entry> uinfo_cache;
 
-  rgw_raw_obj get_buckets_obj(const rgw_user& user_id) const;
+  rgw_raw_obj get_buckets_obj(const rgw_user& user_id) const override;
 
   int get_user_info_from_index(RGWSI_MetaBackend::Context *ctx,
                                const std::string& key,

@@ -360,7 +360,9 @@ int RadosBucket::remove(const DoutPrefixProvider* dpp,
     ldpp_dout(dpp, -1) << "ERROR: unable to remove notifications from bucket. ret=" << ps_ret << dendl;
   }
 
-  ret = store->ctl()->bucket->unlink_bucket(info.owner, info.bucket, y, dpp, false);
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  ret = store->ctl()->bucket->unlink_bucket(rados, info.owner,
+                                            info.bucket, y, dpp, false);
   if (ret < 0) {
     ldpp_dout(dpp, -1) << "ERROR: unable to remove user bucket information" << dendl;
   }
@@ -571,7 +573,8 @@ int RadosBucket::link(const DoutPrefixProvider* dpp, const rgw_user& new_user, o
   Attrs ep_attrs;
   rgw_ep_info ep_data{ep, ep_attrs};
 
-  int r = store->ctl()->bucket->link_bucket(new_user, info.bucket,
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  int r = store->ctl()->bucket->link_bucket(rados, new_user, info.bucket,
 					    get_creation_time(), y, dpp, update_entrypoint,
 					    &ep_data);
   if (r < 0)
@@ -585,13 +588,16 @@ int RadosBucket::link(const DoutPrefixProvider* dpp, const rgw_user& new_user, o
 
 int RadosBucket::unlink(const DoutPrefixProvider* dpp, const rgw_user& owner, optional_yield y, bool update_entrypoint)
 {
-  return store->ctl()->bucket->unlink_bucket(owner, info.bucket, y, dpp, update_entrypoint);
+  librados::Rados& rados = *store->getRados()->get_rados_handle();
+  return store->ctl()->bucket->unlink_bucket(rados, owner, info.bucket,
+                                             y, dpp, update_entrypoint);
 }
 
 int RadosBucket::chown(const DoutPrefixProvider* dpp, const rgw_user& new_owner, optional_yield y)
 {
   std::string obj_marker;
-  int r = this->unlink(dpp, info.owner, y);
+  // unlink from the owner, but don't update the entrypoint until link()
+  int r = this->unlink(dpp, info.owner, y, false);
   if (r < 0) {
     return r;
   }

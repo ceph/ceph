@@ -3126,8 +3126,8 @@ public:
   RGWDataSyncModule *get_data_handler() override {
     return &data_handler;
   }
-  RGWMetadataHandler *alloc_bucket_meta_handler() override {
-    return RGWArchiveBucketMetaHandlerAllocator::alloc();
+  RGWMetadataHandler *alloc_bucket_meta_handler(librados::Rados& rados) override {
+    return RGWArchiveBucketMetaHandlerAllocator::alloc(rados);
   }
   RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver) override {
     return RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(driver);

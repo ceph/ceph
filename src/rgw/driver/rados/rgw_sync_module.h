@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include "include/rados/librados_fwd.hpp"
 #include "rgw_common.h"
 #include "rgw_coroutine.h"
 
@@ -55,7 +56,7 @@ public:
   virtual bool supports_user_writes() {
     return false;
   }
-  virtual RGWMetadataHandler *alloc_bucket_meta_handler();
+  virtual RGWMetadataHandler *alloc_bucket_meta_handler(librados::Rados& rados);
   virtual RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver);
 
   // indication whether the sync module start with full sync (default behavior)
