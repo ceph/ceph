@@ -175,9 +175,12 @@ For each subsystem, there is a logging level for its output logs (a so-called
 "log level") and a logging level for its in-memory logs (a so-called "memory
 level"). Different values may be set for these two logging levels in each
 subsystem. Ceph's logging levels operate on a scale of ``1`` to ``20``, where
-``1`` is terse and ``20`` is verbose [#f1]_.  As a general rule, the in-memory
-logs are not sent to the output log unless one or more of the following
-conditions obtain:
+``1`` is terse and ``20`` is verbose.  In certain rare cases, there are logging
+levels that can take a value greater than 20. The resulting logs are extremely
+verbose.
+
+The in-memory logs are not sent to the output log unless one or more of the
+following conditions are true:
 
 - a fatal signal has been raised or
 - an assertion within Ceph code has been triggered or
@@ -185,9 +188,6 @@ conditions obtain:
   Consult `the portion of the "Ceph Administration Tool documentation
   that provides an example of how to submit admin socket commands
   <http://docs.ceph.com/en/latest/man/8/ceph/#daemon>`_ for more detail.
-
-.. warning ::
-   .. [#f1] In certain rare cases, there are logging levels that can take a value greater than 20. The resulting logs are extremely verbose.
 
 Log levels and memory levels can be set either together or separately. If a
 subsystem is assigned a single value, then that value determines both the log
