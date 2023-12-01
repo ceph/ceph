@@ -51,6 +51,11 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
   labels: string[];
   hasOrchestrator: boolean;
   currentVolumeName: string;
+  fsId: number;
+  disableRename: boolean = true;
+
+  fsFailCmd: string;
+  fsSetCmd: string;
 
   constructor(
     private router: Router,
@@ -101,9 +106,22 @@ export class CephfsVolumeFormComponent extends CdForm implements OnInit {
 
   ngOnInit() {
     if (this.editing) {
-      this.route.params.subscribe((params: { name: string }) => {
-        this.currentVolumeName = params.name;
+      this.route.params.subscribe((params: { id: string }) => {
+        this.fsId = Number(params.id);
+      });
+
+      this.cephfsService.getCephfs(this.fsId).subscribe((resp: object) => {
+        this.currentVolumeName = resp['cephfs']['name'];
         this.form.get('name').setValue(this.currentVolumeName);
+
+        this.disableRename = !(
+          !resp['cephfs']['flags']['joinable'] && resp['cephfs']['flags']['refuse_client_session']
+        );
+        if (this.disableRename) {
+          this.form.get('name').disable();
+          this.fsFailCmd = `ceph fs fail ${this.currentVolumeName}`;
+          this.fsSetCmd = `ceph fs set ${this.currentVolumeName} refuse_client_session true`;
+        }
       });
     } else {
       const hostContext = new CdTableFetchDataContext(() => undefined);
