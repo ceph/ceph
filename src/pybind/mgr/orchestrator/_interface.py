@@ -42,7 +42,8 @@ from ceph.deployment.service_spec import (
     SNMPGatewaySpec,
     ServiceSpec,
     TunedProfileSpec,
-    NvmeofServiceSpec
+    NvmeofServiceSpec,
+    DedupSpec
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
@@ -816,6 +817,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'nvmeof': 'nvmeof',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
+        'dedup': 'dedup',
         'nfs': 'nfs',
         'grafana': 'grafana',
         'alertmanager': 'alertmanager',
@@ -849,6 +851,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'nvmeof': ['nvmeof'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
+        'dedup': ['dedup'],
         'nfs': ['nfs'],
         'grafana': ['grafana'],
         'alertmanager': ['alertmanager'],

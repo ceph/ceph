@@ -61,7 +61,7 @@ from . import ssh
 from .migrations import Migrations
 from .services.cephadmservice import MonService, MgrService, MdsService, RgwService, \
     RbdMirrorService, CrashService, CephadmService, CephfsMirrorService, CephadmAgent, \
-    CephExporterService
+    CephExporterService, DedupService
 from .services.ingress import IngressService
 from .services.container import CustomContainerService
 from .services.iscsi import IscsiService
@@ -636,7 +636,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
             IngressService, CustomContainerService, CephfsMirrorService, NvmeofService,
             CephadmAgent, CephExporterService, SNMPGatewayService, ElasticSearchService,
-            JaegerQueryService, JaegerAgentService, JaegerCollectorService
+            JaegerQueryService, JaegerAgentService, JaegerCollectorService, DedupService
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -2319,7 +2319,7 @@ Then run the following:
 
         if action == 'rotate-key':
             if d.daemon_type not in ['mgr', 'osd', 'mds',
-                                     'rgw', 'crash', 'nfs', 'rbd-mirror', 'iscsi']:
+                                     'rgw', 'crash', 'nfs', 'rbd-mirror', 'iscsi', 'dedup']:
                 raise OrchestratorError(
                     f'key rotation not supported for {d.daemon_type}'
                 )
