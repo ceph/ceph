@@ -36,6 +36,7 @@ class Ceph(ContainerDaemonForm):
         'rbd-mirror',
         'crash',
         'cephfs-mirror',
+        'dedup',
     )
 
     @classmethod
@@ -158,6 +159,7 @@ class Ceph(ContainerDaemonForm):
             'cephfs-mirror',
             'crash',
             'ceph-exporter',
+            'dedup',
         ]:
             # these do not search for their keyrings in a data directory
             mounts[
@@ -198,6 +200,8 @@ class Ceph(ContainerDaemonForm):
             name = 'client.cephfs-mirror.%s' % ident.daemon_id
         elif ident.daemon_type == 'crash':
             name = 'client.crash.%s' % ident.daemon_id
+        elif ident.daemon_type == 'dedup':
+            name = 'client.dedup.%s' % ident.daemon_id
         elif ident.daemon_type in ['mon', 'mgr', 'mds', 'osd']:
             name = ident.daemon_name
         else:
@@ -205,6 +209,9 @@ class Ceph(ContainerDaemonForm):
         args.extend(['-n', name])
         if ident.daemon_type != 'crash':
             args.append('-f')
+            if ident.daemon_type == 'dedup':
+                pool_name = ident.daemon_id.split('.')[0]
+                args.extend(['--pool', pool_name])
         args.extend(self.get_daemon_args())
 
     def customize_container_envs(
@@ -217,6 +224,7 @@ class Ceph(ContainerDaemonForm):
             'rgw': '/usr/bin/radosgw',
             'rbd-mirror': '/usr/bin/rbd-mirror',
             'cephfs-mirror': '/usr/bin/cephfs-mirror',
+            'dedup': '/usr/bin/ceph-dedup-daemon',
         }
         daemon_type = self.identity.daemon_type
         return ep.get(daemon_type) or f'/usr/bin/ceph-{daemon_type}'
