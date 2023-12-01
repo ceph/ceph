@@ -412,7 +412,7 @@ def test_agent_get_ls(_ls_subset, _ls, cephadm_fs):
 @mock.patch("threading.Event.clear")
 @mock.patch("threading.Event.wait")
 @mock.patch("urllib.request.Request.__init__")
-@mock.patch("cephadm.urlopen")
+@mock.patch("cephadmlib.agent.urlopen")
 @mock.patch("cephadm.list_networks")
 @mock.patch("cephadm.HostFacts.dump")
 @mock.patch("cephadm.HostFacts.__init__", lambda _, __: None)
@@ -527,7 +527,7 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
            'port': str(open_listener_port)
         }
         _RQ_init.assert_called_with(
-            f'https://{target_ip}:{target_port}/data/',
+            f'https://{target_ip}:{target_port}/data',
             json.dumps(expected_data).encode('ascii'),
             {'Content-Type': 'application/json'}
         )

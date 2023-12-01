@@ -23,14 +23,6 @@ DEFAULT_CONFIG = {
 }
 
 
-class NodeProxyInitialization(Exception):
-    pass
-
-
-class NodeProxyFetchOobError(Exception):
-    pass
-
-
 class NodeProxy(Thread):
     def __init__(self, **kw: Dict[str, Any]) -> None:
         super().__init__()
@@ -45,6 +37,12 @@ class NodeProxy(Thread):
         except Exception as e:
             self.exc = e
             return
+
+    def shutdown(self) -> None:
+        self.log.logger.info('Shutting down node-proxy...')
+        self.system.client.logout()
+        self.system.stop_update_loop()
+        self.reporter_agent.stop()
 
     def check_auth(self, realm: str, username: str, password: str) -> bool:
         return self.__dict__['username'] == username and \
