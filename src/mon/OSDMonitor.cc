@@ -7563,6 +7563,12 @@ bool OSDMonitor::validate_crush_against_features(const CrushWrapper *newcrush,
 	 << newmap.require_min_compat_client;
       return false;
     }
+    if (mv > newmap.require_osd_release) {
+      ss << "new crush map requires client version " << mv
+	 << " but require_osd_release is "
+	 << newmap.require_osd_release;
+      return false;
+    }
   }
 
   // osd compat
