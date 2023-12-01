@@ -276,6 +276,11 @@
 	:ref:`MON<arch_monitor>`
 		The Ceph monitor software.
 
+        Monitor Store
+                The persistent storage that is used by the Monitor. This
+                includes the Monitor's RocksDB and all related files in
+                ``/var/lib/ceph``.
+
 	Node
                 See :term:`Ceph Node`.
 
