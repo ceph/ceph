@@ -1506,6 +1506,29 @@ Usage:
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 
+    @_cli_write_command('orch apply dedup')
+    def _apply_dedup(self,
+                     pool: str,
+                     unmanaged: bool = False,
+                     dry_run: bool = False,
+                     format: Format = Format.plain,
+                     no_overwrite: bool = False,
+                     inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Scale a dedup service"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = DedupSpec(
+            service_id=pool,
+            pool=pool,
+            unmanaged=unmanaged,
+            preview_only=dry_run
+        )
+
+        spec.validate()
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
+
     @_cli_write_command('orch apply nvmeof')
     def _apply_nvmeof(self,
                       pool: str,

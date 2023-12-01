@@ -503,6 +503,7 @@ class Orchestrator(object):
             'loki': self.apply_loki,
             'promtail': self.apply_promtail,
             'rbd-mirror': self.apply_rbd_mirror,
+            'dedup': self.apply_dedup,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
             'snmp-gateway': self.apply_snmp_gateway,
@@ -670,6 +671,10 @@ class Orchestrator(object):
 
     def apply_rbd_mirror(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update rbd-mirror cluster"""
+        raise NotImplementedError()
+
+    def apply_dedup(self, spec: DedupSpec) -> OrchResult[str]:
+        """Update dedup cluster"""
         raise NotImplementedError()
 
     def apply_nfs(self, spec: NFSServiceSpec) -> OrchResult[str]:
