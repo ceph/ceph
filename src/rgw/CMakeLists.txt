@@ -42,10 +42,8 @@ set(librgw_common_srcs
   services/svc_mdlog.cc
   services/svc_meta.cc
   services/svc_meta_be.cc
-  services/svc_meta_be_otp.cc
   services/svc_meta_be_sobj.cc
   services/svc_notify.cc
-  services/svc_otp.cc
   services/svc_quota.cc
   services/svc_sync_modules.cc
   services/svc_role_rados.cc

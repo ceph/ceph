@@ -14,9 +14,7 @@
 #include "services/svc_meta.h"
 #include "services/svc_meta_be.h"
 #include "services/svc_meta_be_sobj.h"
-#include "services/svc_meta_be_otp.h"
 #include "services/svc_notify.h"
-#include "services/svc_otp.h"
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_quota.h"
@@ -71,9 +69,7 @@ int RGWServices_Def::init(CephContext *cct,
   mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
   meta = std::make_unique<RGWSI_Meta>(cct);
   meta_be_sobj = std::make_unique<RGWSI_MetaBackend_SObj>(cct);
-  meta_be_otp = std::make_unique<RGWSI_MetaBackend_OTP>(cct);
   notify = std::make_unique<RGWSI_Notify>(cct);
-  otp = std::make_unique<RGWSI_OTP>(cct);
   zone = std::make_unique<RGWSI_Zone>(cct);
   zone_utils = std::make_unique<RGWSI_ZoneUtils>(cct);
   quota = std::make_unique<RGWSI_Quota>(cct);
@@ -89,7 +85,7 @@ int RGWServices_Def::init(CephContext *cct,
     sysobj_cache = std::make_unique<RGWSI_SysObj_Cache>(dpp, cct);
   }
 
-  vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get(), meta_be_otp.get()};
+  vector<RGWSI_MetaBackend *> meta_bes{meta_be_sobj.get()};
 
   async_processor->start();
   finisher->init();
@@ -109,10 +105,8 @@ int RGWServices_Def::init(CephContext *cct,
 	      cls.get(), async_processor.get());
   meta->init(sysobj.get(), mdlog.get(), meta_bes);
   meta_be_sobj->init(sysobj.get(), mdlog.get());
-  meta_be_otp->init(sysobj.get(), mdlog.get(), cls.get());
   notify->init(zone.get(), driver->getRados()->get_rados_handle(),
 	       finisher.get());
-  otp->init(zone.get(), meta.get(), meta_be_otp.get());
   zone->init(sysobj.get(), driver->getRados()->get_rados_handle(),
 	     sync_modules.get(), bucket_sync_sobj.get());
   zone_utils->init(driver->getRados()->get_rados_handle(), zone.get());
@@ -247,12 +241,6 @@ int RGWServices_Def::init(CephContext *cct,
       return r;
     }
 
-    r = otp->start(y, dpp);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: failed to start otp service (" << cpp_strerror(-r) << dendl;
-      return r;
-    }
-
     r = role_rados->start(y, dpp);
     if (r < 0) {
       ldout(cct, 0) << "ERROR: failed to start role_rados service (" << cpp_strerror(-r) << dendl;
@@ -279,9 +267,7 @@ void RGWServices_Def::shutdown()
   datalog_rados.reset();
   user_rados->shutdown();
   sync_modules->shutdown();
-  otp->shutdown();
   notify->shutdown();
-  meta_be_otp->shutdown();
   meta_be_sobj->shutdown();
   meta->shutdown();
   mdlog->shutdown();
@@ -332,9 +318,7 @@ int RGWServices::do_init(CephContext *_cct, rgw::sal::RadosStore* driver, bool h
   mdlog = _svc.mdlog.get();
   meta = _svc.meta.get();
   meta_be_sobj = _svc.meta_be_sobj.get();
-  meta_be_otp = _svc.meta_be_otp.get();
   notify = _svc.notify.get();
-  otp = _svc.otp.get();
   zone = _svc.zone.get();
   zone_utils = _svc.zone_utils.get();
   quota = _svc.quota.get();

@@ -129,7 +129,6 @@ public:
 
   enum Type {
     MDBE_SOBJ = 0,
-    MDBE_OTP  = 1,
   };
 
   RGWSI_MetaBackend(CephContext *cct) : RGWServiceInstance(cct) {}

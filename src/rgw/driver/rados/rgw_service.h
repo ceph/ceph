@@ -96,9 +96,7 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_MDLog> mdlog;
   std::unique_ptr<RGWSI_Meta> meta;
   std::unique_ptr<RGWSI_MetaBackend_SObj> meta_be_sobj;
-  std::unique_ptr<RGWSI_MetaBackend_OTP> meta_be_otp;
   std::unique_ptr<RGWSI_Notify> notify;
-  std::unique_ptr<RGWSI_OTP> otp;
   std::unique_ptr<RGWSI_Zone> zone;
   std::unique_ptr<RGWSI_ZoneUtils> zone_utils;
   std::unique_ptr<RGWSI_Quota> quota;
@@ -144,9 +142,7 @@ struct RGWServices
   RGWSI_MDLog *mdlog{nullptr};
   RGWSI_Meta *meta{nullptr};
   RGWSI_MetaBackend *meta_be_sobj{nullptr};
-  RGWSI_MetaBackend *meta_be_otp{nullptr};
   RGWSI_Notify *notify{nullptr};
-  RGWSI_OTP *otp{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};
   RGWSI_Quota *quota{nullptr};
