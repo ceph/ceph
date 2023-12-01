@@ -10,6 +10,7 @@
 #include <boost/container/flat_map.hpp>
 #include <boost/container/flat_set.hpp>
 
+#include "include/rados/librados_fwd.hpp"
 #include "include/types.h"
 #include "rgw_common.h"
 #include "rgw_tools.h"
@@ -188,7 +189,7 @@ public:
 
 class RGWBucketMetaHandlerAllocator {
 public:
-  static RGWBucketMetadataHandlerBase *alloc();
+  static RGWBucketMetadataHandlerBase *alloc(librados::Rados& rados);
 };
 
 class RGWBucketInstanceMetaHandlerAllocator {
@@ -198,7 +199,7 @@ public:
 
 class RGWArchiveBucketMetaHandlerAllocator {
 public:
-  static RGWBucketMetadataHandlerBase *alloc();
+  static RGWBucketMetadataHandlerBase *alloc(librados::Rados& rados);
 };
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
@@ -372,7 +373,7 @@ public:
   static int dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   std::ostream& os, const DoutPrefixProvider *dpp, optional_yield y);
 
-  static int unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y);
+  static int unlink(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = nullptr);
   static int link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
   static int chown(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state, const std::string& marker, const DoutPrefixProvider *dpp, optional_yield y, std::string *err_msg = NULL);
 
@@ -678,7 +679,8 @@ public:
                                 const DoutPrefixProvider *dpp);
 
   /* user/bucket */
-  int link_bucket(const rgw_user& user_id,
+  int link_bucket(librados::Rados& rados,
+                  const rgw_owner& owner,
                   const rgw_bucket& bucket,
                   ceph::real_time creation_time,
 		  optional_yield y,
@@ -686,7 +688,8 @@ public:
                   bool update_entrypoint = true,
                   rgw_ep_info *pinfo = nullptr);
 
-  int unlink_bucket(const rgw_user& user_id,
+  int unlink_bucket(librados::Rados& rados,
+                    const rgw_owner& owner,
                     const rgw_bucket& bucket,
 		    optional_yield y,
                     const DoutPrefixProvider *dpp,
@@ -744,7 +747,8 @@ private:
                                   const DoutPrefixProvider *dpp);
 
   int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                     const rgw_user& user,
+                     librados::Rados& rados,
+                     const rgw_owner& owner,
                      const rgw_bucket& bucket,
                      ceph::real_time creation_time,
                      bool update_entrypoint,
@@ -753,7 +757,8 @@ private:
                      const DoutPrefixProvider *dpp);
 
   int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                       const rgw_user& user_id,
+                       librados::Rados& rados,
+                       const rgw_owner& owner,
                        const rgw_bucket& bucket,
                        bool update_entrypoint,
 		       optional_yield y,
