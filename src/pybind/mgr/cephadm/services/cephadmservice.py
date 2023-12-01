@@ -1223,6 +1223,16 @@ class CephadmAgent(CephService):
 
         return daemon_spec
 
+    def pre_remove(self, daemon: DaemonDescription) -> None:
+        super().pre_remove(daemon)
+
+        assert daemon.daemon_id is not None
+        daemon_id: str = daemon.daemon_id
+
+        logger.info('Removing agent %s...' % daemon_id)
+
+        self.mgr.agent_helpers._shutdown_node_proxy()
+
     def generate_config(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[Dict[str, Any], List[str]]:
         agent = self.mgr.http_server.agent
         try:
