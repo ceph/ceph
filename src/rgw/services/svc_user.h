@@ -42,6 +42,8 @@ public:
 
   /* base svc_user interfaces */
 
+  virtual rgw_raw_obj get_buckets_obj(const rgw_user& user_id) const = 0;
+
   virtual int read_user_info(RGWSI_MetaBackend::Context *ctx,
                              const rgw_user& user,
                              RGWUserInfo *info,

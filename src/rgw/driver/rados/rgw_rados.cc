@@ -1411,7 +1411,7 @@ int RGWRados::init_begin(CephContext* _cct, const DoutPrefixProvider *dpp,
     return ret;
   }
 
-  ret = ctl.init(&svc, driver, dpp);
+  ret = ctl.init(&svc, driver, *get_rados_handle(), dpp);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to init ctls (ret=" << cpp_strerror(-ret) << ")" << dendl;
     return ret;
