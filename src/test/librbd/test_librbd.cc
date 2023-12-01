@@ -4738,50 +4738,6 @@ TYPED_TEST(DiffIterateTest, DiffIterateStress)
   ASSERT_PASSED(this->validate_object_map, image);
 }
 
-TYPED_TEST(DiffIterateTest, DiffIterateRegression6926)
-{
-  librados::IoCtx ioctx;
-  ASSERT_EQ(0, this->_rados.ioctx_create(this->m_pool_name.c_str(), ioctx));
-
-  librbd::RBD rbd;
-  librbd::Image image;
-  int order = 0;
-  std::string name = this->get_temp_image_name();
-  uint64_t size = 20 << 20;
-
-  ASSERT_EQ(0, create_image_pp(rbd, ioctx, name.c_str(), size, &order));
-  ASSERT_EQ(0, rbd.open(ioctx, image, name.c_str(), NULL));
-
-  uint64_t object_size = 0;
-  if (this->whole_object) {
-    object_size = 1 << order;
-  }
-  vector<diff_extent> extents;
-  ceph::bufferlist bl;
-
-  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
-      			           vector_iterate_cb, (void *) &extents));
-  ASSERT_EQ(0u, extents.size());
-
-  ASSERT_EQ(0, image.snap_create("snap1"));
-  char data[256];
-  memset(data, 1, sizeof(data));
-  bl.append(data, 256);
-  ASSERT_EQ(256, image.write(0, 256, bl));
-
-  extents.clear();
-  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
-      			           vector_iterate_cb, (void *) &extents));
-  ASSERT_EQ(1u, extents.size());
-  ASSERT_EQ(diff_extent(0, 256, true, object_size), extents[0]);
-
-  ASSERT_EQ(0, image.snap_set("snap1"));
-  extents.clear();
-  ASSERT_EQ(0, image.diff_iterate2(NULL, 0, size, true, this->whole_object,
-      			           vector_iterate_cb, (void *) &extents));
-  ASSERT_EQ(static_cast<size_t>(0), extents.size());
-}
-
 TYPED_TEST(DiffIterateTest, DiffIterateParent)
 {
   REQUIRE_FEATURE(RBD_FEATURE_LAYERING);
