@@ -26,6 +26,7 @@
 #include "common/ceph_crypto.h"
 #include "common/random_string.h"
 #include "common/tracer.h"
+#include "common/versioned_variant.h"
 #include "rgw_acl.h"
 #include "rgw_bucket_layout.h"
 #include "rgw_cors.h"
@@ -1038,7 +1039,7 @@ WRITE_CLASS_ENCODER(RGWBucketInfo)
 struct RGWBucketEntryPoint
 {
   rgw_bucket bucket;
-  rgw_user owner;
+  rgw_owner owner;
   ceph::real_time creation_time;
   bool linked;
 
@@ -1048,13 +1049,19 @@ struct RGWBucketEntryPoint
   RGWBucketEntryPoint() : linked(false), has_bucket_info(false) {}
 
   void encode(bufferlist& bl) const {
+    const rgw_user* user = std::get_if<rgw_user>(&owner);
     ENCODE_START(10, 8, bl);
     encode(bucket, bl);
-    encode(owner.id, bl);
+    if (user) {
+      encode(user->id, bl);
+    } else {
+      encode(std::string{}, bl); // empty user id
+    }
     encode(linked, bl);
     uint64_t ctime = (uint64_t)real_clock::to_time_t(creation_time);
     encode(ctime, bl);
-    encode(owner, bl);
+    // 'rgw_user owner' converted to 'rgw_owner'
+    ceph::converted_variant::encode(owner, bl);
     encode(creation_time, bl);
     ENCODE_FINISH(bl);
   }
@@ -1069,7 +1076,8 @@ struct RGWBucketEntryPoint
     }
     has_bucket_info = false;
     decode(bucket, bl);
-    decode(owner.id, bl);
+    std::string user_id;
+    decode(user_id, bl);
     decode(linked, bl);
     uint64_t ctime;
     decode(ctime, bl);
@@ -1077,7 +1085,9 @@ struct RGWBucketEntryPoint
       creation_time = real_clock::from_time_t((time_t)ctime);
     }
     if (struct_v >= 9) {
-      decode(owner, bl);
+      ceph::converted_variant::decode(owner, bl);
+    } else {
+      owner = rgw_user{"", user_id};
     }
     if (struct_v >= 10) {
       decode(creation_time, bl);
