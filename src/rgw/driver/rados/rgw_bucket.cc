@@ -3233,11 +3233,11 @@ int RGWBucketCtl::read_bucket_stats(const rgw_bucket& bucket,
   });
 }
 
-int RGWBucketCtl::read_buckets_stats(map<string, RGWBucketEnt>& m,
+int RGWBucketCtl::read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
                                      optional_yield y, const DoutPrefixProvider *dpp)
 {
   return call([&](RGWSI_Bucket_X_Ctx& ctx) {
-    return svc.bucket->read_buckets_stats(ctx, m, y, dpp);
+    return svc.bucket->read_buckets_stats(ctx, buckets, y, dpp);
   });
 }
 

@@ -104,7 +104,7 @@ public:
                         const DoutPrefixProvider *dpp) = 0;
 
   virtual int read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
-                                 std::map<std::string, RGWBucketEnt>& m,
+                                 std::vector<RGWBucketEnt>& buckets,
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) = 0;
 };

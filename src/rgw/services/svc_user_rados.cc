@@ -19,7 +19,7 @@
 #include "rgw_zone.h"
 #include "rgw_rados.h"
 
-#include "cls/user/cls_user_client.h"
+#include "driver/rados/buckets.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -624,68 +624,15 @@ int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ct
                                   info, objv_tracker, pmtime, y, dpp);
 }
 
-int RGWSI_User_RADOS::cls_user_update_buckets(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, list<cls_user_bucket_entry>& entries, bool add, optional_yield y)
-{
-  rgw_rados_ref rados_obj;
-  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
-  if (r < 0) {
-    return r;
-  }
-
-  librados::ObjectWriteOperation op;
-  cls_user_set_buckets(op, entries, add);
-  r = rados_obj.operate(dpp, &op, y);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
-}
-
-int RGWSI_User_RADOS::cls_user_add_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket_entry& entry, optional_yield y)
-{
-  list<cls_user_bucket_entry> l;
-  l.push_back(entry);
-
-  return cls_user_update_buckets(dpp, obj, l, true, y);
-}
-
-int RGWSI_User_RADOS::cls_user_remove_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket& bucket, optional_yield y)
-{
-  rgw_rados_ref rados_obj;
-  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
-  if (r < 0) {
-    return r;
-  }
-
-  librados::ObjectWriteOperation op;
-  ::cls_user_remove_bucket(op, bucket);
-  r = rados_obj.operate(dpp, &op, y);
-  if (r < 0)
-    return r;
-
-  return 0;
-}
-
 int RGWSI_User_RADOS::add_bucket(const DoutPrefixProvider *dpp, 
                                  const rgw_user& user,
                                  const rgw_bucket& bucket,
                                  ceph::real_time creation_time,
 				 optional_yield y)
 {
-  int ret;
-
-  cls_user_bucket_entry new_bucket;
-
-  bucket.convert(&new_bucket.bucket);
-  new_bucket.size = 0;
-  if (real_clock::is_zero(creation_time))
-    new_bucket.creation_time = real_clock::now();
-  else
-    new_bucket.creation_time = creation_time;
-
   rgw_raw_obj obj = get_buckets_obj(user);
-  ret = cls_user_add_bucket(dpp, obj, new_bucket, y);
+  int ret = rgwrados::buckets::add(dpp, y, *rados, obj,
+                                   bucket, creation_time);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error adding bucket to user: ret=" << ret << dendl;
     return ret;
@@ -697,65 +644,14 @@ int RGWSI_User_RADOS::add_bucket(const DoutPrefixProvider *dpp,
 
 int RGWSI_User_RADOS::remove_bucket(const DoutPrefixProvider *dpp, 
                                     const rgw_user& user,
-                                    const rgw_bucket& _bucket,
+                                    const rgw_bucket& bucket,
 				    optional_yield y)
 {
-  cls_user_bucket bucket;
-  bucket.name = _bucket.name;
   rgw_raw_obj obj = get_buckets_obj(user);
-  int ret = cls_user_remove_bucket(dpp, obj, bucket, y);
+  int ret = rgwrados::buckets::remove(dpp, y, *rados, obj, bucket);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: error removing bucket from user: ret=" << ret << dendl;
   }
-
-  return 0;
-}
-
-int RGWSI_User_RADOS::cls_user_flush_bucket_stats(const DoutPrefixProvider *dpp, 
-                                                  rgw_raw_obj& user_obj,
-                                                  const RGWBucketEnt& ent, optional_yield y)
-{
-  cls_user_bucket_entry entry;
-  ent.convert(&entry);
-
-  list<cls_user_bucket_entry> entries;
-  entries.push_back(entry);
-
-  int r = cls_user_update_buckets(dpp, user_obj, entries, false, y);
-  if (r < 0) {
-    ldpp_dout(dpp, 20) << "cls_user_update_buckets() returned " << r << dendl;
-    return r;
-  }
-
-  return 0;
-}
-
-int RGWSI_User_RADOS::cls_user_list_buckets(const DoutPrefixProvider *dpp, 
-                                            rgw_raw_obj& obj,
-                                            const string& in_marker,
-                                            const string& end_marker,
-                                            const int max_entries,
-                                            list<cls_user_bucket_entry>& entries,
-                                            string * const out_marker,
-                                            bool * const truncated,
-					    optional_yield y)
-{
-  rgw_rados_ref rados_obj;
-  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
-  if (r < 0) {
-    return r;
-  }
-
-  librados::ObjectReadOperation op;
-  int rc;
-
-  cls_user_bucket_list(op, in_marker, end_marker, max_entries, entries, out_marker, truncated, &rc);
-  bufferlist ibl;
-  r = rados_obj.operate(dpp, &op, &ibl, y);
-  if (r < 0)
-    return r;
-  if (rc < 0)
-    return rc;
 
   return 0;
 }
@@ -765,47 +661,18 @@ int RGWSI_User_RADOS::list_buckets(const DoutPrefixProvider *dpp,
 				   const string& marker,
 				   const string& end_marker,
 				   uint64_t max,
-				   RGWUserBuckets *buckets,
-				   bool *is_truncated, optional_yield y)
+				   rgw::sal::BucketList& listing,
+				   optional_yield y)
 {
-  int ret;
-
-  buckets->clear();
-   if (user.id == RGW_USER_ANON_ID) {
+  if (user.id == RGW_USER_ANON_ID) {
     ldpp_dout(dpp, 20) << "RGWSI_User_RADOS::list_buckets(): anonymous user" << dendl;
-    *is_truncated = false;
+    listing.next_marker.clear();
     return 0;
   }
+
   rgw_raw_obj obj = get_buckets_obj(user);
-
-  bool truncated = false;
-  string m = marker;
-
-  uint64_t total = 0;
-
-  do {
-    std::list<cls_user_bucket_entry> entries;
-    ret = cls_user_list_buckets(dpp, obj, m, end_marker, max - total, entries, &m, &truncated, y);
-    if (ret == -ENOENT) {
-      ret = 0;
-    }
-
-    if (ret < 0) {
-      return ret;
-    }
-
-    for (auto& entry : entries) {
-      buckets->add(RGWBucketEnt(user, std::move(entry)));
-      total++;
-    }
-
-  } while (truncated && total < max);
-
-  if (is_truncated) {
-    *is_truncated = truncated;
-  }
-
-  return 0;
+  return rgwrados::buckets::list(dpp, y, *rados, obj, user.tenant,
+                                 marker, end_marker, max, listing);
 }
 
 int RGWSI_User_RADOS::flush_bucket_stats(const DoutPrefixProvider *dpp, 
@@ -814,102 +681,22 @@ int RGWSI_User_RADOS::flush_bucket_stats(const DoutPrefixProvider *dpp,
 					 optional_yield y)
 {
   rgw_raw_obj obj = get_buckets_obj(user);
-
-  return cls_user_flush_bucket_stats(dpp, obj, ent, y);
+  return rgwrados::buckets::write_stats(dpp, y, *rados, obj, ent);
 }
 
 int RGWSI_User_RADOS::reset_bucket_stats(const DoutPrefixProvider *dpp, 
                                          const rgw_user& user,
 					 optional_yield y)
 {
-  return cls_user_reset_stats(dpp, user, y);
-}
-
-int RGWSI_User_RADOS::cls_user_reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y)
-{
   rgw_raw_obj obj = get_buckets_obj(user);
-  rgw_rados_ref rados_obj;
-  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
-  if (r < 0) {
-    return r;
-  }
-
-  int rval;
-
-  cls_user_reset_stats2_op call;
-  cls_user_reset_stats2_ret ret;
-
-  do {
-    buffer::list in, out;
-    librados::ObjectWriteOperation op;
-
-    call.time = real_clock::now();
-    ret.update_call(call);
-
-    encode(call, in);
-    op.exec("user", "reset_user_stats2", in, &out, &rval);
-    r = rados_obj.operate(dpp, &op, y, librados::OPERATION_RETURNVEC);
-    if (r < 0) {
-      return r;
-    }
-    try {
-      auto bliter = out.cbegin();
-      decode(ret, bliter);
-    } catch (ceph::buffer::error& err) {
-      return -EINVAL;
-    }
-  } while (ret.truncated);
-
-  return rval;
+  return rgwrados::buckets::reset_stats(dpp, y, *rados, obj);
 }
 
 int RGWSI_User_RADOS::complete_flush_stats(const DoutPrefixProvider *dpp, 
                                            const rgw_user& user, optional_yield y)
 {
   rgw_raw_obj obj = get_buckets_obj(user);
-  rgw_rados_ref rados_obj;
-  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
-  if (r < 0) {
-    return r;
-  }
-
-  librados::ObjectWriteOperation op;
-  ::cls_user_complete_stats_sync(op);
-  return rados_obj.operate(dpp, &op, y);
-}
-
-int RGWSI_User_RADOS::cls_user_get_header(const DoutPrefixProvider *dpp, 
-                                          const rgw_user& user, cls_user_header *header,
-					  optional_yield y)
-{
-  rgw_raw_obj obj = get_buckets_obj(user);
-  rgw_rados_ref rados_obj;
-  int r = rgw_get_rados_ref(dpp, rados, obj, &rados_obj);
-  if (r < 0) {
-    return r;
-  }
-  int rc;
-  bufferlist ibl;
-  librados::ObjectReadOperation op;
-  ::cls_user_get_header(op, header, &rc);
-  return rados_obj.operate(dpp, &op, &ibl, y);
-}
-
-int RGWSI_User_RADOS::cls_user_get_header_async(const DoutPrefixProvider *dpp, const string& user_str, RGWGetUserHeader_CB *cb)
-{
-  rgw_raw_obj obj = get_buckets_obj(rgw_user(user_str));
-  rgw_rados_ref ref;
-  int r = rgw_get_rados_ref(dpp, rados, obj, &ref);
-  if (r < 0) {
-    return r;
-  }
-
-  r = ::cls_user_get_header_async(ref.ioctx, ref.obj.oid, cb);
-  if (r < 0) {
-    return r;
-  }
-
-  return 0;
+  return rgwrados::buckets::complete_flush_stats(dpp, y, *rados, obj);
 }
 
 int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp, 
@@ -919,71 +706,17 @@ int RGWSI_User_RADOS::read_stats(const DoutPrefixProvider *dpp,
                                  ceph::real_time *last_stats_update,
 				 optional_yield y)
 {
-  string user_str = user.to_str();
-
-  RGWUserInfo info;
-  real_time mtime;
-  int ret = read_user_info(ctx, user, &info, nullptr, &mtime, nullptr, nullptr, y, dpp);
-  if (ret < 0)
-  {
-    return ret;
-  }
-
-  cls_user_header header;
-  int r = cls_user_get_header(dpp, rgw_user(user_str), &header, y);
-  if (r < 0 && r != -ENOENT)
-    return r;
-
-  const cls_user_stats& hs = header.stats;
-
-  stats->size = hs.total_bytes;
-  stats->size_rounded = hs.total_bytes_rounded;
-  stats->num_objects = hs.total_entries;
-
-  if (last_stats_sync) {
-    *last_stats_sync = header.last_stats_sync;
-  }
-
-  if (last_stats_update) {
-   *last_stats_update = header.last_stats_update;
-  }
-
-  return 0;
+  rgw_raw_obj obj = get_buckets_obj(user);
+  return rgwrados::buckets::read_stats(
+      dpp, y, *rados, obj, *stats,
+      last_stats_sync, last_stats_update);
 }
-
-class RGWGetUserStatsContext : public RGWGetUserHeader_CB {
-  boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb;
-
-public:
-  explicit RGWGetUserStatsContext(boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb)
-    : cb(std::move(cb)) {}
-
-  void handle_response(int r, cls_user_header& header) override {
-    const cls_user_stats& hs = header.stats;
-    RGWStorageStats stats;
-
-    stats.size = hs.total_bytes;
-    stats.size_rounded = hs.total_bytes_rounded;
-    stats.num_objects = hs.total_entries;
-
-    cb->handle_response(r, stats);
-    cb.reset();
-  }
-};
 
 int RGWSI_User_RADOS::read_stats_async(const DoutPrefixProvider *dpp,
                                        const rgw_user& user,
-                                       boost::intrusive_ptr<rgw::sal::ReadStatsCB> _cb)
+                                       boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb)
 {
-  string user_str = user.to_str();
-
-  RGWGetUserStatsContext *cb = new RGWGetUserStatsContext(std::move(_cb));
-  int r = cls_user_get_header_async(dpp, user_str, cb);
-  if (r < 0) {
-    delete cb;
-    return r;
-  }
-
-  return 0;
+  rgw_raw_obj obj = get_buckets_obj(user);
+  return rgwrados::buckets::read_stats_async(dpp, *rados, obj, std::move(cb));
 }
 
