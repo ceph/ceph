@@ -20,7 +20,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                 try:
                     result[member_id][to_snake_case(field)] = member_info[field]
                 except KeyError:
-                    self.log.logger.warning(f"Could not find field: {field} in member_info: {member_info}")
+                    self.log.logger.warning(f'Could not find field: {field} in member_info: {member_info}')
 
         return normalize_dict(result)
 
@@ -28,7 +28,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                            fields: Dict[str, List[str]],
                            path: str) -> Dict[str, Dict[str, Dict]]:
         result: Dict[str, Dict[str, Dict]] = dict()
-        data = self._get_path(f"{self.chassis_endpoint}/{path}")
+        data = self._get_path(f'{self.chassis_endpoint}/{path}')
 
         for elt, _fields in fields.items():
             for member_elt in data[elt]:
@@ -38,7 +38,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                     try:
                         result[_id][to_snake_case(field)] = member_elt[field]
                     except KeyError:
-                        self.log.logger.warning(f"Could not find field: {field} in data: {data[elt]}")
+                        self.log.logger.warning(f'Could not find field: {field} in data: {data[elt]}')
         return normalize_dict(result)
 
     def get_sn(self) -> str:

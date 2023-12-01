@@ -10,26 +10,26 @@ class RedFishClient(BaseClient):
     PREFIX = '/redfish/v1/'
 
     def __init__(self,
-                 host: str = "",
+                 host: str = '',
                  port: int = 443,
-                 username: str = "",
-                 password: str = ""):
+                 username: str = '',
+                 password: str = ''):
         super().__init__(host, username, password)
         self.log: Logger = Logger(__name__)
-        self.log.logger.info(f"Initializing redfish client {__name__}")
+        self.log.logger.info(f'Initializing redfish client {__name__}')
         self.host: str = host
         self.port: int = port
-        self.url: str = f"https://{self.host}:{self.port}"
+        self.url: str = f'https://{self.host}:{self.port}'
         self.token: str = ''
         self.location: str = ''
 
     def login(self) -> None:
         if not self.is_logged_in():
-            self.log.logger.info("Logging in to "
+            self.log.logger.info('Logging in to '
                                  f"{self.url} as '{self.username}'")
-            oob_credentials = json.dumps({"UserName": self.username,
-                                          "Password": self.password})
-            headers = {"Content-Type": "application/json"}
+            oob_credentials = json.dumps({'UserName': self.username,
+                                          'Password': self.password})
+            headers = {'Content-Type': 'application/json'}
 
             try:
                 _headers, _data, _status_code = self.query(data=oob_credentials,
@@ -46,24 +46,24 @@ class RedFishClient(BaseClient):
             self.location = _headers['Location']
 
     def is_logged_in(self) -> bool:
-        self.log.logger.debug(f"Checking token validity for {self.url}")
+        self.log.logger.debug(f'Checking token validity for {self.url}')
         if not self.location or not self.token:
-            self.log.logger.debug(f"No token found for {self.url}.")
+            self.log.logger.debug(f'No token found for {self.url}.')
             return False
-        headers = {"X-Auth-Token": self.token}
+        headers = {'X-Auth-Token': self.token}
         try:
             _headers, _data, _status_code = self.query(headers=headers,
                                                        endpoint=self.location)
         except URLError as e:
             self.log.logger.error("Can't check token "
-                                  f"validity for {self.url}: {e}")
+                                  f'validity for {self.url}: {e}')
             raise RuntimeError
         return _status_code == 200
 
     def logout(self) -> Dict[str, Any]:
         try:
             _, _data, _status_code = self.query(method='DELETE',
-                                                headers={"X-Auth-Token": self.token},
+                                                headers={'X-Auth-Token': self.token},
                                                 endpoint=self.location)
         except URLError:
             self.log.logger.error(f"Can't log out from {self.url}")
@@ -75,7 +75,7 @@ class RedFishClient(BaseClient):
 
     def get_path(self, path: str) -> Dict[str, Any]:
         if self.PREFIX not in path:
-            path = f"{self.PREFIX}{path}"
+            path = f'{self.PREFIX}{path}'
         try:
             _, result, _status_code = self.query(endpoint=path)
             result_json = json.loads(result)
@@ -108,5 +108,5 @@ class RedFishClient(BaseClient):
 
             return response_headers, response_str, response_status
         except (HTTPError, URLError) as e:
-            self.log.logger.debug(f"{e}")
+            self.log.logger.debug(f'{e}')
             raise
