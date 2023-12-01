@@ -138,6 +138,7 @@ struct Inode : RefCountedObject {
   uint32_t   mode = 0;
   uid_t      uid = 0;
   gid_t      gid = 0;
+  uint32_t i_flags;
 
   // nlink
   int32_t    nlink = 0;
@@ -189,7 +190,9 @@ struct Inode : RefCountedObject {
   bool is_symlink() const { return (mode & S_IFMT) == S_IFLNK; }
   bool is_dir()     const { return (mode & S_IFMT) == S_IFDIR; }
   bool is_file()    const { return (mode & S_IFMT) == S_IFREG; }
-  bool is_encrypted() const { return (mode & S_ENCRYPTED) == S_ENCRYPTED; }
+
+  // use i_flags as 1 << 14 will overlap with other mode bits.
+  bool is_encrypted() const { return (i_flags & S_ENCRYPTED) == S_ENCRYPTED; }
 
   bool has_dir_layout() const {
     return layout != file_layout_t();
