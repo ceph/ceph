@@ -91,7 +91,7 @@ void usage(ostream& out)
 "   append <obj-name> <infile>       append object\n"
 "   truncate <obj-name> length       truncate object\n"
 "   create <obj-name>                create object\n"
-"   rm <obj-name> ...[--force-full]  [force no matter full or not]remove object(s)\n"
+"   rm <obj-name> ... [--force-full] remove object(s), --force-full forces remove when cluster is full\n"
 "   cp <obj-name> [target-obj]       copy object\n"
 "   listxattr <obj-name>\n"
 "   getxattr <obj-name> attr\n"
