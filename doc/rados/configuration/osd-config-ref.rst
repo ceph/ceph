@@ -429,10 +429,10 @@ Miscellaneous
 
 .. confval:: osd_default_notify_timeout
 .. confval:: osd_check_for_log_corruption
-.. confval:: osd_delete_sleep
-.. confval:: osd_delete_sleep_hdd
-.. confval:: osd_delete_sleep_ssd
-.. confval:: osd_delete_sleep_hybrid
+.. confval:: osd_pg_delete_sleep
+.. confval:: osd_pg_delete_sleep_hdd
+.. confval:: osd_pg_delete_sleep_ssd
+.. confval:: osd_pg_delete_sleep_hybrid
 .. confval:: osd_command_max_records
 .. confval:: osd_fast_fail_on_connection_refused
 

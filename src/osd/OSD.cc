@@ -3563,16 +3563,16 @@ float OSD::get_osd_recovery_sleep()
     return cct->_conf->osd_recovery_sleep_hdd;
 }
 
-float OSD::get_osd_delete_sleep()
+float OSD::get_osd_pg_delete_sleep()
 {
-  float osd_delete_sleep = cct->_conf.get_val<double>("osd_delete_sleep");
-  if (osd_delete_sleep > 0)
-    return osd_delete_sleep;
+  float osd_pg_delete_sleep = cct->_conf.get_val<double>("osd_pg_delete_sleep");
+  if (osd_pg_delete_sleep > 0)
+    return osd_pg_delete_sleep;
   if (!store_is_rotational && !journal_is_rotational)
-    return cct->_conf.get_val<double>("osd_delete_sleep_ssd");
+    return cct->_conf.get_val<double>("osd_pg_delete_sleep_ssd");
   if (store_is_rotational && !journal_is_rotational)
-    return cct->_conf.get_val<double>("osd_delete_sleep_hybrid");
-  return cct->_conf.get_val<double>("osd_delete_sleep_hdd");
+    return cct->_conf.get_val<double>("osd_pg_delete_sleep_hybrid");
+  return cct->_conf.get_val<double>("osd_pg_delete_sleep_hdd");
 }
 
 int OSD::get_recovery_max_active()
@@ -9690,10 +9690,10 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_recovery_sleep_hdd",
     "osd_recovery_sleep_ssd",
     "osd_recovery_sleep_hybrid",
-    "osd_delete_sleep",
-    "osd_delete_sleep_hdd",
-    "osd_delete_sleep_ssd",
-    "osd_delete_sleep_hybrid",
+    "osd_pg_delete_sleep",
+    "osd_pg_delete_sleep_hdd",
+    "osd_pg_delete_sleep_ssd",
+    "osd_pg_delete_sleep_hybrid",
     "osd_snap_trim_sleep",
     "osd_snap_trim_sleep_hdd",
     "osd_snap_trim_sleep_ssd",
@@ -9744,10 +9744,10 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
       service.remote_reserver.set_max(cct->_conf->osd_max_backfills);
     }
   }
-  if (changed.count("osd_delete_sleep") ||
-      changed.count("osd_delete_sleep_hdd") ||
-      changed.count("osd_delete_sleep_ssd") ||
-      changed.count("osd_delete_sleep_hybrid") ||
+  if (changed.count("osd_pg_delete_sleep") ||
+      changed.count("osd_pg_delete_sleep_hdd") ||
+      changed.count("osd_pg_delete_sleep_ssd") ||
+      changed.count("osd_pg_delete_sleep_hybrid") ||
       changed.count("osd_snap_trim_sleep") ||
       changed.count("osd_snap_trim_sleep_hdd") ||
       changed.count("osd_snap_trim_sleep_ssd") ||
@@ -10082,10 +10082,10 @@ void OSD::maybe_override_sleep_options_for_qos()
     cct->_conf.set_val("osd_recovery_sleep_hybrid", std::to_string(0));
 
     // Disable delete sleep
-    cct->_conf.set_val("osd_delete_sleep", std::to_string(0));
-    cct->_conf.set_val("osd_delete_sleep_hdd", std::to_string(0));
-    cct->_conf.set_val("osd_delete_sleep_ssd", std::to_string(0));
-    cct->_conf.set_val("osd_delete_sleep_hybrid", std::to_string(0));
+    cct->_conf.set_val("osd_pg_delete_sleep", std::to_string(0));
+    cct->_conf.set_val("osd_pg_delete_sleep_hdd", std::to_string(0));
+    cct->_conf.set_val("osd_pg_delete_sleep_ssd", std::to_string(0));
+    cct->_conf.set_val("osd_pg_delete_sleep_hybrid", std::to_string(0));
 
     // Disable snap trim sleep
     cct->_conf.set_val("osd_snap_trim_sleep", std::to_string(0));

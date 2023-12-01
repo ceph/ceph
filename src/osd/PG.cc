@@ -2630,8 +2630,8 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
   dout(10) << __func__ << dendl;
 
   {
-    float osd_delete_sleep = osd->osd->get_osd_delete_sleep();
-    if (osd_delete_sleep > 0 && delete_needs_sleep) {
+    float osd_pg_delete_sleep = osd->osd->get_osd_pg_delete_sleep();
+    if (osd_pg_delete_sleep > 0 && delete_needs_sleep) {
       epoch_t e = get_osdmap()->get_epoch();
       PGRef pgref(this);
       auto delete_requeue_callback = new LambdaContext([this, pgref, e](int r) {
@@ -2646,7 +2646,7 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
       });
 
       auto delete_schedule_time = ceph::real_clock::now();
-      delete_schedule_time += ceph::make_timespan(osd_delete_sleep);
+      delete_schedule_time += ceph::make_timespan(osd_pg_delete_sleep);
       std::lock_guard l{osd->sleep_lock};
       osd->sleep_timer.add_event_at(delete_schedule_time,
 				    delete_requeue_callback);

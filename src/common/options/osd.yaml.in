@@ -1377,7 +1377,7 @@ options:
   level: advanced
   default: 10
   with_legacy: true
-- name: osd_delete_sleep
+- name: osd_pg_delete_sleep
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction. This setting
@@ -1387,21 +1387,21 @@ options:
   default: 0
   flags:
   - runtime
-- name: osd_delete_sleep_hdd
+- name: osd_pg_delete_sleep_hdd
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction for HDDs
   default: 5
   flags:
   - runtime
-- name: osd_delete_sleep_ssd
+- name: osd_pg_delete_sleep_ssd
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction for SSDs
   default: 1
   flags:
   - runtime
-- name: osd_delete_sleep_hybrid
+- name: osd_pg_delete_sleep_hybrid
   type: float
   level: advanced
   desc: Time in seconds to sleep before next removal transaction when OSD data is on HDD
