@@ -92,7 +92,7 @@ static void dump_account_metadata(req_state * const s,
                                   /* const */map<string, bufferlist>& attrs,
                                   const RGWQuotaInfo& quota,
                                   int32_t max_buckets,
-                                  const RGWAccessControlPolicy_SWIFTAcct &policy)
+                                  const RGWAccessControlPolicy& policy)
 {
   /* Adding X-Timestamp to keep align with Swift API */
   dump_header(s, "X-Timestamp", ceph_clock_now());
@@ -164,8 +164,8 @@ static void dump_account_metadata(req_state * const s,
     }
   }
 
-  /* Dump account ACLs */
-  auto account_acls = policy.to_str();
+  /* Dump account ACLs, if any */
+  auto account_acls = rgw::swift::format_account_acl(policy);
   if (account_acls) {
     dump_header(s, "X-Account-Access-Control", std::move(*account_acls));
   }
@@ -188,7 +188,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             s->user->get_attrs(),
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
+            s->user_acl);
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
@@ -287,7 +287,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             s->user->get_attrs(),
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
+            s->user_acl);
     dump_errno(s);
     end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
   }
@@ -470,10 +470,8 @@ static void dump_container_metadata(req_state *s,
   }
 
   if (rgw::sal::Object::empty(s->object.get())) {
-    auto swift_policy = \
-      static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
     std::string read_acl, write_acl;
-    swift_policy->to_str(read_acl, write_acl);
+    rgw::swift::format_container_acls(s->bucket_acl, read_acl, write_acl);
 
     if (read_acl.size()) {
       dump_header(s, "X-Container-Read", read_acl);
@@ -567,7 +565,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
             attrs,
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
+            s->user_acl);
   }
 
   set_req_state_err(s, op_ret);
@@ -595,7 +593,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 
 static int get_swift_container_settings(req_state * const s,
                                         rgw::sal::Driver*  const driver,
-                                        RGWAccessControlPolicy * const policy,
+                                        RGWAccessControlPolicy& policy,
                                         bool * const has_policy,
                                         uint32_t * rw_mask,
                                         RGWCORSConfiguration * const cors_config,
@@ -607,18 +605,17 @@ static int get_swift_container_settings(req_state * const s,
   *has_policy = false;
 
   if (read_list || write_list) {
-    RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    const auto r = swift_policy.create(s, driver,
-                                       s->user->get_id(),
-                                       s->user->get_display_name(),
-                                       read_list,
-                                       write_list,
-                                       *rw_mask);
+    int r = rgw::swift::create_container_policy(s, driver,
+                                                s->user->get_id(),
+                                                s->user->get_display_name(),
+                                                read_list,
+                                                write_list,
+                                                *rw_mask,
+                                                policy);
     if (r < 0) {
       return r;
     }
 
-    *policy = swift_policy;
     *has_policy = true;
   }
 
@@ -716,7 +713,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
   bool has_policy;
   uint32_t policy_rw_mask = 0;
 
-  int r = get_swift_container_settings(s, driver, &policy, &has_policy,
+  int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
@@ -1060,23 +1057,21 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
 
 static int get_swift_account_settings(req_state * const s,
                                       rgw::sal::Driver*  const driver,
-                                      RGWAccessControlPolicy_SWIFTAcct*  const policy,
+                                      RGWAccessControlPolicy& policy,
                                       bool * const has_policy)
 {
   *has_policy = false;
 
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
-    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
-    const bool r = swift_acct_policy.create(s, driver,
-                                     s->user->get_id(),
-                                     s->user->get_display_name(),
-                                     string(acl_attr));
-    if (r != true) {
-      return -EINVAL;
+    int r = rgw::swift::create_account_policy(s, driver,
+                                              s->user->get_id(),
+                                              s->user->get_display_name(),
+                                              acl_attr, policy);
+    if (r < 0) {
+      return r;
     }
 
-    *policy = swift_acct_policy;
     *has_policy = true;
   }
 
@@ -1089,12 +1084,7 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  int ret = get_swift_account_settings(s,
-                                       driver,
-                                       // FIXME: we need to carry unique_ptr in generic class
-                                       // and allocate appropriate ACL class in the ctor
-                                       static_cast<RGWAccessControlPolicy_SWIFTAcct *>(&policy),
-                                       &has_policy);
+  int ret = get_swift_account_settings(s, driver, policy, &has_policy);
   if (ret < 0) {
     return ret;
   }
@@ -1127,7 +1117,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  int r = get_swift_container_settings(s, driver, &policy, &has_policy,
+  int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;

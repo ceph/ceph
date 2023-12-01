@@ -916,7 +916,7 @@ int POSIXBucket::set_acl(const DoutPrefixProvider* dpp,
   acl.encode(aclbl);
 
   attrs[RGW_ATTR_ACL] = aclbl;
-  info.owner = acl.get_owner().get_id();
+  info.owner = acl.get_owner().id;
 
   return write_attrs(dpp, y);
 }

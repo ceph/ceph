@@ -237,7 +237,7 @@ int RGWAccessKeyPool::init(RGWUserAdminOpState& op_state)
   }
 
   const rgw_user& uid = op_state.get_user_id();
-  if (uid.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid == rgw_user(RGW_USER_ANON_ID)) {
     keys_allowed = false;
     return -EINVAL;
   }
@@ -890,7 +890,7 @@ int RGWSubUserPool::init(RGWUserAdminOpState& op_state)
   }
 
   const rgw_user& uid = op_state.get_user_id();
-  if (uid.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid == rgw_user(RGW_USER_ANON_ID)) {
     subusers_allowed = false;
     return -EACCES;
   }
@@ -1198,7 +1198,7 @@ int RGWUserCapPool::init(RGWUserAdminOpState& op_state)
   }
 
   const rgw_user& uid = op_state.get_user_id();
-  if (uid.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid == rgw_user(RGW_USER_ANON_ID)) {
     caps_allowed = false;
     return -EACCES;
   }
@@ -1373,7 +1373,7 @@ int RGWUser::init(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, 
     }
   }
 
-  if (!user_id.empty() && (user_id.compare(RGW_USER_ANON_ID) != 0)) {
+  if (!user_id.empty() && user_id != rgw_user(RGW_USER_ANON_ID)) {
     user = driver->get_user(user_id);
     found = (user->load_user(dpp, y) >= 0);
     op_state.found_by_uid = found;
@@ -1477,12 +1477,12 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
   int ret = 0;
   const rgw_user& uid = op_state.get_user_id();
 
-  if (uid.compare(RGW_USER_ANON_ID) == 0) {
+  if (uid == rgw_user(RGW_USER_ANON_ID)) {
     set_err_msg(err_msg, "unable to perform operations on the anonymous user");
     return -EINVAL;
   }
 
-  if (is_populated() && user_id.compare(uid) != 0) {
+  if (is_populated() && user_id != uid) {
     set_err_msg(err_msg, "user id mismatch, operation id: " + uid.to_str()
             + " does not match: " + user_id.to_str());
 
@@ -1858,7 +1858,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
   }
 
   // ensure that we can modify the user's attributes
-  if (user_id.compare(RGW_USER_ANON_ID) == 0) {
+  if (user_id == rgw_user(RGW_USER_ANON_ID)) {
     set_err_msg(err_msg, "unable to modify anonymous user's info");
     return -EACCES;
   }
@@ -1870,7 +1870,7 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
     // make sure we are not adding a duplicate email
     if (old_email != op_email) {
       ret = driver->get_user_by_email(dpp, op_email, y, &duplicate_check);
-      if (ret >= 0 && duplicate_check->get_id().compare(user_id) != 0) {
+      if (ret >= 0 && duplicate_check->get_id() != user_id) {
         set_err_msg(err_msg, "cannot add duplicate email");
         return -ERR_EMAIL_EXIST;
       }

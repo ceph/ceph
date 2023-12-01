@@ -460,7 +460,7 @@ int compare_access_keys(RGWAccessKey& k1, RGWAccessKey& k2) {
 int compare_user_info(RGWUserInfo& i1, RGWUserInfo& i2) {
   int rv;
 
-  if ((rv = i1.user_id.compare(i2.user_id)) != 0)
+  if ((rv = i1.user_id.id.compare(i2.user_id.id)) != 0)
     return rv;
   if ((rv = i1.display_name.compare(i2.display_name)) != 0)
     return rv;

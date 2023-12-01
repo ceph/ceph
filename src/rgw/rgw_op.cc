@@ -219,19 +219,18 @@ done:
 static int decode_policy(const DoutPrefixProvider *dpp,
                          CephContext *cct,
                          bufferlist& bl,
-                         RGWAccessControlPolicy *policy)
+                         RGWAccessControlPolicy& policy)
 {
   auto iter = bl.cbegin();
   try {
-    policy->decode(iter);
+    policy.decode(iter);
   } catch (buffer::error& err) {
     ldpp_dout(dpp, 0) << "ERROR: could not decode policy, caught buffer::error" << dendl;
     return -EIO;
   }
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";
-    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
-    s3policy->to_xml(*_dout);
+    rgw::s3::write_policy_xml(policy, *_dout);
     *_dout << dendl;
   }
   return 0;
@@ -243,17 +242,11 @@ static int get_user_policy_from_attr(const DoutPrefixProvider *dpp,
 				     map<string, bufferlist>& attrs,
 				     RGWAccessControlPolicy& policy    /* out */)
 {
-  auto aiter = attrs.find(RGW_ATTR_ACL);
-  if (aiter != attrs.end()) {
-    int ret = decode_policy(dpp, cct, aiter->second, &policy);
-    if (ret < 0) {
-      return ret;
-    }
-  } else {
+  auto i = attrs.find(RGW_ATTR_ACL);
+  if (i == attrs.end()) {
     return -ENOENT;
   }
-
-  return 0;
+  return decode_policy(dpp, cct, i->second, policy);
 }
 
 /**
@@ -268,7 +261,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
 				       rgw::sal::Driver* driver,
 				       const rgw_user& bucket_owner,
 				       map<string, bufferlist>& bucket_attrs,
-				       RGWAccessControlPolicy *policy,
+				       RGWAccessControlPolicy& policy,
 				       optional_yield y)
 {
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_ACL);
@@ -285,7 +278,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
     if (r < 0)
       return r;
 
-    policy->create_default(user->get_id(), user->get_display_name());
+    policy.create_default(user->get_id(), user->get_display_name());
   }
   return 0;
 }
@@ -295,7 +288,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 				    rgw::sal::Driver* driver,
 				    RGWBucketInfo& bucket_info,
 				    map<string, bufferlist>& bucket_attrs,
-				    RGWAccessControlPolicy *policy,
+				    RGWAccessControlPolicy& policy,
                                     string *storage_class,
 				    rgw::sal::Object* obj,
                                     optional_yield y)
@@ -318,7 +311,7 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
     if (ret < 0)
       return ret;
 
-    policy->create_default(bucket_info.owner, user->get_display_name());
+    policy.create_default(bucket_info.owner, user->get_display_name());
   }
 
   if (storage_class) {
@@ -385,7 +378,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
                               req_state *s,
                               RGWBucketInfo& bucket_info,
                               map<string, bufferlist>& bucket_attrs,
-                              RGWAccessControlPolicy *policy,
+                              RGWAccessControlPolicy& policy,
                               rgw_bucket& bucket,
 			      optional_yield y)
 {
@@ -402,7 +395,7 @@ static int read_bucket_policy(const DoutPrefixProvider *dpp,
   int ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info.owner,
                                                bucket_attrs, policy, y);
   if (ret == -ENOENT) {
-      ret = -ERR_NO_SUCH_BUCKET;
+    ret = -ERR_NO_SUCH_BUCKET;
   }
 
   return ret;
@@ -413,7 +406,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
                            req_state *s,
                            RGWBucketInfo& bucket_info,
                            map<string, bufferlist>& bucket_attrs,
-                           RGWAccessControlPolicy* acl,
+                           RGWAccessControlPolicy& acl,
                            string *storage_class,
                            boost::optional<Policy>& policy,
                            rgw::sal::Bucket* bucket,
@@ -450,14 +443,14 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
-    RGWAccessControlPolicy bucket_policy(s->cct);
+    RGWAccessControlPolicy bucket_policy;
     ret = rgw_op_get_bucket_policy_from_attr(dpp, s->cct, driver, bucket_info.owner,
-                                             bucket_attrs, &bucket_policy, y);
+                                             bucket_attrs, bucket_policy, y);
     if (ret < 0) {
       return ret;
     }
-    const rgw_user& bucket_owner = bucket_policy.get_owner().get_id();
-    if (bucket_owner.compare(s->user->get_id()) != 0 &&
+    const rgw_user& bucket_owner = bucket_policy.get_owner().id;
+    if (bucket_owner != s->user->get_id() &&
         ! s->auth.identity->is_admin_of(bucket_owner)) {
       auto r = eval_identity_or_session_policies(dpp, s->iam_user_policies, s->env,
                                   rgw::IAM::s3ListBucket, ARN(bucket->get_key()));
@@ -512,20 +505,6 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     }
   }
 
-  if(s->dialect.compare("s3") == 0) {
-    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_S3>(s->cct);
-  } else if(s->dialect.compare("swift")  == 0) {
-    /* We aren't allocating the account policy for those operations using
-     * the Swift's infrastructure that don't really need req_state::user.
-     * Typical example here is the implementation of /info. */
-    if (!s->user->get_id().empty()) {
-      s->user_acl = std::make_unique<RGWAccessControlPolicy_SWIFTAcct>(s->cct);
-    }
-    s->bucket_acl = std::make_unique<RGWAccessControlPolicy_SWIFT>(s->cct);
-  } else {
-    s->bucket_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
-  }
-
   const RGWZoneGroup& zonegroup = s->penv.site->get_zonegroup();
 
   /* check if copy source is within the current domain */
@@ -574,13 +553,13 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     s->bucket_attrs = s->bucket->get_attrs();
     ret = read_bucket_policy(dpp, driver, s, s->bucket->get_info(),
 			     s->bucket->get_attrs(),
-			     s->bucket_acl.get(), s->bucket->get_key(), y);
+			     s->bucket_acl, s->bucket->get_key(), y);
     acct_acl_user = {
       s->bucket->get_info().owner,
-      s->bucket_acl->get_owner().get_display_name(),
+      s->bucket_acl.get_owner().display_name,
     };
 
-    s->bucket_owner = s->bucket_acl->get_owner();
+    s->bucket_owner = s->bucket_acl.get_owner();
 
     s->zonegroup_endpoint = rgw::get_zonegroup_endpoint(zonegroup);
     s->zonegroup_name = zonegroup.get_name();
@@ -616,12 +595,12 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
   }
 
   /* handle user ACL only for those APIs which support it */
-  if (s->user_acl) {
+  if (s->dialect == "swift" && !s->user->get_id().empty()) {
     std::unique_ptr<rgw::sal::User> acl_user = driver->get_user(acct_acl_user.uid);
 
     ret = acl_user->read_attrs(dpp, y);
     if (!ret) {
-      ret = get_user_policy_from_attr(dpp, s->cct, acl_user->get_attrs(), *s->user_acl);
+      ret = get_user_policy_from_attr(dpp, s->cct, acl_user->get_attrs(), s->user_acl);
     }
     if (-ENOENT == ret) {
       /* In already existing clusters users won't have ACL. In such case
@@ -631,8 +610,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
        *  1. if we try to reach an existing bucket, its owner is considered
        *     as account owner.
        *  2. otherwise account owner is identity stored in s->user->user_id.  */
-      s->user_acl->create_default(acct_acl_user.uid,
-                                  acct_acl_user.display_name);
+      s->user_acl.create_default(acct_acl_user.uid,
+                                 acct_acl_user.display_name);
       ret = 0;
     } else if (ret < 0) {
       ldpp_dout(dpp, 0) << "NOTICE: couldn't get user attrs for handling ACL "
@@ -690,24 +669,21 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 			      req_state *s, bool prefetch_data, optional_yield y)
 {
-  int ret = 0;
-
-  if (!rgw::sal::Object::empty(s->object.get())) {
-    if (!s->bucket_exists) {
-      return -ERR_NO_SUCH_BUCKET;
-    }
-    s->object_acl = std::make_unique<RGWAccessControlPolicy>(s->cct);
-
-    s->object->set_atomic();
-    if (prefetch_data) {
-      s->object->set_prefetch_data();
-    }
-    ret = read_obj_policy(dpp, driver, s, s->bucket->get_info(), s->bucket_attrs,
-			  s->object_acl.get(), nullptr, s->iam_policy, s->bucket.get(),
-                          s->object.get(), y);
+  if (rgw::sal::Object::empty(s->object)) {
+    return 0;
+  }
+  if (!s->bucket_exists) {
+    return -ERR_NO_SUCH_BUCKET;
   }
 
-  return ret;
+  s->object->set_atomic();
+  if (prefetch_data) {
+    s->object->set_prefetch_data();
+  }
+
+  return read_obj_policy(dpp, driver, s, s->bucket->get_info(), s->bucket_attrs,
+                         s->object_acl, nullptr, s->iam_policy, s->bucket.get(),
+                         s->object.get(), y);
 }
 
 static int rgw_iam_remove_objtags(const DoutPrefixProvider *dpp, req_state* s, rgw::sal::Object* object, bool has_existing_obj_tag, bool has_resource_tag) {
@@ -1449,7 +1425,7 @@ int RGWOp::init_quota()
 			driver->get_user(s->bucket->get_info().owner);
   rgw::sal::User* user;
 
-  if (s->user->get_id() == s->bucket_owner.get_id()) {
+  if (s->user->get_id() == s->bucket_owner.id) {
     user = s->user.get();
   } else {
     int r = owner_user->load_user(this, s->yield);
@@ -1640,9 +1616,8 @@ int rgw_policy_from_attrset(const DoutPrefixProvider *dpp, CephContext *cct, map
     return -EIO;
   }
   if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
-    RGWAccessControlPolicy_S3 *s3policy = static_cast<RGWAccessControlPolicy_S3 *>(policy);
     ldpp_dout(dpp, 15) << __func__ << " Read AccessControlPolicy";
-    s3policy->to_xml(*_dout);
+    rgw::s3::write_policy_xml(*policy, *_dout);
     *_dout << dendl;
   }
   return 0;
@@ -1650,7 +1625,7 @@ int rgw_policy_from_attrset(const DoutPrefixProvider *dpp, CephContext *cct, map
 
 int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
                                        const rgw_bucket_dir_entry& ent,
-                                       RGWAccessControlPolicy * const bucket_acl,
+                                       const RGWAccessControlPolicy& bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
                                        const off_t start_ofs,
                                        const off_t end_ofs,
@@ -1667,7 +1642,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
 
   std::unique_ptr<rgw::sal::Object> part = bucket->get_object(ent.key);
 
-  RGWAccessControlPolicy obj_policy(s->cct);
+  RGWAccessControlPolicy obj_policy;
 
   ldpp_dout(this, 20) << "reading obj=" << part << " ofs=" << cur_ofs
       << " end=" << cur_end << dendl;
@@ -1726,8 +1701,8 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
     ldpp_dout(this, 2) << "overriding permissions due to system operation" << dendl;
   } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
     ldpp_dout(this, 2) << "overriding permissions due to admin operation" << dendl;
-  } else if (!verify_object_permission(this, s, part->get_obj(), s->user_acl.get(),
-				       bucket_acl, &obj_policy, bucket_policy,
+  } else if (!verify_object_permission(this, s, part->get_obj(), s->user_acl,
+				       bucket_acl, obj_policy, bucket_policy,
 				       s->iam_user_policies, s->session_policies, action)) {
     return -EPERM;
   }
@@ -1751,14 +1726,14 @@ static int iterate_user_manifest_parts(const DoutPrefixProvider *dpp,
                                        const off_t end,
                                        rgw::sal::Bucket* bucket,
                                        const string& obj_prefix,
-                                       RGWAccessControlPolicy * const bucket_acl,
+                                       const RGWAccessControlPolicy& bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
                                        uint64_t * const ptotal_len,
                                        uint64_t * const pobj_size,
                                        string * const pobj_sum,
                                        int (*cb)(rgw::sal::Bucket* bucket,
                                                  const rgw_bucket_dir_entry& ent,
-                                                 RGWAccessControlPolicy * const bucket_acl,
+                                                 const RGWAccessControlPolicy& bucket_acl,
                                                  const boost::optional<Policy>& bucket_policy,
                                                  off_t start_ofs,
                                                  off_t end_ofs,
@@ -1860,7 +1835,7 @@ static int iterate_slo_parts(const DoutPrefixProvider *dpp,
                              map<uint64_t, rgw_slo_part>& slo_parts,
                              int (*cb)(rgw::sal::Bucket* bucket,
                                        const rgw_bucket_dir_entry& ent,
-                                       RGWAccessControlPolicy *bucket_acl,
+                                       const RGWAccessControlPolicy& bucket_acl,
                                        const boost::optional<Policy>& bucket_policy,
                                        off_t start_ofs,
                                        off_t end_ofs,
@@ -1919,7 +1894,7 @@ static int iterate_slo_parts(const DoutPrefixProvider *dpp,
                           << dendl;
 
 	// SLO is a Swift thing, and Swift has no knowledge of S3 Policies.
-        int r = cb(part.bucket, ent, part.bucket_acl,
+        int r = cb(part.bucket, ent, *part.bucket_acl,
 		   (part.bucket_policy ?
 		    boost::optional<Policy>(*part.bucket_policy) : none),
 		   start_ofs, end_ofs, cb_param, true /* swift_slo */);
@@ -1936,7 +1911,7 @@ static int iterate_slo_parts(const DoutPrefixProvider *dpp,
 
 static int get_obj_user_manifest_iterate_cb(rgw::sal::Bucket* bucket,
                                             const rgw_bucket_dir_entry& ent,
-                                            RGWAccessControlPolicy * const bucket_acl,
+                                            const RGWAccessControlPolicy& bucket_acl,
                                             const boost::optional<Policy>& bucket_policy,
                                             const off_t start_ofs,
                                             const off_t end_ofs,
@@ -1962,7 +1937,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   const std::string bucket_name = url_decode(prefix_view.substr(0, pos));
   const std::string obj_prefix = url_decode(prefix_view.substr(pos + 1));
 
-  RGWAccessControlPolicy _bucket_acl(s->cct);
+  RGWAccessControlPolicy _bucket_acl;
   RGWAccessControlPolicy *bucket_acl;
   boost::optional<Policy> _bucket_policy;
   boost::optional<Policy>* bucket_policy;
@@ -1981,7 +1956,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
       return r;
     }
     bucket_acl = &_bucket_acl;
-    r = read_bucket_policy(this, driver, s, ubucket->get_info(), bucket_attrs, bucket_acl, ubucket->get_key(), y);
+    r = read_bucket_policy(this, driver, s, ubucket->get_info(), bucket_attrs, *bucket_acl, ubucket->get_key(), y);
     if (r < 0) {
       ldpp_dout(this, 0) << "failed to read bucket policy" << dendl;
       return r;
@@ -1991,7 +1966,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
     pbucket = ubucket.get();
   } else {
     pbucket = s->bucket.get();
-    bucket_acl = s->bucket_acl.get();
+    bucket_acl = &s->bucket_acl;
     bucket_policy = &s->iam_policy;
   }
 
@@ -2000,7 +1975,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
    * - overall DLO's content size,
    * - md5 sum of overall DLO's content (for etag of Swift API). */
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
-        pbucket, obj_prefix, bucket_acl, *bucket_policy,
+        pbucket, obj_prefix, *bucket_acl, *bucket_policy,
         nullptr, &s->obj_size, &lo_etag,
 	nullptr /* cb */, nullptr /* cb arg */, y);
   if (r < 0) {
@@ -2014,7 +1989,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   }
 
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
-        pbucket, obj_prefix, bucket_acl, *bucket_policy,
+        pbucket, obj_prefix, *bucket_acl, *bucket_policy,
         &total_len, nullptr, nullptr,
 	nullptr, nullptr, y);
   if (r < 0) {
@@ -2028,7 +2003,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
   }
 
   r = iterate_user_manifest_parts(this, s->cct, driver, ofs, end,
-        pbucket, obj_prefix, bucket_acl, *bucket_policy,
+        pbucket, obj_prefix, *bucket_acl, *bucket_policy,
         nullptr, nullptr, nullptr,
 	get_obj_user_manifest_iterate_cb, (void *)this, y);
   if (r < 0) {
@@ -2100,8 +2075,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
         bucket_policy = piter->second.second.get_ptr();
 	bucket = buckets[bucket_name].get();
       } else {
-	allocated_acls.push_back(RGWAccessControlPolicy(s->cct));
-	RGWAccessControlPolicy& _bucket_acl = allocated_acls.back();
+	RGWAccessControlPolicy& _bucket_acl = allocated_acls.emplace_back();
 
 	std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
 	int r = driver->load_bucket(this, rgw_bucket(s->user->get_tenant(),
@@ -2114,7 +2088,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
         }
         bucket = tmp_bucket.get();
         bucket_acl = &_bucket_acl;
-        r = read_bucket_policy(this, driver, s, tmp_bucket->get_info(), tmp_bucket->get_attrs(), bucket_acl,
+        r = read_bucket_policy(this, driver, s, tmp_bucket->get_info(), tmp_bucket->get_attrs(), *bucket_acl,
                                tmp_bucket->get_key(), y);
         if (r < 0) {
           ldpp_dout(this, 0) << "failed to read bucket ACL for bucket "
@@ -2129,7 +2103,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
       }
     } else {
       bucket = s->bucket.get();
-      bucket_acl = s->bucket_acl.get();
+      bucket_acl = &s->bucket_acl;
       bucket_policy = s->iam_policy.get_ptr();
     }
 
@@ -3516,10 +3490,10 @@ void RGWCreateBucket::execute(optional_yield y)
     }
 
     // don't allow changes to the acl policy
-    RGWAccessControlPolicy old_policy(get_cct());
+    RGWAccessControlPolicy old_policy;
     int r = rgw_op_get_bucket_policy_from_attr(this, s->cct, driver, info.owner,
                                                s->bucket->get_attrs(),
-                                               &old_policy, y);
+                                               old_policy, y);
     if (r >= 0 && old_policy != policy) {
       s->err.message = "Cannot modify existing access control policy";
       op_ret = -EEXIST;
@@ -3527,8 +3501,8 @@ void RGWCreateBucket::execute(optional_yield y)
     }
   }
 
-  s->bucket_owner.set_id(s->user->get_id());
-  s->bucket_owner.set_name(s->user->get_display_name());
+  s->bucket_owner.id = s->user->get_id();
+  s->bucket_owner.display_name = s->user->get_display_name();
   createparams.owner = s->user->get_id();
 
   buffer::list aclbl;
@@ -3843,7 +3817,7 @@ int RGWPutObj::verify_permission(optional_yield y)
 {
   if (! copy_source.empty()) {
 
-    RGWAccessControlPolicy cs_acl(s->cct);
+    RGWAccessControlPolicy cs_acl;
     boost::optional<Policy> policy;
     map<string, bufferlist> cs_attrs;
     auto cs_bucket = driver->get_bucket(copy_source_bucket_info);
@@ -3853,14 +3827,14 @@ int RGWPutObj::verify_permission(optional_yield y)
     cs_object->set_prefetch_data();
 
     /* check source object permissions */
-    int ret = read_obj_policy(this, driver, s, copy_source_bucket_info, cs_attrs, &cs_acl, nullptr,
+    int ret = read_obj_policy(this, driver, s, copy_source_bucket_info, cs_attrs, cs_acl, nullptr,
                               policy, cs_bucket.get(), cs_object.get(), y, true);
     if (ret < 0) {
       return ret;
     }
 
     /* admin request overrides permission checks */
-    if (! s->auth.identity->is_admin_of(cs_acl.get_owner().get_id())) {
+    if (! s->auth.identity->is_admin_of(cs_acl.get_owner().id)) {
       if (policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
         //add source object tags for permission evaluation
         auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, policy, s->iam_user_policies, s->session_policies);
@@ -4269,7 +4243,7 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
     processor = driver->get_append_writer(this, s->yield, s->object.get(),
-					 s->bucket_owner.get_id(),
+					 s->bucket_owner.id,
 					 pdest_placement, s->req_id, position,
 					 &cur_accounted_size);
   } else {
@@ -4282,7 +4256,7 @@ void RGWPutObj::execute(optional_yield y)
       }
     }
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
-					 s->bucket_owner.get_id(),
+					 s->bucket_owner.id,
 					 pdest_placement, olh_epoch, s->req_id);
   }
 
@@ -4688,7 +4662,7 @@ void RGWPostObj::execute(optional_yield y)
 
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
-					 s->bucket_owner.get_id(),
+					 s->bucket_owner.id,
 					 &s->dest_placement, 0, s->req_id);
     op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
@@ -4989,11 +4963,7 @@ void RGWPutMetadataBucket::execute(optional_yield y)
        * contain such keys yet. */
       if (has_policy) {
 	if (s->dialect.compare("swift") == 0) {
-	  auto old_policy =						\
-	    static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
-	  auto new_policy = static_cast<RGWAccessControlPolicy_SWIFT*>(&policy);
-	  new_policy->filter_merge(policy_rw_mask, old_policy);
-	  policy = *new_policy;
+	  rgw::swift::merge_policy(policy_rw_mask, s->bucket_acl, policy);
 	}
 	buffer::list bl;
 	policy.encode(bl);
@@ -5484,7 +5454,7 @@ int RGWCopyObj::init_processing(optional_yield y)
 
 int RGWCopyObj::verify_permission(optional_yield y)
 {
-  RGWAccessControlPolicy src_acl(s->cct);
+  RGWAccessControlPolicy src_acl;
   boost::optional<Policy> src_policy;
 
   /* get buckets info (source and dest) */
@@ -5495,7 +5465,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     rgw_placement_rule src_placement;
 
     /* check source object permissions */
-    op_ret = read_obj_policy(this, driver, s, src_bucket->get_info(), src_bucket->get_attrs(), &src_acl, &src_placement.storage_class,
+    op_ret = read_obj_policy(this, driver, s, src_bucket->get_info(), src_bucket->get_attrs(), src_acl, &src_placement.storage_class,
 			     src_policy, src_bucket.get(), s->src_object.get(), y);
     if (op_ret < 0) {
       return op_ret;
@@ -5512,7 +5482,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     }
 
     /* admin request overrides permission checks */
-    if (!s->auth.identity->is_admin_of(src_acl.get_owner().get_id())) {
+    if (!s->auth.identity->is_admin_of(src_acl.get_owner().id)) {
       if (src_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
         auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, src_policy, s->iam_user_policies, s->session_policies);
         if (has_s3_existing_tag || has_s3_resource_tag)
@@ -5583,20 +5553,20 @@ int RGWCopyObj::verify_permission(optional_yield y)
     }
   }
 
-  RGWAccessControlPolicy dest_bucket_policy(s->cct);
+  RGWAccessControlPolicy dest_bucket_policy;
 
   s->object->set_atomic();
 
   /* check dest bucket permissions */
   op_ret = read_bucket_policy(this, driver, s, s->bucket->get_info(),
 			      s->bucket->get_attrs(),
-                              &dest_bucket_policy, s->bucket->get_key(), y);
+                              dest_bucket_policy, s->bucket->get_key(), y);
   if (op_ret < 0) {
     return op_ret;
   }
   auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket->get_tenant());
   /* admin request overrides permission checks */
-  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
+  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().id)){
     if (dest_iam_policy != boost::none || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
       //Add destination bucket tags for authorization
       auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, dest_iam_policy, s->iam_user_policies, s->session_policies);
@@ -5894,11 +5864,11 @@ void RGWGetACLs::pre_exec()
 void RGWGetACLs::execute(optional_yield y)
 {
   stringstream ss;
-  RGWAccessControlPolicy* const acl = \
-    (!rgw::sal::Object::empty(s->object.get()) ? s->object_acl.get() : s->bucket_acl.get());
-  RGWAccessControlPolicy_S3* const s3policy = \
-    static_cast<RGWAccessControlPolicy_S3*>(acl);
-  s3policy->to_xml(ss);
+  if (rgw::sal::Object::empty(s->object.get())) {
+    rgw::s3::write_policy_xml(s->bucket_acl, ss);
+  } else {
+    rgw::s3::write_policy_xml(s->object_acl, ss);
+  }
   acls = ss.str();
 }
 
@@ -5989,25 +5959,10 @@ void RGWDeleteLC::pre_exec()
 
 void RGWPutACLs::execute(optional_yield y)
 {
-  bufferlist bl;
+  const RGWAccessControlPolicy& existing_policy = \
+    (rgw::sal::Object::empty(s->object.get()) ? s->bucket_acl : s->object_acl);
 
-  RGWAccessControlPolicy_S3 *policy = NULL;
-  RGWACLXMLParser_S3 parser(s->cct);
-  RGWAccessControlPolicy_S3 new_policy(s->cct);
-  stringstream ss;
-
-  op_ret = 0; /* XXX redundant? */
-
-  if (!parser.init()) {
-    op_ret = -EINVAL;
-    return;
-  }
-
-
-  RGWAccessControlPolicy* const existing_policy = \
-    (rgw::sal::Object::empty(s->object.get()) ? s->bucket_acl.get() : s->object_acl.get());
-
-  owner = existing_policy->get_owner();
+  const ACLOwner& existing_owner = existing_policy.get_owner();
 
   op_ret = get_params(y);
   if (op_ret < 0) {
@@ -6030,26 +5985,24 @@ void RGWPutACLs::execute(optional_yield y)
     return;
   }
 
+  RGWAccessControlPolicy new_policy;
   if (!s->canned_acl.empty() || s->has_acl_header) {
-    op_ret = get_policy_from_state(driver, s, ss);
-    if (op_ret < 0)
-      return;
-
-    data.clear();
-    data.append(ss.str());
+    op_ret = get_policy_from_state(existing_owner, new_policy);
+  } else {
+    op_ret = rgw::s3::parse_policy(this, y, driver, {data.c_str(), data.length()},
+                                   new_policy, s->err.message);
   }
-
-  if (!parser.parse(data.c_str(), data.length(), 1)) {
-    op_ret = -EINVAL;
+  if (op_ret < 0)
     return;
-  }
-  policy = static_cast<RGWAccessControlPolicy_S3 *>(parser.find_first("AccessControlPolicy"));
-  if (!policy) {
-    op_ret = -EINVAL;
+
+  if (!existing_owner.id.empty() &&
+      existing_owner.id != new_policy.get_owner().id) {
+    s->err.message = "Cannot modify ACL Owner";
+    op_ret = -EPERM;
     return;
   }
 
-  const RGWAccessControlList& req_acl = policy->get_acl();
+  const RGWAccessControlList& req_acl = new_policy.get_acl();
   const multimap<string, ACLGrant>& req_grant_map = req_acl.get_grant_map();
 #define ACL_GRANTS_MAX_NUM      100
   int max_num = s->cct->_conf->rgw_acl_grants_max_num;
@@ -6070,13 +6023,8 @@ void RGWPutACLs::execute(optional_yield y)
 
   // forward bucket acl requests to meta master zone
   if ((rgw::sal::Object::empty(s->object.get()))) {
-    bufferlist in_data;
-    // include acl data unless it was generated from a canned_acl
-    if (s->canned_acl.empty()) {
-      in_data.append(data);
-    }
     op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
-                                           &in_data, nullptr, s->info, y);
+                                           &data, nullptr, s->info, y);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
@@ -6085,17 +6033,11 @@ void RGWPutACLs::execute(optional_yield y)
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(this, 15) << "Old AccessControlPolicy";
-    policy->to_xml(*_dout);
+    rgw::s3::write_policy_xml(existing_policy, *_dout);
     *_dout << dendl;
-  }
 
-  op_ret = policy->rebuild(this, driver, &owner, new_policy, s->err.message);
-  if (op_ret < 0)
-    return;
-
-  if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     ldpp_dout(this, 15) << "New AccessControlPolicy:";
-    new_policy.to_xml(*_dout);
+    rgw::s3::write_policy_xml(new_policy, *_dout);
     *_dout << dendl;
   }
 
@@ -6105,6 +6047,8 @@ void RGWPutACLs::execute(optional_yield y)
     op_ret = -EACCES;
     return;
   }
+
+  bufferlist bl;
   new_policy.encode(bl);
   map<string, bufferlist> attrs;
 
@@ -7408,8 +7352,8 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
                                                ACLOwner& bucket_owner /* out */,
 					       optional_yield y)
 {
-  RGWAccessControlPolicy bacl(driver->ctx());
-  int ret = read_bucket_policy(dpp, driver, s, binfo, battrs, &bacl, binfo.bucket, y);
+  RGWAccessControlPolicy bacl;
+  int ret = read_bucket_policy(dpp, driver, s, binfo, battrs, bacl, binfo.bucket, y);
   if (ret < 0) {
     return false;
   }
@@ -7420,8 +7364,8 @@ bool RGWBulkDelete::Deleter::verify_permission(RGWBucketInfo& binfo,
 
   /* We can use global user_acl because each BulkDelete request is allowed
    * to work on entities from a single account only. */
-  return verify_bucket_permission(dpp, s, binfo.bucket, s->user_acl.get(),
-				  &bacl, policy, s->iam_user_policies, s->session_policies, rgw::IAM::s3DeleteBucket);
+  return verify_bucket_permission(dpp, s, binfo.bucket, s->user_acl,
+				  bacl, policy, s->iam_user_policies, s->session_policies, rgw::IAM::s3DeleteBucket);
 }
 
 bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yield y)
@@ -7445,7 +7389,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
   if (!path.obj_key.empty()) { // object deletion
     ACLOwner bucket_owner;
 
-    bucket_owner.set_id(bucket->get_info().owner);
+    bucket_owner.id = bucket->get_info().owner;
     std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(path.obj_key);
     obj->set_atomic();
 
@@ -7747,8 +7691,8 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
                                                     ACLOwner& bucket_owner /* out */,
 						    optional_yield y)
 {
-  RGWAccessControlPolicy bacl(driver->ctx());
-  op_ret = read_bucket_policy(this, driver, s, binfo, battrs, &bacl, binfo.bucket, y);
+  RGWAccessControlPolicy bacl;
+  op_ret = read_bucket_policy(this, driver, s, binfo, battrs, bacl, binfo.bucket, y);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot read_policy() for bucket" << dendl;
     return false;
@@ -7801,8 +7745,8 @@ bool RGWBulkUploadOp::handle_file_verify_permission(RGWBucketInfo& binfo,
     }
   }
     
-  return verify_bucket_permission_no_policy(this, s, s->user_acl.get(),
-					    &bacl, RGW_PERM_WRITE);
+  return verify_bucket_permission_no_policy(this, s, s->user_acl,
+					    bacl, RGW_PERM_WRITE);
 }
 
 int RGWBulkUploadOp::handle_file(const std::string_view path,
@@ -7858,7 +7802,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   std::unique_ptr<rgw::sal::Writer> processor;
   processor = driver->get_atomic_writer(this, s->yield, obj.get(),
-				       bowner.get_id(),
+				       bowner.id,
 				       &s->dest_placement, 0, s->req_id);
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
@@ -8243,7 +8187,7 @@ void RGWGetObjLayout::execute(optional_yield y)
 
 int RGWConfigBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
     return -EACCES;
   }
 
@@ -8276,7 +8220,7 @@ void RGWConfigBucketMetaSearch::execute(optional_yield y)
 
 int RGWGetBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
     return -EACCES;
   }
 
@@ -8290,7 +8234,7 @@ void RGWGetBucketMetaSearch::pre_exec()
 
 int RGWDelBucketMetaSearch::verify_permission(optional_yield y)
 {
-  if (!s->auth.identity->is_owner_of(s->bucket_owner.get_id())) {
+  if (!s->auth.identity->is_owner_of(s->bucket_owner.id)) {
     return -EACCES;
   }
 
@@ -8913,7 +8857,7 @@ int RGWGetBucketPolicyStatus::verify_permission(optional_yield y)
 
 void RGWGetBucketPolicyStatus::execute(optional_yield y)
 {
-  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl->is_public(this);
+  isPublic = (s->iam_policy && rgw::IAM::is_public(*s->iam_policy)) || s->bucket_acl.is_public(this);
 }
 
 int RGWPutBucketPublicAccessBlock::verify_permission(optional_yield y)
