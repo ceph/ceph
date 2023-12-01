@@ -104,6 +104,7 @@ class RedfishDellSystem(BaseRedfishSystem):
                 drive_info = self._get_path(drive_path)
                 drive_id = drive_info['Id']
                 result[drive_id] = dict()
+                result[drive_id]['redfish_endpoint'] = drive['@odata.id']
                 for field in fields:
                     result[drive_id][to_snake_case(field)] = drive_info[field]
                     result[drive_id]['entity'] = entity['Id']
