@@ -116,7 +116,8 @@ class BaseRedfishSystem(BaseSystem):
                 'power': self.get_power(),
                 'fans': self.get_fans()
             },
-            'firmwares': self.get_firmwares()
+            'firmwares': self.get_firmwares(),
+            'chassis': {'redfish_endpoint': f'/redfish/v1{self.chassis_endpoint}'}  # TODO(guits): not ideal
         }
         return result
 
