@@ -896,6 +896,16 @@ class CephadmAgentHelpers:
                 host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr, daemon_spec)
             message_thread.start()
 
+    def _shutdown_node_proxy(self) -> None:
+        hosts = set([h for h in self.mgr.cache.get_hosts() if
+                     (h in self.mgr.agent_cache.agent_ports and not self.mgr.agent_cache.messaging_agent(h))])
+
+        for host in hosts:
+            payload: Dict[str, Any] = {'node_proxy_shutdown': host}
+            message_thread = AgentMessageThread(
+                host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr)
+            message_thread.start()
+
     def _request_ack_all_not_up_to_date(self) -> None:
         self.mgr.agent_helpers._request_agent_acks(
             set([h for h in self.mgr.cache.get_hosts() if
@@ -971,10 +981,11 @@ class CephadmAgentHelpers:
             if 'agent' in self.mgr.spec_store:
                 self.mgr.spec_store.rm('agent')
                 need_apply = True
-            self.mgr.agent_cache.agent_counter = {}
-            self.mgr.agent_cache.agent_timestamp = {}
-            self.mgr.agent_cache.agent_keys = {}
-            self.mgr.agent_cache.agent_ports = {}
+            if not self.mgr.cache.get_daemons_by_service('agent'):
+                self.mgr.agent_cache.agent_counter = {}
+                self.mgr.agent_cache.agent_timestamp = {}
+                self.mgr.agent_cache.agent_keys = {}
+                self.mgr.agent_cache.agent_ports = {}
         return need_apply
 
     def _check_agent(self, host: str) -> bool:
