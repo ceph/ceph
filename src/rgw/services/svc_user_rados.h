@@ -71,28 +71,6 @@ class RGWSI_User_RADOS : public RGWSI_User
   int remove_email_index(const DoutPrefixProvider *dpp, const std::string& email, optional_yield y);
   int remove_swift_name_index(const DoutPrefixProvider *dpp, const std::string& swift_name, optional_yield y);
 
-  /* admin management */
-  int cls_user_update_buckets(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, std::list<cls_user_bucket_entry>& entries, bool add, optional_yield y);
-  int cls_user_add_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket_entry& entry, optional_yield y);
-  int cls_user_remove_bucket(const DoutPrefixProvider *dpp, rgw_raw_obj& obj, const cls_user_bucket& bucket, optional_yield y);
-
-  /* quota stats */
-  int cls_user_flush_bucket_stats(const DoutPrefixProvider *dpp, rgw_raw_obj& user_obj,
-                                  const RGWBucketEnt& ent, optional_yield y);
-  int cls_user_list_buckets(const DoutPrefixProvider *dpp, 
-                            rgw_raw_obj& obj,
-                            const std::string& in_marker,
-                            const std::string& end_marker,
-                            const int max_entries,
-                            std::list<cls_user_bucket_entry>& entries,
-                            std::string * const out_marker,
-                            bool * const truncated,
-                            optional_yield y);
-
-  int cls_user_reset_stats(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
-  int cls_user_get_header(const DoutPrefixProvider *dpp, const rgw_user& user, cls_user_header *header, optional_yield y);
-  int cls_user_get_header_async(const DoutPrefixProvider *dpp, const std::string& user, RGWGetUserHeader_CB *cb);
-
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 public:
   librados::Rados* rados{nullptr};
@@ -183,8 +161,7 @@ public:
                    const std::string& marker,
                    const std::string& end_marker,
                    uint64_t max,
-                   RGWUserBuckets *buckets,
-                   bool *is_truncated,
+                   rgw::sal::BucketList& listing,
                    optional_yield y) override;
 
   /* quota related */
