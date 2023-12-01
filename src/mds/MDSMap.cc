@@ -768,7 +768,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 17;
+  __u16 ev = 18;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -946,6 +946,9 @@ void MDSMap::decode(bufferlist::const_iterator& p)
 
   if (ev >= 17) {
     decode(max_xattr_size, p);
+  }
+
+  if (ev >= 18) {
     decode(bal_rank_mask, p);
   }
 
