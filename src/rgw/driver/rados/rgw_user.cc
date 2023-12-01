@@ -2793,8 +2793,7 @@ int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp,
                              const string& end_marker,
                              uint64_t max,
                              bool need_stats,
-                             RGWUserBuckets *buckets,
-                             bool *is_truncated,
+                             rgw::sal::BucketList& listing,
 			     optional_yield y,
                              uint64_t default_max)
 {
@@ -2803,13 +2802,12 @@ int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp,
   }
 
   int ret = svc.user->list_buckets(dpp, user, marker, end_marker,
-                                   max, buckets, is_truncated, y);
+                                   max, listing, y);
   if (ret < 0) {
     return ret;
   }
   if (need_stats) {
-    map<string, RGWBucketEnt>& m = buckets->get_buckets();
-    ret = ctl.bucket->read_buckets_stats(m, y, dpp);
+    ret = ctl.bucket->read_buckets_stats(listing.buckets, y, dpp);
     if (ret < 0 && ret != -ENOENT) {
       ldpp_dout(dpp, 0) << "ERROR: could not get stats for buckets" << dendl;
       return ret;

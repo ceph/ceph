@@ -692,7 +692,7 @@ public:
                     const DoutPrefixProvider *dpp,
                     bool update_entrypoint = true);
 
-  int read_buckets_stats(std::map<std::string, RGWBucketEnt>& m,
+  int read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
                          optional_yield y,
                          const DoutPrefixProvider *dpp);
 

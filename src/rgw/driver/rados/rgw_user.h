@@ -880,8 +880,7 @@ public:
                    const std::string& end_marker,
                    uint64_t max,
                    bool need_stats,
-                   RGWUserBuckets *buckets,
-                   bool *is_truncated,
+                   rgw::sal::BucketList& listing,
 		   optional_yield y,
                    uint64_t default_max = 1000);
 
