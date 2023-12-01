@@ -725,7 +725,7 @@ protected:
 
 class MPRadosSerializer : public StoreMPSerializer {
   librados::IoCtx ioctx;
-  rados::cls::lock::Lock lock;
+  ::rados::cls::lock::Lock lock;
   librados::ObjectWriteOperation op;
 
 public:
@@ -739,7 +739,7 @@ public:
 
 class LCRadosSerializer : public StoreLCSerializer {
   librados::IoCtx* ioctx;
-  rados::cls::lock::Lock lock;
+  ::rados::cls::lock::Lock lock;
 
 public:
   LCRadosSerializer(RadosStore* store, const std::string& oid, const std::string& lock_name, const std::string& cookie);
