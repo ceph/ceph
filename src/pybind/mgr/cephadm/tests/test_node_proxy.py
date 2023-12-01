@@ -4,11 +4,9 @@ import json
 from _pytest.monkeypatch import MonkeyPatch
 from cherrypy.test import helper
 from cephadm.agent import NodeProxy
-from unittest.mock import MagicMock, call
-from cephadm.http_server import CephadmHttpServer
+from unittest.mock import MagicMock, call, patch
 from cephadm.inventory import AgentCache, NodeProxyCache, Inventory
 from cephadm.ssl_cert_utils import SSLCerts
-from urllib.error import URLError
 from . import node_proxy_data
 
 PORT = 58585
@@ -23,6 +21,7 @@ class FakeMgr:
         self.remove_health_warning = MagicMock()
         self.inventory = Inventory(self)
         self.agent_cache = AgentCache(self)
+        self.agent_cache.agent_ports = {"host01": 1234}
         self.node_proxy = NodeProxyCache(self)
         self.node_proxy.save = MagicMock()
         self.http_server = MagicMock()
@@ -133,48 +132,98 @@ class TestNodeProxy(helper.CPWebCase):
                                                                  ('Content-Length', str(len(data)))])
         self.assertStatus('501 Not Implemented')
 
-    def test_set_led(self):
-        data = '{"state": "on"}'
-        TestNodeProxy.app.query_endpoint = MagicMock(return_value=(200, "OK"))
-        # self.monkeypatch.setattr(NodeProxy, "query_endpoint", lambda *a, **kw: (200, "OK"))
+    @patch('cephadm.agent.AgentMessageThread.join', return_value=MagicMock)
+    @patch('cephadm.agent.AgentMessageThread.start', return_value=MagicMock)
+    def test_set_led_no_type(self, m_agent_msg_thread_start, m_agent_msg_thread_join):
+        data = '{"IndicatorLED": "Blinking"}'
         self.getPage("/host01/led", method="PATCH", body=data, headers=[('Content-Type', 'application/json'),
                                                                         ('Content-Length', str(len(data)))])
+        self.assertStatus('400 Bad Request')
 
-        calls = [call(addr='10.10.10.11',
-                      data='{"state": "on"}',
-                      endpoint='/led',
-                      headers={'Authorization': 'Basic aWRyYWMtdXNlcjAxOmlkcmFjLXBhc3MwMQ=='},
-                      method='PATCH',
-                      port=8080,
-                      ssl_ctx=TestNodeProxy.app.ssl_ctx)]
-        self.assertStatus('200 OK')
-        assert TestNodeProxy.app.query_endpoint.mock_calls == calls
+    @patch('cephadm.agent.AgentMessageThread.join', return_value=MagicMock)
+    @patch('cephadm.agent.AgentMessageThread.start', return_value=MagicMock)
+    def test_set_chassis_led(self, m_agent_msg_thread_start, m_agent_msg_thread_join):
+        data = '{"IndicatorLED": "Blinking"}'
+        with patch('cephadm.agent.AgentMessageThread.get_agent_response') as a:
+            a.return_value = '{"http_code": 200}'
+            self.getPage("/host01/led/chassis", method="PATCH", body=data, headers=[('Content-Type', 'application/json'),
+                                                                                    ('Content-Length', str(len(data)))])
+            self.assertStatus('200 OK')
 
-    def test_get_led(self):
-        TestNodeProxy.app.query_endpoint = MagicMock(return_value=(200, "OK"))
+    def test_get_led_missing_type(self):
         self.getPage("/host01/led", method="GET")
-        calls = [call(addr='10.10.10.11',
-                      data=None,
-                      endpoint='/led',
-                      headers={},
-                      method='GET',
-                      port=8080,
-                      ssl_ctx=TestNodeProxy.app.ssl_ctx)]
-        self.assertStatus('200 OK')
-        assert TestNodeProxy.app.query_endpoint.mock_calls == calls
+        self.assertStatus('400 Bad Request')
 
-    def test_led_endpoint_unreachable(self):
-        TestNodeProxy.app.query_endpoint = MagicMock(side_effect=URLError("fake-error"))
-        self.getPage("/host02/led", method="GET")
-        calls = [call(addr='10.10.10.12',
-                      data=None,
-                      endpoint='/led',
-                      headers={},
-                      method='GET',
-                      port=8080,
-                      ssl_ctx=TestNodeProxy.app.ssl_ctx)]
+    def test_get_led_no_hostname(self):
+        self.getPage("/led", method="GET")
+        self.assertStatus('501 Not Implemented')
+
+    def test_get_led_type_chassis_no_hostname(self):
+        self.getPage("/led/chassis", method="GET")
+        self.assertStatus('404 Not Found')
+
+    def test_get_led_type_drive_no_hostname(self):
+        self.getPage("/led/chassis", method="GET")
+        self.assertStatus('404 Not Found')
+
+    def test_get_led_type_drive_missing_id(self):
+        self.getPage("/host01/led/drive", method="GET")
+        self.assertStatus('400 Bad Request')
+
+    def test_get_led_type_chassis_answer_invalid_json(self):
+        self.getPage("/host01/led/chassis", method="GET")
+        self.assertStatus('503 Service Unavailable')
+
+    @patch('cephadm.agent.AgentMessageThread.join', return_value=MagicMock)
+    @patch('cephadm.agent.AgentMessageThread.start', return_value=MagicMock)
+    def test_get_led_type_chassis_answer_no_http_code(self, m_agent_msg_thread_start, m_agent_msg_thread_join):
+        with patch('cephadm.agent.AgentMessageThread.get_agent_response') as a:
+            a.return_value = '{"foo": "bar"}'
+            self.getPage("/host01/led/chassis", method="GET")
+            self.assertStatus('503 Service Unavailable')
+
+    def test_get_led_status_not_200(self):
+        self.getPage("/host01/led/chassis", method="GET")
+        self.assertStatus('503 Service Unavailable')
+
+    def test_get_led_key_error(self):
+        self.getPage("/host02/led/chassis", method="GET")
         self.assertStatus('502 Bad Gateway')
-        assert TestNodeProxy.app.query_endpoint.mock_calls == calls
+
+    @patch('cephadm.agent.AgentMessageThread.join', return_value=MagicMock)
+    @patch('cephadm.agent.AgentMessageThread.start', return_value=MagicMock)
+    def test_get_chassis_led_ok(self, m_agent_msg_thread_start, m_agent_msg_thread_join):
+        with patch('cephadm.agent.AgentMessageThread.get_agent_response') as a:
+            a.return_value = '{"http_code": 200}'
+            self.getPage("/host01/led/chassis", method="GET")
+            self.assertStatus('200 OK')
+
+    @patch('cephadm.agent.AgentMessageThread.join', return_value=MagicMock)
+    @patch('cephadm.agent.AgentMessageThread.start', return_value=MagicMock)
+    def test_get_drive_led_without_id(self, m_agent_msg_thread_start, m_agent_msg_thread_join):
+        self.getPage("/host01/led/drive", method="GET")
+        self.assertStatus('400 Bad Request')
+
+    @patch('cephadm.agent.AgentMessageThread.join', return_value=MagicMock)
+    @patch('cephadm.agent.AgentMessageThread.start', return_value=MagicMock)
+    def test_get_drive_led_with_id(self, m_agent_msg_thread_start, m_agent_msg_thread_join):
+        with patch('cephadm.agent.AgentMessageThread.get_agent_response') as a:
+            a.return_value = '{"http_code": 200}'
+            self.getPage("/host01/led/drive/123", method="GET")
+            self.assertStatus('200 OK')
+
+    # def test_led_endpoint_unreachable(self):
+    #     TestNodeProxy.app.query_endpoint = MagicMock(side_effect=URLError("fake-error"))
+    #     self.getPage("/host02/led", method="GET")
+    #     calls = [call(addr='10.10.10.12',
+    #                   data=None,
+    #                   endpoint='/led',
+    #                   headers={},
+    #                   method='GET',
+    #                   port=8080,
+    #                   ssl_ctx=TestNodeProxy.app.ssl_ctx)]
+    #     self.assertStatus('502 Bad Gateway')
+    #     assert TestNodeProxy.app.query_endpoint.mock_calls == calls
 
     def test_fullreport_with_valid_hostname(self):
         self.getPage("/host02/fullreport", method="GET")
