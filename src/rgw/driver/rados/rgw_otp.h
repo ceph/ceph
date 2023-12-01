@@ -3,30 +3,24 @@
 
 #pragma once
 
-#include "rgw_sal_fwd.h"
-#include "cls/otp/cls_otp_types.h"
-#include "services/svc_meta_be_otp.h"
+#include <memory>
+#include <string>
 
-#include "rgw_basic_types.h"
-#include "rgw_metadata.h"
-
-
-class RGWObjVersionTracker;
+struct rgw_user;
 class RGWMetadataHandler;
-class RGWOTPMetadataHandler;
-class RGWSI_Zone;
-class RGWSI_OTP;
-class RGWSI_MetaBackend;
+class RGWSI_Cls;
+class RGWSI_MDLog;
+class RGWSI_SysObj;
+class RGWZoneParams;
 
-class RGWOTPMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
-public:
-  virtual ~RGWOTPMetadataHandlerBase() {}
-  virtual int init(RGWSI_Zone *zone,
-		   RGWSI_MetaBackend *_meta_be,
-		   RGWSI_OTP *_otp) = 0;
-};
+namespace rgwrados::otp {
 
-class RGWOTPMetaHandlerAllocator {
-public:
-  static RGWMetadataHandler *alloc();
-};
+// return the user's otp metadata key
+std::string get_meta_key(const rgw_user& user);
+
+// otp metadata handler factory
+auto create_metadata_handler(RGWSI_SysObj& sysobj, RGWSI_Cls& cls,
+                             RGWSI_MDLog& mdlog, const RGWZoneParams& zone)
+    -> std::unique_ptr<RGWMetadataHandler>;
+
+} // namespace rgwrados::otp

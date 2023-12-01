@@ -392,7 +392,8 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
     meta.bucket_instance.reset(RGWBucketInstanceMetaHandlerAllocator::alloc(driver));
   }
 
-  meta.otp.reset(RGWOTPMetaHandlerAllocator::alloc());
+  meta.otp = rgwrados::otp::create_metadata_handler(
+      *svc.sysobj, *svc.cls, *svc.mdlog, svc.zone->get_zone_params());
   meta.role = std::make_unique<rgw::sal::RGWRoleMetadataHandler>(driver, svc.role);
   meta.account = rgwrados::account::create_metadata_handler(
       *svc.sysobj, svc.zone->get_zone_params());
@@ -417,9 +418,6 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
   meta.topic = rgwrados::topic::create_metadata_handler(
       *svc.sysobj, svc.cache, *svc.mdlog, rados,
       svc.zone->get_zone_params(), *meta.topic_cache);
-
-  RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
-  otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);
 
   user->init(bucket.get());
   bucket->init(user.get(),
