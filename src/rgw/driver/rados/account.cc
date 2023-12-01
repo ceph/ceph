@@ -19,6 +19,8 @@
 #include "common/errno.h"
 #include "rgw_account.h"
 #include "rgw_common.h"
+#include "rgw_metadata.h"
+#include "rgw_metadata_lister.h"
 #include "rgw_obj_types.h"
 #include "rgw_string.h"
 #include "rgw_tools.h"
@@ -386,6 +388,196 @@ int remove(const DoutPrefixProvider* dpp,
   }
 
   return 0;
+}
+
+
+// metadata abstraction
+
+struct CompleteInfo {
+  RGWAccountInfo info;
+  std::map<std::string, bufferlist> attrs;
+  bool has_attrs = false;
+
+  void dump(Formatter* f) const {
+    info.dump(f);
+    encode_json("attrs", attrs, f);
+  }
+
+  void decode_json(JSONObj* obj) {
+    decode_json_obj(info, obj);
+    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
+  }
+};
+
+class MetadataObject : public RGWMetadataObject {
+  CompleteInfo aci;
+ public:
+  MetadataObject(const CompleteInfo& aci, const obj_version& v,
+                 ceph::real_time m)
+    : RGWMetadataObject(v, m), aci(aci) {}
+
+  void dump(Formatter *f) const override {
+    aci.dump(f);
+  }
+
+  CompleteInfo& get() { return aci; }
+};
+
+
+class MetadataLister : public RGWMetadataLister {
+ public:
+  using RGWMetadataLister::RGWMetadataLister;
+
+  void filter_transform(std::vector<std::string>& oids,
+                        std::list<std::string>& keys) override
+  {
+    // remove the oid prefix from keys
+    constexpr auto trim = [] (const std::string& oid) {
+      return oid.substr(account_oid_prefix.size());
+    };
+    std::transform(oids.begin(), oids.end(),
+                   std::back_inserter(keys),
+                   trim);
+  }
+};
+
+class MetadataHandler : public RGWMetadataHandler {
+  RGWSI_SysObj& sysobj;
+  const RGWZoneParams& zone;
+ public:
+  MetadataHandler(RGWSI_SysObj& sysobj, const RGWZoneParams& zone)
+    : sysobj(sysobj), zone(zone) {}
+
+  std::string get_type() override { return "account"; }
+
+  RGWMetadataObject* get_meta_obj(JSONObj* obj,
+                                  const obj_version& objv,
+                                  const ceph::real_time& mtime) override
+  {
+    CompleteInfo aci;
+    try {
+      decode_json_obj(aci, obj);
+    } catch (const JSONDecoder::err&) {
+      return nullptr;
+    }
+    return new MetadataObject(aci, objv, mtime);
+  }
+
+  int get(std::string& entry, RGWMetadataObject** obj,
+          optional_yield y, const DoutPrefixProvider* dpp) override
+  {
+    const std::string& account_id = entry;
+    CompleteInfo aci;
+    RGWObjVersionTracker objv;
+    ceph::real_time mtime;
+
+    int r = read(dpp, y, sysobj, zone, account_id,
+                 aci.info, aci.attrs, mtime, objv);
+    if (r < 0) {
+      return r;
+    }
+
+    *obj = new MetadataObject(aci, objv.read_version, mtime);
+    return 0;
+  }
+
+  int put(std::string& entry, RGWMetadataObject* obj,
+          RGWObjVersionTracker& objv, optional_yield y,
+          const DoutPrefixProvider* dpp,
+          RGWMDLogSyncType type, bool from_remote_zone) override
+  {
+    const std::string& account_id = entry;
+    auto account_obj = static_cast<MetadataObject*>(obj);
+    const auto& new_info = account_obj->get().info;
+
+    // account id must match metadata key
+    if (new_info.id != account_id) {
+      return -EINVAL;
+    }
+
+    // read existing metadata
+    RGWAccountInfo old_info;
+    std::map<std::string, ceph::buffer::list> old_attrs;
+    ceph::real_time old_mtime;
+    int r = read(dpp, y, sysobj, zone, account_id,
+                 old_info, old_attrs, old_mtime, objv);
+    if (r < 0 && r != -ENOENT) {
+      return r;
+    }
+    const RGWAccountInfo* pold_info = (r == -ENOENT ? nullptr : &old_info);
+
+    // write/overwrite metadata
+    constexpr bool exclusive = false;
+    return write(dpp, y, sysobj, zone, new_info, pold_info,
+                 account_obj->get().attrs, obj->get_mtime(),
+                 exclusive, objv);
+  }
+
+  int remove(std::string& entry, RGWObjVersionTracker& objv,
+             optional_yield y, const DoutPrefixProvider* dpp) override
+  {
+    const std::string& account_id = entry;
+
+    // read existing metadata
+    RGWAccountInfo info;
+    std::map<std::string, ceph::buffer::list> attrs;
+    ceph::real_time mtime;
+    int r = read(dpp, y, sysobj, zone, account_id,
+                 info, attrs, mtime, objv);
+    if (r < 0) {
+      return r;
+    }
+
+    return account::remove(dpp, y, sysobj, zone, info, objv);
+  }
+
+  int mutate(const std::string& entry,
+             const ceph::real_time& mtime,
+             RGWObjVersionTracker* objv,
+             optional_yield y,
+             const DoutPrefixProvider* dpp,
+             RGWMDLogStatus op_type,
+             std::function<int()> f) override
+  {
+    return -ENOTSUP; // unused
+  }
+
+  int list_keys_init(const DoutPrefixProvider* dpp,
+                     const std::string& marker, void** phandle) override
+  {
+    auto lister = std::make_unique<MetadataLister>(
+        sysobj.get_pool(zone.account_pool));
+    int r = lister->init(dpp, marker, account_oid_prefix);
+    if (r < 0) {
+      return r;
+    }
+    *phandle = lister.release();
+    return 0;
+  }
+
+  int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
+                     std::list<std::string>& keys, bool* truncated) override
+  {
+    auto lister = static_cast<MetadataLister*>(handle);
+    return lister->get_next(dpp, max, keys, truncated);
+  }
+
+  void list_keys_complete(void* handle) override
+  {
+    delete static_cast<MetadataLister*>(handle);
+  }
+
+  std::string get_marker(void* handle) override
+  {
+    auto lister = static_cast<MetadataLister*>(handle);
+    return lister->get_marker();
+  }
+};
+
+auto create_metadata_handler(RGWSI_SysObj& sysobj, const RGWZoneParams& zone)
+    -> std::unique_ptr<RGWMetadataHandler>
+{
+  return std::make_unique<MetadataHandler>(sysobj, zone);
 }
 
 } // namespace rgwrados::account

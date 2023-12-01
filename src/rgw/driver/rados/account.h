@@ -17,6 +17,7 @@
 
 #include <list>
 #include <map>
+#include <memory>
 #include <string>
 #include "include/encoding.h"
 #include "common/async/yield_context.h"
@@ -27,12 +28,17 @@ class JSONObj;
 struct rgw_raw_obj;
 class RGWAccountInfo;
 struct RGWBucketInfo;
+class RGWMetadataHandler;
 class RGWObjVersionTracker;
 class RGWSI_SysObj;
 class RGWStorageStats;
 class RGWZoneParams;
 
 namespace rgwrados::account {
+
+/// Account metadata handler factory
+auto create_metadata_handler(RGWSI_SysObj& sysobj, const RGWZoneParams& zone)
+    -> std::unique_ptr<RGWMetadataHandler>;
 
 /// Return the rados object that tracks the given account's buckets. This
 /// can be used with the cls_user interface in namespace rgwrados::buckets.
