@@ -78,5 +78,42 @@ describe('CephfsVolumeFormComponent', () => {
       expect(label).toBeNull();
       expect(hosts).toBeNull();
     });
+
+    it('should disable renaming and show info alert if disableRename is true', () => {
+      component.disableRename = true;
+      component.ngOnInit();
+      fixture.detectChanges();
+      const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel'));
+      expect(alertPanel).not.toBeNull();
+    });
+
+    it('should not show the alert if disableRename is false', () => {
+      component.disableRename = false;
+      component.ngOnInit();
+      fixture.detectChanges();
+      const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel'));
+      expect(alertPanel).toBeNull();
+    });
+
+    it('should disable the submit button only if disableRename is true', () => {
+      component.disableRename = true;
+      component.ngOnInit();
+      fixture.detectChanges();
+      const submitButton = fixture.debugElement.query(By.css('button[type=submit]'));
+      expect(submitButton.nativeElement.disabled).toBeTruthy();
+
+      // the submit button should only be disabled when the form is in edit mode
+      component.editing = false;
+      component.ngOnInit();
+      fixture.detectChanges();
+      expect(submitButton.nativeElement.disabled).toBeFalsy();
+
+      // submit button should be enabled if disableRename is false
+      component.editing = true;
+      component.disableRename = false;
+      component.ngOnInit();
+      fixture.detectChanges();
+      expect(submitButton.nativeElement.disabled).toBeFalsy();
+    });
   });
 });

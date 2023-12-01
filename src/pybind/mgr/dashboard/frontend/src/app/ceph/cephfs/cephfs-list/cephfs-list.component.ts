@@ -87,7 +87,7 @@ export class CephfsListComponent extends ListWithDetails implements OnInit {
         permission: 'update',
         icon: Icons.edit,
         click: () =>
-          this.router.navigate([this.urlBuilder.getEdit(this.selection.first().mdsmap.fs_name)])
+          this.router.navigate([this.urlBuilder.getEdit(String(this.selection.first().id))])
       },
       {
         permission: 'delete',

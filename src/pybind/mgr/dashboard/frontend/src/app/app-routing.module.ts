@@ -361,7 +361,7 @@ const routes: Routes = [
             data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
-            path: `${URLVerbs.EDIT}/:name`,
+            path: `${URLVerbs.EDIT}/:id`,
             component: CephfsVolumeFormComponent,
             data: { breadcrumbs: ActionLabels.EDIT }
           }
