@@ -177,6 +177,8 @@ io_uring_enabled=0
 with_jaeger=0
 force_addr=0
 osds_per_host=0
+require_osd_and_client_version=""
+use_crush_tunables=""
 
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
@@ -267,6 +269,8 @@ options:
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
 	--crimson-smp: number of cores to use for crimson
 	--osds-per-host: populate crush_location as each host holds the specified number of osds if set
+	--require-osd-and-client-version: if supplied, do set-require-min-compat-client and require-osd-release to specified value
+	--use-crush-tunables: if supplied, set tunables to specified value
 \n
 EOF
 
@@ -605,6 +609,16 @@ case $1 in
         osds_per_host="$2"
         shift
         echo "osds_per_host $osds_per_host"
+        ;;
+    --require-osd-and-client-version)
+        require_osd_and_client_version="$2"
+        shift
+        echo "require_osd_and_client_version $require_osd_and_client_version"
+        ;;
+    --use-crush-tunables)
+        use_crush_tunables="$2"
+        shift
+        echo "use_crush_tunables $use_crush_tunables"
         ;;
     *)
         usage_exit
@@ -1101,6 +1115,15 @@ EOF
 
     if [ "$crimson" -eq 1 ]; then
         $CEPH_BIN/ceph osd set-allow-crimson --yes-i-really-mean-it
+    fi
+
+    if [ -n "$require_osd_and_client_version" ]; then
+        $CEPH_BIN/ceph osd set-require-min-compat-client $require_osd_and_client_version
+        $CEPH_BIN/ceph osd require-osd-release $require_osd_and_client_version --yes-i-really-mean-it
+    fi
+
+    if [ -n "$use_crush_tunables" ]; then
+        $CEPH_BIN/ceph osd crush tunables $use_crush_tunables
     fi
 }
 
