@@ -6362,6 +6362,9 @@ int Client::may_open(const InodeRef& in, int flags, const UserPerm& perms)
   ldout(cct, 20) << __func__ << " " << *in << "; " << perms << dendl;
   unsigned want = 0;
 
+  if (!in->is_dir() && is_inode_locked(in))
+    return -ENOKEY;
+
   if ((flags & O_ACCMODE) == O_WRONLY)
     want = CLIENT_MAY_WRITE;
   else if ((flags & O_ACCMODE) == O_RDWR)
@@ -6401,6 +6404,7 @@ out:
 int Client::may_lookup(const InodeRef& dir, const UserPerm& perms)
 {
   ldout(cct, 20) << __func__ << " " << *dir << "; " << perms << dendl;
+
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
@@ -6414,6 +6418,9 @@ out:
 int Client::may_create(const InodeRef& dir, const UserPerm& perms)
 {
   ldout(cct, 20) << __func__ << " " << *dir << "; " << perms << dendl;
+  if (dir->is_dir() && is_inode_locked(dir))
+    return -ENOKEY;
+
   int r = _getattr_for_perm(dir, perms);
   if (r < 0)
     goto out;
@@ -16304,6 +16311,18 @@ int Client::ll_rmdir(Inode *in, const char *name, const UserPerm& perms)
   return _rmdir(in, name, perms);
 }
 
+bool Client::is_inode_locked(Inode *to_check)
+{
+  if (to_check && to_check->fscrypt_ctx) {
+    FSCryptKeyHandlerRef kh;
+    int r = fscrypt->get_key_store().find(to_check->fscrypt_ctx->master_key_identifier, kh);
+    if (r < 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
 int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const char *toname, const UserPerm& perm, std::string alternate_name)
 {
   ldout(cct, 8) << "_rename(" << fromdir->ino << " " << fromname << " to "
@@ -16339,6 +16358,11 @@ int Client::_rename(Inode *fromdir, const char *fromname, Inode *todir, const ch
   if (wdr_to.diri == root && wdr_to.dname.empty()) {
     return -EINVAL;
   }
+
+  bool source_locked = is_inode_locked(fromdir);
+  bool dest_locked = is_inode_locked(todir);
+  if (source_locked || dest_locked)
+    return -ENOKEY;
 
   if (wdr_from.diri->snapid != wdr_to.diri->snapid)
     return -EXDEV;
