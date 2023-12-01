@@ -20,7 +20,7 @@ class BaseRedfishSystem(BaseSystem):
         self.password: str = kw['password']
         # move the following line (class attribute?)
         self.client: RedFishClient = RedFishClient(host=self.host, port=self.port, username=self.username, password=self.password)
-        self.log.logger.info(f"redfish system initialization, host: {self.host}, user: {self.username}")
+        self.log.logger.info(f'redfish system initialization, host: {self.host}, user: {self.username}')
 
         self.run: bool = False
         self.thread: Thread
@@ -49,9 +49,9 @@ class BaseRedfishSystem(BaseSystem):
         #  this loop can have:
         #  - caching logic
         while self.run:
-            self.log.logger.debug("waiting for a lock.")
+            self.log.logger.debug('waiting for a lock.')
             self.lock.acquire()
-            self.log.logger.debug("lock acquired.")
+            self.log.logger.debug('lock acquired.')
             try:
                 self._update_system()
                 self._update_sn()
@@ -70,23 +70,23 @@ class BaseRedfishSystem(BaseSystem):
                 sleep(5)
             except RuntimeError as e:
                 self.run = False
-                self.log.logger.error(f"Error detected, trying to gracefully log out from redfish api.\n{e}")
+                self.log.logger.error(f'Error detected, trying to gracefully log out from redfish api.\n{e}')
                 self.client.logout()
             finally:
                 self.lock.release()
-                self.log.logger.debug("lock released.")
+                self.log.logger.debug('lock released.')
 
     def flush(self) -> None:
-        self.log.logger.info("Acquiring lock to flush data.")
+        self.log.logger.info('Acquiring lock to flush data.')
         self.lock.acquire()
-        self.log.logger.info("Lock acquired, flushing data.")
+        self.log.logger.info('Lock acquired, flushing data.')
         self._system = {}
         self.previous_data = {}
-        self.log.logger.info("Data flushed.")
+        self.log.logger.info('Data flushed.')
         self.data_ready = False
-        self.log.logger.info("Data marked as not ready.")
+        self.log.logger.info('Data marked as not ready.')
         self.lock.release()
-        self.log.logger.info("Lock released.")
+        self.log.logger.info('Lock released.')
 
     @retry(retries=10, delay=2)
     def _get_path(self, path: str) -> Dict:
@@ -95,8 +95,8 @@ class BaseRedfishSystem(BaseSystem):
         except RuntimeError:
             raise
         if result is None:
-            self.log.logger.error(f"The client reported an error when getting path: {path}")
-            raise RuntimeError(f"Could not get path: {path}")
+            self.log.logger.error(f'The client reported an error when getting path: {path}')
+            raise RuntimeError(f'Could not get path: {path}')
         return result
 
     def get_members(self, data: Dict[str, Any], path: str) -> List:

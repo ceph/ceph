@@ -92,12 +92,12 @@ def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Cal
             _tries = retries
             while _tries > 1:
                 try:
-                    log.logger.debug("{} {} attempt(s) left.".format(f, _tries - 1))
+                    log.logger.debug('{} {} attempt(s) left.'.format(f, _tries - 1))
                     return f(*args, **kwargs)
                 except exceptions:
                     time.sleep(delay)
                     _tries -= 1
-            log.logger.warn("{} has failed after {} tries".format(f, retries))
+            log.logger.warn('{} has failed after {} tries'.format(f, retries))
             return f(*args, **kwargs)
         return _retry
     return decorator

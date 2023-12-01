@@ -50,10 +50,10 @@ class NodeProxy(Thread):
 
     def check_status(self) -> bool:
         if self.__dict__.get('system') and not self.system.run:
-            raise RuntimeError("node-proxy encountered an error.")
+            raise RuntimeError('node-proxy encountered an error.')
         if self.exc:
             traceback.print_tb(self.exc.__traceback__)
-            self.log.logger.error(f"{self.exc.__class__.__name__}: {self.exc}")
+            self.log.logger.error(f'{self.exc.__class__.__name__}: {self.exc}')
             raise self.exc
         return True
 
@@ -63,7 +63,7 @@ class NodeProxy(Thread):
         self.log = Logger(__name__, level=self.config.__dict__['logging']['level'])
 
         # create the redfish system and the obsever
-        self.log.logger.info(f"Server initialization...")
+        self.log.logger.info('Server initialization...')
         try:
             self.system = RedfishDellSystem(host=self.__dict__['host'],
                                             port=self.__dict__.get('port', 443),
