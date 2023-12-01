@@ -26,9 +26,10 @@
 #include "common/Formatter.h"
 
 struct rgw_user {
+  // note: order of member variables matches the sort order of operator<=>
   std::string tenant;
-  std::string id;
   std::string ns;
+  std::string id;
 
   rgw_user() {}
   explicit rgw_user(const std::string& s) {
@@ -36,13 +37,13 @@ struct rgw_user {
   }
   rgw_user(const std::string& tenant, const std::string& id, const std::string& ns="")
     : tenant(tenant),
-      id(id),
-      ns(ns) {
+      ns(ns),
+      id(id) {
   }
   rgw_user(std::string&& tenant, std::string&& id, std::string&& ns="")
     : tenant(std::move(tenant)),
-      id(std::move(id)),
-      ns(std::move(ns)) {
+      ns(std::move(ns)),
+      id(std::move(id)) {
   }
 
   void encode(ceph::buffer::list& bl) const {
@@ -118,40 +119,8 @@ struct rgw_user {
     return *this;
   }
 
-  int compare(const rgw_user& u) const {
-    int r = tenant.compare(u.tenant);
-    if (r != 0)
-      return r;
-    r = ns.compare(u.ns);
-    if (r != 0) {
-      return r;
-    }
-    return id.compare(u.id);
-  }
-  int compare(const std::string& str) const {
-    rgw_user u(str);
-    return compare(u);
-  }
+  friend auto operator<=>(const rgw_user&, const rgw_user&) = default;
 
-  bool operator!=(const rgw_user& rhs) const {
-    return (compare(rhs) != 0);
-  }
-  bool operator==(const rgw_user& rhs) const {
-    return (compare(rhs) == 0);
-  }
-  bool operator<(const rgw_user& rhs) const {
-    if (tenant < rhs.tenant) {
-      return true;
-    } else if (tenant > rhs.tenant) {
-      return false;
-    }
-    if (ns < rhs.ns) {
-      return true;
-    } else if (ns > rhs.ns) {
-      return false;
-    }
-    return (id < rhs.id);
-  }
   void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<rgw_user*>& o);
 };

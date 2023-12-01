@@ -639,7 +639,7 @@ bool parse_iso8601(const char *s, struct tm *t, uint32_t *pns, bool extended_for
   return true;
 }
 
-int parse_key_value(string& in_str, const char *delim, string& key, string& val)
+int parse_key_value(const string& in_str, const char *delim, string& key, string& val)
 {
   if (delim == NULL)
     return -EINVAL;
@@ -654,7 +654,7 @@ int parse_key_value(string& in_str, const char *delim, string& key, string& val)
   return 0;
 }
 
-int parse_key_value(string& in_str, string& key, string& val)
+int parse_key_value(const string& in_str, string& key, string& val)
 {
   return parse_key_value(in_str, "=", key,val);
 }
@@ -1135,7 +1135,7 @@ Effect eval_identity_or_session_policies(const DoutPrefixProvider* dpp,
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
                             perm_state_base * const s,
-                            RGWAccessControlPolicy * const user_acl,
+                            const RGWAccessControlPolicy& user_acl,
                             const vector<rgw::IAM::Policy>& user_policies,
                             const vector<rgw::IAM::Policy>& session_policies,
                             const rgw::ARN& res,
@@ -1176,20 +1176,20 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       struct perm_state_base * const s,
-                                      RGWAccessControlPolicy * const user_acl,
+                                      const RGWAccessControlPolicy& user_acl,
                                       const int perm)
 {
   if (s->identity->get_identity_type() == TYPE_ROLE)
     return false;
 
-  /* S3 doesn't support account ACLs. */
-  if (!user_acl)
+  /* S3 doesn't support account ACLs, so user_acl will be uninitialized. */
+  if (user_acl.get_owner().id.empty())
     return true;
 
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  return user_acl->verify_permission(dpp, *s->identity, perm, perm);
+  return user_acl.verify_permission(dpp, *s->identity, perm, perm);
 }
 
 bool verify_user_permission(const DoutPrefixProvider* dpp,
@@ -1199,7 +1199,7 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             bool mandatory_policy)
 {
   perm_state_from_req_state ps(s);
-  return verify_user_permission(dpp, &ps, s->user_acl.get(), s->iam_user_policies, s->session_policies, res, op, mandatory_policy);
+  return verify_user_permission(dpp, &ps, s->user_acl, s->iam_user_policies, s->session_policies, res, op, mandatory_policy);
 }
 
 bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp, 
@@ -1207,7 +1207,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
                                       const int perm)
 {
   perm_state_from_req_state ps(s);
-  return verify_user_permission_no_policy(dpp, &ps, s->user_acl.get(), perm);
+  return verify_user_permission_no_policy(dpp, &ps, s->user_acl, perm);
 }
 
 bool verify_requester_payer_permission(struct perm_state_base *s)
@@ -1233,8 +1233,8 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               struct perm_state_base * const s,
 			      const rgw_bucket& bucket,
-                              RGWAccessControlPolicy * const user_acl,
-                              RGWAccessControlPolicy * const bucket_acl,
+                              const RGWAccessControlPolicy& user_acl,
+                              const RGWAccessControlPolicy& bucket_acl,
 			      const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& identity_policies,
                               const vector<Policy>& session_policies,
@@ -1292,8 +1292,8 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               req_state * const s,
 			      const rgw_bucket& bucket,
-                              RGWAccessControlPolicy * const user_acl,
-                              RGWAccessControlPolicy * const bucket_acl,
+                              const RGWAccessControlPolicy& user_acl,
+                              const RGWAccessControlPolicy& bucket_acl,
 			      const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& user_policies,
                               const vector<Policy>& session_policies,
@@ -1307,31 +1307,25 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 }
 
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
-					RGWAccessControlPolicy * const user_acl,
-					RGWAccessControlPolicy * const bucket_acl,
+					const RGWAccessControlPolicy& user_acl,
+					const RGWAccessControlPolicy& bucket_acl,
 					const int perm)
 {
-  if (!bucket_acl)
-    return false;
-
   if ((perm & (int)s->perm_mask) != perm)
     return false;
 
-  if (bucket_acl->verify_permission(dpp, *s->identity, perm, perm,
-                                    s->get_referer(),
-                                    s->bucket_access_conf &&
-                                    s->bucket_access_conf->ignore_public_acls()))
+  if (bucket_acl.verify_permission(dpp, *s->identity, perm, perm,
+                                   s->get_referer(),
+                                   s->bucket_access_conf &&
+                                   s->bucket_access_conf->ignore_public_acls()))
     return true;
 
-  if (!user_acl)
-    return false;
-
-  return user_acl->verify_permission(dpp, *s->identity, perm, perm);
+  return user_acl.verify_permission(dpp, *s->identity, perm, perm);
 }
 
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state * const s,
-					RGWAccessControlPolicy * const user_acl,
-					RGWAccessControlPolicy * const bucket_acl,
+					const RGWAccessControlPolicy& user_acl,
+					const RGWAccessControlPolicy& bucket_acl,
 					const int perm)
 {
   perm_state_from_req_state ps(s);
@@ -1351,8 +1345,8 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state
 
   return verify_bucket_permission_no_policy(dpp,
                                             &ps,
-                                            s->user_acl.get(),
-                                            s->bucket_acl.get(),
+                                            s->user_acl,
+                                            s->bucket_acl,
                                             perm);
 }
 
@@ -1368,8 +1362,8 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s
   return verify_bucket_permission(dpp, 
                                   &ps,
                                   s->bucket->get_key(),
-                                  s->user_acl.get(),
-                                  s->bucket_acl.get(),
+                                  s->user_acl,
+                                  s->bucket_acl,
                                   s->iam_policy,
                                   s->iam_user_policies,
                                   s->session_policies,
@@ -1421,7 +1415,7 @@ int verify_bucket_owner_or_policy(req_state* const s,
       identity_policy_res == Effect::Allow ||
       (e == Effect::Pass &&
        identity_policy_res == Effect::Pass &&
-       s->auth.identity->is_owner_of(s->bucket_owner.get_id()))) {
+       s->auth.identity->is_owner_of(s->bucket_owner.id))) {
     return 0;
   } else {
     return -EACCES;
@@ -1432,8 +1426,8 @@ int verify_bucket_owner_or_policy(req_state* const s,
 static inline bool check_deferred_bucket_perms(const DoutPrefixProvider* dpp,
                                                struct perm_state_base * const s,
 					       const rgw_bucket& bucket,
-					       RGWAccessControlPolicy * const user_acl,
-					       RGWAccessControlPolicy * const bucket_acl,
+					       const RGWAccessControlPolicy& user_acl,
+					       const RGWAccessControlPolicy& bucket_acl,
 					       const boost::optional<Policy>& bucket_policy,
                  const vector<Policy>& identity_policies,
                  const vector<Policy>& session_policies,
@@ -1446,8 +1440,8 @@ static inline bool check_deferred_bucket_perms(const DoutPrefixProvider* dpp,
 
 static inline bool check_deferred_bucket_only_acl(const DoutPrefixProvider* dpp,
                                                   struct perm_state_base * const s,
-						  RGWAccessControlPolicy * const user_acl,
-						  RGWAccessControlPolicy * const bucket_acl,
+						  const RGWAccessControlPolicy& user_acl,
+						  const RGWAccessControlPolicy& bucket_acl,
 						  const uint8_t deferred_check,
 						  const int perm)
 {
@@ -1457,9 +1451,9 @@ static inline bool check_deferred_bucket_only_acl(const DoutPrefixProvider* dpp,
 
 bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
 			      const rgw_obj& obj,
-                              RGWAccessControlPolicy * const user_acl,
-                              RGWAccessControlPolicy * const bucket_acl,
-                              RGWAccessControlPolicy * const object_acl,
+                              const RGWAccessControlPolicy& user_acl,
+                              const RGWAccessControlPolicy& bucket_acl,
+                              const RGWAccessControlPolicy& object_acl,
                               const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& identity_policies,
                               const vector<Policy>& session_policies,
@@ -1512,14 +1506,10 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
     return true;
   }
 
-  if (!object_acl) {
-    return false;
-  }
-
-  bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm,
-					   nullptr, /* http_referrer */
-					   s->bucket_access_conf &&
-					   s->bucket_access_conf->ignore_public_acls());
+  bool ret = object_acl.verify_permission(dpp, *s->identity, s->perm_mask, perm,
+					  nullptr, /* http_referrer */
+					  s->bucket_access_conf &&
+					  s->bucket_access_conf->ignore_public_acls());
   if (ret) {
     return true;
   }
@@ -1541,21 +1531,18 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
 
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  if (bucket_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm,
-                                    s->get_referer()))
+  if (bucket_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm,
+                                   s->get_referer()))
     return true;
 
-  if (!user_acl)
-    return false;
-
-  return user_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm);
+  return user_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm);
 }
 
 bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s,
 			      const rgw_obj& obj,
-                              RGWAccessControlPolicy * const user_acl,
-                              RGWAccessControlPolicy * const bucket_acl,
-                              RGWAccessControlPolicy * const object_acl,
+                              const RGWAccessControlPolicy& user_acl,
+                              const RGWAccessControlPolicy& bucket_acl,
+                              const RGWAccessControlPolicy& object_acl,
                               const boost::optional<Policy>& bucket_policy,
                               const vector<Policy>& identity_policies,
                               const vector<Policy>& session_policies,
@@ -1570,9 +1557,9 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
 
 bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
                                         struct perm_state_base * const s,
-					RGWAccessControlPolicy * const user_acl,
-					RGWAccessControlPolicy * const bucket_acl,
-					RGWAccessControlPolicy * const object_acl,
+					const RGWAccessControlPolicy& user_acl,
+					const RGWAccessControlPolicy& bucket_acl,
+					const RGWAccessControlPolicy& object_acl,
 					const int perm)
 {
   if (check_deferred_bucket_only_acl(dpp, s, user_acl, bucket_acl, RGW_DEFER_TO_BUCKET_ACLS_RECURSE, perm) ||
@@ -1580,14 +1567,10 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
     return true;
   }
 
-  if (!object_acl) {
-    return false;
-  }
-
-  bool ret = object_acl->verify_permission(dpp, *s->identity, s->perm_mask, perm,
-					   nullptr, /* http referrer */
-					   s->bucket_access_conf &&
-					   s->bucket_access_conf->ignore_public_acls());
+  bool ret = object_acl.verify_permission(dpp, *s->identity, s->perm_mask, perm,
+					  nullptr, /* http referrer */
+					  s->bucket_access_conf &&
+					  s->bucket_access_conf->ignore_public_acls());
   if (ret) {
     return true;
   }
@@ -1609,14 +1592,11 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
-  if (bucket_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm,
-                                    s->get_referer()))
+  if (bucket_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm,
+                                   s->get_referer()))
     return true;
 
-  if (!user_acl)
-    return false;
-
-  return user_acl->verify_permission(dpp, *s->identity, swift_perm, swift_perm);
+  return user_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm);
 }
 
 bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s, int perm)
@@ -1628,9 +1608,9 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state
 
   return verify_object_permission_no_policy(dpp,
                                             &ps,
-                                            s->user_acl.get(),
-                                            s->bucket_acl.get(),
-                                            s->object_acl.get(),
+                                            s->user_acl,
+                                            s->bucket_acl,
+                                            s->object_acl,
                                             perm);
 }
 
@@ -1641,9 +1621,9 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state *s, uint6
   return verify_object_permission(dpp,
                                   &ps,
                                   rgw_obj(s->bucket->get_key(), s->object->get_key()),
-                                  s->user_acl.get(),
-                                  s->bucket_acl.get(),
-                                  s->object_acl.get(),
+                                  s->user_acl,
+                                  s->bucket_acl,
+                                  s->object_acl,
                                   s->iam_policy,
                                   s->iam_user_policies,
                                   s->session_policies,

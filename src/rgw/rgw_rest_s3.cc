@@ -2383,17 +2383,19 @@ void RGWStatBucket_ObjStore_S3::send_response()
 }
 
 static int create_s3_policy(req_state *s, rgw::sal::Driver* driver,
-			    RGWAccessControlPolicy_S3& s3policy,
-			    ACLOwner& owner)
+			    RGWAccessControlPolicy& policy,
+			    const ACLOwner& owner)
 {
   if (s->has_acl_header) {
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return s3policy.create_from_headers(s, driver, s->info.env, owner);
+    return rgw::s3::create_policy_from_headers(s, driver, owner,
+                                               *s->info.env, policy);
   }
 
-  return s3policy.create_canned(owner, s->bucket_owner, s->canned_acl);
+  return rgw::s3::create_canned_acl(owner, s->bucket_owner,
+                                    s->canned_acl, policy);
 }
 
 class RGWLocationConstraint : public XMLObj
@@ -2447,7 +2449,6 @@ public:
 
 int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
 {
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
 
   int r;
@@ -2456,11 +2457,9 @@ int RGWCreateBucket_ObjStore_S3::get_params(optional_yield y)
     if (r) return r;
   }
 
-  r = create_s3_policy(s, driver, s3policy, s->owner);
+  r = create_s3_policy(s, driver, policy, s->owner);
   if (r < 0)
     return r;
-
-  policy = s3policy;
 
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
@@ -2589,12 +2588,9 @@ int RGWPutObj_ObjStore_S3::get_params(optional_yield y)
     return ret;
   }
 
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
-  ret = create_s3_policy(s, driver, s3policy, s->owner);
+  ret = create_s3_policy(s, driver, policy, s->owner);
   if (ret < 0)
     return ret;
-
-  policy = s3policy;
 
   if_match = s->info.env->get("HTTP_IF_MATCH");
   if_nomatch = s->info.env->get("HTTP_IF_NONE_MATCH");
@@ -3162,8 +3158,8 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
       return -EACCES;
     } else {
       /* Populate the owner info. */
-      s->owner.set_id(s->user->get_id());
-      s->owner.set_name(s->user->get_display_name());
+      s->owner.id = s->user->get_id();
+      s->owner.display_name = s->user->get_display_name();
       ldpp_dout(this, 20) << "Successful Signature Verification!" << dendl;
     }
 
@@ -3215,14 +3211,13 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
   string canned_acl;
   part_str(parts, "acl", &canned_acl);
 
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
   ldpp_dout(this, 20) << "canned_acl=" << canned_acl << dendl;
-  if (s3policy.create_canned(s->owner, s->bucket_owner, canned_acl) < 0) {
+  int r = rgw::s3::create_canned_acl(s->owner, s->bucket_owner,
+                                     canned_acl, policy);
+  if (r < 0) {
     err_msg = "Bad canned ACLs";
-    return -EINVAL;
+    return r;
   }
-
-  policy = s3policy;
 
   return 0;
 }
@@ -3450,16 +3445,8 @@ void RGWDeleteObj_ObjStore_S3::send_response()
 
 int RGWCopyObj_ObjStore_S3::init_dest_policy()
 {
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
-
   /* build a policy for the target object */
-  int r = create_s3_policy(s, driver, s3policy, s->owner);
-  if (r < 0)
-    return r;
-
-  dest_policy = s3policy;
-
-  return 0;
+  return create_s3_policy(s, driver, dest_policy, s->owner);
 }
 
 int RGWCopyObj_ObjStore_S3::get_params(optional_yield y)
@@ -3621,25 +3608,16 @@ int RGWPutACLs_ObjStore_S3::get_params(optional_yield y)
   return ret;
 }
 
-int RGWPutACLs_ObjStore_S3::get_policy_from_state(rgw::sal::Driver* driver,
-						  req_state *s,
-						  stringstream& ss)
+int RGWPutACLs_ObjStore_S3::get_policy_from_state(const ACLOwner& owner,
+                                                  RGWAccessControlPolicy& policy)
 {
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
-
   // bucket-* canned acls do not apply to bucket
   if (rgw::sal::Object::empty(s->object.get())) {
     if (s->canned_acl.find("bucket") != string::npos)
       s->canned_acl.clear();
   }
 
-  int r = create_s3_policy(s, driver, s3policy, owner);
-  if (r < 0)
-    return r;
-
-  s3policy.to_xml(ss);
-
-  return 0;
+  return create_s3_policy(s, driver, policy, owner);
 }
 
 void RGWPutACLs_ObjStore_S3::send_response()
@@ -3972,14 +3950,7 @@ int RGWInitMultipart_ObjStore_S3::get_params(optional_yield y)
     return ret;
   }
 
-  RGWAccessControlPolicy_S3 s3policy(s->cct);
-  ret = create_s3_policy(s, driver, s3policy, s->owner);
-  if (ret < 0)
-    return ret;
-
-  policy = s3policy;
-
-  return 0;
+  return create_s3_policy(s, driver, policy, s->owner);
 }
 
 void RGWInitMultipart_ObjStore_S3::send_response()
@@ -4107,7 +4078,7 @@ void RGWListMultipart_ObjStore_S3::send_response()
     s->formatter->dump_string("IsTruncated", (truncated ? "true" : "false"));
 
     ACLOwner& owner = policy.get_owner();
-    dump_owner(s, owner.get_id(), owner.get_display_name());
+    dump_owner(s, owner.id, owner.display_name);
 
     for (; iter != upload->get_parts().end(); ++iter) {
       rgw::sal::MultipartPart* part = iter->second.get();
@@ -4170,8 +4141,8 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
       }
       s->formatter->dump_string("UploadId", upload->get_upload_id());
       const ACLOwner& owner = upload->get_owner();
-      dump_owner(s, owner.get_id(), owner.get_display_name(), "Initiator");
-      dump_owner(s, owner.get_id(), owner.get_display_name()); // Owner
+      dump_owner(s, owner.id, owner.display_name, "Initiator");
+      dump_owner(s, owner.id, owner.display_name); // Owner
       s->formatter->dump_string("StorageClass", "STANDARD");
       dump_time(s, "Initiated", upload->get_mtime());
       s->formatter->close_section();
@@ -5098,8 +5069,8 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
   const auto ret = rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s, y);
   if (ret == 0) {
     /* Populate the owner info. */
-    s->owner.set_id(s->user->get_id());
-    s->owner.set_name(s->user->get_display_name());
+    s->owner.id = s->user->get_id();
+    s->owner.display_name = s->user->get_display_name();
   }
   return ret;
 }

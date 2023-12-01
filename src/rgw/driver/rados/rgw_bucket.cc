@@ -882,17 +882,6 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, const DoutPrefixProvider *d
 }
 
 
-int RGWBucket::policy_bl_to_stream(bufferlist& bl, ostream& o)
-{
-  RGWAccessControlPolicy_S3 policy(g_ceph_context);
-  int ret = decode_bl(bl, policy);
-  if (ret < 0) {
-    ldout(driver->ctx(),0) << "failed to decode RGWAccessControlPolicy" << dendl;
-  }
-  policy.to_xml(o);
-  return 0;
-}
-
 int rgw_object_get_attr(const DoutPrefixProvider *dpp,
 			rgw::sal::Driver* driver, rgw::sal::Object* obj,
 			const char* attr_name, bufferlist& out_bl, optional_yield y)
@@ -961,7 +950,7 @@ int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState
 int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, const DoutPrefixProvider *dpp, optional_yield y)
 {
-  RGWAccessControlPolicy policy(driver->ctx());
+  RGWAccessControlPolicy policy;
 
   int ret = get_policy(driver, op_state, policy, dpp, y);
   if (ret < 0)
@@ -983,13 +972,13 @@ int RGWBucketAdminOp::get_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState
 int RGWBucketAdminOp::dump_s3_policy(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_state,
                   ostream& os, const DoutPrefixProvider *dpp, optional_yield y)
 {
-  RGWAccessControlPolicy_S3 policy(driver->ctx());
+  RGWAccessControlPolicy policy;
 
   int ret = get_policy(driver, op_state, policy, dpp, y);
   if (ret < 0)
     return ret;
 
-  policy.to_xml(os);
+  rgw::s3::write_policy_xml(policy, os);
 
   return 0;
 }
@@ -1068,9 +1057,9 @@ int RGWBucketAdminOp::link(rgw::sal::Driver* driver, RGWBucketAdminOpState& op_s
     return -EIO;
   }
 
-  int r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->unlink_bucket(owner.get_id(), old_bucket->get_info().bucket, y, dpp, false);
+  int r = static_cast<rgw::sal::RadosStore*>(driver)->ctl()->bucket->unlink_bucket(owner.id, old_bucket->get_info().bucket, y, dpp, false);
   if (r < 0) {
-    set_err_msg(err, "could not unlink policy from user " + owner.get_id().to_str());
+    set_err_msg(err, "could not unlink policy from user " + owner.id.to_str());
     return r;
   }
 

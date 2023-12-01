@@ -354,7 +354,7 @@ namespace rgw::sal {
     Attrs attrs = get_attrs();
     attrs[RGW_ATTR_ACL] = aclbl;
 
-    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, &(acl.get_owner().get_id()), &attrs, nullptr, nullptr);
+    ret = store->getDB()->update_bucket(dpp, "attrs", info, false, &acl.get_owner().id, &attrs, nullptr, nullptr);
 
     return ret;
   }
@@ -701,7 +701,7 @@ namespace rgw::sal {
 
   int DBObject::DBDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
   {
-    parent_op.params.bucket_owner = params.bucket_owner.get_id();
+    parent_op.params.bucket_owner = params.bucket_owner.id;
     parent_op.params.versioning_status = params.versioning_status;
     parent_op.params.obj_owner = params.obj_owner;
     parent_op.params.olh_epoch = params.olh_epoch;
@@ -793,7 +793,7 @@ namespace rgw::sal {
     int ret;
 
     std::unique_ptr<rgw::sal::Object::DeleteOp> del_op = meta_obj->get_delete_op();
-    del_op->params.bucket_owner = bucket->get_info().owner;
+    del_op->params.bucket_owner.id = bucket->get_info().owner;
     del_op->params.versioning_status = 0;
 
     // Since the data objects are associated with meta obj till
@@ -833,7 +833,7 @@ namespace rgw::sal {
     DB::Object::Write obj_op(&op_target);
 
     /* Create meta object */
-    obj_op.meta.owner = owner.get_id();
+    obj_op.meta.owner = owner.id;
     obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
     obj_op.meta.mtime = &mtime;
@@ -1012,7 +1012,7 @@ namespace rgw::sal {
     DB::Object::Write obj_op(&op_target);
     ret = obj_op.prepare(dpp);
 
-    obj_op.meta.owner = owner.get_id();
+    obj_op.meta.owner = owner.id;
     obj_op.meta.flags = PUT_OBJ_CREATE;
     obj_op.meta.category = RGWObjCategory::Main;
     obj_op.meta.modify_tail = true;

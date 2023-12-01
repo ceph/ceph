@@ -94,7 +94,7 @@ public:
   void set_extra_headers(const std::map<std::string, std::string>& extra_headers);
   int set_obj_attrs(const DoutPrefixProvider *dpp, std::map<std::string, bufferlist>& rgw_attrs);
   void set_http_attrs(const std::map<std::string, std::string>& http_attrs);
-  void set_policy(RGWAccessControlPolicy& policy);
+  void set_policy(const RGWAccessControlPolicy& policy);
   int sign(const DoutPrefixProvider *dpp, RGWAccessKey& key, const bufferlist *opt_content);
 
   const std::string& get_url() { return url; }

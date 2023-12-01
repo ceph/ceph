@@ -355,8 +355,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
   string req_id = driver->zone_unique_id(driver->get_new_req_id());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = driver->get_atomic_writer(dpp, y, obj.get(),
-				       owner.get_id(),
+  processor = driver->get_atomic_writer(dpp, y, obj.get(), owner.id,
 				       nullptr, olh_epoch, req_id);
 
   int ret = processor->prepare(y);
@@ -413,9 +412,10 @@ int RGWDataAccess::Object::put(bufferlist& data,
   }
 
   if (!aclbl) {
-    RGWAccessControlPolicy_S3 policy(cct);
+    RGWAccessControlPolicy policy;
 
-    policy.create_canned(bucket->policy.get_owner(), bucket->policy.get_owner(), string()); /* default private policy */
+    const auto& owner = bucket->policy.get_owner();
+    policy.create_default(owner.id, owner.display_name); // default private policy
 
     policy.encode(aclbl.emplace());
   }
