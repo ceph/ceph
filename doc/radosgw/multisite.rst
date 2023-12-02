@@ -464,8 +464,8 @@ For example:
 
 .. important:: The following steps assume a multi-site configuration that uses
    newly installed systems that have not yet begun storing data. **DO NOT
-   DELETE the ``default`` zone or its pools** if you are already using it to
-   store data, or the data will be irretrievably lost.
+   DELETE the** ``default`` **zone or its pools** if you are already using it
+   to store data, or the data will be irretrievably lost.
 
 Delete the default zone if needed:
 
