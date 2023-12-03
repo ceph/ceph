@@ -171,14 +171,6 @@ public:
 };
 WRITE_CLASS_ENCODER(RGWUserBuckets)
 
-class RGWBucketMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
-public:
-  virtual ~RGWBucketMetadataHandlerBase() {}
-  virtual void init(RGWSI_Bucket *bucket_svc,
-                    RGWBucketCtl *bucket_ctl) = 0;
-
-};
-
 class RGWBucketInstanceMetadataHandlerBase : public RGWMetadataHandler_GenericMetaBE {
 public:
   virtual ~RGWBucketInstanceMetadataHandlerBase() {}
@@ -187,20 +179,22 @@ public:
                     RGWSI_BucketIndex *bi_svc) = 0;
 };
 
-class RGWBucketMetaHandlerAllocator {
-public:
-  static RGWBucketMetadataHandlerBase *alloc(librados::Rados& rados);
-};
+// bucket entrypoint metadata handler factory
+auto create_bucket_metadata_handler(librados::Rados& rados,
+                                    RGWSI_Bucket* svc_bucket,
+                                    RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>;
 
 class RGWBucketInstanceMetaHandlerAllocator {
 public:
   static RGWBucketInstanceMetadataHandlerBase *alloc(rgw::sal::Driver* driver);
 };
 
-class RGWArchiveBucketMetaHandlerAllocator {
-public:
-  static RGWBucketMetadataHandlerBase *alloc(librados::Rados& rados);
-};
+// archive bucket entrypoint metadata handler factory
+auto create_archive_bucket_metadata_handler(librados::Rados& rados,
+                                            RGWSI_Bucket* svc_bucket,
+                                            RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>;
 
 class RGWArchiveBucketInstanceMetaHandlerAllocator {
 public:
@@ -441,10 +435,8 @@ class RGWBucketCtl {
     RGWUserCtl *user{nullptr};
   } ctl;
 
-  RGWBucketMetadataHandler *bm_handler;
   RGWBucketInstanceMetadataHandler *bmi_handler;
 
-  RGWSI_Bucket_BE_Handler bucket_be_handler; /* bucket backend handler */
   RGWSI_BucketInstance_BE_Handler bi_be_handler; /* bucket instance backend handler */
 
 public:
@@ -455,7 +447,6 @@ public:
                RGWSI_User* user_svc);
 
   void init(RGWUserCtl *user_ctl,
-            RGWBucketMetadataHandler *_bm_handler,
             RGWBucketInstanceMetadataHandler *_bmi_handler,
             RGWDataChangesLog *datalog,
             const DoutPrefixProvider *dpp);

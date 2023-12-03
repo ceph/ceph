@@ -17,9 +17,12 @@
 
 #pragma once
 
+#include <memory>
 #include "rgw_service.h"
 
 #include "svc_bucket_types.h"
+
+class RGWMetadataLister;
 
 class RGWSI_Bucket : public RGWServiceInstance
 {
@@ -30,8 +33,11 @@ public:
   static std::string get_entrypoint_meta_key(const rgw_bucket& bucket);
   static std::string get_bi_meta_key(const rgw_bucket& bucket);
 
-  virtual RGWSI_Bucket_BE_Handler& get_ep_be_handler() = 0;
   virtual RGWSI_BucketInstance_BE_Handler& get_bi_be_handler() = 0;
+
+  virtual int create_entrypoint_lister(const DoutPrefixProvider* dpp,
+                                       const std::string& marker,
+                                       std::unique_ptr<RGWMetadataLister>& lister) = 0;
 
   virtual int read_bucket_entrypoint_info(const std::string& key,
                                           RGWBucketEntryPoint *entry_point,

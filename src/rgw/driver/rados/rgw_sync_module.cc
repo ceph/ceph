@@ -16,9 +16,12 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-RGWMetadataHandler *RGWSyncModuleInstance::alloc_bucket_meta_handler(librados::Rados& rados)
+auto RGWSyncModuleInstance::alloc_bucket_meta_handler(librados::Rados& rados,
+                                                      RGWSI_Bucket* svc_bucket,
+                                                      RGWBucketCtl* ctl_bucket)
+    -> std::unique_ptr<RGWMetadataHandler>
 {
-  return RGWBucketMetaHandlerAllocator::alloc(rados);
+  return create_bucket_metadata_handler(rados, svc_bucket, ctl_bucket);
 }
 
 RGWBucketInstanceMetadataHandlerBase* RGWSyncModuleInstance::alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver)
