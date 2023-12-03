@@ -91,8 +91,11 @@ int RGWRestRole::verify_permission(optional_yield y)
     return op_ret;
   }
 
-  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
-    _role = std::move(role);
+  int ret;
+  if (s->auth.identity->get_identity_type() != TYPE_ROLE &&
+        (ret = check_caps(s->user->get_caps())) != 0) {
+    ldpp_dout(this, 20) << "ERROR: user " << s->user->get_id()
+      << " does not have the required capabilities" << dendl;
     return ret;
   }
 
