@@ -154,21 +154,6 @@ your CRUSH map. This procedure shows how to do this.
       ceph mon set_location e datacenter=site3
       ceph mon enable_stretch_mode e stretch_rule datacenter
 
-#. Set the replication levels for each pool. Here we are setting the standard
-   replication levels for a stretch mode cluster. Where ``4`` copies will be kept
-   in total, with a minimum of ``2`` in each data center:
-
-   .. prompt:: bash $
-
-      ceph osd pool set ceph_data min_size 2
-      set pool 2 min_size to 2
-      ceph osd pool set ceph_data size 4
-      set pool 2 size to 4
-      ceph osd pool set ceph_metadata min_size 2
-      set pool 3 min_size to 2
-      ceph osd pool set ceph_metadata size 4
-      set pool 3 size to 4
-
 When stretch mode is enabled, PGs will become active only when they peer
 across data centers (or across whichever CRUSH bucket type was specified),
 assuming both are alive. Pools will increase in size from the default ``3`` to
