@@ -6690,7 +6690,13 @@ int main(int argc, const char **argv)
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, path,
+
+      // if a user is given via --uid option, it should be a valid user
+      if (!rgw::sal::User::empty(user) && !user_op.has_existing_user()) {
+          cerr << "ERROR: could not find user: " << user << std::endl;
+          return -ENOENT;
+      }
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, user->get_id().id, path,
                                                                  assume_role_doc, max_session_duration);
       ret = role->create(dpp(), true, "", null_yield);
       if (ret < 0) {
@@ -6766,7 +6772,7 @@ int main(int argc, const char **argv)
   case OPT::ROLE_LIST:
     {
       vector<std::unique_ptr<rgw::sal::RGWRole>> result;
-      ret = driver->get_roles(dpp(), null_yield, path_prefix, tenant, result);
+      ret = driver->get_roles(dpp(), null_yield, path_prefix, tenant, user->get_id().id, result);
       if (ret < 0) {
         return -ret;
       }

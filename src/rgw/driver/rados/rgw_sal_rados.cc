@@ -1340,6 +1340,10 @@ int RadosStore::get_roles(const DoutPrefixProvider *dpp,
       if (ret < 0) {
         return ret;
       }
+
+      if (! owner.empty() && role->get_owner() != owner) {
+        continue;
+      }
       roles.push_back(std::move(role));
     }
   }

@@ -249,6 +249,7 @@ void RGWCreateRole::execute(optional_yield y)
   std::string user_tenant = s->user->get_tenant();
   std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
 							    user_tenant,
+							    s->user->get_id().id,
 							    role_path,
 							    trust_policy,
 							    max_session_duration,
@@ -572,7 +573,7 @@ void RGWListRoles::execute(optional_yield y)
     return;
   }
   vector<std::unique_ptr<rgw::sal::RGWRole>> result;
-  op_ret = driver->get_roles(s, y, path_prefix, s->user->get_tenant(), result);
+  op_ret = driver->get_roles(s, y, path_prefix, s->user->get_tenant(), "", result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");
