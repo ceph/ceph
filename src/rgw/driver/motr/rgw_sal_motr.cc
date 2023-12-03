@@ -3024,6 +3024,7 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
 
 std::unique_ptr<RGWRole> MotrStore::get_role(std::string name,
     std::string tenant,
+    std::string owner,
     std::string path,
     std::string trust_policy,
     std::string max_session_duration_str,
@@ -3049,6 +3050,7 @@ int MotrStore::get_roles(const DoutPrefixProvider *dpp,
     optional_yield y,
     const std::string& path_prefix,
     const std::string& tenant,
+    const std::string& owner,
     vector<std::unique_ptr<RGWRole>>& roles)
 {
   return 0;

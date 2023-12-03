@@ -1267,12 +1267,13 @@ std::unique_ptr<LuaManager> RadosStore::get_lua_manager(const std::string& luaro
 
 std::unique_ptr<RGWRole> RadosStore::get_role(std::string name,
 					      std::string tenant,
+					      std::string owner,
 					      std::string path,
 					      std::string trust_policy,
 					      std::string max_session_duration_str,
                 std::multimap<std::string,std::string> tags)
 {
-  return std::make_unique<RadosRole>(this, name, tenant, path, trust_policy, max_session_duration_str, tags);
+  return std::make_unique<RadosRole>(this, name, tenant, owner, path, trust_policy, max_session_duration_str, tags);
 }
 
 std::unique_ptr<RGWRole> RadosStore::get_role(std::string id)
@@ -1289,6 +1290,7 @@ int RadosStore::get_roles(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  const std::string& path_prefix,
 			  const std::string& tenant,
+			  const std::string& owner,
 			  vector<std::unique_ptr<RGWRole>>& roles)
 {
   auto pool = svc()->zone->get_zone_params().roles_pool;

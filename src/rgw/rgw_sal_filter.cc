@@ -390,12 +390,13 @@ std::unique_ptr<LuaManager> FilterDriver::get_lua_manager(const std::string& lua
 
 std::unique_ptr<RGWRole> FilterDriver::get_role(std::string name,
 					      std::string tenant,
+					      std::string owner,
 					      std::string path,
 					      std::string trust_policy,
 					      std::string max_session_duration_str,
                 std::multimap<std::string,std::string> tags)
 {
-  return next->get_role(name, tenant, path, trust_policy, max_session_duration_str, tags);
+  return next->get_role(name, tenant, owner, path, trust_policy, max_session_duration_str, tags);
 }
 
 std::unique_ptr<RGWRole> FilterDriver::get_role(std::string id)
@@ -412,9 +413,10 @@ int FilterDriver::get_roles(const DoutPrefixProvider *dpp,
 			   optional_yield y,
 			   const std::string& path_prefix,
 			   const std::string& tenant,
+			   const std::string& owner,
 			   std::vector<std::unique_ptr<RGWRole>>& roles)
 {
-  return next->get_roles(dpp, y, path_prefix, tenant, roles);
+  return next->get_roles(dpp, y, path_prefix, tenant, owner, roles);
 }
 
 std::unique_ptr<RGWOIDCProvider> FilterDriver::get_oidc_provider()

@@ -25,6 +25,7 @@ struct RGWRoleInfo
   std::string trust_policy;
   std::map<std::string, std::string> perm_policy_map;
   std::string tenant;
+  std::string owner;
   uint64_t max_session_duration;
   std::multimap<std::string,std::string> tags;
   std::map<std::string, bufferlist> attrs;
@@ -36,7 +37,7 @@ struct RGWRoleInfo
   ~RGWRoleInfo() = default;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(id, bl);
     encode(name, bl);
     encode(path, bl);
@@ -46,11 +47,12 @@ struct RGWRoleInfo
     encode(perm_policy_map, bl);
     encode(tenant, bl);
     encode(max_session_duration, bl);
+    encode(owner, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(id, bl);
     decode(name, bl);
     decode(path, bl);
@@ -63,6 +65,9 @@ struct RGWRoleInfo
     }
     if (struct_v >= 3) {
       decode(max_session_duration, bl);
+    }
+    if (struct_v >= 4) {
+      decode(owner, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -98,6 +103,7 @@ public:
 
   RGWRole(std::string name,
               std::string tenant,
+              std::string owner,
               std::string path="",
               std::string trust_policy="",
               std::string max_session_duration_str="",
@@ -114,6 +120,7 @@ public:
   const std::string& get_id() const { return info.id; }
   const std::string& get_name() const { return info.name; }
   const std::string& get_tenant() const { return info.tenant; }
+  const std::string& get_owner() const { return info.owner; }
   const std::string& get_path() const { return info.path; }
   const std::string& get_create_date() const { return info.creation_date; }
   const std::string& get_assume_role_policy() const { return info.trust_policy;}

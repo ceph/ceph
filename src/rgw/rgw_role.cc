@@ -39,6 +39,7 @@ const string RGWRole::role_arn_prefix = "arn:aws:iam::";
 
 void RGWRoleInfo::dump(Formatter *f) const
 {
+  encode_json("Owner", owner , f);
   encode_json("RoleId", id , f);
   std::string role_name;
   if (tenant.empty()) {
@@ -118,6 +119,7 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
 
 RGWRole::RGWRole(std::string name,
               std::string tenant,
+              std::string owner,
               std::string path,
               std::string trust_policy,
               std::string max_session_duration_str,
@@ -127,6 +129,7 @@ RGWRole::RGWRole(std::string name,
   info.path = std::move(path);
   info.trust_policy = std::move(trust_policy);
   info.tenant = std::move(tenant);
+  info.owner = std::move(owner);
   info.tags = std::move(tags);
   if (this->info.path.empty())
     this->info.path = "/";

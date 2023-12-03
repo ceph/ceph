@@ -1403,6 +1403,7 @@ namespace rgw::sal {
 
   std::unique_ptr<RGWRole> DBStore::get_role(std::string name,
       std::string tenant,
+      std::string owner,
       std::string path,
       std::string trust_policy,
       std::string max_session_duration_str,
@@ -1428,6 +1429,7 @@ namespace rgw::sal {
       optional_yield y,
       const std::string& path_prefix,
       const std::string& tenant,
+      const std::string& owner,
       vector<std::unique_ptr<RGWRole>>& roles)
   {
     return 0;

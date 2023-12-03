@@ -982,7 +982,7 @@ class DaosStore : public StoreDriver {
 
   std::unique_ptr<LuaManager> get_lua_manager(const DoutPrefixProvider *dpp = nullptr, const std::string& luarocks_path = "") override;
   virtual std::unique_ptr<RGWRole> get_role(
-      std::string name, std::string tenant, std::string path = "",
+      std::string name, std::string tenant, std::string owner = "", std::string path = "",
       std::string trust_policy = "", std::string max_session_duration_str = "",
       std::multimap<std::string, std::string> tags = {}) override;
   virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
@@ -990,6 +990,7 @@ class DaosStore : public StoreDriver {
   virtual int get_roles(const DoutPrefixProvider* dpp, optional_yield y,
                         const std::string& path_prefix,
                         const std::string& tenant,
+                        const std::string& owner,
                         std::vector<std::unique_ptr<RGWRole>>& roles) override;
   virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() override;
   virtual int get_oidc_providers(
