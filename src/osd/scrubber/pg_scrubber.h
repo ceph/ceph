@@ -258,14 +258,6 @@ class PgScrubber : public ScrubPgIF,
    */
   void handle_scrub_reserve_msgs(OpRequestRef op) final;
 
-  /**
-   *  we are a replica being asked by the Primary to reserve OSD resources for
-   *  scrubbing
-   */
-  void handle_scrub_reserve_request(OpRequestRef op);
-
-  void handle_scrub_reserve_release(OpRequestRef op);
-
   // managing scrub op registration
 
   void update_scrub_job(const requested_scrub_t& request_flags) final;
@@ -333,6 +325,8 @@ class PgScrubber : public ScrubPgIF,
   void map_from_replica(OpRequestRef op) final;
 
   void on_new_interval() final;
+
+  void on_replica_activate() final;
 
   void scrub_clear_state() final;
 
@@ -408,6 +402,9 @@ class PgScrubber : public ScrubPgIF,
     return m_pg->recovery_state.is_primary();
   }
 
+  /// is this scrub more than just regular periodic scrub?
+  [[nodiscard]] bool is_high_priority() const final;
+
   void set_state_name(const char* name) final
   {
     m_fsm_state_name = name;
@@ -476,12 +473,8 @@ class PgScrubber : public ScrubPgIF,
   [[nodiscard]] bool was_epoch_changed() const final;
 
   void set_queued_or_active() final;
-  /// Clears `m_queued_or_active` and restarts snaptrimming
+  /// Clears `m_queued_or_active` and restarts snap-trimming
   void clear_queued_or_active() final;
-
-  void dec_scrubs_remote() final;
-
-  void advance_token() final;
 
   void mark_local_map_ready() final;
 
@@ -566,6 +559,9 @@ class PgScrubber : public ScrubPgIF,
   bool is_token_current(Scrub::act_token_t received_token);
 
   void requeue_waiting() const { m_pg->requeue_ops(m_pg->waiting_for_scrub); }
+
+  /// Modify the token identifying the current replica scrub operation
+  void advance_token();
 
   /**
    *  mark down some parameters of the initiated scrub:
@@ -675,11 +671,20 @@ class PgScrubber : public ScrubPgIF,
   epoch_t m_epoch_start{0};  ///< the actual epoch when scrubbing started
 
   /**
-   * (replica) a tag identifying a specific scrub "session". Incremented
-   * whenever the Primary releases the replica scrub resources. When the scrub
-   * session is terminated (even if the interval remains unchanged, as might
-   * happen following an asok no-scrub command), stale scrub-resched messages
-   *  triggered by the backend will be discarded.
+   * (replica) a tag identifying a specific replica operation, i.e. the
+   * creation of the replica scrub map for a single chunk.
+   *
+   * Background: the backend is asynchronous, and the specific
+   * operations are size-limited. While the scrubber handles a specific
+   * request, it is continuously triggered to poll the backend for the
+   * full results for the chunk handled.
+   * Once the chunk request becomes obsolete, either following an interval
+   * change or if a new request was received, we must not send the stale
+   * data to the primary. The polling of the obsolete chunk request must
+   * stop, and the stale backend response should be discarded.
+   * In other words - the token should be read as saying "the primary has
+   * lost interest in the results of all operations identified by mismatched
+   * token values".
    */
   Scrub::act_token_t m_current_token{1};
 
