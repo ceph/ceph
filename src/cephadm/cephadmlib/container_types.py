@@ -1,9 +1,11 @@
 # container_types.py - container instance wrapper types
 
 import copy
+import enum
+import functools
 import os
 
-from typing import Dict, List, Optional, Any, Union, Tuple, cast
+from typing import Dict, List, Optional, Any, Union, Tuple, Iterable, cast
 
 from .call_wrappers import call, call_throws, CallVerbosity
 from .constants import DEFAULT_TIMEOUT
@@ -606,3 +608,62 @@ def extract_uid_gid(
         raise Error(f'Failed to extract uid/gid for path {ex[0]}: {ex[1]}')
 
     raise RuntimeError('uid/gid not found')
+
+
+@functools.lru_cache()
+def _opt_key(value: str) -> str:
+    """Return a (long) option stripped of its value."""
+    return value.split('=', 1)[0]
+
+
+def _replace_container_arg(args: List[str], new_arg: str) -> None:
+    """Remove and replace arguments that have the same `--xyz` part as
+    the given `new_arg`. If new_arg is expected to have a value it
+    must be part of the new_arg string following an equal sign (`=`).
+    The existing arg may be a single or two strings in the input list.
+    """
+    key = _opt_key(new_arg)
+    has_value = key != new_arg
+    try:
+        idx = [_opt_key(v) for v in args].index(key)
+        if '=' in args[idx] or not has_value:
+            del args[idx]
+        else:
+            del args[idx]
+            del args[idx]
+    except ValueError:
+        pass
+    args.append(new_arg)
+
+
+class Namespace(enum.Enum):
+    """General container namespace control options."""
+
+    cgroupns = 'cgroupns'
+    cgroup = 'cgroupns'  # alias
+    ipc = 'ipc'
+    network = 'network'
+    pid = 'pid'
+    userns = 'userns'
+    user = 'userns'  # alias
+    uts = 'uts'
+
+    def to_option(self, value: str) -> str:
+        return f'--{self}={value}'
+
+    def __str__(self) -> str:
+        return self.value
+
+
+def enable_shared_namespaces(
+    args: List[str],
+    name: str,
+    ns: Iterable[Namespace],
+) -> None:
+    """Update the args list to contain options that enable container namespace
+    sharing where name is the name/id of the target container and ns is a list
+    or set of namespaces that should be shared.
+    """
+    cc = f'container:{name}'
+    for n in ns:
+        _replace_container_arg(args, n.to_option(cc))
