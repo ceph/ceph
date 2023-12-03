@@ -832,7 +832,6 @@ PG::do_osd_ops_execute(
     }
     return seastar::now();
   };
-  auto error_func_ptr = seastar::make_lw_shared(std::move(maybe_submit_error_log));
   auto failure_func_ptr = seastar::make_lw_shared(std::move(failure_func));
   return interruptor::do_for_each(ops, [ox](OSDOp& osd_op) {
     logger().debug(
@@ -892,7 +891,7 @@ PG::do_osd_ops_execute(
           std::move(log_entries));
     });
   }).safe_then_unpack_interruptible(
-    [success_func=std::move(success_func), error_func_ptr, rollbacker, this, failure_func_ptr]
+    [success_func=std::move(success_func), rollbacker, this, failure_func_ptr]
     (auto submitted_fut, auto _all_completed_fut) mutable {
 
     auto all_completed_fut = _all_completed_fut.safe_then_interruptible_tuple(
@@ -929,14 +928,16 @@ PG::do_osd_ops_execute(
       std::move(all_completed_fut)
     );
   }, OpsExecuter::osd_op_errorator::all_same_way(
-    [this, error_func_ptr, rollbacker, failure_func_ptr]
+    [this, maybe_submit_error_log=std::move(maybe_submit_error_log),
+     rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
 
     ceph_tid_t rep_tid = shard_services.get_tid();
     return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-    [error_func_ptr, e, rep_tid, failure_func_ptr] {
+    [maybe_submit_error_log=std::move(maybe_submit_error_log),
+     e, rep_tid, failure_func_ptr] {
       // record error log
-      return (*error_func_ptr)(e, rep_tid).then(
+      return maybe_submit_error_log(e, rep_tid).then(
       [failure_func_ptr, e, rep_tid] {
         return PG::do_osd_ops_iertr::make_ready_future<pg_rep_op_fut_t<Ret>>(
           std::move(seastar::now()),
