@@ -1823,6 +1823,11 @@ void PG::on_activate(interval_set<snapid_t> snaps)
   m_scrubber->on_pg_activate(m_planned_scrub);
 }
 
+void PG::on_replica_activate()
+{
+  m_scrubber->on_replica_activate();
+}
+
 void PG::on_active_exit()
 {
   backfill_reserving = false;

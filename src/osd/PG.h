@@ -624,6 +624,8 @@ public:
 
   void on_activate(interval_set<snapid_t> snaps) override;
 
+  void on_replica_activate() override;
+
   void on_activate_committed() override;
 
   void on_active_actmap() override;

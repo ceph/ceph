@@ -441,14 +441,14 @@ void OsdScrub::dec_scrubs_local()
   m_resource_bookkeeper.dec_scrubs_local();
 }
 
-bool OsdScrub::inc_scrubs_remote()
+bool OsdScrub::inc_scrubs_remote(pg_t pgid)
 {
-  return m_resource_bookkeeper.inc_scrubs_remote();
+  return m_resource_bookkeeper.inc_scrubs_remote(pgid);
 }
 
-void OsdScrub::dec_scrubs_remote()
+void OsdScrub::dec_scrubs_remote(pg_t pgid)
 {
-  m_resource_bookkeeper.dec_scrubs_remote();
+  m_resource_bookkeeper.dec_scrubs_remote(pgid);
 }
 
 void OsdScrub::mark_pg_scrub_blocked(spg_t blocked_pg)

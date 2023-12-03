@@ -18,12 +18,14 @@ struct PGPool;
 
 namespace Scrub {
   class ReplicaReservations;
+  struct ReplicaActive;
 }
 
 /// Facilitating scrub-related object access to private PG data
 class ScrubberPasskey {
 private:
   friend class Scrub::ReplicaReservations;
+  friend struct Scrub::ReplicaActive;
   friend class PrimaryLogScrub;
   friend class PgScrubber;
   friend class ScrubBackend;
@@ -309,6 +311,9 @@ struct ScrubPgIF {
   /// stop any active scrubbing (on interval end) and unregister from
   /// the OSD scrub queue
   virtual void on_new_interval() = 0;
+
+  /// we are peered as a replica
+  virtual void on_replica_activate() = 0;
 
   virtual void scrub_clear_state() = 0;
 
