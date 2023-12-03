@@ -56,8 +56,7 @@ class RGWSI_User_RADOS : public RGWSI_User
 
   rgw_raw_obj get_buckets_obj(const rgw_user& user_id) const override;
 
-  int get_user_info_from_index(RGWSI_MetaBackend::Context *ctx,
-                               const std::string& key,
+  int get_user_info_from_index(const std::string& key,
                                const rgw_pool& pool,
                                RGWUserInfo *info,
                                RGWObjVersionTracker * const objv_tracker,
@@ -66,7 +65,7 @@ class RGWSI_User_RADOS : public RGWSI_User
                                optional_yield y,
                                const DoutPrefixProvider *dpp);
 
-  int remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker,
+  int remove_uid_index(const RGWUserInfo& user_info, RGWObjVersionTracker *objv_tracker,
                        optional_yield y, const DoutPrefixProvider *dpp);
 
   int remove_key_index(const DoutPrefixProvider *dpp, const RGWAccessKey& access_key, optional_yield y);
@@ -100,8 +99,7 @@ public:
     return be_handler;
   }
 
-  int read_user_info(RGWSI_MetaBackend::Context *ctx,
-                     const rgw_user& user,
+  int read_user_info(const rgw_user& user,
                      RGWUserInfo *info,
                      RGWObjVersionTracker * const objv_tracker,
                      real_time * const pmtime,
@@ -110,8 +108,7 @@ public:
                      optional_yield y,
                      const DoutPrefixProvider *dpp) override;
 
-  int store_user_info(RGWSI_MetaBackend::Context *ctx,
-                      const RGWUserInfo& info,
+  int store_user_info(const RGWUserInfo& info,
                       RGWUserInfo *old_info,
                       RGWObjVersionTracker *objv_tracker,
                       const real_time& mtime,
@@ -120,29 +117,25 @@ public:
                       optional_yield y,
                       const DoutPrefixProvider *dpp) override;
 
-  int remove_user_info(RGWSI_MetaBackend::Context *ctx,
-                       const RGWUserInfo& info,
+  int remove_user_info(const RGWUserInfo& info,
                        RGWObjVersionTracker *objv_tracker,
                        optional_yield y,
                        const DoutPrefixProvider *dpp) override;
 
-  int get_user_info_by_email(RGWSI_MetaBackend::Context *ctx,
-                             const std::string& email, RGWUserInfo *info,
+  int get_user_info_by_email(const std::string& email, RGWUserInfo *info,
                              RGWObjVersionTracker *objv_tracker,
                              std::map<std::string, bufferlist>* pattrs,
                              real_time *pmtime,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) override;
-  int get_user_info_by_swift(RGWSI_MetaBackend::Context *ctx,
-                             const std::string& swift_name,
+  int get_user_info_by_swift(const std::string& swift_name,
                              RGWUserInfo *info,        /* out */
                              RGWObjVersionTracker * const objv_tracker,
                              std::map<std::string, bufferlist>* pattrs,
                              real_time * const pmtime,
                              optional_yield y,
                              const DoutPrefixProvider *dpp) override;
-  int get_user_info_by_access_key(RGWSI_MetaBackend::Context *ctx,
-                                  const std::string& access_key,
+  int get_user_info_by_access_key(const std::string& access_key,
                                   RGWUserInfo *info,
                                   RGWObjVersionTracker* objv_tracker,
                                   std::map<std::string, bufferlist>* pattrs,
