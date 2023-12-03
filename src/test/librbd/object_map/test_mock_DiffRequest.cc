@@ -32,7 +32,8 @@ using ::testing::WithArg;
 namespace librbd {
 namespace object_map {
 
-class TestMockObjectMapDiffRequest : public TestMockFixture {
+class TestMockObjectMapDiffRequest : public TestMockFixture,
+                                     public ::testing::WithParamInterface<bool> {
 public:
   typedef DiffRequest<MockTestImageCtx> MockDiffRequest;
 
@@ -43,7 +44,7 @@ public:
   }
 
   bool is_diff_iterate() const {
-    return true;
+    return GetParam();
   }
 
   void expect_get_flags(MockTestImageCtx& mock_image_ctx, uint64_t snap_id,
@@ -84,7 +85,7 @@ public:
   BitVector<2> m_object_diff_state;
 };
 
-TEST_F(TestMockObjectMapDiffRequest, InvalidStartSnap) {
+TEST_P(TestMockObjectMapDiffRequest, InvalidStartSnap) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
@@ -97,7 +98,7 @@ TEST_F(TestMockObjectMapDiffRequest, InvalidStartSnap) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockObjectMapDiffRequest, StartEndSnapEqual) {
+TEST_P(TestMockObjectMapDiffRequest, StartEndSnapEqual) {
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   InSequence seq;
@@ -110,7 +111,7 @@ TEST_F(TestMockObjectMapDiffRequest, StartEndSnapEqual) {
   ASSERT_EQ(0U, m_object_diff_state.size());
 }
 
-TEST_F(TestMockObjectMapDiffRequest, FastDiffDisabled) {
+TEST_P(TestMockObjectMapDiffRequest, FastDiffDisabled) {
   // negative test -- object-map implicitly enables fast-diff
   REQUIRE(!is_feature_enabled(RBD_FEATURE_OBJECT_MAP));
 
@@ -126,7 +127,7 @@ TEST_F(TestMockObjectMapDiffRequest, FastDiffDisabled) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockObjectMapDiffRequest, FastDiffInvalid) {
+TEST_P(TestMockObjectMapDiffRequest, FastDiffInvalid) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   MockTestImageCtx mock_image_ctx(*m_image_ctx);
@@ -145,7 +146,7 @@ TEST_F(TestMockObjectMapDiffRequest, FastDiffInvalid) {
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockObjectMapDiffRequest, FullDelta) {
+TEST_P(TestMockObjectMapDiffRequest, FullDelta) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -200,7 +201,7 @@ TEST_F(TestMockObjectMapDiffRequest, FullDelta) {
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
-TEST_F(TestMockObjectMapDiffRequest, IntermediateDelta) {
+TEST_P(TestMockObjectMapDiffRequest, IntermediateDelta) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -247,7 +248,7 @@ TEST_F(TestMockObjectMapDiffRequest, IntermediateDelta) {
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
-TEST_F(TestMockObjectMapDiffRequest, EndDelta) {
+TEST_P(TestMockObjectMapDiffRequest, EndDelta) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -295,7 +296,7 @@ TEST_F(TestMockObjectMapDiffRequest, EndDelta) {
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
-TEST_F(TestMockObjectMapDiffRequest, StartSnapDNE) {
+TEST_P(TestMockObjectMapDiffRequest, StartSnapDNE) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -317,7 +318,7 @@ TEST_F(TestMockObjectMapDiffRequest, StartSnapDNE) {
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
-TEST_F(TestMockObjectMapDiffRequest, EndSnapDNE) {
+TEST_P(TestMockObjectMapDiffRequest, EndSnapDNE) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -344,7 +345,7 @@ TEST_F(TestMockObjectMapDiffRequest, EndSnapDNE) {
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
-TEST_F(TestMockObjectMapDiffRequest, IntermediateSnapDNE) {
+TEST_P(TestMockObjectMapDiffRequest, IntermediateSnapDNE) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -388,7 +389,7 @@ TEST_F(TestMockObjectMapDiffRequest, IntermediateSnapDNE) {
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
-TEST_F(TestMockObjectMapDiffRequest, LoadObjectMapDNE) {
+TEST_P(TestMockObjectMapDiffRequest, LoadObjectMapDNE) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -411,7 +412,7 @@ TEST_F(TestMockObjectMapDiffRequest, LoadObjectMapDNE) {
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
-TEST_F(TestMockObjectMapDiffRequest, LoadIntermediateObjectMapDNE) {
+TEST_P(TestMockObjectMapDiffRequest, LoadIntermediateObjectMapDNE) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -450,7 +451,7 @@ TEST_F(TestMockObjectMapDiffRequest, LoadIntermediateObjectMapDNE) {
   ASSERT_EQ(expected_diff_state, m_object_diff_state);
 }
 
-TEST_F(TestMockObjectMapDiffRequest, LoadObjectMapError) {
+TEST_P(TestMockObjectMapDiffRequest, LoadObjectMapError) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -477,7 +478,7 @@ TEST_F(TestMockObjectMapDiffRequest, LoadObjectMapError) {
   ASSERT_EQ(-EPERM, ctx.wait());
 }
 
-TEST_F(TestMockObjectMapDiffRequest, ObjectMapTooSmall) {
+TEST_P(TestMockObjectMapDiffRequest, ObjectMapTooSmall) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
@@ -503,6 +504,9 @@ TEST_F(TestMockObjectMapDiffRequest, ObjectMapTooSmall) {
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
+
+INSTANTIATE_TEST_SUITE_P(MockObjectMapDiffRequestTests,
+                         TestMockObjectMapDiffRequest, ::testing::Bool());
 
 } // namespace object_map
 } // librbd
