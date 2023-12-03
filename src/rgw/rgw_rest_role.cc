@@ -99,6 +99,13 @@ int RGWRestRole::verify_permission(optional_yield y)
     return ret;
   }
 
+  // owner of the role doesn't need permission check
+  const auto& role_owner = role->get_owner();
+  if (! role_owner.empty() && role_owner == s->user->get_id().id) {
+    _role = std::move(role);
+    return 0;
+  }
+
   string resource_name = role->get_path() + role_name;
   uint64_t op = get_op();
   if (!verify_user_permission(this,
