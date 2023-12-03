@@ -19,8 +19,6 @@
 
 #include "driver/rados/rgw_service.h" // FIXME: subclass dependency
 
-#include "svc_bucket_types.h"
-
 class RGWBucketSyncPolicyHandler;
 using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler>;
 

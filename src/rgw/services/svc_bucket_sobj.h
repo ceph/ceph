@@ -19,8 +19,6 @@
 
 #include "rgw_service.h"
 
-#include "svc_meta_be.h"
-#include "svc_bucket_types.h"
 #include "svc_bucket.h"
 #include "svc_bucket_sync.h"
 
@@ -47,9 +45,6 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
   using RGWChainedCacheImpl_bucket_info_cache_entry = RGWChainedCacheImpl<bucket_info_cache_entry>;
   std::unique_ptr<RGWChainedCacheImpl_bucket_info_cache_entry> binfo_cache;
 
-  RGWSI_BucketInstance_BE_Handler bi_be_handler;
-  std::unique_ptr<RGWSI_MetaBackend::Module> bi_be_module;
-
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
   int do_read_bucket_instance_info(const std::string& key,
@@ -75,7 +70,6 @@ public:
     RGWSI_SysObj_Cache *cache{nullptr};
     RGWSI_Meta *meta{nullptr};
     RGWSI_MDLog *mdlog{nullptr};
-    RGWSI_MetaBackend *meta_be{nullptr};
     RGWSI_SyncModules *sync_modules{nullptr};
     RGWSI_Bucket_Sync *bucket_sync{nullptr};
   } svc;
@@ -83,23 +77,22 @@ public:
   RGWSI_Bucket_SObj(CephContext *cct);
   ~RGWSI_Bucket_SObj();
 
-  RGWSI_BucketInstance_BE_Handler& get_bi_be_handler() override {
-    return bi_be_handler;
-  }
-
   void init(RGWSI_Zone *_zone_svc,
             RGWSI_SysObj *_sysobj_svc,
 	    RGWSI_SysObj_Cache *_cache_svc,
             RGWSI_BucketIndex *_bi,
             RGWSI_Meta *_meta_svc,
             RGWSI_MDLog *mdlog_svc,
-            RGWSI_MetaBackend *_meta_be_svc,
 	    RGWSI_SyncModules *_sync_modules_svc,
 	    RGWSI_Bucket_Sync *_bucket_sync_svc);
 
   int create_entrypoint_lister(const DoutPrefixProvider* dpp,
                                const std::string& marker,
                                std::unique_ptr<RGWMetadataLister>& lister) override;
+
+  int create_instance_lister(const DoutPrefixProvider* dpp,
+                             const std::string& marker,
+                             std::unique_ptr<RGWMetadataLister>& lister) override;
 
   int read_bucket_entrypoint_info(const std::string& key,
                                   RGWBucketEntryPoint *entry_point,

@@ -3126,8 +3126,13 @@ public:
       -> std::unique_ptr<RGWMetadataHandler> override {
     return create_archive_bucket_metadata_handler(rados, svc_bucket, ctl_bucket);
   }
-  RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver) override {
-    return RGWArchiveBucketInstanceMetaHandlerAllocator::alloc(driver);
+  auto alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver,
+                                          RGWSI_Zone* svc_zone,
+                                          RGWSI_Bucket* svc_bucket,
+                                          RGWSI_BucketIndex* svc_bi)
+      -> std::unique_ptr<RGWMetadataHandler> override {
+    return create_archive_bucket_instance_metadata_handler(
+        driver, svc_zone, svc_bucket, svc_bi);
   }
 };
 

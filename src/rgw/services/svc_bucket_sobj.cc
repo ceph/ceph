@@ -22,7 +22,7 @@
 
 using namespace std;
 
-constexpr std::string_view instance_oid_prefix = ".bucket.meta.";
+static const std::string instance_oid_prefix = ".bucket.meta.";
 
 // convert bucket instance oids back to the tenant/ format for metadata keys.
 // it's safe to parse 'tenant:' only for oids, because they won't contain the
@@ -63,55 +63,6 @@ static std::string instance_oid_to_meta_key(const std::string& oid)
   return key;
 }
 
-class RGWSI_BucketInstance_SObj_Module : public RGWSI_MBSObj_Handler_Module {
-  RGWSI_Bucket_SObj::Svc& svc;
-
-  const string prefix;
-public:
-  RGWSI_BucketInstance_SObj_Module(RGWSI_Bucket_SObj::Svc& _svc) : RGWSI_MBSObj_Handler_Module("bucket.instance"),
-                                                                     svc(_svc), prefix(instance_oid_prefix) {}
-
-  void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
-    if (pool) {
-      *pool = svc.zone->get_zone_params().domain_root;
-    }
-    if (oid) {
-      *oid = key_to_oid(key);
-    }
-  }
-
-  const string& get_oid_prefix() override {
-    return prefix;
-  }
-
-  bool is_valid_oid(const string& oid) override {
-    return (oid.compare(0, prefix.size(), prefix) == 0);
-  }
-
-  string key_to_oid(const string& key) override {
-    return instance_meta_key_to_oid(key);
-  }
-
-  string oid_to_key(const string& oid) override {
-    return instance_oid_to_meta_key(oid);
-  }
-
-  /*
-   * hash entry for mdlog placement. Use the same hash key we'd have for the bucket entry
-   * point, so that the log entries end up at the same log shard, so that we process them
-   * in order
-   */
-  string get_hash_key(const string& key) override {
-    string k = "bucket:";
-    int pos = key.find(':');
-    if (pos < 0)
-      k.append(key);
-    else
-      k.append(key.substr(0, pos));
-
-    return k;
-  }
-};
 
 RGWSI_Bucket_SObj::RGWSI_Bucket_SObj(CephContext *cct): RGWSI_Bucket(cct) {
 }
@@ -122,7 +73,6 @@ RGWSI_Bucket_SObj::~RGWSI_Bucket_SObj() {
 void RGWSI_Bucket_SObj::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
                              RGWSI_SysObj_Cache *_cache_svc, RGWSI_BucketIndex *_bi,
                              RGWSI_Meta *_meta_svc, RGWSI_MDLog* mdlog_svc,
-                             RGWSI_MetaBackend *_meta_be_svc,
                              RGWSI_SyncModules *_sync_modules_svc,
                              RGWSI_Bucket_Sync *_bucket_sync_svc)
 {
@@ -133,7 +83,6 @@ void RGWSI_Bucket_SObj::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
   svc.bi = _bi;
   svc.meta = _meta_svc;
   svc.mdlog = mdlog_svc;
-  svc.meta_be = _meta_be_svc;
   svc.sync_modules = _sync_modules_svc;
   svc.bucket_sync = _bucket_sync_svc;
 }
@@ -142,25 +91,6 @@ int RGWSI_Bucket_SObj::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   binfo_cache.reset(new RGWChainedCacheImpl<bucket_info_cache_entry>);
   binfo_cache->init(svc.cache);
-
-  /* create a backend handler for bucket instance */
-
-  RGWSI_MetaBackend_Handler *bi_handler;
-
-  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ, &bi_handler);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to create be handler: r=" << r << dendl;
-    return r;
-  }
-
-  bi_be_handler = bi_handler;
-
-  RGWSI_MetaBackend_Handler_SObj *bi_bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(bi_handler);
-
-  auto bi_module = new RGWSI_BucketInstance_SObj_Module(svc);
-  bi_be_module.reset(bi_module);
-  bi_bh->set_module(bi_module);
-
   return 0;
 }
 
@@ -192,6 +122,36 @@ int RGWSI_Bucket_SObj::create_entrypoint_lister(
   const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
   auto p = std::make_unique<BucketEntrypointLister>(svc.sysobj->get_pool(pool));
   int r = p->init(dpp, marker, ""); // empty prefix
+  if (r < 0) {
+    return r;
+  }
+  lister = std::move(p);
+  return 0;
+}
+
+
+class BucketInstanceLister : public RGWMetadataLister {
+ public:
+  using RGWMetadataLister::RGWMetadataLister;
+
+  void filter_transform(std::vector<std::string>& oids,
+                        std::list<std::string>& keys) override
+  {
+    // transform instance oids to metadata keys
+    std::transform(oids.begin(), oids.end(),
+                   std::back_inserter(keys),
+                   instance_oid_to_meta_key);
+  }
+};
+
+int RGWSI_Bucket_SObj::create_instance_lister(
+    const DoutPrefixProvider* dpp,
+    const std::string& marker,
+    std::unique_ptr<RGWMetadataLister>& lister)
+{
+  const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
+  auto p = std::make_unique<BucketInstanceLister>(svc.sysobj->get_pool(pool));
+  int r = p->init(dpp, marker, instance_oid_prefix);
   if (r < 0) {
     return r;
   }
@@ -518,9 +478,13 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(const string& key,
   int ret = rgw_put_system_obj(dpp, svc.sysobj, pool, oid, bl, exclusive,
                                &info.objv_tracker, mtime, y, pattrs);
   if (ret >= 0) {
-    int r = svc.bucket_sync->handle_bi_update(dpp, info,
-                                              orig_info.value_or(nullptr),
-                                              y);
+    int r = svc.mdlog->complete_entry(dpp, y, "bucket.instance",
+                                      key, &info.objv_tracker);
+    if (r < 0) {
+      return r;
+    }
+
+    r = svc.bucket_sync->handle_bi_update(dpp, info, orig_info.value_or(nullptr), y);
     if (r < 0) {
       return r;
     }
@@ -565,7 +529,8 @@ int RGWSI_Bucket_SObj::remove_bucket_instance_info(const string& key,
      */
   }
 
-  return 0;
+  return svc.mdlog->complete_entry(dpp, y, "bucket.instance",
+                                   key, objv_tracker);
 }
 
 int RGWSI_Bucket_SObj::read_bucket_stats(const RGWBucketInfo& bucket_info,

@@ -45,6 +45,8 @@ class RGWRESTMgr;
 class RGWMetadataHandler;
 class RGWBucketInstanceMetadataHandlerBase;
 class RGWSI_Bucket;
+class RGWSI_BucketIndex;
+class RGWSI_Zone;
 class RGWBucketCtl;
 
 class RGWSyncModuleInstance {
@@ -62,7 +64,11 @@ public:
                                          RGWSI_Bucket* svc_bucket,
                                          RGWBucketCtl* ctl_bucket)
       -> std::unique_ptr<RGWMetadataHandler>;
-  virtual RGWBucketInstanceMetadataHandlerBase *alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver);
+  virtual auto alloc_bucket_instance_meta_handler(rgw::sal::Driver* driver,
+                                                  RGWSI_Zone* svc_zone,
+                                                  RGWSI_Bucket* svc_bucket,
+                                                  RGWSI_BucketIndex* svc_bi)
+      -> std::unique_ptr<RGWMetadataHandler>;
 
   // indication whether the sync module start with full sync (default behavior)
   // incremental sync would follow anyway
