@@ -214,8 +214,7 @@ int RGWSI_Bucket_SObj::do_start(optional_yield, const DoutPrefixProvider *dpp)
   return 0;
 }
 
-int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                                   const string& key,
+int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(const string& key,
                                                    RGWBucketEntryPoint *entry_point,
                                                    RGWObjVersionTracker *objv_tracker,
                                                    real_time *pmtime,
@@ -244,8 +243,7 @@ int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                                    const string& key,
+int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(const string& key,
                                                     RGWBucketEntryPoint& info,
                                                     bool exclusive,
                                                     real_time mtime,
@@ -262,8 +260,7 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                             objv_tracker, mtime, y, pattrs);
 }
 
-int RGWSI_Bucket_SObj::remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                                     const string& key,
+int RGWSI_Bucket_SObj::remove_bucket_entrypoint_info(const string& key,
                                                      RGWObjVersionTracker *objv_tracker,
                                                      optional_yield y,
                                                      const DoutPrefixProvider *dpp)
@@ -272,8 +269,7 @@ int RGWSI_Bucket_SObj::remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
   return rgw_delete_system_obj(dpp, svc.sysobj, pool, key, objv_tracker, y);
 }
 
-int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                                 const string& key,
+int RGWSI_Bucket_SObj::read_bucket_instance_info(const string& key,
                                                  RGWBucketInfo *info,
                                                  real_time *pmtime, map<string, bufferlist> *pattrs,
                                                  optional_yield y,
@@ -304,9 +300,8 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   bucket_info_cache_entry e;
   rgw_cache_entry_info ci;
 
-  int ret = do_read_bucket_instance_info(ctx, key,
-                                  &e.info, &e.mtime, &e.attrs,
-                                  &ci, refresh_version, y, dpp);
+  int ret = do_read_bucket_instance_info(key, &e.info, &e.mtime, &e.attrs,
+                                         &ci, refresh_version, y, dpp);
   *info = e.info;
 
   if (ret < 0) {
@@ -343,8 +338,7 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket_SObj::do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                                    const string& key,
+int RGWSI_Bucket_SObj::do_read_bucket_instance_info(const string& key,
                                                     RGWBucketInfo *info,
                                                     real_time *pmtime, map<string, bufferlist> *pattrs,
                                                     rgw_cache_entry_info *cache_info,
@@ -374,8 +368,7 @@ int RGWSI_Bucket_SObj::do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   return 0;
 }
 
-int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                        const rgw_bucket& bucket,
+int RGWSI_Bucket_SObj::read_bucket_info(const rgw_bucket& bucket,
                                         RGWBucketInfo *info,
                                         real_time *pmtime,
                                         map<string, bufferlist> *pattrs,
@@ -386,11 +379,8 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
   rgw_cache_entry_info cache_info;
 
   if (!bucket.bucket_id.empty()) {
-    return read_bucket_instance_info(ctx.bi, get_bi_meta_key(bucket),
-                                     info,
-                                     pmtime, pattrs,
-                                     y,
-                                     dpp,
+    return read_bucket_instance_info(get_bi_meta_key(bucket), info,
+                                     pmtime, pattrs, y, dpp,
                                      &cache_info, refresh_version);
   }
 
@@ -423,10 +413,8 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
   real_time ep_mtime;
   RGWObjVersionTracker ot;
   rgw_cache_entry_info entry_cache_info;
-  int ret = read_bucket_entrypoint_info(ctx.ep, bucket_entry,
-                                        &entry_point, &ot, &ep_mtime, pattrs,
-                                        y,
-                                        dpp,
+  int ret = read_bucket_entrypoint_info(bucket_entry, &entry_point, &ot,
+                                        &ep_mtime, pattrs, y, dpp,
                                         &entry_cache_info, refresh_version);
   if (ret < 0) {
     /* only init these fields */
@@ -455,10 +443,8 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 
   bucket_info_cache_entry e;
 
-  ret = read_bucket_instance_info(ctx.bi, get_bi_meta_key(entry_point.bucket),
-                                  &e.info, &e.mtime, &e.attrs,
-                                  y,
-                                  dpp,
+  ret = read_bucket_instance_info(get_bi_meta_key(entry_point.bucket),
+                                  &e.info, &e.mtime, &e.attrs, y, dpp,
                                   &cache_info, refresh_version);
   *info = e.info;
   if (ret < 0) {
@@ -489,8 +475,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 }
 
 
-int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                                  const string& key,
+int RGWSI_Bucket_SObj::store_bucket_instance_info(const string& key,
                                                   RGWBucketInfo& info,
                                                   std::optional<RGWBucketInfo *> orig_info,
                                                   bool exclusive,
@@ -512,12 +497,8 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
      * we're here because orig_info wasn't passed in
      * we don't have info about what was there before, so need to fetch first
      */
-    int r  = read_bucket_instance_info(ctx,
-                                       key,
-                                       &shared_bucket_info,
-                                       nullptr, nullptr,
-                                       y,
-                                       dpp,
+    int r  = read_bucket_instance_info(key, &shared_bucket_info,
+                                       nullptr, nullptr, y, dpp,
                                        nullptr, boost::none);
     if (r < 0) {
       if (r != -ENOENT) {
@@ -567,8 +548,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   return ret;
 }
 
-int RGWSI_Bucket_SObj::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                                   const string& key,
+int RGWSI_Bucket_SObj::remove_bucket_instance_info(const string& key,
                                                    const RGWBucketInfo& info,
                                                    RGWObjVersionTracker *objv_tracker,
                                                    optional_yield y,
@@ -613,14 +593,13 @@ int RGWSI_Bucket_SObj::read_bucket_stats(const RGWBucketInfo& bucket_info,
   return 0;
 }
 
-int RGWSI_Bucket_SObj::read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
-                                         const rgw_bucket& bucket,
+int RGWSI_Bucket_SObj::read_bucket_stats(const rgw_bucket& bucket,
                                          RGWBucketEnt *ent,
                                          optional_yield y,
                                          const DoutPrefixProvider *dpp)
 {
   RGWBucketInfo bucket_info;
-  int ret = read_bucket_info(ctx, bucket, &bucket_info, nullptr, nullptr, boost::none, y, dpp);
+  int ret = read_bucket_info(bucket, &bucket_info, nullptr, nullptr, boost::none, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -628,13 +607,12 @@ int RGWSI_Bucket_SObj::read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
   return read_bucket_stats(bucket_info, ent, y, dpp);
 }
 
-int RGWSI_Bucket_SObj::read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
-                                          std::vector<RGWBucketEnt>& buckets,
+int RGWSI_Bucket_SObj::read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
                                           optional_yield y,
                                           const DoutPrefixProvider *dpp)
 {
   for (auto& ent : buckets) {
-    int r = read_bucket_stats(ctx, ent.bucket, &ent, y, dpp);
+    int r = read_bucket_stats(ent.bucket, &ent, y, dpp);
     if (r < 0) {
       ldpp_dout(dpp, 0) << "ERROR: " << __func__ << "(): read_bucket_stats returned r=" << r << dendl;
       return r;

@@ -447,8 +447,6 @@ class RGWBucketCtl {
   RGWSI_Bucket_BE_Handler bucket_be_handler; /* bucket backend handler */
   RGWSI_BucketInstance_BE_Handler bi_be_handler; /* bucket instance backend handler */
 
-  int call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f);
-
 public:
   RGWBucketCtl(RGWSI_Zone *zone_svc,
                RGWSI_Bucket *bucket_svc,
@@ -736,20 +734,11 @@ public:
                           const DoutPrefixProvider *dpp);
 
 private:
-  int convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                              const rgw_bucket& bucket,
+  int convert_old_bucket_info(const rgw_bucket& bucket,
                               optional_yield y,
                               const DoutPrefixProvider *dpp);
 
-  int do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                    const rgw_bucket& bucket,
-                                    RGWBucketInfo& info,
-                                    optional_yield y,
-                                    const DoutPrefixProvider *dpp,
-                                    const BucketInstance::PutParams& params);
-
-  int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
-                                  RGWBucketInfo& info,
+  int do_store_linked_bucket_info(RGWBucketInfo& info,
                                   RGWBucketInfo *orig_info,
                                   bool exclusive, real_time mtime,
                                   obj_version *pep_objv,
@@ -757,25 +746,6 @@ private:
                                   bool create_entry_point,
 				  optional_yield,
                                   const DoutPrefixProvider *dpp);
-
-  int do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                     librados::Rados& rados,
-                     const rgw_owner& owner,
-                     const rgw_bucket& bucket,
-                     ceph::real_time creation_time,
-                     bool update_entrypoint,
-                     rgw_ep_info *pinfo,
-		     optional_yield y,
-                     const DoutPrefixProvider *dpp);
-
-  int do_unlink_bucket(RGWSI_Bucket_EP_Ctx& ctx,
-                       librados::Rados& rados,
-                       const rgw_owner& owner,
-                       const rgw_bucket& bucket,
-                       bool update_entrypoint,
-		       optional_yield y,
-                       const DoutPrefixProvider *dpp);
-
 };
 
 bool rgw_find_bucket_by_id(const DoutPrefixProvider *dpp, CephContext *cct, rgw::sal::Driver* driver, const std::string& marker,

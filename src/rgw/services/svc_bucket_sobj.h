@@ -53,8 +53,7 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
 
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 
-  int do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                   const std::string& key,
+  int do_read_bucket_instance_info(const std::string& key,
                                    RGWBucketInfo *info,
                                    real_time *pmtime,
                                    std::map<std::string, bufferlist> *pattrs,
@@ -102,8 +101,7 @@ public:
 	    RGWSI_Bucket_Sync *_bucket_sync_svc);
 
 
-  int read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                  const std::string& key,
+  int read_bucket_entrypoint_info(const std::string& key,
                                   RGWBucketEntryPoint *entry_point,
                                   RGWObjVersionTracker *objv_tracker,
                                   real_time *pmtime,
@@ -113,8 +111,7 @@ public:
                                   rgw_cache_entry_info *cache_info = nullptr,
                                   boost::optional<obj_version> refresh_version = boost::none) override;
 
-  int store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                   const std::string& key,
+  int store_bucket_entrypoint_info(const std::string& key,
                                    RGWBucketEntryPoint& info,
                                    bool exclusive,
                                    real_time mtime,
@@ -123,14 +120,12 @@ public:
                                    optional_yield y,
                                    const DoutPrefixProvider *dpp) override;
 
-  int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
-                                    const std::string& key,
+  int remove_bucket_entrypoint_info(const std::string& key,
                                     RGWObjVersionTracker *objv_tracker,
                                     optional_yield y,
                                     const DoutPrefixProvider *dpp) override;
 
-  int read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                const std::string& key,
+  int read_bucket_instance_info(const std::string& key,
                                 RGWBucketInfo *info,
                                 real_time *pmtime,
                                 std::map<std::string, bufferlist> *pattrs,
@@ -139,8 +134,7 @@ public:
                                 rgw_cache_entry_info *cache_info = nullptr,
                                 boost::optional<obj_version> refresh_version = boost::none) override;
 
-  int read_bucket_info(RGWSI_Bucket_X_Ctx& ep_ctx,
-                       const rgw_bucket& bucket,
+  int read_bucket_info(const rgw_bucket& bucket,
                        RGWBucketInfo *info,
                        real_time *pmtime,
                        std::map<std::string, bufferlist> *pattrs,
@@ -148,8 +142,7 @@ public:
                        optional_yield y,
                        const DoutPrefixProvider *dpp) override;
 
-  int store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                 const std::string& key,
+  int store_bucket_instance_info(const std::string& key,
                                  RGWBucketInfo& info,
                                  std::optional<RGWBucketInfo *> orig_info, /* nullopt: orig_info was not fetched,
                                                                               nullptr: orig_info was not found (new bucket instance */
@@ -159,21 +152,18 @@ public:
                                  optional_yield y,
                                  const DoutPrefixProvider *dpp) override;
 
-  int remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
-                                  const std::string& key,
+  int remove_bucket_instance_info(const std::string& key,
                                   const RGWBucketInfo& bucket_info,
                                   RGWObjVersionTracker *objv_tracker,
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp) override;
 
-  int read_bucket_stats(RGWSI_Bucket_X_Ctx& ctx,
-                        const rgw_bucket& bucket,
+  int read_bucket_stats(const rgw_bucket& bucket,
                         RGWBucketEnt *ent,
                         optional_yield y,
                         const DoutPrefixProvider *dpp) override;
 
-  int read_buckets_stats(RGWSI_Bucket_X_Ctx& ctx,
-                         std::vector<RGWBucketEnt>& buckets,
+  int read_buckets_stats(std::vector<RGWBucketEnt>& buckets,
                          optional_yield y,
                          const DoutPrefixProvider *dpp) override;
 };
