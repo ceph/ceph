@@ -473,13 +473,13 @@ Context *PG::on_clean()
   return nullptr;
 }
 
-void PG::on_active_actmap()
+seastar::future<> PG::kick_snap_trim()
 {
   logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
   // loops until snap_trimq is empty or SNAPTRIM_ERROR.
   Ref<PG> pg_ref = this;
-  std::ignore = seastar::do_until(
+  return seastar::do_until(
     [this] { return snap_trimq.empty()
                     || peering_state.state_test(PG_STATE_SNAPTRIM_ERROR);
     },
@@ -522,6 +522,28 @@ void PG::on_active_actmap()
     publish_stats_to_osd();
   });
 }
+
+void PG::on_active_actmap()
+{
+  logger().debug("{}: {} ", *this, __func__);
+  if (peering_state.is_active()) {
+    ceph_assert(is_primary());
+    if (peering_state.is_clean() &&
+        //!peering_state.state_test(PG_STATE_PREMERGE) &&
+        !snap_trimq.empty()) {
+      if (get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM)) {
+        logger().debug("{}: {} nosnaptrim set, not kicking snap trim",
+                       *this, __func__);
+      } else {
+        logger().debug("{}: {} clean and snaps to trim, kicking",
+                       *this, __func__);
+        snap_trim_event_gate.dispatch_in_background("kick_snap_trim", *this, [this] {
+          return kick_snap_trim();
+        });
+      }
+    }
+   }
+ }
 
 void PG::on_active_advmap(const OSDMapRef &osdmap)
 {
@@ -1501,6 +1523,8 @@ seastar::future<> PG::stop()
   check_readable_timer.cancel();
   renew_lease_timer.cancel();
   return osdmap_gate.stop().then([this] {
+    return snap_trim_event_gate.close();
+  }).then([this] {
     return wait_for_active_blocker.stop();
   }).then([this] {
     return recovery_handler->stop();
@@ -1519,6 +1543,7 @@ void PG::on_change(ceph::os::Transaction &t) {
   recovery_backend->on_peering_interval_change(t);
   backend->on_actingset_changed(is_primary());
   wait_for_active_blocker.unblock();
+  std::ignore = snap_trim_event_gate.close();
   if (is_primary()) {
     logger().debug("{} {}: requeueing", *this, __func__);
     client_request_orderer.requeue(shard_services, this);

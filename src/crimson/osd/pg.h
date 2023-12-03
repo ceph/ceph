@@ -23,6 +23,7 @@
 
 #include "crimson/common/interruptible_future.h"
 #include "crimson/common/type_helpers.h"
+#include "crimson/common/gated.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/osd/backfill_state.h"
 #include "crimson/osd/pg_interval_interrupt_condition.h"
@@ -344,6 +345,8 @@ public:
   void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
   void set_ready_to_merge_source(eversion_t lu) final {}
 
+  seastar::future<> kick_snap_trim();
+
   void on_active_actmap() final;
   void on_active_advmap(const OSDMapRef &osdmap) final;
 
@@ -605,6 +608,7 @@ private:
 private:
   PG_OSDMapGate osdmap_gate;
   ShardServices &shard_services;
+  crimson::common::Gated snap_trim_event_gate;
 
 
 public:
