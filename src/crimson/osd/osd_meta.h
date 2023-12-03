@@ -40,6 +40,7 @@ public:
 
   void store_map(ceph::os::Transaction& t,
                  epoch_t e, const bufferlist& m);
+  void remove_map(ceph::os::Transaction& t, epoch_t e);
   seastar::future<bufferlist> load_map(epoch_t e);
 
   void store_superblock(ceph::os::Transaction& t,

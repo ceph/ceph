@@ -24,6 +24,11 @@ void OSDMeta::store_map(ceph::os::Transaction& t,
   t.write(coll->get_cid(), osdmap_oid(e), 0, m.length(), m);
 }
 
+void OSDMeta::remove_map(ceph::os::Transaction& t, epoch_t e)
+{
+  t.remove(coll->get_cid(), osdmap_oid(e));
+}
+
 seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
 {
   return store.read(coll,
