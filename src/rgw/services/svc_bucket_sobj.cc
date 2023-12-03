@@ -12,14 +12,54 @@
 #include "svc_sync_modules.h"
 
 #include "rgw_bucket.h"
+#include "rgw_string.h"
 #include "rgw_tools.h"
 #include "rgw_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
 
-#define RGW_BUCKET_INSTANCE_MD_PREFIX ".bucket.meta."
-
 using namespace std;
+
+constexpr std::string_view instance_oid_prefix = ".bucket.meta.";
+
+// convert bucket instance oids back to the tenant/ format for metadata keys.
+// it's safe to parse 'tenant:' only for oids, because they won't contain the
+// optional :shard at the end
+static std::string instance_meta_key_to_oid(const std::string& metadata_key)
+{
+  std::string oid = string_cat_reserve(instance_oid_prefix, metadata_key);
+
+  // replace tenant/ with tenant:
+  auto c = oid.find('/', instance_oid_prefix.size());
+  if (c != string::npos) {
+    oid[c] = ':';
+  }
+
+  return oid;
+}
+
+// convert bucket instance oids back to the tenant/ format for metadata keys.
+// it's safe to parse 'tenant:' only for oids, because they won't contain the
+// optional :shard at the end
+static std::string instance_oid_to_meta_key(const std::string& oid)
+{
+  if (oid.size() < instance_oid_prefix.size()) { /* just sanity check */
+    return string();
+  }
+
+  std::string key = oid.substr(instance_oid_prefix.size());
+
+  // find first : (could be tenant:bucket or bucket:instance)
+  auto c = key.find(':');
+  if (c != string::npos) {
+    // if we find another :, the first one was for tenant
+    if (key.find(':', c + 1) != string::npos) {
+      key[c] = '/';
+    }
+  }
+
+  return key;
+}
 
 class RGWSI_Bucket_SObj_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Bucket_SObj::Svc& svc;
@@ -63,7 +103,7 @@ class RGWSI_BucketInstance_SObj_Module : public RGWSI_MBSObj_Handler_Module {
   const string prefix;
 public:
   RGWSI_BucketInstance_SObj_Module(RGWSI_Bucket_SObj::Svc& _svc) : RGWSI_MBSObj_Handler_Module("bucket.instance"),
-                                                                     svc(_svc), prefix(RGW_BUCKET_INSTANCE_MD_PREFIX) {}
+                                                                     svc(_svc), prefix(instance_oid_prefix) {}
 
   void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
     if (pool) {
@@ -79,46 +119,15 @@ public:
   }
 
   bool is_valid_oid(const string& oid) override {
-    return (oid.compare(0, prefix.size(), RGW_BUCKET_INSTANCE_MD_PREFIX) == 0);
+    return (oid.compare(0, prefix.size(), prefix) == 0);
   }
 
-// 'tenant/' is used in bucket instance keys for sync to avoid parsing ambiguity
-// with the existing instance[:shard] format. once we parse the shard, the / is
-// replaced with a : to match the [tenant:]instance format
   string key_to_oid(const string& key) override {
-    string oid = prefix + key;
-
-    // replace tenant/ with tenant:
-    auto c = oid.find('/', prefix.size());
-    if (c != string::npos) {
-      oid[c] = ':';
-    }
-
-    return oid;
+    return instance_meta_key_to_oid(key);
   }
 
-  // convert bucket instance oids back to the tenant/ format for metadata keys.
-  // it's safe to parse 'tenant:' only for oids, because they won't contain the
-  // optional :shard at the end
   string oid_to_key(const string& oid) override {
-    /* this should have been called after oid was checked for validity */
-
-    if (oid.size() < prefix.size()) { /* just sanity check */
-      return string();
-    }
-
-    string key = oid.substr(prefix.size());
-
-    // find first : (could be tenant:bucket or bucket:instance)
-    auto c = key.find(':');
-    if (c != string::npos) {
-      // if we find another :, the first one was for tenant
-      if (key.find(':', c + 1) != string::npos) {
-        key[c] = '/';
-      }
-    }
-
-    return key;
+    return instance_oid_to_meta_key(oid);
   }
 
   /*
