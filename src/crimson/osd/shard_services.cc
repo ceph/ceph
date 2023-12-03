@@ -72,7 +72,7 @@ seastar::future<> PerShardState::stop_pgs()
     });
 }
 
-std::map<pg_t, pg_stat_t> PerShardState::get_pg_stats() const
+std::map<pg_t, pg_stat_t> PerShardState::get_pg_stats()
 {
   assert_core();
   std::map<pg_t, pg_stat_t> ret;
@@ -117,6 +117,13 @@ HeartbeatStampsRef PerShardState::get_hb_stamps(int peer)
     stamps->second = ceph::make_ref<HeartbeatStamps>(peer);
   }
   return stamps->second;
+}
+
+seastar::future<> PerShardState::update_shard_superblock(OSDSuperblock superblock)
+{
+  assert_core();
+  per_shard_superblock = std::move(superblock);
+  return seastar::now();
 }
 
 OSDSingletonState::OSDSingletonState(
@@ -352,7 +359,6 @@ void OSDSingletonState::handle_conf_change(
 seastar::future<OSDSingletonState::local_cached_map_t>
 OSDSingletonState::get_local_map(epoch_t e)
 {
-  // TODO: use LRU cache for managing osdmap, fallback to disk if we have to
   if (auto found = osdmaps.find(e); found) {
     logger().debug("{} osdmap.{} found in cache", __func__, e);
     return seastar::make_ready_future<local_cached_map_t>(std::move(found));
@@ -392,6 +398,9 @@ seastar::future<std::map<epoch_t, bufferlist>> OSDSingletonState::load_map_bls(
   logger().debug("{} loading maps [{},{}]",
                  __func__, first, last);
   ceph_assert(first <= last);
+  // TODO: take osd_map_max into account
+  //int max = cct->_conf->osd_map_message_max;
+  //ssize_t max_bytes = cct->_conf->osd_map_message_max_bytes;
   return seastar::map_reduce(boost::make_counting_iterator<epoch_t>(first),
 			     boost::make_counting_iterator<epoch_t>(last + 1),
 			     [this](epoch_t e) {
@@ -456,6 +465,34 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	return seastar::now();
       }
     });
+}
+
+// Note: store/set_superblock is called in later OSD::handle_osd_map
+//       so we use the OSD's superblock reference meanwhile.
+void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
+                                  OSDSuperblock& superblock)
+{
+  epoch_t min =
+    std::min(superblock.cluster_osdmap_trim_lower_bound,
+             osdmaps.cached_key_lower_bound());
+
+  if (min <= superblock.get_oldest_map()) {
+    return;
+  }
+  logger().debug("{}: min={} oldest_map={}", __func__, min,  superblock.get_oldest_map());
+
+  // Trim from the superblock's oldest_map up to `min`.
+  // Break if we have exceeded the txn target size.
+  while (superblock.get_oldest_map() < min &&
+         t.get_num_ops() < crimson::common::local_conf()->osd_target_transaction_size) {
+    logger().debug("{}: removing old osdmap epoch {}", __func__, superblock.get_oldest_map());
+    meta_coll->remove_map(t, superblock.get_oldest_map());
+    superblock.maps.erase(superblock.get_oldest_map());
+  }
+
+  // we should not trim past osdmaps.cached_key_lower_bound()
+  // as there may still be PGs with those map epochs recorded.
+  ceph_assert(min <= osdmaps.cached_key_lower_bound());
 }
 
 seastar::future<Ref<PG>> ShardServices::make_pg(
@@ -716,30 +753,36 @@ seastar::future<> OSDSingletonState::send_incremental_map(
                 "superblock's oldest map: {}",
                 __func__, first, superblock.get_oldest_map());
   if (first >= superblock.get_oldest_map()) {
+    // TODO: osd_map_share_max_epochs
+    // See OSDService::build_incremental_map_msg
+    if (first < superblock.cluster_osdmap_trim_lower_bound) {
+      logger().info("{}: cluster osdmap lower bound: {} "
+                " > first {}, starting with full map",
+                __func__, superblock.cluster_osdmap_trim_lower_bound, first);
+      // we don't have the next map the target wants,
+      // so start with a full map.
+      first = superblock.cluster_osdmap_trim_lower_bound;
+    }
     return load_map_bls(
       first, superblock.get_newest_map()
-    ).then([this, &conn, first](auto&& bls) {
+    ).then([this, &conn](auto&& bls) {
       auto m = crimson::make_message<MOSDMap>(
 	monc.get_fsid(),
 	osdmap->get_encoding_features());
-      m->cluster_osdmap_trim_lower_bound = first;
+      m->cluster_osdmap_trim_lower_bound = superblock.cluster_osdmap_trim_lower_bound;
       m->newest_map = superblock.get_newest_map();
       m->maps = std::move(bls);
       return conn.send(std::move(m));
     });
   } else {
+    // See OSDService::send_incremental_map
+    // just send latest full map
     return load_map_bl(osdmap->get_epoch()
     ).then([this, &conn](auto&& bl) mutable {
       auto m = crimson::make_message<MOSDMap>(
 	monc.get_fsid(),
 	osdmap->get_encoding_features());
-      /* TODO: once we support the tracking of superblock's
-       *       cluster_osdmap_trim_lower_bound, the MOSDMap should
-       *       be populated with this value instead of the oldest_map.
-       *       See: OSD::handle_osd_map for how classic updates the
-       *       cluster's trim lower bound.
-       */
-      m->cluster_osdmap_trim_lower_bound = superblock.get_oldest_map();
+      m->cluster_osdmap_trim_lower_bound = superblock.cluster_osdmap_trim_lower_bound;
       m->newest_map = superblock.get_newest_map();
       m->maps.emplace(osdmap->get_epoch(), std::move(bl));
       return conn.send(std::move(m));
