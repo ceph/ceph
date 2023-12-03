@@ -6708,6 +6708,7 @@ int main(int argc, const char **argv)
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
       ret = role->delete_obj(dpp(), null_yield);
       if (ret < 0) {
+        cerr << "failed to delete the role " <<  role_name << ": err_code " << ret << std::endl;
         return -ret;
       }
       cout << "role: " << role_name << " successfully deleted" << std::endl;

@@ -3674,6 +3674,8 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
   }
 
   if (! info.perm_policy_map.empty()) {
+    ldpp_dout(dpp, 0) << "ERROR: role id " << info.id
+                      << " still have permission policies attached" << dendl;
     return -ERR_DELETE_CONFLICT;
   }
 
