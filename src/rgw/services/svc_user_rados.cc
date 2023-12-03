@@ -129,10 +129,11 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
   bufferlist bl;
   RGWUID user_id;
 
-  RGWSI_MBSObj_GetParams params(&bl, pattrs, pmtime);
-  params.set_cache_info(cache_info);
-
-  int ret = svc.meta_be->get_entry(ctx, get_meta_key(user), params, objv_tracker, y, dpp);
+  const rgw_pool& pool = svc.zone->get_zone_params().user_uid_pool;
+  const std::string key = get_meta_key(user);
+  int ret = rgw_get_system_obj(svc.sysobj, pool, key, bl,
+                               objv_tracker, pmtime, y, dpp,
+                               pattrs, cache_info);
   if (ret < 0) {
     return ret;
   }
@@ -297,13 +298,10 @@ public:
     encode(ui, data_bl);
     encode(info, data_bl);
 
-    RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
-
-    int ret = svc.meta_be->put(ctx, RGWSI_User::get_meta_key(info.user_id), params, &ot, y, dpp);
-    if (ret < 0)
-      return ret;
-
-    return 0;
+    const rgw_pool& pool = svc.zone->get_zone_params().user_uid_pool;
+    const std::string key = RGWSI_User::get_meta_key(info.user_id);
+    return rgw_put_system_obj(dpp, svc.sysobj, pool, key, data_bl,
+                              exclusive, &ot, mtime, y, pattrs);
   }
 
   int complete(const DoutPrefixProvider *dpp) {
@@ -634,13 +632,12 @@ int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RG
 {
   ldpp_dout(dpp, 10) << "removing user index: " << user_info.user_id << dendl;
 
-  RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y, dpp);
+  const rgw_pool& pool = svc.zone->get_zone_params().user_uid_pool;
+  const std::string key = get_meta_key(user_info.user_id);
+  int ret = rgw_delete_system_obj(dpp, svc.sysobj, pool, key, objv_tracker, y);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
-    string key;
-    user_info.user_id.to_str(key);
-    rgw_raw_obj uid_obj(svc.zone->get_zone_params().user_uid_pool, key);
-    ldpp_dout(dpp, 0) << "ERROR: could not remove " << user_info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: could not remove " << user_info.user_id
+        << ": " << cpp_strerror(ret) << dendl;
     return ret;
   }
 
