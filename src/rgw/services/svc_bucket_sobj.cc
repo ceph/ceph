@@ -225,12 +225,11 @@ int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                    rgw_cache_entry_info *cache_info,
                                                    boost::optional<obj_version> refresh_version)
 {
+  const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
   bufferlist bl;
-
-  auto params = RGWSI_MBSObj_GetParams(&bl, pattrs, pmtime).set_cache_info(cache_info)
-                                                           .set_refresh_version(refresh_version);
-                                                    
-  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y, dpp);
+  int ret = rgw_get_system_obj(svc.sysobj, pool, key, bl,
+                               objv_tracker, pmtime, y, dpp,
+                               pattrs, cache_info, refresh_version);
   if (ret < 0) {
     return ret;
   }
@@ -258,14 +257,9 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
   bufferlist bl;
   encode(info, bl);
 
-  RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
-
-  int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker, y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  return ret;
+  const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
+  return rgw_put_system_obj(dpp, svc.sysobj, pool, key, bl, exclusive,
+                            objv_tracker, mtime, y, pattrs);
 }
 
 int RGWSI_Bucket_SObj::remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
@@ -274,8 +268,8 @@ int RGWSI_Bucket_SObj::remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                                      optional_yield y,
                                                      const DoutPrefixProvider *dpp)
 {
-  RGWSI_MBSObj_RemoveParams params;
-  return svc.meta_be->remove(ctx.get(), key, params, objv_tracker, y, dpp);
+  const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
+  return rgw_delete_system_obj(dpp, svc.sysobj, pool, key, objv_tracker, y);
 }
 
 int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
@@ -358,13 +352,13 @@ int RGWSI_Bucket_SObj::do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                     optional_yield y,
                                                     const DoutPrefixProvider *dpp)
 {
+  const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
+  const std::string oid = instance_meta_key_to_oid(key);
   bufferlist bl;
-  RGWObjVersionTracker ot;
+  RGWObjVersionTracker objv;
 
-  auto params = RGWSI_MBSObj_GetParams(&bl, pattrs, pmtime).set_cache_info(cache_info)
-                                                           .set_refresh_version(refresh_version);
-
-  int ret = svc.meta_be->get_entry(ctx.get(), key, params, &ot, y, dpp);
+  int ret = rgw_get_system_obj(svc.sysobj, pool, oid, bl, &objv, pmtime, y,
+                               dpp, pattrs, cache_info, refresh_version);
   if (ret < 0) {
     return ret;
   }
@@ -376,7 +370,7 @@ int RGWSI_Bucket_SObj::do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
     ldpp_dout(dpp, 0) << "ERROR: could not decode buffer info, caught buffer::error" << dendl;
     return -EIO;
   }
-  info->objv_tracker = ot;
+  info->objv_tracker = objv;
   return 0;
 }
 
@@ -543,10 +537,10 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
     }
   }
 
-  RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
-
-  int ret = svc.meta_be->put(ctx.get(), key, params, &info.objv_tracker, y, dpp);
-
+  const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
+  const std::string oid = instance_meta_key_to_oid(key);
+  int ret = rgw_put_system_obj(dpp, svc.sysobj, pool, oid, bl, exclusive,
+                               &info.objv_tracker, mtime, y, pattrs);
   if (ret >= 0) {
     int r = svc.bucket_sync->handle_bi_update(dpp, info,
                                               orig_info.value_or(nullptr),
@@ -580,9 +574,9 @@ int RGWSI_Bucket_SObj::remove_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                    optional_yield y,
                                                    const DoutPrefixProvider *dpp)
 {
-  RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove_entry(dpp, ctx.get(), key, params, objv_tracker, y);
-
+  const rgw_pool& pool = svc.zone->get_zone_params().domain_root;
+  const std::string oid = instance_meta_key_to_oid(key);
+  int ret = rgw_delete_system_obj(dpp, svc.sysobj, pool, oid, objv_tracker, y);
   if (ret < 0 &&
       ret != -ENOENT) {
     return ret;
