@@ -18,17 +18,16 @@
 
 #include "rgw_service.h"
 
-#include "svc_meta_be.h"
 #include "svc_user.h"
 
 #include "driver/rados/rgw_bucket.h" // FIXME: subclass dependency
 
+class RGWSI_MDLog;
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
 class RGWSI_Meta;
 class RGWSI_SyncModules;
-class RGWSI_MetaBackend_Handler;
 
 struct rgw_cache_entry_info;
 
@@ -40,9 +39,6 @@ class RGWChainedCacheImpl;
 class RGWSI_User_RADOS : public RGWSI_User
 {
   friend class PutOperation;
-
-  std::unique_ptr<RGWSI_MetaBackend::Module> be_module;
-  RGWSI_MetaBackend_Handler *be_handler;
 
   struct user_info_cache_entry {
     RGWUserInfo info;
@@ -79,25 +75,25 @@ public:
   struct Svc {
     RGWSI_User_RADOS *user{nullptr};
     RGWSI_Zone *zone{nullptr};
+    RGWSI_MDLog *mdlog{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_SysObj_Cache *cache{nullptr};
     RGWSI_Meta *meta{nullptr};
-    RGWSI_MetaBackend *meta_be{nullptr};
-    RGWSI_SyncModules *sync_modules{nullptr};
   } svc;
 
   RGWSI_User_RADOS(CephContext *cct);
   ~RGWSI_User_RADOS();
 
   void init(librados::Rados* rados_,
-            RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
-	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
-            RGWSI_MetaBackend *_meta_be_svc,
-	    RGWSI_SyncModules *_sync_modules);
+            RGWSI_Zone *_zone_svc,
+            RGWSI_MDLog *mdlog_svc,
+            RGWSI_SysObj *_sysobj_svc,
+            RGWSI_SysObj_Cache *_cache_svc,
+            RGWSI_Meta *_meta_svc);
 
-  RGWSI_MetaBackend_Handler *get_be_handler() override {
-    return be_handler;
-  }
+  int create_lister(const DoutPrefixProvider* dpp,
+                    const std::string& marker,
+                    std::unique_ptr<RGWMetadataLister>& lister) override;
 
   int read_user_info(const rgw_user& user,
                      RGWUserInfo *info,

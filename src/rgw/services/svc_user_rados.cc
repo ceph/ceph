@@ -5,16 +5,16 @@
 
 #include "svc_user.h"
 #include "svc_user_rados.h"
+#include "svc_mdlog.h"
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
 #include "svc_meta.h"
-#include "svc_meta_be_sobj.h"
-#include "svc_sync_modules.h"
 
 #include "rgw_user.h"
 #include "rgw_account.h"
 #include "rgw_bucket.h"
+#include "rgw_metadata_lister.h"
 #include "rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_rados.h"
@@ -30,41 +30,6 @@
 
 using namespace std;
 
-class RGWSI_User_Module : public RGWSI_MBSObj_Handler_Module {
-  RGWSI_User_RADOS::Svc& svc;
-
-  const string prefix;
-public:
-  RGWSI_User_Module(RGWSI_User_RADOS::Svc& _svc) : RGWSI_MBSObj_Handler_Module("user"),
-                                                   svc(_svc) {}
-
-  void get_pool_and_oid(const string& key, rgw_pool *pool, string *oid) override {
-    if (pool) {
-      *pool = svc.zone->get_zone_params().user_uid_pool;
-    }
-    if (oid) {
-      *oid = key;
-    }
-  }
-
-  const string& get_oid_prefix() override {
-    return prefix;
-  }
-
-  bool is_valid_oid(const string& oid) override {
-    // filter out the user.buckets objects
-    return !boost::algorithm::ends_with(oid, RGW_BUCKETS_OBJ_SUFFIX);
-  }
-
-  string key_to_oid(const string& key) override {
-    return key;
-  }
-
-  string oid_to_key(const string& oid) override {
-    return oid;
-  }
-};
-
 RGWSI_User_RADOS::RGWSI_User_RADOS(CephContext *cct): RGWSI_User(cct) {
 }
 
@@ -72,37 +37,25 @@ RGWSI_User_RADOS::~RGWSI_User_RADOS() {
 }
 
 void RGWSI_User_RADOS::init(librados::Rados* rados_,
-                            RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
-                            RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
-                            RGWSI_MetaBackend *_meta_be_svc,
-                            RGWSI_SyncModules *_sync_modules_svc)
+                            RGWSI_Zone *_zone_svc,
+                            RGWSI_MDLog *mdlog_svc,
+                            RGWSI_SysObj *_sysobj_svc,
+                            RGWSI_SysObj_Cache *_cache_svc,
+                            RGWSI_Meta *_meta_svc)
 {
   svc.user = this;
   rados = rados_;
   svc.zone = _zone_svc;
+  svc.mdlog = mdlog_svc;
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
   svc.meta = _meta_svc;
-  svc.meta_be = _meta_be_svc;
-  svc.sync_modules = _sync_modules_svc;
 }
 
 int RGWSI_User_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)
 {
   uinfo_cache.reset(new RGWChainedCacheImpl<user_info_cache_entry>);
   uinfo_cache->init(svc.cache);
-
-  int r = svc.meta->create_be_handler(RGWSI_MetaBackend::Type::MDBE_SOBJ, &be_handler);
-  if (r < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to create be handler: r=" << r << dendl;
-    return r;
-  }
-
-  RGWSI_MetaBackend_Handler_SObj *bh = static_cast<RGWSI_MetaBackend_Handler_SObj *>(be_handler);
-
-  auto module = new RGWSI_User_Module(svc);
-  be_module.reset(module);
-  bh->set_module(module);
   return 0;
 }
 
@@ -110,6 +63,38 @@ rgw_raw_obj RGWSI_User_RADOS::get_buckets_obj(const rgw_user& user) const
 {
   string oid = user.to_str() + RGW_BUCKETS_OBJ_SUFFIX;
   return rgw_raw_obj(svc.zone->get_zone_params().user_uid_pool, oid);
+}
+
+class UserLister : public RGWMetadataLister {
+ public:
+  using RGWMetadataLister::RGWMetadataLister;
+
+  void filter_transform(std::vector<std::string>& oids,
+                        std::list<std::string>& keys) override
+  {
+    // filter out the user.buckets objects
+    constexpr auto filter = [] (const std::string& oid) {
+                              return oid.ends_with(RGW_BUCKETS_OBJ_SUFFIX);
+                            };
+    // 'oids' is mutable so we can move its elements instead of copying
+    std::remove_copy_if(std::make_move_iterator(oids.begin()),
+                        std::make_move_iterator(oids.end()),
+                        std::back_inserter(keys), filter);
+  }
+};
+
+int RGWSI_User_RADOS::create_lister(const DoutPrefixProvider* dpp,
+                                    const std::string& marker,
+                                    std::unique_ptr<RGWMetadataLister>& lister)
+{
+  const rgw_pool& pool = svc.zone->get_zone_params().user_uid_pool;
+  auto p = std::make_unique<UserLister>(svc.sysobj->get_pool(pool));
+  int r = p->init(dpp, marker, ""); // empty prefix
+  if (r < 0) {
+    return r;
+  }
+  lister = std::move(p);
+  return 0;
 }
 
 int RGWSI_User_RADOS::read_user_info(const rgw_user& user,
@@ -230,7 +215,7 @@ public:
 
     if (ot.write_version.tag.empty()) {
       if (ot.read_version.tag.empty()) {
-        ot.generate_new_write_ver(svc.meta_be->ctx());
+        ot.generate_new_write_ver(dpp->get_cct());
       } else {
         ot.write_version = ot.read_version;
         ot.write_version.ver++;
@@ -296,8 +281,12 @@ public:
 
     const rgw_pool& pool = svc.zone->get_zone_params().user_uid_pool;
     const std::string key = RGWSI_User::get_meta_key(info.user_id);
-    return rgw_put_system_obj(dpp, svc.sysobj, pool, key, data_bl,
-                              exclusive, &ot, mtime, y, pattrs);
+    int r = rgw_put_system_obj(dpp, svc.sysobj, pool, key, data_bl,
+                               exclusive, &ot, mtime, y, pattrs);
+    if (r < 0) {
+      return r;
+    }
+    return svc.mdlog->complete_entry(dpp, y, "user", key, &ot);
   }
 
   int complete(const DoutPrefixProvider *dpp) {
@@ -625,13 +614,16 @@ int RGWSI_User_RADOS::remove_uid_index(const RGWUserInfo& user_info, RGWObjVersi
   const rgw_pool& pool = svc.zone->get_zone_params().user_uid_pool;
   const std::string key = get_meta_key(user_info.user_id);
   int ret = rgw_delete_system_obj(dpp, svc.sysobj, pool, key, objv_tracker, y);
-  if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
+  if (ret == -ENOENT || ret  == -ECANCELED) {
+    return 0; // success but no mdlog entry
+  }
+  if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove " << user_info.user_id
         << ": " << cpp_strerror(ret) << dendl;
     return ret;
   }
 
-  return 0;
+  return svc.mdlog->complete_entry(dpp, y, "user", key, objv_tracker);
 }
 
 static int read_index(const DoutPrefixProvider* dpp, optional_yield y,

@@ -119,8 +119,8 @@ int RGWServices_Def::init(CephContext *cct,
   } else {
     sysobj->init(driver->getRados()->get_rados_handle(), sysobj_core.get());
   }
-  user_rados->init(driver->getRados()->get_rados_handle(), zone.get(), sysobj.get(), sysobj_cache.get(),
-                   meta.get(), meta_be_sobj.get(), sync_modules.get());
+  user_rados->init(driver->getRados()->get_rados_handle(), zone.get(), mdlog.get(),
+                   sysobj.get(), sysobj_cache.get(), meta.get());
   role_rados->init(zone.get(), meta.get(), meta_be_sobj.get(), sysobj.get());
   can_shutdown = true;
 
@@ -365,7 +365,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
 {
   meta.mgr.reset(new RGWMetadataManager(svc.meta));
 
-  meta.user.reset(RGWUserMetaHandlerAllocator::alloc(svc.user));
+  meta.user = create_user_metadata_handler(svc.user);
 
   bucket.reset(new RGWBucketCtl(svc.zone,
                                 svc.bucket,
@@ -391,7 +391,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
   meta.group = rgwrados::group::create_metadata_handler(
       *svc.sysobj, rados, svc.zone->get_zone_params());
 
-  user.reset(new RGWUserCtl(svc.zone, svc.user, (RGWUserMetadataHandler *)meta.user.get()));
+  user = std::make_unique<RGWUserCtl>(svc.zone, svc.user);
 
   meta.topic_cache = std::make_unique<RGWChainedCacheImpl<rgwrados::topic::cache_entry>>();
   meta.topic_cache->init(svc.cache);

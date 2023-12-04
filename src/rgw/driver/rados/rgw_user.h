@@ -15,7 +15,6 @@
 
 #include "common/Formatter.h"
 #include "rgw_formats.h"
-#include "rgw_metadata.h"
 #include "rgw_sal_fwd.h"
 
 #define RGW_USER_ANON_ID "anonymous"
@@ -29,6 +28,8 @@
 class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
+class RGWMetadataHandler;
+class RGWSI_User;
 
 // generate a random secret access key of SECRET_KEY_LEN=40
 void rgw_generate_secret_key(CephContext* cct,
@@ -728,43 +729,6 @@ public:
 		    optional_yield y);
 };
 
-struct RGWUserCompleteInfo {
-  RGWUserInfo info;
-  std::map<std::string, bufferlist> attrs;
-  bool has_attrs{false};
-
-  void dump(Formatter * const f) const {
-    info.dump(f);
-    encode_json("attrs", attrs, f);
-  }
-
-  void decode_json(JSONObj *obj) {
-    decode_json_obj(info, obj);
-    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
-  }
-};
-
-class RGWUserMetadataObject : public RGWMetadataObject {
-  RGWUserCompleteInfo uci;
-public:
-  RGWUserMetadataObject() {}
-  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, const obj_version& v, real_time m)
-      : uci(_uci) {
-    objv = v;
-    mtime = m;
-  }
-
-  void dump(Formatter *f) const override {
-    uci.dump(f);
-  }
-
-  RGWUserCompleteInfo& get_uci() {
-    return uci;
-  }
-};
-
-class RGWUserMetadataHandler;
-
 class RGWUserCtl
 {
   struct Svc {
@@ -776,13 +740,8 @@ class RGWUserCtl
     RGWBucketCtl *bucket{nullptr};
   } ctl;
 
-  RGWUserMetadataHandler *umhandler;
-  RGWSI_MetaBackend_Handler *be_handler{nullptr};
-  
 public:
-  RGWUserCtl(RGWSI_Zone *zone_svc,
-             RGWSI_User *user_svc,
-             RGWUserMetadataHandler *_umhandler);
+  RGWUserCtl(RGWSI_Zone *zone_svc, RGWSI_User *user_svc);
 
   void init(RGWBucketCtl *bucket_ctl) {
     ctl.bucket = bucket_ctl;
@@ -894,7 +853,6 @@ public:
                   const RemoveParams& params = {});
 };
 
-class RGWUserMetaHandlerAllocator {
-public:
-  static RGWMetadataHandler *alloc(RGWSI_User *user_svc);
-};
+// user metadata handler factory
+auto create_user_metadata_handler(RGWSI_User *user_svc)
+    -> std::unique_ptr<RGWMetadataHandler>;
