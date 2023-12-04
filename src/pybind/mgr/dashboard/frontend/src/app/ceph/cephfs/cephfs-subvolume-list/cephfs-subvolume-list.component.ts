@@ -1,6 +1,14 @@
-import { Component, Input, OnChanges, OnInit, TemplateRef, ViewChild } from '@angular/core';
-import { Observable, ReplaySubject, of } from 'rxjs';
-import { catchError, shareReplay, switchMap } from 'rxjs/operators';
+import {
+  Component,
+  Input,
+  OnChanges,
+  OnInit,
+  SimpleChanges,
+  TemplateRef,
+  ViewChild
+} from '@angular/core';
+import { BehaviorSubject, Observable, of } from 'rxjs';
+import { catchError, switchMap, tap } from 'rxjs/operators';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
@@ -22,7 +30,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
-import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolumegroup.model';
+import { CephfsSubvolumeGroup } from '~/app/shared/models/cephfs-subvolume-group.model';
 
 @Component({
   selector: 'cd-cephfs-subvolume-list',
@@ -64,13 +72,16 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
 
   subVolumes$: Observable<CephfsSubvolume[]>;
   subVolumeGroups$: Observable<CephfsSubvolumeGroup[]>;
-  subject = new ReplaySubject<CephfsSubvolume[]>();
-  groupsSubject = new ReplaySubject<CephfsSubvolume[]>();
+  subject = new BehaviorSubject<CephfsSubvolume[]>([]);
+  groupsSubject = new BehaviorSubject<CephfsSubvolume[]>([]);
+
+  subvolumeGroupList: string[] = [];
+  subVolumesList: CephfsSubvolume[] = [];
 
   activeGroupName: string = '';
 
   constructor(
-    private cephfsSubVolume: CephfsSubvolumeService,
+    private cephfsSubVolumeService: CephfsSubvolumeService,
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private authStorageService: AuthStorageService,
@@ -146,11 +157,13 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       }
     ];
 
-    this.getSubVolumes();
-
     this.subVolumeGroups$ = this.groupsSubject.pipe(
       switchMap(() =>
-        this.cephfsSubvolumeGroupService.get(this.fsName).pipe(
+        this.cephfsSubvolumeGroupService.get(this.fsName, false).pipe(
+          tap((groups) => {
+            this.subvolumeGroupList = groups.map((group) => group.name);
+            this.subvolumeGroupList.unshift('');
+          }),
           catchError(() => {
             this.context.error();
             return of(null);
@@ -161,12 +174,14 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
   }
 
   fetchData() {
-    this.subject.next();
+    this.subject.next([]);
   }
 
-  ngOnChanges() {
-    this.subject.next();
-    this.groupsSubject.next();
+  ngOnChanges(changes: SimpleChanges) {
+    if (changes.fsName) {
+      this.subject.next([]);
+      this.groupsSubject.next([]);
+    }
   }
 
   updateSelection(selection: CdTableSelection) {
@@ -203,7 +218,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
         this.taskWrapper
           .wrapTaskAroundCall({
             task: new FinishedTask('cephfs/subvolume/remove', { subVolumeName: this.selectedName }),
-            call: this.cephfsSubVolume.remove(
+            call: this.cephfsSubVolumeService.remove(
               this.fsName,
               this.selectedName,
               this.activeGroupName,
@@ -222,20 +237,19 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
 
   selectSubVolumeGroup(subVolumeGroupName: string) {
     this.activeGroupName = subVolumeGroupName;
-    this.getSubVolumes(subVolumeGroupName);
+    this.getSubVolumes();
   }
 
-  getSubVolumes(subVolumeGroupName = '') {
+  getSubVolumes() {
     this.subVolumes$ = this.subject.pipe(
       switchMap(() =>
-        this.cephfsSubVolume.get(this.fsName, subVolumeGroupName).pipe(
+        this.cephfsSubVolumeService.get(this.fsName, this.activeGroupName).pipe(
           catchError(() => {
             this.context.error();
             return of(null);
           })
         )
-      ),
-      shareReplay(1)
+      )
     );
   }
 }

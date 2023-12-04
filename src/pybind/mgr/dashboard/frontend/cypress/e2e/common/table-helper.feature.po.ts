@@ -54,6 +54,13 @@ Then('I should not see a row with {string}', (row: string) => {
   );
 });
 
+Then('I should see a table in the expanded row', () => {
+  cy.get('.datatable-row-detail').within(() => {
+    cy.get('cd-table').should('exist');
+    cy.get('datatable-scroller, .empty-row');
+  });
+});
+
 Then('I should not see a row with {string} in the expanded row', (row: string) => {
   cy.get('.datatable-row-detail').within(() => {
     cy.get('cd-table .search input').first().clear().type(row);
@@ -132,4 +139,10 @@ And('I should see row {string} have {string} on this tab', (row: string, options
       }
     });
   }
+});
+
+Then('I should see an alert {string} in the expanded row', (alert: string) => {
+  cy.get('.datatable-row-detail').within(() => {
+    cy.get('.alert-panel-text').contains(alert);
+  });
 });

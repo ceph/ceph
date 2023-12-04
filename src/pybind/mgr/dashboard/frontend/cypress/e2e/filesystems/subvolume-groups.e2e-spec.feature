@@ -21,7 +21,7 @@ Feature: CephFS Subvolume Group management
         And I click on "Create Subvolume group" button
         Then I should see a row with "test_subvolume_group" in the expanded row
 
-    Scenario: Edit a CephFS Subvolume
+    Scenario: Edit a CephFS Subvolume Group
         Given I am on the "cephfs" page
         When I expand the row "test_cephfs"
         And I go to the "Subvolume groups" tab
@@ -31,7 +31,7 @@ Feature: CephFS Subvolume Group management
         And I click on "Edit Subvolume group" button
         Then I should see row "test_subvolume_group" of the expanded row to have a usage bar
 
-    Scenario: Remove a CephFS Subvolume
+    Scenario: Remove a CephFS Subvolume Group
         Given I am on the "cephfs" page
         When I expand the row "test_cephfs"
         And I go to the "Subvolume groups" tab
