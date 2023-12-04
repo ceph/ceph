@@ -356,47 +356,6 @@ TEST(FSCrypt, SetPolicyEmptyDir) {
   ceph_shutdown(cmount);
 }
 
-TEST(FSCrypt, SetPolicyNotEmptyFile) {
-  struct ceph_fscrypt_key_identifier kid;
-
-  struct ceph_mount_info* cmount;
-  int r = init_mount(&cmount);
-  ASSERT_EQ(0, r);
-
-  string dir_path = "dir1";
-  ceph_mkdir(cmount, dir_path.c_str(), 0777);
-
-  string file_path = "dir1/file1";
-  int fd = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
-  r = ceph_write(cmount, fd, fscrypt_key, sizeof(fscrypt_key), 0);
-  ceph_close(cmount, fd);
-
-  int fd2 = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
-
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
-
-  struct fscrypt_policy_v2 policy;
-  policy.version = 2;
-  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
-  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
-  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
-  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
-
-  r = ceph_set_fscrypt_policy_v2(cmount, fd2, &policy);
-  ASSERT_EQ(-ENOTEMPTY, r);
-
-  fscrypt_remove_key_arg arg;
-  generate_remove_key_arg(kid, &arg);
-
-  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
-  ASSERT_EQ(0, r);
-  ASSERT_EQ(0, arg.removal_status_flags);
-
-  ceph_unlink(cmount, file_path.c_str());
-  ceph_rmdir(cmount, dir_path.c_str());
-  ceph_shutdown(cmount);
-}
-
 TEST(FSCrypt, SetPolicyNotEmptyDir) {
   struct ceph_fscrypt_key_identifier kid;
 
@@ -446,7 +405,7 @@ TEST(FSCrypt, SetPolicyAlreadyExistSameKey) {
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
-  
+
   string dir_path = "dir2";
   ceph_mkdir(cmount, dir_path.c_str(), 0777);
 
@@ -466,21 +425,290 @@ TEST(FSCrypt, SetPolicyAlreadyExistSameKey) {
 
   r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(-EEXIST, r);
-  
+
   ceph_rmdir(cmount, dir_path.c_str());
   ceph_shutdown(cmount);
 }
 
 TEST(FSCrypt, SetPolicyNonDir) {
-  //can be file, symlink, hardlink, device file etc
+  //can be file, symlink, device file etc
   struct ceph_fscrypt_key_identifier kid;
 
   struct ceph_mount_info* cmount;
   int r = init_mount(&cmount);
   ASSERT_EQ(0, r);
 
-  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+  //setup policy
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  //file
+  string file_path = "file1";
+  int fd = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
   ASSERT_EQ(-ENOTDIR, r);
+  ceph_close(cmount, fd);
+
+  //symlink
+  string symlink_path = "symlink1";
+  r = ceph_symlink(cmount, file_path.c_str(), symlink_path.c_str());
+  fd = ceph_open(cmount, symlink_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+  ASSERT_EQ(-ENOTDIR, r);
+  ceph_close(cmount, fd);
+
+  //device file
+  string mknod_path = "device1";
+  r = ceph_mknod(cmount, mknod_path.c_str(), 0600, 55);
+  fd = ceph_open(cmount, mknod_path.c_str(), O_RDWR, 0600);
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+  ASSERT_EQ(-ENOTDIR, r);
+  ceph_close(cmount, fd);
+
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, LockedListDir) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir1";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  string file_path = "dir1/file5";
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+
+  int fd2 = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd2, fscrypt_key, sizeof(fscrypt_key), 0);
+  ASSERT_EQ(32, r);
+
+  ceph_close(cmount, fd);
+  ceph_close(cmount, fd2);
+
+  ino_t inode = 0;
+  struct ceph_dir_result *rdir;
+  struct dirent *result;
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+    if (strcmp(result->d_name, "file5") == 0) {
+      inode = result->d_ino;
+    }
+  }
+  fscrypt_remove_key_arg arg;
+  generate_remove_key_arg(kid, &arg);
+
+  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, arg.removal_status_flags);
+
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+    if (result->d_ino == inode){
+      file_path = dir_path;
+      file_path.append("/");
+      file_path.append(result->d_name);
+
+      //check that we can get stat info
+      struct stat st;
+      ceph_stat(cmount, file_path.c_str(), &st);
+
+      ASSERT_EQ(sizeof(fscrypt_key), st.st_size);
+      goto done;
+    }
+  }
+  ASSERT_EQ(0,-1); //will fail
+
+done:
+  ceph_unlink(cmount, file_path.c_str());
+  ceph_rmdir(cmount, dir_path.c_str());
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, ReadLockedDir) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir1";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  string file_path = "dir1/file5";
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+
+  int fd2 = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd2, fscrypt_key, sizeof(fscrypt_key), 0);
+  ASSERT_EQ(32, r);
+
+  ceph_close(cmount, fd);
+  ceph_close(cmount, fd2);
+
+  ino_t inode = 0;
+  struct ceph_dir_result *rdir;
+  struct dirent *result;
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+    if (strcmp(result->d_name, "file5") == 0) {
+      inode = result->d_ino;
+    }
+  }
+  fscrypt_remove_key_arg arg;
+  generate_remove_key_arg(kid, &arg);
+
+  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, arg.removal_status_flags);
+
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+    if (result->d_ino == inode){
+      file_path = dir_path;
+      file_path.append("/");
+      file_path.append(result->d_name);
+      goto read;
+    }
+  }
+  ASSERT_EQ(0,-1); //will fail
+
+read:
+  fd2 = ceph_open(cmount, file_path.c_str(), O_RDWR, 0600);
+  ASSERT_EQ(-ENOKEY, fd2);
+
+  ceph_unlink(cmount, file_path.c_str());
+  ceph_rmdir(cmount, dir_path.c_str());
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, WriteLockedDir) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir1";
+  string dir_path2 = "dir1/dir3";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  string file_path = "dir1/file5";
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+
+  int fd2 = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd2, fscrypt_key, sizeof(fscrypt_key), 0);
+  ASSERT_EQ(32, r);
+
+  ceph_close(cmount, fd);
+  ceph_close(cmount, fd2);
+
+  ino_t inode = 0;
+  struct ceph_dir_result *rdir;
+  struct dirent *result;
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+    if (strcmp(result->d_name, "file5") == 0) {
+      inode = result->d_ino;
+    }
+  }
+  fscrypt_remove_key_arg arg;
+  generate_remove_key_arg(kid, &arg);
+
+  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, arg.removal_status_flags);
+
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+    if (result->d_ino == inode){
+      file_path = dir_path;
+      file_path.append("/");
+      file_path.append(result->d_name);
+      goto write;
+    }
+  }
+  ASSERT_EQ(0,-1); //will fail
+
+write:
+  fd2 = ceph_open(cmount, file_path.c_str(), O_RDWR, 0600);
+  ASSERT_EQ(-ENOKEY, fd2);
+
+  ASSERT_EQ(-ENOKEY, ceph_mkdir(cmount, dir_path2.c_str(), 0777));
+
+  ceph_unlink(cmount, file_path.c_str());
+  ceph_rmdir(cmount, dir_path.c_str());
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, LockedCreateSnap) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir1";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  string file_path = "dir1/file5";
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+
+  int fd2 = ceph_open(cmount, file_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd2, fscrypt_key, sizeof(fscrypt_key), 0);
+  ASSERT_EQ(32, r);
+
+  ceph_close(cmount, fd);
+  ceph_close(cmount, fd2);
 
   fscrypt_remove_key_arg arg;
   generate_remove_key_arg(kid, &arg);
@@ -489,6 +717,124 @@ TEST(FSCrypt, SetPolicyNonDir) {
   ASSERT_EQ(0, r);
   ASSERT_EQ(0, arg.removal_status_flags);
 
+  string snap_name = "snap1";
+  ASSERT_EQ(-ENOKEY, ceph_mksnap(cmount, dir_path.c_str(), snap_name.c_str(), 0755, nullptr, 0));
+  ceph_unlink(cmount, file_path.c_str());
+  ceph_rmdir(cmount, dir_path.c_str());
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, RenameLockedSource) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir1";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  string src_path = "dir1/file5";
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+
+  int fd2 = ceph_open(cmount, src_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd2, fscrypt_key, sizeof(fscrypt_key), 0);
+  ASSERT_EQ(32, r);
+
+  ceph_close(cmount, fd);
+  ceph_close(cmount, fd2);
+
+  ino_t inode = 0;
+  struct ceph_dir_result *rdir;
+  struct dirent *result;
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+    if (strcmp(result->d_name, "file5") == 0) {
+      inode = result->d_ino;
+    }
+  }
+
+  fscrypt_remove_key_arg arg;
+  generate_remove_key_arg(kid, &arg);
+
+  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, arg.removal_status_flags);
+
+  ASSERT_EQ(ceph_opendir(cmount, "dir1", &rdir), 0);
+  while ((result = ceph_readdir(cmount, rdir)) != NULL) {
+    if (result->d_ino == inode){
+      src_path = dir_path;
+      src_path.append("/");
+      src_path.append(result->d_name);
+      break;
+    }
+  }
+  ASSERT_EQ(ceph_closedir(cmount, rdir), 0);
+
+  string dest_path = "file_dest";
+
+  ASSERT_EQ(ceph_rename(cmount, src_path.c_str(), dest_path.c_str()), -ENOKEY);
+
+  ceph_unlink(cmount, src_path.c_str());
+  ceph_rmdir(cmount, dir_path.c_str());
+  ceph_shutdown(cmount);
+}
+
+TEST(FSCrypt, RenameLockedDest) {
+  struct ceph_fscrypt_key_identifier kid;
+
+  struct ceph_mount_info* cmount;
+  int r = init_mount(&cmount);
+  ASSERT_EQ(0, r);
+
+  string dir_path = "dir1";
+  ceph_mkdir(cmount, dir_path.c_str(), 0777);
+
+  string src_path = "file_src";
+  string dest_path = "dir1/file_dest";
+  int fd = ceph_open(cmount, dir_path.c_str(), O_DIRECTORY, 0);
+
+  r = ceph_add_fscrypt_key(cmount, fscrypt_key, sizeof(fscrypt_key), &kid, 1299);
+
+  struct fscrypt_policy_v2 policy;
+  policy.version = 2;
+  policy.contents_encryption_mode = FSCRYPT_MODE_AES_256_XTS;
+  policy.filenames_encryption_mode = FSCRYPT_MODE_AES_256_CTS;
+  policy.flags = FSCRYPT_POLICY_FLAGS_PAD_32;
+  memcpy(policy.master_key_identifier, kid.raw, FSCRYPT_KEY_IDENTIFIER_SIZE);
+
+  r = ceph_set_fscrypt_policy_v2(cmount, fd, &policy);
+
+  int fd2 = ceph_open(cmount, src_path.c_str(), O_RDWR|O_CREAT|O_TRUNC, 0600);
+  r = ceph_write(cmount, fd2, fscrypt_key, sizeof(fscrypt_key), 0);
+  ASSERT_EQ(32, r);
+
+  ceph_close(cmount, fd);
+  ceph_close(cmount, fd2);
+
+  fscrypt_remove_key_arg arg;
+  generate_remove_key_arg(kid, &arg);
+
+  r = ceph_remove_fscrypt_key(cmount, &arg, 1299);
+  ASSERT_EQ(0, r);
+  ASSERT_EQ(0, arg.removal_status_flags);
+
+  ASSERT_EQ(ceph_rename(cmount, src_path.c_str(), dest_path.c_str()), -ENOKEY);
+
+  ceph_unlink(cmount, src_path.c_str());
+  ceph_rmdir(cmount, dir_path.c_str());
   ceph_shutdown(cmount);
 }
 
