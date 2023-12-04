@@ -1117,6 +1117,10 @@ public:
  */
 class MultipartUpload {
 public:
+  //object lock
+  std::optional<RGWObjectRetention> obj_retention = std::nullopt;
+  std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
+
   MultipartUpload() = default;
   virtual ~MultipartUpload() = default;
 
