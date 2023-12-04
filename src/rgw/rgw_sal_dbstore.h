@@ -505,7 +505,7 @@ protected:
 			 int num_parts, int marker,
 			 int* next_marker, bool* truncated,
 			 bool assume_unsorted = false) override;
-    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct) override;
+    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, bool log_op = true) override;
     virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
@@ -567,7 +567,7 @@ protected:
         public:
           DBDeleteOp(DBObject* _source);
 
-          virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
+          virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op = true) override;
       };
 
       DBObject() = default;
@@ -624,7 +624,8 @@ protected:
           const real_time& mtime,
           uint64_t olh_epoch,
           const DoutPrefixProvider* dpp,
-          optional_yield y) override;
+          optional_yield y,
+          bool log_op = true) override;
       virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
       virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
@@ -705,7 +706,8 @@ protected:
                          const char *if_match, const char *if_nomatch,
                          const std::string *user_data,
                          rgw_zone_set *zones_trace, bool *canceled,
-                         optional_yield y) override;
+                         optional_yield y,
+                         bool log_op = true) override;
   };
 
   class DBMultipartWriter : public StoreWriter {
@@ -753,7 +755,8 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) override;
+                       optional_yield y,
+                       bool log_op = true) override;
   };
 
   class DBStore : public StoreDriver {

@@ -370,7 +370,7 @@ class RadosObject : public StoreObject {
     public:
       RadosDeleteOp(RadosObject* _source);
 
-      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
+      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op = true) override;
     };
 
     RadosObject(RadosStore *_st, const rgw_obj_key& _k)
@@ -453,7 +453,8 @@ class RadosObject : public StoreObject {
 			   const real_time& mtime,
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
-			   optional_yield y) override;
+			   optional_yield y,
+                           bool log_op = true) override;
     virtual int transition_to_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
 			   rgw_bucket_dir_entry& o,
@@ -679,7 +680,7 @@ public:
 			 int num_parts, int marker,
 			 int* next_marker, bool* truncated,
 			 bool assume_unsorted = false) override;
-  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct) override;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, bool log_op = true) override;
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
@@ -822,7 +823,8 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) override;
+                       optional_yield y,
+                       bool log_op = true) override;
 };
 
 class RadosAppendWriter : public StoreWriter {
@@ -869,7 +871,8 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) override;
+                       optional_yield y,
+                       bool log_op = true) override;
 };
 
 class RadosMultipartWriter : public StoreWriter {
@@ -914,7 +917,8 @@ public:
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y) override;
+                       optional_yield y,
+                       bool log_op = true) override;
 };
 
 class RadosLuaManager : public StoreLuaManager {

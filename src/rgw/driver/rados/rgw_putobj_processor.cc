@@ -339,7 +339,8 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
                                     const char *if_nomatch,
                                     const std::string *user_data,
                                     rgw_zone_set *zones_trace,
-                                    bool *pcanceled, optional_yield y)
+                                    bool *pcanceled, optional_yield y,
+                                    bool log_op)
 {
   int r = writer.drain();
   if (r < 0) {
@@ -376,7 +377,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
 
   read_cloudtier_info_from_attrs(attrs, obj_op.meta.category, manifest);
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y, log_op);
   if (r < 0) {
     if (r == -ETIMEDOUT) {
       // The head object write may eventually succeed, clear the set of objects for deletion. if it
@@ -480,7 +481,8 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
                                        const char *if_nomatch,
                                        const std::string *user_data,
                                        rgw_zone_set *zones_trace,
-                                       bool *pcanceled, optional_yield y)
+                                       bool *pcanceled, optional_yield y,
+                                       bool log_op)
 {
   int r = writer.drain();
   if (r < 0) {
@@ -504,7 +506,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
 
-  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y);
+  r = obj_op.write_meta(dpp, actual_size, accounted_size, attrs, y, log_op);
   if (r < 0)
     return r;
 
@@ -684,7 +686,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
                                     ceph::real_time set_mtime, rgw::sal::Attrs& attrs,
                                     ceph::real_time delete_at, const char *if_match, const char *if_nomatch,
                                     const string *user_data, rgw_zone_set *zones_trace, bool *pcanceled,
-                                    optional_yield y)
+                                    optional_yield y, bool log_op)
 {
   int r = writer.drain();
   if (r < 0)
@@ -742,7 +744,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   }
   r = obj_op.write_meta(dpp, actual_size + cur_size,
 			accounted_size + *cur_accounted_size,
-			attrs, y);
+			attrs, y, log_op);
   if (r < 0) {
     return r;
   }
