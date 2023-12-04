@@ -139,3 +139,7 @@ def get_file_timestamp(fn):
         ).strftime(DATEFMT)
     except Exception:
         return None
+
+
+def make_run_dir(fsid: str, uid: int, gid: int) -> None:
+    makedirs(f'/var/run/ceph/{fsid}', uid, gid, 0o770)
