@@ -26,6 +26,8 @@
 #include "rgw_sal_dbstore.h"
 #include "rgw_bucket.h"
 
+#include "driver/rados/rgw_rados.h" // XXX: for RGW_OBJ_NS_MULTIPART, PUT_OBJ_CREATE, etc
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;

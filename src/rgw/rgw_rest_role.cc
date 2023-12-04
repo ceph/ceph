@@ -40,7 +40,7 @@ int RGWRestRole::check_caps(const RGWUserCaps& caps)
   return caps.check_cap("roles", perm);
 }
 
-static void dump_iam_role(const rgw::sal::RGWRoleInfo& role, Formatter *f)
+static void dump_iam_role(const RGWRoleInfo& role, Formatter *f)
 {
   encode_json("RoleId", role.id, f);
   encode_json("RoleName", role.name, f);
@@ -582,7 +582,7 @@ int RGWPutRolePolicy::init_processing(optional_yield y)
 
   try {
     // non-account identity policy is restricted to the current tenant
-    const rgw::sal::RGWRoleInfo& info = role->get_info();
+    const RGWRoleInfo& info = role->get_info();
     const std::string* policy_tenant = account_id.empty() ? &info.tenant : nullptr;
     const rgw::IAM::Policy p(
       s->cct, policy_tenant, perm_policy,

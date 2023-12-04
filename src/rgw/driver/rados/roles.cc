@@ -28,7 +28,7 @@ int add(const DoutPrefixProvider* dpp,
         optional_yield y,
         librados::Rados& rados,
         const rgw_raw_obj& obj,
-        const rgw::sal::RGWRoleInfo& role,
+        const RGWRoleInfo& role,
         bool exclusive, uint32_t limit)
 {
   resource_metadata meta;

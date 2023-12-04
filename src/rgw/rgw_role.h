@@ -3,20 +3,18 @@
 
 #pragma once
 
+#include <map>
 #include <string>
 
+#include "include/encoding.h"
 #include "common/async/yield_context.h"
-
-#include "common/ceph_json.h"
 #include "common/ceph_context.h"
-#include "rgw_rados.h"
-#include "rgw_metadata.h"
+#include "common/ceph_json.h"
+#include "common/ceph_time.h"
+#include "rgw_common.h"
 #include "rgw_iam_managed_policy.h"
 
-class RGWRados;
-
-namespace rgw { namespace sal {
-struct RGWRoleInfo
+struct RGWRoleInfo // TODO: move to rgw_common.h
 {
   std::string id;
   std::string name;
@@ -34,7 +32,7 @@ struct RGWRoleInfo
   std::multimap<std::string,std::string> tags;
   std::map<std::string, bufferlist> attrs;
   RGWObjVersionTracker objv_tracker;
-  real_time mtime;
+  ceph::real_time mtime;
   rgw_account_id account_id;
 
   RGWRoleInfo() = default;
@@ -85,6 +83,8 @@ struct RGWRoleInfo
   void decode_json(JSONObj *obj);
 };
 WRITE_CLASS_ENCODER(RGWRoleInfo)
+
+namespace rgw::sal {
 
 class RGWRole
 {
@@ -164,62 +164,12 @@ public:
   static const std::string& get_path_oid_prefix();
 };
 
-class RGWRoleMetadataObject: public RGWMetadataObject {
-  RGWRoleInfo info;
-  Driver* driver;
-public:
-  RGWRoleMetadataObject() = default;
-  RGWRoleMetadataObject(RGWRoleInfo& info,
-			const obj_version& v,
-			real_time m,
-      Driver* driver) : RGWMetadataObject(v,m), info(info), driver(driver) {}
+} // namespace rgw::sal
 
-  void dump(Formatter *f) const override {
-    info.dump(f);
-  }
 
-  RGWRoleInfo& get_role_info() {
-    return info;
-  }
+class RGWMetadataHandler;
+class RGWSI_Role_RADOS;
 
-  Driver* get_driver() {
-    return driver;
-  }
-};
-
-class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
-{
-public:
-  RGWRoleMetadataHandler(Driver* driver, RGWSI_Role_RADOS *role_svc);
-
-  std::string get_type() final { return "roles";  }
-
-  RGWMetadataObject *get_meta_obj(JSONObj *jo,
-				  const obj_version& objv,
-				  const ceph::real_time& mtime);
-
-  int do_get(RGWSI_MetaBackend_Handler::Op *op,
-	     std::string& entry,
-	     RGWMetadataObject **obj,
-	     optional_yield y,
-       const DoutPrefixProvider *dpp) final;
-
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op,
-		std::string& entry,
-		RGWObjVersionTracker& objv_tracker,
-		optional_yield y,
-    const DoutPrefixProvider *dpp) final;
-
-  int do_put(RGWSI_MetaBackend_Handler::Op *op,
-	     std::string& entr,
-	     RGWMetadataObject *obj,
-	     RGWObjVersionTracker& objv_tracker,
-	     optional_yield y,
-       const DoutPrefixProvider *dpp,
-	     RGWMDLogSyncType type,
-       bool from_remote_zone) override;
-
-private:
-  Driver* driver;
-};
-} } // namespace rgw::sal
+auto create_role_metadata_handler(rgw::sal::Driver* driver,
+                                  RGWSI_Role_RADOS *role_svc)
+    -> std::unique_ptr<RGWMetadataHandler>;
