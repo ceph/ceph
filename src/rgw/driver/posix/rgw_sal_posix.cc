@@ -1658,7 +1658,8 @@ int POSIXObject::transition(Bucket* bucket,
 			    const real_time& mtime,
 			    uint64_t olh_epoch,
 			    const DoutPrefixProvider* dpp,
-			    optional_yield y)
+			    optional_yield y,
+                            bool log_op)
 {
   return -ERR_NOT_IMPLEMENTED;
 }
@@ -2366,7 +2367,7 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 }
 
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-					   optional_yield y)
+					   optional_yield y, bool log_op)
 {
   return source->delete_object(dpp, y, false);
 }
@@ -2572,7 +2573,7 @@ int POSIXMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext 
   return 0;
 }
 
-int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
+int POSIXMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y, bool log_op)
 {
   int ret;
 
@@ -2809,7 +2810,8 @@ int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       bool log_op)
 {
   int ret;
   POSIXUploadPartInfo info;
@@ -2876,7 +2878,8 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       bool log_op)
 {
   int ret;
 
