@@ -31,7 +31,6 @@
 // define as static when RGWBucket implementation completes
 extern void rgw_get_buckets_obj(const rgw_user& user_id, std::string& buckets_obj_id);
 
-class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
@@ -449,7 +448,6 @@ public:
       std::map<std::string, bufferlist> *attrs{nullptr};
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
-      std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
 
       GetParams() {}
 
@@ -475,11 +473,6 @@ public:
 
       GetParams& set_refresh_version(const obj_version& _refresh_version) {
         refresh_version = _refresh_version;
-        return *this;
-      }
-
-      GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
-        bectx_params = _bectx_params;
         return *this;
       }
     };
@@ -532,7 +525,6 @@ public:
       rgw_cache_entry_info *cache_info{nullptr};
       boost::optional<obj_version> refresh_version;
       RGWObjVersionTracker *objv_tracker{nullptr};
-      std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
 
       GetParams() {}
 
@@ -558,11 +550,6 @@ public:
 
       GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
         objv_tracker = _objv_tracker;
-        return *this;
-      }
-
-      GetParams& set_bectx_params(std::optional<RGWSI_MetaBackend_CtxParams> _bectx_params) {
-        bectx_params = _bectx_params;
         return *this;
       }
     };

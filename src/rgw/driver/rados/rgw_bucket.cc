@@ -3099,7 +3099,6 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
     ep.emplace();
 
     int r = read_bucket_entrypoint_info(*b, &(*ep), y, dpp, RGWBucketCtl::Bucket::GetParams()
-                                                    .set_bectx_params(params.bectx_params)
                                                     .set_objv_tracker(ep_objv_tracker));
     if (r < 0) {
       return r;

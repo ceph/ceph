@@ -24,8 +24,6 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
-#include "services/svc_meta_be_sobj.h"
-#include "services/svc_meta.h"
 
 #define dout_subsys ceph_subsys_rgw
 

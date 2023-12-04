@@ -26,7 +26,6 @@ class RGWSI_MDLog;
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
-class RGWSI_Meta;
 class RGWSI_SyncModules;
 
 struct rgw_cache_entry_info;
@@ -78,7 +77,6 @@ public:
     RGWSI_MDLog *mdlog{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_SysObj_Cache *cache{nullptr};
-    RGWSI_Meta *meta{nullptr};
   } svc;
 
   RGWSI_User_RADOS(CephContext *cct);
@@ -88,8 +86,7 @@ public:
             RGWSI_Zone *_zone_svc,
             RGWSI_MDLog *mdlog_svc,
             RGWSI_SysObj *_sysobj_svc,
-            RGWSI_SysObj_Cache *_cache_svc,
-            RGWSI_Meta *_meta_svc);
+            RGWSI_SysObj_Cache *_cache_svc);
 
   int create_lister(const DoutPrefixProvider* dpp,
                     const std::string& marker,

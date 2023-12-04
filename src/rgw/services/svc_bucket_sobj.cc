@@ -7,8 +7,6 @@
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
 #include "svc_bi.h"
-#include "svc_meta.h"
-#include "svc_meta_be_sobj.h"
 #include "svc_mdlog.h"
 #include "svc_sync_modules.h"
 
@@ -72,7 +70,7 @@ RGWSI_Bucket_SObj::~RGWSI_Bucket_SObj() {
 
 void RGWSI_Bucket_SObj::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
                              RGWSI_SysObj_Cache *_cache_svc, RGWSI_BucketIndex *_bi,
-                             RGWSI_Meta *_meta_svc, RGWSI_MDLog* mdlog_svc,
+                             RGWSI_MDLog* mdlog_svc,
                              RGWSI_SyncModules *_sync_modules_svc,
                              RGWSI_Bucket_Sync *_bucket_sync_svc)
 {
@@ -81,7 +79,6 @@ void RGWSI_Bucket_SObj::init(RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
   svc.bi = _bi;
-  svc.meta = _meta_svc;
   svc.mdlog = mdlog_svc;
   svc.sync_modules = _sync_modules_svc;
   svc.bucket_sync = _bucket_sync_svc;

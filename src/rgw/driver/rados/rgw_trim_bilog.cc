@@ -33,7 +33,6 @@
 #include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
-#include "services/svc_meta.h"
 #include "services/svc_bilog_rados.h"
 
 #include <boost/asio/yield.hpp>

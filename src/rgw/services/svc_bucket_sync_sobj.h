@@ -19,7 +19,6 @@
 
 #include "rgw_service.h"
 
-#include "svc_meta_be.h"
 #include "svc_bucket_sync.h"
 
 class RGWSI_Zone;

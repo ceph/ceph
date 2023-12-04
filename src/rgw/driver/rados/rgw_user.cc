@@ -13,7 +13,6 @@
 #include "rgw_rest_iam.h" // validate_iam_user_name()
 
 #include "services/svc_user.h"
-#include "services/svc_meta.h"
 
 #define dout_subsys ceph_subsys_rgw
 

@@ -62,10 +62,6 @@ class RGWSI_Cls;
 class RGWSI_ConfigKey;
 class RGWSI_ConfigKey_RADOS;
 class RGWSI_MDLog;
-class RGWSI_Meta;
-class RGWSI_MetaBackend;
-class RGWSI_MetaBackend_SObj;
-class RGWSI_MetaBackend_OTP;
 class RGWSI_Notify;
 class RGWSI_OTP;
 class RGWSI_Zone;
@@ -93,8 +89,6 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_Cls> cls;
   std::unique_ptr<RGWSI_ConfigKey_RADOS> config_key_rados;
   std::unique_ptr<RGWSI_MDLog> mdlog;
-  std::unique_ptr<RGWSI_Meta> meta;
-  std::unique_ptr<RGWSI_MetaBackend_SObj> meta_be_sobj;
   std::unique_ptr<RGWSI_Notify> notify;
   std::unique_ptr<RGWSI_Zone> zone;
   std::unique_ptr<RGWSI_ZoneUtils> zone_utils;
@@ -138,8 +132,6 @@ struct RGWServices
   RGWSI_ConfigKey *config_key{nullptr};
   RGWDataChangesLog *datalog_rados{nullptr};
   RGWSI_MDLog *mdlog{nullptr};
-  RGWSI_Meta *meta{nullptr};
-  RGWSI_MetaBackend *meta_be_sobj{nullptr};
   RGWSI_Notify *notify{nullptr};
   RGWSI_Zone *zone{nullptr};
   RGWSI_ZoneUtils *zone_utils{nullptr};

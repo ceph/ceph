@@ -9,7 +9,6 @@
 #include "svc_zone.h"
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_cache.h"
-#include "svc_meta.h"
 
 #include "rgw_user.h"
 #include "rgw_account.h"
@@ -40,8 +39,7 @@ void RGWSI_User_RADOS::init(librados::Rados* rados_,
                             RGWSI_Zone *_zone_svc,
                             RGWSI_MDLog *mdlog_svc,
                             RGWSI_SysObj *_sysobj_svc,
-                            RGWSI_SysObj_Cache *_cache_svc,
-                            RGWSI_Meta *_meta_svc)
+                            RGWSI_SysObj_Cache *_cache_svc)
 {
   svc.user = this;
   rados = rados_;
@@ -49,7 +47,6 @@ void RGWSI_User_RADOS::init(librados::Rados* rados_,
   svc.mdlog = mdlog_svc;
   svc.sysobj = _sysobj_svc;
   svc.cache = _cache_svc;
-  svc.meta = _meta_svc;
 }
 
 int RGWSI_User_RADOS::do_start(optional_yield, const DoutPrefixProvider *dpp)

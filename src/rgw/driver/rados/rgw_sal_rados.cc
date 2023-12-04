@@ -57,8 +57,6 @@
 #include "rgw_rest_user.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_mdlog.h"
-#include "services/svc_meta.h"
-#include "services/svc_meta_be_sobj.h"
 #include "services/svc_cls.h"
 #include "services/svc_bilog_rados.h"
 #include "services/svc_bi_rados.h"
@@ -572,21 +570,18 @@ int RadosBucket::load_bucket(const DoutPrefixProvider* dpp, optional_yield y)
 {
   int ret;
 
-  RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj();
   RGWObjVersionTracker ep_ot;
   if (info.bucket.bucket_id.empty()) {
     ret = store->ctl()->bucket->read_bucket_info(info.bucket, &info, y, dpp,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(&mtime)
-				      .set_attrs(&attrs)
-                                      .set_bectx_params(bectx_params),
+				      .set_attrs(&attrs),
 				      &ep_ot);
   } else {
     ret  = store->ctl()->bucket->read_bucket_instance_info(info.bucket, &info, y, dpp,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(&mtime)
-				      .set_attrs(&attrs)
-				      .set_bectx_params(bectx_params));
+				      .set_attrs(&attrs));
   }
   if (ret != 0) {
     return ret;

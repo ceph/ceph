@@ -20,8 +20,6 @@
 #include "rgw_period_history.h"
 #include "rgw_period_puller.h"
 
-#include "svc_meta_be.h"
-
 
 class RGWMetadataLog;
 class RGWMetadataLogHistory;

@@ -25,7 +25,6 @@
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
-class RGWSI_Meta;
 class RGWSI_MDLog;
 class RGWSI_SyncModules;
 
@@ -68,7 +67,6 @@ public:
     RGWSI_Zone *zone{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_SysObj_Cache *cache{nullptr};
-    RGWSI_Meta *meta{nullptr};
     RGWSI_MDLog *mdlog{nullptr};
     RGWSI_SyncModules *sync_modules{nullptr};
     RGWSI_Bucket_Sync *bucket_sync{nullptr};
@@ -81,7 +79,6 @@ public:
             RGWSI_SysObj *_sysobj_svc,
 	    RGWSI_SysObj_Cache *_cache_svc,
             RGWSI_BucketIndex *_bi,
-            RGWSI_Meta *_meta_svc,
             RGWSI_MDLog *mdlog_svc,
 	    RGWSI_SyncModules *_sync_modules_svc,
 	    RGWSI_Bucket_Sync *_bucket_sync_svc);
