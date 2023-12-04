@@ -345,7 +345,7 @@ public:
   void set_ready_to_merge_target(eversion_t lu, epoch_t les, epoch_t lec) final {}
   void set_ready_to_merge_source(eversion_t lu) final {}
 
-  seastar::future<> kick_snap_trim();
+  seastar::future<> kick_snap_trim(Ref<PG> pg_ref);
 
   void on_active_actmap() final;
   void on_active_advmap(const OSDMapRef &osdmap) final;

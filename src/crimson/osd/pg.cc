@@ -473,12 +473,11 @@ Context *PG::on_clean()
   return nullptr;
 }
 
-seastar::future<> PG::kick_snap_trim()
+seastar::future<> PG::kick_snap_trim(Ref<PG> pg_ref)
 {
   logger().debug("{}: {} snap_trimq={}", *this, __func__, snap_trimq);
   peering_state.state_clear(PG_STATE_SNAPTRIM_ERROR);
   // loops until snap_trimq is empty or SNAPTRIM_ERROR.
-  Ref<PG> pg_ref = this;
   return seastar::do_until(
     [this] { return snap_trimq.empty()
                     || peering_state.state_test(PG_STATE_SNAPTRIM_ERROR);
@@ -537,8 +536,10 @@ void PG::on_active_actmap()
       } else {
         logger().debug("{}: {} clean and snaps to trim, kicking",
                        *this, __func__);
-        snap_trim_event_gate.dispatch_in_background("kick_snap_trim", *this, [this] {
-          return kick_snap_trim();
+        Ref<PG> pg_ref = this;
+        snap_trim_event_gate.dispatch_in_background(
+          "kick_snap_trim", *this, [this, pg_ref = std::move(pg_ref)] {
+          return kick_snap_trim(pg_ref);
         });
       }
     }
