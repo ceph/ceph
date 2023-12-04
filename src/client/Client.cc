@@ -15944,6 +15944,7 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
                                   Context *onfinish, bufferlist *bl,
                                   bool do_fsync, bool syncdataonly)
 {
+    ceph_assert(onfinish != nullptr);
     RWRef_t mref_reader(mount_state, CLIENT_MOUNTING);
     if (!mref_reader.is_state_satisfied())
       return -CEPHFS_ENOTCONN;
