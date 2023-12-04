@@ -202,7 +202,7 @@ Many "slow OSD" issues (when they are not attributable to hardware failure)
 arise from running an operating system and multiple OSDs on the same drive.
 Also be aware that today's 22TB HDD uses the same SATA interface as a
 3TB HDD from ten years ago: more than seven times the data to squeeze
-through the same same interface.  For this reason, when using HDDs for
+through the same interface.  For this reason, when using HDDs for
 OSDs, drives larger than 8TB may be best suited for storage of large
 files / objects that are not at all performance-sensitive.
 
@@ -254,7 +254,7 @@ enterprise-class drives are best for production use, as they feature power
 loss protection and increased durability compared to client (desktop) SKUs
 that are intended for much lighter and intermittent duty cycles.
 
-SSDs were historically been cost prohibitive for object storage, but
+SSDs have historically been cost prohibitive for object storage, but
 QLC SSDs are closing the gap, offering greater density with lower power
 consumption and less power spent on cooling. Also, HDD OSDs may see a
 significant write latency improvement by offloading WAL+DB onto an SSD.
