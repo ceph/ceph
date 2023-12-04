@@ -1688,7 +1688,7 @@ class TestFsAuthorizeUpdate(CephFSTestCase):
         keyring = self.fs.mon_manager.get_keyring(self.client_id)
         moncap = gen_mon_cap_str((('r', self.fs.name,),))
         osdcap = gen_osd_cap_str(((PERM, self.fs.name),))
-        mdscap = gen_mds_cap_str(((PERM, self.fs.name, PATH),))
+        mdscap = gen_mds_cap_str(((PERM, self.fs.name, PATH, True),))
         for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
         self._remount(self.mount_a, self.fs.name, keyring, PATH)
