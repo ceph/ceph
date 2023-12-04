@@ -385,7 +385,7 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
 
   meta.otp = rgwrados::otp::create_metadata_handler(
       *svc.sysobj, *svc.cls, *svc.mdlog, svc.zone->get_zone_params());
-  meta.role = create_role_metadata_handler(driver, svc.role);
+  meta.role = create_role_metadata_handler(*driver, *svc.sysobj);
   meta.account = rgwrados::account::create_metadata_handler(
       *svc.sysobj, svc.zone->get_zone_params());
   meta.group = rgwrados::group::create_metadata_handler(

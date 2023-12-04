@@ -18,6 +18,7 @@
 
 #include "rgw_common.h"
 #include "rgw_metadata.h"
+#include "rgw_metadata_lister.h"
 #include "rgw_tools.h"
 #include "rgw_role.h"
 
@@ -366,10 +367,12 @@ public:
   }
 };
 
-class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
-{
+class RGWRoleMetadataHandler: public RGWMetadataHandler {
+  rgw::sal::Driver& driver;
+  RGWSI_SysObj& sysobj;
  public:
-  RGWRoleMetadataHandler(rgw::sal::Driver* driver, RGWSI_Role_RADOS *role_svc);
+  RGWRoleMetadataHandler(rgw::sal::Driver& driver, RGWSI_SysObj& sysobj)
+    : driver(driver), sysobj(sysobj) {}
 
   std::string get_type() final { return "roles";  }
 
@@ -377,37 +380,27 @@ class RGWRoleMetadataHandler: public RGWMetadataHandler_GenericMetaBE
 				  const obj_version& objv,
 				  const ceph::real_time& mtime);
 
-  int do_get(RGWSI_MetaBackend_Handler::Op *op,
-	     std::string& entry,
-	     RGWMetadataObject **obj,
-	     optional_yield y,
-       const DoutPrefixProvider *dpp) final;
+  int get(std::string& entry, RGWMetadataObject** obj, optional_yield y,
+          const DoutPrefixProvider *dpp) override;
+  int put(std::string& entry, RGWMetadataObject* obj,
+          RGWObjVersionTracker& objv_tracker,
+          optional_yield y, const DoutPrefixProvider* dpp,
+          RGWMDLogSyncType type, bool from_remote_zone) override;
+  int remove(std::string& entry, RGWObjVersionTracker& objv_tracker,
+             optional_yield y, const DoutPrefixProvider *dpp) override;
 
-  int do_remove(RGWSI_MetaBackend_Handler::Op *op,
-		std::string& entry,
-		RGWObjVersionTracker& objv_tracker,
-		optional_yield y,
-    const DoutPrefixProvider *dpp) final;
+  int mutate(const std::string& entry, const ceph::real_time& mtime,
+             RGWObjVersionTracker* objv_tracker, optional_yield y,
+             const DoutPrefixProvider* dpp, RGWMDLogStatus op_type,
+             std::function<int()> f) override;
 
-  int do_put(RGWSI_MetaBackend_Handler::Op *op,
-	     std::string& entr,
-	     RGWMetadataObject *obj,
-	     RGWObjVersionTracker& objv_tracker,
-	     optional_yield y,
-       const DoutPrefixProvider *dpp,
-	     RGWMDLogSyncType type,
-       bool from_remote_zone) override;
-
-private:
-  rgw::sal::Driver* driver;
+  int list_keys_init(const DoutPrefixProvider* dpp, const std::string& marker,
+                     void** phandle) override;
+  int list_keys_next(const DoutPrefixProvider* dpp, void* handle, int max,
+                     std::list<std::string>& keys, bool* truncated) override;
+  void list_keys_complete(void *handle) override;
+  std::string get_marker(void *handle) override;
 };
-
-RGWRoleMetadataHandler::RGWRoleMetadataHandler(rgw::sal::Driver* driver,
-                                               RGWSI_Role_RADOS *role_svc)
-  : driver(driver)
-{
-  base_init(role_svc->ctx(), role_svc->get_be_handler());
-}
 
 RGWMetadataObject *RGWRoleMetadataHandler::get_meta_obj(JSONObj *jo,
 							const obj_version& objv,
@@ -424,13 +417,10 @@ RGWMetadataObject *RGWRoleMetadataHandler::get_meta_obj(JSONObj *jo,
   return new RGWRoleMetadataObject(info, objv, mtime);
 }
 
-int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
-                                   std::string& entry,
-                                   RGWMetadataObject **obj,
-                                   optional_yield y,
-                                   const DoutPrefixProvider *dpp)
+int RGWRoleMetadataHandler::get(std::string& entry, RGWMetadataObject **obj,
+                                optional_yield y, const DoutPrefixProvider *dpp)
 {
-  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(entry);
+  std::unique_ptr<rgw::sal::RGWRole> role = driver.get_role(entry);
   int ret = role->read_info(dpp, y);
   if (ret < 0) {
     return ret;
@@ -445,13 +435,31 @@ int RGWRoleMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op *op,
   return 0;
 }
 
-int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
-                                      std::string& entry,
-                                      RGWObjVersionTracker& objv_tracker,
-                                      optional_yield y,
-                                      const DoutPrefixProvider *dpp)
+int RGWRoleMetadataHandler::put(std::string& entry, RGWMetadataObject *obj,
+                                RGWObjVersionTracker& objv_tracker,
+                                optional_yield y, const DoutPrefixProvider *dpp,
+                                RGWMDLogSyncType type, bool from_remote_zone)
 {
-  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(entry);
+  auto robj = static_cast<RGWRoleMetadataObject*>(obj);
+  auto& info = robj->get_role_info();
+  auto mtime = robj->get_mtime();
+  info.mtime = mtime;
+
+  std::unique_ptr<rgw::sal::RGWRole> role = driver.get_role(info);
+  int ret = role->create(dpp, true, info.id, y);
+  if (ret == -EEXIST) {
+    ret = role->update(dpp, y);
+  }
+
+  return ret < 0 ? ret : STATUS_APPLIED;
+}
+
+int RGWRoleMetadataHandler::remove(std::string& entry,
+                                   RGWObjVersionTracker& objv_tracker,
+                                   optional_yield y,
+                                   const DoutPrefixProvider *dpp)
+{
+  std::unique_ptr<rgw::sal::RGWRole> role = driver.get_role(entry);
   int ret = role->read_info(dpp, y);
   if (ret < 0) {
     return ret == -ENOENT? 0 : ret;
@@ -460,57 +468,69 @@ int RGWRoleMetadataHandler::do_remove(RGWSI_MetaBackend_Handler::Op *op,
   return role->delete_obj(dpp, y);
 }
 
-class RGWMetadataHandlerPut_Role : public RGWMetadataHandlerPut_SObj
+int RGWRoleMetadataHandler::mutate(const std::string& entry, const ceph::real_time& mtime,
+                                   RGWObjVersionTracker* objv_tracker, optional_yield y,
+                                   const DoutPrefixProvider* dpp, RGWMDLogStatus op_type,
+                                   std::function<int()> f)
 {
-  rgw::sal::Driver* driver;
-  RGWRoleMetadataHandler *rhandler;
-  RGWRoleMetadataObject *mdo;
-public:
-  RGWMetadataHandlerPut_Role(rgw::sal::Driver* driver,
-                             RGWRoleMetadataHandler *handler,
-                             RGWSI_MetaBackend_Handler::Op *op,
-                             std::string& entry,
-                             RGWMetadataObject *obj,
-                             RGWObjVersionTracker& objv_tracker,
-                             optional_yield y,
-                             RGWMDLogSyncType type,
-                             bool from_remote_zone) :
-    RGWMetadataHandlerPut_SObj(handler, op, entry, obj, objv_tracker, y, type, from_remote_zone),
-    driver(driver), rhandler(handler) {
-    mdo = static_cast<RGWRoleMetadataObject*>(obj);
-  }
+  return -ENOTSUP; // unused
+}
 
-  int put_checked(const DoutPrefixProvider *dpp) override {
-    auto& info = mdo->get_role_info();
-    auto mtime = mdo->get_mtime();
-    info.mtime = mtime;
-    std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(info);
-    constexpr bool exclusive = false;
-    int ret = role->create(dpp, exclusive, info.id, y);
-    if (ret == -EEXIST) {
-      ret = role->update(dpp, y);
-    }
+class RoleLister : public RGWMetadataLister {
+ public:
+  using RGWMetadataLister::RGWMetadataLister;
 
-    return ret < 0 ? ret : STATUS_APPLIED;
+  virtual void filter_transform(std::vector<std::string>& oids,
+                                std::list<std::string>& keys) {
+    // remove the oid prefix from keys
+    constexpr auto trim = [] (const std::string& oid) {
+      return oid.substr(rgw::sal::RGWRole::role_oid_prefix.size());
+    };
+    std::transform(oids.begin(), oids.end(),
+                   std::back_inserter(keys),
+                   trim);
   }
 };
 
-int RGWRoleMetadataHandler::do_put(RGWSI_MetaBackend_Handler::Op *op,
-                                   std::string& entry,
-                                   RGWMetadataObject *obj,
-                                   RGWObjVersionTracker& objv_tracker,
-                                   optional_yield y,
-                                   const DoutPrefixProvider *dpp,
-                                   RGWMDLogSyncType type,
-                                   bool from_remote_zone)
+int RGWRoleMetadataHandler::list_keys_init(const DoutPrefixProvider* dpp,
+                                           const std::string& marker,
+                                           void** phandle)
 {
-  RGWMetadataHandlerPut_Role put_op(driver, this, op , entry, obj, objv_tracker, y, type, from_remote_zone);
-  return do_put_operate(&put_op, dpp);
+  auto svc_zone = sysobj.get_zone_svc();
+  const auto& pool = svc_zone->get_zone_params().roles_pool;
+  auto lister = std::make_unique<RoleLister>(sysobj.get_pool(pool));
+  int ret = lister->init(dpp, marker, rgw::sal::RGWRole::role_oid_prefix);
+  if (ret < 0) {
+    return ret;
+  }
+  *phandle = lister.release(); // release ownership
+  return 0;
 }
 
-auto create_role_metadata_handler(rgw::sal::Driver* driver,
-                                  RGWSI_Role_RADOS *role_svc)
+int RGWRoleMetadataHandler::list_keys_next(const DoutPrefixProvider* dpp,
+                                           void* handle, int max,
+                                           std::list<std::string>& keys,
+                                           bool* truncated)
+{
+  auto lister = static_cast<RGWMetadataLister*>(handle);
+  return lister->get_next(dpp, max, keys, truncated);
+}
+
+void RGWRoleMetadataHandler::list_keys_complete(void *handle)
+{
+  delete static_cast<RGWMetadataLister*>(handle);
+}
+
+std::string RGWRoleMetadataHandler::get_marker(void *handle)
+{
+  auto lister = static_cast<RGWMetadataLister*>(handle);
+  return lister->get_marker();
+}
+
+
+auto create_role_metadata_handler(rgw::sal::Driver& driver,
+                                  RGWSI_SysObj& sysobj)
     -> std::unique_ptr<RGWMetadataHandler>
 {
-  return std::make_unique<RGWRoleMetadataHandler>(driver, role_svc);
+  return std::make_unique<RGWRoleMetadataHandler>(driver, sysobj);
 }

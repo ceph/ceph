@@ -168,8 +168,8 @@ public:
 
 
 class RGWMetadataHandler;
-class RGWSI_Role_RADOS;
+class RGWSI_SysObj;
 
-auto create_role_metadata_handler(rgw::sal::Driver* driver,
-                                  RGWSI_Role_RADOS *role_svc)
+auto create_role_metadata_handler(rgw::sal::Driver& driver,
+                                  RGWSI_SysObj& sysobj)
     -> std::unique_ptr<RGWMetadataHandler>;
