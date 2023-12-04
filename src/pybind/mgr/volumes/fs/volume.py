@@ -775,7 +775,7 @@ class VolumeClient(CephfsClient["Module"]):
         subvol_status = subvolume.status
 
         clone_stats = self.cloner.get_clone_job_stats(subvolume.subvolname)
-        if clone_stats not in (None, 'pending'):
+        if clone_stats not in (None, 'pending', 'finished'):
                 subvol_status.update({
                     'progress_report': clone_stats.get_progress_report()})
 

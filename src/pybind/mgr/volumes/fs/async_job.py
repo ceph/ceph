@@ -129,6 +129,9 @@ class AsyncJobs(threading.Thread):
         # RemoteEvent ID ongoing clone jobs.
         # mgr.progress.module.RemoteEvent is what prints the progress bar.
         self.clone_ongoing_ev_id = None
+        # RemoteEvent ID ongoing+pending clone jobs
+        # mgr.progress.module.RemoteEvent is what prints the progress bar.
+        self.clone_onpen_ev_id = None
         # lock, cv for kickstarting jobs
         self.lock = threading.Lock()
         self.cv = threading.Condition(self.lock)
@@ -178,30 +181,68 @@ class AsyncJobs(threading.Thread):
         assert stats is not None
         self.job_stats[subvolname] = stats
 
-        total_jobs = len(self.job_stats)
-        progress_sum = 0.0
+        # total pending + ongoing clones
+        total_onpen_jobs = len(self.job_stats)
+
+        onpen_progress_sum = 0.0
+        ongoing_progress_sum = 0.0
+        total_ongoing_jobs = 0
         for subvolname, subvol_stats in self.job_stats.items():
-            if subvol_stats is not None:
-                progress_sum += subvol_stats.progress_fraction
-        progress_avg = progress_sum / total_jobs
-        progress_percent = round(progress_avg * 100, 3)
+            if subvol_stats not in ('pending', 'finished'):
+                onpen_progress_sum += subvol_stats.progress_fraction
+                ongoing_progress_sum += subvol_stats.progress_fraction
+                total_ongoing_jobs += 1
+            if subvol_stats == 'finished':
+                onpen_progress_sum += 1.0
+        onpen_progress_avg = onpen_progress_sum / total_onpen_jobs
+        onpen_progress_percent = round(onpen_progress_avg * 100, 3)
+        ongoing_progress_avg = ongoing_progress_sum / total_ongoing_jobs
+        ongoing_progress_percent = round(ongoing_progress_avg * 100, 3)
 
         if self.clone_ongoing_ev_id is None:
             self.clone_ongoing_ev_id = str(uuid4())
+        if self.clone_onpen_ev_id is None:
+            self.clone_onpen_ev_id = str(uuid4())
 
-        if total_jobs == 1:
-            msg = (f'Subvolume "{subvolname}" has been '
-                    '{progress_percent}% cloned')
+        if len(self.job_stats) > self.nr_concurrent_jobs:
+            onpen_ev_msg = (f'{total_onpen_jobs} ongoing+pending cloning jobs; '
+                            f'Avg progress = {onpen_progress_percent}%')
+            self.vc.mgr.remote(
+                'progress', 'update', ev_id=self.clone_onpen_ev_id,
+                ev_msg=onpen_ev_msg, ev_progress=onpen_progress_avg,
+                refs=['mds', 'clone'], add_to_ceph_s=True)
+
+        if total_ongoing_jobs == 1:
+            ongoing_ev_msg = (f'Subvolume "{subvolname}" has been '
+                              f'{ongoing_progress_percent}% cloned')
         else:
-            msg = (f'{total_jobs} ongoing cloning jobs; Avg progress = '
-                   f'{progress_percent}%')
+            ongoing_ev_msg = (f'{total_ongoing_jobs} ongoing cloning jobs; '
+                              f'Avg progress = {ongoing_progress_percent}%')
 
         self.vc.mgr.remote(
-            'progress', 'update', ev_id=self.clone_ongoing_ev_id, ev_msg=msg,
-            ev_progress=stats.progress_fraction, refs=['mds', 'clone'],
-            add_to_ceph_s=True)
+            'progress', 'update', ev_id=self.clone_ongoing_ev_id,
+            ev_msg=ongoing_ev_msg, ev_progress=ongoing_progress_avg,
+            refs=['mds', 'clone'], add_to_ceph_s=True)
 
-    def finish_job_reporting(self, subvolname):
+    def _finish_onpen_job_reporting(self, subvolname):
+        if self.clone_ongoing_ev_id is None:
+            return
+
+        total_finished_jobs = 0
+        for subvolname, subvol_stats in self.job_stats.items():
+            if subvol_stats == 'finished':
+                total_finished_jobs += 1
+        # if all jobs in queue are marked as finished, remove progress bar for
+        # ongoing+pending clone jobs from "ceph -s" output.
+        if total_finished_jobs < len(self.job_stats):
+            return
+
+        self.job_stats.clear()
+        self.vc.mgr.remote('progress', 'complete', self.clone_onpen_ev_id)
+        self.clone_ongoing_ev_id = None
+        self.clone_onpen_ev_id = None
+
+    def _finish_ongoing_job_reporting(self, subvolname):
         assert self.clone_ongoing_ev_id is not None
 
         if self.job_stats[subvolname].progress_fraction < 1.0:
@@ -209,20 +250,24 @@ class AsyncJobs(threading.Thread):
                          'complete. Progress should be 1.0 but it is only '
                          f'{self.job_stats[subvolname].progress_fraction}.')
 
-        self.job_stats.pop(subvolname)
+        self.job_stats[subvolname] = 'finished'
 
         total_ongoing_jobs = 0
-        for subvolname, stats in self.job_stats.items():
-            if stats is not None:
+        for subvolname, subvol_stats in self.job_stats.items():
+            if subvol_stats == 'pending':
                 total_ongoing_jobs += 1
 
         if total_ongoing_jobs == 0:
             self.vc.mgr.remote('progress', 'complete', self.clone_ongoing_ev_id)
 
+    def finish_job_reporting(self, subvolname):
+        self._finish_ongoing_job_reporting(subvolname)
+        self._finish_onpen_job_reporting(subvolname)
+
     def abort_job_reporting(self, subvolname):
         assert self.clone_ongoing_ev_id is not None
 
-        if self.job_stats[subvolname] != 'pending':
+        if self.job_stats[subvolname] not in ('pending', 'finished'):
             log.critical('A job is being aborted. Progress made so far is '
                          f'{self.job_stats[subvolname].progress_fraction}.')
 
