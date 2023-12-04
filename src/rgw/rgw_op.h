@@ -1811,6 +1811,9 @@ protected:
   RGWAccessControlPolicy policy;
   ceph::real_time mtime;
   jspan_ptr multipart_trace;
+  //object lock
+  std::optional<RGWObjectRetention> obj_retention = std::nullopt;
+  std::optional<RGWObjectLegalHold> obj_legal_hold = std::nullopt;
 
 public:
   RGWInitMultipart() {}
@@ -1840,6 +1843,9 @@ protected:
   std::unique_ptr<rgw::sal::Notification> res;
   std::unique_ptr<rgw::sal::Object> meta_obj;
   off_t ofs = 0;
+  //object lock
+  bool bypass_perm = true;
+  bool bypass_governance_mode = false;
 
 public:
   RGWCompleteMultipart() {}
