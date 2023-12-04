@@ -1360,16 +1360,34 @@ inline std::ostream& operator<<(std::ostream& out, const rgw_obj &o) {
 struct multipart_upload_info
 {
   rgw_placement_rule dest_placement;
+  //object lock
+  bool obj_retention_exist{false};
+  bool obj_legal_hold_exist{false};
+  RGWObjectRetention obj_retention;
+  RGWObjectLegalHold obj_legal_hold;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
+    ENCODE_START(2, 1, bl);
     encode(dest_placement, bl);
+    encode(obj_retention_exist, bl);
+    encode(obj_legal_hold_exist, bl);
+    encode(obj_retention, bl);
+    encode(obj_legal_hold, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
+    DECODE_START(2, bl);
     decode(dest_placement, bl);
+    if (struct_v >= 2) {
+      decode(obj_retention_exist, bl);
+      decode(obj_legal_hold_exist, bl);
+      decode(obj_retention, bl);
+      decode(obj_legal_hold, bl);
+    } else {
+      obj_retention_exist = false;
+      obj_legal_hold_exist = false;
+    }
     DECODE_FINISH(bl);
   }
 

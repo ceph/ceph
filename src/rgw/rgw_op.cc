@@ -5267,7 +5267,6 @@ void RGWDeleteObj::execute(optional_yield y)
     {
       RGWObjState* astate = nullptr;
       bool check_obj_lock = s->object->have_instance() && s->bucket->get_info().obj_lock_enabled();
-
       op_ret = s->object->get_obj_state(this, &astate, s->yield, true);
       if (op_ret < 0) {
         if (need_object_expiration() || multipart_delete) {
@@ -5290,7 +5289,6 @@ void RGWDeleteObj::execute(optional_yield y)
 
       // ignore return value from get_obj_attrs in all other cases
       op_ret = 0;
-
       if (check_obj_lock) {
         ceph_assert(astate);
         int object_lock_response = verify_object_lock(this, astate->attrset, bypass_perm, bypass_governance_mode);
@@ -6527,6 +6525,8 @@ void RGWInitMultipart::execute(optional_yield y)
   std::unique_ptr<rgw::sal::MultipartUpload> upload;
   upload = s->bucket->get_multipart_upload(s->object->get_name(),
 				       upload_id);
+  upload->obj_legal_hold = obj_legal_hold;
+  upload->obj_retention = obj_retention;
   op_ret = upload->init(this, s->yield, s->owner, s->dest_placement, attrs);
 
   if (op_ret == 0) {
@@ -6547,6 +6547,28 @@ int RGWCompleteMultipart::verify_permission(optional_yield y)
   rgw_iam_add_crypt_attrs(s->env, s->info.crypt_attribute_map);
 
   if (s->iam_policy || ! s->iam_user_policies.empty() || ! s->session_policies.empty()) {
+    if (s->bucket->get_info().obj_lock_enabled() && bypass_governance_mode) {
+      auto r = eval_identity_or_session_policies(this, s->iam_user_policies, s->env,
+                                  rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key(), s->object->get_name()));
+      if (r == Effect::Deny) {
+        bypass_perm = false;
+      } else if (r == Effect::Pass && s->iam_policy) {
+        ARN arn(s->bucket->get_key(), s->object->get_name());
+        r = s->iam_policy->eval(s->env, *s->auth.identity, rgw::IAM::s3BypassGovernanceRetention, arn);    
+        if (r == Effect::Deny) {
+          bypass_perm = false;
+        }
+      } else if (r == Effect::Pass && !s->session_policies.empty()) {
+        r = eval_identity_or_session_policies(this, s->session_policies, s->env,
+                               rgw::IAM::s3BypassGovernanceRetention, ARN(s->bucket->get_key(), s->object->get_name()));
+        if (r == Effect::Deny) {
+          bypass_perm = false;
+        }
+      } else if (r == Effect::Pass) {
+        bypass_perm = false;
+      }
+      bypass_governance_mode &= bypass_perm;
+    }
     auto identity_policy_res = eval_identity_or_session_policies(this, s->iam_user_policies, s->env,
                                               rgw::IAM::s3PutObject,
                                               s->object->get_obj());
