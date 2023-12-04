@@ -387,6 +387,12 @@ struct MDRequestImpl : public MutationImpl {
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
+  bool get_queued_next_replay_op() const {
+    return queued_next_replay_op;
+  }
+  void set_queued_next_replay_op() {
+    queued_next_replay_op = true;
+  }
   int compare_paths();
 
   bool can_batch();
@@ -456,6 +462,7 @@ protected:
   void _dump_op_descriptor_unlocked(std::ostream& stream) const override;
 private:
   mutable ceph::spinlock msg_lock;
+  bool queued_next_replay_op = false;
 };
 
 struct MDPeerUpdate {
