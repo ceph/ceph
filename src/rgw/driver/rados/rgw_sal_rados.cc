@@ -67,7 +67,6 @@
 #include "services/svc_quota.h"
 #include "services/svc_config_key.h"
 #include "services/svc_zone_utils.h"
-#include "services/svc_role_rados.h"
 #include "services/svc_user.h"
 #include "services/svc_sys_obj_cache.h"
 #include "cls/rgw/cls_rgw_client.h"

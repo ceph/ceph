@@ -26,7 +26,6 @@
 #include "services/svc_sys_obj.h"
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_meta.h"
-#include "services/svc_role_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 

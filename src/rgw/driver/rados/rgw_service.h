@@ -78,7 +78,6 @@ class RGWSI_SysObj_Cache;
 class RGWSI_User;
 class RGWSI_User_RADOS;
 class RGWDataChangesLog;
-class RGWSI_Role_RADOS;
 class RGWAsyncRadosProcessor;
 
 struct RGWServices_Def
@@ -106,7 +105,6 @@ struct RGWServices_Def
   std::unique_ptr<RGWSI_SysObj_Cache> sysobj_cache;
   std::unique_ptr<RGWSI_User_RADOS> user_rados;
   std::unique_ptr<RGWDataChangesLog> datalog_rados;
-  std::unique_ptr<RGWSI_Role_RADOS> role_rados;
   std::unique_ptr<RGWAsyncRadosProcessor> async_processor;
 
   RGWServices_Def();
@@ -151,7 +149,6 @@ struct RGWServices
   RGWSI_SysObj_Cache *cache{nullptr};
   RGWSI_SysObj_Core *core{nullptr};
   RGWSI_User *user{nullptr};
-  RGWSI_Role_RADOS *role{nullptr};
   RGWAsyncRadosProcessor* async_processor;
 
   int do_init(CephContext *cct, rgw::sal::RadosStore* store, bool have_cache,
