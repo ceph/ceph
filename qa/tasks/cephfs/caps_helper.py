@@ -66,7 +66,7 @@ def gen_mds_cap_str(caps):
 
     caps = ((perm1, fsname1, cephfs_mntpt1), (perm2, fsname2, cephfs_mntpt2))
     """
-    def _gen_mds_cap_str(perm, fsname=None, cephfs_mntpt='/'):
+    def _gen_mds_cap_str(perm, fsname=None, cephfs_mntpt='/', root_squash=False):
         mds_cap = f'allow {perm}'
         if fsname:
             mds_cap += f' fsname={fsname}'
@@ -74,6 +74,8 @@ def gen_mds_cap_str(caps):
             if cephfs_mntpt[0] == '/':
                 cephfs_mntpt = cephfs_mntpt[1:]
             mds_cap += f' path={cephfs_mntpt}'
+        if root_squash:
+            mds_cap += ' root_squash'
         return mds_cap
 
     if len(caps) == 1:
