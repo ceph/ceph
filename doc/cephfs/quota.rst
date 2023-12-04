@@ -21,6 +21,14 @@ value::
   setfattr -n ceph.quota.max_bytes -v 100000000 /some/dir     # 100 MB
   setfattr -n ceph.quota.max_files -v 10000 /some/dir         # 10,000 files
 
+``ceph.quota.max_bytes`` can also be set using human-friendly units::
+
+  setfattr -n ceph.quota.max_bytes -v 100K /some/dir          # 100 KiB
+  setfattr -n ceph.quota.max_bytes -v 5Gi /some/dir           # 5 GiB
+
+.. note:: Values will be strictly cast to IEC units even when SI units
+   are input, e.g. 1K to 1024 bytes.
+
 To view quota limit::
 
   $ getfattr -n ceph.quota.max_bytes /some/dir
