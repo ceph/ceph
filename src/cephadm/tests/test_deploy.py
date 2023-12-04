@@ -8,38 +8,35 @@ from .fixtures import (
     import_cephadm,
     mock_podman,
     with_cephadm_ctx,
+    FunkyPatcher,
+    funkypatch,
 )
 
 
 _cephadm = import_cephadm()
 
 
-def _common_mp(monkeypatch):
+def _common_patches(funkypatch):
     mocks = {}
-    _call = mock.MagicMock(return_value=('', '', 0))
-    monkeypatch.setattr('cephadmlib.container_types.call', _call)
+    _call = funkypatch.patch('cephadmlib.container_types.call')
+    _call.return_value = ('', '', 0)
     mocks['call'] = _call
-    _call_throws = mock.MagicMock(return_value=0)
-    monkeypatch.setattr(
-        'cephadmlib.container_types.call_throws', _call_throws
-    )
+    _call_throws = funkypatch.patch('cephadmlib.container_types.call_throws')
+    _call_throws.return_value = ('', '', 0)
     mocks['call_throws'] = _call_throws
-    _firewalld = mock.MagicMock()
+    _firewalld = funkypatch.patch('cephadm.Firewalld')
     _firewalld().external_ports.get.return_value = []
-    monkeypatch.setattr('cephadm.Firewalld', _firewalld)
     mocks['Firewalld'] = _firewalld
-    _extract_uid_gid = mock.MagicMock()
+    _extract_uid_gid = funkypatch.patch('cephadm.extract_uid_gid', force=True)
     _extract_uid_gid.return_value = (8765, 8765)
-    monkeypatch.setattr('cephadm.extract_uid_gid', _extract_uid_gid)
     mocks['extract_uid_gid'] = _extract_uid_gid
-    _install_sysctl = mock.MagicMock()
-    monkeypatch.setattr('cephadm.install_sysctl', _install_sysctl)
+    _install_sysctl = funkypatch.patch('cephadm.install_sysctl')
     mocks['install_sysctl'] = _install_sysctl
     return mocks
 
 
-def test_deploy_nfs_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_nfs_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
@@ -75,8 +72,8 @@ def test_deploy_nfs_container(cephadm_fs, monkeypatch):
         assert f.read() == 'FAKE'
 
 
-def test_deploy_snmp_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_snmp_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
@@ -107,8 +104,8 @@ def test_deploy_snmp_container(cephadm_fs, monkeypatch):
     assert not (basedir / 'keyring').exists()
 
 
-def test_deploy_keepalived_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_keepalived_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     _install_sysctl = mocks['install_sysctl']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
@@ -155,8 +152,8 @@ def test_deploy_keepalived_container(cephadm_fs, monkeypatch):
     assert len(_install_sysctl.call_args[0][-1].get_sysctl_settings()) > 1
 
 
-def test_deploy_haproxy_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_haproxy_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     _install_sysctl = mocks['install_sysctl']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
@@ -200,8 +197,8 @@ def test_deploy_haproxy_container(cephadm_fs, monkeypatch):
     assert len(_install_sysctl.call_args[0][-1].get_sysctl_settings()) > 1
 
 
-def test_deploy_iscsi_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_iscsi_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
@@ -244,8 +241,8 @@ def test_deploy_iscsi_container(cephadm_fs, monkeypatch):
         assert (si.st_uid, si.st_gid) == (8765, 8765)
 
 
-def test_deploy_nvmeof_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_nvmeof_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
@@ -290,11 +287,11 @@ def test_deploy_nvmeof_container(cephadm_fs, monkeypatch):
         assert (si.st_uid, si.st_gid) == (167, 167)
 
 
-def test_deploy_a_monitoring_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_a_monitoring_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
-    _get_ip_addresses = mock.MagicMock(return_value=(['10.10.10.10'], []))
-    monkeypatch.setattr('cephadm.get_ip_addresses', _get_ip_addresses)
+    _get_ip_addresses = funkypatch.patch('cephadmlib.net_utils.get_ip_addresses')
+    _get_ip_addresses.return_value = (['10.10.10.10'], [])
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
         ctx.container_engine = mock_podman()
@@ -330,8 +327,8 @@ def test_deploy_a_monitoring_container(cephadm_fs, monkeypatch):
         assert (si.st_uid, si.st_gid) == (8765, 8765)
 
 
-def test_deploy_a_tracing_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_a_tracing_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
@@ -361,11 +358,10 @@ def test_deploy_a_tracing_container(cephadm_fs, monkeypatch):
     assert not (basedir / 'keyring').exists()
 
 
-def test_deploy_ceph_mgr_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_ceph_mgr_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
-    _make_var_run = mock.MagicMock()
-    monkeypatch.setattr('cephadm.make_var_run', _make_var_run)
+    _make_run_dir = funkypatch.patch('cephadmlib.file_utils.make_run_dir')
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
         ctx.container_engine = mock_podman()
@@ -399,16 +395,15 @@ def test_deploy_ceph_mgr_container(cephadm_fs, monkeypatch):
         assert f.read() == 'XXXXXXX'
     with open(basedir / 'keyring') as f:
         assert f.read() == 'YYYYYY'
-    assert _make_var_run.call_count == 1
-    assert _make_var_run.call_args[0][2] == 8765
-    assert _make_var_run.call_args[0][3] == 8765
+    assert _make_run_dir.call_count == 1
+    assert _make_run_dir.call_args[0][1] == 8765
+    assert _make_run_dir.call_args[0][2] == 8765
 
 
-def test_deploy_ceph_osd_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_ceph_osd_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
-    _make_var_run = mock.MagicMock()
-    monkeypatch.setattr('cephadm.make_var_run', _make_var_run)
+    _make_run_dir = funkypatch.patch('cephadmlib.file_utils.make_run_dir')
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
         ctx.container_engine = mock_podman()
@@ -444,18 +439,17 @@ def test_deploy_ceph_osd_container(cephadm_fs, monkeypatch):
         assert f.read() == 'XXXXXXX'
     with open(basedir / 'keyring') as f:
         assert f.read() == 'YYYYYY'
-    assert _make_var_run.call_count == 1
-    assert _make_var_run.call_args[0][2] == 8765
-    assert _make_var_run.call_args[0][3] == 8765
+    assert _make_run_dir.call_count == 1
+    assert _make_run_dir.call_args[0][1] == 8765
+    assert _make_run_dir.call_args[0][2] == 8765
 
 
-def test_deploy_ceph_exporter_container(cephadm_fs, monkeypatch):
-    mocks = _common_mp(monkeypatch)
+def test_deploy_ceph_exporter_container(cephadm_fs, funkypatch):
+    mocks = _common_patches(funkypatch)
     _firewalld = mocks['Firewalld']
-    _get_ip_addresses = mock.MagicMock(return_value=(['10.10.10.10'], []))
-    monkeypatch.setattr('cephadm.get_ip_addresses', _get_ip_addresses)
-    _make_var_run = mock.MagicMock()
-    monkeypatch.setattr('cephadm.make_var_run', _make_var_run)
+    _get_ip_addresses = funkypatch.patch('cephadmlib.net_utils.get_ip_addresses')
+    _get_ip_addresses.return_value = (['10.10.10.10'], [])
+    _make_run_dir = funkypatch.patch('cephadmlib.file_utils.make_run_dir')
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
     with with_cephadm_ctx([]) as ctx:
         ctx.container_engine = mock_podman()

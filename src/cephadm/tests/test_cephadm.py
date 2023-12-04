@@ -16,6 +16,7 @@ from .fixtures import (
     with_cephadm_ctx,
     mock_bad_firewalld,
     import_cephadm,
+    funkypatch,
 )
 
 from pyfakefs import fake_filesystem
@@ -317,13 +318,17 @@ class TestCephAdm(object):
         with pytest.raises(Exception):
             _cephadm.prepare_dashboard(ctx, 0, 0, lambda _, extra_mounts=None, ___=None : '5', lambda : None)
 
-    @mock.patch('cephadm.logger')
-    @mock.patch('cephadm.fetch_custom_config_files')
-    @mock.patch('cephadm.get_container')
-    def test_to_deployment_container(self, _get_container, _get_config, _logger):
+    def test_to_deployment_container(self, funkypatch):
         """
         test to_deployment_container properly makes use of extra container args and custom conf files
         """
+        from cephadmlib.deployment_utils import to_deployment_container
+
+        funkypatch.patch('cephadm.logger')
+        _get_config = funkypatch.patch(
+            'cephadmlib.deployment_utils.fetch_custom_config_files'
+        )
+        _get_container = funkypatch.patch('cephadm.get_container')
 
         ctx = _cephadm.CephadmContext()
         ctx.config_json = '-'
@@ -357,32 +362,45 @@ class TestCephAdm(object):
             host_network=True,
         )
         c = _cephadm.get_container(ctx, ident)
-        c = _cephadm.to_deployment_container(ctx, c)
+        c = to_deployment_container(ctx, c)
 
         assert '--pids-limit=12345' in c.container_args
         assert '--something' in c.container_args
         assert os.path.join('data', '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'custom_config_files', 'grafana.host1', 'testing.str') in c.volume_mounts
         assert c.volume_mounts[os.path.join('data', '9b9d7609-f4d5-4aba-94c8-effa764d96c9', 'custom_config_files', 'grafana.host1', 'testing.str')] == '/etc/testing.str'
 
-    @mock.patch('cephadm.logger')
-    @mock.patch('cephadm.FileLock')
-    @mock.patch('cephadm.deploy_daemon')
-    @mock.patch('cephadm.make_var_run')
-    @mock.patch('cephadm.migrate_sysctl_dir')
-    @mock.patch('cephadm.check_unit', lambda *args, **kwargs: (None, 'running', None))
-    @mock.patch('cephadm.get_unit_name', lambda *args, **kwargs: 'mon-unit-name')
-    @mock.patch('cephadm.extract_uid_gid', lambda *args, **kwargs: (0, 0))
-    @mock.patch('cephadm.get_container')
-    @mock.patch('cephadm.apply_deploy_config_to_ctx', lambda d, c: None)
-    def test_mon_crush_location(self, _get_container, _migrate_sysctl, _make_var_run, _deploy_daemon, _file_lock, _logger, monkeypatch):
+    def test_mon_crush_location(self, funkypatch):
         """
         test that crush location for mon is set if it is included in config_json
         """
-        _fetch_configs = mock.MagicMock()
-        monkeypatch.setattr('cephadmlib.context_getters.fetch_configs', _fetch_configs)
-        monkeypatch.setattr('cephadm.fetch_configs', _fetch_configs)
-        monkeypatch.setattr('cephadm.read_configuration_source', lambda c: {})
-        monkeypatch.setattr('cephadm.fetch_custom_config_files', mock.MagicMock())
+        funkypatch.patch('cephadm.logger')
+        funkypatch.patch('cephadm.FileLock')
+        _deploy_daemon = funkypatch.patch('cephadm.deploy_daemon')
+        funkypatch.patch('cephadm.make_var_run')
+        funkypatch.patch('cephadmlib.file_utils.make_run_dir')
+        _migrate_sysctl = funkypatch.patch('cephadm.migrate_sysctl_dir')
+        funkypatch.patch(
+            'cephadm.check_unit',
+            dest=lambda *args, **kwargs: (None, 'running', None),
+        )
+        funkypatch.patch(
+            'cephadm.get_unit_name',
+            dest=lambda *args, **kwargs: 'mon-unit-name',
+        )
+        funkypatch.patch(
+            'cephadm.extract_uid_gid', dest=lambda *args, **kwargs: (0, 0)
+        )
+        _get_container = funkypatch.patch('cephadm.get_container')
+        funkypatch.patch(
+            'cephadm.apply_deploy_config_to_ctx', dest=lambda d, c: None
+        )
+        _fetch_configs = funkypatch.patch(
+            'cephadmlib.context_getters.fetch_configs'
+        )
+        funkypatch.patch(
+            'cephadm.read_configuration_source', dest=lambda c: {}
+        )
+        funkypatch.patch('cephadm.fetch_custom_config_files')
 
         ctx = _cephadm.CephadmContext()
         ctx.name = 'mon.test'
@@ -541,25 +559,31 @@ class TestCephAdm(object):
 
 
     def test_dict_get(self):
-        result = _cephadm.dict_get({'a': 1}, 'a', require=True)
+        from cephadmlib.data_utils import dict_get
+
+        result = dict_get({'a': 1}, 'a', require=True)
         assert result == 1
-        result = _cephadm.dict_get({'a': 1}, 'b')
+        result = dict_get({'a': 1}, 'b')
         assert result is None
-        result = _cephadm.dict_get({'a': 1}, 'b', default=2)
+        result = dict_get({'a': 1}, 'b', default=2)
         assert result == 2
 
     def test_dict_get_error(self):
+        from cephadmlib.data_utils import dict_get
+
         with pytest.raises(_cephadm.Error):
-            _cephadm.dict_get({'a': 1}, 'b', require=True)
+            dict_get({'a': 1}, 'b', require=True)
 
     def test_dict_get_join(self):
-        result = _cephadm.dict_get_join({'foo': ['a', 'b']}, 'foo')
+        from cephadmlib.data_utils import dict_get_join
+
+        result = dict_get_join({'foo': ['a', 'b']}, 'foo')
         assert result == 'a\nb'
-        result = _cephadm.dict_get_join({'foo': [1, 2]}, 'foo')
+        result = dict_get_join({'foo': [1, 2]}, 'foo')
         assert result == '1\n2'
-        result = _cephadm.dict_get_join({'bar': 'a'}, 'bar')
+        result = dict_get_join({'bar': 'a'}, 'bar')
         assert result == 'a'
-        result = _cephadm.dict_get_join({'a': 1}, 'a')
+        result = dict_get_join({'a': 1}, 'a')
         assert result == 1
 
     @mock.patch('os.listdir', return_value=[])
@@ -761,24 +785,26 @@ class TestCephAdm(object):
                 assert _cephadm.get_container_info(ctx, daemon_filter, by_name) == output
 
     def test_should_log_to_journald(self):
+        from cephadmlib import context_getters
+
         ctx = _cephadm.CephadmContext()
         # explicit
         ctx.log_to_journald = True
-        assert _cephadm.should_log_to_journald(ctx)
+        assert context_getters.should_log_to_journald(ctx)
 
         ctx.log_to_journald = None
         # enable if podman support --cgroup=split
         ctx.container_engine = mock_podman()
         ctx.container_engine.version = (2, 1, 0)
-        assert _cephadm.should_log_to_journald(ctx)
+        assert context_getters.should_log_to_journald(ctx)
 
         # disable on old podman
         ctx.container_engine.version = (2, 0, 0)
-        assert not _cephadm.should_log_to_journald(ctx)
+        assert not context_getters.should_log_to_journald(ctx)
 
         # disable on docker
         ctx.container_engine = mock_docker()
-        assert not _cephadm.should_log_to_journald(ctx)
+        assert not context_getters.should_log_to_journald(ctx)
 
     def test_normalize_image_digest(self):
         s = 'myhostname:5000/ceph/ceph@sha256:753886ad9049004395ae990fbb9b096923b5a518b819283141ee8716ddf55ad1'
@@ -1186,15 +1212,17 @@ class TestMaintenance:
 
 
 class TestMonitoring(object):
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.daemons.monitoring.call')
     def test_get_version_alertmanager(self, _call):
+        from cephadmlib.daemons import monitoring
+
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         daemon_type = 'alertmanager'
 
         # binary `prometheus`
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
-        version = _cephadm.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        version = monitoring.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
         # binary `prometheus-alertmanager`
@@ -1205,13 +1233,15 @@ class TestMonitoring(object):
         version = _cephadm.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.daemons.monitoring.call')
     def test_get_version_prometheus(self, _call):
+        from cephadmlib.daemons import monitoring
+
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         daemon_type = 'prometheus'
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type), 0
-        version = _cephadm.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        version = monitoring.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
     def test_prometheus_external_url(self):
@@ -1225,13 +1255,15 @@ class TestMonitoring(object):
         ).get_daemon_args()
         assert any([x.startswith('--web.external-url=http://') for x in args])
 
-    @mock.patch('cephadm.call')
+    @mock.patch('cephadmlib.daemons.monitoring.call')
     def test_get_version_node_exporter(self, _call):
+        from cephadmlib.daemons import monitoring
+
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         daemon_type = 'node-exporter'
         _call.return_value = '', '{}, version 0.16.1'.format(daemon_type.replace('-', '_')), 0
-        version = _cephadm.Monitoring.get_version(ctx, 'container_id', daemon_type)
+        version = monitoring.Monitoring.get_version(ctx, 'container_id', daemon_type)
         assert version == '0.16.1'
 
     def test_create_daemon_dirs_prometheus(self, cephadm_fs):
@@ -2113,16 +2145,12 @@ class TestValidateRepo:
 
 
 class TestPull:
-
-    @mock.patch('time.sleep')
-    @mock.patch('cephadm.get_image_info_from_inspect', return_value={})
-    @mock.patch('cephadm.logger')
-    def test_error(self, _logger, _get_image_info_from_inspect, _sleep, monkeypatch):
-        # manually create a mock and use pytest's monkeypatch fixture to set
-        # multiple targets to the *same* mock
-        _call = mock.MagicMock()
-        monkeypatch.setattr('cephadm.call', _call)
-        monkeypatch.setattr('cephadmlib.call_wrappers.call', _call)
+    def test_error(self, funkypatch):
+        funkypatch.patch('time.sleep')
+        funkypatch.patch('cephadm.logger')
+        _giifi = funkypatch.patch('cephadm.get_image_info_from_inspect')
+        _giifi.return_value = {}
+        _call = funkypatch.patch('cephadmlib.call_wrappers.call')
         ctx = _cephadm.CephadmContext()
         ctx.container_engine = mock_podman()
         ctx.insecure = False
