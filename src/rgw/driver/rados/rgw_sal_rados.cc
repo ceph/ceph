@@ -1702,9 +1702,10 @@ int RadosObject::transition(Bucket* bucket,
 			    const real_time& mtime,
 			    uint64_t olh_epoch,
 			    const DoutPrefixProvider* dpp,
-			    optional_yield y)
+			    optional_yield y,
+                            bool log_op)
 {
-  return store->getRados()->transition_obj(*rados_ctx, bucket->get_info(), get_obj(), placement_rule, mtime, olh_epoch, dpp, y);
+  return store->getRados()->transition_obj(*rados_ctx, bucket->get_info(), get_obj(), placement_rule, mtime, olh_epoch, dpp, y, log_op);
 }
 
 int RadosObject::transition_to_cloud(Bucket* bucket,
@@ -1986,7 +1987,7 @@ RadosObject::RadosDeleteOp::RadosDeleteOp(RadosObject *_source) :
 	parent_op(&op_target)
 { }
 
-int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op)
 {
   parent_op.params.bucket_owner = params.bucket_owner.id;
   parent_op.params.versioning_status = params.versioning_status;
@@ -2003,7 +2004,7 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.abortmp = params.abortmp;
   parent_op.params.parts_accounted_size = params.parts_accounted_size;
 
-  int ret = parent_op.delete_obj(y, dpp);
+  int ret = parent_op.delete_obj(y, dpp, log_op);
   if (ret < 0)
     return ret;
 
@@ -2154,7 +2155,7 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
 }
 
 
-int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
+int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y, bool log_op)
 {
   std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
   meta_obj->set_in_extra_data(true);
@@ -2182,7 +2183,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 	std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
 				    rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART));
 	obj->set_hash_source(mp_obj.get_key());
-	ret = obj->delete_object(dpp, y);
+	ret = obj->delete_object(dpp, y, log_op);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
@@ -2232,7 +2233,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   del_op->params.parts_accounted_size = parts_accounted_size;
 
   // and also remove the metadata obj
-  ret = del_op->delete_obj(dpp, y);
+  ret = del_op->delete_obj(dpp, y, log_op);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;
@@ -2849,10 +2850,11 @@ int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       bool log_op)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, log_op);
 }
 
 int RadosAppendWriter::prepare(optional_yield y)
@@ -2872,10 +2874,11 @@ int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       bool log_op)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, log_op);
 }
 
 int RadosMultipartWriter::prepare(optional_yield y)
@@ -2895,10 +2898,11 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       bool log_op)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, rctx, log_op);
 }
 
 bool RadosZoneGroup::placement_target_exists(std::string& target) const
@@ -3046,7 +3050,7 @@ const std::string_view RadosZone::get_tier_type()
   if (local_zone)
     return store->svc()->zone->get_zone().tier_type;
 
-  return rgw_zone.id;
+  return rgw_zone.tier_type;
 }
 
 RGWBucketSyncPolicyHandlerRef RadosZone::get_sync_policy_handler()

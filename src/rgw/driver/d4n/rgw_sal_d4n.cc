@@ -245,7 +245,7 @@ int D4NFilterObject::modify_obj_attrs(const char* attr_name, bufferlist& attr_va
 }
 
 int D4NFilterObject::delete_obj_attrs(const DoutPrefixProvider* dpp, const char* attr_name,
-                               optional_yield y) 
+                               optional_yield y)
 {
   std::vector<std::string> delFields;
   delFields.push_back((std::string)attr_name);
@@ -361,7 +361,7 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 }
 
 int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-					   optional_yield y)
+                                                   optional_yield y, bool log_op)
 {
   int delDirReturn = source->filter->get_block_dir()->delValue(source->filter->get_cache_block());
 
@@ -415,7 +415,8 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       bool log_op)
 {
   cache_block* temp_cache_block = filter->get_cache_block();
   RGWBlockDirectory* temp_block_dir = filter->get_block_dir();
@@ -437,7 +438,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   RGWObjState* astate;
   int ret = next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, rctx);
+			canceled, rctx, log_op);
   obj->get_obj_attrs(rctx.y, save_dpp, NULL);
   obj->get_obj_state(save_dpp, &astate, rctx.y);
 

@@ -1294,7 +1294,8 @@ int MotrObject::transition(Bucket* bucket,
     const real_time& mtime,
     uint64_t olh_epoch,
     const DoutPrefixProvider* dpp,
-    optional_yield y)
+    optional_yield y,
+    bool log_op)
 {
   return 0;
 }
@@ -1456,7 +1457,7 @@ MotrObject::MotrDeleteOp::MotrDeleteOp(MotrObject *_source) :
 // Delete::delete_obj() in rgw_rados.cc shows how rados backend process the
 // params.
 // 2. Delete an object when its versioning is turned on.
-int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
+int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op)
 {
   ldpp_dout(dpp, 20) << "delete " << source->get_key().get_oid() << " from " << source->get_bucket()->get_name() << dendl;
 
@@ -2324,7 +2325,8 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       bool log_op)
 {
   int rc = 0;
 
@@ -2463,7 +2465,7 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp)
   return store->delete_motr_idx_by_name(obj_part_iname);
 }
 
-int MotrMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
+int MotrMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y, bool log_op)
 {
   int rc;
   // Check if multipart upload exists
@@ -2981,7 +2983,8 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       optional_yield y,
+                       bool log_op)
 {
   // Should the dir entry(object metadata) be updated? For example
   // mtime.
