@@ -300,7 +300,7 @@ std::tuple<int, rgw::sal::RGWRole*> STSService::getRoleInfo(const DoutPrefixProv
     }
 
     std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(roleName, tenant, account);
-    if (int ret = role->get(dpp, y); ret < 0) {
+    if (int ret = role->load_by_name(dpp, y); ret < 0) {
       if (ret == -ENOENT) {
         ldpp_dout(dpp, 0) << "Role doesn't exist: " << roleName << dendl;
         ret = -ERR_NO_ROLE_FOUND;

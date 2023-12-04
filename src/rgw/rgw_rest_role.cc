@@ -114,7 +114,7 @@ static int load_role(const DoutPrefixProvider* dpp, optional_yield y,
                      rgw::ARN& resource, std::string& message)
 {
   role = driver->get_role(name, tenant, account_id);
-  const int r = role->get(dpp, y);
+  const int r = role->load_by_name(dpp, y);
   if (r == -ENOENT) {
     message = "No such RoleName in the tenant";
     return -ERR_NO_ROLE_FOUND;
@@ -312,7 +312,7 @@ void RGWCreateRole::execute(optional_yield y)
     ldpp_dout(this, 0) << "role_id decoded from master zonegroup response is " << role_id << dendl;
   }
 
-  op_ret = role->create(s, true, role_id, y);
+  op_ret = role->create(s, role_id, y);
   if (op_ret == -EEXIST) {
     if (site.is_meta_master()) {
       op_ret = -ERR_ROLE_EXISTS;
@@ -489,7 +489,8 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
   op_ret = retry_raced_role_write(this, y, role.get(),
       [this, y] {
         role->update_trust_policy(trust_policy);
-        return role->update(this, y);
+        constexpr bool exclusive = false;
+        return role->store_info(this, exclusive, y);
       });
 
   s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
@@ -625,7 +626,8 @@ void RGWPutRolePolicy::execute(optional_yield y)
   op_ret = retry_raced_role_write(this, y, role.get(),
       [this, y] {
         role->set_perm_policy(policy_name, perm_policy);
-        return role->update(this, y);
+        constexpr bool exclusive = false;
+        return role->store_info(this, exclusive, y);
       });
 
   if (op_ret == 0) {
@@ -766,7 +768,8 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
           return -ERR_NO_SUCH_ENTITY;
         }
         if (r == 0) {
-          r = role->update(this, y);
+          constexpr bool exclusive = false;
+          r = role->store_info(this, exclusive, y);
         }
         return r;
       });
@@ -833,7 +836,8 @@ void RGWTagRole::execute(optional_yield y)
       [this, y] {
         int r = role->set_tags(this, tags);
         if (r == 0) {
-          r = role->update(this, y);
+          constexpr bool exclusive = false;
+          r = role->store_info(this, exclusive, y);
         }
         return r;
       });
@@ -940,7 +944,8 @@ void RGWUntagRole::execute(optional_yield y)
   op_ret = retry_raced_role_write(this, y, role.get(),
       [this, y] {
         role->erase_tags(untag);
-        return role->update(this, y);
+        constexpr bool exclusive = false;
+        return role->store_info(this, exclusive, y);
       });
 
   if (op_ret == 0) {
@@ -1009,15 +1014,18 @@ void RGWUpdateRole::execute(optional_yield y)
           return -EINVAL;
         }
 
-        return role->update(this, y);
+        constexpr bool exclusive = false;
+        return role->store_info(this, exclusive, y);
       });
 
-  s->formatter->open_object_section("UpdateRoleResponse");
-  s->formatter->open_object_section("UpdateRoleResult");
-  s->formatter->open_object_section("ResponseMetadata");
-  s->formatter->dump_string("RequestId", s->trans_id);
-  s->formatter->close_section();
-  s->formatter->close_section();
+  if (op_ret == 0) {
+    s->formatter->open_object_section("UpdateRoleResponse");
+    s->formatter->open_object_section("UpdateRoleResult");
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
 }
 
 static bool validate_policy_arn(const std::string& arn, std::string& err)
@@ -1127,7 +1135,8 @@ void RGWAttachRolePolicy_IAM::execute(optional_yield y)
         if (!policies.arns.insert(policy_arn).second) {
           return 0;
         }
-        return role->update(this, y);
+        constexpr bool exclusive = false;
+        return role->store_info(this, exclusive, y);
       });
 
   if (op_ret == 0) {
@@ -1217,7 +1226,9 @@ void RGWDetachRolePolicy_IAM::execute(optional_yield y)
           return -ERR_NO_SUCH_ENTITY;
         }
         policies.arns.erase(p);
-        return role->update(this, y);
+
+        constexpr bool exclusive = false;
+        return role->store_info(this, exclusive, y);
       });
 
   if (op_ret == 0) {

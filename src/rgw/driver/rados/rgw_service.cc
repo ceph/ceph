@@ -36,7 +36,7 @@
 #include "rgw_otp.h"
 #include "rgw_sal_rados.h"
 #include "rgw_user.h"
-#include "rgw_role.h"
+#include "role.h"
 #include "rgw_pubsub.h"
 #include "topic.h"
 
@@ -385,7 +385,8 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver,
 
   meta.otp = rgwrados::otp::create_metadata_handler(
       *svc.sysobj, *svc.cls, *svc.mdlog, svc.zone->get_zone_params());
-  meta.role = create_role_metadata_handler(*driver, *svc.sysobj);
+  meta.role = rgwrados::role::create_metadata_handler(
+      rados, *svc.sysobj, *svc.mdlog, svc.zone->get_zone_params());
   meta.account = rgwrados::account::create_metadata_handler(
       *svc.sysobj, svc.zone->get_zone_params());
   meta.group = rgwrados::group::create_metadata_handler(

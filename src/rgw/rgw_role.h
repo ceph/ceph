@@ -30,7 +30,6 @@ struct RGWRoleInfo // TODO: move to rgw_common.h
   std::string description;
   uint64_t max_session_duration = 0;
   std::multimap<std::string,std::string> tags;
-  std::map<std::string, bufferlist> attrs;
   RGWObjVersionTracker objv_tracker;
   ceph::real_time mtime;
   rgw_account_id account_id;
@@ -89,9 +88,6 @@ namespace rgw::sal {
 class RGWRole
 {
 public:
-  static const std::string role_name_oid_prefix;
-  static const std::string role_oid_prefix;
-  static const std::string role_path_oid_prefix;
   static const std::string role_arn_prefix;
   static constexpr int MAX_ROLE_NAME_LEN = 64;
   static constexpr int MAX_PATH_NAME_LEN = 512;
@@ -100,12 +96,6 @@ public:
 protected:
   RGWRoleInfo info;
 public:
-  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
-  virtual int store_name(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
-  virtual int store_path(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
-  virtual int read_id(const DoutPrefixProvider *dpp, const std::string& role_name, const std::string& tenant, std::string& role_id, optional_yield y) = 0;
-  virtual int read_name(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-  virtual int read_info(const DoutPrefixProvider *dpp, optional_yield y) = 0;
   bool validate_max_session_duration(const DoutPrefixProvider* dpp);
   bool validate_input(const DoutPrefixProvider* dpp);
   void extract_name_tenant(const std::string& str);
@@ -127,6 +117,12 @@ public:
 
   virtual ~RGWRole() = default;
 
+  // virtual interface
+  virtual int load_by_name(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  virtual int load_by_id(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+  virtual int store_info(const DoutPrefixProvider *dpp, bool exclusive, optional_yield y) = 0;
+  virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;
+
   const std::string& get_id() const { return info.id; }
   const std::string& get_name() const { return info.name; }
   const std::string& get_tenant() const { return info.tenant; }
@@ -138,17 +134,12 @@ public:
   RGWObjVersionTracker& get_objv_tracker() { return info.objv_tracker; }
   const RGWObjVersionTracker& get_objv_tracker() const { return info.objv_tracker; }
   const real_time& get_mtime() const { return info.mtime; }
-  std::map<std::string, bufferlist>& get_attrs() { return info.attrs; }
   RGWRoleInfo& get_info() { return info; }
 
   void set_id(const std::string& id) { this->info.id = id; }
   void set_mtime(const real_time& mtime) { this->info.mtime = mtime; }
 
-  virtual int create(const DoutPrefixProvider *dpp, bool exclusive, const std::string &role_id, optional_yield y) = 0;
-  virtual int delete_obj(const DoutPrefixProvider *dpp, optional_yield y) = 0;
-  int get(const DoutPrefixProvider *dpp, optional_yield y);
-  int get_by_id(const DoutPrefixProvider *dpp, optional_yield y);
-  int update(const DoutPrefixProvider *dpp, optional_yield y);
+  int create(const DoutPrefixProvider *dpp, const std::string &role_id, optional_yield y);
   void update_trust_policy(std::string& trust_policy);
   void set_perm_policy(const std::string& policy_name, const std::string& perm_policy);
   std::vector<std::string> get_role_policy_names();
@@ -158,18 +149,6 @@ public:
   boost::optional<std::multimap<std::string,std::string>> get_tags();
   void erase_tags(const std::vector<std::string>& tagKeys);
   void update_max_session_duration(const std::string& max_session_duration_str);
-
-  static const std::string& get_names_oid_prefix();
-  static const std::string& get_info_oid_prefix();
-  static const std::string& get_path_oid_prefix();
 };
 
 } // namespace rgw::sal
-
-
-class RGWMetadataHandler;
-class RGWSI_SysObj;
-
-auto create_role_metadata_handler(rgw::sal::Driver& driver,
-                                  RGWSI_SysObj& sysobj)
-    -> std::unique_ptr<RGWMetadataHandler>;
