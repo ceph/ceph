@@ -50,6 +50,11 @@
   recommend that users with versioned buckets, especially those that existed
   on prior releases, use these new tools to check whether their buckets are
   affected and to clean them up accordingly.
+* CephFS: Running the command "ceph fs authorize" for an existing entity now
+  upgrades the entity's capabilities instead of printing an error. It can now
+  also change read/write permissions in a capability that the entity already
+  holds. If the capability passed by user is same as one of the capabilities
+  that the entity already holds, idempotency is maintained.
 * CephFS: Two FS names can now be swapped, optionally along with their IDs,
   using "ceph fs swap" command. The function of this API is to facilitate
   file system swaps for disaster recovery. In particular, it avoids situations
@@ -57,9 +62,10 @@
   level storage operator (like Rook) to recreate the missing file system.
   See https://docs.ceph.com/en/latest/cephfs/administration/#file-systems
   docs for more information.
-* CephFS: Before running the command "ceph fs rename", the CephFS to be
-  renamed must be taken offline and "refuse_client_session" must be set for
-  it.
+* CephFS: Before running the command "ceph fs rename", the filesystem to be
+  renamed must be offline and the config "refuse_client_session" must be set
+  for it. The config "refuse_client_session" can be removed/unset and
+  filesystem can be online after the rename operation is complete.
 * RADOS: A POOL_APP_NOT_ENABLED health warning will now be reported if
   the application is not enabled for the pool irrespective of whether
   the pool is in use or not. Always tag a pool with an application
@@ -256,11 +262,6 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
   than the number mentioned against the config tunable `mds_max_snaps_per_dir`
   so that a new snapshot can be created and retained during the next schedule
   run.
-* cephfs: Running the command "ceph fs authorize" for an existing entity now
-  upgrades the entity's capabilities instead of printing an error. It can now
-  also change read/write permissions in a capability that the entity already
-  holds. If the capability passed by user is same as one of the capabilities
-  that the entity already holds, idempotency is maintained.
 * `ceph config dump --format <json|xml>` output will display the localized
   option names instead of its normalized version. For e.g.,
   "mgr/prometheus/x/server_port" will be displayed instead of
