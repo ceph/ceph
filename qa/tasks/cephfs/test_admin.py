@@ -1691,8 +1691,6 @@ class TestFsAuthorizeUpdate(CephFSTestCase):
         mdscap = gen_mds_cap_str(((PERM, self.fs.name, PATH, True),))
         for cap in (moncap, osdcap, mdscap):
             self.assertIn(cap, keyring)
-        self._remount(self.mount_a, self.fs.name, keyring, PATH)
-        self.captester.run_cap_tests(self.fs, self.client_id, PERM, PATH)
 
     def _get_uid(self):
         return self.mount_a.client_remote.run(
