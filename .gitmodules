@@ -75,3 +75,6 @@
 [submodule "src/jaegertracing/opentelemetry-cpp"]
 	path = src/jaegertracing/opentelemetry-cpp
 	url = https://github.com/open-telemetry/opentelemetry-cpp.git
+[submodule "nvmeof"]
+	path = src/pybind/mgr/dashboard/ceph-nvmeof
+	url = https://github.com/ceph/ceph-nvmeof.git
