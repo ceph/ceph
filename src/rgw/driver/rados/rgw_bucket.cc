@@ -1337,13 +1337,24 @@ static int bucket_stats(rgw::sal::Driver* driver,
   }
 
   // bucket notifications
-  RGWPubSub ps(driver, tenant_name);
   rgw_pubsub_bucket_topics result;
-  const RGWPubSub::Bucket b(ps, bucket.get());
-  ret = b.get_topics(dpp, result, y);
-  if (ret < 0 && ret != -ENOENT) {
-    cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-    return -ret;
+  if (driver->get_zone()->get_zonegroup().supports_feature(
+          rgw::zone_features::notification_v2)) {
+    ret = get_bucket_notifications(dpp, bucket.get(), result);
+    if (ret < 0) {
+      cerr << "ERROR: could not get topics: " << cpp_strerror(-ret)
+           << std::endl;
+      return -ret;
+    }
+  } else {
+    RGWPubSub ps(driver, tenant_name);
+    const RGWPubSub::Bucket b(ps, bucket.get());
+    ret = b.get_topics(dpp, result, y);
+    if (ret < 0 && ret != -ENOENT) {
+      cerr << "ERROR: could not get topics: " << cpp_strerror(-ret)
+           << std::endl;
+      return -ret;
+    }
   }
   result.dump(formatter);
 
