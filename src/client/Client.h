@@ -883,8 +883,6 @@ public:
     return std::make_pair(opened_inodes, inode_map.size());
   }
 
-  xlist<Inode*> &get_dirty_list() { return dirty_list; }
-
   /* timer_lock for 'timer' */
   ceph::mutex timer_lock = ceph::make_mutex("Client::timer_lock");
   SafeTimer timer;
@@ -1548,8 +1546,7 @@ private:
   // cap flushing
   ceph_tid_t last_flush_tid = 1;
 
-  // dirty_list keeps all the dirty inodes before flushing.
-  xlist<Inode*> delayed_list, dirty_list;
+  xlist<Inode*> delayed_list;
   int num_flushing_caps = 0;
   ceph::unordered_map<inodeno_t,SnapRealm*> snap_realms;
   std::map<std::string, std::string> metadata;
