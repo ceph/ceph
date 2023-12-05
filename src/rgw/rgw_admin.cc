@@ -10512,20 +10512,28 @@ next:
       return EINVAL;
     }
 
-    RGWPubSub ps(driver, tenant);
-
     rgw_pubsub_bucket_topics result;
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-
-    const RGWPubSub::Bucket b(ps, bucket.get());
-    ret = b.get_topics(dpp(), result, null_yield);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    if (driver->get_zone()->get_zonegroup().supports_feature(
+            rgw::zone_features::notification_v2)) {
+      ret = get_bucket_notifications(dpp(), bucket.get(), result);
+      if (ret < 0) {
+        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret)
+             << std::endl;
+        return -ret;
+      }
+    } else {
+      RGWPubSub ps(driver, tenant);
+      const RGWPubSub::Bucket b(ps, bucket.get());
+      ret = b.get_topics(dpp(), result, null_yield);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
     encode_json("result", result, formatter.get());
     formatter->flush(cout);
@@ -10597,24 +10605,30 @@ next:
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-
-    RGWPubSub ps(driver, tenant);
-
     rgw_pubsub_bucket_topics bucket_topics;
-    const RGWPubSub::Bucket b(ps, bucket.get());
-    ret = b.get_topics(dpp(), bucket_topics, null_yield);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not get bucket notifications: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    if (driver->get_zone()->get_zonegroup().supports_feature(
+            rgw::zone_features::notification_v2)) {
+      ret = get_bucket_notifications(dpp(), bucket.get(), bucket_topics);
+      if (ret < 0) {
+        cerr << "ERROR: could not get bucket notifications: "
+             << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+    } else {
+      RGWPubSub ps(driver, tenant);
+      const RGWPubSub::Bucket b(ps, bucket.get());
+      ret = b.get_topics(dpp(), bucket_topics, null_yield);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: could not get bucket notifications: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
     }
-
-    rgw_pubsub_topic_filter bucket_topic;
-    ret = b.get_notification_by_id(dpp(), notification_id, bucket_topic, null_yield);
-    if (ret < 0) {
-      cerr << "ERROR: could not get notification: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
+    auto iter = find_unique_topic(bucket_topics, notification_id);
+    if (!iter) {
+      cerr << "ERROR: notification was not found" << std::endl;
+      return -ENOENT;
     }
-    encode_json("notification", bucket_topic, formatter.get());
+    encode_json("notification", *iter, formatter.get());
     formatter->flush(cout);
   }
 
@@ -10623,7 +10637,10 @@ next:
       cerr << "ERROR: topic name was not provided (via --topic)" << std::endl;
       return EINVAL;
     }
-
+    if (!driver->is_meta_master()) {
+      cerr << "ERROR: Run 'topic rm' from master zone " << std::endl;
+      return -EINVAL;
+    }
     ret = rgw::notify::remove_persistent_topic(
         dpp(), static_cast<rgw::sal::RadosStore*>(driver)->getRados()->get_notif_pool_ctx(), topic_name, null_yield);
     if (ret < 0) {
@@ -10651,28 +10668,37 @@ next:
       cerr << "ERROR: bucket name was not provided (via --bucket)" << std::endl;
       return EINVAL;
     }
-
+    if (!driver->is_meta_master()) {
+      cerr << "ERROR: Run 'notification rm' from master zone " << std::endl;
+      return -EINVAL;
+    }
     int ret = init_bucket(tenant, bucket_name, bucket_id, &bucket);
     if (ret < 0) {
       cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
 
-    RGWPubSub ps(driver, tenant);
-
-    rgw_pubsub_bucket_topics bucket_topics;
-    const RGWPubSub::Bucket b(ps, bucket.get());
-    ret = b.get_topics(dpp(), bucket_topics, null_yield);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not get bucket notifications: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-
-    rgw_pubsub_topic_filter bucket_topic;
-    if(notification_id.empty()) {
-      ret = b.remove_notifications(dpp(), null_yield);
+    if (driver->get_zone()->get_zonegroup().supports_feature(
+            rgw::zone_features::notification_v2)) {
+      ret = remove_notification_v2(dpp(), driver, bucket.get(), notification_id,
+                                   null_yield);
     } else {
-      ret = b.remove_notification_by_id(dpp(), notification_id, null_yield);
+      RGWPubSub ps(driver, tenant);
+
+      rgw_pubsub_bucket_topics bucket_topics;
+      const RGWPubSub::Bucket b(ps, bucket.get());
+      ret = b.get_topics(dpp(), bucket_topics, null_yield);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: could not get bucket notifications: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
+      }
+
+      rgw_pubsub_topic_filter bucket_topic;
+      if(notification_id.empty()) {
+        ret = b.remove_notifications(dpp(), null_yield);
+      } else {
+        ret = b.remove_notification_by_id(dpp(), notification_id, null_yield);
+      }
     }
   }
 
