@@ -353,5 +353,9 @@ if(ENABLE_SHARED)
       set_property(TARGET librbd APPEND_STRING PROPERTY
         LINK_FLAGS " -Wl,--exclude-libs,ALL")
     endif()
+  if(HAVE_LINK_VERSION_SCRIPT AND NOT WIN32)
+    set_property(TARGET librbd APPEND_STRING PROPERTY
+      LINK_FLAGS " -Wl,--version-script=${CMAKE_CURRENT_SOURCE_DIR}/librbd.map")
+  endif()
 endif(ENABLE_SHARED)
 install(TARGETS librbd DESTINATION ${CMAKE_INSTALL_LIBDIR})
