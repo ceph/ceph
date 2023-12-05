@@ -91,10 +91,7 @@ def write_service_scripts(
         # init-container commands
         if init_containers:
             initf = estack.enter_context(write_new(initctr_file_path))
-            _write_init_container_cmds_clean(ctx, initf, init_containers[0])
-            for idx, ic in enumerate(init_containers):
-                _write_init_container_cmds(ctx, initf, idx, ic)
-            initf.write('exit 0\n')
+            _write_init_containers_script(ctx, initf, init_containers)
 
         # sidecar container scripts
         for sidecar in sidecars or []:
@@ -218,6 +215,18 @@ def _write_stop_actions(
     f.write(
         f'! {container_exists % container.cname} || {" ".join(container.stop_cmd(timeout=timeout))} \n'
     )
+
+
+def _write_init_containers_script(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    init_containers: List[InitContainer],
+) -> None:
+    file_obj.write('set -e\n')
+    _write_init_container_cmds_clean(ctx, file_obj, init_containers[0])
+    for idx, ic in enumerate(init_containers):
+        _write_init_container_cmds(ctx, file_obj, idx, ic)
+    file_obj.write('exit 0\n')
 
 
 def _write_sidecar_script(
