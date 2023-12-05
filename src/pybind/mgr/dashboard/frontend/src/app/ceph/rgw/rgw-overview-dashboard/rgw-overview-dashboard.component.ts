@@ -46,11 +46,11 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   ZoneSUb: Subscription;
   HealthSub: Subscription;
   BucketSub: Subscription;
-  queriesResults: any = {
-    RGW_REQUEST_PER_SECOND: '',
-    BANDWIDTH: '',
-    AVG_GET_LATENCY: '',
-    AVG_PUT_LATENCY: ''
+  queriesResults: { [key: string]: [] } = {
+    RGW_REQUEST_PER_SECOND: [],
+    BANDWIDTH: [],
+    AVG_GET_LATENCY: [],
+    AVG_PUT_LATENCY: []
   };
   timerGetPrometheusDataSub: Subscription;
   chartTitles = ['Metadata Sync', 'Data Sync'];

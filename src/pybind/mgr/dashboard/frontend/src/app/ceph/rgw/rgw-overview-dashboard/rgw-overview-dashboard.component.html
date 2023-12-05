@@ -55,22 +55,18 @@
         </cd-dashboard-time-selector>
         <cd-dashboard-area-chart chartTitle="Requests/sec"
                                  dataUnits=""
-                                 label="Requests/sec"
-                                 [data]="queriesResults.RGW_REQUEST_PER_SECOND">
+                                 [labelsArray]="['Requests/sec']"
+                                 [dataArray]="[queriesResults.RGW_REQUEST_PER_SECOND]">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="Latency"
                                  dataUnits="ms"
-                                 label="GET"
-                                 label2="PUT"
-                                 [data]="queriesResults.AVG_GET_LATENCY"
-                                 [data2]="queriesResults.AVG_PUT_LATENCY">
+                                 [labelsArray]="['GET', 'PUT']"
+                                 [dataArray]="[queriesResults.AVG_GET_LATENCY, queriesResults.AVG_PUT_LATENCY]">
         </cd-dashboard-area-chart>
         <cd-dashboard-area-chart chartTitle="Bandwidth"
                                  dataUnits="B"
-                                 label="GET"
-                                 label2="PUT"
-                                 [data]="queriesResults.GET_BANDWIDTH"
-                                 [data2]="queriesResults.PUT_BANDWIDTH">
+                                 [labelsArray]="['GET', 'PUT']"
+                                 [dataArray]="[queriesResults.GET_BANDWIDTH, queriesResults.PUT_BANDWIDTH]">
         </cd-dashboard-area-chart>
       </div>
     </cd-card>
