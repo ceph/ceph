@@ -131,12 +131,12 @@ ceph-container
 --------------
 In the `ceph/ceph-container.git` repo:
 
-- [ ] Add the release name to `Makefile`
-- [ ] Update `ceph-releases/ALL/centos/daemon-base/__DOCKERFILE_INSTALL__` with the with the supported nfs-ganesha version
-- [ ] Update `contrib/build-push-ceph-container-imgs.sh` with the new release
-- [ ] Update `contrib/ceph-build-config.sh` with the release name
-- [ ] Update `contrib/common.sh` with supported version numbers
-- [ ] Update `maint-lib/ceph_version.sh` with the release name
+- [x] Add the release name to `Makefile`
+- [x] Update `ceph-releases/ALL/centos/daemon-base/__DOCKERFILE_INSTALL__` with the with the supported nfs-ganesha version
+- [x] Update `contrib/build-push-ceph-container-imgs.sh` with the new release
+- [x] Update `contrib/ceph-build-config.sh` with the release name
+- [x] Update `contrib/common.sh` with supported version numbers
+- [x] Update `maint-lib/ceph_version.sh` with the release name
 
 See https://github.com/ceph/ceph-container/pull/2109 as an example for what to do.
 
