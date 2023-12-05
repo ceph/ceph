@@ -16,6 +16,7 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_zone_features.h"
 #include "rgw_perf_counters.h"
+#include "services/svc_zone.h"
 #include "common/dout.h"
 #include <chrono>
 
@@ -980,13 +981,35 @@ static inline bool notification_match(reservation_t& res,
 		      reservation_t& res,
 		      const RGWObjTags* req_tags)
 {
-  const RGWPubSub ps(res.store, res.user_tenant);
-  const RGWPubSub::Bucket ps_bucket(ps, res.bucket);
   rgw_pubsub_bucket_topics bucket_topics;
-  auto rc = ps_bucket.get_topics(res.dpp, bucket_topics, res.yield);
-  if (rc < 0) {
-    // failed to fetch bucket topics
-    return rc;
+  if (do_all_zonegroups_support_notification_v2(
+          res.store->svc()->zone->get_current_period().get_map().zonegroups)) {
+    auto ret = 0;
+    if (!res.s) {
+      //  for non S3-request caller (e.g., lifecycle, ObjectSync), bucket attrs
+      //  are not loaded, so force to reload the bucket, that reloads the attr.
+      // for non S3-request caller, res.s is nullptr
+      ret = res.bucket->load_bucket(dpp, res.yield);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1)
+            << "ERROR: failed to reload bucket: '" << res.bucket->get_name()
+            << "' to get bucket notification attrs with error ret= " << ret
+            << dendl;
+        return ret;
+      }
+    }
+    ret = get_bucket_notifications(dpp, res.bucket, bucket_topics);
+    if (ret < 0) {
+      return ret;
+    }
+  } else {
+    const RGWPubSub ps(res.store, res.user_tenant);
+    const RGWPubSub::Bucket ps_bucket(ps, res.bucket);
+    auto rc = ps_bucket.get_topics(res.dpp, bucket_topics, res.yield);
+    if (rc < 0) {
+      // failed to fetch bucket topics
+      return rc;
+    }
   }
   for (const auto& bucket_topic : bucket_topics.topics) {
     const rgw_pubsub_topic_filter& topic_filter = bucket_topic.second;
@@ -1027,7 +1050,31 @@ static inline bool notification_match(reservation_t& res,
         return ret;
       }
     }
-    res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id);
+    // load the topic,if there is change in topic config while it's stored in
+    // notification.
+    rgw_pubsub_topic result;
+    const RGWPubSub ps(
+        res.store, res.user_tenant,
+        &res.store->svc()->zone->get_current_period().get_map().zonegroups);
+    auto ret = ps.get_topic(res.dpp, topic_cfg.name, result, res.yield);
+    if (ret < 0) {
+      ldpp_dout(res.dpp, 1)
+          << "INFO: failed to load topic: " << topic_cfg.name
+          << ". error: " << ret
+          << " while storing the persistent notification event" << dendl;
+      if (ret == -ENOENT) {
+        // either the topic is deleted but the corresponding notification still
+        // exist or in v2 mode the notification could have synced first but
+        // topic is not synced yet.
+        return 0;
+      }
+      ldpp_dout(res.dpp, 1)
+          << "WARN: Using the stored topic from bucket notification struct."
+          << dendl;
+      res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id);
+    } else {
+      res.topics.emplace_back(topic_filter.s3_id, result, res_id);
+    }
   }
   return 0;
 }

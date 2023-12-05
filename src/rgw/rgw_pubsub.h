@@ -672,3 +672,23 @@ namespace rgw::notify {
 
 bool do_all_zonegroups_support_notification_v2(
     std::map<std::string, RGWZoneGroup> zonegroups);
+
+std::string topic_to_unique(const std::string& topic,
+                            const std::string& notification);
+
+std::optional<rgw_pubsub_topic_filter> find_unique_topic(
+    const rgw_pubsub_bucket_topics& bucket_topics,
+    const std::string& notif_name);
+
+// Delete the bucket notification if |notification_id| is passed, else delete
+// all the bucket notifications for the given |bucket| and update the topic
+// bucket mapping.
+int remove_notification_v2(const DoutPrefixProvider* dpp,
+                           rgw::sal::Driver* driver,
+                           rgw::sal::Bucket* bucket,
+                           const std::string& notification_id,
+                           optional_yield y);
+
+int get_bucket_notifications(const DoutPrefixProvider* dpp,
+                             rgw::sal::Bucket* bucket,
+                             rgw_pubsub_bucket_topics& bucket_topics);
