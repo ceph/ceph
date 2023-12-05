@@ -24,12 +24,14 @@ export class ContextComponent implements OnInit, OnDestroy {
   private subs = new Subscription();
   private rgwUrlPrefix = '/rgw';
   private rgwUserUrlPrefix = '/rgw/user';
+  private rgwRoleUrlPrefix = '/rgw/roles';
   private rgwBuckerUrlPrefix = '/rgw/bucket';
   permissions: Permissions;
   featureToggleMap$: FeatureTogglesMap$;
   isRgwRoute =
     document.location.href.includes(this.rgwUserUrlPrefix) ||
-    document.location.href.includes(this.rgwBuckerUrlPrefix);
+    document.location.href.includes(this.rgwBuckerUrlPrefix) ||
+    document.location.href.includes(this.rgwRoleUrlPrefix);
 
   constructor(
     private authStorageService: AuthStorageService,
@@ -48,9 +50,11 @@ export class ContextComponent implements OnInit, OnDestroy {
         .pipe(filter((event: Event) => event instanceof NavigationEnd))
         .subscribe(
           () =>
-            (this.isRgwRoute = [this.rgwBuckerUrlPrefix, this.rgwUserUrlPrefix].some((urlPrefix) =>
-              this.router.url.startsWith(urlPrefix)
-            ))
+            (this.isRgwRoute = [
+              this.rgwBuckerUrlPrefix,
+              this.rgwUserUrlPrefix,
+              this.rgwRoleUrlPrefix
+            ].some((urlPrefix) => this.router.url.startsWith(urlPrefix)))
         )
     );
     // Set daemon list polling only when in RGW route:
