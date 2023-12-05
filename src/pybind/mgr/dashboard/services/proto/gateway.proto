@@ -1,0 +1,247 @@
+//
+//  Copyright (c) 2021 International Business Machines
+//  All rights reserved.
+//
+//  SPDX-License-Identifier: MIT
+//
+//  Authors: anita.shekar@ibm.com, sandy.kaur@ibm.com
+//
+
+
+syntax = "proto3";
+
+enum TransportType {
+    INVALID = 0;
+    RDMA = 1;
+    FC = 2;
+    TCP = 3;
+    PCIE = 256;
+    VFIOUSER = 1024;
+    CUSTOM = 4096;
+}
+
+enum AddressFamily {
+    invalid = 0;
+    ipv4 = 1;
+    ipv6 = 2;
+    ib = 3;
+    fc = 4;
+}
+
+enum LogLevel {
+    DISABLED = 0;
+    ERROR = 1;
+    WARN = 2;
+    NOTICE = 3;
+    INFO = 4;
+    DEBUG = 5;
+}
+
+service Gateway {
+	// Creates a bdev from an RBD image
+	rpc create_bdev(create_bdev_req) returns (bdev) {}
+
+	// Resizes a bdev
+	rpc resize_bdev(resize_bdev_req) returns (req_status) {}
+
+	// Deletes a bdev
+	rpc delete_bdev(delete_bdev_req) returns (req_status) {}
+
+	// Creates a subsystem
+	rpc create_subsystem(create_subsystem_req) returns(req_status) {}
+
+	// Deletes a subsystem
+	rpc delete_subsystem(delete_subsystem_req) returns(req_status) {}
+
+	// Adds a namespace to a subsystem
+	rpc add_namespace(add_namespace_req) returns(nsid_status) {}
+
+	// Removes a namespace from a subsystem
+	rpc remove_namespace(remove_namespace_req) returns(req_status) {}
+
+	// Adds a host to a subsystem
+	rpc add_host(add_host_req) returns (req_status) {}
+
+	// Removes a host from a subsystem
+	rpc remove_host(remove_host_req) returns (req_status) {}
+
+	// Creates a listener for a subsystem at a given IP/Port
+	rpc create_listener(create_listener_req) returns(req_status) {}
+
+	// Deletes a listener from a subsystem at a given IP/Port
+	rpc delete_listener(delete_listener_req) returns(req_status) {}
+
+	// Gets subsystems
+	rpc get_subsystems(get_subsystems_req) returns(subsystems_info) {}
+
+	// Gets spdk nvmf log flags and level
+	rpc get_spdk_nvmf_log_flags_and_level(get_spdk_nvmf_log_flags_and_level_req) returns(spdk_nvmf_log_flags_and_level_info) {}
+
+	// Disables spdk nvmf logs
+	rpc disable_spdk_nvmf_logs(disable_spdk_nvmf_logs_req) returns(req_status) {}
+
+	// Set spdk nvmf logs
+	rpc set_spdk_nvmf_logs(set_spdk_nvmf_logs_req) returns(req_status) {}
+
+	// Set spdk nvmf logs
+	rpc get_gateway_info(get_gateway_info_req) returns(gateway_info) {}
+}
+
+// Request messages
+
+message create_bdev_req {
+	string bdev_name = 1;
+	string rbd_pool_name = 2;
+	string rbd_image_name = 3;
+	int32 block_size = 4;
+	optional string uuid = 5;
+}
+
+message resize_bdev_req {
+	string bdev_name = 1;
+	int32 new_size = 2;
+}
+
+message delete_bdev_req {
+	string bdev_name = 1;
+	bool force = 2;
+}
+
+message create_subsystem_req {
+	string subsystem_nqn = 1;
+	string serial_number = 2;
+	int32 max_namespaces = 3;
+	bool  ana_reporting  = 4;
+	bool  enable_ha      = 5;
+}
+
+message delete_subsystem_req {
+	string subsystem_nqn = 1;
+}
+
+message add_namespace_req {
+	string subsystem_nqn = 1;
+	string bdev_name = 2;
+	optional uint32 nsid = 3;
+	optional int32 anagrpid = 4;
+}
+
+message remove_namespace_req {
+	string subsystem_nqn = 1;
+	uint32 nsid = 2;
+}
+
+message add_host_req {
+	string subsystem_nqn = 1;
+	string host_nqn = 2;
+}
+
+message remove_host_req {
+	string subsystem_nqn = 1;
+	string host_nqn = 2;
+}
+
+message create_listener_req {
+	string nqn = 1;
+	string gateway_name = 2;
+	TransportType trtype = 3;
+	AddressFamily adrfam = 4;
+	string traddr = 5;
+	string trsvcid = 6;
+}
+
+message delete_listener_req {
+	string nqn = 1;
+	string gateway_name = 2;
+	TransportType trtype = 3;
+	AddressFamily adrfam = 4;
+	string traddr = 5;
+	string trsvcid = 6;
+}
+
+message get_subsystems_req {
+}
+
+message get_spdk_nvmf_log_flags_and_level_req {
+}
+
+message disable_spdk_nvmf_logs_req {
+}
+
+message set_spdk_nvmf_logs_req {
+	optional LogLevel log_level = 1;
+	optional LogLevel print_level = 2;
+}
+
+message get_gateway_info_req {
+	string cli_version = 1;
+}
+
+// Return messages 
+
+message bdev {
+	string bdev_name = 1;
+	bool status = 2;
+}
+
+message req_status {
+	bool status = 1;
+}
+
+message nsid_status {
+	uint32 nsid = 1;
+	bool status = 2;
+}
+
+message subsystems_info {
+	repeated subsystem subsystems = 1;
+}
+
+message subsystem {
+	string nqn = 1;
+	string subtype = 2;
+	repeated listen_address listen_addresses = 3;
+	repeated host hosts = 4;
+	bool allow_any_host = 5;
+	optional string serial_number = 6;
+	optional string model_number = 7;
+	optional uint32 max_namespaces = 8;
+	optional uint32 min_cntlid = 9;
+	optional uint32 max_cntlid = 10;
+	repeated namespace namespaces = 11;
+}
+
+message gateway_info {
+	string cli_version = 1;
+	string gateway_version = 2;
+	string gateway_name = 3;
+	string gateway_group = 4;
+	string gateway_addr = 5;
+	string gateway_port = 6;
+	bool status = 7;
+}
+
+message listen_address {
+	string transport = 1;
+	TransportType trtype = 2;
+	AddressFamily adrfam = 3;
+	string traddr = 4;
+	string trsvcid = 5;
+}
+
+message host {
+    string nqn = 1;
+}
+
+message namespace {
+    uint32 nsid = 1;
+    string name = 2;
+    optional string bdev_name = 3;
+    optional string nguid = 4;
+    optional string uuid = 5;
+    optional uint32 anagrpid = 6;
+}
+
+message spdk_nvmf_log_flags_and_level_info {
+	string flags_level =1;
+}
