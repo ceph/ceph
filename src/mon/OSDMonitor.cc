@@ -699,7 +699,7 @@ void OSDMonitor::create_initial()
   newmap.encode(pending_inc.fullmap,
                 features | CEPH_FEATURE_RESERVED);
   pending_inc.full_crc = newmap.get_crc();
-  dout(20) << " full crc " << pending_inc.full_crc << dendl;
+  dout(20) << " pending_inc.full crc " << pending_inc.full_crc << dendl;
 }
 
 void OSDMonitor::get_store_prefixes(std::set<string>& s) const
@@ -824,7 +824,6 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
                  << dendl;
       }
     }
-
     dout(7) << "update_from_paxos  applying incremental " << osdmap.epoch+1
 	    << dendl;
     OSDMap::Incremental inc(inc_bl);
@@ -844,12 +843,26 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
     if (!f)
       f = -1;
     bufferlist full_bl;
+    dout(20) << "before apply osdmap.encode, osdmap.crc: " << osdmap.crc << dendl;
     osdmap.encode(full_bl, f | CEPH_FEATURE_RESERVED);
+    dout(20) << "after apply osdmap.encode, osdmap.crc: " << osdmap.crc << dendl;
     tx_size += full_bl.length();
-
     bufferlist orig_full_bl;
     get_version_full(osdmap.epoch, orig_full_bl);
+    OSDMap orig_full_osdmap;
+    orig_full_osdmap = OSDMap();
+	  orig_full_osdmap.decode(orig_full_bl);
     if (orig_full_bl.length()) {
+	    // jf.dump_object("orig_full_osdmap", orig_full_osdmap);
+      // dout(10) << "osdmap.blocklist: " << osdmap.blocklist << dendl;
+      for (const auto &addr : osdmap.blocklist) {
+        dout(10) << "osdmap.blocklist " << addr.first << " expires " << addr.second << dendl;
+      }
+      for (const auto &addr : orig_full_osdmap.blocklist) {
+        dout(10) << "orig_full_osdmap.blocklist " << addr.first << " expires " << addr.second << dendl;
+      }
+      dout(10) << "inc.full_crc: " << inc.full_crc << dendl;
+      dout(10) << "osdmap.crc: " << osdmap.crc << dendl;
       // the primary provided the full map
       ceph_assert(inc.have_crc);
       if (inc.full_crc != osdmap.crc) {
@@ -2010,27 +2023,32 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 
     // the features should be a subset of the mon quorum's features!
     ceph_assert((features & ~mon.get_quorum_con_features()) == 0);
-
     bufferlist fullbl;
+    dout(20) << " tmp_crc before encode: " << tmp.get_crc() << dendl;
     encode(tmp, fullbl, features | CEPH_FEATURE_RESERVED);
+    dout(20) << " tmp_crc after encode: " << tmp.get_crc() << dendl;
     pending_inc.full_crc = tmp.get_crc();
 
     // include full map in the txn.  note that old monitors will
     // overwrite this.  new ones will now skip the local full map
     // encode and reload from this.
     put_version_full(t, pending_inc.epoch, fullbl);
+    dout(20) << "put_version_full_osdmap" << dendl;
   }
 
   // encode
   ceph_assert(get_last_committed() + 1 == pending_inc.epoch);
   bufferlist bl;
+  dout(20) << " pending_inc.full_crc before encode: " <<  pending_inc.full_crc << dendl;
   encode(pending_inc, bl, features | CEPH_FEATURE_RESERVED);
+  dout(20) << " pending_inc.full_crc after encode: " <<  pending_inc.full_crc << dendl;
 
-  dout(20) << " full_crc " << tmp.get_crc()
+  dout(20) << " full_crc " << pending_inc.full_crc
 	   << " inc_crc " << pending_inc.inc_crc << dendl;
 
   /* put everything in the transaction */
   put_version(t, pending_inc.epoch, bl);
+  dout(20) << "put_version" << dendl;
   put_last_committed(t, pending_inc.epoch);
 
   // metadata, too!
