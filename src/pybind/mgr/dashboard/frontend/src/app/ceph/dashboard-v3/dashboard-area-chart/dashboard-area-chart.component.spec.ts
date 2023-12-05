@@ -28,10 +28,21 @@ describe('DashboardAreaChartComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(DashboardAreaChartComponent);
     component = fixture.componentInstance;
-    component.data = [
-      [1, '110'],
-      [3, '130']
+    component.dataArray = [
+      [
+        [1, '110'],
+        [3, '130']
+      ],
+      [
+        [2, '120'],
+        [4, '140']
+      ],
+      [
+        [5, '150'],
+        [6, '160']
+      ]
     ];
+    component.labelsArray = ['Read', 'Write', 'Total'];
   });
 
   it('should create', () => {
@@ -43,25 +54,22 @@ describe('DashboardAreaChartComponent', () => {
     expect(chartElement).toBeTruthy();
   });
 
-  it('should have two datasets', () => {
-    component.data2 = [
-      [2, '120'],
-      [4, '140']
-    ];
+  it('should have three datasets', () => {
+    component.ngOnChanges({ dataArray: new SimpleChange(null, component.dataArray, false) });
     expect(component.chartData.dataset[0].data).toBeDefined();
     expect(component.chartData.dataset[1].data).toBeDefined();
+    expect(component.chartData.dataset[2].data).toBeDefined();
   });
 
   it('should set label', () => {
-    component.label = 'Write';
-    expect(component.label).toBe('Write');
+    component.ngOnChanges({ dataArray: new SimpleChange(null, component.dataArray, false) });
+    expect(component.chartData.dataset[0].label).toEqual('Read');
+    expect(component.chartData.dataset[1].label).toEqual('Write');
+    expect(component.chartData.dataset[2].label).toEqual('Total');
   });
 
   it('should transform and update data', () => {
-    expect(component.chartData.dataset[0].data).toEqual([{ x: 0, y: 0 }]);
-
-    component.ngOnChanges({ data: new SimpleChange(null, component.data, false) });
-
+    component.ngOnChanges({ dataArray: new SimpleChange(null, component.dataArray, false) });
     expect(component.chartData.dataset[0].data).toEqual([
       { x: 1000, y: 110 },
       { x: 3000, y: 130 }
@@ -69,8 +77,8 @@ describe('DashboardAreaChartComponent', () => {
   });
 
   it('should set currentData to last value', () => {
-    component.ngOnChanges({ data: new SimpleChange(null, component.data, false) });
-    expect(component.currentData).toBe('130');
+    component.ngOnChanges({ dataArray: new SimpleChange(null, component.dataArray, false) });
+    expect(component.currentChartData.dataset[0].currentData).toBe('130');
   });
 
   it('should keep data units consistency', () => {
@@ -78,12 +86,8 @@ describe('DashboardAreaChartComponent', () => {
     setTimeout(() => {
       fixture.detectChanges();
 
-      component.data = [
-        [1, '1100'],
-        [3, '1300']
-      ];
       component.dataUnits = 'B';
-      component.ngOnChanges({ data: new SimpleChange(null, component.data, false) });
+      component.ngOnChanges({ dataArray: new SimpleChange(null, component.dataArray, false) });
 
       expect(component.currentDataUnits).toBe('KiB');
       expect(component.chartDataUnits).toBe('KiB');
