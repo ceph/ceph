@@ -92,6 +92,10 @@ Mon
 - [x] mon/MonCommands.h: adjust "osd require-osd-release" allows options to include X
 - [x] qa/workunits/cephtool/test.sh: adjust `require-osd-release` test
 
+OSDMap
+------
+
+- [ ] src/osd/OSDMap.cc add release name mapping for `SERVER_X` in `pending_require_osd_release()`
 
 Code cleanup
 ------------
