@@ -61,7 +61,11 @@ import { CheckedTableFormComponent } from './checked-table-form/checked-table-fo
             'Role path must start and finish with a slash "/".' +
             ' (pattern: (\u002F)|(\u002F[\u0021-\u007E]+\u002F))'
         },
-        { name: 'file_size', message: 'File size must not exceed 4KiB' }
+        { name: 'file_size', message: 'File size must not exceed 4KiB' },
+        {
+          name: 'rgwRoleSessionDuration',
+          message: 'This field must be a number and should be a value from 1 hour to 12 hour'
+        }
       ],
       wrappers: [{ name: 'input-wrapper', component: FormlyInputWrapperComponent }]
     }),
