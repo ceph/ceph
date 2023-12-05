@@ -11259,11 +11259,6 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
                           onfinish);
         ldout(cct, 3) << "preadv(" << fh << ", " <<  offset << ") = " << r << dendl;
         if (r <= 0) {
-          if (r < 0 && onfinish != nullptr) {
-            client_lock.unlock();
-            onfinish->complete(r);
-            client_lock.lock();
-          }
           return r;
         }
 
@@ -15960,9 +15955,37 @@ int64_t Client::ll_preadv_pwritev(struct Fh *fh, const struct iovec *iov,
     }
 
     std::scoped_lock cl(client_lock);
-    return _preadv_pwritev_locked(fh, iov, iovcnt, offset, write, true,
-    				  onfinish, bl, do_fsync, syncdataonly);
 
+    int64_t retval = _preadv_pwritev_locked(fh, iov, iovcnt, offset, write,
+                                            true, onfinish, bl, do_fsync,
+                                            syncdataonly);
+    /* There are two scenarios with each having two cases to handle here
+    1) async io
+      1.a) r == 0:
+        async call in progress, the context will be automatically invoked,
+        so just return the retval (i.e. zero).
+      1.b) r < 0:
+        There was an error; no context completion should've took place so
+        complete the context with retval followed by returning zero to the
+        caller.
+    2) sync io
+      2.a) r >= 0:
+        sync call success; return the no. of bytes read/written.
+      2.b) r < 0:
+        sync call failed; return the errno. */
+
+    if (retval < 0) {
+      if (onfinish != nullptr) {
+        //async io failed
+        client_lock.unlock();
+        onfinish->complete(retval);
+        client_lock.lock();
+        /* async call should always return zero to caller and allow the
+        caller to wait on callback for the actual errno/retval. */
+        retval = 0;
+      }
+    }
+    return retval;
 }
 
 int Client::ll_flush(Fh *fh)
