@@ -57,6 +57,9 @@
   level storage operator (like Rook) to recreate the missing file system.
   See https://docs.ceph.com/en/latest/cephfs/administration/#file-systems
   docs for more information.
+* CephFS: Before running the command "ceph fs rename", the CephFS to be
+  renamed must be taken offline and "refuse_client_session" must be set for
+  it.
 * RADOS: A POOL_APP_NOT_ENABLED health warning will now be reported if
   the application is not enabled for the pool irrespective of whether
   the pool is in use or not. Always tag a pool with an application
