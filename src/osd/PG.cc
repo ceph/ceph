@@ -2665,7 +2665,8 @@ void PG::C_DeleteMore::complete(int r) {
   ceph_assert(r == 0);
   pg->lock();
   if (!pg->pg_has_reset_since(epoch)) {
-    pg->osd->queue_for_pg_delete(pg->get_pgid(), epoch);
+    pg->osd->queue_for_pg_delete(pg->get_pgid(), epoch,
+	                         num_objects);
   }
   pg->unlock();
   delete this;
@@ -2689,7 +2690,9 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
         std::scoped_lock locker{*this};
         delete_needs_sleep = false;
         if (!pg_has_reset_since(e)) {
-          osd->queue_for_pg_delete(get_pgid(), e);
+	  // We pass 1 for num_objects here as only wpq uses this code path
+	  // and it will be ignored
+          osd->queue_for_pg_delete(get_pgid(), e, 1);
         }
       });
 
@@ -2762,7 +2765,7 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
   bool running = true;
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
-    Context *fin = new C_DeleteMore(this, get_osdmap_epoch());
+    Context *fin = new C_DeleteMore(this, get_osdmap_epoch(), num);
     t.register_on_commit(fin);
   } else {
     if (cct->_conf->osd_inject_failure_on_pg_removal) {
