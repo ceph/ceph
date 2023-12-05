@@ -95,7 +95,7 @@ Mon
 OSDMap
 ------
 
-- [ ] src/osd/OSDMap.cc add release name mapping for `SERVER_X` in `pending_require_osd_release()`
+- [x] src/osd/OSDMap.cc add release name mapping for `SERVER_X` in `pending_require_osd_release()`
 
 Code cleanup
 ------------
