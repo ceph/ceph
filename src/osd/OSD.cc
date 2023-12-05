@@ -1877,14 +1877,21 @@ void OSDService::queue_scrub_next_chunk(PG *pg, Scrub::scrub_prio_t with_priorit
   queue_scrub_event_msg<PGScrubGetNextChunk>(pg, with_priority);
 }
 
-void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
+void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e, int64_t num_objects)
 {
   dout(10) << __func__ << " on " << pgid << " e " << e  << dendl;
+  uint64_t cost_for_queue = [this, num_objects] {
+    if (op_queue_type_t::mClockScheduler == osd->osd_op_queue_type()) {
+      return num_objects * cct->_conf->osd_pg_delete_cost;
+    } else {
+      return cct->_conf->osd_pg_delete_cost;
+    }
+  }();
   enqueue_back(
     OpSchedulerItem(
       unique_ptr<OpSchedulerItem::OpQueueable>(
 	new PGDelete(pgid, e)),
-      cct->_conf->osd_pg_delete_cost,
+      cost_for_queue,
       cct->_conf->osd_pg_delete_priority,
       ceph_clock_now(),
       0,
@@ -10223,7 +10230,7 @@ void OSD::maybe_override_cost_for_qos()
   // If the scheduler enabled is mclock, override the default PG deletion cost
   // so that mclock can meet the QoS goals.
   if (op_queue_type_t::mClockScheduler == osd_op_queue_type()) {
-    uint64_t pg_delete_cost = 15728640;
+    uint64_t pg_delete_cost = 1048576;
     cct->_conf.set_val("osd_pg_delete_cost", std::to_string(pg_delete_cost));
   }
 }
