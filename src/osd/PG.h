@@ -775,7 +775,9 @@ public:
   struct C_DeleteMore : public Context {
     PGRef pg;
     epoch_t epoch;
-    C_DeleteMore(PG *p, epoch_t e) : pg(p), epoch(e) {}
+    int64_t num_objects;
+    C_DeleteMore(PG *p, epoch_t e, int64_t num) : pg(p), epoch(e),
+	                                          num_objects(num){}
     void finish(int r) override {
       ceph_abort();
     }

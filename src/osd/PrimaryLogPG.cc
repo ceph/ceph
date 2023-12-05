@@ -12876,7 +12876,9 @@ void PrimaryLogPG::on_removal(ObjectStore::Transaction &t)
 
   on_shutdown();
 
-  t.register_on_commit(new C_DeleteMore(this, get_osdmap_epoch()));
+  // starting PG deletion, num_objects can be 1
+  // do_delete_work will update num_objects
+  t.register_on_commit(new C_DeleteMore(this, get_osdmap_epoch(), 1));
 }
 
 void PrimaryLogPG::clear_async_reads()
