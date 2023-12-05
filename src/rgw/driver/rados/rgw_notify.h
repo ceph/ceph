@@ -63,7 +63,7 @@ struct reservation_t {
   size_t size;
   rgw::sal::Object* const object;
   rgw::sal::Object* const src_object; // may differ from object
-  rgw::sal::Bucket* const bucket;
+  rgw::sal::Bucket* bucket;
   const std::string* const object_name;
   boost::optional<const RGWObjTags&> tagset;
   meta_map_t x_meta_map; // metadata cached by value
