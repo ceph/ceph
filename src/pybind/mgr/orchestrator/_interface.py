@@ -368,6 +368,38 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def node_proxy_summary(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy summary
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def node_proxy_firmwares(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy firmwares report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def node_proxy_criticals(self, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy criticals report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
+    def node_proxy_common(self, category: str, hostname: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Return node-proxy generic report
+
+        :param hostname: hostname
+        """
+        raise NotImplementedError()
+
     def remove_host(self, host: str, force: bool, offline: bool, rm_crush_entry: bool) -> OrchResult[str]:
         """
         Remove a host from the orchestrator inventory.
