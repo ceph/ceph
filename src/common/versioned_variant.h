@@ -28,8 +28,8 @@
 namespace ceph {
 
 // null encoding for std::monostate
-void encode(const std::monostate&, bufferlist& bl) {}
-void decode(std::monostate&, bufferlist::const_iterator& p) {}
+inline void encode(const std::monostate&, bufferlist& bl) {}
+inline void decode(std::monostate&, bufferlist::const_iterator& p) {}
 
 // largest value that can be represented by `__u8 struct_v`
 inline constexpr size_t max_version = std::numeric_limits<__u8>::max();
