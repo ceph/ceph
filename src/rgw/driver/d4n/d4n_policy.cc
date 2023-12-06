@@ -15,9 +15,9 @@ int CachePolicy::find_client(const DoutPrefixProvider* dpp, cpp_redis::client* c
     return EDESTADDRREQ;
   }
 
-  client.connect(get_addr().host, get_addr().port, nullptr);
+  client->connect(get_addr().host, get_addr().port, nullptr);
 
-  if (!client.is_connected())
+  if (!client->is_connected())
     return ECONNREFUSED;
 
   return 0;
