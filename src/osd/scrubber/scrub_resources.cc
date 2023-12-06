@@ -81,7 +81,7 @@ bool ScrubResources::inc_scrubs_remote(pg_t pgid)
   }
 
   auto pre_op_cnt = granted_reservations.size();
-  if (pre_op_cnt < conf->osd_max_scrubs) {
+  if (std::cmp_less(pre_op_cnt, conf->osd_max_scrubs)) {
     granted_reservations.insert(pgid);
     log_upwards(fmt::format(
 	"{}: pg[{}] reserved. Remote scrubs count changed from {} -> {} (max "
