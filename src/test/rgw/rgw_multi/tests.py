@@ -1745,6 +1745,29 @@ def test_role_sync():
 
             check_role_eq(source_conn, target_conn, role)
 
+def test_role_delete_sync():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    role_name = gen_role_name()
+    log.info('create role zone=%s name=%s', zonegroup_conns.master_zone.name, role_name)
+    zonegroup_conns.master_zone.create_role("", role_name, None, "")
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        log.info(f'checking if zone: {zone.name} has role: {role_name}')
+        assert(zone.has_role(role_name))
+        log.info(f'success, zone: {zone.name} has role: {role_name}')
+
+    log.info(f"deleting role: {role_name}")
+    zonegroup_conns.master_zone.delete_role(role_name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    for zone in zonegroup_conns.zones:
+        log.info(f'checking if zone: {zone.name} does not have role: {role_name}')
+        assert(not zone.has_role(role_name))
+        log.info(f'success, zone: {zone.name} does not have role: {role_name}')
+
 @attr('fails_with_rgw')
 @attr('data_sync_init')
 def test_bucket_full_sync_after_data_sync_init():

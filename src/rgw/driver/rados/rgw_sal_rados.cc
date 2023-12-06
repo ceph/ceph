@@ -3802,16 +3802,18 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
     return -ERR_DELETE_CONFLICT;
   }
 
-  // Delete id
-  std::string oid = get_info_oid_prefix() + info.id;
-  ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, oid, nullptr, y);
+  // Delete id & insert MD Log
+  RGWSI_MBSObj_RemoveParams params;
+  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(store->svc()->role->svc.meta_be->alloc_ctx());
+  ctx->init(store->svc()->role->get_be_handler());
+  ret = store->svc()->role->svc.meta_be->remove(ctx.get(), info.id, params, &info.objv_tracker, y, dpp);
   if (ret < 0) {
-    ldpp_dout(dpp, 0) << "ERROR: deleting role id from Role pool: "
-                  << info.id << ": " << cpp_strerror(-ret) << dendl;
+    ldpp_dout(dpp, 0) << "ERROR: deleting role id: " << info.id << " failed with code: " << cpp_strerror(-ret) << dendl;
+    return ret;
   }
 
   // Delete name
-  oid = info.tenant + get_names_oid_prefix() + info.name;
+  std::string oid = info.tenant + get_names_oid_prefix() + info.name;
   ret = rgw_delete_system_obj(dpp, store->svc()->sysobj, pool, oid, nullptr, y);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: deleting role name from Role pool: "
