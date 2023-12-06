@@ -1,4 +1,3 @@
-import pytest
 import cherrypy
 import json
 from _pytest.monkeypatch import MonkeyPatch
@@ -32,6 +31,7 @@ class FakeMgr:
     def get_mgr_ip(self) -> str:
         return '0.0.0.0'
 
+
 class TestNodeProxy(helper.CPWebCase):
     mgr = FakeMgr()
     app = NodeProxy(mgr)
@@ -58,37 +58,37 @@ class TestNodeProxy(helper.CPWebCase):
     def test_oob_data_misses_cephx_field(self):
         data = '{}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
-                                                                  ('Content-Length', str(len(data)))])
+                                                                ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
 
     def test_oob_data_misses_name_field(self):
         data = '{"cephx": {"secret": "fake-secret"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
-                                                                  ('Content-Length', str(len(data)))])
+                                                                ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
 
     def test_oob_data_misses_secret_field(self):
         data = '{"cephx": {"name": "host01"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
-                                                                  ('Content-Length', str(len(data)))])
+                                                                ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
 
     def test_oob_agent_not_running(self):
         data = '{"cephx": {"name": "host03", "secret": "fake-secret03"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
-                                                                  ('Content-Length', str(len(data)))])
+                                                                ('Content-Length', str(len(data)))])
         self.assertStatus('502 Bad Gateway')
 
     def test_oob_wrong_keyring(self):
         data = '{"cephx": {"name": "host01", "secret": "wrong-keyring"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
-                                                                  ('Content-Length', str(len(data)))])
+                                                                ('Content-Length', str(len(data)))])
         self.assertStatus('403 Forbidden')
 
     def test_oob_ok(self):
         data = '{"cephx": {"name": "host01", "secret": "fake-secret01"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
-                                                                  ('Content-Length', str(len(data)))])
+                                                                ('Content-Length', str(len(data)))])
         self.assertStatus('200 OK')
 
     def test_data_missing_patch(self):
