@@ -473,7 +473,7 @@ void AbstractImageWriteRequest<I>::send_request() {
     if (journaling) {
       // in-flight ops are flushed prior to closing the journal
       ceph_assert(image_ctx.journal != NULL);
-      journal_tid = append_journal_event(m_synchronous);
+      journal_tid = append_journal_event();
     }
 
     // it's very important that IOContext is captured here instead of
@@ -518,22 +518,12 @@ void ImageWriteRequest<I>::assemble_extent(
 }
 
 template <typename I>
-uint64_t ImageWriteRequest<I>::append_journal_event(bool synchronous) {
+uint64_t ImageWriteRequest<I>::append_journal_event() {
   I &image_ctx = this->m_image_ctx;
 
-  uint64_t tid = 0;
-  uint64_t buffer_offset = 0;
   ceph_assert(!this->m_image_extents.empty());
-  for (auto &extent : this->m_image_extents) {
-    bufferlist sub_bl;
-    sub_bl.substr_of(m_bl, buffer_offset, extent.second);
-    buffer_offset += extent.second;
-
-    tid = image_ctx.journal->append_write_event(extent.first, extent.second,
-                                                sub_bl, synchronous);
-  }
-
-  return tid;
+  return image_ctx.journal->append_write_event(
+    this->m_image_extents, m_bl, false);
 }
 
 template <typename I>
@@ -566,22 +556,12 @@ void ImageWriteRequest<I>::update_stats(size_t length) {
 }
 
 template <typename I>
-uint64_t ImageDiscardRequest<I>::append_journal_event(bool synchronous) {
+uint64_t ImageDiscardRequest<I>::append_journal_event() {
   I &image_ctx = this->m_image_ctx;
 
-  uint64_t tid = 0;
   ceph_assert(!this->m_image_extents.empty());
-  for (auto &extent : this->m_image_extents) {
-    journal::EventEntry event_entry(
-      journal::AioDiscardEvent(extent.first,
-                               extent.second,
-                               this->m_discard_granularity_bytes));
-    tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                             extent.first, extent.second,
-                                             synchronous, 0);
-  }
-
-  return tid;
+  return image_ctx.journal->append_discard_event(
+    this->m_image_extents, m_discard_granularity_bytes, false);
 }
 
 template <typename I>
@@ -717,21 +697,12 @@ void ImageFlushRequest<I>::send_request() {
 }
 
 template <typename I>
-uint64_t ImageWriteSameRequest<I>::append_journal_event(bool synchronous) {
+uint64_t ImageWriteSameRequest<I>::append_journal_event() {
   I &image_ctx = this->m_image_ctx;
 
-  uint64_t tid = 0;
   ceph_assert(!this->m_image_extents.empty());
-  for (auto &extent : this->m_image_extents) {
-    journal::EventEntry event_entry(journal::AioWriteSameEvent(extent.first,
-                                                               extent.second,
-                                                               m_data_bl));
-    tid = image_ctx.journal->append_io_event(std::move(event_entry),
-                                             extent.first, extent.second,
-                                             synchronous, 0);
-  }
-
-  return tid;
+  return image_ctx.journal->append_write_same_event(
+    this->m_image_extents, m_data_bl, false);
 }
 
 template <typename I>
@@ -768,8 +739,7 @@ void ImageWriteSameRequest<I>::update_stats(size_t length) {
 }
 
 template <typename I>
-uint64_t ImageCompareAndWriteRequest<I>::append_journal_event(
-    bool synchronous) {
+uint64_t ImageCompareAndWriteRequest<I>::append_journal_event() {
   I &image_ctx = this->m_image_ctx;
 
   uint64_t tid = 0;
@@ -779,7 +749,7 @@ uint64_t ImageCompareAndWriteRequest<I>::append_journal_event(
                                                           extent.second,
                                                           m_cmp_bl,
                                                           m_bl,
-                                                          synchronous);
+                                                          false);
 
   return tid;
 }
