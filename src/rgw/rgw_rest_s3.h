@@ -183,14 +183,6 @@ public:
   void send_versioned_response();
 };
 
-class RGWGetBucketLogging_ObjStore_S3 : public RGWGetBucketLogging {
-public:
-  RGWGetBucketLogging_ObjStore_S3() {}
-  ~RGWGetBucketLogging_ObjStore_S3() override {}
-
-  void send_response() override;
-};
-
 class RGWGetBucketLocation_ObjStore_S3 : public RGWGetBucketLocation {
 public:
   RGWGetBucketLocation_ObjStore_S3() {}

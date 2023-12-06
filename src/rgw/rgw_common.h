@@ -107,6 +107,7 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_SLO_UINDICATOR RGW_ATTR_META_PREFIX "static-large-object"
 #define RGW_ATTR_X_ROBOTS_TAG	RGW_ATTR_PREFIX "x-robots-tag"
 #define RGW_ATTR_STORAGE_CLASS  RGW_ATTR_PREFIX "storage_class"
+#define RGW_ATTR_BUCKET_LOGGING RGW_ATTR_PREFIX "logging"
 
 /* S3 Object Lock*/
 #define RGW_ATTR_OBJECT_LOCK        RGW_ATTR_PREFIX "object-lock"

@@ -759,7 +759,7 @@ static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s, r
   return 0;
 }
 
-static int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s) {
+int rgw_iam_add_buckettags(const DoutPrefixProvider *dpp, req_state* s) {
   return rgw_iam_add_buckettags(dpp, s, s->bucket.get());
 }
 
@@ -832,7 +832,7 @@ static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvide
   return make_tuple(has_existing_obj_tag, has_resource_tag);
 }
 
-static std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag=true) {
+std::tuple<bool, bool> rgw_check_policy_condition(const DoutPrefixProvider *dpp, req_state* s, bool check_obj_exist_tag) {
   return rgw_check_policy_condition(dpp, s->iam_policy, s->iam_identity_policies, s->session_policies, check_obj_exist_tag);
 }
 
@@ -3129,19 +3129,6 @@ void RGWListBucket::execute(optional_yield y)
   auto counters = rgw::op_counters::get(s);
   rgw::op_counters::inc(counters, l_rgw_op_list_obj, 1);
   rgw::op_counters::tinc(counters, l_rgw_op_list_obj_lat, s->time_elapsed());
-}
-
-int RGWGetBucketLogging::verify_permission(optional_yield y)
-{
-  auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
-  if (has_s3_resource_tag)
-    rgw_iam_add_buckettags(this, s);
-
-  if (!verify_bucket_permission(this, s, rgw::IAM::s3GetBucketLogging)) {
-    return -EACCES;
-  }
-
-  return 0;
 }
 
 int RGWGetBucketLocation::verify_permission(optional_yield y)
