@@ -88,7 +88,7 @@ std::unique_ptr<Object> D4NFilterBucket::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
 
-  return std::make_unique<D4NFilterObject>(std::move(o), this, driver);
+  return std::make_unique<D4NFilterObject>(std::move(o), this, filter);
 }
 
 int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
@@ -365,8 +365,10 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation failed." << dendl;
   } else {
     /* Set metadata locally */
+    RGWQuotaInfo quota_info;
     RGWObjState* astate;
     source->get_obj_state(dpp, &astate, y);
+    std::unique_ptr<rgw::sal::User> user = source->driver->get_user(source->get_bucket()->get_owner());
 
     for (auto it = attrs.begin(); it != attrs.end(); ++it) {
       if (it->second.length() > 0) { // or return? -Sam
@@ -395,11 +397,11 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
         quota_info.max_objects = std::stoull(it->second.c_str());
 	attrs.erase(it->first);
       } else if (it->first == "max_buckets") {
-        source->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second.c_str()));
+        user->set_max_buckets(std::stoull(it->second.c_str()));
 	attrs.erase(it->first);
       }
     }
-
+    user->set_info(quota_info);
     source->set_obj_state(*astate);
    
     /* Set attributes locally */
@@ -410,6 +412,7 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
     } else {
       ldpp_dout(dpp, 20) << "D4N Filter: Cache get object operation succeeded." << dendl;
     }   
+  }
   }
 
   return ret;
