@@ -1351,6 +1351,21 @@ Usage:
                         except KeyError:
                             raise SpecValidationError(f'Invalid config option {k} in spec')
 
+                # There is a general "osd" service with no service id, but we use
+                # that to dump osds created individually with "ceph orch daemon add osd"
+                # and those made with "ceph orch apply osd --all-available-devices"
+                # For actual user created OSD specs, we should promote users having a
+                # service id so it doesn't get mixed in with those other OSDs. This
+                # check is being done in this spot in particular as this is the only
+                # place we can 100% differentiate between an actual user created OSD
+                # spec and a spec we made ourselves to cover the all-available-devices case
+                if (
+                    isinstance(spec, DriveGroupSpec)
+                    and spec.service_type == 'osd'
+                    and not spec.service_id
+                ):
+                    raise SpecValidationError('Please provide the service_id field in your OSD spec')
+
                 if dry_run and not isinstance(spec, HostSpec):
                     spec.preview_only = dry_run
 
