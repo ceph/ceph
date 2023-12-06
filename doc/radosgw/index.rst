@@ -89,3 +89,5 @@ Cluster with one API and then retrieve that data with the other API.
    Cloud Transition <cloud-transition>
    Metrics <metrics>
    UADK Acceleration for Compression <uadk-accel>
+   Bucket Logging <bucket_logging>
+
