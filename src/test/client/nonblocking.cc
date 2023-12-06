@@ -395,3 +395,65 @@ TEST_F(TestClient, LlreadvLlwritevIOClientNotMounted) {
   rc = readfinish->wait();
   ASSERT_EQ(rc, -CEPHFS_ENOTCONN);
 }
+
+TEST_F(TestClient, LlreadvLlwritevNegativeIOVCount) {
+  /* Test function handles negative iovcnt and returns EINVAL */
+  int mypid = getpid();
+  char filename[256];
+
+  client->unmount();
+  TearDown();
+  SetUp();
+
+  sprintf(filename, "test_llreadvllwritevnegativeiovcountfile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+				  O_RDWR | O_CREAT | O_TRUNC,
+				  &file, &fh, &stx, 0, 0, myperm));
+
+  char out0[] = "hello ";
+  char out1[] = "world\n";  
+  struct iovec iov_out[2] = {
+	  {out0, sizeof(out0)},
+	  {out1, sizeof(out1)}
+  };
+
+  char in0[sizeof(out0)];
+  char in1[sizeof(out1)];
+  struct iovec iov_in[2] = {
+	  {in0, sizeof(in0)},
+	  {in1, sizeof(in1)}
+  };
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-negative-iovcnt"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-negative-iovcnt"));
+
+  int64_t rc;
+  bufferlist bl;
+
+  rc = client->ll_preadv_pwritev(fh, iov_out, -2, 0, true, writefinish.get(),
+                                 nullptr);
+  ASSERT_EQ(rc, 0);
+  ssize_t bytes_written = writefinish->wait();
+  ASSERT_EQ(bytes_written, -CEPHFS_EINVAL);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in, -2, 0, false, readfinish.get(),
+                                 &bl);
+  ASSERT_EQ(rc, 0);
+  ssize_t bytes_read = readfinish->wait();
+  ASSERT_EQ(bytes_read, -CEPHFS_EINVAL);
+  ASSERT_EQ(bl.length(), 0);
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
+}
