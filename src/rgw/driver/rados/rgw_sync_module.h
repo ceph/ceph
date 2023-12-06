@@ -31,6 +31,7 @@ public:
   }
   virtual RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
                                     rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
+                                    real_time& mtime,
                                     std::optional<uint64_t> versioned_epoch,
                                     const rgw_zone_set_entry& my_trace_entry,
                                     rgw_zone_set *zones_trace) = 0;

@@ -2556,6 +2556,7 @@ public:
 
   RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
                             rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
+                            real_time& mtime,
                             std::optional<uint64_t> versioned_epoch,
                             const rgw_zone_set_entry& source_trace_entry,
                             rgw_zone_set *zones_trace) override;
@@ -3053,6 +3054,7 @@ public:
 
 RGWCoroutine *RGWDefaultDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
                                                     rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
+                                                    real_time& mtime,
                                                     std::optional<uint64_t> versioned_epoch,
                                                     const rgw_zone_set_entry& source_trace_entry,
                                                     rgw_zone_set *zones_trace)
@@ -3086,7 +3088,7 @@ public:
 
   RGWCoroutine *sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
                             rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
-                            std::optional<uint64_t> versioned_epoch,
+                            real_time& mtime, std::optional<uint64_t> versioned_epoch,
                             const rgw_zone_set_entry& source_trace_entry,
                             rgw_zone_set *zones_trace) override;
   RGWCoroutine *remove_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override;
@@ -3115,13 +3117,18 @@ int RGWArchiveSyncModule::create_instance(const DoutPrefixProvider *dpp, CephCon
   return 0;
 }
 
+std::string generate_archive_instance_id(rgw_bucket& bucket, std::optional<rgw_obj_key> key, real_time& mtime)
+{
+  return bucket.name + "_" + key->name + "_" + std::to_string(utime_t(mtime));
+}
+
 RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dpp, RGWDataSyncCtx *sc,
                                                     rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
+                                                    real_time& mtime,
                                                     std::optional<uint64_t> versioned_epoch,
                                                     const rgw_zone_set_entry& source_trace_entry,
                                                     rgw_zone_set *zones_trace)
 {
-  auto sync_env = sc->env;
   ldout(sc->cct, 5) << "SYNC_ARCHIVE: sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
 
   std::optional<rgw_obj_key> dest_key;
@@ -3133,13 +3140,15 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dp
     versioned_epoch = 0;
     dest_key = key;
     if (key.instance.empty()) {
-      sync_env->driver->getRados()->gen_rand_obj_instance_name(&(*dest_key));
+      // generate pre-determined version id. when there are more
+      // than one source zone syncing an object at the same time and if
+      // the source zones are not versioned, the sync threads may
+      // race to update the same head object with different version id's
+      // on the archive zone.
+      auto archive_key = generate_archive_instance_id(sync_pipe.info.source_bs.bucket, dest_key, mtime);
+      dest_key->set_instance(archive_key);
+      ldout(sc->cct, 5) << "SYNC_ARCHIVE: dest_key: " << dest_key << dendl;
     }
-  }
-
-  if (key.instance.empty()) {
-    dest_key = key;
-    sync_env->driver->getRados()->gen_rand_obj_instance_name(&(*dest_key));
   }
 
   return new RGWObjFetchCR(sc, sync_pipe, key, dest_key, versioned_epoch,
@@ -4471,7 +4480,7 @@ public:
 	      pretty_print(sc->env, "Syncing object s3://{}/{} in sync from zone {}\n",
 			   bs.bucket.name, key, zone_name);
 	    }
-            call(data_sync_module->sync_object(dpp, sc, sync_pipe, key, versioned_epoch,
+            call(data_sync_module->sync_object(dpp, sc, sync_pipe, key, timestamp, versioned_epoch,
                                                source_trace_entry, &zones_trace));
           } else if (op == CLS_RGW_OP_DEL || op == CLS_RGW_OP_UNLINK_INSTANCE) {
             set_status("removing obj");
