@@ -454,6 +454,15 @@ configurations, without knowing the specifics of device names and paths.
 Service specifications make it possible to define a yaml or json file that can
 be used to reduce the amount of manual work involved in creating OSDs.
 
+.. note::
+    It is recommended that advanced OSD specs include the ``service_id`` field
+    set. The plain ``osd`` service with no service id is where OSDs created
+    using ``ceph orch daemon add`` or ``ceph orch apply osd --all-available-devices``
+    are placed. Not including a ``service_id`` in your OSD spec would mix
+    the OSDs from your spec with those OSDs and potentially overwrite services
+    specs created by cephadm to track them. Newer versions of cephadm will even
+    block creation of advanced OSD specs without the service_id present
+
 For example, instead of running the following command:
 
 .. prompt:: bash [monitor.1]#
