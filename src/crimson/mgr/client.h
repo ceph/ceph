@@ -57,6 +57,9 @@ private:
   seastar::timer<seastar::lowres_clock> report_timer;
   crimson::common::Gated gate;
   uint64_t last_config_bl_version = 0;
+  std::string service_name, daemon_name;
+
+  void _send_report();
 };
 
 inline std::ostream& operator<<(std::ostream& out, const Client& client) {
