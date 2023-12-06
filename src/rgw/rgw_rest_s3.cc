@@ -69,6 +69,7 @@
 #include "rgw_role.h"
 #include "rgw_rest_sts.h"
 #include "rgw_rest_iam.h"
+#include "rgw_rest_bucket_logging.h"
 #include "rgw_sts.h"
 #include "rgw_sal_rados.h"
 #include "rgw_cksum_pipe.h"
@@ -2128,16 +2129,6 @@ void RGWListBucket_ObjStore_S3v2::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-void RGWGetBucketLogging_ObjStore_S3::send_response()
-{
-  dump_errno(s);
-  end_header(s, this, to_mime_type(s->format));
-  dump_start(s);
-
-  s->formatter->open_object_section_in_ns("BucketLoggingStatus", XMLNS_AWS_S3);
-  s->formatter->close_section();
-  rgw_flush_formatter_and_reset(s, s->formatter);
-}
 
 void RGWGetBucketLocation_ObjStore_S3::send_response()
 {
@@ -4765,7 +4756,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return nullptr;
 
   if (s->info.args.sub_resource_exists("logging"))
-    return new RGWGetBucketLogging_ObjStore_S3;
+    return RGWHandler_REST_BucketLogging_S3::create_get_op();
 
   if (s->info.args.sub_resource_exists("location"))
     return new RGWGetBucketLocation_ObjStore_S3;
@@ -4829,9 +4820,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_head()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 {
-  if (s->info.args.sub_resource_exists("logging") ||
-      s->info.args.sub_resource_exists("encryption"))
+  if (s->info.args.sub_resource_exists("encryption"))
     return nullptr;
+  if (s->info.args.sub_resource_exists("logging"))
+    return RGWHandler_REST_BucketLogging_S3::create_put_op();
   if (s->info.args.sub_resource_exists("versioning"))
     return new RGWSetBucketVersioning_ObjStore_S3;
   if (s->info.args.sub_resource_exists("website")) {
@@ -4876,8 +4868,7 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
-  if (s->info.args.sub_resource_exists("logging") ||
-      s->info.args.sub_resource_exists("encryption"))
+  if (s->info.args.sub_resource_exists("encryption"))
     return nullptr;
 
   if (is_tagging_op()) {
@@ -6078,6 +6069,8 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_GET_BUCKET_PUBLIC_ACCESS_BLOCK:
         case RGW_OP_DELETE_BUCKET_PUBLIC_ACCESS_BLOCK:
 	case RGW_OP_GET_OBJ://s3select its post-method(payload contain the query) , the request is get-object
+        case RGW_OP_PUT_BUCKET_LOGGING: 
+        case RGW_OP_GET_BUCKET_LOGGING: 
           break;
         default:
           ldpp_dout(s, 10) << "ERROR: AWS4 completion for operation: " << s->op_type << ", NOT IMPLEMENTED" << dendl;

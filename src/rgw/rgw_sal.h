@@ -1003,6 +1003,15 @@ class Bucket {
     virtual int remove_topics(RGWObjVersionTracker* objv_tracker, 
         optional_yield y, const DoutPrefixProvider *dpp) = 0;
 
+    /** Read the name of the pending bucket logging object name */
+    virtual int get_logging_object_name(std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Update the name of the pending bucket logging object name */
+    virtual int set_logging_object_name(const std::string& obj_name, const std::string& prefix, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Move the pending bucket logging object into the bucket */
+    virtual int commit_logging_object(const std::string& obj_name, optional_yield y, const DoutPrefixProvider *dpp) = 0;
+    /** Write a record to the pending bucket logging object */
+    virtual int write_logging_object(const std::string& obj_name, const std::string& record, optional_yield y, const DoutPrefixProvider *dpp, bool async_completion) = 0;
+
     /* dang - This is temporary, until the API is completed */
     virtual rgw_bucket& get_key() = 0;
     virtual RGWBucketInfo& get_info() = 0;
