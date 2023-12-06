@@ -219,7 +219,6 @@ std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
 
 // bluefs_transaction_t
 
-DENC_HELPERS
 void bluefs_transaction_t::bound_encode(size_t &s) const {
   uint32_t crc = op_bl.crc32c(-1);
   DENC_START(1, 1, s);
