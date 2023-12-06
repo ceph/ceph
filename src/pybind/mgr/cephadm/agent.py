@@ -281,7 +281,7 @@ class NodeProxy:
         try:
             _status_code, _data, _headers = self.query(addr=addr,
                                                        port=port,
-                                                       data=oob_credentials,
+                                                       data=bytes(oob_credentials, 'ascii'),
                                                        headers=headers,
                                                        endpoint="/redfish/v1/SessionService/Sessions/",
                                                        method="POST")
@@ -345,9 +345,9 @@ class NodeProxy:
         if not _headers.get('Content-Type'):
             # default to application/json if nothing provided
             _headers['Content-Type'] = 'application/json'
-        _data = bytes(data, 'ascii') if data else None
+
         try:
-            req = Request(url, _data, _headers, method=method)
+            req = Request(url, data, _headers, method=method)
             with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
                 response_str = response.read()
                 response_headers = response.headers
