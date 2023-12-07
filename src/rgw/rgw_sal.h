@@ -225,7 +225,7 @@ class ObjectProcessor : public DataProcessor {
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        const req_context& rctx,
-                       bool log_op = true) = 0;
+                       bool log_op) = 0;
 };
 
 /** A list of key-value attributes */
@@ -888,7 +888,7 @@ class Object {
       virtual ~DeleteOp() = default;
 
       /** Delete the object */
-      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op = true) = 0;
+      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op) = 0;
     };
 
     Object() {}
@@ -966,7 +966,7 @@ class Object {
 			   uint64_t olh_epoch,
 			   const DoutPrefixProvider* dpp,
 			   optional_yield y,
-                           bool log_op = true) = 0;
+                           bool log_op) = 0;
     /** Move an object to the cloud */
     virtual int transition_to_cloud(Bucket* bucket,
 			   rgw::sal::PlacementTier* tier,
@@ -1145,7 +1145,7 @@ public:
 			 int* next_marker, bool* truncated, optional_yield y,
 			 bool assume_unsorted = false) = 0;
   /** Abort this upload */
-  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y, bool log_op = true) = 0;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y, bool log_op) = 0;
   /** Complete this upload, making it available as a normal object */
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
@@ -1375,7 +1375,7 @@ public:
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        const req_context& rctx,
-                       bool log_op = true) = 0;
+                       bool log_op) = 0;
 };
 
 

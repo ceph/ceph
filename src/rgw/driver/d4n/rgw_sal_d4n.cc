@@ -379,7 +379,7 @@ int D4NFilterObject::D4NFilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp
     ldpp_dout(dpp, 20) << "D4N Filter: Cache delete operation succeeded." << dendl;
   }
 
-  return next->delete_obj(dpp, y);
+  return next->delete_obj(dpp, y, log_op);
 }
 
 int D4NFilterWriter::prepare(optional_yield y) 

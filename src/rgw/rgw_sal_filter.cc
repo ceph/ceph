@@ -1027,7 +1027,7 @@ int FilterMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext
 
 int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y, bool log_op)
 {
-  return next->abort(dpp, cct, y);
+  return next->abort(dpp, cct, y, log_op);
 }
 
 int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
