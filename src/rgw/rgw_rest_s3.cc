@@ -3157,9 +3157,6 @@ int RGWPostObj_ObjStore_S3::get_policy(optional_yield y)
     if (ret != 0) {
       return -EACCES;
     } else {
-      /* Populate the owner info. */
-      s->owner.id = s->user->get_id();
-      s->owner.display_name = s->user->get_display_name();
       ldpp_dout(this, 20) << "Successful Signature Verification!" << dendl;
     }
 
@@ -5059,13 +5056,7 @@ int RGW_Auth_S3::authorize(const DoutPrefixProvider *dpp,
     return -EPERM;
   }
 
-  const auto ret = rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s, y);
-  if (ret == 0) {
-    /* Populate the owner info. */
-    s->owner.id = s->user->get_id();
-    s->owner.display_name = s->user->get_display_name();
-  }
-  return ret;
+  return rgw::auth::Strategy::apply(dpp, auth_registry.get_s3_main(), s, y);
 }
 
 int RGWHandler_Auth_S3::init(rgw::sal::Driver* driver, req_state *state,

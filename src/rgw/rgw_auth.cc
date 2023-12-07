@@ -338,6 +338,9 @@ rgw::auth::Strategy::apply(const DoutPrefixProvider *dpp, const rgw::auth::Strat
       s->auth.identity = std::move(applier);
       s->auth.completer = std::move(completer);
 
+      /* Populate the owner info. */
+      s->owner = s->auth.identity->get_aclowner();
+
       return 0;
     } catch (const int err) {
       ldpp_dout(dpp, 5) << "applier throwed err=" << err << dendl;
