@@ -407,9 +407,10 @@ void OsdScrub::remove_from_osd_queue(Scrub::ScrubJobRef sjob)
   m_queue.remove_from_osd_queue(sjob);
 }
 
-bool OsdScrub::inc_scrubs_local()
+std::unique_ptr<Scrub::LocalResourceWrapper> OsdScrub::inc_scrubs_local(
+    bool is_high_priority)
 {
-  return m_resource_bookkeeper.inc_scrubs_local();
+  return m_resource_bookkeeper.inc_scrubs_local(is_high_priority);
 }
 
 void OsdScrub::dec_scrubs_local()
