@@ -457,3 +457,73 @@ TEST_F(TestClient, LlreadvLlwritevNegativeIOVCount) {
   client->ll_release(fh);
   ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
 }
+
+TEST_F(TestClient, LlreadvLlwritevZeroBytes) {
+  /* Test async i/o with empty input/output buffers*/
+
+  int mypid = getpid();
+  char filename[256];
+
+  client->unmount();
+  TearDown();
+  SetUp();
+
+  sprintf(filename, "test_llreadvllwritevzerobytesfile%u", mypid);
+
+  Inode *root, *file;
+  root = client->get_root();
+  ASSERT_NE(root, (Inode *)NULL);
+
+  Fh *fh;
+  struct ceph_statx stx;
+
+  ASSERT_EQ(0, client->ll_createx(root, filename, 0666,
+				  O_RDWR | O_CREAT | O_TRUNC,
+				  &file, &fh, &stx, 0, 0, myperm));
+
+  char out_empty_buf_0[0];
+  char out_empty_buf_1[0];
+  struct iovec iov_out[2] = {
+    {out_empty_buf_0, sizeof(out_empty_buf_0)},
+    {out_empty_buf_1, sizeof(out_empty_buf_1)}
+  };
+
+  char in_empty_buf_0[sizeof(out_empty_buf_0)];
+  char in_empty_buf_1[sizeof(out_empty_buf_1)];
+  struct iovec iov_in[2] = {
+    {in_empty_buf_0, sizeof(in_empty_buf_0)},
+    {in_empty_buf_1, sizeof(in_empty_buf_1)}
+  };
+
+  std::unique_ptr<C_SaferCond> writefinish = nullptr;
+  std::unique_ptr<C_SaferCond> readfinish = nullptr;
+
+  writefinish.reset(new C_SaferCond("test-nonblocking-writefinish-zero-bytes"));
+  readfinish.reset(new C_SaferCond("test-nonblocking-readfinish-zero-bytes"));
+
+  int64_t rc;
+  bufferlist bl;
+
+  rc = client->ll_preadv_pwritev(fh, iov_out, 2, 0, true, writefinish.get(),
+                                 nullptr);
+  ASSERT_EQ(rc, 0);
+  ssize_t bytes_written = writefinish->wait();
+  ASSERT_EQ(bytes_written, -CEPHFS_EINVAL);
+
+  rc = client->ll_preadv_pwritev(fh, iov_in, 2, 0, false, readfinish.get(),
+                                 &bl);
+  ASSERT_EQ(rc, 0);
+  ssize_t bytes_read = readfinish->wait();
+  ASSERT_EQ(bytes_read, 0);
+
+  copy_bufferlist_to_iovec(iov_in, 2, &bl, bytes_read);
+  ASSERT_EQ(0, strncmp((const char*)iov_in[0].iov_base,
+                       (const char*)iov_out[0].iov_base,
+                       iov_out[0].iov_len));
+  ASSERT_EQ(0, strncmp((const char*)iov_in[1].iov_base,
+                       (const char*)iov_out[1].iov_base, 
+                       iov_out[1].iov_len));
+
+  client->ll_release(fh);
+  ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
+}
