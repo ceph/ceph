@@ -298,7 +298,7 @@ public:
       source(_source) {}
     virtual ~POSIXDeleteOp() = default;
 
-    virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op = true) override;
+    virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op) override;
   };
 
   POSIXObject(POSIXDriver *_dr, const rgw_obj_key& _k)
@@ -356,7 +356,7 @@ public:
 			 uint64_t olh_epoch,
 			 const DoutPrefixProvider* dpp,
 			 optional_yield y,
-                         bool log_op = true) override;
+                         bool log_op) override;
   virtual int transition_to_cloud(Bucket* bucket,
 			 rgw::sal::PlacementTier* tier,
 			 rgw_bucket_dir_entry& o,
@@ -545,7 +545,7 @@ public:
 			 int num_parts, int marker,
 			 int* next_marker, bool* truncated, optional_yield y,
 			 bool assume_unsorted = false) override;
-  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y, bool log_op = true) override;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y, bool log_op) override;
   virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
@@ -608,7 +608,7 @@ public:
 		       const std::string *user_data,
 		       rgw_zone_set *zones_trace, bool *canceled,
 		       const req_context& rctx,
-                       bool log_op = true) override;
+                       bool log_op) override;
 };
 
 class POSIXMultipartWriter : public StoreWriter {
@@ -648,7 +648,7 @@ public:
 		       const std::string *user_data,
 		       rgw_zone_set *zones_trace, bool *canceled,
 		       const req_context& rctx,
-                       bool log_op = true) override;
+                       bool log_op) override;
 
 };
 

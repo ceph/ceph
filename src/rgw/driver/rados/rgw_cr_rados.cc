@@ -922,7 +922,7 @@ int RGWAsyncRemoveObj::_send_request(const DoutPrefixProvider *dpp)
   del_op->params.high_precision_time = true;
   del_op->params.zones_trace = &zones_trace;
 
-  ret = del_op->delete_obj(dpp, null_yield);
+  ret = del_op->delete_obj(dpp, null_yield, true);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   }
