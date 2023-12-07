@@ -12,6 +12,13 @@
         </cd-cephfs-detail>
       </ng-template>
     </ng-container>
+    <ng-container ngbNavItem="directories">
+      <a ngbNavLink
+         i18n>Directories</a>
+      <ng-template ngbNavContent>
+        <cd-cephfs-directories [id]="id"></cd-cephfs-directories>
+      </ng-template>
+    </ng-container>
     <ng-container ngbNavItem="subvolumes">
       <a ngbNavLink
          i18n>Subvolumes</a>
@@ -47,13 +54,6 @@
                            [clients]="clients"
                            (triggerApiUpdate)="refresh()">
         </cd-cephfs-clients>
-      </ng-template>
-    </ng-container>
-    <ng-container ngbNavItem="directories">
-      <a ngbNavLink
-         i18n>Directories</a>
-      <ng-template ngbNavContent>
-        <cd-cephfs-directories [id]="id"></cd-cephfs-directories>
       </ng-template>
     </ng-container>
     <ng-container ngbNavItem="performance-details">

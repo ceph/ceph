@@ -293,6 +293,10 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
         this.updateTree();
         resolve(this.getChildren(path));
         this.setLoadingIndicator(path, false);
+
+        if (path === '/' && this.treeComponent.treeModel.activeNodes?.length === 0) {
+          this.selectNode(this.getNode('/'));
+        }
       });
     });
   }
@@ -317,6 +321,13 @@ export class CephfsDirectoriesComponent implements OnInit, OnChanges {
     this.nodeIds[dir.path] = dir;
     if (!subTree) {
       this.getSubTree(dir.parent);
+    }
+
+    if (dir.path === '/volumes') {
+      const innerNode = this.treeComponent.treeModel.getNodeById('/volumes');
+      if (innerNode) {
+        innerNode.expand();
+      }
     }
     return {
       name: dir.name,
