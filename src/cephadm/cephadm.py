@@ -4754,13 +4754,28 @@ class MgrListener(Thread):
                             self.agent.ls_gatherer.wakeup()
                             self.agent.volume_gatherer.wakeup()
                             logger.debug(f'Got mgr message {data}')
+                        if 'node_proxy_oob_cmd' in data:
+                            if data['node_proxy_oob_cmd']['action'] in ['get_led', 'set_led']:
+                                conn.send(bytes(json.dumps(self.node_proxy_oob_cmd_result), 'utf-8'))
             except Exception as e:
                 logger.error(f'Mgr Listener encountered exception: {e}')
 
     def shutdown(self) -> None:
         self.stop = True
 
+    def validate_node_proxy_payload(self, data: Dict[str, Any]) -> None:
+        if 'action' not in data.keys():
+            raise RuntimeError('node-proxy oob command needs an action.')
+        if data['action'] in ['get_led', 'set_led']:
+            fields = ['type', 'id']
+            if data['type'] not in ['chassis', 'drive']:
+                raise RuntimeError('the LED type must be either "chassis" or "drive".')
+            for field in fields:
+                if field not in data.keys():
+                    raise RuntimeError('Received invalid node-proxy cmd.')
+
     def handle_json_payload(self, data: Dict[Any, Any]) -> None:
+        self.node_proxy_oob_cmd_result: Dict[str, Any] = {}
         if 'counter' in data:
             self.agent.ack = int(data['counter'])
             if 'config' in data:
@@ -4774,7 +4789,24 @@ class MgrListener(Thread):
                 self.agent.pull_conf_settings()
                 self.agent.wakeup()
         elif 'node_proxy_shutdown' in data:
+            logger.info('Received node_proxy_shutdown command.')
             self.agent.shutdown()
+        elif 'node_proxy_oob_cmd' in data:
+            node_proxy_cmd: Dict[str, Any] = data['node_proxy_oob_cmd']
+            try:
+                self.validate_node_proxy_payload(node_proxy_cmd)
+            except RuntimeError as e:
+                logger.error(f"Couldn't validate node-proxy payload:\n{node_proxy_cmd}\n{e}")
+                raise
+            logger.info(f'Received node_proxy_oob_cmd command: {node_proxy_cmd}')
+            if node_proxy_cmd['action'] == 'get_led':
+                if node_proxy_cmd['type'] == 'chassis':
+                    self.node_proxy_oob_cmd_result = self.agent.node_proxy_mgr.node_proxy.system.get_chassis_led()
+            if node_proxy_cmd['action'] == 'set_led':
+                if node_proxy_cmd['type'] == 'chassis':
+                    _data: Dict[str, Any] = json.loads(node_proxy_cmd['data'])
+                    _result: int = self.agent.node_proxy_mgr.node_proxy.system.set_chassis_led(_data)
+                    self.node_proxy_oob_cmd_result = {'http_code': _result}
         else:
             raise RuntimeError('No valid data received.')
 
@@ -4821,7 +4853,7 @@ class NodeProxyManager(Thread):
         if result_json['result'].get('port'):
             kwargs['port'] = result_json['result']['port']
 
-        self.node_proxy = NodeProxy(**kwargs)
+        self.node_proxy: NodeProxy = NodeProxy(**kwargs)
         self.node_proxy.start()
 
     def loop(self) -> None:
