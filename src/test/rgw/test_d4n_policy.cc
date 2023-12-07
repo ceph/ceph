@@ -177,7 +177,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
     conn->async_exec(req, resp, yield[ec]);
 
     ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(std::get<0>(resp).value(), "5");
+    EXPECT_EQ(std::get<0>(resp).value(), "6");
     conn->cancel();
   });
 
