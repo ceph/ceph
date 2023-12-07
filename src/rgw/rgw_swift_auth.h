@@ -155,7 +155,7 @@ class SwiftAnonymousApplier : public rgw::auth::LocalApplier {
                           const RGWUserInfo& user_info)
       : LocalApplier(cct, user_info, LocalApplier::NO_SUBUSER, std::nullopt, LocalApplier::NO_ACCESS_KEY) {
     }
-    bool is_admin_of(const rgw_user& uid) const {return false;}
+    bool is_admin() const { return false; }
     bool is_owner_of(const rgw_user& uid) const {return uid.id.compare(RGW_USER_ANON_ID) == 0;}
 };
 

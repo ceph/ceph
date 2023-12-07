@@ -27,7 +27,7 @@ std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
                        const int perm_mask,
-                       const bool is_admin,
+                       const bool admin,
                        const uint32_t type)
 {
   /* This class is not intended for public use. Should be removed altogether
@@ -41,18 +41,18 @@ transform_old_authinfo(CephContext* const cct,
      * new auth. */
     const rgw_user id;
     const int perm_mask;
-    const bool is_admin;
+    const bool admin;
     const uint32_t type;
   public:
     DummyIdentityApplier(CephContext* const cct,
                          const rgw_user& auth_id,
                          const int perm_mask,
-                         const bool is_admin,
+                         const bool admin,
                          const uint32_t type)
       : cct(cct),
         id(auth_id),
         perm_mask(perm_mask),
-        is_admin(is_admin),
+        admin(admin),
         type(type) {
     }
 
@@ -60,8 +60,8 @@ transform_old_authinfo(CephContext* const cct,
       return rgw_perms_from_aclspec_default_strategy(id, aclspec, dpp);
     }
 
-    bool is_admin_of(const rgw_user& acct_id) const override {
-      return is_admin;
+    bool is_admin() const override {
+      return admin;
     }
 
     bool is_owner_of(const rgw_user& acct_id) const override {
@@ -102,7 +102,7 @@ transform_old_authinfo(CephContext* const cct,
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
           << ", perm_mask=" << perm_mask
-          << ", is_admin=" << is_admin << ")";
+          << ", is_admin=" << admin << ")";
     }
   };
 
@@ -110,7 +110,7 @@ transform_old_authinfo(CephContext* const cct,
         new DummyIdentityApplier(cct,
                                  auth_id,
                                  perm_mask,
-                                 is_admin,
+                                 admin,
                                  type));
 }
 
@@ -545,7 +545,7 @@ uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvid
   return perm;
 }
 
-bool rgw::auth::RemoteApplier::is_admin_of(const rgw_user& uid) const
+bool rgw::auth::RemoteApplier::is_admin() const
 {
   return info.is_admin;
 }
@@ -740,7 +740,7 @@ uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvide
   return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec, dpp);
 }
 
-bool rgw::auth::LocalApplier::is_admin_of(const rgw_user& uid) const
+bool rgw::auth::LocalApplier::is_admin() const
 {
   return user_info.admin || user_info.system;
 }

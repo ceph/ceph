@@ -43,10 +43,8 @@ public:
    * applier that is being used. */
   virtual uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const = 0;
 
-  /* Verify whether a given identity *can be treated as* an admin of rgw_user
-  * (account in Swift's terminology) specified in @uid. On error throws
-  * rgw::auth::Exception storing the reason. */
-  virtual bool is_admin_of(const rgw_user& uid) const = 0;
+  /* Verify whether a given identity should be treated as an admin. */
+  virtual bool is_admin() const = 0;
 
   /* Verify whether a given identity *is* the owner of the rgw_user (account
    * in the Swift's terminology) specified in @uid. On internal error throws
@@ -98,7 +96,7 @@ std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
                        const int perm_mask,
-                       const bool is_admin,
+                       const bool admin,
                        const uint32_t type);
 std::unique_ptr<Identity> transform_old_authinfo(const req_state* const s);
 
@@ -445,7 +443,7 @@ public:
     return RGW_PERM_NONE;
   }
 
-  bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin() const override {
     return false;
   }
 
@@ -613,7 +611,7 @@ public:
   }
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_user& uid) const override;
+  bool is_admin() const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
 
@@ -671,7 +669,7 @@ public:
 
 
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
-  bool is_admin_of(const rgw_user& uid) const override;
+  bool is_admin() const override;
   bool is_owner_of(const rgw_user& uid) const override;
   bool is_identity(const idset_t& ids) const override;
   uint32_t get_perm_mask() const override {
@@ -730,7 +728,7 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   }
-  bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin() const override {
     return false;
   }
   bool is_owner_of(const rgw_user& uid) const override {

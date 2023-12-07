@@ -35,7 +35,7 @@ public:
     return 0;
   };
 
-  bool is_admin_of(const rgw_user& uid) const override {
+  bool is_admin() const override {
     return false;
   }
 

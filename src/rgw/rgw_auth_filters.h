@@ -69,8 +69,8 @@ public:
     return get_decoratee().get_perms_from_aclspec(dpp, aclspec);
   }
 
-  bool is_admin_of(const rgw_user& uid) const override {
-    return get_decoratee().is_admin_of(uid);
+  bool is_admin() const override {
+    return get_decoratee().is_admin();
   }
 
   bool is_owner_of(const rgw_user& uid) const override {

@@ -451,7 +451,7 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     }
     const rgw_user& bucket_owner = bucket_policy.get_owner().id;
     if (bucket_owner != s->user->get_id() &&
-        ! s->auth.identity->is_admin_of(bucket_owner)) {
+        !s->auth.identity->is_admin()) {
       auto r = eval_identity_or_session_policies(dpp, s->iam_user_policies, s->env,
                                   rgw::IAM::s3ListBucket, ARN(bucket->get_key()));
       if (r == Effect::Allow)
@@ -1699,7 +1699,7 @@ int RGWGetObj::read_user_manifest_part(rgw::sal::Bucket* bucket,
    * stored inside different accounts. */
   if (s->system_request) {
     ldpp_dout(this, 2) << "overriding permissions due to system operation" << dendl;
-  } else if (s->auth.identity->is_admin_of(s->user->get_id())) {
+  } else if (s->auth.identity->is_admin()) {
     ldpp_dout(this, 2) << "overriding permissions due to admin operation" << dendl;
   } else if (!verify_object_permission(this, s, part->get_obj(), s->user_acl,
 				       bucket_acl, obj_policy, bucket_policy,
@@ -3834,7 +3834,7 @@ int RGWPutObj::verify_permission(optional_yield y)
     }
 
     /* admin request overrides permission checks */
-    if (! s->auth.identity->is_admin_of(cs_acl.get_owner().id)) {
+    if (! s->auth.identity->is_admin()) {
       if (policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
         //add source object tags for permission evaluation
         auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, policy, s->iam_user_policies, s->session_policies);
@@ -5482,7 +5482,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
     }
 
     /* admin request overrides permission checks */
-    if (!s->auth.identity->is_admin_of(src_acl.get_owner().id)) {
+    if (!s->auth.identity->is_admin()) {
       if (src_policy || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
         auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, src_policy, s->iam_user_policies, s->session_policies);
         if (has_s3_existing_tag || has_s3_resource_tag)
@@ -5566,7 +5566,7 @@ int RGWCopyObj::verify_permission(optional_yield y)
   }
   auto dest_iam_policy = get_iam_policy_from_attr(s->cct, s->bucket->get_attrs(), s->bucket->get_tenant());
   /* admin request overrides permission checks */
-  if (! s->auth.identity->is_admin_of(dest_policy.get_owner().id)){
+  if (!s->auth.identity->is_admin()) {
     if (dest_iam_policy != boost::none || ! s->iam_user_policies.empty() || !s->session_policies.empty()) {
       //Add destination bucket tags for authorization
       auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, dest_iam_policy, s->iam_user_policies, s->session_policies);
