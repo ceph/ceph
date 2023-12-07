@@ -168,20 +168,17 @@ class OsdScrub {
 
   /**
    * check the OSD-wide environment conditions (scrub resources, time, etc.).
-   * These may restrict the type of scrubs we are allowed to start, or just
-   * prevent us from starting any scrub at all.
+   * These may restrict the type of scrubs we are allowed to start, maybe
+   * down to allowing only high-priority scrubs
    *
    * Specifically:
-   * a nullopt is returned if we are not allowed to scrub at all, for either of
+   * 'only high priority' flag is set for either of
    * the following reasons: no local resources (too many scrubs on this OSD);
    * a dice roll says we will not scrub in this tick;
    * a recovery is in progress, and we are not allowed to scrub while recovery;
    * a PG is trying to acquire replica resources.
-   *
-   * If we are allowed to scrub, the returned value specifies whether the only
-   * high priority scrubs or only overdue ones are allowed to go on.
    */
-  std::optional<Scrub::OSDRestrictions> restrictions_on_scrubbing(
+  Scrub::OSDRestrictions restrictions_on_scrubbing(
       bool is_recovery_active,
       utime_t scrub_clock_now) const;
 
