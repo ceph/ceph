@@ -49,6 +49,18 @@ class SubvolumeLoader(object):
     def get_subvolume_object_max(self, mgr, fs, vol_spec, group, subvolname):
         return self._get_subvolume_version(self.max_version)(mgr, fs, vol_spec, group, subvolname)
 
+    def allow_subvolume_upgrade(self, subvolume):
+        asu = True
+        try:
+            opt = subvolume.metadata_mgr.get_global_option(MetadataManager.GLOBAL_META_KEY_ALLOW_SUBVOLUME_UPGRADE)
+            asu = False if opt == "0" else True
+        except MetadataMgrException:
+            # this key is injected for QA testing and will not be available in
+            # production
+            pass
+
+        return asu
+
     def upgrade_to_v2_subvolume(self, subvolume):
         # legacy mode subvolumes cannot be upgraded to v2
         if subvolume.legacy_mode:
@@ -56,6 +68,9 @@ class SubvolumeLoader(object):
 
         version = int(subvolume.metadata_mgr.get_global_option('version'))
         if version >= SubvolumeV2.version():
+            return
+
+        if not self.allow_subvolume_upgrade(subvolume):
             return
 
         v1_subvolume = self._get_subvolume_version(version)(subvolume.mgr, subvolume.fs, subvolume.vol_spec, subvolume.group, subvolume.subvolname)
