@@ -110,7 +110,7 @@ int D4NFilterBucket::create(const DoutPrefixProvider* dpp,
   return next->create(dpp, params, y);
 }
 
-int D4NFilterObject::copy_object(User* user,
+int D4NFilterObject::copy_object(const ACLOwner& owner,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -197,7 +197,7 @@ int D4NFilterObject::copy_object(User* user,
     }
   }*/
 
-  return next->copy_object(user, info, source_zone,
+  return next->copy_object(owner, info, source_zone,
                            nextObject(dest_object),
                            nextBucket(dest_bucket),
                            nextBucket(src_bucket),
@@ -347,7 +347,7 @@ std::unique_ptr<Object> D4NFilterDriver::get_object(const rgw_obj_key& k)
 std::unique_ptr<Writer> D4NFilterDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
