@@ -318,7 +318,7 @@ public:
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule
 				  *ptail_placement_rule,
 				  const std::string& unique_tag,
@@ -327,7 +327,7 @@ public:
   virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
@@ -585,7 +585,7 @@ public:
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
 			    uint32_t flags) override;
-  virtual int copy_object(User* user,
+  virtual int copy_object(const ACLOwner& owner,
                req_info* info, const rgw_zone_id& source_zone,
 	       rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -673,9 +673,9 @@ public:
   virtual bool have_instance(void) override { return next->have_instance(); }
   virtual void clear_instance() override { return next->clear_instance(); }
 
-  virtual int swift_versioning_restore(bool& restored,   /* out */
+  virtual int swift_versioning_restore(const ACLOwner& owner, bool& restored,   /* out */
 				       const DoutPrefixProvider* dpp, optional_yield y) override;
-  virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
+  virtual int swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
 				    optional_yield y) override;
 
   virtual std::unique_ptr<ReadOp> get_read_op() override;
@@ -767,7 +767,7 @@ public:
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  rgw::sal::Object* obj,
-			  const rgw_user& owner,
+			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;

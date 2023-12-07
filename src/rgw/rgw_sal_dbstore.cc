@@ -738,7 +738,7 @@ namespace rgw::sal {
     return del_op.delete_obj(dpp);
   }
 
-  int DBObject::copy_object(User* user,
+  int DBObject::copy_object(const ACLOwner& owner,
       req_info* info,
       const rgw_zone_id& source_zone,
       rgw::sal::Object* dest_object,
@@ -774,13 +774,13 @@ namespace rgw::sal {
     return parent_op.iterate(dpp, ofs, end, cb);
   }
 
-  int DBObject::swift_versioning_restore(bool& restored,
+  int DBObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
       const DoutPrefixProvider* dpp, optional_yield y)
   {
     return 0;
   }
 
-  int DBObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
+  int DBObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
       optional_yield y)
   {
     return 0;
@@ -1103,7 +1103,7 @@ namespace rgw::sal {
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
@@ -1117,7 +1117,7 @@ namespace rgw::sal {
                 MultipartUpload* upload,
 		        rgw::sal::Object* obj,
 		        DBStore* _driver,
-    		    const rgw_user& _owner,
+    		    const ACLOwner& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
                 uint64_t _part_num, const std::string& _part_num_str):
 			StoreWriter(dpp, y),
@@ -1263,7 +1263,7 @@ namespace rgw::sal {
 	    	    optional_yield y,
 		        rgw::sal::Object* _obj,
 		        DBStore* _driver,
-    		    const rgw_user& _owner,
+    		    const ACLOwner& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag) :
@@ -1452,7 +1452,7 @@ namespace rgw::sal {
   std::unique_ptr<Writer> DBStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -1463,7 +1463,7 @@ namespace rgw::sal {
   std::unique_ptr<Writer> DBStore::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) {
