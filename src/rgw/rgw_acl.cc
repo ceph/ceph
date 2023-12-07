@@ -6,6 +6,7 @@
 #include <iostream>
 #include <map>
 
+#include "include/function2.hpp"
 #include "include/types.h"
 
 #include "common/Formatter.h"
@@ -72,7 +73,7 @@ void RGWAccessControlList::register_grant(const ACLGrant& grant)
   ACLPermission perm = grant.get_permission();
 
   if (const auto* user = grant.get_user(); user) {
-    acl_user_map[user->id.to_str()] |= perm.get_permissions();
+    acl_user_map[to_string(user->id)] |= perm.get_permissions();
   } else if (const auto* email = grant.get_email(); email) {
     acl_user_map[email->address] |= perm.get_permissions();
   } else if (const auto* group = grant.get_group(); group) {
@@ -92,7 +93,7 @@ void RGWAccessControlList::add_grant(const ACLGrant& grant)
 {
   std::string id;
   if (const auto* user = grant.get_user(); user) {
-    id = user->id.to_str();
+    id = to_string(user->id);
   } else if (const auto* email = grant.get_email(); email) {
     id = email->address;
   } // other types share the empty key in the grant multimap
@@ -100,11 +101,11 @@ void RGWAccessControlList::add_grant(const ACLGrant& grant)
   register_grant(grant);
 }
 
-void RGWAccessControlList::remove_canon_user_grant(const rgw_user& user_id)
+void RGWAccessControlList::remove_canon_user_grant(const rgw_owner& owner)
 {
-  const std::string& key = user_id.to_str();
-  grant_map.erase(key);
-  acl_user_map.erase(key);
+  const std::string& id = to_string(owner);
+  grant_map.erase(id);
+  acl_user_map.erase(id);
 }
 
 uint32_t RGWAccessControlList::get_perm(const DoutPrefixProvider* dpp, 
@@ -245,6 +246,14 @@ bool RGWAccessControlPolicy::is_public(const DoutPrefixProvider *dpp) const
 
 }
 
+bool ACLOwner::empty() const
+{
+  return std::visit(fu2::overload(
+      [] (const rgw_user& uid) { return uid.empty(); },
+      [] (const rgw_account_id& aid) { return aid.empty(); }
+      ), id);
+}
+
 void ACLPermission::generate_test_instances(list<ACLPermission*>& o)
 {
   ACLPermission *p = new ACLPermission;
@@ -346,7 +355,7 @@ void RGWAccessControlPolicy::generate_test_instances(list<RGWAccessControlPolicy
     RGWAccessControlList *l = *iter;
     p->acl = *l;
 
-    p->owner.id.id = "rgw";
+    p->owner.id = rgw_user{"rgw"};
     p->owner.display_name = "radosgw";
 
     o.push_back(p);
@@ -394,14 +403,14 @@ void RGWAccessControlList::dump(Formatter *f) const
 
 void ACLOwner::dump(Formatter *f) const
 {
-  encode_json("id", id.to_str(), f);
+  encode_json("id", to_string(id), f);
   encode_json("display_name", display_name, f);
 }
 
 void ACLOwner::decode_json(JSONObj *obj) {
   string id_str;
   JSONDecoder::decode_json("id", id_str, obj);
-  id.from_str(id_str);
+  id = parse_owner(id_str);
   JSONDecoder::decode_json("display_name", display_name, obj);
 }
 

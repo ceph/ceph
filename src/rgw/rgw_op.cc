@@ -449,9 +449,9 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
     if (ret < 0) {
       return ret;
     }
-    const rgw_user& bucket_owner = bucket_policy.get_owner().id;
-    if (bucket_owner != s->user->get_id() &&
-        ! s->auth.identity->is_admin_of(bucket_owner)) {
+    const rgw_owner& bucket_owner = bucket_policy.get_owner().id;
+    if (bucket_owner != s->owner.id &&
+        !s->auth.identity->is_admin_of(bucket_owner)) {
       auto r = eval_identity_or_session_policies(dpp, s->iam_user_policies, s->env,
                                   rgw::IAM::s3ListBucket, ARN(bucket->get_key()));
       if (r == Effect::Allow)
