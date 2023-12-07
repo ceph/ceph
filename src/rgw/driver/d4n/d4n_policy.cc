@@ -77,8 +77,8 @@ int LFUDAPolicy::get_age(optional_yield y) {
   }
 
   if (!std::get<0>(resp).value()) {
-    if (set_age(0, y)) /* Initialize age */
-      return 0;
+    if (set_age(1, y)) /* Initialize age */
+      return 1;
     else
       return -1;
   }
