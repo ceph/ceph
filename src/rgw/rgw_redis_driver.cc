@@ -495,7 +495,7 @@ int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key,
   return std::get<0>(resp).value();
 }
 
-static Aio::OpFunc redis_read_op(optional_yield y, std::shared_ptr<connection> conn,
+Aio::OpFunc RedisDriver::redis_read_op(optional_yield y, std::shared_ptr<connection> conn,
                                  off_t read_ofs, off_t read_len, const std::string& key)
 {
   return [y, conn, key] (Aio* aio, AioResult& r) mutable {
