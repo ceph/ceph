@@ -598,6 +598,12 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number)
         if (!conn) {
           ldout(cct, 1) << __func__ << " csi with qpn " << response->qp_num << " may be dead. chunk 0x"
                         << std::hex << chunk << " will be back." << std::dec << dendl;
+          if (qp) {
+            ib->post_chunks_to_rq(1, qp);
+          } else {
+            lderr(cct) << __func__ << " qpn " << response->qp_num  << " not in QueuePair, " << dendl;
+          }
+
           ib->post_chunk_to_pool(chunk);
           perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
         } else {
