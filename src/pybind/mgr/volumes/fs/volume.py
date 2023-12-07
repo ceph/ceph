@@ -424,6 +424,7 @@ class VolumeClient(CephfsClient["Module"]):
 
                         subvol_info_dict = subvolume.info()
                         subvol_info_dict["mon_addrs"] = mon_addr_lst
+                        subvol_info_dict["flavor"] = subvolume.VERSION
                         ret = 0, json.dumps(subvol_info_dict, indent=4, sort_keys=True), ""
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
