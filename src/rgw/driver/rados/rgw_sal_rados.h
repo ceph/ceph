@@ -247,7 +247,7 @@ class RadosStore : public StoreDriver {
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -255,7 +255,7 @@ class RadosStore : public StoreDriver {
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
@@ -404,7 +404,7 @@ class RadosObject : public StoreObject {
     }
     virtual int delete_object(const DoutPrefixProvider* dpp,
 			      optional_yield y, uint32_t flags) override;
-    virtual int copy_object(User* user,
+    virtual int copy_object(const ACLOwner& owner,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
                rgw::sal::Bucket* src_bucket,
@@ -466,9 +466,9 @@ class RadosObject : public StoreObject {
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
     /* Swift versioning */
-    virtual int swift_versioning_restore(bool& restored,
+    virtual int swift_versioning_restore(const ACLOwner& owner, bool& restored,
 					 const DoutPrefixProvider* dpp, optional_yield y) override;
-    virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
+    virtual int swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
 				      optional_yield y) override;
 
     /* OPs */
@@ -664,7 +664,7 @@ public:
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  rgw::sal::Object* obj,
-			  const rgw_user& owner,
+			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
@@ -764,7 +764,7 @@ public:
 		    RGWObjectCtx& obj_ctx,
 		    const rgw_obj& obj,
 		    RadosStore* _store, std::unique_ptr<Aio> _aio,
-		    const rgw_user& owner,
+		    const ACLOwner& owner,
 		    const rgw_placement_rule *ptail_placement_rule,
 		    uint64_t olh_epoch,
 		    const std::string& unique_tag,
@@ -812,7 +812,7 @@ public:
 		    RGWObjectCtx& obj_ctx,
 		    const rgw_obj& obj,
 		    RadosStore* _store, std::unique_ptr<Aio> _aio,
-		    const rgw_user& owner,
+		    const ACLOwner& owner,
 		    const rgw_placement_rule *ptail_placement_rule,
 		    const std::string& unique_tag,
 		    uint64_t position,
@@ -861,7 +861,7 @@ public:
 		       RGWObjectCtx& obj_ctx,
 		       const rgw_obj& obj,
 		       RadosStore* _store, std::unique_ptr<Aio> _aio,
-		       const rgw_user& owner,
+		       const ACLOwner& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t part_num, const std::string& part_num_str, jspan_context& trace) :
 			StoreWriter(dpp, y),

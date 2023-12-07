@@ -677,7 +677,7 @@ class MotrObject : public StoreObject {
     virtual int delete_object(const DoutPrefixProvider* dpp,
         optional_yield y,
         uint32_t flags) override;
-    virtual int copy_object(User* user,
+    virtual int copy_object(const ACLOwner& owner,
         req_info* info, const rgw_zone_id& source_zone,
         rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
         rgw::sal::Bucket* src_bucket,
@@ -716,9 +716,9 @@ class MotrObject : public StoreObject {
     virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
     /* Swift versioning */
-    virtual int swift_versioning_restore(bool& restored,
+    virtual int swift_versioning_restore(const ACLOwner& owner, bool& restored,
         const DoutPrefixProvider* dpp) override;
-    virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
+    virtual int swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
         optional_yield y) override;
 
     /* OPs */
@@ -772,7 +772,7 @@ class MPMotrSerializer : public StoreMPSerializer {
 class MotrAtomicWriter : public StoreWriter {
   protected:
   rgw::sal::MotrStore* store;
-  const rgw_user& owner;
+  const ACLOwner& owner;
   const rgw_placement_rule *ptail_placement_rule;
   uint64_t olh_epoch;
   const std::string& unique_tag;
@@ -791,7 +791,7 @@ class MotrAtomicWriter : public StoreWriter {
           optional_yield y,
           rgw::sal::Object* obj,
           MotrStore* _store,
-          const rgw_user& _owner,
+          const ACLOwner& _owner,
           const rgw_placement_rule *_ptail_placement_rule,
           uint64_t _olh_epoch,
           const std::string& _unique_tag);
@@ -838,7 +838,7 @@ public:
 		       optional_yield y, MultipartUpload* upload,
 		       rgw::sal::Object* obj,
 		       MotrStore* _store,
-		       const rgw_user& owner,
+		       const ACLOwner& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t _part_num, const std::string& part_num_str) :
 				  StoreWriter(dpp, y), store(_store), head_obj(obj),
@@ -951,7 +951,7 @@ public:
   virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  rgw::sal::Object* obj,
-			  const rgw_user& owner,
+			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
@@ -1064,7 +1064,7 @@ class MotrStore : public StoreDriver {
     virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
         rgw::sal::Object* obj,
-        const rgw_user& owner,
+        const ACLOwner& owner,
         const rgw_placement_rule *ptail_placement_rule,
         const std::string& unique_tag,
         uint64_t position,
@@ -1072,7 +1072,7 @@ class MotrStore : public StoreDriver {
     virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
         rgw::sal::Object* obj,
-        const rgw_user& owner,
+        const ACLOwner& owner,
         const rgw_placement_rule *ptail_placement_rule,
         uint64_t olh_epoch,
         const std::string& unique_tag) override;

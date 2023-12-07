@@ -378,6 +378,7 @@ int AtomicObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.mtime = mtime;
   obj_op.meta.set_mtime = set_mtime;
   obj_op.meta.owner = owner;
+  obj_op.meta.bucket_owner = bucket_info.owner;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.olh_epoch = olh_epoch;
   obj_op.meta.delete_at = delete_at;
@@ -517,6 +518,7 @@ int MultipartObjectProcessor::complete(size_t accounted_size,
   obj_op.meta.set_mtime = set_mtime;
   obj_op.meta.mtime = mtime;
   obj_op.meta.owner = owner;
+  obj_op.meta.bucket_owner = bucket_info.owner;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.zones_trace = zones_trace;
   obj_op.meta.modify_tail = true;
@@ -728,6 +730,7 @@ int AppendObjectProcessor::complete(size_t accounted_size, const string &etag, c
   obj_op.meta.mtime = mtime;
   obj_op.meta.set_mtime = set_mtime;
   obj_op.meta.owner = owner;
+  obj_op.meta.bucket_owner = bucket_info.owner;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.delete_at = delete_at;
   obj_op.meta.user_data = user_data;
