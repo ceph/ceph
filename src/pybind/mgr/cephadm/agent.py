@@ -22,11 +22,8 @@ from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.ssl_cert_utils import SSLCerts
 from mgr_util import test_port_allocation, PortAlreadyInUse
-from urllib.request import urlopen, Request
-from urllib.error import HTTPError, URLError
-from contextlib import contextmanager
 
-from typing import Any, Dict, List, Set, Tuple, TYPE_CHECKING, Optional, Generator
+from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -267,103 +264,6 @@ class NodeProxy:
         self.mgr.node_proxy.save(host, data['patch'])
         self.raise_alert(data)
 
-    def login(self,
-              addr: str,
-              username: str,
-              password: str,
-              port: str = '443') -> None:
-        self.mgr.log.info("Logging in to "
-                          f"{addr}:{port} as '{username}'")
-        oob_credentials = json.dumps({"UserName": username,
-                                      "Password": password})
-        headers = {"Content-Type": "application/json"}
-
-        try:
-            _status_code, _data, _headers = self.query(addr=addr,
-                                                       port=port,
-                                                       data=bytes(oob_credentials, 'ascii'),
-                                                       headers=headers,
-                                                       endpoint="/redfish/v1/SessionService/Sessions/",
-                                                       method="POST")
-            if _status_code != 201:
-                self.mgr.log.error(f"Can't log in to {addr}:{port} as '{username}': {_status_code}")
-                raise RuntimeError
-            self.redfish_token = _headers['X-Auth-Token']
-            self.redfish_session_location = _headers['Location']
-        except URLError as e:
-            msg = f"Can't log in to {addr}:{port} as '{username}': {e}"
-            self.mgr.log.error(msg)
-            raise RuntimeError
-
-    def logout(self,
-               addr: str,
-               port: str = '443') -> None:
-        try:
-            _status_code, _data, _ = self.query(addr=addr,
-                                                port=port,
-                                                method='DELETE',
-                                                headers={"X-Auth-Token": self.redfish_token},
-                                                endpoint=self.redfish_session_location)
-        except URLError:
-            msg = f"Can't log out from {addr}:{port}"
-            self.mgr.log.error(msg)
-            raise cherrypy.HTTPError(502, msg)
-
-    @contextmanager
-    def redfish_session(self,
-                        addr: str,
-                        username: str,
-                        password: str,
-                        port: str = '443') -> Generator:
-        try:
-            self.login(addr=addr,
-                       port=port,
-                       username=username,
-                       password=password)
-            yield
-        except Exception:
-            raise
-        else:
-            self.logout(addr=addr,
-                        port=port)
-
-    def query(self,
-              addr: str = '',
-              port: str = '',
-              method: Optional[str] = None,
-              headers: Dict[str, str] = {},
-              data: Optional[bytes] = None,
-              endpoint: str = '',
-              ssl_ctx: Optional[Any] = None,
-              timeout: Optional[int] = 10) -> Tuple[int, Dict[str, Any], Dict[str, Any]]:
-        if not ssl_ctx:
-            ssl_ctx = self.ssl_ctx
-        url = f'https://{addr}:{port}{endpoint}'
-        _headers = headers
-        response_json = {}
-        response_headers = {}
-        if not _headers.get('Content-Type'):
-            # default to application/json if nothing provided
-            _headers['Content-Type'] = 'application/json'
-
-        try:
-            req = Request(url, data, _headers, method=method)
-            with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
-                response_str = response.read()
-                response_headers = response.headers
-                response_json = json.loads(response_str)
-                response_status = response.status
-        except HTTPError as e:
-            self.mgr.log.error(f"{e.code} {e.reason}")
-            response_status = e.code
-        except URLError as e:
-            self.mgr.log.error(f"{e.reason}")
-            raise
-        except Exception as e:
-            self.mgr.log.error(f"{e}")
-            raise
-        return (response_status, response_json, response_headers)
-
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET', 'PATCH'])
     @cherrypy.tools.json_in()
@@ -392,6 +292,9 @@ class NodeProxy:
         hostname: Optional[str] = kw.get('hostname')
         led_type: Optional[str] = kw.get('type')
         id_drive: Optional[str] = kw.get('id')
+        data: Optional[str] = None
+        # this method is restricted to 'GET' or 'PATCH'
+        action: str = 'get_led' if method == 'GET' else 'set_led'
 
         if not hostname:
             msg: str = "listing enclosure LED status for all nodes is not implemented."
@@ -414,19 +317,10 @@ class NodeProxy:
             self.mgr.log.debug(msg)
             raise cherrypy.HTTPError(400, msg)
 
-        # if led_type not in ['chassis', 'drive']:
-        #     # TODO(guits): update unit test for this
-        #     raise cherrypy.HTTPError(404, 'LED type must be either "chassis" or "drive"')
-
-        addr = self.mgr.node_proxy.oob[hostname]['addr']
-        port = self.mgr.node_proxy.oob[hostname]['port']
-        username = self.mgr.node_proxy.oob[hostname]['username']
-        password = self.mgr.node_proxy.oob[hostname]['password']
-
         if method == 'PATCH':
             # TODO(guits): need to check the request is authorized
             # allowing a specific keyring only ? (client.admin or client.agent.. ?)
-            data: str = json.dumps(cherrypy.request.json)
+            data = json.dumps(cherrypy.request.json)
 
             if led_type == 'drive':
                 if id_drive not in self.mgr.node_proxy.data[hostname]['status']['storage'].keys():
@@ -434,25 +328,30 @@ class NodeProxy:
                     msg = f"'{id_drive}' not found."
                     self.mgr.log.debug(msg)
                     raise cherrypy.HTTPError(400, msg)
-                endpoint = self.mgr.node_proxy.data[hostname]['status']['storage'][id_drive].get('redfish_endpoint')
-            else:
-                endpoint = self.mgr.node_proxy.data[hostname]['chassis']['redfish_endpoint']
 
-        with self.redfish_session(addr, username, password, port=port):
-            try:
-                status, result, _ = self.query(data=bytes(data, 'ascii'),
-                                               addr=addr,
-                                               method=method,
-                                               headers={"X-Auth-Token": self.redfish_token},
-                                               port=port,
-                                               endpoint=endpoint,
-                                               ssl_ctx=self.ssl_ctx)
-            except (URLError, HTTPError, RuntimeError) as e:
-                raise cherrypy.HTTPError(502, f"{e}")
-            if method == 'GET':
-                result = {"LocationIndicatorActive": result['LocationIndicatorActive']}
-            cherrypy.response.status = status
-            return result
+        payload: Dict[str, Any] = {"node_proxy_oob_cmd":
+                                   {"action": action,
+                                    "type": led_type,
+                                    "id": id_drive,
+                                    "host": hostname,
+                                    "data": data}}
+        try:
+            message_thread = AgentMessageThread(
+                hostname, self.mgr.agent_cache.agent_ports[hostname], payload, self.mgr)
+            message_thread.start()
+            message_thread.join()  # TODO(guits): Add a timeout?
+        except KeyError:
+            raise cherrypy.HTTPError(502, f"{hostname}'s agent not running, please check.")
+        agent_response = message_thread.get_agent_response()
+        try:
+            response_json: Dict[str, Any] = json.loads(agent_response)
+        except json.decoder.JSONDecodeError:
+            cherrypy.response.status = 503
+        else:
+            cherrypy.response.status = response_json.get('http_code', 503)
+        if cherrypy.response.status != 200:
+            raise cherrypy.HTTPError(cherrypy.response.status, "Couldn't change the LED status.")
+        return response_json
 
     @cherrypy.expose
     @cherrypy.tools.allow(methods=['GET'])
@@ -845,6 +744,7 @@ class AgentMessageThread(threading.Thread):
         self.port = port
         self.data: str = json.dumps(data)
         self.daemon_spec: Optional[CephadmDaemonDeploySpec] = daemon_spec
+        self.agent_response: str = ''
         super().__init__(target=self.run)
 
     def run(self) -> None:
@@ -897,8 +797,8 @@ class AgentMessageThread(threading.Thread):
                 secure_agent_socket.connect((self.addr, self.port))
                 msg = (bytes_len + self.data)
                 secure_agent_socket.sendall(msg.encode('utf-8'))
-                agent_response = secure_agent_socket.recv(1024).decode()
-                self.mgr.log.debug(f'Received "{agent_response}" from agent on host {self.host}')
+                self.agent_response = secure_agent_socket.recv(1024).decode()
+                self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
                 self.mgr.agent_cache.sending_agent_message[self.host] = False
@@ -917,6 +817,9 @@ class AgentMessageThread(threading.Thread):
         self.mgr.log.error(f'Could not connect to agent on host {self.host}')
         self.mgr.agent_cache.sending_agent_message[self.host] = False
         return
+
+    def get_agent_response(self) -> str:
+        return self.agent_response
 
 
 class CephadmAgentHelpers:
