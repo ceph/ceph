@@ -598,6 +598,22 @@ class LokiService(CephadmService):
         }, sorted(deps)
 
 
+class ThanosQuerierService(CephadmService):
+    TYPE = 'thanos-querier'
+    DEFAULT_SERVICE_PORT = 10902
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        return daemon_spec
+    
+class ThanosSidecarService(CephadmService):
+    TYPE = 'thanos-sidecar'
+    DEFAULT_SERVICE_PORT = 10901
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+        return daemon_spec
+
 class PromtailService(CephadmService):
     TYPE = 'promtail'
     DEFAULT_SERVICE_PORT = 9080

@@ -69,7 +69,7 @@ from .services.nvmeof import NvmeofService
 from .services.nfs import NFSService
 from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
-    NodeExporterService, SNMPGatewayService, LokiService, PromtailService
+    NodeExporterService, SNMPGatewayService, LokiService, PromtailService, ThanosQuerierService, ThanosSidecarService
 from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
@@ -116,6 +116,7 @@ DEFAULT_PROMETHEUS_IMAGE = 'quay.io/prometheus/prometheus:v2.43.0'
 DEFAULT_NODE_EXPORTER_IMAGE = 'quay.io/prometheus/node-exporter:v1.5.0'
 DEFAULT_NVMEOF_IMAGE = 'quay.io/ceph/nvmeof:latest'
 DEFAULT_LOKI_IMAGE = 'docker.io/grafana/loki:2.4.0'
+DEFAULT_THANOS_IMAGE = 'thanosio/thanos:main-2023-10-16-77fac93'
 DEFAULT_PROMTAIL_IMAGE = 'docker.io/grafana/promtail:2.4.0'
 DEFAULT_ALERT_MANAGER_IMAGE = 'quay.io/prometheus/alertmanager:v0.25.0'
 DEFAULT_GRAFANA_IMAGE = 'quay.io/ceph/ceph-grafana:9.4.7'
@@ -241,6 +242,16 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_loki',
             default=DEFAULT_LOKI_IMAGE,
             desc='Loki container image',
+        ),
+        Option(
+            'container_image_thanos_querier',
+            default=DEFAULT_THANOS_IMAGE,
+            desc='Thanos querier container image',
+        ),
+        Option(
+            'container_image_thanos_sidecar',
+            default=DEFAULT_THANOS_IMAGE,
+            desc='Thanos sidecar container image',
         ),
         Option(
             'container_image_promtail',
@@ -520,6 +531,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_alertmanager = ''
             self.container_image_node_exporter = ''
             self.container_image_loki = ''
+            self.container_image_thanos_querier = ''
+            self.container_image_thanos_sidecar = ''
             self.container_image_promtail = ''
             self.container_image_haproxy = ''
             self.container_image_keepalived = ''
@@ -633,7 +646,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         _service_classes: Sequence[Type[CephadmService]] = [
             OSDService, NFSService, MonService, MgrService, MdsService,
             RgwService, RbdMirrorService, GrafanaService, AlertmanagerService,
-            PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
+            PrometheusService, NodeExporterService, LokiService, ThanosQuerierService, ThanosSidecarService, PromtailService, CrashService, IscsiService,
             IngressService, CustomContainerService, CephfsMirrorService, NvmeofService,
             CephadmAgent, CephExporterService, SNMPGatewayService, ElasticSearchService,
             JaegerQueryService, JaegerAgentService, JaegerCollectorService
@@ -827,7 +840,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         suffix = daemon_type not in [
             'mon', 'crash', 'ceph-exporter',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
-            'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
+            'container', 'agent', 'snmp-gateway', 'loki', 'promtail', 'thanos-querier', 'thanos-sidecar'
             'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query'
         ]
         if forcename:
@@ -1518,6 +1531,10 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = self.container_image_node_exporter
         elif daemon_type == 'loki':
             image = self.container_image_loki
+        elif daemon_type == 'thanos-querier':
+            image = self.container_image_thanos_querier
+        elif daemon_type == 'thanos-sidecar':
+            image = self.container_image_thanos_sidecar
         elif daemon_type == 'promtail':
             image = self.container_image_promtail
         elif daemon_type == 'haproxy':
@@ -3074,6 +3091,8 @@ Then run the following:
                 'node-exporter': PlacementSpec(host_pattern='*'),
                 'ceph-exporter': PlacementSpec(host_pattern='*'),
                 'loki': PlacementSpec(count=1),
+                'thanos-querier': PlacementSpec(count=1),
+                'thanos-sidecar': PlacementSpec(count=1),
                 'promtail': PlacementSpec(host_pattern='*'),
                 'crash': PlacementSpec(host_pattern='*'),
                 'container': PlacementSpec(count=1),
@@ -3177,6 +3196,14 @@ Then run the following:
 
     @handle_orch_error
     def apply_loki(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+    
+    @handle_orch_error
+    def apply_thanos_querier(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+    
+    @handle_orch_error
+    def apply_thanos_sidecar(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error

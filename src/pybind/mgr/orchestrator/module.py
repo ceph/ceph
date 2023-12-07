@@ -161,6 +161,8 @@ class ServiceType(enum.Enum):
     prometheus = 'prometheus'
     loki = 'loki'
     promtail = 'promtail'
+    thanos_querier = 'thanos-querier'
+    thanos_sidecar = 'thanos-sidecar'
     mds = 'mds'
     rgw = 'rgw'
     nfs = 'nfs'

@@ -7,6 +7,7 @@ from ..constants import (
     DEFAULT_ALERT_MANAGER_IMAGE,
     DEFAULT_GRAFANA_IMAGE,
     DEFAULT_LOKI_IMAGE,
+    DEFAULT_THANOS_IMAGE,
     DEFAULT_NODE_EXPORTER_IMAGE,
     DEFAULT_PROMETHEUS_IMAGE,
     DEFAULT_PROMTAIL_IMAGE,
@@ -35,6 +36,8 @@ class Monitoring(ContainerDaemonForm):
         'alertmanager': [9093, 9094],
         'loki': [3100],
         'promtail': [9080],
+        'thanos-querier': [10902],
+        'thanos-sidecar': [10901]
     }
 
     components = {
@@ -58,6 +61,25 @@ class Monitoring(ContainerDaemonForm):
                 '--config.file=/etc/loki/loki.yml',
             ],
             'config-json-files': ['loki.yml'],
+        },
+        'thanos-querier': {
+            'image': DEFAULT_THANOS_IMAGE,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': [
+                'query',
+                '--store=thanos-sidecar:10901'
+            ],
+        },
+        'thanos-sidecar': {
+            'image': DEFAULT_THANOS_IMAGE,
+            'cpus': '1',
+            'memory': '1GB',
+            'args': [
+                'sidecar',
+                '--tsdb.path=/prometheus'
+                '--prometheus.url=http://prometheus:9090'
+            ],
         },
         'promtail': {
             'image': DEFAULT_PROMTAIL_IMAGE,
@@ -182,7 +204,7 @@ class Monitoring(ContainerDaemonForm):
                 ctx, file_path=['/etc/alertmanager', '/etc/prometheus']
             )
         else:
-            raise Error('{} not implemented yet'.format(daemon_type))
+            uid, gid = 65534, 65534
         return uid, gid
 
     def __init__(self, ctx: CephadmContext, ident: DaemonIdentity) -> None:

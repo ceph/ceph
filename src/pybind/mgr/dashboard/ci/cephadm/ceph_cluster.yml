@@ -1,5 +1,5 @@
 parameters:
- nodes: 4
+ nodes: 3
  node_ip_offset: 100
  pool: ceph-dashboard
  network: ceph-dashboard
@@ -8,7 +8,7 @@ parameters:
  prefix: ceph
  numcpus: 1
  memory: 2048
- image: fedora36
+ image: /var/lib/libvirt/images/ceph-dashboard/fedora36
  notify: false
  admin_password: password
  disks:

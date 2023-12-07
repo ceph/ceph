@@ -744,6 +744,11 @@ def create_daemon_dirs(
             config_dir = 'etc/loki'
             makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
             makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
+        elif daemon_type == 'thanos-querier':
+            data_dir_root = ident.data_dir(ctx.data_dir)
+            config_dir = 'etc/thanos-querier'
+            makedirs(os.path.join(data_dir_root, config_dir), uid, gid, 0o755)
+            makedirs(os.path.join(data_dir_root, 'data'), uid, gid, 0o755)
         elif daemon_type == 'node-exporter':
             data_dir_root = ident.data_dir(ctx.data_dir)
             config_dir = 'etc/node-exporter'
@@ -3262,6 +3267,7 @@ def command_deploy_from(ctx: CephadmContext) -> None:
 
 def _common_deploy(ctx: CephadmContext) -> None:
     ident = DaemonIdentity.from_context(ctx)
+    supported_daemons  = get_supported_daemons()
     if ident.daemon_type not in get_supported_daemons():
         raise Error('daemon type %s not recognized' % ident.daemon_type)
 
@@ -3928,7 +3934,8 @@ def command_adopt(ctx):
     elif daemon_type == 'alertmanager':
         command_adopt_alertmanager(ctx, daemon_id, fsid)
     else:
-        raise Error('daemon type %s not recognized' % daemon_type)
+        logger.info('i am hereee')
+        raise Error('daemon type %s not recognizedeee' % daemon_type)
 
 
 class AdoptOsd(object):

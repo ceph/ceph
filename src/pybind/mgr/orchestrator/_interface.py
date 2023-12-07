@@ -500,6 +500,8 @@ class Orchestrator(object):
             'osd': lambda dg: self.apply_drivegroups([dg]),  # type: ignore
             'prometheus': self.apply_prometheus,
             'loki': self.apply_loki,
+            'thanos-querier': self.apply_thanos_querier,
+            'thanos-sidecar': self.apply_thanos_sidecar,
             'promtail': self.apply_promtail,
             'rbd-mirror': self.apply_rbd_mirror,
             'rgw': self.apply_rgw,
@@ -714,6 +716,14 @@ class Orchestrator(object):
     def apply_loki(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Loki daemon(s)"""
         raise NotImplementedError()
+    
+    def apply_thanos_querier(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a Thanos querier daemon(s)"""
+        raise NotImplementedError()
+    
+    def apply_thanos_sidecar(self, spec: ServiceSpec) -> OrchResult[str]:
+        """Update existing a Thanos sidecar daemon(s)"""
+        raise NotImplementedError()
 
     def apply_promtail(self, spec: ServiceSpec) -> OrchResult[str]:
         """Update existing a Promtail daemon(s)"""
@@ -823,6 +833,8 @@ def daemon_type_to_service(dtype: str) -> str:
         'node-exporter': 'node-exporter',
         'ceph-exporter': 'ceph-exporter',
         'loki': 'loki',
+        'thanos-querier': 'thanos-querier',
+        'thanos-sidecar': 'thanos-sidecar',
         'promtail': 'promtail',
         'crash': 'crash',
         'crashcollector': 'crash',  # Specific Rook Daemon
@@ -854,6 +866,8 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'alertmanager': ['alertmanager'],
         'prometheus': ['prometheus'],
         'loki': ['loki'],
+        'thanos-sidecar': ['thanos-sidecar'],
+        'thanos-querier': ['thanos-querier'],
         'promtail': ['promtail'],
         'node-exporter': ['node-exporter'],
         'ceph-exporter': ['ceph-exporter'],

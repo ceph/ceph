@@ -3,6 +3,7 @@
 import abc
 
 from typing import List, Tuple, Optional, Dict
+import logging
 
 from .container_engines import Podman
 from .container_types import CephContainer, InitContainer
@@ -10,6 +11,10 @@ from .context import CephadmContext
 from .daemon_form import DaemonForm
 from .deploy import DeploymentType
 from .net_utils import EndPoint
+
+
+logger = logging.getLogger(__name__)
+
 
 
 class ContainerDaemonForm(DaemonForm):
@@ -161,6 +166,8 @@ def daemon_to_container(
         container_args.extend(
             ctx.container_engine.service_args(ctx, service_name)
         )
+
+    logger.info('helloji %s', args)
 
     return CephContainer.for_daemon(
         ctx,
