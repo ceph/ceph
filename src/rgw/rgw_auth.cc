@@ -98,6 +98,9 @@ transform_old_authinfo(CephContext* const cct,
     string get_subuser() const override {
       return {};
     }
+    const std::string& get_tenant() const override {
+      return id.tenant;
+    }
 
     void to_str(std::ostream& out) const override {
       out << "RGWDummyIdentityApplier(auth_id=" << id
