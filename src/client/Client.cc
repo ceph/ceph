@@ -11441,6 +11441,10 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   CWF_iofinish *cwf_iofinish = NULL;
   C_SaferCond *cond_iofinish = NULL;
 
+  if (size < 1) { // zero bytes write is not supported by osd
+    return -CEPHFS_EINVAL;
+  }
+
   if ( (uint64_t)(offset+size) > mdsmap->get_max_filesize() && //exceeds config
        (uint64_t)(offset+size) > in->size ) { //exceeds filesize 
       return -CEPHFS_EFBIG;              
