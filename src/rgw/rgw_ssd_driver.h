@@ -31,6 +31,11 @@ public:
   virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
   virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; }
 
+private:
+  Partition partition_info;
+  uint64_t free_space;
+  CephContext* cct;
+
   struct libaio_handler {
     rgw::Aio* throttle = nullptr;
     rgw::AioResult& r;
@@ -42,66 +47,59 @@ public:
     }
   };
 
-protected:
-  Partition partition_info;
-  uint64_t free_space;
-
-private:
-
-// unique_ptr with custom deleter for struct aiocb
-struct libaio_aiocb_deleter {
-  void operator()(struct aiocb* c) {
-    if(c->aio_fildes > 0) {
-      if( ::close(c->aio_fildes) != 0) {
+  // unique_ptr with custom deleter for struct aiocb
+  struct libaio_aiocb_deleter {
+    void operator()(struct aiocb* c) {
+      if(c->aio_fildes > 0) {
+	      if( ::close(c->aio_fildes) != 0) {
+	      }
       }
+      delete c;
     }
-    delete c;
-  }
-};
+  };
 
-template <typename ExecutionContext, typename CompletionToken>
-  auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
-                  off_t read_ofs, off_t read_len, CompletionToken&& token);
+  template <typename ExecutionContext, typename CompletionToken>
+    auto get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, const std::string& key,
+		    off_t read_ofs, off_t read_len, CompletionToken&& token);
 
-rgw::Aio::OpFunc ssd_cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cache::CacheDriver* cache_driver,
-                                off_t read_ofs, off_t read_len, const std::string& key);
+  rgw::Aio::OpFunc ssd_cache_read_op(const DoutPrefixProvider *dpp, optional_yield y, rgw::cache::CacheDriver* cache_driver,
+				  off_t read_ofs, off_t read_len, const std::string& key);
 
-using unique_aio_cb_ptr = std::unique_ptr<struct aiocb, libaio_aiocb_deleter>;
+  using unique_aio_cb_ptr = std::unique_ptr<struct aiocb, libaio_aiocb_deleter>;
 
-struct AsyncReadOp {
-  bufferlist result;
-  unique_aio_cb_ptr aio_cb;
-  using Signature = void(boost::system::error_code, bufferlist);
-  using Completion = ceph::async::Completion<Signature, AsyncReadOp>;
+  struct AsyncReadOp {
+    bufferlist result;
+    unique_aio_cb_ptr aio_cb;
+    using Signature = void(boost::system::error_code, bufferlist);
+    using Completion = ceph::async::Completion<Signature, AsyncReadOp>;
 
   int init(const DoutPrefixProvider *dpp, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg);
   static void libaio_cb_aio_dispatch(sigval sigval);
 
-  template <typename Executor1, typename CompletionHandler>
-  static auto create(const Executor1& ex1, CompletionHandler&& handler);
-};
+    template <typename Executor1, typename CompletionHandler>
+    static auto create(const Executor1& ex1, CompletionHandler&& handler);
+  };
 
-struct AsyncWriteRequest {
-  const DoutPrefixProvider* dpp;
-	std::string key;
-	void *data;
-	int fd;
-	struct aiocb *cb;
-  SSDDriver *priv_data;
+  struct AsyncWriteRequest {
+    const DoutPrefixProvider* dpp;
+	  std::string key;
+	  void *data;
+	  int fd;
+	  struct aiocb *cb;
+    SSDDriver *priv_data;
 
-	AsyncWriteRequest(const DoutPrefixProvider* dpp) : dpp(dpp) {}
-	int prepare_libaio_write_op(const DoutPrefixProvider *dpp, bufferlist& bl, unsigned int len, std::string key, std::string cache_location);
-  static void libaio_write_cb(sigval sigval);
+	  AsyncWriteRequest(const DoutPrefixProvider* dpp) : dpp(dpp) {}
+	  int prepare_libaio_write_op(const DoutPrefixProvider *dpp, bufferlist& bl, unsigned int len, std::string key, std::string cache_location);
+    static void libaio_write_cb(sigval sigval);
 
-  ~AsyncWriteRequest() {
-    ::close(fd);
-		cb->aio_buf = nullptr;
-		delete(cb);
-  }
-};
+    ~AsyncWriteRequest() {
+      ::close(fd);
+		  cb->aio_buf = nullptr;
+		  delete(cb);
+    }
+  };
 
-void libaio_write_completion_cb(AsyncWriteRequest* c);
-
+  void libaio_write_completion_cb(AsyncWriteRequest* c);
 };
 
 } } // namespace rgw::cache
