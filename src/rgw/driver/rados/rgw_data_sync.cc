@@ -2122,9 +2122,9 @@ public:
       } while (true);
 
       drain_all();
-      yield marker_tracker->flush();
 
       if (lost_bid) {
+        yield call(marker_tracker->flush());
         return set_cr_error(-EBUSY);
       } else if (lost_lock) {
         return set_cr_error(-ECANCELED);
