@@ -168,6 +168,7 @@ fi
 ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
+rgw_store="rados"
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 # disable SPDK by default
 pmem_enabled=0
@@ -229,6 +230,7 @@ options:
 	--rgw_frontend specify the rgw frontend configuration
 	--rgw_arrow_flight start arrow flight frontend
 	--rgw_compression specify the rgw compression plugin
+	--rgw_store storage backend: rados|dbstore|posix
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
 	-K, --kstore use kstore as the osd objectstore backend
@@ -459,6 +461,10 @@ case $1 in
         ;;
     --rgw_compression)
         rgw_compression=$2
+        shift
+        ;;
+    --rgw_store)
+        rgw_store=$2
         shift
         ;;
     --kstore_path)
@@ -692,6 +698,22 @@ done
 
 }
 
+do_rgw_dbstore_conf() {
+    if [ $CEPH_NUM_RGW -gt 1 ]; then
+        echo "dbstore is not distributed so only works with CEPH_NUM_RGW=1"
+        exit 1
+    fi
+
+    prun mkdir -p "$CEPH_DEV_DIR/rgw/dbstore"
+    wconf <<EOF
+        rgw backend store = dbstore
+        rgw config store = dbstore
+        dbstore db dir = $CEPH_DEV_DIR/rgw/dbstore
+        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
+
+EOF
+}
+
 format_conf() {
     local opts=$1
     local indent="        "
@@ -861,6 +883,20 @@ $CCLIENTDEBUG
         ; rgw lc debug interval = 10
         $(format_conf "${extra_conf}")
 EOF
+    if [ "$rgw_store" == "dbstore" ] ; then
+        do_rgw_dbstore_conf
+    elif [ "$rgw_store" == "posix" ] ; then
+        # use dbstore as the backend and posix as the filter
+        do_rgw_dbstore_conf
+        posix_dir="$CEPH_DEV_DIR/rgw/posix"
+        prun mkdir -p $posix_dir/root $posix_dir/lmdb
+        wconf <<EOF
+        rgw filter = posix
+        rgw posix base path = $posix_dir/root
+        rgw posix database root = $posix_dir/lmdb
+
+EOF
+    fi
 	do_rgw_conf
 	wconf << EOF
 [mds]
@@ -1785,11 +1821,13 @@ do_rgw()
     for n in $(seq 1 $CEPH_NUM_RGW); do
         rgw_name="client.rgw.${current_port}"
 
-        ceph_adm auth get-or-create $rgw_name \
-            mon 'allow rw' \
-            osd 'allow rwx' \
-            mgr 'allow rw' \
-            >> "$keyring_fn"
+        if [ "$CEPH_NUM_MON" -gt 0 ]; then
+            ceph_adm auth get-or-create $rgw_name \
+                mon 'allow rw' \
+                osd 'allow rwx' \
+                mgr 'allow rw' \
+                >> "$keyring_fn"
+        fi
 
         debug echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
         run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn \
