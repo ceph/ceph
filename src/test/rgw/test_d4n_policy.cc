@@ -165,7 +165,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 
     dir->shutdown();
     cacheDriver->shutdown();
-    policyDriver->get_cache_policy()->shutdown();
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->shutdown(); 
 
     boost::system::error_code ec;
     request req;
@@ -228,7 +228,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 
     dir->shutdown();
     cacheDriver->shutdown();
-    policyDriver->get_cache_policy()->shutdown();
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->shutdown(); 
 
     std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
     boost::system::error_code ec;
@@ -260,7 +260,7 @@ TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
 
     dir->shutdown();
     cacheDriver->shutdown();
-    policyDriver->get_cache_policy()->shutdown();
+    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->shutdown(); 
 
     boost::system::error_code ec;
     request req;
