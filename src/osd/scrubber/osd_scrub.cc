@@ -71,7 +71,7 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
 {
   const utime_t scrub_time = ceph_clock_now();
   dout(10) << fmt::format(
-		  "time now:{}, recover is active?:{}", scrub_time,
+		  "time now:{:s}, recovery is active?:{}", scrub_time,
 		  is_recovery_active)
 	   << dendl;
 
@@ -116,8 +116,7 @@ void OsdScrub::initiate_scrub(bool is_recovery_active)
     // we have a candidate to scrub. But we may fail when trying to initiate that
     // scrub. For some failures - we can continue with the next candidate. For
     // others - we should stop trying to scrub at this tick.
-    auto res = initiate_a_scrub(
-	candidate, env_restrictions.allow_requested_repair_only);
+    auto res = initiate_a_scrub(candidate, env_restrictions);
 
     if (res == schedule_result_t::target_specific_failure) {
       // continue with the next job.
@@ -190,7 +189,7 @@ Scrub::OSDRestrictions OsdScrub::restrictions_on_scrubbing(
 
 Scrub::schedule_result_t OsdScrub::initiate_a_scrub(
     spg_t pgid,
-    bool allow_requested_repair_only)
+    Scrub::OSDRestrictions restrictions)
 {
   dout(20) << fmt::format("trying pg[{}]", pgid) << dendl;
 
@@ -205,23 +204,8 @@ Scrub::schedule_result_t OsdScrub::initiate_a_scrub(
     return Scrub::schedule_result_t::target_specific_failure;
   }
 
-  // This one is already scrubbing, so go on to the next scrub job
-  if (locked_pg->pg()->is_scrub_queued_or_active()) {
-    dout(10) << fmt::format("pg[{}]: scrub already in progress", pgid) << dendl;
-    return Scrub::schedule_result_t::target_specific_failure;
-  }
-  // Skip other kinds of scrubbing if only explicitly requested repairing is allowed
-  if (allow_requested_repair_only &&
-      !locked_pg->pg()->get_planned_scrub().must_repair) {
-    dout(10) << fmt::format(
-		    "skipping pg[{}] as repairing was not explicitly "
-		    "requested for that pg",
-		    pgid)
-	     << dendl;
-    return Scrub::schedule_result_t::target_specific_failure;
-  }
-
-  return locked_pg->pg()->sched_scrub();
+  // later on, here is where the scrub target would be dequeued
+  return locked_pg->pg()->start_scrubbing(restrictions);
 }
 
 void OsdScrub::on_config_change()

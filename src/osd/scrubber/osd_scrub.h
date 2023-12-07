@@ -193,7 +193,7 @@ class OsdScrub {
    */
   Scrub::schedule_result_t initiate_a_scrub(
       spg_t pgid,
-      bool allow_requested_repair_only);
+      Scrub::OSDRestrictions restrictions);
 
   /// resource reservation management
   Scrub::ScrubResources m_resource_bookkeeper;
