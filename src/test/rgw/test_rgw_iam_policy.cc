@@ -102,6 +102,12 @@ class FakeIdentity : public Identity {
 public:
 
   explicit FakeIdentity(Principal&& id) : id(std::move(id)) {}
+
+  ACLOwner get_aclowner() const override {
+    ceph_abort();
+    return {};
+  }
+
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     ceph_abort();
     return 0;
