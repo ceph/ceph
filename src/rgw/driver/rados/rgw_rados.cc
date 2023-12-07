@@ -2835,7 +2835,7 @@ bool RGWRados::swift_versioning_enabled(const RGWBucketInfo& bucket_info) const
 }
 
 int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
-                                    const rgw_user& user,
+                                    const ACLOwner& owner,
                                     RGWBucketInfo& bucket_info,
                                     const rgw_obj& obj,
                                     const DoutPrefixProvider *dpp,
@@ -2890,7 +2890,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
   rgw_zone_id no_zone;
 
   r = copy_obj(obj_ctx,
-               user,
+               owner,
                NULL, /* req_info *info */
                no_zone,
                dest_obj,
@@ -2928,7 +2928,7 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
 }
 
 int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
-                                       const rgw_user& user,
+                                       const ACLOwner& owner,
                                        RGWBucketInfo& bucket_info,
                                        rgw_obj& obj,
                                        bool& restored,
@@ -2984,7 +2984,7 @@ int RGWRados::swift_versioning_restore(RGWObjectCtx& obj_ctx,
     obj_ctx.set_atomic(obj);
 
     int ret = copy_obj(obj_ctx,
-                       user,
+                       owner,
                        nullptr,       /* req_info *info */
                        no_zone,
                        obj,           /* dest obj */
@@ -3122,7 +3122,6 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   string etag;
   string content_type;
-  bufferlist acl_bl;
   string storage_class;
 
   map<string, bufferlist>::iterator iter;
@@ -3159,8 +3158,6 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
       etag = rgw_bl_str(bl);
     } else if (name.compare(RGW_ATTR_CONTENT_TYPE) == 0) {
       content_type = rgw_bl_str(bl);
-    } else if (name.compare(RGW_ATTR_ACL) == 0) {
-      acl_bl = bl;
     }
   }
   if (attrs.find(RGW_ATTR_PG_VER) == attrs.end()) {
@@ -3238,7 +3235,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   tracepoint(rgw_rados, complete_enter, req_id.c_str());
   r = index_op->complete(rctx.dpp, poolid, epoch, size, accounted_size,
                         meta.set_mtime, etag, content_type,
-                        storage_class, &acl_bl,
+                        storage_class, meta.owner,
 			 meta.category, meta.remove_objs, rctx.y,
 			 meta.user_data, meta.appendable);
   tracepoint(rgw_rados, complete_exit, req_id.c_str());
@@ -3275,11 +3272,11 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   /* update quota cache */
   if (meta.completeMultipart){
-  	store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
+    store->quota_handler->update_stats(meta.bucket_owner, obj.bucket, (orig_exists ? 0 : 1),
                                      0, orig_size);
   }
   else {
-    store->quota_handler->update_stats(meta.owner, obj.bucket, (orig_exists ? 0 : 1),
+    store->quota_handler->update_stats(meta.bucket_owner, obj.bucket, (orig_exists ? 0 : 1),
                                      accounted_size, orig_size);
   }
   return 0;
@@ -3632,7 +3629,13 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
   attrset.erase(RGW_ATTR_TAIL_TAG);
   attrset.erase(RGW_ATTR_STORAGE_CLASS);
 
-  return copy_obj_data(octx, dest_bucket_info, dest_bucket_info.placement_rule,
+  ACLOwner owner;
+  if (auto i = attrset.find(RGW_ATTR_ACL); i != attrset.end()) {
+    (void) decode_policy(dpp, i->second, &owner);
+  }
+
+  return copy_obj_data(octx, owner, dest_bucket_info,
+                       dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime,
                        attrset, 0, real_time(), NULL, dpp, y);
 }
@@ -3783,6 +3786,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   std::string etag;
   std::string content_type;
   std::string storage_class;
+  bool found_acl = false;
   bufferlist acl_bl;
   bool found_olh_info { false };
   bufferlist olh_info_bl;
@@ -3793,7 +3797,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
   read_attr(attr_set, RGW_ATTR_ETAG, etag);
   read_attr(attr_set, RGW_ATTR_CONTENT_TYPE, content_type);
   read_attr(attr_set, RGW_ATTR_STORAGE_CLASS, storage_class);
-  read_attr(attr_set, RGW_ATTR_ACL, acl_bl);
+  read_attr(attr_set, RGW_ATTR_ACL, acl_bl, &found_acl);
   read_attr(attr_set, RGW_ATTR_OLH_INFO, olh_info_bl, &found_olh_info);
   read_attr(attr_set, RGW_ATTR_APPEND_PART_NUM, part_num_bl, &appendable);
 
@@ -3818,6 +3822,11 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
     }
   }
 
+  ACLOwner owner;
+  if (found_acl) {
+    (void) decode_policy(dpp, acl_bl, &owner);
+  }
+
   Bucket bkt(this, bucket_info);
   RGWRados::Bucket::UpdateIndex update_idx(&bkt, head_obj);
 
@@ -3832,7 +3841,7 @@ int RGWRados::reindex_obj(rgw::sal::Driver* driver,
 			    etag,
 			    content_type,
 			    storage_class,
-			    &acl_bl,
+			    owner,
 			    RGWObjCategory::Main, // RGWObjCategory category,
 			    nullptr, // remove_objs list
 			    y,
@@ -4145,10 +4154,14 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
 
+  // use an empty owner until we decode RGW_ATTR_ACL
+  ACLOwner owner;
+  RGWAccessControlPolicy policy;
+
   rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, nullptr,
-                                  user_id, obj_ctx, dest_obj, olh_epoch,
+                                  owner, obj_ctx, dest_obj, olh_epoch,
 				  tag, rctx.dpp, rctx.y);
   RGWRESTConn *conn;
   auto& zone_conn_map = svc.zone->get_zone_conn_map();
@@ -4299,43 +4312,32 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     }
   }
 
+  // decode the ACLOwner from RGW_ATTR_ACL for the bucket index
+  if (auto i = cb.get_attrs().find(RGW_ATTR_ACL); i != cb.get_attrs().end()) {
+    ret = decode_policy(rctx.dpp, i->second, &owner);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
   if (override_owner) {
-    processor.set_owner(*override_owner);
-
-    auto& obj_attrs = cb.get_attrs();
-
     RGWUserInfo owner_info;
     if (ctl.user->get_info_by_uid(rctx.dpp, *override_owner, &owner_info, rctx.y) < 0) {
       ldpp_dout(rctx.dpp, 10) << "owner info does not exist" << dendl;
       return -EINVAL;
     }
 
-    RGWAccessControlPolicy acl;
+    owner.id = *override_owner;
+    owner.display_name = owner_info.display_name;
 
-    auto aiter = obj_attrs.find(RGW_ATTR_ACL);
-    if (aiter == obj_attrs.end()) {
-      ldpp_dout(rctx.dpp, 0) << "WARNING: " << __func__ << "(): object doesn't have ACL attribute, setting default ACLs" << dendl;
-      acl.create_default(owner_info.user_id, owner_info.display_name);
-    } else {
-      auto iter = aiter->second.cbegin();
-      try {
-	acl.decode(iter);
-      } catch (buffer::error& err) {
-	ldpp_dout(rctx.dpp, 0) << "ERROR: " << __func__ << "(): could not decode policy, caught buffer::error" << dendl;
-	return -EIO;
-      }
-    }
-
-    ACLOwner new_owner;
-    new_owner.id = *override_owner;
-    new_owner.display_name = owner_info.display_name;
-
-    acl.set_owner(new_owner);
+    policy.create_default(owner_info.user_id, owner_info.display_name);
 
     bufferlist bl;
-    acl.encode(bl);
-    obj_attrs[RGW_ATTR_ACL] = std::move(bl);
+    policy.encode(bl);
+    cb.get_attrs()[RGW_ATTR_ACL] = std::move(bl);
   }
+
+  processor.set_owner(owner);
 
   if (source_zone.empty()) { /* need to preserve expiration if copy in the same zonegroup */
     cb.get_attrs().erase(RGW_ATTR_DELETE_AT);
@@ -4537,7 +4539,7 @@ int RGWRados::copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
  * Returns: 0 on success, -ERR# otherwise.
  */
 int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
-               const rgw_user& user_id,
+               const ACLOwner& owner,
                req_info *info,
                const rgw_zone_id& source_zone,
                const rgw_obj& dest_obj,
@@ -4595,7 +4597,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (remote_src || !source_zone.empty()) {
     rgw_zone_set_entry source_trace_entry{source_zone.id, std::nullopt};
     const req_context rctx{dpp, y, nullptr};
-    return fetch_remote_obj(obj_ctx, user_id, info, source_zone,
+    return fetch_remote_obj(obj_ctx, owner.id, info, source_zone,
                dest_obj, src_obj, dest_bucket_info, &src_bucket_info,
                dest_placement, src_mtime, mtime, mod_ptr,
                unmod_ptr, high_precision_time,
@@ -4666,7 +4668,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (remote_dest) {
     /* dest is in a different zonegroup, copy it there */
-    return copy_obj_to_remote_dest(dpp, astate, attrs, read_op, user_id, dest_obj, mtime, y);
+    return copy_obj_to_remote_dest(dpp, astate, attrs, read_op, owner.id, dest_obj, mtime, y);
   }
   uint64_t max_chunk_size;
 
@@ -4733,7 +4735,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
 
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
-    return copy_obj_data(obj_ctx, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
+    return copy_obj_data(obj_ctx, owner, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
                          mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
   }
 
@@ -4831,7 +4833,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.data = &first_chunk;
   write_op.meta.manifest = pmanifest;
   write_op.meta.ptag = &tag;
-  write_op.meta.owner = dest_bucket_info.owner;
+  write_op.meta.owner = owner;
+  write_op.meta.bucket_owner = dest_bucket_info.owner;
   write_op.meta.mtime = mtime;
   write_op.meta.flags = PUT_OBJ_CREATE;
   write_op.meta.category = category;
@@ -4890,6 +4893,7 @@ done_ret:
 
 
 int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
+               const ACLOwner& owner,
                RGWBucketInfo& dest_bucket_info,
                const rgw_placement_rule& dest_placement,
 	       RGWRados::Object::Read& read_op, off_t end,
@@ -4909,7 +4913,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   auto aio = rgw::make_throttle(cct->_conf->rgw_put_obj_min_window_size, y);
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(aio.get(), this, dest_bucket_info,
-                                  &dest_placement, dest_bucket_info.owner,
+                                  &dest_placement, owner,
                                   obj_ctx, dest_obj, olh_epoch, tag, dpp, y);
   int ret = processor.prepare(y);
   if (ret < 0)
@@ -5003,7 +5007,13 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
   attrs.erase(RGW_ATTR_ID_TAG);
   attrs.erase(RGW_ATTR_TAIL_TAG);
 
+  ACLOwner owner;
+  if (auto i = attrs.find(RGW_ATTR_ACL); i != attrs.end()) {
+    (void) decode_policy(dpp, i->second, &owner);
+  }
+
   ret = copy_obj_data(obj_ctx,
+                      owner,
                       bucket_info,
                       placement_rule,
                       read_op,
@@ -6474,9 +6484,9 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
   r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y);
   if (state) {
     if (r >= 0) {
-      bufferlist acl_bl;
+      ACLOwner owner;
       if (iter = attrs.find(RGW_ATTR_ACL); iter != attrs.end()) {
-        acl_bl = iter->second;
+        (void) decode_policy(dpp, iter->second, &owner);
       }
       std::string etag;
       if (iter = attrs.find(RGW_ATTR_ETAG); iter != attrs.end()) {
@@ -6493,7 +6503,7 @@ int RGWRados::set_attrs(const DoutPrefixProvider *dpp, RGWObjectCtx* octx, RGWBu
       uint64_t epoch = ioctx.get_last_version();
       int64_t poolid = ioctx.get_id();
       r = index_op.complete(dpp, poolid, epoch, state->size, state->accounted_size,
-                            mtime, etag, content_type, storage_class, &acl_bl,
+                            mtime, etag, content_type, storage_class, owner,
                             RGWObjCategory::Main, nullptr, y);
     } else {
       int ret = index_op.cancel(dpp, nullptr, y);
@@ -6856,7 +6866,7 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
                                             uint64_t size, uint64_t accounted_size,
                                             const ceph::real_time& ut, const string& etag,
                                             const string& content_type, const string& storage_class,
-                                            bufferlist *acl_bl,
+                                            const ACLOwner& owner,
                                             RGWObjCategory category,
                                             list<rgw_obj_index_key> *remove_objs,
 					    optional_yield y,
@@ -6885,13 +6895,6 @@ int RGWRados::Bucket::UpdateIndex::complete(const DoutPrefixProvider *dpp, int64
   if (user_data)
     ent.meta.user_data = *user_data;
 
-  ACLOwner owner;
-  if (acl_bl && acl_bl->length()) {
-    int ret = store->decode_policy(dpp, *acl_bl, &owner);
-    if (ret < 0) {
-      ldpp_dout(dpp, 0) << "WARNING: could not decode policy ret=" << ret << dendl;
-    }
-  }
   ent.meta.owner = owner.id.to_str();
   ent.meta.owner_display_name = owner.display_name;
   ent.meta.content_type = content_type;

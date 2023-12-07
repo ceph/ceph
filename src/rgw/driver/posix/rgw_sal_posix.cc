@@ -373,7 +373,7 @@ std::string POSIXDriver::zone_unique_trans_id(const uint64_t unique_num)
 std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* _head_obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -390,7 +390,7 @@ std::unique_ptr<Writer> POSIXDriver::get_append_writer(const DoutPrefixProvider 
 std::unique_ptr<Writer> POSIXDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* _head_obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
@@ -1483,7 +1483,7 @@ int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int POSIXObject::copy_object(User* user,
+int POSIXObject::copy_object(const ACLOwner& owner,
                               req_info* info,
                               const rgw_zone_id& source_zone,
                               rgw::sal::Object* dest_object,
@@ -1685,13 +1685,13 @@ int POSIXObject::dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y
     return 0;
 }
 
-int POSIXObject::swift_versioning_restore(bool& restored,
+int POSIXObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
 				       const DoutPrefixProvider* dpp, optional_yield y)
 {
   return 0;
 }
 
-int POSIXObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
+int POSIXObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
 				    optional_yield y)
 {
   return 0;
@@ -2778,7 +2778,7 @@ std::unique_ptr<Writer> POSIXMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* _head_obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)

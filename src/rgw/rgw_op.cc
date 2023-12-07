@@ -4170,7 +4170,7 @@ void RGWPutObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. */
   if (! multipart) {
-    op_ret = s->object->swift_versioning_copy(this, s->yield);
+    op_ret = s->object->swift_versioning_copy(s->owner, this, s->yield);
     if (op_ret < 0) {
       return;
     }
@@ -4215,7 +4215,7 @@ void RGWPutObj::execute(optional_yield y)
     pdest_placement = &s->dest_placement;
     ldpp_dout(this, 20) << "dest_placement for part=" << *pdest_placement << dendl;
     processor = upload->get_writer(this, s->yield, s->object.get(),
-				   s->user->get_id(), pdest_placement,
+				   s->owner, pdest_placement,
 				   multipart_part_num, multipart_part_str);
   } else if(append) {
     if (s->bucket->versioned()) {
@@ -4223,7 +4223,7 @@ void RGWPutObj::execute(optional_yield y)
       return;
     }
     processor = driver->get_append_writer(this, s->yield, s->object.get(),
-					 s->bucket_owner.id,
+					 s->owner,
 					 pdest_placement, s->req_id, position,
 					 &cur_accounted_size);
   } else {
@@ -4236,7 +4236,7 @@ void RGWPutObj::execute(optional_yield y)
       }
     }
     processor = driver->get_atomic_writer(this, s->yield, s->object.get(),
-					 s->bucket_owner.id,
+					 s->owner,
 					 pdest_placement, olh_epoch, s->req_id);
   }
 
@@ -4642,7 +4642,7 @@ void RGWPostObj::execute(optional_yield y)
 
     std::unique_ptr<rgw::sal::Writer> processor;
     processor = driver->get_atomic_writer(this, s->yield, obj.get(),
-					 s->bucket_owner.id,
+					 s->owner,
 					 &s->dest_placement, 0, s->req_id);
     op_ret = processor->prepare(s->yield);
     if (op_ret < 0) {
@@ -5295,7 +5295,7 @@ void RGWDeleteObj::execute(optional_yield y)
     s->object->set_atomic();
     
     bool ver_restored = false;
-    op_ret = s->object->swift_versioning_restore(ver_restored, this, y);
+    op_ret = s->object->swift_versioning_restore(s->owner, ver_restored, this, y);
     if (op_ret < 0) {
       return;
     }
@@ -5766,12 +5766,12 @@ void RGWCopyObj::execute(optional_yield y)
 
   /* Handle object versioning of Swift API. In case of copying to remote this
    * should fail gently (op_ret == 0) as the dst_obj will not exist here. */
-  op_ret = s->object->swift_versioning_copy(this, s->yield);
+  op_ret = s->object->swift_versioning_copy(s->owner, this, s->yield);
   if (op_ret < 0) {
     return;
   }
 
-  op_ret = s->src_object->copy_object(s->user.get(),
+  op_ret = s->src_object->copy_object(s->owner,
 	   &s->info,
 	   source_zone,
 	   s->object.get(),
@@ -7781,8 +7781,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   dest_placement.inherit_from(bucket->get_placement_rule());
 
   std::unique_ptr<rgw::sal::Writer> processor;
-  processor = driver->get_atomic_writer(this, s->yield, obj.get(),
-				       bowner.id,
+  processor = driver->get_atomic_writer(this, s->yield, obj.get(), bowner,
 				       &s->dest_placement, 0, s->req_id);
   op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {

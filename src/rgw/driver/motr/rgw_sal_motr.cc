@@ -1509,7 +1509,7 @@ int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, b
   return del_op.delete_obj(dpp, y);
 }
 
-int MotrObject::copy_object(User* user,
+int MotrObject::copy_object(const ACLOwner& owner,
     req_info* info,
     const rgw_zone_id& source_zone,
     rgw::sal::Object* dest_object,
@@ -1540,13 +1540,13 @@ int MotrObject::copy_object(User* user,
       return 0;
 }
 
-int MotrObject::swift_versioning_restore(bool& restored,
+int MotrObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
     const DoutPrefixProvider* dpp)
 {
   return 0;
 }
 
-int MotrObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
+int MotrObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
     optional_yield y)
 {
   return 0;
@@ -1556,7 +1556,7 @@ MotrAtomicWriter::MotrAtomicWriter(const DoutPrefixProvider *dpp,
           optional_yield y,
           rgw::sal::Object* obj,
           MotrStore* _store,
-          const rgw_user& _owner,
+          const ACLOwner& _owner,
           const rgw_placement_rule *_ptail_placement_rule,
           uint64_t _olh_epoch,
           const std::string& _unique_tag) :
@@ -2933,7 +2933,7 @@ std::unique_ptr<Writer> MotrMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
@@ -3077,7 +3077,7 @@ std::unique_ptr<MultipartUpload> MotrBucket::get_multipart_upload(const std::str
 std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
         rgw::sal::Object* obj,
-        const rgw_user& owner,
+        const ACLOwner& owner,
         const rgw_placement_rule *ptail_placement_rule,
         const std::string& unique_tag,
         uint64_t position,
@@ -3088,7 +3088,7 @@ std::unique_ptr<Writer> MotrStore::get_append_writer(const DoutPrefixProvider *d
 std::unique_ptr<Writer> MotrStore::get_atomic_writer(const DoutPrefixProvider *dpp,
         optional_yield y,
         rgw::sal::Object* obj,
-        const rgw_user& owner,
+        const ACLOwner& owner,
         const rgw_placement_rule *ptail_placement_rule,
         uint64_t olh_epoch,
         const std::string& unique_tag) {

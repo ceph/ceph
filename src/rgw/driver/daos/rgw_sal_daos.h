@@ -600,7 +600,7 @@ class DaosObject : public StoreObject {
   virtual int delete_object(const DoutPrefixProvider* dpp, optional_yield y,
                             bool prevent_versioning = false) override;
   virtual int copy_object(
-      User* user, req_info* info, const rgw_zone_id& source_zone,
+      const ACLOwner& owner, req_info* info, const rgw_zone_id& source_zone,
       rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
       rgw::sal::Bucket* src_bucket, const rgw_placement_rule& dest_placement,
       ceph::real_time* src_mtime, ceph::real_time* mtime,
@@ -654,9 +654,9 @@ class DaosObject : public StoreObject {
                               Formatter* f) override;
 
   /* Swift versioning */
-  virtual int swift_versioning_restore(bool& restored,
+  virtual int swift_versioning_restore(const ACLOwner& owner, bool& restored,
                                        const DoutPrefixProvider* dpp) override;
-  virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
+  virtual int swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
                                     optional_yield y) override;
 
   /* OPs */
@@ -717,7 +717,7 @@ class MPDaosSerializer : public StoreMPSerializer {
 class DaosAtomicWriter : public StoreWriter {
  protected:
   rgw::sal::DaosStore* store;
-  const rgw_user& owner;
+  const ACLOwner& owner;
   const rgw_placement_rule* ptail_placement_rule;
   uint64_t olh_epoch;
   const std::string& unique_tag;
@@ -766,7 +766,7 @@ class DaosMultipartWriter : public StoreWriter {
   DaosMultipartWriter(const DoutPrefixProvider* dpp, optional_yield y,
                       MultipartUpload* _upload,
                       rgw::sal::Object* obj,
-                      DaosStore* _store, const rgw_user& owner,
+                      DaosStore* _store, const ACLOwner& owner,
                       const rgw_placement_rule* ptail_placement_rule,
                       uint64_t _part_num, const std::string& part_num_str)
       : StoreWriter(dpp, y),
@@ -859,7 +859,7 @@ class DaosMultipartUpload : public StoreMultipartUpload {
                        rgw::sal::Attrs* attrs = nullptr) override;
   virtual std::unique_ptr<Writer> get_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
-      rgw::sal::Object* obj, const rgw_user& owner,
+      rgw::sal::Object* obj, const ACLOwner& owner,
       const rgw_placement_rule* ptail_placement_rule, uint64_t part_num,
       const std::string& part_num_str) override;
   const std::string& get_bucket_name() { return bucket->get_name(); }
@@ -997,13 +997,13 @@ class DaosStore : public StoreDriver {
       std::vector<std::unique_ptr<RGWOIDCProvider>>& providers) override;
   virtual std::unique_ptr<Writer> get_append_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
-      rgw::sal::Object* obj, const rgw_user& owner,
+      rgw::sal::Object* obj, const ACLOwner& owner,
       const rgw_placement_rule* ptail_placement_rule,
       const std::string& unique_tag, uint64_t position,
       uint64_t* cur_accounted_size) override;
   virtual std::unique_ptr<Writer> get_atomic_writer(
       const DoutPrefixProvider* dpp, optional_yield y,
-      rgw::sal::Object* obj, const rgw_user& owner,
+      rgw::sal::Object* obj, const ACLOwner& owner,
       const rgw_placement_rule* ptail_placement_rule, uint64_t olh_epoch,
       const std::string& unique_tag) override;
   virtual const std::string& get_compression_type(

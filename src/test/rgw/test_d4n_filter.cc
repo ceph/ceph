@@ -130,7 +130,7 @@ class D4NFilterFixture : public ::testing::Test {
     int putObject(string name) {
       string object_name = "test_object_" + name;
       unique_ptr<rgw::sal::Object> obj = testBucket->get_object(rgw_obj_key(object_name));
-      rgw_user owner;
+      ACLOwner owner;
       rgw_placement_rule ptail_placement_rule;
       uint64_t olh_epoch = 123;
       string unique_tag;
@@ -310,6 +310,7 @@ TEST_F(D4NFilterFixture, CopyObjectNone) {
   ASSERT_NE(nextObject->get_attrs().empty(), true);
 
   /* Update object */
+  ACLOwner owner;
   RGWEnv rgw_env;
   req_info info(get_pointer(env->cct), &rgw_env);
   rgw_zone_id source_zone;
@@ -328,7 +329,7 @@ TEST_F(D4NFilterFixture, CopyObjectNone) {
   string tag;
   string etag;
 
-  EXPECT_EQ(testObject_CopyObjectNone->copy_object(testUser.get(),
+  EXPECT_EQ(testObject_CopyObjectNone->copy_object(owner,
 			      &info, source_zone, testObject_CopyObjectNone.get(),
 			      testBucket.get(), testBucket.get(),
                               dest_placement, &src_mtime, &mtime,
@@ -379,7 +380,7 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
   /* Copy to new object */
   unique_ptr<rgw::sal::Writer> testWriterCopy = nullptr;
   unique_ptr<rgw::sal::Object> obj = testBucket->get_object(rgw_obj_key("test_object_copy"));
-  rgw_user owner;
+  ACLOwner owner;
   rgw_placement_rule ptail_placement_rule;
   uint64_t olh_epoch_copy = 123;
   string unique_tag;
@@ -433,7 +434,7 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
-  EXPECT_EQ(testObject_CopyObjectReplace->copy_object(testUser.get(),
+  EXPECT_EQ(testObject_CopyObjectReplace->copy_object(owner,
 			      &info, source_zone, testObject_copy.get(),
 			      testBucket.get(), testBucket.get(),
                               dest_placement, &src_mtime, &mtime,
@@ -502,7 +503,7 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
   unique_ptr<rgw::sal::Writer> testWriterCopy = nullptr;
   string object_name = "test_object_copy";
   unique_ptr<rgw::sal::Object> obj = testBucket->get_object(rgw_obj_key(object_name));
-  rgw_user owner;
+  ACLOwner owner;
   rgw_placement_rule ptail_placement_rule;
   uint64_t olh_epoch_copy = 123;
   string unique_tag;
@@ -558,7 +559,7 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
-  EXPECT_EQ(testObject_CopyObjectMerge->copy_object(testUser.get(),
+  EXPECT_EQ(testObject_CopyObjectMerge->copy_object(owner,
 			      &info, source_zone, testObject_copy.get(),
 			      testBucket.get(), testBucket.get(),
                               dest_placement, &src_mtime, &mtime,
@@ -1135,6 +1136,7 @@ TEST_F(D4NFilterFixture, PrepareCopyObject) {
 
   /* Update object */
   RGWEnv rgw_env;
+  ACLOwner owner;
   req_info info(get_pointer(env->cct), &rgw_env);
   rgw_zone_id source_zone;
   rgw_placement_rule dest_placement; 
@@ -1152,7 +1154,7 @@ TEST_F(D4NFilterFixture, PrepareCopyObject) {
   string tag;
   string etag;
 
-  EXPECT_EQ(testObject_PrepareCopyObject->copy_object(testUser.get(),
+  EXPECT_EQ(testObject_PrepareCopyObject->copy_object(owner,
 			      &info, source_zone, testObject_PrepareCopyObject.get(),
 			      testBucket.get(), testBucket.get(),
                               dest_placement, &src_mtime, &mtime,
@@ -1836,7 +1838,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
   
   /* Prepare, process, and complete object write */
   unique_ptr<rgw::sal::Object> obj = testBucket->get_object(rgw_obj_key("test_object_DataCheck"));
-  rgw_user owner;
+  ACLOwner owner;
   rgw_placement_rule ptail_placement_rule;
   uint64_t olh_epoch = 123;
   string unique_tag;

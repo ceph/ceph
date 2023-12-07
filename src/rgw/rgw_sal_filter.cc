@@ -432,7 +432,7 @@ int FilterDriver::get_oidc_providers(const DoutPrefixProvider *dpp,
 std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -449,7 +449,7 @@ std::unique_ptr<Writer> FilterDriver::get_append_writer(const DoutPrefixProvider
 std::unique_ptr<Writer> FilterDriver::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
@@ -760,7 +760,7 @@ int FilterObject::delete_object(const DoutPrefixProvider* dpp,
   return next->delete_object(dpp, y, prevent_versioning);
 }
 
-int FilterObject::copy_object(User* user,
+int FilterObject::copy_object(const ACLOwner& owner,
 			      req_info* info,
 			      const rgw_zone_id& source_zone,
 			      rgw::sal::Object* dest_object,
@@ -788,7 +788,7 @@ int FilterObject::copy_object(User* user,
 			      const DoutPrefixProvider* dpp,
 			      optional_yield y)
 {
-  return next->copy_object(user, info, source_zone,
+  return next->copy_object(owner, info, source_zone,
 			   nextObject(dest_object),
 			   nextBucket(dest_bucket),
 			   nextBucket(src_bucket),
@@ -892,16 +892,16 @@ void FilterObject::set_bucket(Bucket* b)
   next->set_bucket(nextBucket(b));
 };
 
-int FilterObject::swift_versioning_restore(bool& restored,
+int FilterObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
 					   const DoutPrefixProvider* dpp, optional_yield y)
 {
-  return next->swift_versioning_restore(restored, dpp, y);
+  return next->swift_versioning_restore(owner, restored, dpp, y);
 }
 
-int FilterObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
+int FilterObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
 					optional_yield y)
 {
-  return next->swift_versioning_copy(dpp, y);
+  return next->swift_versioning_copy(owner, dpp, y);
 }
 
 std::unique_ptr<Object::ReadOp> FilterObject::get_read_op()
@@ -1055,7 +1055,7 @@ std::unique_ptr<Writer> FilterMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)

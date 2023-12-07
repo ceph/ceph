@@ -1206,7 +1206,7 @@ int DaosObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y,
 }
 
 int DaosObject::copy_object(
-    User* user, req_info* info, const rgw_zone_id& source_zone,
+    const ACLOwner& owner, req_info* info, const rgw_zone_id& source_zone,
     rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
     rgw::sal::Bucket* src_bucket, const rgw_placement_rule& dest_placement,
     ceph::real_time* src_mtime, ceph::real_time* mtime,
@@ -1220,12 +1220,12 @@ int DaosObject::copy_object(
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosObject::swift_versioning_restore(bool& restored,
+int DaosObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
                                          const DoutPrefixProvider* dpp) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
-int DaosObject::swift_versioning_copy(const DoutPrefixProvider* dpp,
+int DaosObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
                                       optional_yield y) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
@@ -1975,7 +1975,7 @@ int DaosMultipartUpload::get_info(const DoutPrefixProvider* dpp,
 
 std::unique_ptr<Writer> DaosMultipartUpload::get_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    rgw::sal::Object* obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t part_num,
     const std::string& part_num_str) {
   ldpp_dout(dpp, 20) << "DaosMultipartUpload::get_writer(): enter part="
@@ -2119,7 +2119,7 @@ std::unique_ptr<MultipartUpload> DaosBucket::get_multipart_upload(
 
 std::unique_ptr<Writer> DaosStore::get_append_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    rgw::sal::Object* obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule,
     const std::string& unique_tag, uint64_t position,
     uint64_t* cur_accounted_size) {
@@ -2129,7 +2129,7 @@ std::unique_ptr<Writer> DaosStore::get_append_writer(
 
 std::unique_ptr<Writer> DaosStore::get_atomic_writer(
     const DoutPrefixProvider* dpp, optional_yield y,
-    rgw::sal::Object* obj, const rgw_user& owner,
+    rgw::sal::Object* obj, const ACLOwner& owner,
     const rgw_placement_rule* ptail_placement_rule, uint64_t olh_epoch,
     const std::string& unique_tag) {
   ldpp_dout(dpp, 20) << "get_atomic_writer" << dendl;

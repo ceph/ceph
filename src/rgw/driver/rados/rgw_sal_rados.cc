@@ -1398,7 +1398,7 @@ int RadosStore::get_oidc_providers(const DoutPrefixProvider *dpp,
 std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -1418,7 +1418,7 @@ std::unique_ptr<Writer> RadosStore::get_append_writer(const DoutPrefixProvider *
 std::unique_ptr<Writer> RadosStore::get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag)
@@ -2026,7 +2026,7 @@ int RadosObject::delete_object(const DoutPrefixProvider* dpp,
   return del_op.delete_obj(y, dpp);
 }
 
-int RadosObject::copy_object(User* user,
+int RadosObject::copy_object(const ACLOwner& owner,
 				req_info* info,
 				const rgw_zone_id& source_zone,
 				rgw::sal::Object* dest_object,
@@ -2055,7 +2055,7 @@ int RadosObject::copy_object(User* user,
 				optional_yield y)
 {
   return store->getRados()->copy_obj(*rados_ctx,
-				     user->get_id(),
+				     owner,
 				     info,
 				     source_zone,
 				     dest_object->get_obj(),
@@ -2090,22 +2090,22 @@ int RadosObject::RadosReadOp::iterate(const DoutPrefixProvider* dpp, int64_t ofs
   return parent_op.iterate(dpp, ofs, end, cb, y);
 }
 
-int RadosObject::swift_versioning_restore(bool& restored,
+int RadosObject::swift_versioning_restore(const ACLOwner& owner, bool& restored,
 					  const DoutPrefixProvider* dpp, optional_yield y)
 {
   rgw_obj obj = get_obj();
   return store->getRados()->swift_versioning_restore(*rados_ctx,
-						     bucket->get_owner(),
+						     owner,
 						     bucket->get_info(),
 						     obj,
 						     restored,
 						     dpp, y);
 }
 
-int RadosObject::swift_versioning_copy(const DoutPrefixProvider* dpp, optional_yield y)
+int RadosObject::swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp, optional_yield y)
 {
   return store->getRados()->swift_versioning_copy(*rados_ctx,
-                                        bucket->get_info().owner,
+                                        owner,
                                         bucket->get_info(),
                                         get_obj(),
                                         dpp,
@@ -2268,13 +2268,16 @@ int RadosMultipartUpload::init(const DoutPrefixProvider *dpp, optional_yield y, 
     obj->set_in_extra_data(true);
     obj->set_hash_source(oid);
 
-    RGWRados::Object op_target(store->getRados(),
-			       obj->get_bucket()->get_info(),
+
+    const RGWBucketInfo& bucket_info = obj->get_bucket()->get_info();
+
+    RGWRados::Object op_target(store->getRados(), bucket_info,
 			       obj_ctx, obj->get_obj());
     RGWRados::Object::Write obj_op(&op_target);
 
     op_target.set_versioning_disabled(true); /* no versioning for multipart meta */
-    obj_op.meta.owner = owner.id;
+    obj_op.meta.owner = owner;
+    obj_op.meta.bucket_owner = bucket_info.owner;
     obj_op.meta.category = RGWObjCategory::MultiMeta;
     obj_op.meta.flags = PUT_OBJ_CREATE_EXCL;
     obj_op.meta.mtime = &mtime;
@@ -2553,8 +2556,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
 
   target_obj->set_atomic();
 
-  RGWRados::Object op_target(store->getRados(),
-			     target_obj->get_bucket()->get_info(),
+  const RGWBucketInfo& bucket_info = target_obj->get_bucket()->get_info();
+  RGWRados::Object op_target(store->getRados(), bucket_info,
 			     dynamic_cast<RadosObject*>(target_obj)->get_ctx(),
 			     target_obj->get_obj());
   RGWRados::Object::Write obj_op(&op_target);
@@ -2563,7 +2566,8 @@ int RadosMultipartUpload::complete(const DoutPrefixProvider *dpp,
   obj_op.meta.remove_objs = &remove_objs;
 
   obj_op.meta.ptag = &tag; /* use req_id as operation tag */
-  obj_op.meta.owner = owner.id;
+  obj_op.meta.owner = owner;
+  obj_op.meta.bucket_owner = bucket_info.owner;
   obj_op.meta.flags = PUT_OBJ_CREATE;
   obj_op.meta.modify_tail = true;
   obj_op.meta.completeMultipart = true;
@@ -2657,7 +2661,7 @@ std::unique_ptr<Writer> RadosMultipartUpload::get_writer(
 				  const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t part_num,
 				  const std::string& part_num_str)
