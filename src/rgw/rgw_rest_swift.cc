@@ -606,8 +606,7 @@ static int get_swift_container_settings(req_state * const s,
 
   if (read_list || write_list) {
     int r = rgw::swift::create_container_policy(s, driver,
-                                                s->user->get_id(),
-                                                s->user->get_display_name(),
+                                                s->owner,
                                                 read_list,
                                                 write_list,
                                                 *rw_mask,
@@ -720,7 +719,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
   }
 
   if (!has_policy) {
-    policy.create_default(s->user->get_id(), s->user->get_display_name());
+    policy.create_default(s->owner.id, s->owner.display_name);
   }
 
   location_constraint = driver->get_zone()->get_zonegroup().get_api_name();
@@ -945,7 +944,7 @@ int RGWPutObj_ObjStore_SWIFT::get_params(optional_yield y)
     }
   }
 
-  policy.create_default(s->user->get_id(), s->user->get_display_name());
+  policy.create_default(s->owner.id, s->owner.display_name);
 
   int r = get_delete_at_param(s, delete_at);
   if (r < 0) {
@@ -1064,9 +1063,7 @@ static int get_swift_account_settings(req_state * const s,
 
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
-    int r = rgw::swift::create_account_policy(s, driver,
-                                              s->user->get_id(),
-                                              s->user->get_display_name(),
+    int r = rgw::swift::create_account_policy(s, driver, s->owner,
                                               acl_attr, policy);
     if (r < 0) {
       return r;
@@ -1374,7 +1371,7 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, req_state * cons
 
 int RGWCopyObj_ObjStore_SWIFT::init_dest_policy()
 {
-  dest_policy.create_default(s->user->get_id(), s->user->get_display_name());
+  dest_policy.create_default(s->owner.id, s->owner.display_name);
 
   return 0;
 }
@@ -2142,7 +2139,7 @@ int RGWFormPost::get_params(optional_yield y)
     return ret;
   }
 
-  policy.create_default(s->user->get_id(), s->user->get_display_name());
+  policy.create_default(s->owner.id, s->owner.display_name);
 
   /* Let's start parsing the HTTP body by parsing each form part step-
    * by-step till encountering the first part with file data. */
