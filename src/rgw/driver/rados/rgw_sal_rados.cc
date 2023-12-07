@@ -1002,7 +1002,7 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 
     if (!uploads.empty()) {
       for (const auto& upload : uploads) {
-	ret = upload->abort(dpp, cct);
+	ret = upload->abort(dpp, cct, true);
         if (ret < 0) {
 	  // we're doing a best-effort; if something cannot be found,
 	  // log it and keep moving forward

@@ -2012,7 +2012,7 @@ namespace rgw {
     op_ret = processor->complete(state->obj_size, etag, &mtime, real_time(), attrs,
                                  (delete_at ? *delete_at : real_time()),
                                 if_match, if_nomatch, nullptr, nullptr, nullptr,
-                                state->yield);
+                                state->yield, true);
     if (op_ret != 0) {
       /* revert attr updates */
       rgw_fh->set_mtime(omtime);
