@@ -292,8 +292,7 @@ int rgw_op_get_bucket_policy_from_attr(const DoutPrefixProvider *dpp,
 static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp, 
                                     CephContext *cct,
 				    rgw::sal::Driver* driver,
-				    RGWBucketInfo& bucket_info,
-				    map<string, bufferlist>& bucket_attrs,
+				    const ACLOwner& bucket_owner,
 				    RGWAccessControlPolicy& policy,
                                     string *storage_class,
 				    rgw::sal::Object* obj,
@@ -312,12 +311,8 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
   } else if (ret == -ENODATA) {
     /* object exists, but policy is broken */
     ldpp_dout(dpp, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(bucket_info.owner);
-    ret = user->load_user(dpp, y);
-    if (ret < 0)
-      return ret;
-
-    policy.create_default(bucket_info.owner, user->get_display_name());
+    policy.create_default(bucket_owner.id, bucket_owner.display_name);
+    ret = 0;
   }
 
   if (storage_class) {
@@ -443,9 +438,8 @@ static int read_obj_policy(const DoutPrefixProvider *dpp,
   }
   policy = get_iam_policy_from_attr(s->cct, bucket_attrs, bucket->get_tenant());
 
-  int ret = get_obj_policy_from_attr(dpp, s->cct, driver, bucket_info,
-				     bucket_attrs, acl, storage_class, object,
-				     s->yield);
+  int ret = get_obj_policy_from_attr(dpp, s->cct, driver, s->bucket_owner,
+				     acl, storage_class, object, s->yield);
   if (ret == -ENOENT) {
     /* object does not exist checking the bucket's ACL to make sure
        that we send a proper error code */
@@ -524,13 +518,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     }
   }
 
-  struct {
-    rgw_user uid;
-    std::string display_name;
-  } acct_acl_user = {
-    s->user->get_id(),
-    s->user->get_display_name(),
-  };
+  // ACLOwner for swift's s->user_acl. may be retargeted to s->bucket_owner
+  const ACLOwner* acct_acl_user = &s->owner;
 
   if (!s->bucket_name.empty()) {
     s->bucket_exists = true;
@@ -560,12 +549,9 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
     ret = read_bucket_policy(dpp, driver, s, s->bucket->get_info(),
 			     s->bucket->get_attrs(),
 			     s->bucket_acl, s->bucket->get_key(), y);
-    acct_acl_user = {
-      s->bucket->get_info().owner,
-      s->bucket_acl.get_owner().display_name,
-    };
 
     s->bucket_owner = s->bucket_acl.get_owner();
+    acct_acl_user = &s->bucket_owner;
 
     s->zonegroup_endpoint = rgw::get_zonegroup_endpoint(zonegroup);
     s->zonegroup_name = zonegroup.get_name();
@@ -602,7 +588,7 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
 
   /* handle user ACL only for those APIs which support it */
   if (s->dialect == "swift" && !s->user->get_id().empty()) {
-    std::unique_ptr<rgw::sal::User> acl_user = driver->get_user(acct_acl_user.uid);
+    std::unique_ptr<rgw::sal::User> acl_user = driver->get_user(acct_acl_user->id);
 
     ret = acl_user->read_attrs(dpp, y);
     if (!ret) {
@@ -616,8 +602,8 @@ int rgw_build_bucket_policies(const DoutPrefixProvider *dpp, rgw::sal::Driver* d
        *  1. if we try to reach an existing bucket, its owner is considered
        *     as account owner.
        *  2. otherwise account owner is identity stored in s->user->user_id.  */
-      s->user_acl.create_default(acct_acl_user.uid,
-                                 acct_acl_user.display_name);
+      s->user_acl.create_default(acct_acl_user->id,
+                                 acct_acl_user->display_name);
       ret = 0;
     } else if (ret < 0) {
       ldpp_dout(dpp, 0) << "NOTICE: couldn't get user attrs for handling ACL "
@@ -3517,9 +3503,8 @@ void RGWCreateBucket::execute(optional_yield y)
     }
   }
 
-  s->bucket_owner.id = s->user->get_id();
-  s->bucket_owner.display_name = s->user->get_display_name();
-  createparams.owner = s->user->get_id();
+  s->bucket_owner = policy.get_owner();
+  createparams.owner = s->bucket_owner.id;
 
   buffer::list aclbl;
   policy.encode(aclbl);
@@ -7706,7 +7691,7 @@ int RGWBulkUploadOp::handle_dir(const std::string_view path, optional_yield y)
   {
     // create a default acl
     RGWAccessControlPolicy policy;
-    policy.create_default(s->user->get_id(), s->user->get_display_name());
+    policy.create_default(s->owner.id, s->owner.display_name);
     ceph::bufferlist aclbl;
     policy.encode(aclbl);
     createparams.attrs[RGW_ATTR_ACL] = std::move(aclbl);
@@ -7941,7 +7926,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
 
   /* Create metadata: ACLs. */
   RGWAccessControlPolicy policy;
-  policy.create_default(s->user->get_id(), s->user->get_display_name());
+  policy.create_default(s->owner.id, s->owner.display_name);
   ceph::bufferlist aclbl;
   policy.encode(aclbl);
   attrs.emplace(RGW_ATTR_ACL, std::move(aclbl));

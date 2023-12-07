@@ -171,14 +171,13 @@ namespace rgw::swift {
 
 int create_container_policy(const DoutPrefixProvider *dpp,
                             rgw::sal::Driver* driver,
-                            const rgw_user& id,
-                            const std::string& name,
+                            const ACLOwner& owner,
                             const char* read_list,
                             const char* write_list,
                             uint32_t& rw_mask,
                             RGWAccessControlPolicy& policy)
 {
-  policy.create_default(id, name);
+  policy.create_default(owner.id, owner.display_name);
   auto& acl = policy.get_acl();
 
   if (read_list) {
@@ -279,12 +278,11 @@ void format_container_acls(const RGWAccessControlPolicy& policy,
 
 int create_account_policy(const DoutPrefixProvider* dpp,
                           rgw::sal::Driver* driver,
-                          const rgw_user& id,
-                          const std::string& name,
+                          const ACLOwner& owner,
                           const std::string& acl_str,
                           RGWAccessControlPolicy& policy)
 {
-  policy.create_default(id, name);
+  policy.create_default(owner.id, owner.display_name);
   auto& acl = policy.get_acl();
 
   JSONParser parser;
