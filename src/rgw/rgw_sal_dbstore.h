@@ -478,7 +478,7 @@ protected:
     virtual std::unique_ptr<Writer> get_writer(const DoutPrefixProvider *dpp,
 			  optional_yield y,
 			  rgw::sal::Object* obj,
-			  const rgw_user& owner,
+			  const ACLOwner& owner,
 			  const rgw_placement_rule *ptail_placement_rule,
 			  uint64_t part_num,
 			  const std::string& part_num_str) override;
@@ -546,7 +546,7 @@ protected:
       virtual int delete_object(const DoutPrefixProvider* dpp,
           optional_yield y,
           uint32_t flags) override;
-      virtual int copy_object(User* user,
+      virtual int copy_object(const ACLOwner& owner,
           req_info* info, const rgw_zone_id& source_zone,
           rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
           rgw::sal::Bucket* src_bucket,
@@ -587,9 +587,9 @@ protected:
       virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
       /* Swift versioning */
-      virtual int swift_versioning_restore(bool& restored,
+      virtual int swift_versioning_restore(const ACLOwner& owner, bool& restored,
           const DoutPrefixProvider* dpp, optional_yield y) override;
-      virtual int swift_versioning_copy(const DoutPrefixProvider* dpp,
+      virtual int swift_versioning_copy(const ACLOwner& owner, const DoutPrefixProvider* dpp,
           optional_yield y) override;
 
       /* OPs */
@@ -619,7 +619,7 @@ protected:
   class DBAtomicWriter : public StoreWriter {
     protected:
     rgw::sal::DBStore* store;
-    const rgw_user& owner;
+    const ACLOwner& owner;
 	const rgw_placement_rule *ptail_placement_rule;
 	uint64_t olh_epoch;
 	const std::string& unique_tag;
@@ -638,7 +638,7 @@ protected:
 	    	    optional_yield y,
 		        rgw::sal::Object* obj,
 		        DBStore* _store,
-    		    const rgw_user& _owner,
+    		    const ACLOwner& _owner,
 	    	    const rgw_placement_rule *_ptail_placement_rule,
 		        uint64_t _olh_epoch,
 		        const std::string& _unique_tag);
@@ -665,7 +665,7 @@ protected:
   class DBMultipartWriter : public StoreWriter {
   protected:
     rgw::sal::DBStore* store;
-    const rgw_user& owner;
+    const ACLOwner& owner;
 	const rgw_placement_rule *ptail_placement_rule;
 	uint64_t olh_epoch;
     rgw::sal::Object* head_obj;
@@ -688,7 +688,7 @@ public:
 		       optional_yield y, MultipartUpload* upload,
 		       rgw::sal::Object* obj,
 		       DBStore* _store,
-		       const rgw_user& owner,
+		       const ACLOwner& owner,
 		       const rgw_placement_rule *ptail_placement_rule,
 		       uint64_t part_num, const std::string& part_num_str);
     ~DBMultipartWriter() = default;
@@ -835,7 +835,7 @@ public:
       virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  const std::string& unique_tag,
 				  uint64_t position,
@@ -843,7 +843,7 @@ public:
       virtual std::unique_ptr<Writer> get_atomic_writer(const DoutPrefixProvider *dpp,
 				  optional_yield y,
 				  rgw::sal::Object* obj,
-				  const rgw_user& owner,
+				  const ACLOwner& owner,
 				  const rgw_placement_rule *ptail_placement_rule,
 				  uint64_t olh_epoch,
 				  const std::string& unique_tag) override;
