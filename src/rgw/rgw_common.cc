@@ -1186,7 +1186,7 @@ bool verify_user_permission_no_policy(const DoutPrefixProvider* dpp,
     return false;
 
   /* S3 doesn't support account ACLs, so user_acl will be uninitialized. */
-  if (user_acl.get_owner().id.empty())
+  if (user_acl.empty())
     return true;
 
   if ((perm & (int)s->perm_mask) != perm)

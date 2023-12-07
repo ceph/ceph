@@ -244,7 +244,7 @@ void format_container_acls(const RGWAccessControlPolicy& policy,
     std::string id;
     std::string url_spec;
     if (const auto user = grant.get_user(); user) {
-      id = user->id.to_str();
+      id = to_string(user->id);
     } else if (const auto group = grant.get_group(); group) {
       if (group->type == ACL_GROUP_ALL_USERS) {
         id = SWIFT_GROUP_ALL_USERS;
@@ -340,7 +340,7 @@ auto format_account_acl(const RGWAccessControlPolicy& policy)
       if (owner.id == user->id) {
         continue;
       }
-      id = user->id.to_str();
+      id = to_string(user->id);
     } else if (const auto group = grant.get_group(); group) {
       if (group->type != ACL_GROUP_ALL_USERS) {
         continue;

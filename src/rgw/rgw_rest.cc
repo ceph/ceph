@@ -498,15 +498,22 @@ void dump_time(req_state *s, const char *name, real_time t)
   s->formatter->dump_string(name, buf);
 }
 
-void dump_owner(req_state *s, const rgw_user& id, const string& name,
+void dump_owner(req_state *s, const std::string& id, const string& name,
 		const char *section)
 {
   if (!section)
     section = "Owner";
   s->formatter->open_object_section(section);
-  s->formatter->dump_string("ID", id.to_str());
+  s->formatter->dump_string("ID", id);
   s->formatter->dump_string("DisplayName", name);
   s->formatter->close_section();
+}
+
+void dump_owner(req_state *s, const rgw_owner& owner, const string& name,
+		const char *section)
+{
+  std::string id = to_string(owner);
+  dump_owner(s, id, name, section);
 }
 
 void dump_access_control(req_state *s, const char *origin,

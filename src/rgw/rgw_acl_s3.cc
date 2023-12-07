@@ -171,8 +171,7 @@ bool ACLOwner_S3::xml_end(const char *el) {
 
 void to_xml(const ACLOwner& o, std::ostream& out)
 {
-  string s;
-  o.id.to_str(s);
+  const std::string s = to_string(o.id);
   if (s.empty())
     return;
   out << "<Owner>" << "<ID>" << s << "</ID>";
@@ -366,7 +365,7 @@ static int parse_acl_header(const DoutPrefixProvider* dpp, rgw::sal::Driver* dri
 static int create_canned(const ACLOwner& owner, const ACLOwner& bucket_owner,
                          const string& canned_acl, RGWAccessControlList& acl)
 {
-  const rgw_user& bid = bucket_owner.id;
+  const rgw_owner& bid = bucket_owner.id;
   const std::string& bname = bucket_owner.display_name;
 
   /* owner gets full control */
@@ -600,7 +599,7 @@ int parse_policy(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   ACLOwner& owner = policy.get_owner();
-  owner.id = xml_owner->id;
+  owner.id = parse_owner(xml_owner->id);
   if (!xml_owner->display_name.empty()) {
     owner.display_name = xml_owner->display_name;
   } else {
@@ -641,7 +640,7 @@ int create_canned_acl(const ACLOwner& owner,
                       const std::string& canned_acl,
                       RGWAccessControlPolicy& policy)
 {
-  if (owner.id == rgw_user("anonymous")) {
+  if (owner.id == parse_owner("anonymous")) {
     policy.set_owner(bucket_owner);
   } else {
     policy.set_owner(owner);

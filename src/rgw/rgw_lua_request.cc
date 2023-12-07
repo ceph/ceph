@@ -262,7 +262,7 @@ struct OwnerMetaTable : public EmptyMetaTable {
     if (strcasecmp(index, "DisplayName") == 0) {
       pushstring(L, owner->display_name);
     } else if (strcasecmp(index, "User") == 0) {
-      create_metatable<UserMetaTable>(L, name, index, false, &owner->id);
+      pushstring(L, to_string(owner->id));
     } else {
       return error_unknown_field(L, index, name);
     }
@@ -365,8 +365,7 @@ struct GrantMetaTable : public EmptyMetaTable {
       lua_pushinteger(L, grant->get_type().get_type());
     } else if (strcasecmp(index, "User") == 0) {
       if (const auto user = grant->get_user(); user) {
-        create_metatable<UserMetaTable>(L, name, index, false, 
-            const_cast<rgw_user*>(&user->id));
+        pushstring(L, to_string(user->id));
       } else {
         lua_pushnil(L);
       }
