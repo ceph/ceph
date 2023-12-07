@@ -533,7 +533,9 @@ public:
 
   void print(std::ostream& os) const;
   void dump_primary(Formatter*);
-  seastar::future<> submit_error_log(
+  seastar::future<> complete_error_log(const ceph_tid_t& rep_tid,
+                                       const eversion_t& version);
+  seastar::future<std::optional<eversion_t>> submit_error_log(
     Ref<MOSDOp> m,
     const OpInfo &op_info,
     ObjectContextRef obc,
@@ -791,7 +793,6 @@ private:
   };
 
   std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
-  std::map<ceph_tid_t, eversion_t> log_entry_version;
   // snap trimming
   interval_set<snapid_t> snap_trimq;
 };
