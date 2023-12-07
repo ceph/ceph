@@ -530,10 +530,6 @@ void rgw_pubsub_dest::decode_json(JSONObj* f) {
                                                      : std::stoul(sleep_dur);
 }
 
-RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver, const std::string& _tenant)
-  : driver(_driver), tenant(_tenant)
-{}
-
 RGWPubSub::RGWPubSub(rgw::sal::Driver* _driver,
                      const std::string& _tenant,
                      const rgw::SiteConfig& site)
