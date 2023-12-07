@@ -26,6 +26,7 @@ namespace auth {
 std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
+                       const std::string& display_name,
                        const int perm_mask,
                        const bool admin,
                        const uint32_t type)
@@ -40,20 +41,30 @@ transform_old_authinfo(CephContext* const cct,
      * the identity info as this was the policy for doing that before the
      * new auth. */
     const rgw_user id;
+    const std::string display_name;
     const int perm_mask;
     const bool admin;
     const uint32_t type;
   public:
     DummyIdentityApplier(CephContext* const cct,
                          const rgw_user& auth_id,
+                         const std::string display_name,
                          const int perm_mask,
                          const bool admin,
                          const uint32_t type)
       : cct(cct),
         id(auth_id),
+        display_name(display_name),
         perm_mask(perm_mask),
         admin(admin),
         type(type) {
+    }
+
+    ACLOwner get_aclowner() const {
+      ACLOwner owner;
+      owner.id = id;
+      owner.display_name = display_name;
+      return owner;
     }
 
     uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
@@ -112,6 +123,7 @@ transform_old_authinfo(CephContext* const cct,
   return std::unique_ptr<rgw::auth::Identity>(
         new DummyIdentityApplier(cct,
                                  auth_id,
+                                 display_name,
                                  perm_mask,
                                  admin,
                                  type));
@@ -122,6 +134,7 @@ transform_old_authinfo(const req_state* const s)
 {
   return transform_old_authinfo(s->cct,
                                 s->user->get_id(),
+                                s->user->get_display_name(),
                                 s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
    * through any security check. */
@@ -521,6 +534,14 @@ const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_ACCESS_KEY;
 
 /* rgw::auth::RemoteAuthApplier */
+ACLOwner rgw::auth::RemoteApplier::get_aclowner() const
+{
+  ACLOwner owner;
+  owner.id = info.acct_user;
+  owner.display_name = info.acct_name;
+  return owner;
+}
+
 uint32_t rgw::auth::RemoteApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
   uint32_t perm = 0;
@@ -738,6 +759,14 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 const std::string rgw::auth::LocalApplier::NO_SUBUSER;
 const std::string rgw::auth::LocalApplier::NO_ACCESS_KEY;
 
+ACLOwner rgw::auth::LocalApplier::get_aclowner() const
+{
+  ACLOwner owner;
+  owner.id = user_info.user_id;
+  owner.display_name = user_info.display_name;
+  return owner;
+}
+
 uint32_t rgw::auth::LocalApplier::get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const
 {
   return rgw_perms_from_aclspec_default_strategy(user_info.user_id, aclspec, dpp);
@@ -819,6 +848,14 @@ void rgw::auth::LocalApplier::write_ops_log_entry(rgw_log_entry& entry) const
 {
   entry.access_key_id = access_key_id;
   entry.subuser = subuser;
+}
+
+ACLOwner rgw::auth::RoleApplier::get_aclowner() const
+{
+  ACLOwner owner;
+  owner.id = token_attrs.user_id;
+  owner.display_name = role.name;
+  return owner;
 }
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {

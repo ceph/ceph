@@ -2621,8 +2621,8 @@ class RGWUserPermHandler {
         return ret;
       }
 
-      info->identity = rgw::auth::transform_old_authinfo(sync_env->cct,
-                                                         uid,
+      info->identity = rgw::auth::transform_old_authinfo(sync_env->cct, uid,
+                                                         info->user_info.display_name,
                                                          RGW_PERM_FULL_CONTROL,
                                                          false, /* system_request? */
                                                          TYPE_RGW);

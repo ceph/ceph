@@ -31,6 +31,10 @@ class FakeIdentity : public Identity {
 public:
   FakeIdentity() = default;
 
+  ACLOwner get_aclowner() const override {
+    return {};
+  }
+
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   };
