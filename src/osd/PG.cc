@@ -1331,30 +1331,44 @@ unsigned int PG::scrub_requeue_priority(Scrub::scrub_prio_t with_priority, unsig
 // ==========================================================================================
 // SCRUB
 
+
 /*
  *  implementation note:
- *  PG::sched_scrub() is called only once per a specific scrub session.
+ *  PG::start_scrubbing() is called only once per a specific scrub session.
  *  That call commits us to the whatever choices are made (deep/shallow, etc').
  *  Unless failing to start scrubbing, the 'planned scrub' flag-set is 'frozen' into
  *  PgScrubber's m_flags, then cleared.
  */
-Scrub::schedule_result_t PG::sched_scrub()
+Scrub::schedule_result_t PG::start_scrubbing(
+    Scrub::OSDRestrictions osd_restrictions)
 {
   using Scrub::schedule_result_t;
-  dout(15) << __func__ << " pg(" << info.pgid
-	  << (is_active() ? ") <active>" : ") <not-active>")
-	  << (is_clean() ? " <clean>" : " <not-clean>") << dendl;
+  dout(10) << fmt::format(
+		  "{}: {}+{} (env restrictions:{})", __func__,
+		  (is_active() ? "<active>" : "<not-active>"),
+		  (is_clean() ? "<clean>" : "<not-clean>"), osd_restrictions)
+	   << dendl;
   ceph_assert(ceph_mutex_is_locked(_lock));
-  ceph_assert(m_scrubber);
-
-  if (is_scrub_queued_or_active()) {
-     dout(10) << __func__ << ": already scrubbing" << dendl;
-     return schedule_result_t::target_specific_failure;
-  }
 
   if (!is_primary() || !is_active() || !is_clean()) {
     dout(10) << __func__ << ": cannot scrub (not a clean and active primary)"
-      << dendl;
+	     << dendl;
+    return schedule_result_t::target_specific_failure;
+  }
+
+  ceph_assert(m_scrubber);
+  if (is_scrub_queued_or_active()) {
+    dout(10) << __func__ << ": scrub already in progress" << dendl;
+    return schedule_result_t::target_specific_failure;
+  }
+  // if only explicitly requested repairing is allowed - skip other types
+  // of scrubbing
+  if (osd_restrictions.allow_requested_repair_only &&
+      !get_planned_scrub().must_repair) {
+    dout(10) << __func__
+	     << ": skipping this PG as repairing was not explicitly "
+		"requested for it"
+	     << dendl;
     return schedule_result_t::target_specific_failure;
   }
 
@@ -1366,9 +1380,9 @@ Scrub::schedule_result_t PG::sched_scrub()
     return schedule_result_t::target_specific_failure;
   }
 
-  // analyse the combination of the requested scrub flags, the osd/pool configuration
-  // and the PG status to determine whether we should scrub now, and what type of scrub
-  // should that be.
+  // analyze the combination of the requested scrub flags, the osd/pool
+  // configuration and the PG status to determine whether we should scrub
+  // now, and what type of scrub should that be.
   auto updated_flags = validate_scrub_mode();
   if (!updated_flags) {
     // the stars do not align for starting a scrub for this PG at this time
@@ -1391,14 +1405,16 @@ Scrub::schedule_result_t PG::sched_scrub()
   // An interrupted recovery repair could leave this set.
   state_clear(PG_STATE_REPAIR);
 
-  // Pass control to the scrubber. It is the scrubber that handles the replicas'
-  // resources reservations.
+  // Pass control to the scrubber. It is the scrubber that handles the
+  // replicas' resources reservations.
   m_scrubber->set_op_parameters(m_planned_scrub);
 
+  // using the OSD queue, as to not execute the scrub code as part of the tick.
   dout(10) << __func__ << ": queueing" << dendl;
   osd->queue_for_scrub(this, Scrub::scrub_prio_t::low_priority);
   return schedule_result_t::scrub_initiated;
 }
+
 
 double PG::next_deepscrub_interval() const
 {
