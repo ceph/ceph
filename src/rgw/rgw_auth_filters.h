@@ -65,6 +65,10 @@ public:
     : decoratee(std::forward<DecorateeT>(decoratee)) {
   }
 
+  ACLOwner get_aclowner() const override {
+    return get_decoratee().get_aclowner();
+  }
+
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return get_decoratee().get_perms_from_aclspec(dpp, aclspec);
   }

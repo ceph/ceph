@@ -36,6 +36,9 @@ public:
 
   virtual ~Identity() = default;
 
+  /* Return the ACLOwner for resources created by this identity. */
+  virtual ACLOwner get_aclowner() const = 0;
+
   /* Translate the ACL provided in @aclspec into concrete permission set that
    * can be used during the authorization phase (RGWOp::verify_permission).
    * On error throws rgw::auth::Exception storing the reason.
@@ -100,6 +103,7 @@ inline std::ostream& operator<<(std::ostream& out,
 std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
+                       const std::string& display_name,
                        const int perm_mask,
                        const bool is_admin,
                        const uint32_t type);
@@ -444,6 +448,13 @@ public:
 
   void modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const override;
 
+  ACLOwner get_aclowner() const override {
+    ACLOwner owner;
+    owner.id = rgw_user{role_tenant, sub, "oidc"};
+    owner.display_name = user_name;
+    return owner;
+  }
+
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const  override {
     return RGW_PERM_NONE;
   }
@@ -618,6 +629,7 @@ public:
       implicit_tenant_bit(implicit_tenant_bit) {
   }
 
+  ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
@@ -678,7 +690,7 @@ public:
       access_key_id(access_key_id) {
   }
 
-
+  ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_user& uid) const override;
   bool is_owner_of(const rgw_user& uid) const override;
@@ -740,6 +752,7 @@ public:
     : role(role),
       token_attrs(token_attrs) {}
 
+  ACLOwner get_aclowner() const override;
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override {
     return 0;
   }
