@@ -93,6 +93,8 @@ class ScrubJob final : public RefCountedObject {
 
   CephContext* cct;
 
+  bool high_priority{false};
+
   ScrubJob(CephContext* cct, const spg_t& pg, int node_id);
 
   utime_t get_sched_time() const { return schedule.scheduled_at; }
@@ -129,6 +131,12 @@ class ScrubJob final : public RefCountedObject {
    * and 'unregistering' is needed (both have in_queues() == true)
    */
   bool is_state_registered() const { return state == qu_state_t::registered; }
+
+  /**
+   * is this a high priority scrub job?
+   * High priority - (usually) a scrub that was initiated by the operator
+   */
+  bool is_high_priority() const { return high_priority; }
 
   /**
    * a text description of the "scheduling intentions" of this PG:
