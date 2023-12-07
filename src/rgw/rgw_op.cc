@@ -1934,6 +1934,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
     return -EINVAL;
   }
 
+  const std::string& auth_tenant = s->auth.identity->get_tenant();
   const std::string bucket_name = url_decode(prefix_view.substr(0, pos));
   const std::string obj_prefix = url_decode(prefix_view.substr(pos + 1));
 
@@ -1948,7 +1949,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
     map<string, bufferlist> bucket_attrs;
-    r = driver->load_bucket(this, rgw_bucket(s->user->get_tenant(), bucket_name),
+    r = driver->load_bucket(this, rgw_bucket(auth_tenant, bucket_name),
                             &ubucket, y);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
@@ -1961,7 +1962,7 @@ int RGWGetObj::handle_user_manifest(const char *prefix, optional_yield y)
       ldpp_dout(this, 0) << "failed to read bucket policy" << dendl;
       return r;
     }
-    _bucket_policy = get_iam_policy_from_attr(s->cct, bucket_attrs, s->user->get_tenant());
+    _bucket_policy = get_iam_policy_from_attr(s->cct, bucket_attrs, auth_tenant);
     bucket_policy = &_bucket_policy;
     pbucket = ubucket.get();
   } else {
@@ -2033,6 +2034,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
   vector<RGWAccessControlPolicy> allocated_acls;
   map<string, pair<RGWAccessControlPolicy *, boost::optional<Policy>>> policies;
   map<string, std::unique_ptr<rgw::sal::Bucket>> buckets;
+  const std::string& auth_tenant = s->auth.identity->get_tenant();
 
   map<uint64_t, rgw_slo_part> slo_parts;
 
@@ -2078,8 +2080,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
 	RGWAccessControlPolicy& _bucket_acl = allocated_acls.emplace_back();
 
 	std::unique_ptr<rgw::sal::Bucket> tmp_bucket;
-	int r = driver->load_bucket(this, rgw_bucket(s->user->get_tenant(),
-                                                     bucket_name),
+	int r = driver->load_bucket(this, rgw_bucket(auth_tenant, bucket_name),
                                     &tmp_bucket, y);
         if (r < 0) {
           ldpp_dout(this, 0) << "could not get bucket info for bucket="
@@ -2096,7 +2097,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl, optional_yield y)
           return r;
 	}
 	auto _bucket_policy = get_iam_policy_from_attr(
-	  s->cct, tmp_bucket->get_attrs(), tmp_bucket->get_tenant());
+	  s->cct, tmp_bucket->get_attrs(), auth_tenant);
         bucket_policy = _bucket_policy.get_ptr();
 	buckets[bucket_name].swap(tmp_bucket);
         policies[bucket_name] = make_pair(bucket_acl, _bucket_policy);
@@ -2488,13 +2489,7 @@ int RGWListBuckets::verify_permission(optional_yield y)
   rgw::Partition partition = rgw::Partition::aws;
   rgw::Service service = rgw::Service::s3;
 
-  string tenant;
-  if (s->auth.identity->get_identity_type() == TYPE_ROLE) {
-    tenant = s->auth.identity->get_role_tenant();
-  } else {
-    tenant = s->user->get_tenant();
-  }
-
+  const std::string& tenant = s->auth.identity->get_tenant();
   if (!verify_user_permission(this, s, ARN(partition, service, "", tenant, "*"), rgw::IAM::s3ListAllMyBuckets, false)) {
     return -EACCES;
   }
@@ -3156,7 +3151,7 @@ int RGWCreateBucket::verify_permission(optional_yield y)
     return -EACCES;
   }
 
-  if (s->user->get_tenant() != s->bucket_tenant) {
+  if (s->auth.identity->get_tenant() != s->bucket_tenant) {
     //AssumeRole is meant for cross account access
     if (s->auth.identity->get_identity_type() != TYPE_ROLE) {
       ldpp_dout(this, 10) << "user cannot create a bucket in a different tenant"
@@ -3752,7 +3747,7 @@ int RGWPutObj::init_processing(optional_yield y) {
     pos = copy_source_bucket_name.find(":");
     if (pos == std::string::npos) {
       // if tenant is not specified in x-amz-copy-source, use tenant of the requester
-      copy_source_tenant_name = s->user->get_tenant();
+      copy_source_tenant_name = s->auth.identity->get_tenant();
     } else {
       copy_source_tenant_name = copy_source_bucket_name.substr(0, pos);
       copy_source_bucket_name = copy_source_bucket_name.substr(pos + 1, copy_source_bucket_name.size());
@@ -7374,7 +7369,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
   ACLOwner bowner;
   RGWObjVersionTracker ot;
 
-  int ret = driver->load_bucket(dpp, rgw_bucket(s->user->get_tenant(),
+  int ret = driver->load_bucket(dpp, rgw_bucket(s->auth.identity->get_tenant(),
                                                 path.bucket_name),
                                 &bucket, y);
   if (ret < 0) {
@@ -7516,9 +7511,9 @@ int RGWBulkUploadOp::verify_permission(optional_yield y)
     return -EACCES;
   }
 
-  if (s->user->get_tenant() != s->bucket_tenant) {
+  if (s->auth.identity->get_tenant() != s->bucket_tenant) {
     ldpp_dout(this, 10) << "user cannot create a bucket in a different tenant"
-        << " (user_id.tenant=" << s->user->get_tenant()
+        << " (authorized user tenant=" << s->auth.identity->get_tenant()
         << " requested=" << s->bucket_tenant << ")" << dendl;
     return -EACCES;
   }
@@ -7768,7 +7763,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   std::unique_ptr<rgw::sal::Bucket> bucket;
   ACLOwner bowner;
 
-  op_ret = driver->load_bucket(this, rgw_bucket(s->user->get_tenant(),
+  op_ret = driver->load_bucket(this, rgw_bucket(s->auth.identity->get_tenant(),
                                                 bucket_name),
                                &bucket, y);
   if (op_ret < 0) {

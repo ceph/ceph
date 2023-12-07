@@ -132,6 +132,12 @@ public:
     return 0;
   }
 
+  const std::string& get_tenant() const override {
+    ceph_abort();
+    static std::string empty;
+    return empty;
+  }
+
   void to_str(std::ostream& out) const override {
     out << id;
   }

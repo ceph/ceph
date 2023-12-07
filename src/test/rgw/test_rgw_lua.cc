@@ -59,6 +59,11 @@ public:
     return "";
   }
 
+  const std::string& get_tenant() const override {
+    static std::string empty;
+    return empty;
+  }
+
   void to_str(std::ostream& out) const override {
     return;
   }

@@ -2823,7 +2823,7 @@ int RGWHandler_REST_SWIFT::postauth_init(optional_yield y)
       && s->user->get_id().id == RGW_USER_ANON_ID) {
     s->bucket_tenant = s->account_name;
   } else {
-    s->bucket_tenant = s->user->get_tenant();
+    s->bucket_tenant = s->auth.identity->get_tenant();
   }
   s->bucket_name = t->url_bucket;
 

@@ -4897,13 +4897,12 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
 {
   struct req_init_state *t = &s->init_state;
 
-  int ret = rgw_parse_url_bucket(t->url_bucket, s->user->get_tenant(),
+  const std::string& auth_tenant = s->auth.identity->get_tenant();
+
+  int ret = rgw_parse_url_bucket(t->url_bucket, auth_tenant,
                                  s->bucket_tenant, s->bucket_name);
   if (ret) {
     return ret;
-  }
-  if (s->auth.identity->get_identity_type() == TYPE_ROLE) {
-    s->bucket_tenant = s->auth.identity->get_role_tenant();
   }
 
   ldpp_dout(s, 10) << "s->object=" << s->object
@@ -4919,12 +4918,6 @@ int RGWHandler_REST_S3::postauth_init(optional_yield y)
   }
 
   if (!t->src_bucket.empty()) {
-    string auth_tenant;
-    if (s->auth.identity->get_identity_type() == TYPE_ROLE) {
-      auth_tenant = s->auth.identity->get_role_tenant();
-    } else {
-      auth_tenant = s->user->get_tenant();
-    }
     ret = rgw_parse_url_bucket(t->src_bucket, auth_tenant,
                                s->src_tenant_name, s->src_bucket_name);
     if (ret) {
