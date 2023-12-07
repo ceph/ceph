@@ -1138,6 +1138,7 @@ struct req_state : DoutPrefixProvider {
   std::string src_bucket_name;
   std::unique_ptr<rgw::sal::Object> src_object;
   ACLOwner bucket_owner;
+  // Resource owner for the authenticated identity, initialized in authorize()
   ACLOwner owner;
 
   std::string zonegroup_name;
