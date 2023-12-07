@@ -568,11 +568,9 @@ class RGWPubSub
                       RGWObjVersionTracker* objv_tracker, optional_yield y) const;
 
 public:
-  RGWPubSub(rgw::sal::Driver* _driver, const std::string& tenant);
-
- RGWPubSub(rgw::sal::Driver* _driver,
-           const std::string& _tenant,
-           const rgw::SiteConfig& site);
+  RGWPubSub(rgw::sal::Driver* _driver,
+            const std::string& _tenant,
+            const rgw::SiteConfig& site);
 
   class Bucket {
     friend class RGWPubSub;

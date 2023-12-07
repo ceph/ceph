@@ -92,7 +92,7 @@ std::optional<rgw::IAM::Policy> get_policy_from_text(req_state* const s,
   const auto bl = bufferlist::static_from_string(policy_text);
   try {
     return rgw::IAM::Policy(
-        s->cct, s->owner.id.tenant, bl,
+        s->cct, s->auth.identity->get_tenant(), bl,
         s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 1) << "failed to parse policy: '" << policy_text
@@ -218,7 +218,7 @@ class RGWPSCreateTopicOp : public RGWOp {
       return ret;
     }
 
-    const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
     rgw_pubsub_topic result;
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret == -ENOENT) {
@@ -297,7 +297,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            s->owner.id, policy_text, y);
   if (op_ret < 0) {
@@ -358,7 +358,7 @@ public:
 void RGWPSListTopicsOp::execute(optional_yield y) {
   const std::string start_token = s->info.args.get("NextToken");
 
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   constexpr int max_items = 100;
   op_ret = ps.get_topics(this, start_token, max_items, result, next_token, y);
   // if there are no topics it is not considered an error
@@ -446,7 +446,7 @@ void RGWPSGetTopicOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -530,7 +530,7 @@ void RGWPSGetTopicAttributesOp::execute(optional_yield y) {
   if (op_ret < 0) {
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
   if (op_ret < 0) {
     ldpp_dout(this, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -662,7 +662,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
       return ret;
     }
     rgw_pubsub_topic result;
-    const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
     ret = ps.get_topic(this, topic_name, result, y, nullptr);
     if (ret < 0) {
       ldpp_dout(this, 1) << "failed to get topic '" << topic_name
@@ -739,7 +739,7 @@ void RGWPSSetTopicAttributesOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   op_ret = ps.create_topic(this, topic_name, dest, topic_arn, opaque_data,
                            topic_owner, policy_text, y);
   if (op_ret < 0) {
@@ -823,7 +823,7 @@ void RGWPSDeleteTopicOp::execute(optional_yield y) {
       return;
     }
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
 
   rgw_pubsub_topic result;
   op_ret = ps.get_topic(this, topic_name, result, y, nullptr);
@@ -1047,7 +1047,7 @@ void RGWPSCreateNotifOp::execute(optional_yield y) {
     return;
   }
 
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   const RGWPubSub::Bucket b(ps, bucket.get());
 
   if(configurations.list.empty()) {
@@ -1202,7 +1202,7 @@ void RGWPSCreateNotifOp::execute_v2(optional_yield y) {
         << "' , ret = " << op_ret << dendl;
     return;
   }
-  const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   std::unordered_map<std::string, rgw_pubsub_topic> topics;
   for (const auto& c : configurations.list) {
     const auto& notif_name = c.id;
@@ -1352,7 +1352,7 @@ void RGWPSDeleteNotifOp::execute(optional_yield y) {
     return;
   }
 
-  const RGWPubSub ps(driver, s->owner.id.tenant);
+  const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
   const RGWPubSub::Bucket b(ps, bucket.get());
 
   // get all topics on a bucket
@@ -1494,7 +1494,7 @@ void RGWPSListNotifsOp::execute(optional_yield y) {
       driver->stat_topics_v1(s->bucket_tenant, y, this) == -ENOENT) {
     op_ret = get_bucket_notifications(this, bucket.get(), bucket_topics);
   } else {
-    const RGWPubSub ps(driver, s->owner.id.tenant);
+    const RGWPubSub ps(driver, s->auth.identity->get_tenant(), *s->penv.site);
     const RGWPubSub::Bucket b(ps, bucket.get());
     op_ret = b.get_topics(this, bucket_topics, y);
   }

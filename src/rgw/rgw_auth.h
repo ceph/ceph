@@ -83,7 +83,8 @@ public:
   /* Subuser of Account */
   virtual std::string get_subuser() const = 0;
 
-  virtual std::string get_role_tenant() const { return ""; }
+  /* Identity's tenant namespace */
+  virtual const std::string& get_tenant() const = 0;
 
   /* write any auth-specific fields that are safe to expose in the ops log */
   virtual void write_ops_log_entry(rgw_log_entry& entry) const {};
@@ -479,6 +480,9 @@ public:
   std::string get_subuser() const override {
     return {};
   }
+  const std::string& get_tenant() const override {
+    return role_tenant;
+  }
 
   struct Factory {
     virtual ~Factory() {}
@@ -626,6 +630,9 @@ public:
   uint32_t get_identity_type() const override { return info.acct_type; }
   std::string get_acct_name() const override { return info.acct_name; }
   std::string get_subuser() const override { return {}; }
+  const std::string& get_tenant() const override {
+    return info.acct_user.tenant;
+  }
 
   struct Factory {
     virtual ~Factory() {}
@@ -688,6 +695,10 @@ public:
   uint32_t get_identity_type() const override { return TYPE_RGW; }
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
+  const std::string& get_tenant() const override {
+    return user_info.user_id.tenant;
+  }
+
   void write_ops_log_entry(rgw_log_entry& entry) const override;
 
   struct Factory {
@@ -747,8 +758,9 @@ public:
   uint32_t get_identity_type() const override { return TYPE_ROLE; }
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return {}; }
+  const std::string& get_tenant() const override { return role.tenant; }
+
   void modify_request_state(const DoutPrefixProvider* dpp, req_state* s) const override;
-  std::string get_role_tenant() const override { return role.tenant; }
 
   struct Factory {
     virtual ~Factory() {}

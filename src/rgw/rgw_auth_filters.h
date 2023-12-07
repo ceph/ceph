@@ -106,8 +106,8 @@ public:
     get_decoratee().to_str(out);
   }
 
-  std::string get_role_tenant() const override {     /* in/out */
-    return get_decoratee().get_role_tenant();
+  const std::string& get_tenant() const override {
+    return get_decoratee().get_tenant();
   }
 
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override {  /* out */
