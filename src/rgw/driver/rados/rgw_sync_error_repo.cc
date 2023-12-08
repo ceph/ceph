@@ -118,7 +118,7 @@ int remove(librados::ObjectWriteOperation& op,
 
 class RGWErrorRepoWriteCR : public RGWSimpleCoroutine {
   librados::Rados* rados;
-  const rgw_raw_obj& raw_obj;
+  rgw_raw_obj raw_obj;
   std::string key;
   ceph::real_time timestamp;
 
@@ -163,7 +163,7 @@ RGWCoroutine* write_cr(librados::Rados* rados,
 
 class RGWErrorRepoRemoveCR : public RGWSimpleCoroutine {
   librados::Rados* rados;
-  const rgw_raw_obj& raw_obj;
+  rgw_raw_obj raw_obj;
   std::string key;
   ceph::real_time timestamp;
 
