@@ -528,6 +528,17 @@ running the following commands on the object gateway host:
    systemctl start ceph-radosgw@rgw.`hostname -s`
    systemctl enable ceph-radosgw@rgw.`hostname -s`
 
+If the ``cephadm`` command was used to deploy the cluster, you will not be able
+to use ``systemctl`` to start the gateway because no services will exist on
+which ``systemctl`` could operate. This is due to the containerized nature of
+the ``cephadm``-deployed Ceph cluster. If you have used the ``cephadm`` command
+and you have a containerized cluster, you must run a command of the following
+form to start the gateway:
+
+.. prompt:: bash #
+
+   ceph orch apply rgw <name> --realm=<realm> --zone=<zone> --placement --port
+
 Checking Synchronization Status
 -------------------------------
 
