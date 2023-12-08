@@ -5206,7 +5206,7 @@ def _get_parser():
         '--volume', '-v',
         action='append',
         default=[],
-        help='set environment variable')
+        help='mount a volume')
     parser_shell.add_argument(
         'command', nargs=argparse.REMAINDER,
         help='command (optional)')
