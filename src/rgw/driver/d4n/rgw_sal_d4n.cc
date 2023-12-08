@@ -235,6 +235,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
     /* Set metadata locally */
     RGWQuotaInfo quota_info;
     RGWObjState* astate;
+    std::unique_ptr<rgw::sal::User> user = this->driver->get_user(this->get_bucket()->get_owner());
     this->get_obj_state(dpp, &astate, y);
 
     for (auto it = attrs.begin(); it != attrs.end(); ++it) {
@@ -264,7 +265,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
 	  quota_info.max_objects = std::stoull(it->second.c_str());
 	  attrs.erase(it->first);
 	} else if (it->first == "max_buckets") {
-	  this->get_bucket()->get_owner()->set_max_buckets(std::stoull(it->second.c_str()));
+	  user->set_max_buckets(std::stoull(it->second.c_str()));
 	  attrs.erase(it->first);
 	} else {
 	  ldpp_dout(dpp, 20) << "D4N Filter: Unexpected attribute; not locally set." << dendl;
@@ -273,7 +274,7 @@ int D4NFilterObject::get_obj_attrs(optional_yield y, const DoutPrefixProvider* d
       }
     }
 
-    this->get_bucket()->get_owner()->set_info(quota_info);
+    user->set_info(quota_info);
     this->set_obj_state(*astate);
    
     /* Set attributes locally */
