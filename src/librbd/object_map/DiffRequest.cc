@@ -266,7 +266,11 @@ void DiffRequest<I>::handle_load_object_map(int r) {
         }
       } else {
         // diffing against a snapshot, this is its object map
-        *diff_it = DIFF_STATE_DATA;
+        if (object_map_state != OBJECT_PENDING) {
+          *diff_it = DIFF_STATE_DATA;
+        } else {
+          *diff_it = DIFF_STATE_DATA_UPDATED;
+        }
       }
 
       ldout(cct, 20) << "object state: " << i << " "
