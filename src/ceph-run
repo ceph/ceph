@@ -1,9 +1,9 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 sleep=5
 no_restart=0
 
-if [ $1 == "--no-restart" ]; then
+if [[ $1 == "--no-restart" ]]; then
     no_restart=1
     shift
 fi
