@@ -3378,6 +3378,9 @@ done:
   if (op_ret >= 0) {
     dump_content_length(s, s->formatter->get_len());
   }
+  if (op_ret == STATUS_NO_CONTENT) {
+    dump_etag(s, etag);
+  }
   end_header(s, this);
   if (op_ret != STATUS_CREATED)
     return;
