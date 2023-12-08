@@ -468,6 +468,7 @@ namespace rgw {
 
   int RGWLib::init(vector<const char*>& args)
   {
+    int r{0};
     /* alternative default for module */
     map<std::string,std::string> defaults = {
       { "debug_rgw", "1/5" },
@@ -524,7 +525,13 @@ namespace rgw {
     register_async_signal_handler(SIGUSR1, rgw::signal::handle_sigterm);
 
     main.init_tracepoints();
-    main.init_frontends2(this /* rgwlib */);
+    r = main.init_frontends2(this /* rgwlib */);
+    if (r != 0) {
+      derr << "ERROR: unable to initialize frontend, r = " << r << dendl;
+      main.shutdown();
+      return r;
+    }
+
     main.init_notification_endpoints();
     main.init_lua();
 
