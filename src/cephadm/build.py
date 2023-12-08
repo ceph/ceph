@@ -328,7 +328,7 @@ def _install_rpm_deps(tempdir, config):
 
 def _deps_from_rpm(tempdir, config, dinfo, pkg):
     # first, figure out what rpm provides a particular python lib
-    dist = f'python3dist({pkg})'.lower()
+    dist = f'python3.{sys.version_info.minor}dist({pkg})'.lower()
     try:
         res = subprocess.run(
             ['rpm', '-q', '--whatprovides', dist],
