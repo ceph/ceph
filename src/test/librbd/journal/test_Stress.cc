@@ -86,7 +86,7 @@ TEST_F(TestJournalStress, DiscardWithPruneWriteOverlap) {
           bufferlist payload_bl;
           payload_bl.append(payload);
           auto aio_comp = new librbd::io::AioCompletion();
-          api::Io<>::aio_write(*ictx, aio_comp, 0, payload.size(),
+          api::Io<>::aio_write(*ictx, aio_comp, offset, payload.size(),
                                std::move(payload_bl), 0, true);
           ASSERT_EQ(0, aio_comp->wait_for_complete());
           aio_comp->release();
