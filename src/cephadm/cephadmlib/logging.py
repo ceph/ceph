@@ -12,6 +12,10 @@ from typing import List, Any, Dict, Optional, cast
 from .context import CephadmContext
 from .constants import QUIET_LOG_LEVEL, LOG_DIR
 
+from cephadmlib.file_utils import write_new
+
+from cephadmlib import templating
+
 
 class _ExcludeErrorsFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -145,18 +149,6 @@ _interactive_logging_config = {
 }
 
 
-_logrotate_data = """# created by cephadm
-/var/log/ceph/cephadm.log {
-    rotate 7
-    daily
-    compress
-    missingok
-    notifempty
-    su root root
-}
-"""
-
-
 _VERBOSE_HANDLERS = [
     'console',
     'console_stdout',
@@ -222,9 +214,7 @@ def cephadm_init_logging(
 
     logger.setLevel(QUIET_LOG_LEVEL)
 
-    if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
-        with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
-            f.write(_logrotate_data)
+    write_cephadm_logrotate_config(ctx)
 
     for handler in logger.handlers:
         # the following little hack ensures that no matter how cephadm is named
@@ -239,3 +229,48 @@ def cephadm_init_logging(
         if ctx.verbose and handler.name in _VERBOSE_HANDLERS:
             handler.setLevel(QUIET_LOG_LEVEL)
     logger.debug('%s\ncephadm %s' % ('-' * 80, args))
+
+
+def write_cephadm_logrotate_config(ctx: CephadmContext) -> None:
+    if not os.path.exists(ctx.logrotate_dir + '/cephadm'):
+        with open(ctx.logrotate_dir + '/cephadm', 'w') as f:
+            cephadm_logrotate_config = templating.render(
+                ctx, templating.Templates.cephadm_logrotate_config
+            )
+            f.write(cephadm_logrotate_config)
+
+
+def write_cluster_logrotate_config(ctx: CephadmContext, fsid: str) -> None:
+    # logrotate for the cluster
+    with write_new(ctx.logrotate_dir + f'/ceph-{fsid}', perms=None) as f:
+        """
+        See cephadm/cephadmlib/templates/cluster.logrotate.config.j2 to
+        get a better idea what this comment is referring to
+
+        This is a bit sloppy in that the killall/pkill will touch all ceph daemons
+        in all containers, but I don't see an elegant way to send SIGHUP *just* to
+        the daemons for this cluster.  (1) systemd kill -s will get the signal to
+        podman, but podman will exit.  (2) podman kill will get the signal to the
+        first child (bash), but that isn't the ceph daemon.  This is simpler and
+        should be harmless.
+        """
+        targets: List[str] = [
+            'ceph-mon',
+            'ceph-mgr',
+            'ceph-mds',
+            'ceph-osd',
+            'ceph-fuse',
+            'radosgw',
+            'rbd-mirror',
+            'cephfs-mirror',
+            'tcmu-runner',
+        ]
+
+        logrotate_config = templating.render(
+            ctx,
+            templating.Templates.cluster_logrotate_config,
+            fsid=fsid,
+            targets=targets,
+        )
+
+        f.write(logrotate_config)

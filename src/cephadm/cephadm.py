@@ -128,7 +128,12 @@ from cephadmlib.net_utils import (
 from cephadmlib.locking import FileLock
 from cephadmlib.daemon_identity import DaemonIdentity
 from cephadmlib.packagers import create_packager, Packager
-from cephadmlib.logging import cephadm_init_logging, Highlight, LogDestination
+from cephadmlib.logging import (
+    cephadm_init_logging,
+    Highlight,
+    LogDestination,
+    write_cluster_logrotate_config,
+)
 from cephadmlib.systemd import check_unit, check_units
 from cephadmlib.container_types import (
     CephContainer,
@@ -1421,42 +1426,7 @@ def install_base_units(ctx, fsid):
     if os.path.exists(ctx.logrotate_dir + f'/ceph-{fsid}'):
         return
 
-    # logrotate for the cluster
-    with write_new(ctx.logrotate_dir + f'/ceph-{fsid}', perms=None) as f:
-        """
-        This is a bit sloppy in that the killall/pkill will touch all ceph daemons
-        in all containers, but I don't see an elegant way to send SIGHUP *just* to
-        the daemons for this cluster.  (1) systemd kill -s will get the signal to
-        podman, but podman will exit.  (2) podman kill will get the signal to the
-        first child (bash), but that isn't the ceph daemon.  This is simpler and
-        should be harmless.
-        """
-        targets: List[str] = [
-            'ceph-mon',
-            'ceph-mgr',
-            'ceph-mds',
-            'ceph-osd',
-            'ceph-fuse',
-            'radosgw',
-            'rbd-mirror',
-            'cephfs-mirror',
-            'tcmu-runner'
-        ]
-
-        f.write("""# created by cephadm
-/var/log/ceph/%s/*.log {
-    rotate 7
-    daily
-    compress
-    sharedscripts
-    postrotate
-        killall -q -1 %s || pkill -1 -x '%s' || true
-    endscript
-    missingok
-    notifempty
-    su root root
-}
-""" % (fsid, ' '.join(targets), '|'.join(targets)))
+    write_cluster_logrotate_config(ctx, fsid)
 
 
 def get_unit_file(ctx: CephadmContext, fsid: str) -> str:
