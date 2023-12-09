@@ -4457,6 +4457,9 @@ TYPED_TEST(DiffIterateTest, DiffIterateDeterministic)
   ASSERT_EQ(0u, extents.size());
 
   ASSERT_PASSED(this->validate_object_map, image);
+
+  ASSERT_EQ(0, rbd_close(image));
+  rados_ioctx_destroy(ioctx);
 }
 
 TYPED_TEST(DiffIterateTest, DiffIterateDeterministicPP)
