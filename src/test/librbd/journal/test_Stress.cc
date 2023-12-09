@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "test/librados/test_cxx.h"
 #include "test/librbd/test_fixture.h"
 #include "test/librbd/test_support.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -21,6 +22,7 @@
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
+#include <boost/scope_exit.hpp>
 
 void register_test_journal_stress() {
 }
@@ -39,23 +41,37 @@ TEST_F(TestJournalStress, DiscardWithPruneWriteOverlap) {
 
   // Create an image that is multiple objects so that we can force multiple
   // image extents on the discard path.
-  CephContext* cct = reinterpret_cast<CephContext*>(_rados.cct());
-  auto object_size = 1ull << cct->_conf.get_val<uint64_t>("rbd_default_order");
+  int order = 22;
+  auto object_size = uint64_t{1} << order;
   auto image_size = 4 * object_size;
 
   // Write-around cache required for overlapping I/O delays.
-  cct->_conf.set_val_or_die("rbd_cache_writethrough_until_flush", "false");
-  cct->_conf.set_val_or_die("rbd_cache_policy", "writearound");
+  std::map<std::string, std::string> config;
+  config["rbd_cache"] = "true";
+  config["rbd_cache_policy"] = "writearound";
+  config["rbd_cache_max_dirty"] = std::to_string(image_size);
+  config["rbd_cache_writethrough_until_flush"] = "false";
   // XXX: Work around https://tracker.ceph.com/issues/63681, which this test
   // exposes when run under Valgrind.
-  cct->_conf.set_val_or_die("librados_thread_count", "15");
-  cct->_conf.apply_changes(nullptr);
+  config["librados_thread_count"] = "15";
 
+  librados::Rados rados;
+  ASSERT_EQ("", connect_cluster_pp(rados, config));
+
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  uint64_t features;
+  ASSERT_TRUE(::get_features(&features));
   auto image_name = get_temp_image_name();
-  ASSERT_EQ(0, create_image_pp(m_rbd, m_ioctx, image_name, image_size));
+  ASSERT_EQ(0, create_image_full_pp(m_rbd, ioctx, image_name, image_size,
+                                    features, false, &order));
 
-  librbd::ImageCtx *ictx;
-  ASSERT_EQ(0, open_image(image_name, &ictx));
+  auto ictx = new librbd::ImageCtx(image_name, "", nullptr, ioctx, false);
+  ASSERT_EQ(0, ictx->state->open(0));
+  BOOST_SCOPE_EXIT(ictx) {
+    ictx->state->close();
+  } BOOST_SCOPE_EXIT_END;
 
   std::thread write_thread(
     [ictx, object_size]() {
