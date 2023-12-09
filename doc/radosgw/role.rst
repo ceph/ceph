@@ -31,7 +31,7 @@ Request Parameters
 :Description: The trust relationship policy document that grants an entity permission to assume the role.
 :Type: String
 
-For example:: 	
+For example::
 	
   radosgw-admin role create --role-name=S3Access1 --path=/application_abc/component_xyz/ --assume-role-policy-doc=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Principal\":\{\"AWS\":\[\"arn:aws:iam:::user/TESTER\"\]\},\"Action\":\[\"sts:AssumeRole\"\]\}\]\}
   
@@ -334,6 +334,7 @@ Create a Role
 -------------
 
 Example::
+
   POST "<hostname>?Action=CreateRole&RoleName=S3Access&Path=/application_abc/component_xyz/&AssumeRolePolicyDocument=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Principal\":\{\"AWS\":\[\"arn:aws:iam:::user/TESTER\"\]\},\"Action\":\[\"sts:AssumeRole\"\]\}\]\}"
 
 .. code-block:: XML
@@ -353,6 +354,7 @@ Delete a Role
 -------------
 
 Example::
+
   POST "<hostname>?Action=DeleteRole&RoleName=S3Access"
 
 Note: A role can be deleted only when it doesn't have any permission policy attached to it.
@@ -361,6 +363,7 @@ Get a Role
 ----------
 
 Example::
+
   POST "<hostname>?Action=GetRole&RoleName=S3Access"
 
 .. code-block:: XML
@@ -380,6 +383,7 @@ List Roles
 ----------
 
 Example::
+
   POST "<hostname>?Action=ListRoles&RoleName=S3Access&PathPrefix=/application"
 
 .. code-block:: XML
@@ -399,18 +403,21 @@ Update Assume Role Policy Document
 ----------------------------------
 
 Example::
+
   POST "<hostname>?Action=UpdateAssumeRolePolicy&RoleName=S3Access&PolicyDocument=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Principal\":\{\"AWS\":\[\"arn:aws:iam:::user/TESTER2\"\]\},\"Action\":\[\"sts:AssumeRole\"\]\}\]\}"
 
 Add/ Update a Policy attached to a Role
 ---------------------------------------
 
 Example::
+
   POST "<hostname>?Action=PutRolePolicy&RoleName=S3Access&PolicyName=Policy1&PolicyDocument=\{\"Version\":\"2012-10-17\",\"Statement\":\[\{\"Effect\":\"Allow\",\"Action\":\[\"s3:CreateBucket\"\],\"Resource\":\"arn:aws:s3:::example_bucket\"\}\]\}"
 
 List Permission Policy Names attached to a Role
 -----------------------------------------------
 
 Example::
+
   POST "<hostname>?Action=ListRolePolicies&RoleName=S3Access"
 
 .. code-block:: XML
@@ -424,6 +431,7 @@ Get Permission Policy attached to a Role
 ----------------------------------------
 
 Example::
+
   POST "<hostname>?Action=GetRolePolicy&RoleName=S3Access&PolicyName=Policy1"
 
 .. code-block:: XML
@@ -439,6 +447,7 @@ Delete Policy attached to a Role
 --------------------------------
 
 Example::
+
   POST "<hostname>?Action=DeleteRolePolicy&RoleName=S3Access&PolicyName=Policy1"
 
 Tag a role
@@ -447,6 +456,7 @@ A role can have multivalued tags attached to it. These tags can be passed in as 
 AWS does not support multi-valued role tags.
 
 Example::
+
   POST "<hostname>?Action=TagRole&RoleName=S3Access&Tags.member.1.Key=Department&Tags.member.1.Value=Engineering"
 
 .. code-block:: XML
@@ -463,6 +473,7 @@ List role tags
 Lists the tags attached to a role.
 
 Example::
+
   POST "<hostname>?Action=ListRoleTags&RoleName=S3Access"
 
 .. code-block:: XML
@@ -486,6 +497,7 @@ Delete role tags
 Delete a tag/ tags attached to a role.
 
 Example::
+
   POST "<hostname>?Action=UntagRoles&RoleName=S3Access&TagKeys.member.1=Department"
 
 .. code-block:: XML
@@ -500,6 +512,7 @@ Update Role
 -----------
 
 Example::
+
   POST "<hostname>?Action=UpdateRole&RoleName=S3Access&MaxSessionDuration=43200"
 
 .. code-block:: XML
@@ -565,6 +578,3 @@ The following is sample code for adding tags to role, listing tags and untagging
             'Department',
         ]
     )
-
-
-
