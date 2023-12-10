@@ -12,7 +12,7 @@
 #include "rgw_lc_s3.h"
 
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_lifecycle
 
 using namespace std;
 

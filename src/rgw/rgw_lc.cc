@@ -39,7 +39,8 @@
 #include "services/svc_tier_rados.h"
 
 #define dout_context g_ceph_context
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_lifecycle
+
 
 using namespace std;
 

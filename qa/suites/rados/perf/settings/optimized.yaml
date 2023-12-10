@@ -54,6 +54,7 @@ overrides:
         debug perfcounter: "0/0"
         debug rgw: "0/0"
         debug rgw sync: "0/0"
+        debug rgw lifecycle: "0/0"
         debug civetweb: "0/0"
         debug javaclient: "0/0"
         debug asok: "0/0"
