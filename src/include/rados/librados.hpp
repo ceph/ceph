@@ -853,6 +853,10 @@ inline namespace v14_2_0 {
     int writesame(const std::string& oid, bufferlist& bl,
 		  size_t write_len, uint64_t off);
     int read(const std::string& oid, bufferlist& bl, size_t len, uint64_t off);
+    int read_full(const std::string& oid, bufferlist& bl) {
+      // 0 @len means read until the end
+      return read(oid, bl, 0, 0);
+    }
     int checksum(const std::string& o, rados_checksum_type_t type,
 		 const bufferlist &init_value_bl, size_t len, uint64_t off,
 		 size_t chunk_size, bufferlist *pbl);
