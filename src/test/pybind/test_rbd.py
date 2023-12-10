@@ -1471,7 +1471,7 @@ def check_diff(image, offset, length, from_snapshot, expected):
     extents = []
     def cb(offset, length, exists):
         extents.append((offset, length, exists))
-    image.diff_iterate(0, IMG_SIZE, None, cb)
+    image.diff_iterate(0, IMG_SIZE, from_snapshot, cb)
     eq(extents, expected)
 
 class TestClone(object):
