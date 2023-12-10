@@ -209,6 +209,16 @@ auto digest(const ceph::buffer::list& bl)
   gen.Final(fingerprint);
   return sha_digest_t<Digest::digest_size>{fingerprint};
 }
+
+template<class Digest>
+auto digest(const unsigned char *p, unsigned len)
+{
+  unsigned char fingerprint[Digest::digest_size];
+  Digest gen;
+  gen.Update(p, len);
+  gen.Final(fingerprint);
+  return sha_digest_t<Digest::digest_size>{fingerprint};
+}
 }
 
 #pragma clang diagnostic pop
