@@ -1244,6 +1244,14 @@ public:
 
   virtual void clear_delta() {}
 
+  struct modified_region_t {
+    extent_len_t offset;
+    extent_len_t len;
+  };
+  virtual std::optional<modified_region_t> get_modified_region() {
+    return std::nullopt;
+  }
+
   virtual ~LogicalCachedExtent();
 protected:
 

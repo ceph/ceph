@@ -83,6 +83,20 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   void clear_delta() final {
     delta.clear();
   }
+
+  std::optional<modified_region_t> get_modified_region() final {
+    interval_set<extent_len_t> range;
+    for (auto &p : delta) {
+      if (p.len > 0) {
+	range.union_insert(p.offset, p.len);
+      }
+    }
+    if (range.empty()) {
+      return std::nullopt;
+    }
+    return modified_region_t{range.range_start(),
+      range.range_end() - range.range_start()};
+  }
 };
 using TestBlockRef = TCachedExtentRef<TestBlock>;
 

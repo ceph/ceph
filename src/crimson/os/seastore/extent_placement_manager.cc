@@ -790,19 +790,33 @@ RandomBlockOolWriter::do_write(
     stats.num_records += 1;
 
     ex->prepare_write();
-    return rbm->write(paddr,
-      ex->get_bptr()
+    extent_len_t offset = 0;
+    bufferptr bp;
+    if (can_inplace_rewrite(t, ex)) {
+      auto r = ex->get_modified_region();
+      if (r.has_value() && r->len > rbm->get_block_size()) {
+	offset = p2align(r->offset, rbm->get_block_size());
+	extent_len_t len =
+	  p2roundup(r->offset + r->len, rbm->get_block_size()) - offset;
+	bp = ceph::bufferptr(ex->get_bptr(), offset, len);
+      } else {
+	bp = ex->get_bptr();
+      }
+    } else {
+      bp = ex->get_bptr();
+    }
+    return rbm->write(paddr + offset,
+      bp
     ).handle_error(
       alloc_write_iertr::pass_further{},
       crimson::ct_error::assert_all{
 	"Invalid error when writing record"}
-    ).safe_then([&t, &ex, paddr, FNAME]() {
+    ).safe_then([&t, &ex, paddr, this, FNAME]() {
       TRACET("ool extent written at {} -- {}",
 	     t, paddr, *ex);
       if (ex->is_initial_pending()) {
 	t.mark_allocated_extent_ool(ex);
-      } else if (ex->is_dirty()) {
-	assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
+      } else if (can_inplace_rewrite(t, ex)) {
 	t.mark_inplace_rewrite_extent_ool(ex);
       } else {
 	ceph_assert("impossible");
