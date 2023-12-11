@@ -797,7 +797,7 @@ void OpsExecuter::fill_op_params_bump_pg_version()
 {
   osd_op_params->req_id = msg->get_reqid();
   osd_op_params->mtime = msg->get_mtime();
-  osd_op_params->at_version = pg->next_version();
+  osd_op_params->at_version = pg->get_next_version();
   osd_op_params->pg_trim_to = pg->get_pg_trim_to();
   osd_op_params->min_last_complete_ondisk = pg->get_min_last_complete_ondisk();
   osd_op_params->last_complete = pg->get_info().last_complete;
@@ -820,6 +820,7 @@ std::vector<pg_log_entry_t> OpsExecuter::prepare_transaction(
     osd_op_params->req_id,
     osd_op_params->mtime,
     op_info.allows_returnvec() && !ops.empty() ? ops.back().rval.code : 0);
+  osd_op_params->at_version.version++;
   if (op_info.allows_returnvec()) {
     // also the per-op values are recorded in the pg log
     log_entries.back().set_op_returns(ops);
@@ -957,6 +958,7 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     initial_obs.oi.mtime, // will be replaced in `apply_to()`
     0
   };
+  osd_op_params->at_version.version++;
   encode(cloned_snaps, cloning_ctx->log_entry.snaps);
 
   // TODO: update most recent clone_overlap and usage stats
@@ -968,7 +970,7 @@ void OpsExecuter::CloningContext::apply_to(
   ObjectContext& processed_obc) &&
 {
   log_entry.mtime = processed_obc.obs.oi.mtime;
-  log_entries.emplace_back(std::move(log_entry));
+  log_entries.insert(log_entries.begin(), std::move(log_entry));
   processed_obc.ssc->snapset = std::move(new_snapset);
 }
 
@@ -983,7 +985,7 @@ OpsExecuter::flush_clone_metadata(
   auto maybe_snap_mapped = interruptor::now();
   if (cloning_ctx) {
     std::move(*cloning_ctx).apply_to(log_entries, *obc);
-    const auto& coid = log_entries.back().soid;
+    const auto& coid = log_entries.front().soid;
     const auto& cloned_snaps = obc->ssc->snapset.clone_snaps[coid.snap];
     maybe_snap_mapped = snap_map_clone(
       coid,
@@ -1012,7 +1014,7 @@ std::pair<object_info_t, ObjectContextRef> OpsExecuter::prepare_clone(
   const hobject_t& coid)
 {
   object_info_t static_snap_oi(coid);
-  static_snap_oi.version = pg->next_version();
+  static_snap_oi.version = osd_op_params->at_version;
   static_snap_oi.prior_version = obc->obs.oi.version;
   static_snap_oi.copy_user_bits(obc->obs.oi);
   if (static_snap_oi.is_whiteout()) {
