@@ -318,6 +318,9 @@ public:
   bool is_deleted() const {
     return recovery_state.is_deleted();
   }
+  void set_delete_complete() {
+    recovery_state.set_delete_complete();
+  }
   bool is_nonprimary() const {
     return recovery_state.is_nonprimary();
   }
@@ -1281,11 +1284,11 @@ protected:
 
 public:
   int pg_stat_adjust(osd_stat_t *new_stat);
+  bool state_test(uint64_t m) const { return recovery_state.state_test(m); }
 protected:
   bool delete_needs_sleep = false;
 
 protected:
-  bool state_test(uint64_t m) const { return recovery_state.state_test(m); }
   void state_set(uint64_t m) { recovery_state.state_set(m); }
   void state_clear(uint64_t m) { recovery_state.state_clear(m); }
 

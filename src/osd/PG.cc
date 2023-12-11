@@ -823,7 +823,7 @@ bool PG::check_in_progress_op(
 
 void PG::publish_stats_to_osd()
 {
-  if (!is_primary())
+  if (!is_primary() && is_deleted())
     return;
 
   ceph_assert(m_scrubber);
@@ -2747,8 +2747,6 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
       init_pg_ondisk(t, info.pgid, &pool.info);
       recovery_state.reset_last_persisted();
     } else {
-      recovery_state.set_delete_complete();
-
       // cancel reserver here, since the PG is about to get deleted and the
       // exit() methods don't run when that happens.
       osd->local_reserver.cancel_reservation(info.pgid);
@@ -2818,11 +2816,13 @@ void PG::with_pg_stats(ceph::coarse_real_clock::time_point now_is,
 {
   dout(30) << __func__ << dendl;
   // possibly update the scrub state & timers
-  lock();
-  if (m_scrubber) {
-    m_scrubber->update_scrub_stats(now_is);
+  if (is_primary()) {
+    lock();
+    if (m_scrubber) {
+      m_scrubber->update_scrub_stats(now_is);
+    }
+    unlock();
   }
-  unlock();
 
   // now - the actual publishing
   std::lock_guard l{pg_stats_publish_lock};

@@ -5098,8 +5098,6 @@ bool OSD::try_finish_pg_delete(PG *pg, unsigned old_pg_num)
       dout(20) << __func__ << " " << pg->pg_id << " waiting for merge" << dendl;
       return false;
     }
-    dout(20) << __func__ << " " << pg->pg_id << " " << pg << dendl;
-    sdata->_detach_pg(p->second.get());
   }
 
   for (auto shard : shards) {
@@ -7665,7 +7663,7 @@ MPGStats* OSD::collect_pg_stats()
   for (auto& pg : pgs) {
     auto pool = pg->pg_id.pgid.pool();
     pool_set.emplace((int64_t)pool);
-    if (!pg->is_primary()) {
+    if (!pg->is_primary() && pg->is_deleted()) {
       continue;
     }
     pg->with_pg_stats(now_is, [&](const pg_stat_t& s, epoch_t lec) {
@@ -7673,6 +7671,15 @@ MPGStats* OSD::collect_pg_stats()
 	min_last_epoch_clean = std::min(min_last_epoch_clean, lec);
 	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
       });
+
+    // detach_pg after send deleted state to mgr.
+    if (pg->state_test(PG_STATE_DELETED)) {
+      pg->set_delete_complete();
+      auto sdata = pg->osd_shard;
+      std::lock_guard l(sdata->shard_lock);
+      auto p = sdata->pg_slots.find(pg->pg_id);
+      sdata->_detach_pg(p->second.get());
+    }
   }
   store_statfs_t st;
   bool per_pool_stats = true;

@@ -77,6 +77,8 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
   std::lock_guard l(lock);
 
   const int from = stats->get_orig_source().num();
+  dout(10) << " from osd " << from << dendl;
+
   bool is_in = with_osdmap([from](const OSDMap& osdmap) {
     return osdmap.is_in(from);
   });
@@ -93,27 +95,6 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
     pg_t pgid = p.first;
     const auto &pg_stats = p.second;
 
-    // In case we're hearing about a PG that according to last
-    // OSDMap update should not exist
-    auto r = existing_pools.find(pgid.pool());
-    if (r == existing_pools.end()) {
-      dout(15) << " got " << pgid
-	       << " reported at " << pg_stats.reported_epoch << ":"
-               << pg_stats.reported_seq
-               << " state " << pg_state_string(pg_stats.state)
-               << " but pool not in " << existing_pools
-               << dendl;
-      continue;
-    }
-    if (pgid.ps() >= r->second) {
-      dout(15) << " got " << pgid
-	       << " reported at " << pg_stats.reported_epoch << ":"
-               << pg_stats.reported_seq
-               << " state " << pg_state_string(pg_stats.state)
-               << " but > pg_num " << r->second
-               << dendl;
-      continue;
-    }
     // In case we already heard about more recent stats from this PG
     // from another OSD
     const auto q = pg_map.pg_stat.find(pgid);
@@ -124,8 +105,11 @@ void ClusterState::ingest_pgstats(ref_t<MPGStats> stats)
 	       << q->second.reported_seq << dendl;
       continue;
     }
-
-    pending_inc.pg_stat_updates[pgid] = pg_stats;
+    if (pg_state_string(pg_stats.state) == "deleted") {
+      pending_inc.pg_remove.insert(pgid);
+    } else {
+      pending_inc.pg_stat_updates[pgid] = pg_stats;
+    }
   }
   for (auto p : stats->pool_stat) {
     pending_inc.pool_statfs_updates[std::make_pair(p.first, from)] = p.second;

@@ -3554,6 +3554,10 @@ static pg_shard_t get_another_shard(const set<pg_shard_t> & pgs, pg_shard_t skip
 
 void PeeringState::update_calc_stats()
 {
+  if (state_test(PG_STATE_DELETED) || state_test(PG_STATE_DELETING)) {
+    return;
+  }
+
   info.stats.version = info.last_update;
   info.stats.created = info.history.epoch_created;
   info.stats.last_scrub = info.history.last_scrub;
@@ -6724,6 +6728,8 @@ PeeringState::Deleting::Deleting(my_context ctx)
 
   DECLARE_LOCALS;
   ps->deleting = true;
+  ps->state_set(PG_STATE_DELETING);
+  pl->publish_stats_to_osd();
   ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
 
   // clear log
@@ -6754,6 +6760,9 @@ void PeeringState::Deleting::exit()
   context< PeeringMachine >().log_exit(state_name, enter_time);
   DECLARE_LOCALS;
   ps->deleting = false;
+  ps->state_clear(PG_STATE_DELETING);
+  ps->state_set(PG_STATE_DELETED);
+  pl->publish_stats_to_osd();
   pl->cancel_local_background_io_reservation();
 }
 
