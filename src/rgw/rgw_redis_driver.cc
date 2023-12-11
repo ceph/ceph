@@ -7,14 +7,13 @@
 
 namespace rgw { namespace cache {
 
-std::list<std::string> build_attrs(rgw::sal::Attrs* binary) 
+std::list<std::string> build_attrs(const rgw::sal::Attrs& binary) 
 {
   std::list<std::string> values;
-  rgw::sal::Attrs::iterator attrs;
 
   /* Convert to vector */
-  if (binary != NULL) {
-    for (attrs = binary->begin(); attrs != binary->end(); ++attrs) {
+  if (!binary.empty()) {
+    for (auto attrs = binary.begin(); attrs != binary.end(); ++attrs) {
       values.push_back(attrs->first);
       values.push_back(attrs->second.to_str());
     }
@@ -81,7 +80,7 @@ int RedisDriver::initialize(const DoutPrefixProvider* dpp)
   return 0;
 }
 
-int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) 
+int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
@@ -89,7 +88,7 @@ int RedisDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buff
   try {
     boost::system::error_code ec;
     response<std::string> resp;
-    auto redisAttrs = build_attrs(&attrs);
+    auto redisAttrs = build_attrs(attrs);
 
     if (bl.length()) {
       redisAttrs.push_back("data");
@@ -199,7 +198,7 @@ int RedisDriver::del(const DoutPrefixProvider* dpp, const std::string& key, opti
   return 0; 
 }
 
-int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y) 
+int RedisDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, const bufferlist& bl_data, optional_yield y) 
 {
   response<int> exists;
   std::string value;
@@ -347,7 +346,7 @@ int RedisDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key
   return 0;
 }
 
-int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
+int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, const rgw::sal::Attrs& attrs, optional_yield y) 
 {
   if (attrs.empty())
     return -1;
@@ -359,7 +358,7 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
     boost::system::error_code ec;
     response<std::string> resp;
     std::string result;
-    std::list<std::string> redisAttrs = build_attrs(&attrs);
+    std::list<std::string> redisAttrs = build_attrs(attrs);
 
     request req;
     req.push_range("HMSET", entry, redisAttrs);
@@ -376,14 +375,14 @@ int RedisDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key
   return 0;
 }
 
-int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y) 
+int RedisDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, const rgw::sal::Attrs& attrs, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
 
   try {
     boost::system::error_code ec;
     response<std::string> resp;
-    auto redisAttrs = build_attrs(&attrs);
+    auto redisAttrs = build_attrs(attrs);
 
     request req;
     req.push_range("HMSET", entry, redisAttrs);
@@ -407,7 +406,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   try {
     boost::system::error_code ec;
     response<int> resp;
-    auto redisAttrs = build_attrs(&del_attrs);
+    auto redisAttrs = build_attrs(del_attrs);
 
     request req;
     req.push_range("HDEL", entry, redisAttrs);
@@ -524,7 +523,7 @@ rgw::AioResultList RedisDriver::get_async(const DoutPrefixProvider* dpp, optiona
   return aio->get(r_obj, redis_read_op(y, conn, ofs, len, entry), cost, id);
 }
 
-int RedisDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) {
+int RedisDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs) {
   // TODO: implement
   return -1;
 } 

@@ -52,8 +52,9 @@ int SSDDriver::initialize(const DoutPrefixProvider* dpp)
     return 0;
 }
 
-int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y)
+int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs, optional_yield y)
 {
+    bufferlist src = bl;
     std::string location = partition_info.location + key;
 
     ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
@@ -67,7 +68,7 @@ int SSDDriver::put(const DoutPrefixProvider* dpp, const std::string& key, buffer
         return -errno;
     }
 
-    nbytes = fwrite(bl.c_str(), 1, len, cache_file);
+    nbytes = fwrite(src.c_str(), 1, len, cache_file);
     if (nbytes != len) {
         ldpp_dout(dpp, 0) << "ERROR: put::io_write: fwrite has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << len << dendl;
         return -EIO;
@@ -135,8 +136,9 @@ int SSDDriver::get(const DoutPrefixProvider* dpp, const std::string& key, off_t 
     return 0;
 }
 
-int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, bufferlist& bl_data, optional_yield y)
+int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& key, const bufferlist& bl_data, optional_yield y)
 {
+    bufferlist src = bl_data;
     std::string location = partition_info.location + key;
 
     ldpp_dout(dpp, 20) << __func__ << "(): location=" << location << dendl;
@@ -150,8 +152,8 @@ int SSDDriver::append_data(const DoutPrefixProvider* dpp, const::std::string& ke
         return -errno;
     }
 
-    nbytes = fwrite(bl_data.c_str(), 1, bl_data.length(), cache_file);
-    if (nbytes != bl_data.length()) {
+    nbytes = fwrite(src.c_str(), 1, src.length(), cache_file);
+    if (nbytes != src.length()) {
         ldpp_dout(dpp, 0) << "ERROR: append_data: fwrite has returned error: nbytes!=len, nbytes=" << nbytes << ", len=" << bl_data.length() << dendl;
         return -EIO;
     }
@@ -231,12 +233,13 @@ void SSDDriver::libaio_write_completion_cb(AsyncWriteRequest* c)
     this->free_space = space.available;
 }
 
-int SSDDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs)
+int SSDDriver::put_async(const DoutPrefixProvider* dpp, const std::string& key, const bufferlist& bl, uint64_t len, const rgw::sal::Attrs& attrs)
 {
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): Write To Cache, oid=" << key << ", len=" << len << dendl;
+    bufferlist src = bl;
     struct AsyncWriteRequest* wr = new struct AsyncWriteRequest(dpp);
     int r = 0;
-    if ((r = wr->prepare_libaio_write_op(dpp, bl, len, key, partition_info.location)) < 0) {
+    if ((r = wr->prepare_libaio_write_op(dpp, src, len, key, partition_info.location)) < 0) {
         ldpp_dout(dpp, 0) << "ERROR: SSDCache: " << __func__ << "() prepare libaio write op r=" << r << dendl;
         return r;
     }
@@ -348,7 +351,7 @@ void SSDDriver::AsyncReadOp::libaio_cb_aio_dispatch(sigval sigval)
     ceph::async::dispatch(std::move(p), ec, std::move(op.result));
 }
 
-int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y)
+int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& key, const rgw::sal::Attrs& attrs, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
@@ -426,7 +429,7 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     return 0;
 }
 
-int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, rgw::sal::Attrs& attrs, optional_yield y)
+int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, const rgw::sal::Attrs& attrs, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
