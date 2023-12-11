@@ -35,7 +35,7 @@ seastar::future<> RecoverySubRequest::with_pg(
   return interruptor::with_interruption([this, pgref] {
     LOG_PREFIX(RecoverySubRequest::with_pg);
     DEBUGI("{}: {}", "RecoverySubRequest::with_pg", *this);
-    return pgref->get_recovery_backend()->handle_recovery_op(m, conn
+    return pgref->get_recovery_backend()->handle_recovery_op(m, r_conn
     ).then_interruptible([this] {
       LOG_PREFIX(RecoverySubRequest::with_pg);
       DEBUGI("{}: complete", *this);
@@ -52,7 +52,8 @@ seastar::future<> RecoverySubRequest::with_pg(
 
 ConnectionPipeline &RecoverySubRequest::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).peering_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).client_request_conn_pipeline;
 }
 
 PerShardPipeline &RecoverySubRequest::get_pershard_pipeline(

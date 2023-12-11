@@ -49,7 +49,7 @@ ClientRequest::ClientRequest(
   ShardServices &_shard_services, crimson::net::ConnectionRef conn,
   Ref<MOSDOp> &&m)
   : shard_services(&_shard_services),
-    conn(std::move(conn)),
+    l_conn(std::move(conn)),
     m(std::move(m)),
     instance_handle(new instance_handle_t)
 {}
@@ -76,7 +76,8 @@ void ClientRequest::dump_detail(Formatter *f) const
 
 ConnectionPipeline &ClientRequest::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).client_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).client_request_conn_pipeline;
 }
 
 PerShardPipeline &ClientRequest::get_pershard_pipeline(
@@ -117,7 +118,7 @@ seastar::future<> ClientRequest::with_pg_int(Ref<PG> pgref)
       PG &pg = *pgref;
       if (pg.can_discard_op(*m)) {
 	return shard_services->send_incremental_map(
-	  std::ref(*conn), m->get_map_epoch()
+	  std::ref(get_foreign_connection()), m->get_map_epoch()
 	).then([FNAME, this, this_instance_id, pgref] {
 	  DEBUGDPP("{}: discarding {}", *pgref, *this, this_instance_id);
 	  pgref->client_request_orderer.remove_request(*this);
@@ -196,7 +197,7 @@ ClientRequest::process_pg_op(
     m
   ).then_interruptible([this, pg=std::move(pg)](MURef<MOSDOpReply> reply) {
     // TODO: gate the crosscore sending
-    return conn->send_with_throttling(std::move(reply));
+    return get_foreign_connection().send_with_throttling(std::move(reply));
   });
 }
 
@@ -211,7 +212,7 @@ auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
   reply->set_reply_versions(eversion_t(), 0);
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
   // TODO: gate the crosscore sending
-  return conn->send_with_throttling(std::move(reply));
+  return get_foreign_connection().send_with_throttling(std::move(reply));
 }
 
 ClientRequest::interruptible_future<>
@@ -237,7 +238,7 @@ ClientRequest::process_op(
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
 	reply->set_reply_versions(completed->version, completed->user_version);
         // TODO: gate the crosscore sending
-        return conn->send_with_throttling(std::move(reply));
+        return get_foreign_connection().send_with_throttling(std::move(reply));
       } else {
 	DEBUGDPP("{}.{}: not completed, entering get_obc stage",
 		 *pg, *this, this_instance_id);
@@ -323,9 +324,10 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENAMETOOLONG);
   } else if (m->get_hobj().oid.name.empty()) {
     return reply_op_error(pg, -EINVAL);
-  } else if (pg->get_osdmap()->is_blocklisted(conn->get_peer_addr())) {
+  } else if (pg->get_osdmap()->is_blocklisted(
+        get_foreign_connection().get_peer_addr())) {
     DEBUGDPP("{}.{}: {} is blocklisted",
-	     *pg, *this, this_instance_id, conn->get_peer_addr());
+	     *pg, *this, this_instance_id, get_foreign_connection().get_peer_addr());
     return reply_op_error(pg, -EBLOCKLISTED);
   }
 
@@ -361,7 +363,9 @@ ClientRequest::do_process(
 	       *pg, *this, this_instance_id, m->get_hobj());
     }
   }
-  return pg->do_osd_ops(m, conn, obc, op_info, snapc).safe_then_unpack_interruptible(
+  return pg->do_osd_ops(
+    m, r_conn, obc, op_info, snapc
+  ).safe_then_unpack_interruptible(
     [FNAME, this, pg, this_instance_id, &ihref](
       auto submitted, auto all_completed) mutable {
       return submitted.then_interruptible(
@@ -379,7 +383,9 @@ ClientRequest::do_process(
 		 reply=std::move(reply)]() mutable {
 		  DEBUGDPP("{}.{}: sending response",
 			   *pg, *this, this_instance_id);
-		  return conn->send(std::move(reply));
+		  // TODO: gate the crosscore sending
+		  return get_foreign_connection(
+                      ).send_with_throttling(std::move(reply));
 		});
 	    }, crimson::ct_error::eagain::handle(
 	      [this, pg, this_instance_id, &ihref]() mutable {

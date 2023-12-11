@@ -24,7 +24,9 @@ class RemoteScrubEventBaseT : public PhasedOperationT<T> {
 
   PipelineHandle handle;
 
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionRef l_conn;
+  crimson::net::ConnectionXcoreRef r_conn;
+
   epoch_t epoch;
   spg_t pgid;
 
@@ -38,16 +40,40 @@ protected:
 public:
   RemoteScrubEventBaseT(
     crimson::net::ConnectionRef conn, epoch_t epoch, spg_t pgid)
-    : conn(conn), epoch(epoch), pgid(pgid) {}
+    : l_conn(std::move(conn)), epoch(epoch), pgid(pgid) {}
 
   PGPeeringPipeline &get_peering_pipeline(PG &pg);
+
   ConnectionPipeline &get_connection_pipeline();
+
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
 
-  crimson::net::Connection &get_connection() {
-    assert(conn);
-    return *conn;
+  crimson::net::Connection &get_local_connection() {
+    assert(l_conn);
+    assert(!r_conn);
+    return *l_conn;
   };
+
+  crimson::net::Connection &get_foreign_connection() {
+    assert(r_conn);
+    assert(!l_conn);
+    return *r_conn;
+  };
+
+  crimson::net::ConnectionFFRef prepare_remote_submission() {
+    assert(l_conn);
+    assert(!r_conn);
+    auto ret = seastar::make_foreign(std::move(l_conn));
+    l_conn.reset();
+    return ret;
+  }
+
+  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
+    assert(conn);
+    assert(!l_conn);
+    assert(!r_conn);
+    r_conn = make_local_shared_foreign(std::move(conn));
+  }
 
   static constexpr bool can_create() { return false; }
 
@@ -57,19 +83,6 @@ public:
 
   PipelineHandle &get_handle() { return handle; }
   epoch_t get_epoch() const { return epoch; }
-
-  seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
-    assert(conn);
-    return conn.get_foreign(
-    ).then([this](auto f_conn) {
-      conn.reset();
-      return f_conn;
-    });
-  }
-  void finish_remote_submission(crimson::net::ConnectionFRef _conn) {
-    assert(!conn);
-    conn = make_local_shared_foreign(std::move(_conn));
-  }
 
   seastar::future<> with_pg(
     ShardServices &shard_services, Ref<PG> pg);
