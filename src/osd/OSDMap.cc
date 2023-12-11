@@ -933,6 +933,10 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
       decode(new_last_up_change, bl);
       decode(new_last_in_change, bl);
     }
+    if (struct_v >= 9) {
+      decode(new_pg_upmap_primary, bl);
+      decode(old_pg_upmap_primary, bl);
+    }
     DECODE_FINISH(bl); // client-usable data
   }
 
