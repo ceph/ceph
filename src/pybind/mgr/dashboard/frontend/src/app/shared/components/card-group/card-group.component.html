@@ -1,0 +1,10 @@
+<div class="row"
+     *ngIf="groupTitle">
+  <div class="info-group-title">
+    <span i18n>{{ groupTitle }}</span>
+  </div>
+</div>
+
+<div class="row">
+  <ng-content></ng-content>
+</div>

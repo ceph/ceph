@@ -1,0 +1,11 @@
+tasks:
+- install:
+- ceph:
+- rgw: [client.0]
+- tox: [client.0]
+- s3tests:
+    client.0:
+      rgw_server: client.0
+      storage classes: LUKEWARM, FROZEN
+      lc_debug_interval: 10
+      lifecycle_tests: True
