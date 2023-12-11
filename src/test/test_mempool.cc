@@ -412,7 +412,7 @@ TEST(mempool, check_shard_select)
   for (size_t i = 0; i < samples; i++) {
     workers.push_back(
       std::thread([&](){
-          size_t i = mempool::pool_t::pick_a_shard_int();
+          size_t i = mempool::pick_a_shard_int();
           shards[i]++;
         }));
   }
