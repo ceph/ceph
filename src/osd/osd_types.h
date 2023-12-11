@@ -1041,6 +1041,8 @@ WRITE_CLASS_ENCODER_FEATURES(objectstore_perf_stat_t)
 #define PG_STATE_FAILED_REPAIR      (1ULL << 32) // A repair failed to fix all errors
 #define PG_STATE_LAGGY              (1ULL << 33) // PG is laggy/unreabable due to slow/delayed pings
 #define PG_STATE_WAIT               (1ULL << 34) // PG is waiting for prior intervals' readable period to expire
+#define PG_STATE_DELETING           (1ULL << 35) // pg is deleting
+#define PG_STATE_DELETED            (1ULL << 36) // pg is deleted
 
 std::string pg_state_string(uint64_t state);
 std::string pg_vector_string(const std::vector<int32_t> &a);

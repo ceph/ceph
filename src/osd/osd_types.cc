@@ -1185,6 +1185,10 @@ std::string pg_state_string(uint64_t state)
     *css << "laggy+";
   if (state & PG_STATE_WAIT)
     *css << "wait+";
+  if (state & PG_STATE_DELETING)
+    *css << "deleting+";
+  if (state & PG_STATE_DELETED)
+    *css << "deleted+";
   auto ret = css->str();
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -1262,6 +1266,10 @@ std::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_LAGGY;
   else if (state == "wait")
     type = PG_STATE_WAIT;
+  else if (state == "deleting")
+    type = PG_STATE_DELETING;
+  else if (state == "deleted")
+    type = PG_STATE_DELETED;
   else if (state == "unknown")
     type = 0;
   else
