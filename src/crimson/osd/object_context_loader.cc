@@ -22,7 +22,7 @@ using crimson::common::local_conf;
       return get_or_load_obc<State>(obc, existed)
       .safe_then_interruptible(
         [func = std::move(func)](auto obc) {
-        return std::move(func)(std::move(obc));
+        return std::move(func)(obc, obc);
       });
     }).finally([FNAME, this, obc=std::move(obc)] {
       DEBUGDPP("released object {}", dpp, obc->get_oid());
@@ -39,7 +39,7 @@ using crimson::common::local_conf;
     assert(!oid.is_head());
     return with_obc<RWState::RWREAD>(
       oid.get_head(),
-      [FNAME, oid, func=std::move(func), this](auto head) mutable
+      [FNAME, oid, func=std::move(func), this](auto head, auto) mutable
       -> load_obc_iertr::future<> {
       if (!head->obs.exists) {
 	ERRORDPP("head doesn't exist for object {}", dpp, head->obs.oi.soid);
@@ -70,12 +70,12 @@ using crimson::common::local_conf;
     auto [clone, existed] = obc_registry.get_cached_obc(*coid);
     return clone->template with_lock<State, IOInterruptCondition>(
       [existed=existed, clone=std::move(clone),
-       func=std::move(func), head=std::move(head), this]()
+       func=std::move(func), head=std::move(head), this]() mutable
       -> load_obc_iertr::future<> {
       auto loaded = get_or_load_obc<State>(clone, existed);
       return loaded.safe_then_interruptible(
-        [func = std::move(func)](auto clone) {
-        return std::move(func)(std::move(clone));
+        [func = std::move(func), head=std::move(head)](auto clone) mutable {
+        return std::move(func)(std::move(head), std::move(clone));
       });
     });
   }
@@ -84,13 +84,13 @@ using crimson::common::local_conf;
   ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_clone_obc_direct(
     hobject_t oid,
-    with_both_obc_func_t&& func)
+    with_obc_func_t&& func)
   {
     LOG_PREFIX(ObjectContextLoader::with_clone_obc_direct);
     assert(!oid.is_head());
     return with_obc<RWState::RWREAD>(
       oid.get_head(),
-      [FNAME, oid, func=std::move(func), this](auto head) mutable
+      [FNAME, oid, func=std::move(func), this](auto head, auto) mutable
       -> load_obc_iertr::future<> {
       if (!head->obs.exists) {
         ERRORDPP("head doesn't exist for object {}", dpp, head->obs.oi.soid);
@@ -228,5 +228,5 @@ using crimson::common::local_conf;
   template ObjectContextLoader::load_obc_iertr::future<>
   ObjectContextLoader::with_clone_obc_direct<RWState::RWWRITE>(
     hobject_t,
-    with_both_obc_func_t&&);
+    with_obc_func_t&&);
 }

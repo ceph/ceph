@@ -316,7 +316,8 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_pushes(
   );
 }
 
-void PGRecovery::on_local_recover(
+RecoveryBackend::interruptible_future<>
+PGRecovery::on_local_recover(
   const hobject_t& soid,
   const ObjectRecoveryInfo& recovery_info,
   const bool is_delete,
@@ -332,20 +333,38 @@ void PGRecovery::on_local_recover(
       ceph_abort("mark_unfound_lost (LOST_REVERT) is not implemented yet");
     }
   }
-  pg->get_peering_state().recover_got(soid,
-      recovery_info.version, is_delete, t);
 
-  if (pg->is_primary()) {
-    if (!is_delete) {
-      auto& obc = pg->get_recovery_backend()->get_recovering(soid).obc; //TODO: move to pg backend?
-      obc->obs.exists = true;
-      obc->obs.oi = recovery_info.oi;
+  return RecoveryBackend::interruptor::async(
+    [soid, &recovery_info, is_delete, &t, this] {
+    if (soid.is_snap()) {
+      OSDriver::OSTransaction _t(pg->get_osdriver().get_transaction(&t));
+      int r = pg->get_snap_mapper().remove_oid(soid, &_t);
+      assert(r == 0 || r == -ENOENT);
+
+      if (!is_delete) {
+	set<snapid_t> snaps;
+	auto p = recovery_info.ss.clone_snaps.find(soid.snap);
+	assert(p != recovery_info.ss.clone_snaps.end());
+	snaps.insert(p->second.begin(), p->second.end());
+	pg->get_snap_mapper().add_oid(recovery_info.soid, snaps, &_t);
+      }
     }
-    if (!pg->is_unreadable_object(soid)) {
-      pg->get_recovery_backend()->get_recovering(soid).set_readable();
+
+    pg->get_peering_state().recover_got(soid,
+	recovery_info.version, is_delete, t);
+
+    if (pg->is_primary()) {
+      if (!is_delete) {
+	auto& obc = pg->get_recovery_backend()->get_recovering(soid).obc; //TODO: move to pg backend?
+	obc->obs.exists = true;
+	obc->obs.oi = recovery_info.oi;
+      }
+      if (!pg->is_unreadable_object(soid)) {
+	pg->get_recovery_backend()->get_recovering(soid).set_readable();
+      }
+      pg->publish_stats_to_osd();
     }
-    pg->publish_stats_to_osd();
-  }
+  });
 }
 
 void PGRecovery::on_global_recover (

@@ -1261,9 +1261,9 @@ PG::with_locked_obc(const hobject_t &hobj,
     throw crimson::common::system_shutdown_exception();
   }
   const hobject_t oid = get_oid(hobj);
-  auto wrapper = [f=std::move(f), this](auto obc) {
+  auto wrapper = [f=std::move(f), this](auto head, auto obc) {
     check_blocklisted_obc_watchers(obc);
-    return f(obc);
+    return f(head, obc);
   };
   switch (get_lock_type(op_info)) {
   case RWState::RWREAD:
