@@ -2395,6 +2395,9 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
     ++num;
   }
   bool running = true;
+
+  osd->update_deleting_pgs(pg_id.pgid);
+
   if (num) {
     dout(20) << __func__ << " deleting " << num << " objects" << dendl;
     Context *fin = new C_DeleteMore(this, get_osdmap_epoch(), num);
@@ -2425,6 +2428,7 @@ std::pair<ghobject_t, bool> PG::do_delete_work(
       init_pg_ondisk(t, info.pgid, &pool.info);
       recovery_state.reset_last_persisted();
     } else {
+      osd->update_deleted_pgs(pg_id.pgid);
       recovery_state.set_delete_complete();
 
       // cancel reserver here, since the PG is about to get deleted and the

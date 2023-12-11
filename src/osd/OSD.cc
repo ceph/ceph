@@ -2061,6 +2061,26 @@ void OSDService::prune_sent_ready_to_merge(const OSDMapRef& osdmap)
   }
 }
 
+void OSDService::update_deleting_pgs(pg_t pgid)
+{
+  std::lock_guard l(pg_delete);
+  if (osd_deleting_pgs.find(pgid) == osd_deleting_pgs.end()) {
+    pg_stat_t delete_stats;
+    delete_stats.state = PG_STATE_DELETING;
+    osd_deleting_pgs[pgid] = delete_stats;
+  }
+}
+
+void OSDService::update_deleted_pgs(pg_t pgid)
+{
+  std::lock_guard l(pg_delete);
+  if (osd_deleting_pgs.find(pgid) != osd_deleting_pgs.end()) {
+    osd_deleting_pgs[pgid].state = PG_STATE_DELETED;
+    osd_deleted_pgs[pgid] = osd_deleting_pgs[pgid];
+    osd_deleting_pgs.erase(pgid);
+  }
+}
+
 // ---
 
 void OSDService::_queue_for_recovery(
@@ -7787,6 +7807,22 @@ MPGStats* OSD::collect_pg_stats()
 	min_last_epoch_clean = std::min(min_last_epoch_clean, lec);
 	min_last_epoch_clean_pgs.push_back(pg->pg_id.pgid);
       });
+  }
+
+  {
+    std::lock_guard l(service.pg_delete);
+    const auto& osd_deleting_pgs = service.get_osd_deleting_pgs();
+    for (const auto& [pgid, pg_stats] : osd_deleting_pgs) {
+      m->pg_stat[pgid] = pg_stats;
+    }
+    auto& osd_deleted_pgs = service.get_osd_deleted_pgs();
+    if (!osd_deleted_pgs.empty()) {
+      for (const auto& [pgid, pg_stats] : osd_deleted_pgs) {
+        m->pg_stat[pgid] = pg_stats;
+      }
+      // After sending it to MGR, clear it.
+      osd_deleted_pgs.clear();
+    }
   }
   store_statfs_t st;
   bool per_pool_stats = true;

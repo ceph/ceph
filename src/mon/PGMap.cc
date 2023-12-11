@@ -2494,6 +2494,10 @@ void PGMap::get_health_checks(
       const auto &pg_id = i.first;
       const auto &pg_info = i.second;
 
+      // skip pg of deleting state, avoid health warn caused by deleting pg
+      if (pg_info.state == PG_STATE_DELETING)
+        continue;
+
       for (const auto &j : state_to_response) {
         const auto &pg_response_state = j.first;
         const auto &pg_response = j.second;
