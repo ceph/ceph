@@ -227,18 +227,9 @@ ClientRequest::interruptible_future<>
 ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
 {
   return ihref.enter_stage<interruptor>(
-    client_pp(*pg).recover_missing,
-    *this
-  ).then_interruptible(
-    [this, pg]() mutable {
-    LOG_PREFIX(ClientRequest::process_op);
-    if (pg->is_primary()) {
-      return do_recover_missing(pg, m->get_hobj());
-    } else {
-      DEBUGI("process_op: Skipping do_recover_missing"
-                     "on non primary pg");
-      return interruptor::now();
-    }
+    client_pp(*pg).recover_missing, *this
+  ).then_interruptible([pg, this]() mutable {
+    return recover_missings(pg, m->get_hobj(), snaps_need_to_recover());
   }).then_interruptible([this, pg, &ihref]() mutable {
     return pg->already_complete(m->get_reqid()).then_interruptible(
       [this, pg, &ihref](auto completed) mutable
@@ -259,7 +250,7 @@ ClientRequest::process_op(instance_handle_t &ihref, Ref<PG> &pg)
           op_info.set_from_op(&*m, *pg->get_osdmap());
           return pg->with_locked_obc(
             m->get_hobj(), op_info,
-            [this, pg, &ihref](auto obc) mutable {
+            [this, pg, &ihref](auto head, auto obc) mutable {
               LOG_PREFIX(ClientRequest::process_op);
               DEBUGI("{}: got obc {}", *this, obc->obs);
               return ihref.enter_stage<interruptor>(

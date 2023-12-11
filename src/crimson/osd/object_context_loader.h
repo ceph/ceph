@@ -30,9 +30,6 @@ public:
       load_obc_ertr>;
 
   using with_obc_func_t =
-    std::function<load_obc_iertr::future<> (ObjectContextRef)>;
-
-  using with_both_obc_func_t =
     std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
   // Use this variant by default
@@ -55,7 +52,7 @@ public:
   template<RWState::State State>
   load_obc_iertr::future<> with_clone_obc_direct(
     hobject_t oid,
-    with_both_obc_func_t&& func);
+    with_obc_func_t&& func);
 
   load_obc_iertr::future<> reload_obc(ObjectContext& obc) const;
 

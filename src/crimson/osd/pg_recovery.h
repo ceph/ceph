@@ -64,7 +64,7 @@ private:
     const hobject_t& soid,
     eversion_t need);
 
-  void on_local_recover(
+  RecoveryBackend::interruptible_future<> on_local_recover(
     const hobject_t& soid,
     const ObjectRecoveryInfo& recovery_info,
     bool is_delete,
