@@ -492,6 +492,9 @@ class InitContainer(BasicContainer):
     def rm_cmd(self, storage: bool = False) -> List[str]:
         return self.build_rm_cmd(storage=storage)
 
+    def stop_cmd(self, timeout: Optional[int] = None) -> List[str]:
+        return self.build_stop_cmd(timeout=timeout)
+
 
 class SidecarContainer(BasicContainer):
     @classmethod
