@@ -384,7 +384,7 @@ public:
       return this->read_pin<T>(t, std::move(pin));
     }).si_then([this, &t](auto extent) {
       auto ext = get_mutable_extent(t, extent)->template cast<T>();
-      return alloc_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
+      return read_extent_iertr::make_ready_future<TCachedExtentRef<T>>(
 	std::move(ext));
     });
   }
