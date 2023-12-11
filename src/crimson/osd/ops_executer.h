@@ -113,10 +113,10 @@ public:
   class ExecutableMessagePimpl final : ExecutableMessage {
     const ImplT* pimpl;
     // In crimson, conn is independently maintained outside Message.
-    const crimson::net::ConnectionRef conn;
+    const crimson::net::ConnectionXcoreRef conn;
   public:
     ExecutableMessagePimpl(const ImplT* pimpl,
-                           const crimson::net::ConnectionRef conn)
+                           const crimson::net::ConnectionXcoreRef conn)
       : pimpl(pimpl), conn(conn) {
     }
 
@@ -185,7 +185,7 @@ private:
     ceph::static_ptr<ExecutableMessage,
                      sizeof(ExecutableMessagePimpl<void>)>;
   abstracted_msg_t msg;
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionXcoreRef conn;
   std::optional<osd_op_params_t> osd_op_params;
   bool user_modify = false;
   ceph::os::Transaction txn;
@@ -372,7 +372,7 @@ private:
               ObjectContextRef obc,
               const OpInfo& op_info,
               abstracted_msg_t&& msg,
-              crimson::net::ConnectionRef conn,
+              crimson::net::ConnectionXcoreRef conn,
               const SnapContext& snapc);
 
 public:
@@ -381,7 +381,7 @@ public:
               ObjectContextRef obc,
               const OpInfo& op_info,
               const MsgT& msg,
-              crimson::net::ConnectionRef conn,
+              crimson::net::ConnectionXcoreRef conn,
               const SnapContext& snapc)
     : OpsExecuter(
         std::move(pg),

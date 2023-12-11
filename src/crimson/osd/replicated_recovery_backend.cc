@@ -1305,7 +1305,7 @@ ReplicatedRecoveryBackend::handle_recovery_delete_reply(
 RecoveryBackend::interruptible_future<>
 ReplicatedRecoveryBackend::handle_recovery_op(
   Ref<MOSDFastDispatchOp> m,
-  crimson::net::ConnectionRef conn)
+  crimson::net::ConnectionXcoreRef conn)
 {
   switch (m->get_header().type) {
   case MSG_OSD_PG_PULL:
