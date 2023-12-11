@@ -419,7 +419,7 @@ centers for three-way replication, and yet another rule for erasure coding acros
 six storage devices. For a detailed discussion of CRUSH rules, see **Section 3.2**
 of `CRUSH - Controlled, Scalable, Decentralized Placement of Replicated Data`_.
 
-A rule takes the following form::
+A normal CRUSH rule takes the following form::
 
     rule <rulename> {
 
@@ -430,6 +430,19 @@ A rule takes the following form::
         step emit
     }
 
+CRUSH MSR (Multi-Step Retry) rules are a distinct type of CRUSH rule which
+supports retrying steps and provides better support for configurations that
+require multiple OSDs within each failure domain. MSR rules take the following
+form::
+
+    rule <rulename> {
+
+        id [a unique integer ID]
+        type [msr_indep|msr_firstn]
+        step take <bucket-name> [class <device-class>]
+        step choosemsr <N> type <bucket-type>
+        step emit
+    }
 
 ``id``
    :Description: A unique integer that identifies the rule.
@@ -441,12 +454,14 @@ A rule takes the following form::
 
 ``type``
    :Description: Denotes the type of replication strategy to be enforced by the
-                 rule.
+                 rule.  msr_firstn and msr_indep are a distinct descent algorithm
+		 which supports retrying steps within the rule and therefore
+		 multiple OSDs per failure domain.
    :Purpose: A component of the rule mask.
    :Type: String
    :Required: Yes
    :Default: ``replicated``
-   :Valid Values: ``replicated`` or ``erasure``
+   :Valid Values: ``replicated``, ``erasure``, ``msr_firstn``, ``msr_indep``
 
 
 ``step take <bucket-name> [class <device-class>]``
@@ -524,6 +539,16 @@ A rule takes the following form::
                  select 3, discover that 3 is down, retry, and select 6. The
                  final CRUSH mapping transformation is therefore 1, 2, 3, 4, 5
                  → 1, 2, 6, 4, 5.
+
+``step choosemsr {num} type {bucket-type}``
+   :Description: Selects a num buckets of type bucket-type.  msr_firstn and msr_indep
+		 must use choosemsr rather than choose or chooseleaf.
+
+                 - If ``{num} == 0``, choose ``pool-num-replicas`` buckets (as many buckets as are available).
+                 - If ``pool-num-replicas > {num} > 0``, choose that many buckets.
+   :Purpose: Choose step required for msr_firstn and msr_indep rules.
+   :Prerequisite: Follows ``step take`` and precedes ``step emit``
+   :Example: ``step choosemsr 3 type host``
 
 .. _crush-reclassify:
 
