@@ -3,6 +3,7 @@
 #include "rgw_common.h"
 
 #include <boost/lexical_cast.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
 
 #define dout_subsys ceph_subsys_rgw

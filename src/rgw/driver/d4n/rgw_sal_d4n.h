@@ -29,6 +29,7 @@
 
 #include <boost/intrusive/list.hpp>
 #include <boost/asio/io_context.hpp>
+#include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
 
 namespace rgw::d4n {

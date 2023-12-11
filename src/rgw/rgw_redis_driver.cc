@@ -1,5 +1,6 @@
 #include <boost/algorithm/string.hpp>
 #include <boost/redis/src.hpp>
+#include <boost/asio/detached.hpp>
 
 #include "rgw_redis_driver.h"
 #include "common/async/blocked_completion.h"
