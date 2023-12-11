@@ -222,6 +222,7 @@ BLOCK_MGR_ROLE = Role(
         Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
         Scope.GRAFANA: [_P.READ],
+        Scope.NVME_OF: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     })
 
 
