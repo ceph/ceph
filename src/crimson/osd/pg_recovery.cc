@@ -140,13 +140,14 @@ size_t PGRecovery::start_primary_recovery_ops(
 
     hobject_t head = soid.get_head();
 
+    bool head_missing = missing.is_missing(head);
     logger().info(
       "{} {} item.need {} {} {} {} {}",
       __func__,
       soid,
       item.need,
       missing.is_missing(soid) ? " (missing)":"",
-      missing.is_missing(head) ? " (missing head)":"",
+      head_missing ? " (missing head)":"",
       pg->get_recovery_backend()->is_recovering(soid) ? " (recovering)":"",
       pg->get_recovery_backend()->is_recovering(head) ? " (recovering head)":"");
 
@@ -158,7 +159,15 @@ size_t PGRecovery::start_primary_recovery_ops(
     } else if (pg->get_recovery_backend()->is_recovering(head)) {
       ++skipped;
     } else {
-      out->emplace_back(recover_missing(trigger, soid, item.need));
+      if (head_missing) {
+	auto it = missing.get_items().find(head);
+	assert(it != missing.get_items().end());
+	auto head_need = it->second.need;
+	out->emplace_back(recover_missing(trigger, head, head_need));
+	++skipped;
+      } else {
+	out->emplace_back(recover_missing(trigger, soid, item.need));
+      }
       ++started;
     }
 
