@@ -802,13 +802,15 @@ RandomBlockOolWriter::do_write(
     } else {
       bp = ex->get_bptr();
     }
-    return rbm->write(paddr + offset,
-      bp
-    ).handle_error(
-      alloc_write_iertr::pass_further{},
-      crimson::ct_error::assert_all{
-	"Invalid error when writing record"}
-    ).safe_then([&t, &ex, paddr, this, FNAME]() {
+    return trans_intr::make_interruptible(
+      rbm->write(paddr + offset,
+	bp
+      ).handle_error(
+	alloc_write_iertr::pass_further{},
+	crimson::ct_error::assert_all{
+	  "Invalid error when writing record"}
+      )
+    ).si_then([this, &t, &ex, paddr, FNAME] {
       TRACET("ool extent written at {} -- {}",
 	     t, paddr, *ex);
       if (ex->is_initial_pending()) {
