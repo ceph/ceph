@@ -17,7 +17,7 @@ class CacheDriver {
     CacheDriver() {}
     virtual ~CacheDriver() = default;
 
-    virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) = 0;
+    virtual int initialize(const DoutPrefixProvider* dpp) = 0;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) = 0;
     virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) = 0;
     virtual int del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) = 0;

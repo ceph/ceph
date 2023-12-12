@@ -70,7 +70,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
       ASSERT_NE(conn, nullptr);
 
       dir->init(env->cct, env->dpp);
-      cacheDriver->initialize(env->cct, env->dpp);
+      cacheDriver->initialize(env->dpp);
       policyDriver->get_cache_policy()->init(env->cct, env->dpp);
 
       bl.append("test data");
