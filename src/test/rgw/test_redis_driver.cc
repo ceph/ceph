@@ -52,7 +52,7 @@ class RedisDriverFixture: public ::testing::Test {
       ASSERT_NE(cacheDriver, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      cacheDriver->initialize(env->cct, env->dpp);
+      cacheDriver->initialize(env->dpp);
 
       bl.append("test data");
       bufferlist attrVal;
