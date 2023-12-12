@@ -6,13 +6,8 @@
 #include <sys/xattr.h>
 #endif
 
-#if __has_include(<filesystem>)
 #include <filesystem>
 namespace efs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace efs = std::experimental::filesystem;
-#endif
 
 namespace rgw { namespace cache {
 
