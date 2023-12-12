@@ -1096,6 +1096,20 @@ record_t Cache::prepare_record(
     if (!i->is_exist_mutation_pending()) {
       DEBUGT("commit replace extent ... -- {}, prior={}",
 	     t, *i, *i->prior_instance);
+      // If inplace rewrite occurs during mutation, prev->version will
+      // be zero. Although this results in the version mismatch here, we can
+      // correct this by changing version to 1. This is because the inplace rewrite
+      // does not introduce any actual modification that could negatively
+      // impact system reliability
+      if (i->prior_instance->version == 0 && i->version > 1) {
+	assert(can_inplace_rewrite(i->get_type()));
+	assert(can_inplace_rewrite(i->prior_instance->get_type()));
+	assert(i->prior_instance->dirty_from_or_retired_at == JOURNAL_SEQ_MIN);
+	assert(i->prior_instance->state == CachedExtent::extent_state_t::CLEAN);
+	assert(i->prior_instance->get_paddr().get_addr_type() ==
+	  paddr_types_t::RANDOM_BLOCK);
+	i->version = 1;
+      }
       // extent with EXIST_MUTATION_PENDING doesn't have
       // prior_instance field so skip these extents.
       // the existing extents should be added into Cache
