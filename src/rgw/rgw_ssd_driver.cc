@@ -18,49 +18,6 @@ namespace rgw { namespace cache {
 
 constexpr std::string_view ATTR_PREFIX = "user.rgw.";
 
-std::optional<Partition> SSDDriver::get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type)
-{
-    std::string key = name + type;
-    auto iter = partitions.find(key);
-    if (iter != partitions.end()) {
-        return iter->second;
-    }
-
-    return std::nullopt;
-}
-
-std::vector<Partition> SSDDriver::list_partitions(const DoutPrefixProvider* dpp)
-{
-    std::vector<Partition> partitions_v;
-    for (auto& it : SSDDriver::partitions) {
-        partitions_v.emplace_back(it.second);
-    }
-    return partitions_v;
-}
-
-int SSDDriver::add_partition_info(Partition& info)
-{
-    std::string key = info.name + info.type;
-    auto ret = partitions.emplace(key, info);
-    return ret.second;
-}
-
-int SSDDriver::remove_partition_info(Partition& info)
-{
-    std::string key = info.name + info.type;
-    return partitions.erase(key);
-}
-
-SSDDriver::SSDDriver(Partition& partition_info) : partition_info(partition_info)
-{
-    add_partition_info(partition_info);
-}
-
-SSDDriver::~SSDDriver()
-{
-    remove_partition_info(partition_info);
-}
-
 int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
 {
     this->cct = cct;
