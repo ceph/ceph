@@ -621,7 +621,7 @@ def test_ps_s3_topic_admin_on_master():
     parsed_result = json.loads(result[0])
     assert_equal(parsed_result['arn'], topic_arn3)
     matches = [tenant, UID_PREFIX]
-    assert_true( all([x in parsed_result['user'] for x in matches]))
+    assert_true( all([x in parsed_result['owner'] for x in matches]))
 
     # delete topic 3
     _, result = admin(['topic', 'rm', '--topic', topic_name+'_3', '--tenant', tenant], get_config_cluster())
