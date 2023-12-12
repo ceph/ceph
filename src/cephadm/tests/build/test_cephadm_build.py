@@ -25,12 +25,12 @@ CONTAINERS = {
     'centos-8-plusdeps': {
         'name': 'cephadm-build-test:centos8-py36-deps',
         'base_image': 'quay.io/centos/centos:stream8',
-        'script': 'dnf install -y python36 python3-jinja2',
+        'script': 'dnf install -y python36 python3-jinja2 python3-pyyaml',
     },
     'centos-9-plusdeps': {
         'name': 'cephadm-build-test:centos9-py3-deps',
         'base_image': 'quay.io/centos/centos:stream9',
-        'script': 'dnf install -y python3 python3-jinja2',
+        'script': 'dnf install -y python3 python3-jinja2 python3-pyyaml',
     },
     'ubuntu-20.04': {
         'name': 'cephadm-build-test:ubuntu-20-04-py3',
@@ -122,7 +122,7 @@ def test_cephadm_build(env, source_dir, tmp_path):
     assert 'bundled_packages' in data
     assert all(v['package_source'] == 'pip' for v in data['bundled_packages'])
     assert all(
-        v['name'] in ('Jinja2', 'MarkupSafe')
+        v['name'] in ('Jinja2', 'MarkupSafe', 'PyYAML')
         for v in data['bundled_packages']
     )
     assert all('requirements_entry' in v for v in data['bundled_packages'])
@@ -178,7 +178,7 @@ def test_cephadm_build_from_rpms(env, source_dir, tmp_path):
     assert 'bundled_packages' in data
     assert all(v['package_source'] == 'rpm' for v in data['bundled_packages'])
     assert all(
-        v['name'] in ('Jinja2', 'MarkupSafe')
+        v['name'] in ('Jinja2', 'MarkupSafe', 'PyYAML')
         for v in data['bundled_packages']
     )
     assert all('requirements_entry' in v for v in data['bundled_packages'])
