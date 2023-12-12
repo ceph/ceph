@@ -243,6 +243,31 @@ value to `-1`.
    $ setfattr -n ceph.dir.pin -v -1 home
 
 
+Dynamic Subtree Partitioning
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+CephFS has long had a dynamic metadata blanacer (sometimes called the "default
+balancer") which can split or merge subtrees while placing them on "colder" MDS
+ranks. Moving the metadata around can improve overall file system throughput
+and cache size.
+
+However, the balancer has suffered from problem with efficiency and performance
+so it is by default turned off. This is to avoid an administrator "turning on
+multimds" by increasing the ``max_mds`` setting and then finding the balancer
+has made a mess of the cluster performance (reverting is straightforward but
+can take time).
+
+The setting to turn on the balancer is:
+
+.. prompt:: bash #
+
+   ceph fs set <fs_name> balance_automate true
+
+Turning on the balancer should only be done with appropriate configuration,
+such as with the ``bal_rank_mask`` setting (described below). Careful
+monitoring of the file system performance and MDS is advised.
+
+
 Dynamic subtree partitioning with Balancer on specific ranks
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
