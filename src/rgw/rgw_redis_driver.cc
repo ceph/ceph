@@ -7,8 +7,6 @@
 
 namespace rgw { namespace cache {
 
-std::unordered_map<std::string, Partition> RedisDriver::partitions;
-
 std::list<std::string> build_attrs(rgw::sal::Attrs* binary) 
 {
   std::list<std::string> values;
@@ -59,41 +57,6 @@ void redis_exec(std::shared_ptr<connection> conn, boost::system::error_code& ec,
   } else {
     async_exec(std::move(conn), req, resp, ceph::async::use_blocked[ec]);
   }
-}
-
-int RedisDriver::add_partition_info(Partition& info)
-{
-  std::string key = info.name + info.type;
-  auto ret = partitions.emplace(key, info);
-
-  return ret.second;
-}
-
-int RedisDriver::remove_partition_info(Partition& info)
-{
-  std::string key = info.name + info.type;
-  return partitions.erase(key);
-}
-
-std::optional<Partition> RedisDriver::get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type)
-{
-  std::string key = name + type;
-
-  auto iter = partitions.find(key);
-  if (iter != partitions.end())
-    return iter->second;
-
-  return std::nullopt;
-}
-
-std::vector<Partition> RedisDriver::list_partitions(const DoutPrefixProvider* dpp)
-{
-  std::vector<Partition> partitions_v;
-
-  for (auto& it : partitions)
-    partitions_v.emplace_back(it.second);
-
-  return partitions_v;
 }
 
 int RedisDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp) 
