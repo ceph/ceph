@@ -3,7 +3,8 @@
 
 #pragma once
 
-#include "rgw_sal.h"
+#include "common/versioned_variant.h"
+#include "rgw_sal_fwd.h"
 #include "rgw_tools.h"
 #include "rgw_zone.h"
 #include "rgw_notify_event_type.h"
@@ -394,7 +395,7 @@ struct rgw_pubsub_dest {
 WRITE_CLASS_ENCODER(rgw_pubsub_dest)
 
 struct rgw_pubsub_topic {
-  rgw_user user;
+  rgw_owner owner;
   std::string name;
   rgw_pubsub_dest dest;
   std::string arn;
@@ -403,7 +404,8 @@ struct rgw_pubsub_topic {
 
   void encode(bufferlist& bl) const {
     ENCODE_START(4, 1, bl);
-    encode(user, bl);
+    // converted from rgw_user to rgw_owner
+    ceph::converted_variant::encode(owner, bl);
     encode(name, bl);
     encode(dest, bl);
     encode(arn, bl);
@@ -414,7 +416,8 @@ struct rgw_pubsub_topic {
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(4, bl);
-    decode(user, bl);
+    // converted from rgw_user to rgw_owner
+    ceph::converted_variant::decode(owner, bl);
     decode(name, bl);
     if (struct_v >= 2) {
       decode(dest, bl);
@@ -429,18 +432,10 @@ struct rgw_pubsub_topic {
     DECODE_FINISH(bl);
   }
 
-  std::string to_str() const {
-    return user.tenant + "/" + name;
-  }
-
   void dump(Formatter *f) const;
   void dump_xml(Formatter *f) const;
   void dump_xml_as_attributes(Formatter *f) const;
   void decode_json(JSONObj* obj);
-
-  bool operator<(const rgw_pubsub_topic& t) const {
-    return to_str().compare(t.to_str());
-  }
 };
 WRITE_CLASS_ENCODER(rgw_pubsub_topic)
 
@@ -640,7 +635,7 @@ public:
   // return 0 on success, error code otherwise
   int create_topic(const DoutPrefixProvider* dpp, const std::string& name,
                    const rgw_pubsub_dest& dest, const std::string& arn,
-                   const std::string& opaque_data, const rgw_user& user,
+                   const std::string& opaque_data, const rgw_owner& owner,
                    const std::string& policy_text, optional_yield y) const;
   // remove a topic according to its name
   // if the topic does not exists it is a no-op (considered success)
@@ -690,8 +685,9 @@ int get_bucket_notifications(const DoutPrefixProvider* dpp,
                              rgw_pubsub_bucket_topics& bucket_topics);
 
 // format and parse topic metadata keys as tenant:name
-std::string get_topic_metadata_key(std::string_view topic_name,
-                                   std::string_view tenant);
+std::string get_topic_metadata_key(std::string_view tenant,
+                                   std::string_view topic_name);
+std::string get_topic_metadata_key(const rgw_pubsub_topic& topic);
 void parse_topic_metadata_key(const std::string& key,
                               std::string& tenant_name,
                               std::string& topic_name);
