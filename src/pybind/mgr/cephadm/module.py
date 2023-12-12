@@ -3,6 +3,7 @@ import json
 import errno
 import ipaddress
 import logging
+import cherrypy
 import re
 import shlex
 from collections import defaultdict
@@ -13,6 +14,8 @@ from tempfile import TemporaryDirectory, NamedTemporaryFile
 from threading import Event
 
 from cephadm.service_discovery import ServiceDiscovery
+
+from ceph.deployment.service_spec import PrometheusSpec
 
 import string
 from typing import List, Dict, Optional, Callable, Tuple, TypeVar, \
@@ -2063,6 +2066,10 @@ Then run the following:
 
         self._kick_serve_loop()
 
+    def describe_prometheus_service_spec(self) -> None:
+        spec = cast(PrometheusSpec, self.spec_store['prometheus'].spec)
+        return spec
+
     @handle_orch_error
     def describe_service(self, service_type: Optional[str] = None, service_name: Optional[str] = None,
                          refresh: bool = False) -> List[orchestrator.ServiceDescription]:
@@ -2859,6 +2866,36 @@ Then run the following:
         self.set_store(PrometheusService.USER_CFG_KEY, user)
         self.set_store(PrometheusService.PASS_CFG_KEY, password)
         return 'prometheus credentials updated correctly'
+    
+    @handle_orch_error
+    def set_prometheus_targets(self, url: str) -> str:
+        services = self.describe_prometheus_service_spec()
+        if url not in services.targets:
+            services.targets.append(url)
+        else:
+            raise OrchestratorError('Target {} already exists'.format(url))
+        if not services:
+            raise OrchestratorError('Service {} not found'.format('prometheus'))
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
+        spec = ServiceSpec.from_json(services.to_json())
+        self.apply([spec], no_overwrite=False)
+        self.daemon_action(action='redeploy', daemon_name=daemons[0].daemon_name)
+        return 'prometheus multi-cluster targets updated'
+
+    @handle_orch_error
+    def remove_prometheus_targets(self, url: str) -> str:
+        services = self.describe_prometheus_service_spec()
+        if url in services.targets:
+            services.targets.remove(url)
+        else:
+            raise OrchestratorError('Target {} does not exist'.format(url))
+        if not services:
+            raise OrchestratorError('Service {} not found'.format('prometheus'))
+        daemons: List[orchestrator.DaemonDescription] = self.cache.get_daemons_by_type('prometheus')
+        spec = ServiceSpec.from_json(services.to_json())
+        self.apply([spec], no_overwrite=False)
+        self.daemon_action(action='redeploy', daemon_name=daemons[0].daemon_name)
+        return 'prometheus multi-cluster targets updated'
 
     @handle_orch_error
     def set_alertmanager_access_info(self, user: str, password: str) -> str:

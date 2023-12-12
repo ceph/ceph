@@ -12,7 +12,7 @@ import sys
 import tempfile
 import threading
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, List, Optional
 from urllib.parse import urlparse
 
 if TYPE_CHECKING:
@@ -30,6 +30,7 @@ from . import mgr
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
+from .services.orchestrator import OrchClient
 from .services.exception import dashboard_exception_handler
 from .services.rgw_client import configure_rgw_credentials
 from .services.sso import SSO_COMMANDS, handle_sso_command

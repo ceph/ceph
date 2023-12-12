@@ -471,6 +471,14 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def describe_prometheus_service_spec(self):
+        """
+        Describe a prometheus service spec
+
+        :return: list of ServiceDescription objects.
+        """
+        raise NotImplementedError()
+
     def list_daemons(self, service_name: Optional[str] = None, daemon_type: Optional[str] = None, daemon_id: Optional[str] = None, host: Optional[str] = None, refresh: bool = False) -> OrchResult[List['DaemonDescription']]:
         """
         Describe a daemon (of any kind) that is already configured in
@@ -697,6 +705,14 @@ class Orchestrator(object):
 
     def set_prometheus_access_info(self, user: str, password: str) -> OrchResult[str]:
         """set prometheus access information"""
+        raise NotImplementedError()
+    
+    def set_prometheus_targets(self, url: str) -> OrchResult[str]:
+        """set prometheus target for multi-cluster"""
+        raise NotImplementedError()
+
+    def remove_prometheus_targets(self, url: str) -> OrchResult[str]:
+        """remove prometheus target for multi-cluster"""
         raise NotImplementedError()
 
     def get_alertmanager_access_info(self) -> OrchResult[Dict[str, str]]:

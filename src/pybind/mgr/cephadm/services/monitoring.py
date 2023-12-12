@@ -349,6 +349,7 @@ class PrometheusService(CephadmService):
     DEFAULT_MGR_PROMETHEUS_PORT = 9283
     USER_CFG_KEY = 'prometheus/web_user'
     PASS_CFG_KEY = 'prometheus/web_password'
+    FSID = ''
 
     def config(self, spec: ServiceSpec) -> None:
         # make sure module is enabled
@@ -376,11 +377,15 @@ class PrometheusService(CephadmService):
 
         assert self.TYPE == daemon_spec.daemon_type
         spec = cast(PrometheusSpec, self.mgr.spec_store[daemon_spec.service_name].spec)
-
         try:
             retention_time = spec.retention_time if spec.retention_time else '15d'
         except AttributeError:
             retention_time = '15d'
+
+        try:
+            targets = spec.targets if spec.targets else []
+        except AttributeError:
+            targets = []
 
         try:
             retention_size = spec.retention_size if spec.retention_size else '0'
@@ -406,6 +411,9 @@ class PrometheusService(CephadmService):
         alertmanager_user, alertmanager_password = self.mgr._get_alertmanager_credentials()
         prometheus_user, prometheus_password = self.mgr._get_prometheus_credentials()
 
+        external_prometheus_targets = targets if targets else []
+        FSID = self.mgr.get('config')['fsid']
+
         # generate the prometheus configuration
         context = {
             'alertmanager_web_user': alertmanager_user,
@@ -417,7 +425,9 @@ class PrometheusService(CephadmService):
             'node_exporter_sd_url': node_exporter_sd_url,
             'alertmanager_sd_url': alertmanager_sd_url,
             'haproxy_sd_url': haproxy_sd_url,
-            'ceph_exporter_sd_url': ceph_exporter_sd_url
+            'ceph_exporter_sd_url': ceph_exporter_sd_url,
+            'external_prometheus_targets': external_prometheus_targets,
+            'cluster_fsid': FSID
         }
 
         web_context = {
