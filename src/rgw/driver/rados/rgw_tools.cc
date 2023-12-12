@@ -517,9 +517,7 @@ int rgw_list_pool(const DoutPrefixProvider *dpp,
   if (iter == ioctx.nobjects_end())
     return -ENOENT;
 
-  uint32_t i;
-
-  for (i = 0; i < max && iter != ioctx.nobjects_end(); ++i, ++iter) {
+  for (; oids->size() < max && iter != ioctx.nobjects_end(); ++iter) {
     string oid = iter->get_oid();
     ldpp_dout(dpp, 20) << "RGWRados::pool_iterate: got " << oid << dendl;
 
