@@ -602,8 +602,9 @@ static int remove_expired_obj(
     return ret;
   }
 
-  bool log_op = !remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone());
-  ret =  del_op->delete_obj(dpp, null_yield, log_op);
+  uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
+                   ? rgw::sal::FLAG_LOG_OP : 0;
+  ret =  del_op->delete_obj(dpp, null_yield, flags);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
       "ERROR: publishing notification failed, with error: " << ret << dendl;
@@ -868,8 +869,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
       rgw_obj_key key(obj.key);
       std::unique_ptr<rgw::sal::MultipartUpload> mpu = target->get_multipart_upload(key.name);
 
-      bool log_op = !zonegroup_lc_check(wk->get_lc(), driver->get_zone());
-      int ret = mpu->abort(this, cct, log_op);
+      int ret = mpu->abort(this, cct);
       if (ret == 0) {
         if (perfcounter) {
           perfcounter->inc(l_rgw_lc_abort_mpu, 1);
@@ -1379,9 +1379,10 @@ public:
         return -EINVAL;
       }
 
-      bool log_op = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone());
+      uint32_t flags = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone())
+                       ? rgw::sal::FLAG_LOG_OP : 0;
       int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
-                                 o.versioned_epoch, oc.dpp, null_yield, log_op);
+                                 o.versioned_epoch, oc.dpp, null_yield, flags);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 

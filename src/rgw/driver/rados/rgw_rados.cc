@@ -4201,7 +4201,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     bool canceled = false;
     ret = processor.complete(accounted_size, etag, mtime, set_mtime,
                              attrs, delete_at, nullptr, nullptr, nullptr,
-                             zones_trace, &canceled, null_yield);
+                             zones_trace, &canceled, null_yield, rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {
       goto set_err_state;
     }
@@ -4722,7 +4722,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   }
 
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-                            nullptr, nullptr, nullptr, nullptr, nullptr, y, log_op);
+                            nullptr, nullptr, nullptr, nullptr, nullptr, y,
+                            log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
@@ -5566,7 +5567,7 @@ int RGWRados::delete_obj(const DoutPrefixProvider *dpp,
   del_op.params.expiration_time = expiration_time;
   del_op.params.zones_trace = zones_trace;
 
-  return del_op.delete_obj(null_yield, dpp, log_op);
+  return del_op.delete_obj(null_yield, dpp, log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
 int RGWRados::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj)
@@ -7335,7 +7336,6 @@ int RGWRados::bucket_index_link_olh(const DoutPrefixProvider *dpp, RGWBucketInfo
 		      cls_rgw_bucket_link_olh(op, key, olh_state.olh_tag,
                                               delete_marker, op_tag, meta, olh_epoch,
 					      unmod_since, high_precision_time,
-					      svc.zone->need_to_log_data(), zones_trace);
 					      log_data_change, zones_trace);
                       return rgw_rados_operate(dpp, ref.pool.ioctx(), ref.obj.oid, &op, null_yield);
                     });

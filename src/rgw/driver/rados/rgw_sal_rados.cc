@@ -1002,7 +1002,7 @@ int RadosBucket::abort_multiparts(const DoutPrefixProvider* dpp,
 
     if (!uploads.empty()) {
       for (const auto& upload : uploads) {
-	ret = upload->abort(dpp, cct, true);
+	ret = upload->abort(dpp, cct);
         if (ret < 0) {
 	  // we're doing a best-effort; if something cannot be found,
 	  // log it and keep moving forward
@@ -1973,9 +1973,10 @@ int RadosObject::transition(Bucket* bucket,
 			    uint64_t olh_epoch,
 			    const DoutPrefixProvider* dpp,
 			    optional_yield y,
-                            bool log_op)
+                            uint32_t flags)
 {
-  return store->getRados()->transition_obj(*rados_ctx, bucket->get_info(), get_obj(), placement_rule, mtime, olh_epoch, dpp, y, log_op);
+  return store->getRados()->transition_obj(*rados_ctx, bucket->get_info(), get_obj(), placement_rule,
+                                           mtime, olh_epoch, dpp, y, flags & FLAG_LOG_OP);
 }
 
 int RadosObject::transition_to_cloud(Bucket* bucket,
@@ -2254,7 +2255,7 @@ RadosObject::RadosDeleteOp::RadosDeleteOp(RadosObject *_source) :
 	parent_op(&op_target)
 { }
 
-int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op)
+int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
   parent_op.params.bucket_owner = params.bucket_owner.get_id();
   parent_op.params.versioning_status = params.versioning_status;
@@ -2271,7 +2272,7 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
   parent_op.params.abortmp = params.abortmp;
   parent_op.params.parts_accounted_size = params.parts_accounted_size;
 
-  int ret = parent_op.delete_obj(y, dpp, log_op);
+  int ret = parent_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
   if (ret < 0)
     return ret;
 
@@ -2283,15 +2284,16 @@ int RadosObject::RadosDeleteOp::delete_obj(const DoutPrefixProvider* dpp, option
 
 int RadosObject::delete_object(const DoutPrefixProvider* dpp,
 			       optional_yield y,
-			       bool prevent_versioning)
+			       uint32_t flags)
 {
   RGWRados::Object del_target(store->getRados(), bucket->get_info(), *rados_ctx, get_obj());
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket->get_info().owner;
-  del_op.params.versioning_status = prevent_versioning ? 0 : bucket->get_info().versioning_status();
+  del_op.params.versioning_status = (flags & FLAG_PREVENT_VERSIONING)
+                                    ? 0 : bucket->get_info().versioning_status();
 
-  return del_op.delete_obj(y, dpp);
+  return del_op.delete_obj(y, dpp, flags & FLAG_LOG_OP);
 }
 
 int RadosObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
@@ -2432,7 +2434,7 @@ int RadosMultipartUpload::cleanup_part_history(const DoutPrefixProvider* dpp,
 }
 
 
-int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, bool log_op)
+int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
 {
   std::unique_ptr<rgw::sal::Object> meta_obj = get_meta_obj();
   meta_obj->set_in_extra_data(true);
@@ -2460,7 +2462,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
 	std::unique_ptr<rgw::sal::Object> obj = bucket->get_object(
 				    rgw_obj_key(obj_part->oid, std::string(), RGW_OBJ_NS_MULTIPART));
 	obj->set_hash_source(mp_obj.get_key());
-	ret = obj->delete_object(dpp, null_yield, log_op);
+	ret = obj->delete_object(dpp, null_yield, 0);
         if (ret < 0 && ret != -ENOENT)
           return ret;
       } else {
@@ -2510,7 +2512,7 @@ int RadosMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct,
   del_op->params.parts_accounted_size = parts_accounted_size;
 
   // and also remove the metadata obj
-  ret = del_op->delete_obj(dpp, null_yield, log_op);
+  ret = del_op->delete_obj(dpp, null_yield, 0);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;
@@ -3122,10 +3124,10 @@ int RadosAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y,
-                       bool log_op)
+                       uint32_t flags)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, y, log_op);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, y, flags);
 }
 
 int RadosAppendWriter::prepare(optional_yield y)
@@ -3146,10 +3148,10 @@ int RadosAppendWriter::complete(size_t accounted_size, const std::string& etag,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y,
-                       bool log_op)
+                       uint32_t flags)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, y, log_op);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, y, flags);
 }
 
 int RadosMultipartWriter::prepare(optional_yield y)
@@ -3170,10 +3172,10 @@ int RadosMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y,
-                       bool log_op)
+                       uint32_t flags)
 {
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-			    if_match, if_nomatch, user_data, zones_trace, canceled, y, log_op);
+			    if_match, if_nomatch, user_data, zones_trace, canceled, y, flags);
 }
 
 const std::string& RadosZoneGroup::get_endpoint() const

@@ -4361,7 +4361,7 @@ void RGWPutObj::execute(optional_yield y)
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
-                               s->yield, true);
+                               s->yield, rgw::sal::FLAG_LOG_OP);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
 
   /* produce torrent */
@@ -4639,7 +4639,7 @@ void RGWPostObj::execute(optional_yield y)
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(), attrs,
                                 (delete_at ? *delete_at : real_time()),
                                 nullptr, nullptr, nullptr, nullptr, nullptr,
-                                s->yield, true);
+                                s->yield, rgw::sal::FLAG_LOG_OP);
     if (op_ret < 0) {
       return;
     }
@@ -5202,7 +5202,7 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
 
-      op_ret = del_op->delete_obj(this, y, true);
+      op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
 	delete_marker = del_op->result.delete_marker;
 	version_id = del_op->result.version_id;
@@ -6572,7 +6572,7 @@ void RGWCompleteMultipart::execute(optional_yield y)
 
   // remove the upload meta object ; the meta object is not versioned
   // when the bucket is, as that would add an unneeded delete marker
-  int r = meta_obj->delete_object(this, y, true /* prevent versioning */);
+  int r = meta_obj->delete_object(this, y, rgw::sal::FLAG_PREVENT_VERSIONING | rgw::sal::FLAG_LOG_OP);
   if (r >= 0)  {
     /* serializer's exclusive lock is released */
     serializer->clear_locked();
@@ -6733,7 +6733,7 @@ void RGWAbortMultipart::execute(optional_yield y)
   }
   multipart_trace = tracing::rgw::tracer.add_span(name(), trace_ctx);
 
-  op_ret = upload->abort(this, s->cct, true);
+  op_ret = upload->abort(this, s->cct);
 }
 
 int RGWListMultipart::verify_permission(optional_yield y)
@@ -7099,7 +7099,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.bucket_owner = s->bucket_owner;
   del_op->params.marker_version_id = version_id;
 
-  op_ret = del_op->delete_obj(this, y, true);
+  op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
@@ -7275,7 +7275,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     del_op->params.obj_owner = bowner;
     del_op->params.bucket_owner = bucket_owner;
 
-    ret = del_op->delete_obj(dpp, y, true);
+    ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {
       goto delop_fail;
     }
@@ -7765,7 +7765,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
                               attrs, ceph::real_time() /* delete_at */,
                               nullptr, nullptr, nullptr, nullptr, nullptr,
-                              s->yield, true);
+                              s->yield, rgw::sal::FLAG_LOG_OP);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;
   }

@@ -852,9 +852,9 @@ int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* c
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				bool prevent_versioning)
+				uint32_t flags)
 {
-  return next->delete_object(dpp, y, prevent_versioning);
+  return next->delete_object(dpp, y, flags);
 }
 
 int FilterObject::delete_obj_aio(const DoutPrefixProvider* dpp, RGWObjState* astate,
@@ -961,10 +961,10 @@ int FilterObject::transition(Bucket* bucket,
 			     uint64_t olh_epoch,
 			     const DoutPrefixProvider* dpp,
 			     optional_yield y,
-                             bool log_op)
+                             uint32_t flags)
 {
   return next->transition(nextBucket(bucket), placement_rule, mtime, olh_epoch,
-			  dpp, y, log_op);
+			  dpp, y, flags);
 }
 
 int FilterObject::transition_to_cloud(Bucket* bucket,
@@ -1092,11 +1092,11 @@ int FilterObject::FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t o
 }
 
 int FilterObject::FilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-					   optional_yield y, bool log_op)
+					   optional_yield y, uint32_t flags)
 {
   /* Copy params into next */
   next->params = params;
-  int ret = next->delete_obj(dpp, y, log_op);
+  int ret = next->delete_obj(dpp, y, flags);
   /* Copy result back */
   result = next->result;
   return ret;
@@ -1137,9 +1137,9 @@ int FilterMultipartUpload::list_parts(const DoutPrefixProvider *dpp, CephContext
   return 0;
 }
 
-int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, bool log_op)
+int FilterMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
 {
-  return next->abort(dpp, cct, log_op);
+  return next->abort(dpp, cct);
 }
 
 int FilterMultipartUpload::complete(const DoutPrefixProvider *dpp,
@@ -1315,11 +1315,11 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        optional_yield y,
-                       bool log_op)
+                       uint32_t flags)
 {
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, y, log_op);
+			canceled, y, flags);
 }
 
 int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,

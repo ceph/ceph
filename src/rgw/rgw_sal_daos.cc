@@ -1053,7 +1053,7 @@ int DaosObject::transition(Bucket* bucket,
                            const rgw_placement_rule& placement_rule,
                            const real_time& mtime, uint64_t olh_epoch,
                            const DoutPrefixProvider* dpp, optional_yield y,
-                           bool log_op) {
+                           uint32_t flags) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 
@@ -1203,7 +1203,7 @@ DaosObject::DaosDeleteOp::DaosDeleteOp(DaosObject* _source) : source(_source) {}
 // 3. Handle empty directories
 // 4. Fail when file doesn't exist
 int DaosObject::DaosDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-                                         optional_yield y, bool log_op) {
+                                         optional_yield y, uint32_t flags) {
   ldpp_dout(dpp, 20) << "DaosDeleteOp::delete_obj "
                      << source->get_key().get_oid() << " from "
                      << source->get_bucket()->get_name() << dendl;
@@ -1232,13 +1232,13 @@ int DaosObject::DaosDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
 }
 
 int DaosObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y,
-                              bool prevent_versioning) {
+                              uint32_t flags) {
   ldpp_dout(dpp, 20) << "DEBUG: delete_object" << dendl;
   DaosObject::DaosDeleteOp del_op(this);
   del_op.params.bucket_owner = bucket->get_info().owner;
   del_op.params.versioning_status = bucket->get_info().versioning_status();
 
-  return del_op.delete_obj(dpp, y);
+  return del_op.delete_obj(dpp, y, flags);
 }
 
 int DaosObject::delete_obj_aio(const DoutPrefixProvider* dpp,
@@ -1549,7 +1549,7 @@ int DaosAtomicWriter::complete(
     ceph::real_time set_mtime, std::map<std::string, bufferlist>& attrs,
     ceph::real_time delete_at, const char* if_match, const char* if_nomatch,
     const std::string* user_data, rgw_zone_set* zones_trace, bool* canceled,
-    optional_yield y, bool log_op) {
+    optional_yield y, uint32_t flags) {
   ldpp_dout(dpp, 20) << "DEBUG: complete" << dendl;
   bufferlist bl;
   rgw_bucket_dir_entry ent;
@@ -1606,7 +1606,7 @@ int DaosAtomicWriter::complete(
 }
 
 int DaosMultipartUpload::abort(const DoutPrefixProvider* dpp,
-                               CephContext* cct, optional_yield y, bool log_op) {
+                               CephContext* cct) {
   // Remove upload from bucket multipart index
   ldpp_dout(dpp, 20) << "DEBUG: abort" << dendl;
   return ds3_upload_remove(bucket->get_name().c_str(), get_upload_id().c_str(),
@@ -2073,7 +2073,7 @@ int DaosMultipartWriter::complete(
     ceph::real_time set_mtime, std::map<std::string, bufferlist>& attrs,
     ceph::real_time delete_at, const char* if_match, const char* if_nomatch,
     const std::string* user_data, rgw_zone_set* zones_trace, bool* canceled,
-    optional_yield y, bool log_op) {
+    optional_yield y, uint32_t flags) {
   ldpp_dout(dpp, 20) << "DaosMultipartWriter::complete(): enter part="
                      << part_num_str << dendl;
 
