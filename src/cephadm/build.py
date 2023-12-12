@@ -31,6 +31,23 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
+# Fill in the package requirements for the zipapp build below. The PY36_REQUIREMENTS
+# list applies *only* to python 3.6. The PY_REQUIREMENTS list applies to all other
+# python versions. Python lower than 3.6 is not supported by this script.
+#
+# Each item must be a dict with the following fields:
+# - package_spec (REQUIRED, str): A python package requirement in the same style as
+#   requirements.txt and pip.
+# - from_source (bool): Try to force a clean no-binaries build using source packages.
+# - unique (bool): If true, this requirement should not be combined with any other
+#   on the pip command line.
+# - ignore_suffixes (list of str): A list of file and directory suffixes to EXCLUDE
+#   from the final zipapp.
+# - ignore_exact (list of str): A list of exact file and directory names to EXCLUDE
+#   from the final zipapp.
+# - custom_pip_args (list of str): A list of additional custom arguments to pass
+#   to pip when installing this dependency.
+#
 PY36_REQUIREMENTS = [
     {
         'package_spec': 'MarkupSafe >= 2.0.1, <2.2',
@@ -54,6 +71,11 @@ PY36_REQUIREMENTS = [
 PY_REQUIREMENTS = [
     {'package_spec': 'MarkupSafe >= 2.1.3, <2.2', 'from_source': True},
     {'package_spec': 'Jinja2 >= 3.1.2, <3.2', 'from_source': True},
+    # We can not install PyYAML using sources. Unlike MarkupSafe it requires
+    # Cython to build and Cython must be compiled and there's not clear way past
+    # the requirement in pyyaml's pyproject.toml. Instead, rely on fetching
+    # a platform specific pyyaml wheel and then stripping of the binary shared
+    # object.
     {
         'package_spec': 'PyYAML >= 6.0, <6.1',
         # do not include the stub package for compatibility with
