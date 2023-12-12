@@ -106,7 +106,7 @@ int verify_topic_owner_or_policy(req_state* const s,
                                  const rgw_pubsub_topic& topic,
                                  const std::string& zonegroup_name,
                                  const uint64_t op) {
-  if (topic.user == s->owner.id) {
+  if (s->auth.identity->is_owner_of(topic.owner)) {
     return 0;
   }
   // no policy set.
@@ -115,7 +115,7 @@ int verify_topic_owner_or_policy(req_state* const s,
     if (op == rgw::IAM::snsPublish && !s->cct->_conf->rgw_topic_require_publish_policy) {
       return 0;
     }
-    if (topic.user.empty()) {
+    if (std::visit([] (const auto& o) { return o.empty(); }, topic.owner)) {
       // if we don't know the original user and there is no policy
       // we will not reject the request.
       // this is for compatibility with versions that did not store the user in the topic
@@ -563,7 +563,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
   std::string opaque_data;
   std::string policy_text;
   rgw_pubsub_dest dest;
-  rgw_user topic_owner;
+  rgw_owner topic_owner;
   std::string attribute_name;
 
   int get_params() {
@@ -669,7 +669,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
                          << "', ret=" << ret << dendl;
       return ret;
     }
-    topic_owner = result.user;
+    topic_owner = result.owner;
     ret = verify_topic_owner_or_policy(
         s, result, driver->get_zone()->get_zonegroup().get_name(),
         rgw::IAM::snsSetTopicAttributes);

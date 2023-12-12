@@ -1317,7 +1317,7 @@ int RadosStore::update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
                                             const DoutPrefixProvider* dpp) {
   librados::Rados& rados = *getRados()->get_rados_handle();
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  const std::string key = get_topic_metadata_key(topic.user.tenant, topic.name);
+  const std::string key = get_topic_metadata_key(topic);
   int ret = 0;
   if (add_mapping) {
     ret = rgwrados::topic::link_bucket(dpp, y, rados, zone, key, bucket_key);
@@ -1343,7 +1343,7 @@ int RadosStore::get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
 {
   librados::Rados& rados = *getRados()->get_rados_handle();
   const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  const std::string key = get_topic_metadata_key(topic.user.tenant, topic.name);
+  const std::string key = get_topic_metadata_key(topic);
   constexpr int max_chunk = 1024;
   std::string marker;
 

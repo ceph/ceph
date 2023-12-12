@@ -12,6 +12,7 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_bucket.h"
 #include "common/errno.h"
+#include "include/function2.hpp"
 #include <regex>
 #include <algorithm>
 
@@ -24,6 +25,16 @@ std::string get_topic_metadata_key(std::string_view tenant,
                                    std::string_view topic_name)
 {
   return string_cat_reserve(tenant, topic_tenant_delim, topic_name);
+}
+
+std::string get_topic_metadata_key(const rgw_pubsub_topic& topic)
+{
+  // use account id or tenant name
+  std::string_view tenant = std::visit(fu2::overload(
+      [] (const rgw_user& u) -> std::string_view { return u.tenant; },
+      [] (const rgw_account_id& a) -> std::string_view { return a; }
+      ), topic.owner);
+  return get_topic_metadata_key(tenant, topic.name);
 }
 
 void parse_topic_metadata_key(const std::string& key,
@@ -367,7 +378,7 @@ void rgw_pubsub_s3_event::dump(Formatter *f) const {
 
 void rgw_pubsub_topic::dump(Formatter *f) const
 {
-  encode_json("user", user, f);
+  encode_json("owner", owner, f);
   encode_json("name", name, f);
   encode_json("dest", dest, f);
   encode_json("arn", arn, f);
@@ -377,7 +388,7 @@ void rgw_pubsub_topic::dump(Formatter *f) const
 
 void rgw_pubsub_topic::dump_xml(Formatter *f) const
 {
-  encode_xml("User", user, f);
+  encode_xml("User", to_string(owner), f);
   encode_xml("Name", name, f);
   encode_xml("EndPoint", dest, f);
   encode_xml("TopicArn", arn, f);
@@ -395,9 +406,7 @@ void encode_xml_key_value_entry(const std::string& key, const std::string& value
 void rgw_pubsub_topic::dump_xml_as_attributes(Formatter *f) const
 {
   f->open_array_section("Attributes");
-  std::string str_user;
-  user.to_str(str_user);
-  encode_xml_key_value_entry("User", str_user, f);
+  encode_xml_key_value_entry("User", to_string(owner), f);
   encode_xml_key_value_entry("Name", name, f);
   encode_xml_key_value_entry("EndPoint", dest.to_json_str(), f);
   encode_xml_key_value_entry("TopicArn", arn, f);
@@ -408,7 +417,7 @@ void rgw_pubsub_topic::dump_xml_as_attributes(Formatter *f) const
 }
 
 void rgw_pubsub_topic::decode_json(JSONObj* f) {
-  JSONDecoder::decode_json("user", user, f);
+  JSONDecoder::decode_json("owner", owner, f);
   JSONDecoder::decode_json("name", name, f);
   JSONDecoder::decode_json("dest", dest, f);
   JSONDecoder::decode_json("arn", arn, f);
@@ -971,7 +980,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
                             const std::string& name,
                             const rgw_pubsub_dest& dest, const std::string& arn,
                             const std::string& opaque_data,
-                            const rgw_user& user,
+                            const rgw_owner& owner,
                             const std::string& policy_text,
                             optional_yield y) const {
   if (use_notification_v2) {
@@ -981,7 +990,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
       return -ERR_SERVICE_UNAVAILABLE;
     }
     rgw_pubsub_topic new_topic;
-    new_topic.user = user;
+    new_topic.owner = owner;
     new_topic.name = name;
     new_topic.dest = dest;
     new_topic.arn = arn;
@@ -1000,7 +1009,7 @@ int RGWPubSub::create_topic(const DoutPrefixProvider* dpp,
   }
  
   rgw_pubsub_topic& new_topic = topics.topics[name];
-  new_topic.user = user;
+  new_topic.owner = owner;
   new_topic.name = name;
   new_topic.dest = dest;
   new_topic.arn = arn;
