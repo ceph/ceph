@@ -30,6 +30,7 @@ struct RGWSI_SysObj_Core_PoolListImplInfo : public RGWSI_SysObj_Pool_ListInfo {
   rgw::AccessListFilter filter;
   std::string marker;
 
-  RGWSI_SysObj_Core_PoolListImplInfo(const std::string& prefix)
-    : filter(rgw::AccessListFilterPrefix(prefix)) {}
+  RGWSI_SysObj_Core_PoolListImplInfo(const std::string& prefix,
+                                     const std::string& marker)
+    : filter(rgw::AccessListFilterPrefix(prefix)), marker(marker) {}
 };
