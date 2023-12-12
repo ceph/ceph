@@ -25,18 +25,12 @@ class RedisDriver : public CacheDriver {
 								           outstanding_write_size(0)
     {
       conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-      add_partition_info(_partition_info);
     }
-    virtual ~RedisDriver()
-    {
-      remove_partition_info(partition_info);
-    }
+    virtual ~RedisDriver() {}
 
     /* Partition */
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; }
-    static std::optional<Partition> get_partition_info(const DoutPrefixProvider* dpp, const std::string& name, const std::string& type);
-    static std::vector<Partition> list_partitions(const DoutPrefixProvider* dpp);
 
     virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) override;
@@ -73,14 +67,9 @@ class RedisDriver : public CacheDriver {
 
   protected:
     std::shared_ptr<connection> conn;
-
-    static std::unordered_map<std::string, Partition> partitions;
     Partition partition_info;
     uint64_t free_space;
     uint64_t outstanding_write_size;
-
-    int add_partition_info(Partition& info);
-    int remove_partition_info(Partition& info);
 };
 
 } } // namespace rgw::cache
