@@ -165,7 +165,9 @@ class DependencyInfo:
     def __init__(self, config):
         self._config = config
         self._deps = []
-        self._reqs = {s.name: s.package_spec for s in self._config.requirements}
+        self._reqs = {
+            s.name: s.package_spec for s in self._config.requirements
+        }
 
     @property
     def requirements(self):
@@ -184,7 +186,6 @@ class DependencyInfo:
         """Record bundled dependency meta-data to the supplied file."""
         with open(path, 'w') as fh:
             json.dump(self._deps, fh)
-
 
 
 def _run(command, *args, **kwargs):
@@ -255,7 +256,9 @@ def _build(dest, src, config):
         shutil.rmtree(tempdir)
 
 
-def _ignore_cephadmlib(source_dir, names, ignore_suffixes=None, ignore_exact=None):
+def _ignore_cephadmlib(
+    source_dir, names, ignore_suffixes=None, ignore_exact=None
+):
     # shutil.copytree callback: return the list of names *to ignore*
     suffixes = ["~", ".old", ".swp", ".pyc", ".pyo", ".so", "__pycache__"]
     exact = []
