@@ -8,6 +8,7 @@
 import argparse
 import compileall
 import enum
+import functools
 import json
 import logging
 import os
@@ -41,10 +42,26 @@ PY36_REQUIREMENTS = [
         'from_source': True,
         'unique': True,
     },
+    {
+        'package_spec': 'PyYAML >= 6.0, <6.1',
+        # do not include the stub package for compatibility with
+        # old versions of the extension module. We are going out of our
+        # way to avoid the binary extension module for our zipapp, no
+        # point in pulling this unnecessary module for wrapping it.
+        'ignore_exact': ['_yaml'],
+    },
 ]
 PY_REQUIREMENTS = [
     {'package_spec': 'MarkupSafe >= 2.1.3, <2.2', 'from_source': True},
     {'package_spec': 'Jinja2 >= 3.1.2, <3.2', 'from_source': True},
+    {
+        'package_spec': 'PyYAML >= 6.0, <6.1',
+        # do not include the stub package for compatibility with
+        # old versions of the extension module. We are going out of our
+        # way to avoid the binary extension module for our zipapp, no
+        # point in pulling this unnecessary module for wrapping it.
+        'ignore_exact': ['_yaml'],
+    },
 ]
 # IMPORTANT to be fully compatible with all the distros ceph is built for we
 # need to work around various old versions of python/pip. As such it's easier
@@ -68,6 +85,8 @@ class InstallSpec:
         custom_pip_args=None,
         unique=False,
         from_source=False,
+        ignore_suffixes=None,
+        ignore_exact=None,
         **kwargs,
     ):
         self.package_spec = package_spec
@@ -75,6 +94,8 @@ class InstallSpec:
         self.custom_pip_args = custom_pip_args or []
         self.unique = unique
         self.from_source = from_source
+        self.ignore_suffixes = ignore_suffixes or []
+        self.ignore_exact = ignore_exact or []
         self.extra = kwargs
 
     @property
@@ -197,18 +218,31 @@ def _build(dest, src, config):
     tempdir = pathlib.Path(tempfile.mkdtemp(suffix=".cephadm.build"))
     log.debug("working in %s", tempdir)
     dinfo = None
+    appdir = tempdir / "app"
     try:
         if config.install_dependencies:
-            dinfo = _install_deps(tempdir, config)
+            depsdir = tempdir / "deps"
+            dinfo = _install_deps(depsdir, config)
+            ignore_suffixes = []
+            ignore_exact = []
+            for ispec in config.requirements:
+                ignore_suffixes.extend(ispec.ignore_suffixes)
+                ignore_exact.extend(ispec.ignore_exact)
+            ignorefn = functools.partial(
+                _ignore_cephadmlib,
+                ignore_suffixes=ignore_suffixes,
+                ignore_exact=ignore_exact,
+            )
+            shutil.copytree(depsdir, appdir, ignore=ignorefn)
         log.info("Copying contents")
         # cephadmlib is cephadm's private library of modules
         shutil.copytree(
-            "cephadmlib", tempdir / "cephadmlib", ignore=_ignore_cephadmlib
+            "cephadmlib", appdir / "cephadmlib", ignore=_ignore_cephadmlib
         )
         # cephadm.py is cephadm's main script for the "binary"
         # this must be renamed to __main__.py for the zipapp
-        shutil.copy("cephadm.py", tempdir / "__main__.py")
-        mdir = tempdir / "_cephadmmeta"
+        shutil.copy("cephadm.py", appdir / "__main__.py")
+        mdir = appdir / "_cephadmmeta"
         mdir.mkdir(parents=True, exist_ok=True)
         (mdir / "__init__.py").touch(exist_ok=True)
         versioning_vars = config.cli_args.version_vars
@@ -216,19 +250,23 @@ def _build(dest, src, config):
             generate_version_file(versioning_vars, mdir / "version.py")
         if dinfo:
             dinfo.save(mdir / "deps.json")
-        _compile(dest, tempdir)
+        _compile(dest, appdir)
     finally:
         shutil.rmtree(tempdir)
 
 
-def _ignore_cephadmlib(source_dir, names):
+def _ignore_cephadmlib(source_dir, names, ignore_suffixes=None, ignore_exact=None):
     # shutil.copytree callback: return the list of names *to ignore*
+    suffixes = ["~", ".old", ".swp", ".pyc", ".pyo", ".so", "__pycache__"]
+    exact = []
+    if ignore_suffixes:
+        suffixes += ignore_suffixes
+    if ignore_exact:
+        exact += ignore_exact
     return [
         name
         for name in names
-        if name.endswith(
-            ("~", ".old", ".swp", ".pyc", ".pyo", ".so", "__pycache__")
-        )
+        if name.endswith(tuple(suffixes)) or name in exact
     ]
 
 
