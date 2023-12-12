@@ -13,16 +13,14 @@ namespace rgw { namespace cache {
 
 constexpr std::string_view ATTR_PREFIX = "user.rgw.";
 
-int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
+int SSDDriver::initialize(const DoutPrefixProvider* dpp)
 {
-    this->cct = cct;
-
     if(partition_info.location.back() != '/') {
       partition_info.location += "/";
     }
     try {
         if (efs::exists(partition_info.location)) {
-            if (cct->_conf->rgw_d4n_l1_evict_cache_on_start) {
+            if (dpp->get_cct()->_conf->rgw_d4n_l1_evict_cache_on_start) {
                 ldpp_dout(dpp, 5) << "initialize: evicting the persistent storage directory on start" << dendl;
                 for (auto& p : efs::directory_iterator(partition_info.location)) {
                     efs::remove_all(p.path());
@@ -41,8 +39,8 @@ int SSDDriver::initialize(CephContext* cct, const DoutPrefixProvider* dpp)
     #if defined(HAVE_LIBAIO) && defined(__GLIBC__)
     // libaio setup
     struct aioinit ainit{0};
-    ainit.aio_threads = cct->_conf.get_val<int64_t>("rgw_d4n_libaio_aio_threads");
-    ainit.aio_num = cct->_conf.get_val<int64_t>("rgw_d4n_libaio_aio_num");
+    ainit.aio_threads = dpp->get_cct()->_conf.get_val<int64_t>("rgw_d4n_libaio_aio_threads");
+    ainit.aio_num = dpp->get_cct()->_conf.get_val<int64_t>("rgw_d4n_libaio_aio_num");
     ainit.aio_idle_time = 120;
     aio_init(&ainit);
     #endif
@@ -190,7 +188,7 @@ auto SSDDriver::get_async(const DoutPrefixProvider *dpp, ExecutionContext& ctx, 
     auto p = Op::create(ctx.get_executor(), init.completion_handler);
     auto& op = p->user_data;
 
-    int ret = op.init(dpp, cct, location, read_ofs, read_len, p.get());
+    int ret = op.init(dpp, location, read_ofs, read_len, p.get());
     if(0 == ret) {
         ret = ::aio_read(op.aio_cb.get());
     }
@@ -308,7 +306,7 @@ void SSDDriver::AsyncWriteRequest::libaio_write_cb(sigval sigval)
   c->priv_data->libaio_write_completion_cb(c);
 }
 
-int SSDDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg)
+int SSDDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg)
 {
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): file_path=" << file_path << dendl;
     aio_cb.reset(new struct aiocb);
@@ -319,7 +317,7 @@ int SSDDriver::AsyncReadOp::init(const DoutPrefixProvider *dpp, CephContext* cct
         ldpp_dout(dpp, 1) << "ERROR: SSDCache: " << __func__ << "(): can't open " << file_path << " : " << " error: " << err << dendl;
         return -err;
     }
-    if (cct->_conf->rgw_d4n_l1_fadvise != POSIX_FADV_NORMAL) {
+    if (dpp->get_cct()->_conf->rgw_d4n_l1_fadvise != POSIX_FADV_NORMAL) {
         posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d4n_l1_fadvise);
     }
 
