@@ -15,7 +15,7 @@ update a role and the permissions associated with it.
 Create a Role
 -------------
 
-To create a role, execute the following::
+To create a role, run a command of the following form::
 
 	radosgw-admin role create --role-name={role-name} [--path=="{path to the role}"] [--assume-role-policy-doc={trust-policy-document}]
 
@@ -29,12 +29,13 @@ Request Parameters
 
 ``path``
 
-:Description: Path to the role. The default value is a slash(/).
+:Description: Path to the role. The default value is a slash(``/``).
 :Type: String
 
 ``assume-role-policy-doc``
 
-:Description: The trust relationship policy document that grants an entity permission to assume the role.
+:Description: The trust relationship policy document that grants an entity
+              permission to assume the role.
 :Type: String
 
 For example::
