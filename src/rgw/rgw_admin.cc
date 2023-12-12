@@ -10739,6 +10739,13 @@ next:
     RGWPubSub ps(driver, tenant, *site);
     std::string next_token = marker;
 
+    std::optional<rgw_owner> owner;
+    if (!rgw::sal::User::empty(user)) {
+      owner = user->get_id();
+    } else if (!account_id.empty()) {
+      owner = rgw_account_id{account_id};
+    }
+
     formatter->open_object_section("result");
     formatter->open_array_section("topics");
     do {
@@ -10750,7 +10757,7 @@ next:
         return -ret;
       }
       for (const auto& [_, topic] : result.topics) {
-        if (!rgw::sal::User::empty(user) && user->get_id() != topic.user) {
+        if (owner && *owner != topic.owner) {
           continue;
         }
         std::set<std::string> subscribed_buckets;
