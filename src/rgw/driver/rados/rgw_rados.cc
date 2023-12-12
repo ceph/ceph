@@ -4432,7 +4432,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     bool canceled = false;
     ret = processor.complete(accounted_size, etag, mtime, set_mtime,
                              attrs, delete_at, nullptr, nullptr, nullptr,
-                             zones_trace, &canceled, rctx);
+                             zones_trace, &canceled, rctx, rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {
       goto set_err_state;
     }
@@ -4970,7 +4970,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
 
   const req_context rctx{dpp, y, nullptr};
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-                            nullptr, nullptr, nullptr, nullptr, nullptr, rctx, log_op);
+                            nullptr, nullptr, nullptr, nullptr, nullptr, rctx,
+                            log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
@@ -5814,7 +5815,7 @@ int RGWRados::delete_obj(const DoutPrefixProvider *dpp,
   del_op.params.expiration_time = expiration_time;
   del_op.params.zones_trace = zones_trace;
 
-  return del_op.delete_obj(y, dpp, log_op);
+  return del_op.delete_obj(y, dpp, log_op ? rgw::sal::FLAG_LOG_OP : 0);
 }
 
 int RGWRados::delete_raw_obj(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj, optional_yield y)

@@ -588,8 +588,9 @@ static int remove_expired_obj(
     return ret;
   }
 
-  bool log_op = !remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone());
-  ret =  del_op->delete_obj(dpp, null_yield, log_op);
+  uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
+                   ? rgw::sal::FLAG_LOG_OP : 0;
+  ret =  del_op->delete_obj(dpp, null_yield, flags);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
       fmt::format("ERROR: {} failed, with error: {}", __func__, ret) << dendl;
@@ -885,8 +886,7 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
         return ret;
       }
 
-      bool log_op = !zonegroup_lc_check(wk->get_lc(), driver->get_zone());
-      ret = mpu->abort(this, cct, null_yield, log_op);
+      ret = mpu->abort(this, cct, null_yield);
       if (ret == 0) {
         int publish_ret = notify->publish_commit(
             this, obj_state->size,
@@ -1465,9 +1465,10 @@ public:
         return -EINVAL;
       }
 
-      bool log_op = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone());
+      uint32_t flags = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone())
+                       ? rgw::sal::FLAG_LOG_OP : 0;
       int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
-                                 o.versioned_epoch, oc.dpp, null_yield, log_op);
+                                 o.versioned_epoch, oc.dpp, null_yield, flags);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 
