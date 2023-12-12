@@ -62,6 +62,7 @@ extern "C" {
 #include "rgw_lua.h"
 #include "rgw_sal.h"
 #include "rgw_sal_config.h"
+#include "rgw_data_access.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
