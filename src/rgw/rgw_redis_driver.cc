@@ -423,7 +423,7 @@ int RedisDriver::delete_attrs(const DoutPrefixProvider* dpp, const std::string& 
   }
 }
 
-std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y) 
+int RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, std::string& attr_val, optional_yield y) 
 {
   std::string entry = partition_info.location + key;
   response<std::string> value;
@@ -437,15 +437,19 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (ec)
-      return {};
+    if (ec) {
+      attr_val = "";
+      return -1;
+    }
   } catch(std::exception &e) {
-    return {};
+    attr_val = "";
+    return -1;
   }
   
   if (!std::get<0>(resp).value()) {
     ldpp_dout(dpp, 10) << "RedisDriver::" << __func__ << "(): Attribute was not found." << dendl;
-    return {};
+    attr_val = "";
+    return -1;
   }
 
   /* Retrieve existing value from cache */
@@ -456,13 +460,17 @@ std::string RedisDriver::get_attr(const DoutPrefixProvider* dpp, const std::stri
 
     redis_exec(conn, ec, req, value, y);
 
-    if (ec)
-      return {};
+    if (ec) {
+      attr_val = "";
+      return -1;
+    }
   } catch(std::exception &e) {
-    return {};
+    attr_val = "";
+    return -1;
   }
 
-  return std::get<0>(value).value();
+  attr_val = std::get<0>(value).value();
+  return 0;
 }
 
 int RedisDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y) 
