@@ -149,7 +149,9 @@ TEST_F(SSDDriverFixture, SetGetAttr)
       std::string attr_name = "user.ssd.testattr";
       std::string attr_val = "testattrVal";
       ASSERT_EQ(0, cacheDriver->set_attr(env->dpp, "testSetGetAttr", attr_name, attr_val, optional_yield{io, yield}));
-      ASSERT_EQ(attr_val, cacheDriver->get_attr(env->dpp, "testSetGetAttr", attr_name, optional_yield{io, yield}));
+      std::string attr_val_ret;
+      ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "testSetGetAttr", attr_name, attr_val_ret, optional_yield{io, yield}));
+      ASSERT_EQ(attr_val, attr_val_ret);
     });
 
     io.run();
@@ -163,10 +165,14 @@ TEST_F(SSDDriverFixture, DeleteAttr)
       std::string attr_name = "user.ssd.testattr";
       std::string attr_val = "testattrVal";
       ASSERT_EQ(0, cacheDriver->set_attr(env->dpp, "testDeleteAttr", attr_name, attr_val, optional_yield{io, yield}));
-      ASSERT_EQ(attr_val, cacheDriver->get_attr(env->dpp, "testDeleteAttr", attr_name, optional_yield{io, yield}));
+      std::string attr_val_ret;
+      ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "testDeleteAttr", attr_name, attr_val_ret, optional_yield{io, yield}));
+      ASSERT_EQ(attr_val, attr_val_ret);
 
+      attr_val_ret.clear();
       ASSERT_EQ(0, cacheDriver->delete_attr(env->dpp, "testDeleteAttr", attr_name));
-      ASSERT_EQ("", cacheDriver->get_attr(env->dpp, "testDeleteAttr", attr_name, optional_yield{io, yield}));
+      ASSERT_EQ(ENODATA, cacheDriver->get_attr(env->dpp, "testDeleteAttr", attr_name, attr_val_ret, optional_yield{io, yield}));
+      ASSERT_EQ("", attr_val_ret);
     });
 
     io.run();
