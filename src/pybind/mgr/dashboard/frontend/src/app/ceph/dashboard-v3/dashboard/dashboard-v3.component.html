@@ -137,6 +137,9 @@
                     <span [ngStyle]="check.severity | healthColor"
                           [class.health-warn-description]="check.severity === 'HEALTH_WARN'">
                     {{ check.type }}</span>: {{ check.summary.message }}
+                    <div *ngFor="let details of check?.detail">
+                      <div class="text-muted">{{ details?.message }}</div>
+                    </div>
                   </li>
                 </ul>
               </ng-template>
@@ -150,8 +153,7 @@
                    [ngbPopover]="healthChecks"
                    popoverClass="info-card-popover-cluster-status"
                    [openDelay]="300"
-                   [closeDelay]="500"
-                   triggers="mouseenter:mouseleave"
+                   triggers="mouseenter"
                    *ngIf="healthData.health?.checks?.length"
                    i18n>Cluster</a>
                 <span class="ms-2 mt-n1 lead"
