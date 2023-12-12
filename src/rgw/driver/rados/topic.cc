@@ -99,7 +99,7 @@ int write(const DoutPrefixProvider* dpp, optional_yield y,
           const rgw_pubsub_topic& info, RGWObjVersionTracker& objv,
           ceph::real_time mtime, bool exclusive)
 {
-  const std::string topic_key = get_topic_metadata_key(info.user.tenant, info.name);
+  const std::string topic_key = get_topic_metadata_key(info);
   const rgw_raw_obj obj = get_topic_obj(zone, topic_key);
 
   bufferlist bl;
