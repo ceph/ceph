@@ -821,7 +821,7 @@ void get_omap_batch(ObjectMap::ObjectMapIterator &iter, map<string, bufferlist> 
   }
 }
 
-int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj)
+int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj, bool force)
 {
   struct stat st;
   mysize_t total;
@@ -845,13 +845,19 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
     bufferlist bl;
     ret = store->getattr(ch, obj, OI_ATTR, bp);
     if (ret < 0) {
-      cerr << "getattr failure object_info " << ret << std::endl;
-      return ret;
+      cerr << "getattr failure: " << cpp_strerror(ret)
+           << " at obj:" << obj
+           << (force ? " IGNORED" : "")
+           << std::endl;
+      if (!force) {
+        return ret;
+      }
+    } else {
+      bl.push_back(bp);
+      decode(objb.oi, bl);
+      if (debug)
+        cerr << "object_info: " << objb.oi << std::endl;
     }
-    bl.push_back(bp);
-    decode(objb.oi, bl);
-    if (debug)
-      cerr << "object_info: " << objb.oi << std::endl;
   }
 
   // NOTE: we include whiteouts, lost, etc.
@@ -869,10 +875,35 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
       len = total;
 
     ret = store->read(ch, obj, offset, len, rawdatabl);
-    if (ret < 0)
-      return ret;
-    if (ret == 0)
-      return -EINVAL;
+
+    ret = ret == 0 ? -EINVAL : ret;
+    if (ret < 0) {
+      if (!force) {
+        cerr << "read failure: " << cpp_strerror(ret)
+             << " at obj:" << obj
+             << std::hex << ", read 0x" << offset << "~" << len << std::dec
+             << std::endl;
+        return ret;
+      }
+      // re-read using minimal disk block to minimize error footprint.
+      auto o = offset;
+      const size_t block_size = 4096;
+      while(o < offset + len) {
+        bufferlist bl;
+        int r = store->read(ch, obj, o, block_size, bl);
+        if (r <= 0) {
+          rawdatabl.append_zero(block_size);
+          cerr << "read failure: " << cpp_strerror(r == 0 ? -EINVAL : r)
+               << " at obj:" << obj << std::hex
+               << ", read 0x" << o << "~" << block_size
+               << std::dec << std::endl;
+        } else {
+          rawdatabl.claim_append(bl);
+        }
+        o += block_size;
+      }
+      ret = len;
+    }
 
     data_section dblock(offset, len, rawdatabl);
     if (debug)
@@ -941,7 +972,7 @@ int ObjectStoreTool::export_file(ObjectStore *store, coll_t cid, ghobject_t &obj
   return 0;
 }
 
-int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
+int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll, bool force)
 {
   ghobject_t next;
   auto ch = store->open_collection(coll);
@@ -958,7 +989,7 @@ int ObjectStoreTool::export_files(ObjectStore *store, coll_t coll)
       if (i->is_pgmeta() || i->hobj.is_temp() || !i->is_no_gen()) {
 	continue;
       }
-      r = export_file(store, coll, *i);
+      r = export_file(store, coll, *i, force);
       if (r < 0)
         return r;
     }
@@ -1124,9 +1155,9 @@ int ObjectStoreTool::do_export(
   if (ret)
     return ret;
 
-  ret = export_files(fs, coll);
+  ret = export_files(fs, coll, force);
   if (ret) {
-    cerr << "export_files error " << ret << std::endl;
+    cerr << "export_files error: " << cpp_strerror(ret) << std::endl;
     return ret;
   }
 
