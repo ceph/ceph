@@ -31,12 +31,18 @@ log = logging.getLogger(__name__)
 
 
 PY36_REQUIREMENTS = [
-    'MarkupSafe >= 2.0.1, <2.2',
-    'Jinja2 >= 3.0.2, <3.2',
+    {
+        'package_spec': 'MarkupSafe >= 2.0.1, <2.2',
+        'unique': True,
+    },
+    {
+        'package_spec': 'Jinja2 >= 3.0.2, <3.2',
+        'unique': True,
+    },
 ]
 PY_REQUIREMENTS = [
-    'MarkupSafe >= 2.1.3, <2.2',
-    'Jinja2 >= 3.1.2, <3.2',
+    {'package_spec': 'MarkupSafe >= 2.1.3, <2.2'},
+    {'package_spec': 'Jinja2 >= 3.1.2, <3.2'},
 ]
 # IMPORTANT to be fully compatible with all the distros ceph is built for we
 # need to work around various old versions of python/pip. As such it's easier
@@ -51,6 +57,33 @@ _VALID_VERS_VARS = [
     "CEPH_RELEASE_NAME",
     "CEPH_RELEASE_TYPE",
 ]
+
+
+class InstallSpec:
+    def __init__(
+        self, package_spec, custom_pip_args=None, unique=False, **kwargs
+    ):
+        self.package_spec = package_spec
+        self.name = package_spec.split()[0]
+        self.custom_pip_args = custom_pip_args or []
+        self.unique = unique
+        self.extra = kwargs
+
+    @property
+    def pip_args(self):
+        return self.custom_pip_args
+
+    @property
+    def pip_args_and_package(self):
+        return self.pip_args + [self.package_spec]
+
+    def compatible(self, other):
+        return (
+            other
+            and not self.unique
+            and not other.unique
+            and self.pip_args == other.pip_args
+        )
 
 
 class PipEnv(enum.Enum):
@@ -84,15 +117,13 @@ class Config:
 
     def _setup_pip(self):
         if self._maj_min == (3, 6):
-            self.pip_split = True
-            self.requirements = PY36_REQUIREMENTS
+            self.requirements = [InstallSpec(**v) for v in PY36_REQUIREMENTS]
         else:
-            self.pip_split = False
-            self.requirements = PY_REQUIREMENTS
+            self.requirements = [InstallSpec(**v) for v in PY_REQUIREMENTS]
         self.pip_venv = PipEnv[self.cli_args.pip_use_venv]
 
     def _setup_rpm(self):
-        self.requirements = [s.split()[0] for s in PY_REQUIREMENTS]
+        self.requirements = [InstallSpec(**v) for v in PY_REQUIREMENTS]
 
 
 class DependencyInfo:
@@ -101,7 +132,7 @@ class DependencyInfo:
     def __init__(self, config):
         self._config = config
         self._deps = []
-        self._reqs = {s.split()[0]: s for s in self._config.requirements}
+        self._reqs = {s.name: s.package_spec for s in self._config.requirements}
 
     @property
     def requirements(self):
@@ -259,15 +290,16 @@ def _install_pip_deps(tempdir, config):
         env['PYTHONPATH'] = env['PYTHONPATH'] + f':{tempdir}'
     else:
         env['PYTHONPATH'] = f'{tempdir}'
-    if config.pip_split:
-        # a list of single item lists; so that pip run once for each
-        # requirement
-        req_batches = [[r] for r in config.requirements]
-    else:
-        # a list containing another list of the requirements, so we only
-        # need to run pip once
-        req_batches = [list(config.requirements)]
-    for batch in req_batches:
+
+    pip_args = []
+    prev = None
+    for ispec in config.requirements:
+        if ispec.compatible(prev) and pip_args:
+            pip_args[0].append(ispec.package_spec)
+        else:
+            pip_args.append(ispec.pip_args_and_package)
+        prev = ispec
+    for batch in pip_args:
         _run(
             [
                 executable,
@@ -321,8 +353,8 @@ def _install_rpm_deps(tempdir, config):
     log.info("Installing dependencies using RPMs")
     dinfo = DependencyInfo(config)
     for pkg in config.requirements:
-        log.info(f"Looking for rpm package for: {pkg!r}")
-        _deps_from_rpm(tempdir, config, dinfo, pkg)
+        log.info(f"Looking for rpm package for: {pkg.name!r}")
+        _deps_from_rpm(tempdir, config, dinfo, pkg.name)
     return dinfo
 
 
