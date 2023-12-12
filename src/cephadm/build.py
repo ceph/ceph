@@ -33,16 +33,18 @@ log = logging.getLogger(__name__)
 PY36_REQUIREMENTS = [
     {
         'package_spec': 'MarkupSafe >= 2.0.1, <2.2',
+        'from_source': True,
         'unique': True,
     },
     {
         'package_spec': 'Jinja2 >= 3.0.2, <3.2',
+        'from_source': True,
         'unique': True,
     },
 ]
 PY_REQUIREMENTS = [
-    {'package_spec': 'MarkupSafe >= 2.1.3, <2.2'},
-    {'package_spec': 'Jinja2 >= 3.1.2, <3.2'},
+    {'package_spec': 'MarkupSafe >= 2.1.3, <2.2', 'from_source': True},
+    {'package_spec': 'Jinja2 >= 3.1.2, <3.2', 'from_source': True},
 ]
 # IMPORTANT to be fully compatible with all the distros ceph is built for we
 # need to work around various old versions of python/pip. As such it's easier
@@ -61,17 +63,27 @@ _VALID_VERS_VARS = [
 
 class InstallSpec:
     def __init__(
-        self, package_spec, custom_pip_args=None, unique=False, **kwargs
+        self,
+        package_spec,
+        custom_pip_args=None,
+        unique=False,
+        from_source=False,
+        **kwargs,
     ):
         self.package_spec = package_spec
         self.name = package_spec.split()[0]
         self.custom_pip_args = custom_pip_args or []
         self.unique = unique
+        self.from_source = from_source
         self.extra = kwargs
 
     @property
     def pip_args(self):
-        return self.custom_pip_args
+        args = []
+        if self.from_source:
+            args.append("--no-binary")
+            args.append(":all:")
+        return args + self.custom_pip_args
 
     @property
     def pip_args_and_package(self):
@@ -306,8 +318,6 @@ def _install_pip_deps(tempdir, config):
                 "-m",
                 "pip",
                 "install",
-                "--no-binary",
-                ":all:",
                 "--target",
                 tempdir,
             ]
