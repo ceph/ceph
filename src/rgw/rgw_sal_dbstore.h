@@ -462,7 +462,7 @@ protected:
 			 int num_parts, int marker,
 			 int* next_marker, bool* truncated, optional_yield y,
 			 bool assume_unsorted = false) override;
-    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y, bool log_op) override;
+    virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
     virtual int complete(const DoutPrefixProvider* dpp,
 		       optional_yield y, CephContext* cct,
 		       std::map<int, std::string>& part_etags,
@@ -524,7 +524,7 @@ protected:
         public:
           DBDeleteOp(DBObject* _source);
 
-          virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, bool log_op) override;
+          virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
       };
 
       DBObject() = default;
@@ -543,7 +543,7 @@ protected:
 
       virtual int delete_object(const DoutPrefixProvider* dpp,
           optional_yield y,
-          bool prevent_versioning = false) override;
+          uint32_t flags) override;
       virtual int copy_object(User* user,
           req_info* info, const rgw_zone_id& source_zone,
           rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
@@ -580,7 +580,7 @@ protected:
           uint64_t olh_epoch,
           const DoutPrefixProvider* dpp,
           optional_yield y,
-          bool log_op) override;
+          uint32_t flags) override;
       virtual bool placement_rules_match(rgw_placement_rule& r1, rgw_placement_rule& r2) override;
       virtual int dump_obj_layout(const DoutPrefixProvider *dpp, optional_yield y, Formatter* f) override;
 
@@ -657,7 +657,7 @@ protected:
                          const std::string *user_data,
                          rgw_zone_set *zones_trace, bool *canceled,
                          const req_context& rctx,
-                         bool log_op) override;
+                         uint32_t flags) override;
   };
 
   class DBMultipartWriter : public StoreWriter {
@@ -706,7 +706,7 @@ public:
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
                        const req_context& rctx,
-                       bool log_op) override;
+                       uint32_t flags) override;
   };
 
   class DBStore : public StoreDriver {

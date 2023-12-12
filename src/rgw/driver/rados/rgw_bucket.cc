@@ -148,7 +148,7 @@ int rgw_remove_object(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, r
 
   std::unique_ptr<rgw::sal::Object> object = bucket->get_object(key);
 
-  return object->delete_object(dpp, y);
+  return object->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP);
 }
 
 static void set_err_msg(std::string *sink, std::string msg)
