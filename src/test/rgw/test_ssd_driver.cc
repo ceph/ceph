@@ -43,7 +43,7 @@ class SSDDriverFixture: public ::testing::Test {
 
         ASSERT_NE(cacheDriver, nullptr);
 
-        cacheDriver->initialize(env->cct, env->dpp);
+        cacheDriver->initialize(env->dpp);
 
         bl.append("This is testdata");
         attrVal.append("attrVal");

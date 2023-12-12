@@ -32,7 +32,7 @@ class RedisDriver : public CacheDriver {
     virtual Partition get_current_partition_info(const DoutPrefixProvider* dpp) override { return partition_info; }
     virtual uint64_t get_free_space(const DoutPrefixProvider* dpp) override { return free_space; }
 
-    virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
+    virtual int initialize(const DoutPrefixProvider* dpp) override;
     virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) override;
     virtual int put_async(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs) override;
     virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) override;
