@@ -358,8 +358,8 @@ int SSDDriver::update_attrs(const DoutPrefixProvider* dpp, const std::string& ke
     for (auto& it : attrs) {
         std::string attr_name = it.first;
         std::string attr_val = it.second.to_str();
-        std::string old_attr_val = get_attr(dpp, key, attr_name, y);
-        int ret;
+        std::string old_attr_val;
+        auto ret = get_attr(dpp, key, attr_name, old_attr_val, y);
         if (old_attr_val.empty()) {
             ret = setxattr(location.c_str(), attr_name.c_str(), attr_val.c_str(), attr_val.size(), XATTR_CREATE);
         } else {
@@ -419,7 +419,8 @@ int SSDDriver::get_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
         if (prefixloc == std::string::npos) {
             continue;
         }
-        std::string attr_value = get_attr(dpp, key, attr_name, y);
+        std::string attr_value;
+        get_attr(dpp, key, attr_name, attr_value, y);
         bufferlist bl_value;
         bl_value.append(attr_value);
         attrs.emplace(std::move(attr_name), std::move(bl_value));
@@ -449,7 +450,7 @@ int SSDDriver::set_attrs(const DoutPrefixProvider* dpp, const std::string& key, 
     return 0;
 }
 
-std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, optional_yield y)
+int SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, std::string& attr_val, optional_yield y)
 {
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
@@ -458,24 +459,26 @@ std::string SSDDriver::get_attr(const DoutPrefixProvider* dpp, const std::string
 
     int attr_size = getxattr(location.c_str(), attr_name.c_str(), nullptr, 0);
     if (attr_size < 0) {
-        auto ret = errno;
-        ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << attr_name << ": " << cpp_strerror(ret) << dendl;
-        return "";
+        ldpp_dout(dpp, 0) << "ERROR: could not get attribute " << attr_name << ": " << cpp_strerror(errno) << dendl;
+        attr_val = "";
+        return errno;
     }
 
     if (attr_size == 0) {
         ldpp_dout(dpp, 0) << "ERROR: no attribute value found for attr_name: " << attr_name << dendl;
-        return "";
+        attr_val = "";
+        return 0;
     }
 
-    char attr_val_ptr[attr_size + 1];
-    attr_size = getxattr(location.c_str(), attr_name.c_str(), attr_val_ptr, attr_size);
+    attr_val.resize(attr_size);
+    attr_size = getxattr(location.c_str(), attr_name.c_str(), attr_val.data(), attr_size);
     if (attr_size < 0) {
         ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not get attr value for attr name: " << attr_name << " key: " << key << dendl;
+        attr_val = "";
+        return errno;
     }
-    attr_val_ptr[attr_size] = '\0';
 
-    return std::string(attr_val_ptr);
+    return 0;
 }
 
 int SSDDriver::set_attr(const DoutPrefixProvider* dpp, const std::string& key, const std::string& attr_name, const std::string& attr_val, optional_yield y)
@@ -502,7 +505,6 @@ int SSDDriver::delete_attr(const DoutPrefixProvider* dpp, const std::string& key
     std::string location = partition_info.location + key;
     ldpp_dout(dpp, 20) << "SSDCache: " << __func__ << "(): location=" << location << dendl;
 
-    auto attr_val = get_attr(dpp, key, attr_name, null_yield); //need this for free space calculation.
     auto ret = removexattr(location.c_str(), attr_name.c_str());
     if (ret < 0) {
         ldpp_dout(dpp, 0) << "SSDCache: " << __func__ << "(): could not remove attr value for attr name: " << attr_name << " key: " << key << cpp_strerror(errno) << dendl;
