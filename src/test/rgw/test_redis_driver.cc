@@ -464,8 +464,9 @@ TEST_F(RedisDriverFixture, GetAttrYield)
       ASSERT_EQ((bool)ec, false);
       EXPECT_EQ(std::get<0>(resp).value(), 0);
     }
-
-    ASSERT_EQ("newVal", cacheDriver->get_attr(env->dpp, "testName", "attr", optional_yield{io, yield}));
+    std::string attr_val;
+    ASSERT_EQ(0, cacheDriver->get_attr(env->dpp, "testName", "attr", attr_val, optional_yield{io, yield}));
+    ASSERT_EQ("newVal", attr_val);
     cacheDriver->shutdown();
 
     {
