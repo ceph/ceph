@@ -3772,6 +3772,9 @@ int main(int argc, char **argv)
       ret = -EINVAL;
       goto out;
     }
+  } else {
+    cout << "Using no superblock" << std::endl;
+    superblock.reset(new OSDSuperblock);
   }
 
   if (op != "list" && vm.count("object")) {
