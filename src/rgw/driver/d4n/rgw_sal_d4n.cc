@@ -60,7 +60,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
   FilterDriver::initialize(cct, dpp);
 
-  cacheDriver->initialize(cct, dpp);
+  cacheDriver->initialize(dpp);
 
   objDir->init(cct, dpp);
   blockDir->init(cct, dpp);

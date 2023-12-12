@@ -11,7 +11,7 @@ public:
   SSDDriver(Partition& partition_info) : partition_info(partition_info) {}
   virtual ~SSDDriver() {}
 
-  virtual int initialize(CephContext* cct, const DoutPrefixProvider* dpp) override;
+  virtual int initialize(const DoutPrefixProvider* dpp) override;
   virtual int put(const DoutPrefixProvider* dpp, const std::string& key, bufferlist& bl, uint64_t len, rgw::sal::Attrs& attrs, optional_yield y) override;
   virtual int get(const DoutPrefixProvider* dpp, const std::string& key, off_t offset, uint64_t len, bufferlist& bl, rgw::sal::Attrs& attrs, optional_yield y) override;
   virtual int del(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override { return -1; } // TODO: implement
@@ -45,7 +45,6 @@ public:
 protected:
   Partition partition_info;
   uint64_t free_space;
-  CephContext* cct;
 
 private:
 
@@ -75,7 +74,7 @@ struct AsyncReadOp {
   using Signature = void(boost::system::error_code, bufferlist);
   using Completion = ceph::async::Completion<Signature, AsyncReadOp>;
 
-  int init(const DoutPrefixProvider *dpp, CephContext* cct, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg);
+  int init(const DoutPrefixProvider *dpp, const std::string& file_path, off_t read_ofs, off_t read_len, void* arg);
   static void libaio_cb_aio_dispatch(sigval sigval);
 
   template <typename Executor1, typename CompletionHandler>
