@@ -2261,6 +2261,7 @@ void CrushWrapper::reweight_bucket(
 int CrushWrapper::add_simple_rule_at(
   string name, string root_name,
   string failure_domain_name,
+  int num_failure_domains,
   string device_class,
   string mode, int rule_type,
   int rno,
@@ -2332,17 +2333,19 @@ int CrushWrapper::add_simple_rule_at(
   }
   crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
   if (type)
-    crush_rule_set_step(rule, step++,
-			mode == "firstn" ? CRUSH_RULE_CHOOSELEAF_FIRSTN :
-			CRUSH_RULE_CHOOSELEAF_INDEP,
-			CRUSH_CHOOSE_N,
-			type);
+    crush_rule_set_step(
+      rule, step++,
+      mode == "firstn" ? CRUSH_RULE_CHOOSELEAF_FIRSTN :
+      CRUSH_RULE_CHOOSELEAF_INDEP,
+      num_failure_domains <= 0 ? CRUSH_CHOOSE_N : num_failure_domains,
+      type);
   else
-    crush_rule_set_step(rule, step++,
-			mode == "firstn" ? CRUSH_RULE_CHOOSE_FIRSTN :
-			CRUSH_RULE_CHOOSE_INDEP,
-			CRUSH_CHOOSE_N,
-			0);
+    crush_rule_set_step(
+      rule, step++,
+      mode == "firstn" ? CRUSH_RULE_CHOOSE_FIRSTN :
+      CRUSH_RULE_CHOOSE_INDEP,
+      num_failure_domains <= 0 ? CRUSH_CHOOSE_N : num_failure_domains,
+      0);
   crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
 
   int ret = crush_add_rule(crush, rule, rno);
@@ -2358,13 +2361,125 @@ int CrushWrapper::add_simple_rule_at(
 int CrushWrapper::add_simple_rule(
   string name, string root_name,
   string failure_domain_name,
+  int num_failure_domains,
   string device_class,
   string mode, int rule_type,
   ostream *err)
 {
-  return add_simple_rule_at(name, root_name, failure_domain_name, device_class,
-			    mode,
-			    rule_type, -1, err);
+  return add_simple_rule_at(
+    name, root_name, failure_domain_name, num_failure_domains,
+    device_class,
+    mode,
+    rule_type, -1, err);
+}
+
+int CrushWrapper::add_multi_osd_per_failure_domain_rule_at(
+  string name, string root_name, string failure_domain_name,
+  int num_failure_domains,
+  int osds_per_failure_domain,
+  string device_class,
+  crush_rule_type rule_type,
+  int rno,
+  ostream *err)
+{
+  if (rule_exists(name)) {
+    if (err)
+      *err << "rule " << name << " exists";
+    return -EEXIST;
+  }
+  if (rno >= 0) {
+    if (rule_exists(rno)) {
+      if (err)
+        *err << "rule with ruleno " << rno << " exists";
+      return -EEXIST;
+    }
+  } else {
+    for (rno = 0; rno < get_max_rules(); rno++) {
+      if (!rule_exists(rno))
+        break;
+    }
+  }
+  if (!name_exists(root_name)) {
+    if (err)
+      *err << "root item " << root_name << " does not exist";
+    return -ENOENT;
+  }
+  int root = get_item_id(root_name);
+  int type = 0;
+  if (failure_domain_name.length()) {
+    type = get_type_id(failure_domain_name);
+    if (type < 0) {
+      if (err)
+	*err << "unknown type " << failure_domain_name;
+      return -EINVAL;
+    }
+  }
+  if (device_class.size()) {
+    if (!class_exists(device_class)) {
+      if (err)
+	*err << "device class " << device_class << " does not exist";
+      return -EINVAL;
+    }
+    int c = get_class_id(device_class);
+    if (class_bucket.count(root) == 0 ||
+	class_bucket[root].count(c) == 0) {
+      if (err)
+	*err << "root " << root_name << " has no devices with class "
+	     << device_class;
+      return -EINVAL;
+    }
+    root = class_bucket[root][c];
+  }
+  if (rule_type != CRUSH_RULE_TYPE_MSR_INDEP &&
+      rule_type != CRUSH_RULE_TYPE_MSR_FIRSTN) {
+    if (err)
+      *err << "unknown rule_type " << rule_type;
+    return -EINVAL;
+  }
+
+  int steps = 4;
+  crush_rule *rule = crush_make_rule(steps, rule_type);
+  ceph_assert(rule);
+  int step = 0;
+  crush_rule_set_step(rule, step++, CRUSH_RULE_TAKE, root, 0);
+  crush_rule_set_step(rule, step++,
+		      CRUSH_RULE_CHOOSE_MSR,
+		      num_failure_domains,
+		      type);
+  crush_rule_set_step(rule, step++,
+		      CRUSH_RULE_CHOOSE_MSR,
+		      osds_per_failure_domain,
+		      0);
+  crush_rule_set_step(rule, step++, CRUSH_RULE_EMIT, 0, 0);
+
+  int ret = crush_add_rule(crush, rule, rno);
+  if(ret < 0) {
+    *err << "failed to add rule " << rno << " because " << cpp_strerror(ret);
+    return ret;
+  }
+  set_rule_name(rno, name);
+  have_rmaps = false;
+  return rno;
+}
+
+
+int CrushWrapper::add_indep_multi_osd_per_failure_domain_rule(
+  string name, string root_name,
+  string failure_domain_name,
+  int num_failure_domains,
+  int osds_per_failure_domain,
+  string device_class,
+  ostream *err)
+{
+  return add_multi_osd_per_failure_domain_rule_at(
+    name, root_name,
+    failure_domain_name,
+    num_failure_domains,
+    osds_per_failure_domain,
+    device_class,
+    CRUSH_RULE_TYPE_MSR_INDEP,
+    -1,
+    err);
 }
 
 float CrushWrapper::_get_take_weight_osd_map(int root,

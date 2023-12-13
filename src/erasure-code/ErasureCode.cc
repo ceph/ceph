@@ -52,6 +52,12 @@ int ErasureCode::init(
   err |= to_string("crush-failure-domain", profile,
 		   &rule_failure_domain,
 		   DEFAULT_RULE_FAILURE_DOMAIN, ss);
+  err |= to_int("crush-osds-per-failure-domain", profile,
+		&rule_osds_per_failure_domain,
+		"0", ss);
+  err |= to_int("crush-num-failure-domains", profile,
+		&rule_num_failure_domains,
+		"0", ss);
   err |= to_string("crush-device-class", profile,
 		   &rule_device_class,
 		   "", ss);
@@ -66,19 +72,33 @@ int ErasureCode::create_rule(
   CrushWrapper &crush,
   std::ostream *ss) const
 {
-  int ruleid = crush.add_simple_rule(
-    name,
-    rule_root,
-    rule_failure_domain,
-    rule_device_class,
-    "indep",
-    pg_pool_t::TYPE_ERASURE,
-    ss);
-
-  if (ruleid < 0)
-    return ruleid;
-
-  return ruleid;
+  if (rule_osds_per_failure_domain <= 1) {
+    return crush.add_simple_rule(
+      name,
+      rule_root,
+      rule_failure_domain,
+      rule_num_failure_domains,
+      rule_device_class,
+      "indep",
+      pg_pool_t::TYPE_ERASURE,
+      ss);
+  } else {
+    if (rule_num_failure_domains < 1)  {
+      if (ss) {
+	*ss << "crush-num-failure-domains " << rule_num_failure_domains
+	    << " must be >= 1 if crush-osds-per-failure-domain specified";
+	return -EINVAL;
+      }
+    }
+    return crush.add_indep_multi_osd_per_failure_domain_rule(
+      name,
+      rule_root,
+      rule_failure_domain,
+      rule_num_failure_domains,
+      rule_osds_per_failure_domain,
+      rule_device_class,
+      ss);
+  }
 }
 
 int ErasureCode::sanity_check_k_m(int k, int m, ostream *ss)
