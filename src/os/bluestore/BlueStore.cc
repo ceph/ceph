@@ -3034,12 +3034,12 @@ void BlueStore::ExtentMap::scan_shared_blobs(
     if (ep->blob->last_encoded_id == -1) {
       const bluestore_blob_t& blob = ep->blob->get_blob();
       if (blob.is_shared()) {
-	// excellent time to load the blob
-	c->load_shared_blob(ep->blob->shared_blob);
-	if (!blob.is_compressed()) {
-	  // Restrict elastic shared blobs to non-compressed blobs.
-	  // Fsck cannot handle case when one shared blob contains refs to
-	  // both shared and non-shared blobs.
+        // excellent time to load the blob
+        c->load_shared_blob(ep->blob->get_shared_blob());
+        if (!blob.is_compressed()) {
+          // Restrict elastic shared blobs to non-compressed blobs.
+          // Fsck cannot handle case when one shared blob contains refs to
+          // both shared and non-shared blobs.
 
 	  // todo consider change to emplace_hint
 	  candidates.emplace(ep->blob_start(), ep->blob.get());
@@ -3147,7 +3147,7 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
 	uint32_t b_logical_length = b->merge_blob(store->cct, e.blob.get());
 	for (auto p : blob.get_extents()) {
 	  if (p.is_valid()) {
-	    b->shared_blob->get_ref(p.offset, p.length);
+	    b->get_shared_blob()->get_ref(p.offset, p.length);
 	  }
 	}
 	// reblob extents might erase e
@@ -3165,7 +3165,7 @@ void BlueStore::ExtentMap::make_range_shared_maybe_merge(
 	++ep;
       }
     } else {
-      c->load_shared_blob(e.blob->shared_blob);
+      c->load_shared_blob(e.blob->get_shared_blob());
       ++ep;
     }
   }
@@ -3226,7 +3226,7 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
         // -1 to exclude next potential shard
         dirty_range_end = e.logical_end() - 1;
       } else {
-        c->load_shared_blob(e.blob->shared_blob);
+        c->load_shared_blob(e.blob->get_shared_blob());
       }
       cb = c->new_blob();
       e.blob->last_encoded_id = n;
@@ -3245,10 +3245,10 @@ void BlueStore::ExtentMap::dup(BlueStore* b, TransContext* txc,
       // bump the extent refs on the copied blob's extents
       for (auto p : blob.get_extents()) {
         if (p.is_valid()) {
-          e.blob->shared_blob->get_ref(p.offset, p.length);
+          e.blob->get_shared_blob()->get_ref(p.offset, p.length);
         }
       }
-      txc->write_shared_blob(e.blob->shared_blob);
+      txc->write_shared_blob(e.blob->get_shared_blob());
       dout(20) << __func__ << "    new " << *cb << dendl;
     }
 
@@ -3357,7 +3357,7 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
 	// we must copy source blob diligently region-by-region
 	// initialize shared_blob
 	cb->dirty_blob().set_flag(bluestore_blob_t::FLAG_SHARED);
-	cb->set_shared_blob(e.blob->shared_blob);
+	cb->set_shared_blob(e.blob->get_shared_blob());
       }
       // By default do not copy buffers to clones, and let them read data by themselves.
       // The exception are 'writing' buffers, which are not yet stable on device.
@@ -3369,7 +3369,7 @@ void BlueStore::ExtentMap::dup_esb(BlueStore* b, TransContext* txc,
 	txc->blobs_written.insert(cb);
       }
 
-      txc->write_shared_blob(e.blob->shared_blob);
+      txc->write_shared_blob(e.blob->get_shared_blob());
       dout(20) << __func__ << "    new " << *cb << dendl;
     }
 
@@ -4512,7 +4512,7 @@ BlueStore::ExtentMap::debug_list_disk_layout()
     bluestore_extent_ref_map_t* ref_map = nullptr;
     if (bblob.is_shared()) {
       ceph_assert(ep->blob->is_shared_loaded());
-      bluestore_shared_blob_t* bsblob = ep->blob->shared_blob->persistent;
+      bluestore_shared_blob_t* bsblob = ep->blob->get_shared_blob()->persistent;
       ref_map = &bsblob->ref_map;
     }
 
@@ -4979,7 +4979,7 @@ void BlueStore::Collection::flush_all_but_last()
 
 void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
 {
-  ceph_assert(!b->shared_blob);
+  ceph_assert(!b->get_shared_blob());
   const bluestore_blob_t& blob = b->get_blob();
   if (!blob.is_shared()) {
     return;
@@ -4989,12 +4989,12 @@ void BlueStore::Collection::open_shared_blob(uint64_t sbid, BlobRef b)
   if (sb) {
     b->set_shared_blob(sb);
     ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
-			  << std::dec << " had " << *b->shared_blob << dendl;
+			  << std::dec << " had " << *b->get_shared_blob() << dendl;
   } else {
     b->set_shared_blob(new SharedBlob(sbid, this));
-    shared_blob_set.add(this, b->shared_blob.get());
+    shared_blob_set.add(this, b->get_shared_blob().get());
     ldout(store->cct, 10) << __func__ << " sbid 0x" << std::hex << sbid
-			  << std::dec << " opened " << *b->shared_blob
+			  << std::dec << " opened " << *b->get_shared_blob()
 			  << dendl;
   }
 }
@@ -5035,12 +5035,12 @@ void BlueStore::Collection::make_blob_shared(uint64_t sbid, BlobRef b)
   blob.clear_flag(bluestore_blob_t::FLAG_HAS_UNUSED);
   // update shared blob
   b->set_shared_blob(new SharedBlob(sbid, this));
-  b->shared_blob->loaded = true;
-  b->shared_blob->persistent = new bluestore_shared_blob_t(sbid);
-  shared_blob_set.add(this, b->shared_blob.get());
+  b->get_shared_blob()->loaded = true;
+  b->get_shared_blob()->persistent = new bluestore_shared_blob_t(sbid);
+  shared_blob_set.add(this, b->get_shared_blob().get());
   for (auto p : blob.get_extents()) {
     if (p.is_valid()) {
-      b->shared_blob->get_ref(
+      b->get_shared_blob()->get_ref(
 	p.offset,
 	p.length);
     }
@@ -5168,7 +5168,7 @@ void BlueStore::Collection::split_cache(
 	}
 	cache->rm_blob();
 	dest->cache->add_blob();
-	SharedBlob* sb = b->shared_blob.get();
+	SharedBlob* sb = b->get_shared_blob().get();
         b->collection = dest;
         if (sb) {
           if (sb->collection == dest) {
@@ -16304,22 +16304,22 @@ void BlueStore::_wctx_finish(
       dout(20) << __func__ << "  blob " << *b << " release " << r << dendl;
       if (blob.is_shared()) {
 	PExtentVector final;
-        c->load_shared_blob(b->shared_blob);
+        c->load_shared_blob(b->get_shared_blob());
 	bool unshare = false;
 	bool* unshare_ptr =
 	  !maybe_unshared_blobs || b->is_referenced() ? nullptr : &unshare;
 	for (auto e : r) {
-	  b->shared_blob->put_ref(
+	  b->get_shared_blob()->put_ref(
 	    e.offset, e.length, &final,
 	    unshare_ptr);
 	}
 	if (unshare) {
 	  ceph_assert(maybe_unshared_blobs);
-	  maybe_unshared_blobs->insert(b->shared_blob.get());
+	  maybe_unshared_blobs->insert(b->get_shared_blob().get());
 	}
 	dout(20) << __func__ << "  shared_blob release " << final
-		 << " from " << *b->shared_blob << dendl;
-	txc->write_shared_blob(b->shared_blob);
+		 << " from " << *b->get_shared_blob() << dendl;
+	txc->write_shared_blob(b->get_shared_blob());
 	r.clear();
 	r.swap(final);
       }
@@ -16851,7 +16851,7 @@ int BlueStore::_do_remove(
   map<SharedBlob*,bluestore_extent_ref_map_t> expect;
   for (auto& e : h->extent_map.extent_map) {
     const bluestore_blob_t& b = e.blob->get_blob();
-    SharedBlob *sb = e.blob->shared_blob.get();
+    SharedBlob *sb = e.blob->get_shared_blob().get();
     if (b.is_shared() &&
 	sb->loaded &&
 	maybe_unshared_blobs.count(sb)) {
@@ -16892,14 +16892,14 @@ int BlueStore::_do_remove(
   // And now a run through .head extents to clear up freshly unshared blobs.
   for (auto& e : h->extent_map.extent_map) {
     const bluestore_blob_t& b = e.blob->get_blob();
-    SharedBlob *sb = e.blob->shared_blob.get();
+    SharedBlob *sb = e.blob->get_shared_blob().get();
     if (b.is_shared() &&
         std::find(unshared_blobs.begin(), unshared_blobs.end(),
                   sb) != unshared_blobs.end()) {
       dout(20) << __func__ << "  unsharing " << e << dendl;
       bluestore_blob_t& blob = e.blob->dirty_blob();
       blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
-      if (e.blob->shared_blob->nref > 1) {
+      if (e.blob->get_shared_blob()->nref > 1) {
 	// Each blob on creation gets its own unique (empty) shared_blob.
 	// In function ExtentMap::dup() we sometimes merge 2 blobs,
 	// so they share common shared_blob used for ref counting.
@@ -16911,7 +16911,7 @@ int BlueStore::_do_remove(
 
 	// Here we skip set_shared_blob() because e.blob is already in BufferCacheShard
 	// and cannot do add_blob() twice
-	e.blob->shared_blob = new SharedBlob(c.get());
+        e.blob->get_dirty_shared_blob() = new SharedBlob(c.get());
       }
       h->extent_map.dirty_range(e.logical_offset, 1);
     }

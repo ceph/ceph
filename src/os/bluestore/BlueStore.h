@@ -605,7 +605,6 @@ public:
     std::atomic_int nref = {0};     ///< reference count
     int16_t id = -1;                ///< id, for spanning blobs only, >= 0
     int16_t last_encoded_id = -1;   ///< (ephemeral) used during encoding only
-    SharedBlobRef shared_blob;      ///< shared blob state (if any)
     CollectionRef collection;
 
     void set_shared_blob(SharedBlobRef sb) {
@@ -618,6 +617,7 @@ public:
     Blob(CollectionRef collection) : collection(collection) {}
     BufferSpace bc;
   private:
+    SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
 #ifdef CACHE_BLOB_BL
     mutable ceph::buffer::list blob_bl;     ///< cached encoded blob, blob is dirty if empty
@@ -639,6 +639,15 @@ public:
     bluestore_blob_use_tracker_t& dirty_blob_use_tracker() {
       return used_in_blob;
     }
+
+    const SharedBlobRef& get_shared_blob() const {
+      return shared_blob;
+    }
+
+    SharedBlobRef& get_dirty_shared_blob() {
+      return shared_blob;
+    }
+
     bool is_referenced() const {
       return used_in_blob.is_not_empty();
     }
@@ -1906,7 +1915,7 @@ private:
     void write_onode(OnodeRef& o) {
       onodes.insert(o);
     }
-    void write_shared_blob(SharedBlobRef &sb) {
+    void write_shared_blob(const SharedBlobRef &sb) {
       shared_blobs.insert(sb);
     }
     void unshare_blob(SharedBlob *sb) {
