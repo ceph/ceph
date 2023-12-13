@@ -63,6 +63,17 @@ public:
       decode(nestlock, bl);
       decode(dftlock, bl);
     }
+    void dump(ceph::Formatter *f) const {
+      f->dump_int("nonce", nonce);
+      f->dump_int("caps_wanted", caps_wanted);
+      f->dump_int("filelock", filelock);
+      f->dump_int("nestlock", nestlock);
+      f->dump_int("dftlock", dftlock);
+    }
+    static void generate_test_instances(std::list<inode_strong*>& ls) {
+      ls.push_back(new inode_strong);
+      ls.push_back(new inode_strong(1, 2, 3, 4, 5));
+    }
   };
   WRITE_CLASS_ENCODER(inode_strong)
 
@@ -80,6 +91,14 @@ public:
       using ceph::decode;
       decode(nonce, bl);
       decode(dir_rep, bl);
+    }
+    static void generate_test_instances(std::list<dirfrag_strong*>& ls) {
+      ls.push_back(new dirfrag_strong);
+      ls.push_back(new dirfrag_strong(1, 2));
+    }
+    void dump(ceph::Formatter *f) const {
+      f->dump_unsigned("nonce", nonce);
+      f->dump_unsigned("dir_rep", dir_rep);
     }
   };
   WRITE_CLASS_ENCODER(dirfrag_strong)
@@ -117,6 +136,19 @@ public:
       decode(nonce, bl);
       decode(lock, bl);
       decode(alternate_name, bl);
+    }
+    static void generate_test_instances(std::list<dn_strong*>& ls) {
+      ls.push_back(new dn_strong);
+      ls.push_back(new dn_strong(1, "alternate_name", 2, 3, 4, 5, 6));
+    }
+    void dump(ceph::Formatter *f) const {
+      f->dump_unsigned("first", first);
+      f->dump_string("alternate_name", alternate_name);
+      f->dump_unsigned("ino", ino);
+      f->dump_unsigned("remote_ino", remote_ino);
+      f->dump_unsigned("remote_d_type", remote_d_type);
+      f->dump_unsigned("nonce", nonce);
+      f->dump_unsigned("lock", lock);
     }
   };
   WRITE_CLASS_ENCODER(dn_strong)

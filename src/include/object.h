@@ -25,6 +25,7 @@
 
 #include "include/rados.h"
 #include "include/unordered_map.h"
+#include "common/Formatter.h"
 
 #include "hash.h"
 #include "encoding.h"
@@ -57,6 +58,15 @@ struct object_t {
   void decode(ceph::buffer::list::const_iterator &bl) {
     using ceph::decode;
     decode(name, bl);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("name", name);
+  }
+
+  static void generate_test_instances(std::list<object_t*>& o) {
+    o.push_back(new object_t);
+    o.push_back(new object_t("myobject"));
   }
 };
 WRITE_CLASS_ENCODER(object_t)
@@ -169,6 +179,14 @@ struct sobject_t {
     using ceph::decode;
     decode(oid, bl);
     decode(snap, bl);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_stream("oid") << oid;
+    f->dump_stream("snap") << snap;
+  }
+  static void generate_test_instances(std::list<sobject_t*>& o) {
+    o.push_back(new sobject_t);
+    o.push_back(new sobject_t(object_t("myobject"), 123));
   }
 };
 WRITE_CLASS_ENCODER(sobject_t)

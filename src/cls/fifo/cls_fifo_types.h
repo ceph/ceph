@@ -54,7 +54,16 @@ struct objv {
     decode(ver, bl);
     DECODE_FINISH(bl);
   }
-  void dump(ceph::Formatter* f) const;
+  void dump(ceph::Formatter* f) const {
+    f->dump_string("instance", instance);
+    f->dump_unsigned("ver", ver);
+  }
+  static void generate_test_instances(std::list<objv*>& o) {
+    o.push_back(new objv);
+    o.push_back(new objv);
+    o.back()->instance = "instance";
+    o.back()->ver = 1;
+  }
   void decode_json(JSONObj* obj);
 
   bool operator ==(const objv& rhs) const {
@@ -103,7 +112,18 @@ struct data_params {
     decode(full_size_threshold, bl);
     DECODE_FINISH(bl);
   }
-  void dump(ceph::Formatter* f) const;
+  void dump(ceph::Formatter* f) const {
+    f->dump_unsigned("max_part_size", max_part_size);
+    f->dump_unsigned("max_entry_size", max_entry_size);
+    f->dump_unsigned("full_size_threshold", full_size_threshold);
+  }
+  static void generate_test_instances(std::list<data_params*>& o) {
+    o.push_back(new data_params);
+    o.push_back(new data_params);
+    o.back()->max_part_size = 1;
+    o.back()->max_entry_size = 2;
+    o.back()->full_size_threshold = 3;
+  }
   void decode_json(JSONObj* obj);
 
   auto operator <=>(const data_params&) const = default;
@@ -161,7 +181,10 @@ struct journal_entry {
     decode(part_tag, bl);
     DECODE_FINISH(bl);
   }
-  void dump(ceph::Formatter* f) const;
+  void dump(ceph::Formatter* f) const {
+    f->dump_int("op", (int)op);
+    f->dump_int("part_num", part_num);
+  }
 
   auto operator <=>(const journal_entry&) const = default;
 };
@@ -397,7 +420,38 @@ struct info {
     decode_journal(bl);
     DECODE_FINISH(bl);
   }
-  void dump(ceph::Formatter* f) const;
+  void dump(ceph::Formatter* f) const {
+    f->dump_string("id", id);
+    f->dump_object("version", version);
+    f->dump_string("oid_prefix", oid_prefix);
+    f->dump_object("params", params);
+    f->dump_int("tail_part_num", tail_part_num);
+    f->dump_int("head_part_num", head_part_num);
+    f->dump_int("min_push_part_num", min_push_part_num);
+    f->dump_int("max_push_part_num", max_push_part_num);
+    f->open_array_section("journal");
+    for (const auto& entry : journal) {
+      f->open_object_section("entry");
+      f->dump_object("entry", entry);
+      f->close_section();
+    }
+    f->close_section();
+  }
+  static void generate_test_instances(std::list<info*>& o) {
+    o.push_back(new info);
+    o.push_back(new info);
+    o.back()->id = "myid";
+    o.back()->version = objv();
+    o.back()->oid_prefix = "myprefix";
+    o.back()->params = data_params();
+    o.back()->tail_part_num = 123;
+    o.back()->head_part_num = 456;
+    o.back()->min_push_part_num = 789;
+    o.back()->max_push_part_num = 101112;
+    o.back()->journal.insert(journal_entry(journal_entry::Op::create, 1));
+    o.back()->journal.insert(journal_entry(journal_entry::Op::create, 2));
+    o.back()->journal.insert(journal_entry(journal_entry::Op::create, 3));
+  }
   void decode_json(JSONObj* obj);
 
   std::string part_oid(std::int64_t part_num) const {

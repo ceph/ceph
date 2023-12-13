@@ -75,6 +75,13 @@ struct inodeno_t {
     using ceph::decode;
     decode(val, p);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("val", val);
+  }
+  static void generate_test_instances(std::list<inodeno_t*>& ls) {
+    ls.push_back(new inodeno_t(1));
+    ls.push_back(new inodeno_t(123456789));
+  }
 } __attribute__ ((__may_alias__));
 WRITE_CLASS_ENCODER(inodeno_t)
 
