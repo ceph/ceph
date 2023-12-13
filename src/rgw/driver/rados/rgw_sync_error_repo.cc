@@ -127,7 +127,7 @@ class RGWErrorRepoWriteCR : public RGWSimpleCoroutine {
   RGWErrorRepoWriteCR(librados::Rados* rados, const rgw_raw_obj& raw_obj,
                       const std::string& key, ceph::real_time timestamp)
     : RGWSimpleCoroutine(static_cast<CephContext*>(rados->cct())),
-      raw_obj(raw_obj),
+      rados(rados), raw_obj(raw_obj),
       key(key), timestamp(timestamp)
   {}
 
@@ -172,7 +172,7 @@ class RGWErrorRepoRemoveCR : public RGWSimpleCoroutine {
   RGWErrorRepoRemoveCR(librados::Rados* rados, const rgw_raw_obj& raw_obj,
                        const std::string& key, ceph::real_time timestamp)
     : RGWSimpleCoroutine(static_cast<CephContext*>(rados->cct())),
-      raw_obj(raw_obj),
+      rados(rados), raw_obj(raw_obj),
       key(key), timestamp(timestamp)
   {}
 
