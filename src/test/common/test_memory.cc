@@ -30,7 +30,7 @@ TEST_P(MemoryIsZeroBigTest, MemoryIsZeroTestBig) {
 TEST_P(MemoryIsZeroSmallTest, MemoryIsZeroTestSmall) {
   size_t size = GetParam();
   for (size_t i = 0; i < size; i++) {
-    char data[size] = { 0 };
+    char* data = new char[size]();
     EXPECT_TRUE(mem_is_zero(data, size));
 
     data[i] = 'a';
@@ -63,11 +63,11 @@ TEST_P(MemoryIsZeroPerformance, MemoryIsZeroPerformanceTest) {
   free(data);
 }
 
-INSTANTIATE_TEST_CASE_P(Default, MemoryIsZeroSmallTest,
+INSTANTIATE_TEST_SUITE_P(MemoryIsZeroSmallTests, MemoryIsZeroSmallTest,
                         ::testing::Values(1, 4, 7, 8, 12, 28, 60, 64));
 
-INSTANTIATE_TEST_CASE_P(Default, MemoryIsZeroBigTest,
+INSTANTIATE_TEST_SUITE_P(MemoryIsZeroBigTests, MemoryIsZeroBigTest,
                         ::testing::Values(1024, 4096, 8192, 64 * 1024));
 
-INSTANTIATE_TEST_CASE_P(Default, MemoryIsZeroPerformance,
+INSTANTIATE_TEST_SUITE_P(MemoryIsZeroPerformanceTests, MemoryIsZeroPerformance,
                         ::testing::Values(1024, 2048, 4096, 8192, 64 * 1024));
