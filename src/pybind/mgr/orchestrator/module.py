@@ -26,13 +26,32 @@ from mgr_util import to_pretty_timedelta, format_bytes
 from mgr_module import MgrModule, HandleCommandResult, Option
 from object_format import Format
 
-from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_command, \
-    raise_if_exception, _cli_write_command, OrchestratorError, \
-    NoOrchestrator, OrchestratorValidationError, NFSServiceSpec, \
-    RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
-    ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, \
-    GenericSpec, DaemonDescriptionStatus, SNMPGatewaySpec, MDSSpec, TunedProfileSpec, \
-    NvmeofServiceSpec
+from ._interface import (
+    CLICommandMeta,
+    DaemonDescription,
+    DaemonDescriptionStatus,
+    DeviceLightLoc,
+    GenericSpec,
+    HostSpec,
+    InventoryFilter,
+    InventoryHost,
+    IscsiServiceSpec,
+    MDSSpec,
+    NFSServiceSpec,
+    NoOrchestrator,
+    NvmeofServiceSpec,
+    OrchestratorClientMixin,
+    OrchestratorError,
+    OrchestratorValidationError,
+    RGWSpec,
+    SNMPGatewaySpec,
+    ServiceDescription,
+    TunedProfileSpec,
+    _cli_read_command,
+    _cli_write_command,
+    json_to_generic_spec,
+    raise_if_exception,
+)
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
