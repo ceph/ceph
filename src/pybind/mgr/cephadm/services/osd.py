@@ -319,11 +319,16 @@ class OSDService(CephService):
                             logger.exception('Cannot decode JSON: \'%s\'' % ' '.join(out))
                             concat_out = {}
                         notes = []
-                        if osdspec.data_devices is not None and osdspec.data_devices.limit and len(concat_out) < osdspec.data_devices.limit:
+                        if (
+                            osdspec.data_devices is not None
+                            and osdspec.data_devices.limit
+                            and (len(concat_out) + ds.existing_daemons) < osdspec.data_devices.limit
+                        ):
                             found = len(concat_out)
                             limit = osdspec.data_devices.limit
                             notes.append(
-                                f'NOTE: Did not find enough disks matching filter on host {host} to reach data device limit (Found: {found} | Limit: {limit})')
+                                f'NOTE: Did not find enough disks matching filter on host {host} to reach data device limit\n'
+                                f'(New Devices: {found} | Existing Matching Daemons: {ds.existing_daemons} | Limit: {limit})')
                         ret_all.append({'data': concat_out,
                                         'osdspec': osdspec.service_id,
                                         'host': host,
