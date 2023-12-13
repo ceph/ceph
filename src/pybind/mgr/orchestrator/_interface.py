@@ -38,11 +38,11 @@ from ceph.deployment.service_spec import (
     IscsiServiceSpec,
     MDSSpec,
     NFSServiceSpec,
+    NvmeofServiceSpec,
     RGWSpec,
     SNMPGatewaySpec,
     ServiceSpec,
     TunedProfileSpec,
-    NvmeofServiceSpec
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
