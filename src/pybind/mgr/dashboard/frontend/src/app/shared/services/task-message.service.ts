@@ -387,6 +387,9 @@ export class TaskMessageService {
     'cephfs/subvolume/snapshot/delete': this.newTaskMessage(
       this.commonOperations.delete,
       (metadata) => this.snapshot(metadata)
+    ),
+    'cephfs/snapshot/schedule/create': this.newTaskMessage(this.commonOperations.add, (metadata) =>
+      this.snapshotSchedule(metadata)
     )
   };
 
@@ -459,6 +462,9 @@ export class TaskMessageService {
     return $localize`snapshot '${metadata.snapshotName}'`;
   }
 
+  snapshotSchedule(metadata: any) {
+    return $localize`snapshot schedule for path '${metadata?.path}'`;
+  }
   crudMessageId(id: string) {
     return $localize`${id}`;
   }

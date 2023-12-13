@@ -940,25 +940,25 @@ class CephFsSnapshotClone(RESTController):
             )
         return f'Clone {clone_name} created successfully'
 
-@APIRouter('/cephfs/snaphost/schedule', Scope.CEPHFS)
+
+@APIRouter('/cephfs/snapshot/schedule', Scope.CEPHFS)
 @APIDoc("Cephfs Snapshot Scheduling API", "CephFSSnapshotSchedule")
 class CephFSSnapshotSchedule(RESTController):
 
     def list(self, fs: str, path: str = '/', recursive: bool = True):
         error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
-                                          path, recursive, fs, 'plain')
-
+                                          path, recursive, fs, None, None, 'plain')
         if len(out) == 0:
             return []
 
         snapshot_schedule_list = out.split('\n')
-        output = []
+        output: list[Any] = []
 
         for snap in snapshot_schedule_list:
             current_path = snap.strip().split(' ')[0]
             error_code, status_out, err = mgr.remote('snap_schedule', 'snap_schedule_get',
-                                                     current_path, fs, 'plain')
-            output.append(json.loads(status_out))
+                                                     current_path, fs, None, None, 'json')
+            output = output + json.loads(status_out)
 
         output_json = json.dumps(output)
 
@@ -966,5 +966,34 @@ class CephFSSnapshotSchedule(RESTController):
             raise DashboardException(
                 f'Failed to get list of snapshot schedules for path {path}: {err}'
             )
-
         return json.loads(output_json)
+
+    def create(self, fs: str, path: str, snap_schedule: str, start: str, retention_policy=None):
+        error_code, _, err = mgr.remote('snap_schedule',
+                                        'snap_schedule_add',
+                                        path,
+                                        snap_schedule,
+                                        start,
+                                        fs)
+
+        if retention_policy:
+            retention_policies = retention_policy.split('|')
+            for retention in retention_policies:
+                retention_count = retention.split('-')[0]
+                retention_spec_or_period = retention.split('-')[1]
+                error_code_retention, _, err_retention = mgr.remote('snap_schedule',
+                                                                    'snap_schedule_retention_add',
+                                                                    path,
+                                                                    retention_spec_or_period,
+                                                                    retention_count,
+                                                                    fs)
+                if error_code_retention != 0:
+                    raise DashboardException(
+                        f'Failed to add retention policy for path {path}: {err_retention}'
+                    )
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create snapshot schedule for path {path}: {err}'
+            )
+
+        return f'Snapshot schedule for path {path} created successfully'

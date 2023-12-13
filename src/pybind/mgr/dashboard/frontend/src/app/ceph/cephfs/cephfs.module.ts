@@ -3,7 +3,13 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 import { TreeModule } from '@circlon/angular-tree-component';
-import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import {
+  NgbDatepickerModule,
+  NgbNavModule,
+  NgbTimepickerModule,
+  NgbTooltipModule,
+  NgbTypeaheadModule
+} from '@ng-bootstrap/ng-bootstrap';
 import { NgChartsModule } from 'ng2-charts';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -20,9 +26,10 @@ import { CephfsSubvolumeFormComponent } from './cephfs-subvolume-form/cephfs-sub
 import { CephfsSubvolumeGroupComponent } from './cephfs-subvolume-group/cephfs-subvolume-group.component';
 import { CephfsSubvolumegroupFormComponent } from './cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component';
 import { CephfsSubvolumeSnapshotsListComponent } from './cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component';
-import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component';
 import { CephfsSnapshotscheduleListComponent } from './cephfs-snapshotschedule-list/cephfs-snapshotschedule-list.component';
 import { DataTableModule } from '../../shared/datatable/datatable.module';
+import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component';
+import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
 
 @NgModule({
   imports: [
@@ -36,7 +43,9 @@ import { DataTableModule } from '../../shared/datatable/datatable.module';
     ReactiveFormsModule,
     NgbTypeaheadModule,
     NgbTooltipModule,
-    DataTableModule
+    DataTableModule,
+    NgbDatepickerModule,
+    NgbTimepickerModule
   ],
   declarations: [
     CephfsDetailComponent,
@@ -52,8 +61,9 @@ import { DataTableModule } from '../../shared/datatable/datatable.module';
     CephfsSubvolumeGroupComponent,
     CephfsSubvolumegroupFormComponent,
     CephfsSubvolumeSnapshotsListComponent,
-    CephfsSubvolumeSnapshotsFormComponent,
-    CephfsSnapshotscheduleListComponent
+    CephfsSnapshotscheduleListComponent,
+    CephfsSnapshotscheduleFormComponent,
+    CephfsSubvolumeSnapshotsFormComponent
   ]
 })
 export class CephfsModule {}
