@@ -142,7 +142,7 @@ class DriveSelection(object):
                 other_osdspec_affinity = ''
                 for lv in disk.lvs:
                     if 'osdspec_affinity' in lv.keys():
-                        if lv['osdspec_affinity'] != self.spec.service_id:
+                        if lv['osdspec_affinity'] != str(self.spec.service_id):
                             other_osdspec_affinity = lv['osdspec_affinity']
                             break
                 if other_osdspec_affinity:
