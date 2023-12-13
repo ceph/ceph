@@ -68,7 +68,10 @@ class KernelMount(CephFSMount):
                 self.enable_dynamic_debug()
             self.ctx[f'kmount_count.{self.client_remote.hostname}'] = kmount_count + 1
 
-        self.gather_mount_info()
+        try:
+            self.gather_mount_info()
+        except:
+            log.warn('failed to fetch mount info - tests depending on mount addr/inst may fail!')
 
     def gather_mount_info(self):
         self.id = self._get_global_id()
