@@ -132,6 +132,12 @@ int rgw_forward_request_to_master(const DoutPrefixProvider* dpp,
   }
   const RGWAccessKey& creds = site.get_zone_params().system_key;
 
+  bufferlist data;
+  if (indata == nullptr) {
+    // forward() needs an input bufferlist to set the content-length
+    indata = &data;
+  }
+
   // use the master zone's endpoints
   auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
                           creds, zg->second.id, zg->second.api_name};
