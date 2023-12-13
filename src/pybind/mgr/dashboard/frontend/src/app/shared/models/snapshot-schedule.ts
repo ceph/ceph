@@ -1,3 +1,5 @@
+import { NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
+
 export interface SnapshotSchedule {
   fs?: string;
   subvol?: string;
@@ -14,4 +16,18 @@ export interface SnapshotSchedule {
   pruned_count?: number;
   active: boolean;
   status: 'Active' | 'Inactive';
+}
+
+export interface SnapshotScheduleFormValue {
+  directory: string;
+  startDate: NgbDateStruct;
+  startTime: NgbTimeStruct;
+  repeatInterval: number;
+  repeatFrequency: string;
+  retentionPolicies: RetentionPolicy[];
+}
+
+export interface RetentionPolicy {
+  retentionInterval: number;
+  retentionFrequency: string;
 }
