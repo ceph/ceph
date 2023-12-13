@@ -57,6 +57,9 @@ class SpecialHostLabels(str, Enum):
     def to_json(self) -> str:
         return self.value
 
+    def __str__(self) -> str:
+        return self.value
+
 
 def name_to_config_section(name: str) -> ConfEntity:
     """
