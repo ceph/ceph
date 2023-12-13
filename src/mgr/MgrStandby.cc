@@ -295,41 +295,6 @@ void MgrStandby::tick()
   ));
 }
 
-void MgrStandby::shutdown()
-{
-  finisher.queue(new LambdaContext([&](int) {
-    std::lock_guard l(lock);
-
-    dout(4) << "Shutting down" << dendl;
-
-    py_module_registry.shutdown();
-    // stop sending beacon first, I use monc to talk with monitors
-    timer.shutdown();
-    // client uses monc and objecter
-    client.shutdown();
-    mgrc.shutdown();
-    // Stop asio threads, so leftover events won't call into shut down
-    // monclient/objecter.
-    poolctx.finish();
-    // stop monc, so mon won't be able to instruct me to shutdown/activate after
-    // the active_mgr is stopped
-    monc.shutdown();
-    if (active_mgr) {
-      active_mgr->shutdown();
-    }
-    // objecter is used by monc and active_mgr
-    objecter.shutdown();
-    // client_messenger is used by all of them, so stop it in the end
-    client_messenger->shutdown();
-  }));
-
-  // Then stop the finisher to ensure its enqueued contexts aren't going
-  // to touch references to the things we're about to tear down
-  finisher.wait_for_empty();
-  finisher.stop();
-  mgr_perf_stop(g_ceph_context);
-}
-
 void MgrStandby::respawn()
 {
   // --- WARNING TO FUTURE COPY/PASTERS ---
