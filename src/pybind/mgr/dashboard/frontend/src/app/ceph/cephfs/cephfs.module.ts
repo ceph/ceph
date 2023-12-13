@@ -3,7 +3,13 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 import { TreeModule } from '@circlon/angular-tree-component';
-import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
+import {
+  NgbDatepickerModule,
+  NgbNavModule,
+  NgbTimepickerModule,
+  NgbTooltipModule,
+  NgbTypeaheadModule
+} from '@ng-bootstrap/ng-bootstrap';
 import { NgChartsModule } from 'ng2-charts';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
@@ -23,6 +29,7 @@ import { CephfsSubvolumeSnapshotsListComponent } from './cephfs-subvolume-snapsh
 import { CephfsSnapshotscheduleListComponent } from './cephfs-snapshotschedule-list/cephfs-snapshotschedule-list.component';
 import { DataTableModule } from '../../shared/datatable/datatable.module';
 import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component';
+import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
 
 @NgModule({
   imports: [
@@ -36,7 +43,9 @@ import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapsh
     ReactiveFormsModule,
     NgbTypeaheadModule,
     NgbTooltipModule,
-    DataTableModule
+    DataTableModule,
+    NgbDatepickerModule,
+    NgbTimepickerModule
   ],
   declarations: [
     CephfsDetailComponent,
@@ -53,6 +62,7 @@ import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapsh
     CephfsSubvolumegroupFormComponent,
     CephfsSubvolumeSnapshotsListComponent,
     CephfsSnapshotscheduleListComponent,
+    CephfsSnapshotscheduleFormComponent,
     CephfsSubvolumeSnapshotsFormComponent
   ]
 })
