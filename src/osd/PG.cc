@@ -1490,7 +1490,7 @@ std::optional<requested_scrub_t> PG::validate_initiated_scrub(
 
   upd_flags.time_for_deep = time_for_deep;
   upd_flags.deep_scrub_on_error = false;
-  upd_flags.auto_repair = false;  // will only be considered for periodic scrubs
+  upd_flags.auto_repair = false;
 
   if (upd_flags.must_deep_scrub) {
     upd_flags.calculated_to_deep = true;
@@ -1503,6 +1503,25 @@ std::optional<requested_scrub_t> PG::validate_initiated_scrub(
 	"osd.{} pg {} Regular scrub request, deep-scrub details will be lost",
 	osd->whoami,
 	info.pgid);
+    }
+  }
+
+  if (try_to_auto_repair) {
+    // for shallow scrubs: rescrub if errors found
+    // for deep: turn 'auto-repair' on
+    if (upd_flags.calculated_to_deep) {
+      dout(10) << fmt::format(
+                      "{}: performing an auto-repair deep scrub",
+                      __func__)
+               << dendl;
+      upd_flags.auto_repair = true;
+    } else {
+      dout(10) << fmt::format(
+		      "{}: will perform an auto-repair deep scrub if errors "
+		      "are found",
+		      __func__)
+	       << dendl;
+      upd_flags.deep_scrub_on_error = true;
     }
   }
 
