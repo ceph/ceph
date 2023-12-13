@@ -94,6 +94,8 @@ public:
   }
   void get_meta(uint64_t target_size,
     std::vector<std::pair<std::string, std::string>>*) const override;
+
+  bool validate(uint64_t min_alloc_size) const override;
 };
 
 #endif

@@ -6791,6 +6791,14 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
       return r;
     }
   }
+  dout(1) << __func__ << " effective freelist_type = " << freelist_type << std::hex
+          << ", freelist_alloc_size = 0x" << fm->get_alloc_size()
+          << ", min_alloc_size = 0x" << min_alloc_size
+          << std::dec << dendl;
+  if (!fm->validate(min_alloc_size)) {
+    derr << __func__ << " freelist validation failed, unable to proceed." << dendl;
+    ceph_assert(false);
+  }
   // if space size tracked by free list manager is that higher than actual
   // dev size one can hit out-of-space allocation which will result
   // in data loss and/or assertions
@@ -13116,20 +13124,26 @@ int BlueStore::_open_super_meta()
   }
 
   {
-    bufferlist bl;
-    db->get(PREFIX_SUPER, "min_alloc_size", &bl);
-    auto p = bl.cbegin();
-    try {
-      uint64_t val;
-      decode(val, p);
-      min_alloc_size = val;
-      min_alloc_size_order = std::countr_zero(val);
-      min_alloc_size_mask  = min_alloc_size - 1;
+    if(cct->_conf->bluestore_debug_enforce_min_alloc_size == 0) {
+      bufferlist bl;
+      db->get(PREFIX_SUPER, "min_alloc_size", &bl);
+      auto p = bl.cbegin();
+      try {
+        uint64_t val;
+        decode(val, p);
+        min_alloc_size = val;
+        min_alloc_size_order = std::countr_zero(val);
+        min_alloc_size_mask  = min_alloc_size - 1;
 
-      ceph_assert(min_alloc_size == 1u << min_alloc_size_order);
-    } catch (ceph::buffer::error& e) {
-      derr << __func__ << " unable to read min_alloc_size" << dendl;
-      return -EIO;
+        ceph_assert(min_alloc_size == 1u << min_alloc_size_order);
+      } catch (ceph::buffer::error& e) {
+        derr << __func__ << " unable to read min_alloc_size" << dendl;
+        return -EIO;
+      }
+    } else {
+      min_alloc_size = cct->_conf->bluestore_debug_enforce_min_alloc_size;
+      min_alloc_size_order = std::countr_zero(min_alloc_size);
+      min_alloc_size_mask  = min_alloc_size - 1;
     }
     dout(1) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	     << std::dec << dendl;
