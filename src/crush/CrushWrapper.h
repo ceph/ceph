@@ -1231,7 +1231,23 @@ public:
 
   int add_simple_rule(
     std::string name, std::string root_name, std::string failure_domain_type,
+    int num_failure_domains,
     std::string device_class, std::string mode, int rule_type,
+    std::ostream *err = 0);
+  int add_simple_rule(
+    std::string name, std::string root_name, std::string failure_domain_type,
+    std::string device_class, std::string mode, int rule_type,
+    std::ostream *err = 0) {
+    return add_simple_rule(
+      name, root_name, failure_domain_type, -1,
+      device_class, mode, rule_type, err);
+  }
+
+  int add_indep_multi_osd_per_failure_domain_rule(
+    std::string name, std::string root_name, std::string failure_domain_type,
+    int osds_per_failure_domain,
+    int num_failure_domains,
+    std::string device_class,
     std::ostream *err = 0);
 
   /**
@@ -1239,8 +1255,28 @@ public:
    */
   int add_simple_rule_at(
     std::string name, std::string root_name,
-    std::string failure_domain_type, std::string device_class, std::string mode,
+    std::string failure_domain_type,
+    int num_failure_domains,
+    std::string device_class, std::string mode,
     int rule_type, int rno, std::ostream *err = 0);
+  int add_simple_rule_at(
+    std::string name, std::string root_name,
+    std::string failure_domain_type,
+    std::string device_class, std::string mode,
+    int rule_type, int rno, std::ostream *err = 0) {
+    return add_simple_rule_at(
+      name, root_name, failure_domain_type, -1,
+      device_class, mode, rule_type, rno, err);
+  }
+
+  int add_multi_osd_per_failure_domain_rule_at(
+    std::string name, std::string root_name, std::string failure_domain_type,
+    int osds_per_failure_domain,
+    int num_failure_domains,
+    std::string device_class,
+    crush_rule_type rule_type,
+    int rno,
+    std::ostream *err = 0);
 
   int remove_rule(int ruleno);
 
