@@ -938,14 +938,8 @@ PG::do_osd_ops_execute(
     [this, error_func_ptr, rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
 
-    PG::interruptible_future<> maybe_rollback_fut = seastar::now();
     ceph_tid_t rep_tid = shard_services.get_tid();
-
-    if (e.value() == ENOENT) {
-      maybe_rollback_fut = rollbacker.rollback_obc_if_modified(e);
-    }
-
-    return maybe_rollback_fut.then_interruptible(
+    return rollbacker.rollback_obc_if_modified(e).then_interruptible(
     [error_func_ptr, e, rep_tid, failure_func_ptr] {
       // record error log
       return (*error_func_ptr)(e, rep_tid).then(
