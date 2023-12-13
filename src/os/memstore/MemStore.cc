@@ -1131,8 +1131,14 @@ int MemStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
   if (!o)
     return -ENOENT;
   std::lock_guard lock{o->xattr_mutex};
-  for (auto p = aset.begin(); p != aset.end(); ++p)
-    o->xattr[p->first] = p->second;
+  for (auto p = aset.begin(); p != aset.end(); ++p) {
+    if (p->second.is_partial()) {
+      o->xattr[p->first] = bufferptr(p->second.c_str(), p->second.length());
+    } else {
+      o->xattr[p->first] = p->second;
+    }
+  }
+
   return 0;
 }
 
