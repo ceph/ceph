@@ -18,7 +18,7 @@ import tempfile
 import time
 import errno
 import ssl
-from typing import Dict, List, Tuple, Optional, Union, Any, Callable, IO, Sequence, TypeVar, cast, Iterable, TextIO
+from typing import Dict, List, Tuple, Optional, Union, Any, Callable, Sequence, TypeVar, cast, Iterable
 
 import re
 import uuid
@@ -83,7 +83,6 @@ from cephadmlib.call_wrappers import (
     concurrent_tasks,
 )
 from cephadmlib.container_engines import (
-    Docker,
     Podman,
     check_container_engine,
     find_container_engine,
@@ -132,9 +131,10 @@ from cephadmlib.logging import (
     cephadm_init_logging,
     Highlight,
     LogDestination,
-    write_cluster_logrotate_config,
 )
 from cephadmlib.systemd import check_unit, check_units
+from cephadmlib import systemd_unit
+from cephadmlib import runscripts
 from cephadmlib.container_types import (
     CephContainer,
     InitContainer,
@@ -1056,97 +1056,6 @@ def deploy_daemon(
         call_throws(ctx, ['systemctl', 'restart', ident.unit_name])
 
 
-def _bash_cmd(
-    fh: IO[str],
-    cmd: List[str],
-    check: bool = True,
-    background: bool = False,
-    stderr: bool = True,
-) -> None:
-    line = ' '.join(shlex.quote(arg) for arg in cmd)
-    if not check:
-        line = f'! {line}'
-    if not stderr:
-        line = f'{line} 2> /dev/null'
-    if background:
-        line = f'{line} &'
-    fh.write(line)
-    fh.write('\n')
-
-
-def _write_container_cmd_to_bash(
-    ctx: CephadmContext,
-    file_obj: IO[str],
-    container: 'CephContainer',
-    comment: Optional[str] = None,
-    background: Optional[bool] = False,
-) -> None:
-    if comment:
-        # Sometimes adding a comment, especially if there are multiple containers in one
-        # unit file, makes it easier to read and grok.
-        assert '\n' not in comment
-        file_obj.write(f'# {comment}\n')
-    # Sometimes, adding `--rm` to a run_cmd doesn't work. Let's remove the container manually
-    _bash_cmd(
-        file_obj, container.rm_cmd(old_cname=True), check=False, stderr=False
-    )
-    _bash_cmd(file_obj, container.rm_cmd(), check=False, stderr=False)
-
-    # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
-    if isinstance(ctx.container_engine, Podman):
-        _bash_cmd(
-            file_obj,
-            container.rm_cmd(storage=True),
-            check=False,
-            stderr=False,
-        )
-        _bash_cmd(
-            file_obj,
-            container.rm_cmd(old_cname=True, storage=True),
-            check=False,
-            stderr=False,
-        )
-
-    # container run command
-    _bash_cmd(file_obj, container.run_cmd(), background=bool(background))
-
-
-def _write_init_container_cmds(
-    ctx: CephadmContext,
-    file_obj: IO[str],
-    index: int,
-    init_container: 'InitContainer',
-) -> None:
-    file_obj.write(f'# init container {index}: {init_container.cname}\n')
-    _bash_cmd(file_obj, init_container.run_cmd())
-    _write_init_container_cmds_clean(ctx, file_obj, init_container, comment='')
-
-
-def _write_init_container_cmds_clean(
-    ctx: CephadmContext,
-    file_obj: IO[str],
-    init_container: 'InitContainer',
-    comment: str = 'init container cleanup',
-) -> None:
-    if comment:
-        assert '\n' not in comment
-        file_obj.write(f'# {comment}\n')
-    _bash_cmd(
-        file_obj,
-        init_container.rm_cmd(),
-        check=False,
-        stderr=False,
-    )
-    # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
-    if isinstance(ctx.container_engine, Podman):
-        _bash_cmd(
-            file_obj,
-            init_container.rm_cmd(storage=True),
-            check=False,
-            stderr=False,
-        )
-
-
 def clean_cgroup(ctx: CephadmContext, fsid: str, unit_name: str) -> None:
     # systemd may fail to cleanup cgroups from previous stopped unit, which will cause next "systemctl start" to fail.
     # see https://tracker.ceph.com/issues/50998
@@ -1184,85 +1093,44 @@ def deploy_daemon_units(
     endpoints: Optional[List[EndPoint]] = None,
     init_containers: Optional[List['InitContainer']] = None,
 ) -> None:
-    # cmd
-
-    # unpack values from ident because they're used very frequently
-    fsid = ident.fsid
-    daemon_type = ident.daemon_type
-    daemon_id = ident.daemon_id
-
     data_dir = ident.data_dir(ctx.data_dir)
-    run_file_path = data_dir + '/unit.run'
-    meta_file_path = data_dir + '/unit.meta'
-    with write_new(run_file_path) as f, write_new(meta_file_path) as metaf:
+    pre_start_commands: List[runscripts.Command] = []
+    post_stop_commands: List[runscripts.Command] = []
 
-        f.write('set -e\n')
+    if ident.daemon_type in ceph_daemons():
+        install_path = find_program('install')
+        pre_start_commands.append('{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}\n'.format(install_path=install_path, fsid=ident.fsid, uid=uid, gid=gid))
+    if ident.daemon_type == 'osd':
+        assert osd_fsid
+        pre_start_commands.extend(_osd_unit_run_commands(
+            ctx, ident, osd_fsid, data_dir, uid, gid
+        ))
+        post_stop_commands.extend(
+            _osd_unit_poststop_commands(ctx, ident, osd_fsid)
+        )
+    if ident.daemon_type == CephIscsi.daemon_type:
+        pre_start_commands.extend(_iscsi_unit_run_commands(ctx, ident, data_dir))
+        post_stop_commands.extend(_iscsi_unit_poststop_commands(ctx, ident, data_dir))
 
-        if daemon_type in ceph_daemons():
-            install_path = find_program('install')
-            f.write('{install_path} -d -m0770 -o {uid} -g {gid} /var/run/ceph/{fsid}\n'.format(install_path=install_path, fsid=fsid, uid=uid, gid=gid))
-
-        # pre-start cmd(s)
-        if daemon_type == 'osd':
-            assert osd_fsid
-            _write_osd_unit_run_commands(
-                ctx, f, ident, osd_fsid, data_dir, uid, gid
-            )
-        elif daemon_type == CephIscsi.daemon_type:
-            _write_iscsi_unit_run_commands(ctx, f, ident, data_dir)
-        init_containers = init_containers or []
-        if init_containers:
-            _write_init_container_cmds_clean(ctx, f, init_containers[0])
-        for idx, ic in enumerate(init_containers):
-            _write_init_container_cmds(ctx, f, idx, ic)
-
-        _write_container_cmd_to_bash(ctx, f, container, '%s.%s' % (daemon_type, str(daemon_id)))
-
-        # some metadata about the deploy
-        meta: Dict[str, Any] = fetch_meta(ctx)
-        meta.update({
-            'memory_request': int(ctx.memory_request) if ctx.memory_request else None,
-            'memory_limit': int(ctx.memory_limit) if ctx.memory_limit else None,
-        })
-        if not meta.get('ports'):
-            if endpoints:
-                meta['ports'] = [e.port for e in endpoints]
-            else:
-                meta['ports'] = []
-        metaf.write(json.dumps(meta, indent=4) + '\n')
-
-    timeout = 30 if daemon_type == 'osd' else None
-    # post-stop command(s)
-    with write_new(data_dir + '/unit.poststop') as f:
-        # this is a fallback to eventually stop any underlying container that was not stopped properly by unit.stop,
-        # this could happen in very slow setups as described in the issue https://tracker.ceph.com/issues/58242.
-        _write_stop_actions(ctx, cast(TextIO, f), container, timeout)
-        if daemon_type == 'osd':
-            assert osd_fsid
-            _write_osd_unit_poststop_commands(ctx, f, ident, osd_fsid)
-        elif daemon_type == CephIscsi.daemon_type:
-            _write_iscsi_unit_poststop_commands(ctx, f, ident, data_dir)
-
-    # post-stop command(s)
-    with write_new(data_dir + '/unit.stop') as f:
-        _write_stop_actions(ctx, cast(TextIO, f), container, timeout)
-
-    if container:
-        with write_new(data_dir + '/unit.image') as f:
-            f.write(container.image + '\n')
+    runscripts.write_service_scripts(
+        ctx,
+        ident,
+        container=container,
+        init_containers=init_containers,
+        endpoints=endpoints,
+        pre_start_commands=pre_start_commands,
+        post_stop_commands=post_stop_commands,
+        timeout=30 if ident.daemon_type == 'osd' else None,
+    )
 
     # sysctl
-    install_sysctl(ctx, fsid, daemon_form_create(ctx, ident))
+    install_sysctl(ctx, ident.fsid, daemon_form_create(ctx, ident))
 
     # systemd
-    install_base_units(ctx, fsid)
-    unit = get_unit_file(ctx, fsid)
-    unit_file = 'ceph-%s@.service' % (fsid)
-    with write_new(ctx.unit_dir + '/' + unit_file, perms=None) as f:
-        f.write(unit)
+    systemd_unit.update_files(ctx, ident)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
-    unit_name = get_unit_name(fsid, daemon_type, daemon_id)
+    unit_name = get_unit_name(ident.fsid, ident.daemon_type, ident.daemon_id)
     call(ctx, ['systemctl', 'stop', unit_name],
          verbosity=CallVerbosity.DEBUG)
     call(ctx, ['systemctl', 'reset-failed', unit_name],
@@ -1270,38 +1138,27 @@ def deploy_daemon_units(
     if enable:
         call_throws(ctx, ['systemctl', 'enable', unit_name])
     if start:
-        clean_cgroup(ctx, fsid, unit_name)
+        clean_cgroup(ctx, ident.fsid, unit_name)
         call_throws(ctx, ['systemctl', 'start', unit_name])
 
 
-def _write_stop_actions(
-    ctx: CephadmContext, f: TextIO, container: 'CephContainer', timeout: Optional[int]
-) -> None:
-    # following generated script basically checks if the container exists
-    # before stopping it. Exit code will be success either if it doesn't
-    # exist or if it exists and is stopped successfully.
-    container_exists = f'{ctx.container_engine.path} inspect %s &>/dev/null'
-    f.write(f'! {container_exists % container.old_cname} || {" ".join(container.stop_cmd(old_cname=True, timeout=timeout))} \n')
-    f.write(f'! {container_exists % container.cname} || {" ".join(container.stop_cmd(timeout=timeout))} \n')
-
-
-def _write_osd_unit_run_commands(
+def _osd_unit_run_commands(
     ctx: CephadmContext,
-    f: IO,
     ident: 'DaemonIdentity',
     osd_fsid: str,
     data_dir: str,
     uid: int,
     gid: int,
-) -> None:
+) -> List[runscripts.Command]:
+    cmds: List[runscripts.Command] = []
     # osds have a pre-start step
     simple_fn = os.path.join('/etc/ceph/osd',
                              '%s-%s.json.adopted-by-cephadm' % (ident.daemon_id, osd_fsid))
     if os.path.exists(simple_fn):
-        f.write('# Simple OSDs need chown on startup:\n')
+        cmds.append('# Simple OSDs need chown on startup:\n')
         for n in ['block', 'block.db', 'block.wal']:
             p = os.path.join(data_dir, n)
-            f.write('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
+            cmds.append('[ ! -L {p} ] || chown {uid}:{gid} {p}\n'.format(p=p, uid=uid, gid=gid))
     else:
         # if ceph-volume does not support 'ceph-volume activate', we must
         # do 'ceph-volume lvm activate'.
@@ -1341,21 +1198,24 @@ def _write_osd_unit_run_commands(
             bind_mounts=get_container_binds(ctx, ident),
             cname='ceph-%s-%s.%s-activate' % (fsid, daemon_type, daemon_id),
         )
-        _write_container_cmd_to_bash(ctx, f, prestart, 'LVM OSDs use ceph-volume lvm activate')
+        cmds.append(runscripts.ContainerCommand(prestart, comment='LVM OSDs use ceph-volume lvm activate'))
+    return cmds
 
 
-def _write_iscsi_unit_run_commands(
-    ctx: CephadmContext, f: IO, ident: 'DaemonIdentity', data_dir: str
-) -> None:
-    f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
+def _iscsi_unit_run_commands(
+    ctx: CephadmContext, ident: 'DaemonIdentity', data_dir: str
+) -> List[runscripts.Command]:
+    cmds: List[runscripts.Command] = []
+    cmds.append(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
     ceph_iscsi = CephIscsi.init(ctx, ident.fsid, ident.daemon_id)
     tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-    _write_container_cmd_to_bash(ctx, f, tcmu_container, 'iscsi tcmu-runner container', background=True)
+    cmds.append(runscripts.ContainerCommand(tcmu_container, comment='iscsi tcmu-runner container', background=True))
+    return cmds
 
 
-def _write_osd_unit_poststop_commands(
-    ctx: CephadmContext, f: IO, ident: 'DaemonIdentity', osd_fsid: str
-) -> None:
+def _osd_unit_poststop_commands(
+    ctx: CephadmContext, ident: 'DaemonIdentity', osd_fsid: str
+) -> List[runscripts.Command]:
     poststop = get_ceph_volume_container(
         ctx,
         args=[
@@ -1366,83 +1226,22 @@ def _write_osd_unit_poststop_commands(
         bind_mounts=get_container_binds(ctx, ident),
         cname='ceph-%s-%s.%s-deactivate' % (ident.fsid, ident.daemon_type, ident.daemon_id),
     )
-    _write_container_cmd_to_bash(ctx, f, poststop, 'deactivate osd')
+    return [runscripts.ContainerCommand(poststop, comment='deactivate osd')]
 
 
-def _write_iscsi_unit_poststop_commands(
-    ctx: CephadmContext, f: IO, ident: 'DaemonIdentity', data_dir: str
-) -> None:
+def _iscsi_unit_poststop_commands(
+    ctx: CephadmContext, ident: 'DaemonIdentity', data_dir: str
+) -> List[runscripts.Command]:
     # make sure we also stop the tcmu container
+    cmds: List[runscripts.Command] = []
     runtime_dir = '/run'
     ceph_iscsi = CephIscsi.init(ctx, ident.fsid, ident.daemon_id)
     tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-    f.write('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
-    f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
-    f.write('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
-    f.write(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
-
-
-def install_base_units(ctx, fsid):
-    # type: (CephadmContext, str) -> None
-    """
-    Set up ceph.target and ceph-$fsid.target units.
-    """
-    # global unit
-    existed = os.path.exists(ctx.unit_dir + '/ceph.target')
-    with write_new(ctx.unit_dir + '/ceph.target', perms=None) as f:
-        f.write('[Unit]\n'
-                'Description=All Ceph clusters and services\n'
-                '\n'
-                '[Install]\n'
-                'WantedBy=multi-user.target\n')
-    if not existed:
-        # we disable before enable in case a different ceph.target
-        # (from the traditional package) is present; while newer
-        # systemd is smart enough to disable the old
-        # (/lib/systemd/...) and enable the new (/etc/systemd/...),
-        # some older versions of systemd error out with EEXIST.
-        call_throws(ctx, ['systemctl', 'disable', 'ceph.target'])
-        call_throws(ctx, ['systemctl', 'enable', 'ceph.target'])
-        call_throws(ctx, ['systemctl', 'start', 'ceph.target'])
-
-    # cluster unit
-    existed = os.path.exists(ctx.unit_dir + '/ceph-%s.target' % fsid)
-    with write_new(ctx.unit_dir + f'/ceph-{fsid}.target', perms=None) as f:
-        f.write(
-            '[Unit]\n'
-            'Description=Ceph cluster {fsid}\n'
-            'PartOf=ceph.target\n'
-            'Before=ceph.target\n'
-            '\n'
-            '[Install]\n'
-            'WantedBy=multi-user.target ceph.target\n'.format(
-                fsid=fsid)
-        )
-    if not existed:
-        call_throws(ctx, ['systemctl', 'enable', 'ceph-%s.target' % fsid])
-        call_throws(ctx, ['systemctl', 'start', 'ceph-%s.target' % fsid])
-
-    # don't overwrite file in order to allow users to manipulate it
-    if os.path.exists(ctx.logrotate_dir + f'/ceph-{fsid}'):
-        return
-
-    write_cluster_logrotate_config(ctx, fsid)
-
-
-def get_unit_file(ctx: CephadmContext, fsid: str) -> str:
-    has_docker_engine = isinstance(ctx.container_engine, Docker)
-    has_podman_engine = isinstance(ctx.container_engine, Podman)
-    has_podman_split_version = (
-        has_podman_engine and ctx.container_engine.supports_split_cgroups
-    )
-    return templating.render(
-        ctx,
-        templating.Templates.ceph_service,
-        fsid=fsid,
-        has_docker_engine=has_docker_engine,
-        has_podman_engine=has_podman_engine,
-        has_podman_split_version=has_podman_split_version,
-    )
+    cmds.append('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
+    cmds.append('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
+    cmds.append('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
+    cmds.append(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
+    return cmds
 
 ##################################
 
@@ -3495,21 +3294,16 @@ def command_ceph_volume(ctx):
 ##################################
 
 
+@infer_fsid
 def command_unit_install(ctx):
     # type: (CephadmContext) -> int
-    if not ctx.fsid:
+    if not getattr(ctx, 'fsid', None):
         raise Error('must pass --fsid to specify cluster')
-
-    fsid = ctx.fsid
-    install_base_units(ctx, fsid)
-    unit = get_unit_file(ctx, fsid)
-    unit_file = 'ceph-%s@.service' % (fsid)
-    with open(ctx.unit_dir + '/' + unit_file + '.new', 'w') as f:
-        f.write(unit)
-        os.rename(ctx.unit_dir + '/' + unit_file + '.new',
-                  ctx.unit_dir + '/' + unit_file)
+    if not getattr(ctx, 'name', None):
+        raise Error('daemon name required')
+    ident = DaemonIdentity.from_context(ctx)
+    systemd_unit.update_files(ctx, ident)
     call_throws(ctx, ['systemctl', 'daemon-reload'])
-
     return 0
 
 
@@ -5255,6 +5049,13 @@ def _get_parser():
     parser_unit_install = subparsers.add_parser(
         'unit-install', help="Install the daemon's systemd unit")
     parser_unit_install.set_defaults(func=command_unit_install)
+    parser_unit_install.add_argument(
+        '--fsid',
+        help='cluster FSID')
+    parser_unit_install.add_argument(
+        '--name', '-n',
+        required=True,
+        help='daemon name (type.id)')
 
     parser_logs = subparsers.add_parser(
         'logs', help='print journald logs for a daemon container')
