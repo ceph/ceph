@@ -139,7 +139,7 @@ yaml.add_representer(HostDetails, HostDetails.yaml_representer)
 class DaemonFields(enum.Enum):
     service_name = 'service_name'
     daemon_type = 'daemon_type'
-    name = 'name'
+    name = 'name'  # type: ignore
     host = 'host'
     status = 'status'
     refreshed = 'refreshed'
