@@ -171,8 +171,7 @@ struct requested_scrub_t {
    * the value of auto_repair is determined in sched_scrub() (once per scrub.
    * previous value is not remembered). Set if
    * - allowed by configuration and backend, and
-   * - must_scrub is not set (i.e. - this is a periodic scrub),
-   * - time_for_deep was just set
+   * - for periodic scrubs: time_for_deep was just set
    */
   bool auto_repair{false};
 
