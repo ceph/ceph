@@ -18315,6 +18315,12 @@ int Client::ll_set_fscrypt_policy_v2(Inode *in, const struct fscrypt_policy_v2& 
     return -EEXIST;
   }
 
+  if (!in->is_dir())
+    return -ENOTDIR;
+
+  if (in->is_dir() && in->dir && in->dir->dentries.size() > 0)
+    return -ENOTEMPTY;
+
   FSCryptContext fsc(cct);
   fsc.init(policy);
   fsc.generate_new_nonce();
