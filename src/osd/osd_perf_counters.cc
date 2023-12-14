@@ -319,6 +319,25 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   osd_plb.add_u64_counter(
     l_osd_pg_biginfo, "osd_pg_biginfo", "PG updated its biginfo attr");
 
+  /// scrub's replicas reservation time/#replicas histogram
+  PerfHistogramCommon::axis_config_d rsrv_hist_x_axis_config{
+      "number of replicas",
+      PerfHistogramCommon::SCALE_LINEAR,
+      0,   ///< Start at 0
+      1,   ///< Quantization unit is 1
+      8,   ///< 9 OSDs in the active set
+  };
+  PerfHistogramCommon::axis_config_d rsrv_hist_y_axis_config{
+      "duration",
+      PerfHistogramCommon::SCALE_LOG2,	///< Request size in logarithmic scale
+      0,				///< Start at 0
+      250'000,				///< 250us granularity
+      10,				///< should be enough
+  };
+  osd_plb.add_u64_counter_histogram(
+      l_osd_scrub_reservation_dur_hist, "scrub_resrv_repnum_vs_duration",
+      rsrv_hist_x_axis_config, rsrv_hist_y_axis_config, "Histogram of scrub replicas reservation duration");
+
   return osd_plb.create_perf_counters();
 }
  
@@ -359,4 +378,29 @@ PerfCounters *build_recoverystate_perf(CephContext *cct) {
   rs_perf.add_time_avg(rs_notrecovering_latency, "notrecovering_latency", "Notrecovering recovery state latency");
 
   return rs_perf.create_perf_counters();
+}
+
+
+PerfCounters *build_scrub_labeled_perf(CephContext *cct, std::string label)
+{
+  // the labels matrix is:
+  //   <shallow/deep>  X  <replicated/EC>  // maybe later we'll add <periodic/operator>
+  PerfCountersBuilder scrub_perf(cct, label, scrbcnt_first, scrbcnt_last);
+
+  scrub_perf.set_prio_default(PerfCountersBuilder::PRIO_INTERESTING);
+
+  scrub_perf.add_u64_counter(scrbcnt_started, "num_scrubs_started", "scrubs attempted count");
+  scrub_perf.add_u64_counter(scrbcnt_active_started, "num_scrubs_past_reservation", "scrubs count");
+  scrub_perf.add_u64_counter(scrbcnt_failed, "failed_scrubs", "failed scrubs count");
+  scrub_perf.add_u64_counter(scrbcnt_successful, "successful_scrubs", "successful scrubs count");
+  scrub_perf.add_time_avg(scrbcnt_failed_elapsed, "failed_scrubs_elapsed", "time to scrub failure");
+  scrub_perf.add_time_avg(scrbcnt_successful_elapsed, "successful_scrubs_elapsed", "time to scrub completion");
+
+  scrub_perf.add_u64_counter(scrbcnt_preempted, "preemptions", "preemptions on scrubs");
+  scrub_perf.add_u64_counter(scrbcnt_chunks_selected, "chunk_selected", "chunk selection during scrubs");
+  scrub_perf.add_u64_counter(scrbcnt_chunks_busy, "chunk_busy", "chunk busy during scrubs");
+  scrub_perf.add_u64_counter(scrbcnt_blocked, "locked_object", "waiting on locked object events");
+  scrub_perf.add_u64_counter(scrbcnt_write_blocked, "write_blocked_by_scrub", "write blocked by scrub");
+
+  return scrub_perf.create_perf_counters();
 }
