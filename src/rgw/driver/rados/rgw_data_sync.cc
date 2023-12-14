@@ -3138,18 +3138,17 @@ RGWCoroutine *RGWArchiveDataSyncModule::sync_object(const DoutPrefixProvider *dp
   if (versioned_epoch.value_or(0) == 0) { /* force version if not set */
     stat_follow_olh = true;
     versioned_epoch = 0;
-    dest_key = key;
-    if (key.instance.empty()) {
-      // generate pre-determined version id. when there are more
-      // than one source zone syncing an object at the same time and if
-      // the source zones are not versioned, the sync threads may
-      // race to update the same head object with different version id's
-      // on the archive zone.
-      auto archive_key = generate_archive_instance_id(sync_pipe.info.source_bs.bucket, dest_key, mtime);
-      dest_key->set_instance(archive_key);
-      ldout(sc->cct, 5) << "SYNC_ARCHIVE: dest_key: " << dest_key << dendl;
-    }
   }
+
+  dest_key = key;
+  // generate pre-determined version id. when there are more
+  // than one source zone syncing an object at the same time and if
+  // the source zones are not versioned, the sync threads may
+  // race to update the same head object with different version id's
+  // on the archive zone.
+  auto archive_key = generate_archive_instance_id(sync_pipe.info.source_bs.bucket, dest_key, mtime);
+  dest_key->set_instance(archive_key);
+  ldout(sc->cct, 5) << "SYNC_ARCHIVE: dest_key: " << dest_key << dendl;
 
   return new RGWObjFetchCR(sc, sync_pipe, key, dest_key, versioned_epoch,
                            stat_follow_olh, source_trace_entry, zones_trace);
