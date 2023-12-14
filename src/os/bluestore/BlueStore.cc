@@ -16908,10 +16908,7 @@ int BlueStore::_do_remove(
 	// but now those 2 blobs share it.
 	// This is illegal, as empty shared blobs should be unique.
 	// Fixing by re-creation.
-
-	// Here we skip set_shared_blob() because e.blob is already in BufferCacheShard
-	// and cannot do add_blob() twice
-        e.blob->get_dirty_shared_blob() = new SharedBlob(c.get());
+        e.blob->get_dirty_shared_blob() = nullptr;
       }
       h->extent_map.dirty_range(e.logical_offset, 1);
     }
