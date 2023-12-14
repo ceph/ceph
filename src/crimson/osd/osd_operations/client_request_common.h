@@ -15,7 +15,7 @@ struct CommonClientRequest {
   recover_missings(
     Ref<PG> &pg,
     const hobject_t& soid,
-    std::vector<snapid_t> &&snaps);
+    std::set<snapid_t> &&snaps);
 
   static InterruptibleOperation::template interruptible_future<>
   do_recover_missing(Ref<PG>& pg, const hobject_t& soid);
