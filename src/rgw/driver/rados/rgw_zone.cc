@@ -1005,10 +1005,12 @@ int create_zone(const DoutPrefixProvider* dpp, optional_yield y,
   }
 
   // add default placement with empty pool name
+  RGWZonePlacementInfo placement;
   rgw_pool pool;
-  auto& placement = info.placement_pools["default-placement"];
   placement.storage_classes.set_storage_class(
       RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
+  // don't overwrite if it already exists
+  info.placement_pools.emplace("default-placement", std::move(placement));
 
   // build a set of all pool names used by other zones
   std::set<rgw_pool> pools;
