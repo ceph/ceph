@@ -19,44 +19,37 @@ InterruptibleOperation::template interruptible_future<>
 CommonClientRequest::recover_missings(
   Ref<PG> &pg,
   const hobject_t& soid,
-  std::vector<snapid_t> &&snaps)
+  std::set<snapid_t> &&snaps)
 {
-  using interruptor = InterruptibleOperation::interruptor;
   LOG_PREFIX(CommonClientRequest::recover_missings);
-  auto fut = interruptor::now();
   if (!pg->is_primary()) {
-    DEBUGI("process_op: Skipping do_recover_missing on non primary pg");
-    return fut;
+    DEBUGDPP(
+      "Skipping recover_missings on non primary pg for soid {}", *pg, soid);
+    return seastar::now();
   }
-  if (!soid.is_head()) {
-    fut = do_recover_missing(pg, soid.get_head());
-  }
-  return seastar::do_with(
-    std::move(snaps),
-    [pg, soid, fut=std::move(fut)](auto &snaps) mutable {
-    return fut.then_interruptible([&snaps, pg, soid]() mutable {
-      return pg->obc_loader.with_obc<RWState::RWREAD>(
-        soid.get_head(),
-        [&snaps, pg, soid](auto head, auto) mutable {
-        auto oid = resolve_oid(head->get_head_ss(), soid);
-        assert(oid);
-        return do_recover_missing(pg, *oid
-        ).then_interruptible([&snaps, pg, soid, head]() mutable {
-          return InterruptibleOperation::interruptor::do_for_each(
-            snaps,
-            [pg, soid, head](auto &snap) mutable {
-            auto coid = head->obs.oi.soid;
-            coid.snap = snap;
-            auto oid = resolve_oid(head->get_head_ss(), coid);
-            assert(oid);
-            return do_recover_missing(pg, *oid);
-          });
-        });
+  return do_recover_missing(
+    pg, soid.get_head()
+  ).then_interruptible([snaps=std::move(snaps), pg, soid]() mutable {
+    return pg->obc_loader.with_obc<RWState::RWREAD>(
+      soid.get_head(),
+      [snaps=std::move(snaps), pg, soid](auto head, auto) mutable {
+      return seastar::do_with(
+	std::move(snaps),
+	[pg, soid, head](auto &snaps) mutable {
+	return InterruptibleOperation::interruptor::do_for_each(
+	  snaps,
+	  [pg, soid, head](auto &snap) mutable {
+	  auto coid = head->obs.oi.soid;
+	  coid.snap = snap;
+	  auto oid = resolve_oid(head->get_head_ss(), coid);
+	  assert(oid);
+	  return do_recover_missing(pg, *oid);
+	});
       });
-    }).handle_error_interruptible(
-      crimson::ct_error::assert_all("unexpected error")
-    );
-  });
+    });
+  }).handle_error_interruptible(
+    crimson::ct_error::assert_all("unexpected error")
+  );
 }
 
 typename InterruptibleOperation::template interruptible_future<>

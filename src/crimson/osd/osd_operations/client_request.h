@@ -160,11 +160,15 @@ public:
   }
   auto get_instance_handle() { return instance_handle; }
 
-  std::vector<snapid_t> snaps_need_to_recover() {
-    std::vector<snapid_t> ret;
+  std::set<snapid_t> snaps_need_to_recover() {
+    std::set<snapid_t> ret;
+    auto target = m->get_hobj();
+    if (!target.is_head()) {
+      ret.insert(target.snap);
+    }
     for (auto &op : m->ops) {
       if (op.op.op == CEPH_OSD_OP_ROLLBACK) {
-	ret.emplace_back((snapid_t)op.op.snap.snapid);
+	ret.insert((snapid_t)op.op.snap.snapid);
       }
     }
     return ret;
