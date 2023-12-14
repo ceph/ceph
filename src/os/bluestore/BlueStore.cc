@@ -2461,21 +2461,60 @@ void BlueStore::Blob::copy_extents(
   CephContext* cct, const Blob& from, uint32_t start,
   uint32_t pre_len, uint32_t main_len, uint32_t post_len)
 {
-  constexpr uint64_t invalid = bluestore_pextent_t::INVALID_OFFSET;
-  auto at = [&](const PExtentVector& e, uint32_t pos, uint32_t len) -> uint64_t {
-    auto it = e.begin();
-    while (it != e.end() && pos >= it->length) {
-      pos -= it->length;
-      ++it;
+  // There are 2 valid states:
+  // 1) `to` is not defined on [pos~len] range
+  //    (need to copy this region - return true)
+  // 2) `from` and `to` are exact on [pos~len] range
+  //    (no need to copy region - return false)
+  // Otherwise just assert.
+  auto check_sane_need_copy = [&](
+    const PExtentVector& from,
+    const PExtentVector& to,
+    uint32_t pos, uint32_t len) -> bool
+  {
+    uint32_t pto = pos;
+    auto ito = to.begin();
+    while (ito != to.end() && pto >= ito->length) {
+      pto -= ito->length;
+      ++ito;
     }
-    if (it == e.end()) {
-      return invalid;
+    if (ito == to.end()) return true; // case 1 - obviously empty
+    if (!ito->is_valid()) {
+      // now sanity check that all the rest is invalid too
+      pto += len;
+      while (ito != to.end() && pto >= ito->length) {
+        ceph_assert(!ito->is_valid());
+        pto -= ito->length;
+        ++ito;
+      }
+      return true;
     }
-    if (!it->is_valid()) {
-      return invalid;
+    uint32_t pfrom = pos;
+    auto ifrom = from.begin();
+    while (ifrom != from.end() && pfrom >= ifrom->length) {
+      pfrom -= ifrom->length;
+      ++ifrom;
     }
-    ceph_assert(pos + len <= it->length); // post_len should be single au, and we do not split
-    return it->offset + pos;
+    ceph_assert(ifrom != from.end());
+    ceph_assert(ifrom->is_valid());
+    // here we require from and to be the same
+    while (len > 0) {
+      ceph_assert(ifrom->offset + pfrom == ito->offset + pto);
+      uint32_t jump = std::min(len, ifrom->length - pfrom);
+      jump = std::min(jump, ito->length - pto);
+      pfrom += jump;
+      if (pfrom == ifrom->length) {
+        pfrom = 0;
+        ++ifrom;
+      }
+      pto += jump;
+      if (pto == ito->length) {
+        pto = 0;
+        ++ito;
+      }
+      len -= jump;
+    }
+    return false;
   };
   const PExtentVector& exfrom = from.blob.get_extents();
   PExtentVector& exto = blob.dirty_extents();
@@ -2484,24 +2523,16 @@ void BlueStore::Blob::copy_extents(
 
   // the extents that cover same area must be the same
   if (pre_len > 0) {
-    uint64_t au_from = at(exfrom, start, pre_len);
-    ceph_assert(au_from != bluestore_pextent_t::INVALID_OFFSET);
-    uint64_t au_to = at(exto, start, pre_len);
-    if (au_to == bluestore_pextent_t::INVALID_OFFSET) {
+    if (check_sane_need_copy(exfrom, exto, start, pre_len)) {
       main_len += pre_len; // also copy pre_len
     } else {
-      ceph_assert(au_from == au_to);
       start += pre_len; // skip, already there
     }
   }
   if (post_len > 0) {
-    uint64_t au_from = at(exfrom, start + main_len, post_len);
-    ceph_assert(au_from != bluestore_pextent_t::INVALID_OFFSET);
-    uint64_t au_to = at(exto, start + main_len, post_len);
-    if (au_to == bluestore_pextent_t::INVALID_OFFSET) {
+    if (check_sane_need_copy(exfrom, exto, start + main_len, post_len)) {
       main_len += post_len; // also copy post_len
     } else {
-      ceph_assert(au_from == au_to);
       // skip, already there
     }
   }
