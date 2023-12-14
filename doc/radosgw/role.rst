@@ -58,9 +58,11 @@ For example::
 Delete a Role
 -------------
 
-To delete a role, execute the following::
+To delete a role, run a command of the following form:
 
-	radosgw-admin role delete --role-name={role-name}
+.. prompt:: bash
+
+   radosgw-admin role delete --role-name={role-name}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -70,18 +72,23 @@ Request Parameters
 :Description: Name of the role.
 :Type: String
 
-For example:: 	
-	
-  radosgw-admin role delete --role-name=S3Access1
+For example:
 
-Note: A role can be deleted only when it doesn't have any permission policy attached to it.
+.. prompt:: bash
+	
+   radosgw-admin role delete --role-name=S3Access1
+
+Note: A role can be deleted only when it has no permission policy attached to
+it.
 
 Get a Role
 ----------
 
-To get information about a role, execute the following::
+To get information about a role, run a command of the following form:
 
-	radosgw-admin role get --role-name={role-name}
+.. prompt:: bash
+
+   radosgw-admin role get --role-name={role-name}
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
@@ -91,9 +98,11 @@ Request Parameters
 :Description: Name of the role.
 :Type: String
 
-For example:: 	
+For example:
+
+.. prompt:: bash
 	
-  radosgw-admin role get --role-name=S3Access1
+   radosgw-admin role get --role-name=S3Access1
   
 .. code-block:: javascript
   
@@ -111,21 +120,26 @@ For example::
 List Roles
 ----------
 
-To list roles with a specified path prefix, execute the following::
+To list roles with a specified path prefix, run a command of the following form:
 
-	radosgw-admin role list [--path-prefix ={path prefix}]
+.. prompt:: bash
+
+   radosgw-admin role list [--path-prefix ={path prefix}]
 
 Request Parameters
 ~~~~~~~~~~~~~~~~~~
 
 ``path-prefix``
 
-:Description: Path prefix for filtering roles. If this is not specified, all roles are listed.
+:Description: Path prefix for filtering roles. If this is not specified, all
+              roles are listed.
 :Type: String
 
-For example:: 	
+For example:
+
+.. prompt:: bash
 	
-  radosgw-admin role list --path-prefix="/application"
+   radosgw-admin role list --path-prefix="/application"
   
 .. code-block:: javascript
   
@@ -140,7 +154,6 @@ For example::
         "assume_role_policy_document": "{\"Version\":\"2012-10-17\",\"Statement\":[{\"Effect\":\"Allow\",\"Principal\":{\"AWS\":[\"arn:aws:iam:::user/TESTER\"]},\"Action\":[\"sts:AssumeRole\"]}]}"
     }
   ]
-
 
 Update Assume Role Policy Document of a role
 --------------------------------------------
@@ -364,7 +377,9 @@ Example::
 
   POST "<hostname>?Action=DeleteRole&RoleName=S3Access"
 
-Note: A role can be deleted only when it doesn't have any permission policy attached to it.
+Note: A role can be deleted only when it doesn't have any permission policy
+attached to it. If you intend to delete a role, you must first delete any
+policies attached to it.
 
 Get a Role
 ----------
