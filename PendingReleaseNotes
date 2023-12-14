@@ -75,6 +75,8 @@
 * CephFS: The period specifier ``m`` now implies minutes and the period specifier
   ``M`` now implies months. This has been made consistent with the rest
   of the system.
+* CephFS: Full support for subvolumes and subvolume groups is now available
+  for snap_schedule Manager module.
 
 >=18.0.0
 
