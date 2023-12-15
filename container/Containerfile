@@ -1,25 +1,28 @@
 FROM quay.io/centos/centos:stream8
 
-# The name of the Ceph release
+# The name of the Ceph release.
+# e.g., "main", "reef", "qincy"
 ARG CEPH_VERSION_NAME="main"
 
 # (optional) Choose a specific Ceph package version to install
 # This value is appended directly to ceph packages to select their version
 # e.g., "-18.2.0"
-ARG CEPH_PACKAGE_VERSION=""
+ARG CEPH_PACKAGE_VERSION=
 
 # (optional) Choose a specific NFS-Ganesha package version to install
 # This value is appended directly to nfs-ganesha packages to select their version
 # e.g., "-5.5-1.el8s"
-ARG GANESHA_PACKAGE_VERSION=""
+ARG GANESHA_PACKAGE_VERSION=
 
-# Set this to "true" to force usage of Shaman for devel builds
-ARG IS_DEVEL="false"
-
-# Used as URL "ref" for selecting Shaman packages
+# (optional) Used as URL "ref" for selecting Shaman packages.
+# Will force use of shaman packages if set to something other than CEPH_VERSION_NAME.
+# e.g., "main", "reef", "wip-feature"
 ARG CEPH_REF="${CEPH_VERSION_NAME}"
 
-# Set to "crimson" if needed
+# (optional) Set this to select a specific Ceph Shaman SHA1 build directly.
+ARG CEPH_SHA1=
+
+# (optional) Set to "crimson" to install crimson packages.
 ARG OSD_FLAVOR="default"
 
 
@@ -59,22 +62,18 @@ RUN set -x && \
     esac
 
 # Ceph repo
-# TODO: currently, the shaman api search can return different versions if the latest x86+arm build
-#       is not the same as the latest x86-only build; should we make tooling so this doesn't happen?
 RUN set -x && \
     rpm --import 'https://download.ceph.com/keys/release.asc' && \
-    if [ "${CEPH_VERSION_NAME}" == "main" ] || ${IS_DEVEL}; then \
-        ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
+    ARCH=$(arch); if [ "${ARCH}" == "aarch64" ]; then ARCH="arm64"; fi ;\
+    IS_RELEASE=0 ;\
+    if [ -n "${CEPH_SHA1}" ]; then \
+        REPO_URL=$(curl -s "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/8/${ARCH}&sha1=${CEPH_SHA1}" | jq -r .[0].url ) ;\
+    elif [ "${CEPH_VERSION_NAME}" == "main" ] || [ "${CEPH_VERSION_NAME}" != "${CEPH_REF}" ]; then \
+        # TODO: this can return different ceph builds (SHA1) for x86 vs. arm runs. is it important to fix?
         REPO_URL=$(curl -s "https://shaman.ceph.com/api/search/?project=ceph&distros=centos/8/${ARCH}&flavor=${OSD_FLAVOR}&ref=${CEPH_REF}&sha1=latest" | jq -r .[0].url) ;\
-        IS_RELEASE=0 ;\
-        echo "" > crimson-packages.txt ;\
-        if [ "${OSD_FLAVOR}" == "crimson" ]; then \
-            echo "ceph-crimson-osd${CEPH_PACKAGE_VERSION}" > crimson-packages.txt ;\
-        fi ;\
     else \
         IS_RELEASE=1 ;\
         REPO_URL="http://download.ceph.com/rpm-${CEPH_VERSION_NAME}/el8/" ;\
-        echo "" > crimson-packages.txt ;\
     fi && \
     rpm -Uvh "$REPO_URL/noarch/ceph-release-1-${IS_RELEASE}.el8.noarch.rpm"
 
@@ -117,8 +116,13 @@ RUN \
         kmod \
         libradosstriper1${CEPH_PACKAGE_VERSION} \
         rbd-mirror${CEPH_PACKAGE_VERSION} \
-        $(cat crimson-packages.txt) \
         " && \
+    # Optional crimson package(s)
+    if [ "${OSD_FLAVOR}" == "crimson" ]; then \
+        PACKAGES="$PACKAGES \
+        ceph-crimson-osd${CEPH_PACKAGE_VERSION} \
+        " ;\
+    fi && \
     # Ceph "Recommends"
     PACKAGES="$PACKAGES \
         nvme-cli \
@@ -201,7 +205,6 @@ RUN rpm -q $(cat packages.txt) && rm -f /var/lib/rpm/__db* && rm -f *packages.tx
 #
 # Set some envs in the container for quickly inspecting details about the build at runtime
 # Should all be prefaced with CEPH_ unless obviously unrelated (like GANESHA_)
-#
 ENV CEPH_VERSION_NAME="${CEPH_VERSION_NAME}" \
     CEPH_PACKAGE_VERSION="${CEPH_PACKAGE_VERSION}" \
     GANESHA_PACKAGE_VERSION="${GANESHA_PACKAGE_VERSION}" \

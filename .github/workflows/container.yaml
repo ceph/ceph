@@ -9,6 +9,21 @@ on:
     branches:
       - main
 
+env:
+  # the name of the ceph version for this image
+  # e.g., "main", "reef", "quincy"
+  CEPH_VERSION_NAME: main
+
+  # (optional) Choose a specific Ceph package version to install
+  # This value is appended directly to ceph packages to select their version
+  # e.g., "-18.2.0"
+  CEPH_PACKAGE_VERSION:
+
+  # (optional) Choose a specific NFS-Ganesha package version to install
+  # This value is appended directly to nfs-ganesha packages to select their version
+  # e.g., "-5.5-1.el8s"
+  GANESHA_PACKAGE_VERSION:
+
 defaults:
   run:
     # reference: https://docs.github.com/en/actions/reference/workflow-syntax-for-github-actions#using-a-specific-shell
@@ -28,6 +43,21 @@ jobs:
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
+
+      - name: Calculate build args
+        id: build-args
+        run: |
+          # TODO: if this is a release, CEPH_REF="" so that it takes the default
+          if [ "${{ github.event_name }}" == "pull_request" ]; then
+            # if pull_request, CEPH_REF is the target branch (e.g., main, reef, wip-feature)
+            echo "CEPH_REF=${{ github.base_ref }}" >> "$GITHUB_OUTPUT"
+          elif [ "${{ github.event_name }}" == "push" ]; then
+            # if push (committed code), CEPH_REF is this branch (e.g., main, reef, wip-feature)
+            echo "CEPH_REF=${{ github.ref_name }}" >> "$GITHUB_OUTPUT"
+          else
+            # if anything is ambiguous, fail so there is a clear error to be handled
+            echo "::error Cannot set CEPH_REF fro github event type: ${{ github.event_name }}"
+          fi
 
       # TODO: fix licenses output; this reports: org.opencontainers.image.licenses=NOASSERTION
       - name: Generate container metadata
@@ -49,19 +79,20 @@ jobs:
             ${{ steps.container-meta.outputs.labels }}
           tags: |
             ${{ steps.container-meta.outputs.tags }}
+          extra-args: --squash
           build-args: |
-            CEPH_VERSION_NAME=main
-            CEPH_PACKAGE_VERSION=
-            GANESHA_PACKAGE_VERSION=
-            IS_DEVEL=true
-            CEPH_REF=main
+            CEPH_VERSION_NAME=${{ env.CEPH_VERSION_NAME }}
+            CEPH_PACKAGE_VERSION=${{ env.CEPH_PACKAGE_VERSION }}
+            GANESHA_PACKAGE_VERSION=${{ env.GANESHA_PACKAGE_VERSION }}
+            CEPH_REF=${{ steps.build-args.outputs.CEPH_REF }}
+            CEPH_SHA1=
             OSD_FLAVOR=default
 
       # TODO: for semver tags on release branches, rebuild daily w/ cron if base image is updated
       #       see: https://github.com/lucacome/docker-image-update-checker
 
       - name: Push To quay.io
-        if: ${{ github.repository_owner == 'ceph' && github.ref == 'refs/heads/master' }}
+        if: ${{ github.repository_owner == 'ceph' && github.ref == 'refs/heads/main' }}
         uses: redhat-actions/push-to-registry@v2
         with:
           image: ${{ steps.container-build.outputs.image }}
