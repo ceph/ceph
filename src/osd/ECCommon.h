@@ -370,14 +370,18 @@ struct ECCommon {
       bool fast_read,
       GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func);
 
-    template <class F>
+    template <class F, class G>
     void filter_read_op(
       const OSDMapRef& osdmap,
       ReadOp &op,
-      F&& on_erase);
+      F&& on_erase,
+      G&& on_schedule_recovery);
 
-    template <class F>
-    void check_recovery_sources(const OSDMapRef& osdmap, F&& on_erase);
+    template <class F, class G>
+    void check_recovery_sources(
+      const OSDMapRef& osdmap,
+      F&& on_erase,
+      G&& on_schedule_recovery);
 
     void complete_read_op(ReadOp &rop);
 
@@ -698,10 +702,11 @@ template <> struct fmt::formatter<ECCommon::read_result_t> : fmt::ostream_format
 template <> struct fmt::formatter<ECCommon::ReadOp> : fmt::ostream_formatter {};
 template <> struct fmt::formatter<ECCommon::RMWPipeline::Op> : fmt::ostream_formatter {};
 
-template <class F>
+template <class F, class G>
 void ECCommon::ReadPipeline::check_recovery_sources(
   const OSDMapRef& osdmap,
-  F&& on_erase)
+  F&& on_erase,
+  G&& on_schedule_recovery)
 {
   std::set<ceph_tid_t> tids_to_filter;
   for (std::map<pg_shard_t, std::set<ceph_tid_t> >::iterator 
@@ -720,15 +725,16 @@ void ECCommon::ReadPipeline::check_recovery_sources(
        ++i) {
     std::map<ceph_tid_t, ReadOp>::iterator j = tid_to_read_map.find(*i);
     ceph_assert(j != tid_to_read_map.end());
-    filter_read_op(osdmap, j->second, on_erase);
+    filter_read_op(osdmap, j->second, on_erase, on_schedule_recovery);
   }
 }
 
-template <class F>
+template <class F, class G>
 void ECCommon::ReadPipeline::filter_read_op(
   const OSDMapRef& osdmap,
   ReadOp &op,
-  F&& on_erase)
+  F&& on_erase,
+  G&& on_schedule_recovery)
 {
   std::set<hobject_t> to_cancel;
   for (std::map<pg_shard_t, std::set<hobject_t> >::iterator i = op.source_to_obj.begin();
@@ -790,6 +796,6 @@ void ECCommon::ReadPipeline::filter_read_op(
      *    the pull on the affected objects and pushes from in-memory buffers
      *    on any now complete unaffected objects.
      */
-    schedule_recovery_work();
+    on_schedule_recovery(op);
   }
 }

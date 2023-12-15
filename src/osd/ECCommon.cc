@@ -182,31 +182,6 @@ void ECCommon::ReadPipeline::complete_read_op(ReadOp &rop)
   tid_to_read_map.erase(rop.tid);
 }
 
-struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
-  ECCommon::ReadPipeline& read_pipeline;
-  ceph_tid_t tid;
-  FinishReadOp(ECCommon::ReadPipeline& read_pipeline, ceph_tid_t tid)
-    : read_pipeline(read_pipeline), tid(tid) {}
-  void finish(ThreadPool::TPHandle&) override {
-    auto ropiter = read_pipeline.tid_to_read_map.find(tid);
-    ceph_assert(ropiter != read_pipeline.tid_to_read_map.end());
-    read_pipeline.complete_read_op(ropiter->second);
-  }
-};
-
-void ECCommon::ReadPipeline::schedule_recovery_work()
-{
-#ifndef WITH_SEASTAR
-    get_parent()->schedule_recovery_work(
-      get_parent()->bless_unlocked_gencontext(
-        nullptr), //new struct FinishReadOp(*this, op.tid)),
-      1);
-#else
-    // TODO
-    ceph_abort_msg("not yet implemented");
-#endif
-}
-
 void ECCommon::ReadPipeline::on_change()
 {
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
