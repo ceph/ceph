@@ -1316,11 +1316,28 @@ void ECBackend::handle_sub_read_reply(
 
 void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
 {
-#if 0
-  read_pipeline.check_recovery_sources(osdmap, [this] (const hobject_t& obj) {
-    recovery_ops.erase(obj);
-  });
-#endif
+  struct FinishReadOp : public GenContext<ThreadPool::TPHandle&>  {
+    ECCommon::ReadPipeline& read_pipeline;
+    ceph_tid_t tid;
+    FinishReadOp(ECCommon::ReadPipeline& read_pipeline, ceph_tid_t tid)
+      : read_pipeline(read_pipeline), tid(tid) {}
+    void finish(ThreadPool::TPHandle&) override {
+      auto ropiter = read_pipeline.tid_to_read_map.find(tid);
+      ceph_assert(ropiter != read_pipeline.tid_to_read_map.end());
+      read_pipeline.complete_read_op(ropiter->second);
+    }
+  };
+  read_pipeline.check_recovery_sources(
+    osdmap,
+    [this] (const hobject_t& obj) {
+      recovery_backend.recovery_ops.erase(obj);
+    },
+    [this] (const ReadOp& op) {
+      get_parent()->schedule_recovery_work(
+        get_parent()->bless_unlocked_gencontext(
+          new FinishReadOp(read_pipeline, op.tid)),
+        1);
+    });
 }
 
 void ECBackend::on_change()
