@@ -703,7 +703,7 @@ else()
 endif()
 include_directories(BEFORE SYSTEM ${Boost_INCLUDE_DIRS})
 
-if(Boost_VERSION VERSION_EQUAL 1.81 OR Boost_VERSION VERSION_EQUAL 1.82)
+if(Boost_VERSION VERSION_LESS 1.84)
   # This is a workaround for https://github.com/boostorg/phoenix/issues/111
   add_compile_options($<$<COMPILE_LANGUAGE:CXX>:-DBOOST_PHOENIX_STL_TUPLE_H_>)
 endif()
