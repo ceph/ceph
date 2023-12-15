@@ -130,7 +130,7 @@ ECBackend::ECBackend(
   : PGBackend(cct, pg, store, coll, ch),
     read_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener()),
     rmw_pipeline(cct, ec_impl, this->sinfo, get_parent()->get_eclistener(), *this),
-    recovery_backend(cct, coll, ec_impl, this->sinfo, read_pipeline, unstable_hashinfo_registry, get_parent()->get_eclistener()),
+    recovery_backend(cct, coll, ec_impl, this->sinfo, read_pipeline, unstable_hashinfo_registry, get_parent()),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width),
     unstable_hashinfo_registry(cct, ec_impl) {
@@ -141,6 +141,23 @@ ECBackend::ECBackend(
 PGBackend::RecoveryHandle *ECBackend::open_recovery_op()
 {
   return recovery_backend.open_recovery_op();
+}
+
+ECBackend::RecoveryBackend::RecoveryBackend(
+  CephContext* cct,
+  const coll_t &coll,
+  ceph::ErasureCodeInterfaceRef ec_impl,
+  const ECUtil::stripe_info_t& sinfo,
+  ReadPipeline& read_pipeline,
+  UnstableHashInfoRegistry& unstable_hashinfo_registry,
+  ECListener* parent)
+  : cct(cct),
+    coll(coll),
+    ec_impl(std::move(ec_impl)),
+    sinfo(sinfo),
+    read_pipeline(read_pipeline),
+    unstable_hashinfo_registry(unstable_hashinfo_registry),
+    parent(parent) {
 }
 
 PGBackend::RecoveryHandle *ECBackend::RecoveryBackend::open_recovery_op()
@@ -475,6 +492,19 @@ struct RecoveryReadCompleter : ECCommon::ReadCompleter {
   RecoveryMessages rm;
 };
 
+void ECBackend::ECRecoveryBackend::commit_txn_send_replies(
+  ceph::os::Transaction&& txn,
+  std::map<int, MOSDPGPushReply*> replies)
+{
+  txn.register_on_complete(
+      get_parent()->bless_context(
+        new SendPushReplies(
+          get_parent(),
+          get_osdmap_epoch(),
+          replies)));
+  get_parent()->queue_transaction(std::move(txn));
+}
+
 void ECBackend::RecoveryBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
 {
   for (map<pg_shard_t, vector<PushOp> >::iterator i = m.pushes.begin();
@@ -510,15 +540,11 @@ void ECBackend::RecoveryBackend::dispatch_recovery_messages(RecoveryMessages &m,
     replies.insert(make_pair(i->first.osd, msg));
   }
 
+#if 1
   if (!replies.empty()) {
-    (m.t).register_on_complete(
-	get_parent()->bless_context(
-	  new SendPushReplies(
-	    get_parent(),
-	    get_osdmap_epoch(),
-	    replies)));
-    get_parent()->queue_transaction(std::move(m.t));
-  } 
+    commit_txn_send_replies(std::move(m.t), std::move(replies));
+  }
+#endif
 
   if (m.recovery_reads.empty())
     return;

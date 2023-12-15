@@ -208,20 +208,11 @@ public:
 
     RecoveryBackend(CephContext* cct,
 		    const coll_t &coll,
-                ceph::ErasureCodeInterfaceRef ec_impl,
-                const ECUtil::stripe_info_t& sinfo,
-		ReadPipeline& read_pipeline,
-		UnstableHashInfoRegistry& unstable_hashinfo_registry,
-                ECListener* parent)
-      : cct(cct),
-        coll(coll),
-        ec_impl(std::move(ec_impl)),
-        sinfo(sinfo),
-	read_pipeline(read_pipeline),
-	unstable_hashinfo_registry(unstable_hashinfo_registry),
-        parent(parent) {
-    }
-  // <<<----
+		    ceph::ErasureCodeInterfaceRef ec_impl,
+		    const ECUtil::stripe_info_t& sinfo,
+		    ReadPipeline& read_pipeline,
+		    UnstableHashInfoRegistry& unstable_hashinfo_registry,
+		    ECListener* parent);
   struct RecoveryOp {
     hobject_t hoid;
     eversion_t v;
@@ -271,6 +262,10 @@ public:
 			sinfo.get_stripe_width());
   }
 
+  virtual ~RecoveryBackend() = default;
+  virtual void commit_txn_send_replies(
+    ceph::os::Transaction&& txn,
+    std::map<int, MOSDPGPushReply*> replies) = 0;
   void dispatch_recovery_messages(RecoveryMessages &m, int priority);
 
   RecoveryHandle *open_recovery_op();
@@ -305,6 +300,27 @@ public:
   }
   void _failed_push(const hobject_t &hoid, ECCommon::read_result_t &res);
   };
+  struct ECRecoveryBackend : RecoveryBackend {
+    ECRecoveryBackend(CephContext* cct,
+		      const coll_t &coll,
+		      ceph::ErasureCodeInterfaceRef ec_impl,
+		      const ECUtil::stripe_info_t& sinfo,
+		      ReadPipeline& read_pipeline,
+		      UnstableHashInfoRegistry& unstable_hashinfo_registry,
+		      Listener* parent)
+      : RecoveryBackend(cct, coll, std::move(ec_impl), sinfo, read_pipeline, unstable_hashinfo_registry, parent->get_eclistener()),
+	parent(parent) {
+    }
+
+    void commit_txn_send_replies(
+      ceph::os::Transaction&& txn,
+      std::map<int, MOSDPGPushReply*> replies) override;
+
+    Listener *get_parent() const { return parent; }
+
+  private:
+    Listener *parent;
+  };
   friend ostream &operator<<(ostream &lhs, const RecoveryBackend::RecoveryOp &rhs);
   friend struct RecoveryMessages;
   friend struct OnRecoveryReadComplete;
@@ -318,7 +334,7 @@ public:
 public:
   struct ReadPipeline read_pipeline;
   struct RMWPipeline rmw_pipeline;
-  struct RecoveryBackend recovery_backend;
+  struct ECRecoveryBackend recovery_backend;
 
   ceph::ErasureCodeInterfaceRef ec_impl;
 
