@@ -4,14 +4,13 @@
 Installing Ceph
 ===============
 
-There are multiple ways to install Ceph.  
+There are multiple ways to install Ceph.
 
 Recommended methods
 ~~~~~~~~~~~~~~~~~~~
 
-:ref:`Cephadm <cephadm_deploying_new_cluster>` installs and manages a Ceph
-cluster that uses containers and systemd and is tightly integrated with the CLI
-and dashboard GUI.
+:ref:`Cephadm <cephadm_deploying_new_cluster>` is a tool that can be used to
+install and manage a Ceph cluster.
 
 * cephadm supports only Octopus and newer releases.
 * cephadm is fully integrated with the orchestration API and fully supports the
@@ -58,6 +57,8 @@ tool that can be used to quickly deploy clusters. It is deprecated.
 `jaas.ai/ceph-mon <https://jaas.ai/ceph-mon>`_ installs Ceph using Juju.
 
 `github.com/openstack/puppet-ceph <https://github.com/openstack/puppet-ceph>`_  installs Ceph via Puppet.
+
+`OpenNebula HCI clusters <https://docs.opennebula.io/stable/provision_clusters/hci_clusters/overview.html>`_ deploys Ceph on various cloud platforms.
 
 Ceph can also be :ref:`installed manually <install-manual>`.
 
