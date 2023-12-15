@@ -1,0 +1,6 @@
+# distributed pins would be interesting if we had workloads on multiple clients. We do not yet. So it's disabled.
+tasks:
+- exec:
+    mon.a:
+      - ceph fs set cephfs balance_automate false
+      - ceph fs subvolumegroup pin cephfs qa distributed 1

@@ -665,6 +665,21 @@ public:
         }
       };
       fsmap.modify_filesystem(fsp->get_fscid(), std::move(f));
+    } else if (var == "balance_automate") {
+      bool allow = false;
+      int r = parse_bool(val, &allow, ss);
+      if (r != 0) {
+        return r;
+      }
+
+      auto f = [allow](auto&& fs) {
+        if (allow) {
+          fs.get_mds_map().set_balance_automate();
+        } else {
+          fs.get_mds_map().clear_balance_automate();
+        }
+      };
+      fsmap.modify_filesystem(fsp->get_fscid(), std::move(f));
     } else if (var == "min_compat_client") {
       auto vno = ceph_release_from_name(val.c_str());
       if (!vno) {
