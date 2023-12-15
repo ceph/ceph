@@ -1,8 +1,12 @@
 overrides:
   ceph:
-    conf:
+    mgr-modules:
+      - snap_schedule
+    cluster-conf:
       mgr:
         debug cephsqlite: 20
+        mgr/snap_schedule/allow_m_granularity: true
+        mgr/snap_schedule/dump_on_update: true
   check-counter:
     counters:
       mds:
@@ -12,9 +16,6 @@ overrides:
 tasks:
 - exec:
     mon.a:
-      - ceph mgr module enable snap_schedule
-      - ceph config set mgr mgr/snap_schedule/allow_m_granularity true
-      - ceph config set mgr mgr/snap_schedule/dump_on_update true
       - ceph fs snap-schedule add --fs=cephfs --path=/ --snap_schedule=1m
       - ceph fs snap-schedule retention add --fs=cephfs --path=/ --retention-spec-or-period=6m3h
       - ceph fs snap-schedule status --fs=cephfs --path=/
