@@ -5,18 +5,19 @@ global:
 rule_files:
   - /etc/prometheus/alerting/*
 
-{% if alertmanager_sd_url %}
-alerting:
-  alertmanagers:
+
+{% macro monitoring_stack(basic_auth=false, url) -%}
 {% if secure_monitoring_stack %}
     - scheme: https
+{% if basic_auth %}
       basic_auth:
         username: {{ alertmanager_web_user }}
         password: {{ alertmanager_web_password }}
+{%endif %}
       tls_config:
         ca_file: root_cert.pem
       http_sd_configs:
-        - url: {{ alertmanager_sd_url }}
+        - url: {{ url }}
           basic_auth:
             username: {{ service_discovery_username }}
             password: {{ service_discovery_password }}
@@ -25,8 +26,14 @@ alerting:
 {% else %}
     - scheme: http
       http_sd_configs:
-        - url: {{ alertmanager_sd_url }}
+        - url: {{ url }}
 {% endif %}
+{%- endmacro %}
+
+{% if alertmanager_sd_url %}
+alerting:
+  alertmanagers:
+{{ monitoring_stack(basic_auth=true, url=alertmanager_sd_url) }}
 {% endif %}
 
 scrape_configs:
@@ -51,59 +58,15 @@ scrape_configs:
 
 {% if node_exporter_sd_url %}
   - job_name: 'node'
-{% if secure_monitoring_stack %}
-    scheme: https
-    tls_config:
-      ca_file: root_cert.pem
-    http_sd_configs:
-    - url: {{ node_exporter_sd_url }}
-      basic_auth:
-        username: {{ service_discovery_username }}
-        password: {{ service_discovery_password }}
-      tls_config:
-        ca_file: root_cert.pem
-{% else %}
-    http_sd_configs:
-    - url: {{ node_exporter_sd_url }}
-{% endif %}
+{{ monitoring_stack(url=node_exporter_sd_url) }}
 {% endif %}
 
 {% if haproxy_sd_url %}
   - job_name: 'haproxy'
-{% if secure_monitoring_stack %}
-    scheme: https
-    tls_config:
-      ca_file: root_cert.pem
-    http_sd_configs:
-    - url: {{ haproxy_sd_url }}
-      basic_auth:
-        username: {{ service_discovery_username }}
-        password: {{ service_discovery_password }}
-      tls_config:
-        ca_file: root_cert.pem
-{% else %}
-    http_sd_configs:
-    - url: {{ haproxy_sd_url }}
-{% endif %}
+{{ monitoring_stack(url=haproxy_sd_url) }}
 {% endif %}
 
 {% if ceph_exporter_sd_url %}
   - job_name: 'ceph-exporter'
-{% if secure_monitoring_stack %}
-    honor_labels: true
-    scheme: https
-    tls_config:
-      ca_file: root_cert.pem
-    http_sd_configs:
-    - url: {{ ceph_exporter_sd_url }}
-      basic_auth:
-        username: {{ service_discovery_username }}
-        password: {{ service_discovery_password }}
-      tls_config:
-        ca_file: root_cert.pem
-{% else %}
-    honor_labels: true
-    http_sd_configs:
-    - url: {{ ceph_exporter_sd_url }}
-{% endif %}
+{{ monitoring_stack(url=ceph_exporter_sd_url) }}
 {% endif %}
