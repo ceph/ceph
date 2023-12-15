@@ -8,9 +8,9 @@ struct cls_2pc_reservation
 {
   using id_t = uint32_t;
   inline static const id_t NO_ID{0};
-  uint64_t size;                     // how much size to reserve (bytes)
+  uint64_t size = 0;                 // how much size to reserve (bytes)
   ceph::coarse_real_time timestamp;  // when the reservation was done (used for cleaning stale reservations)
-  uint32_t entries;                  // how many entries are reserved
+  uint32_t entries = 0;              // how many entries are reserved
 
   cls_2pc_reservation(uint64_t _size, ceph::coarse_real_time _timestamp, uint32_t _entries) :
       size(_size), timestamp(_timestamp), entries(_entries) {}
