@@ -132,6 +132,7 @@ DEFAULT_ELASTICSEARCH_IMAGE = 'quay.io/omrizeneva/elasticsearch:6.8.23'
 DEFAULT_JAEGER_COLLECTOR_IMAGE = 'quay.io/jaegertracing/jaeger-collector:1.29'
 DEFAULT_JAEGER_AGENT_IMAGE = 'quay.io/jaegertracing/jaeger-agent:1.29'
 DEFAULT_JAEGER_QUERY_IMAGE = 'quay.io/jaegertracing/jaeger-query:1.29'
+DEFAULT_SAMBA_IMAGE = 'quay.io/samba.org/samba-server:devbuilds-centos-amd64'
 # ------------------------------------------------------------------------------
 
 
@@ -287,6 +288,11 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             'container_image_jaeger_query',
             default=DEFAULT_JAEGER_QUERY_IMAGE,
             desc='Jaeger query container image',
+        ),
+        Option(
+            'container_image_samba',
+            default=DEFAULT_SAMBA_IMAGE,
+            desc='Samba/SMB container image',
         ),
         Option(
             'warn_on_stray_hosts',
@@ -552,6 +558,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.container_image_jaeger_agent = ''
             self.container_image_jaeger_collector = ''
             self.container_image_jaeger_query = ''
+            self.container_image_samba = ''
             self.warn_on_stray_hosts = True
             self.warn_on_stray_daemons = True
             self.warn_on_failed_host_check = True
@@ -1617,6 +1624,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             image = None
         elif daemon_type == 'snmp-gateway':
             image = self.container_image_snmp_gateway
+        elif daemon_type == SMBService.TYPE:
+            image = self.container_image_samba
         else:
             assert False, daemon_type
 
