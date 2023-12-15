@@ -713,6 +713,8 @@ void OSD::dump_status(Formatter* f) const
   f->dump_unsigned("whoami", superblock.whoami);
   f->dump_string("state", pg_shard_manager.get_osd_state_string());
   f->dump_stream("maps") << superblock.maps;
+  f->dump_stream("oldest_map") << superblock.get_oldest_map();
+  f->dump_stream("newest_map") << superblock.get_newest_map();
   f->dump_unsigned("cluster_osdmap_trim_lower_bound",
                    superblock.cluster_osdmap_trim_lower_bound);
   f->dump_unsigned("num_pgs", pg_shard_manager.get_num_pgs());
