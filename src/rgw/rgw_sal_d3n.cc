@@ -59,31 +59,30 @@ std::unique_ptr<Object::ReadOp> D3NFilterObject::get_read_op()
 
 int D3NFilterObject::D3NFilterReadOp::prepare(optional_yield y, const DoutPrefixProvider* dpp)
 {
-  next->params.mod_ptr = params.mod_ptr;
-  next->params.unmod_ptr = params.unmod_ptr;
-  next->params.high_precision_time = params.high_precision_time;
-  next->params.mod_zone_id = params.mod_zone_id;
-  next->params.mod_pg_ver = params.mod_pg_ver;
-  next->params.if_match = params.if_match;
-  next->params.if_nomatch = params.if_nomatch;
-  next->params.lastmod = params.lastmod;
+  next->params = params;
 
   auto ret = next->prepare(y, dpp);
   if (ret < 0) {
     return ret;
   }
 
-  if (! this->source->have_instance()) {
-    RGWObjState* state = nullptr;
-    if (this->source->get_obj_state(dpp, &state, y) == 0) {
-      auto it = state->attrset.find(RGW_ATTR_ID_TAG);
-      if (it != state->attrset.end()) {
-        bufferlist bl = it->second;
-        this->source->set_object_version(bl.c_str());
-        ldpp_dout(dpp, 20) << __func__ << "id tag version is: " << this->source->get_object_version() << dendl;
-      } else {
-        ldpp_dout(dpp, 20) << __func__ << "Failed to find id tag" << dendl;
-      }
+  if (params.part_num) {
+    params.parts_count = next->params.parts_count;
+    if (params.parts_count > 1) {
+      ldpp_dout(dpp, 20) << __func__ << "params.part_count: " << params.parts_count << dendl;
+      return 0; // d3n wont handle multipart read requests with part number
+    }
+  }
+
+  if (!this->source->have_instance()) {
+    auto& attrs = this->source->get_attrs();
+    auto it = attrs.find(RGW_ATTR_ID_TAG);
+    if (it != attrs.end()) {
+      bufferlist bl = it->second;
+      this->source->set_object_version(bl.c_str());
+      ldpp_dout(dpp, 20) << __func__ << "id tag version is: " << this->source->get_object_version() << dendl;
+    } else {
+      ldpp_dout(dpp, 20) << __func__ << "Failed to find id tag" << dendl;
     }
   }
 
@@ -237,7 +236,7 @@ int D3NFilterObject::D3NFilterReadOp::iterate(const DoutPrefixProvider* dpp, int
   if (source->has_attrs()) {
     obj_attrs = source->get_attrs();
   }
-  if (source->is_compressed() || obj_attrs.find(RGW_ATTR_CRYPT_MODE) != obj_attrs.end()) {
+  if (source->is_compressed() || obj_attrs.find(RGW_ATTR_CRYPT_MODE) != obj_attrs.end() || params.parts_count > 1) {
     ldpp_dout(dpp, 20) << "D3NFilterObject::iterate:: " << __func__ << "(): Skipping writing to cache" << dendl;
     this->cb->bypass_cache_write();
   }
