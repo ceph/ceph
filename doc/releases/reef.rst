@@ -17,6 +17,9 @@ This is the first stable release of Ceph Reef.
    https://bugs.debian.org/cgi-bin/bugreport.cgi?bug=1030129. We will build as
    soon as this bug is resolved in Debian stable.
 
+   If you use ``cephadm`` to install and you do not intend to use Ceph from the
+   Debian repositories, this bug will not affect your installation.
+
    *last updated 2023 Aug 04*
 
 Major Changes from Quincy
