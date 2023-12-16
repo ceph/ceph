@@ -213,10 +213,15 @@ extern int rgw_object_get_attr(rgw::sal::Driver* driver, rgw::sal::Object* obj,
 			       const char* attr_name, bufferlist& out_bl,
 			       optional_yield y);
 
-extern void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& user, bool fix, optional_yield y, const DoutPrefixProvider *dpp);
+void check_bad_owner_bucket_mapping(rgw::sal::Driver* driver,
+                                    const rgw_owner& owner,
+                                    const std::string& tenant,
+                                    bool fix, optional_yield y,
+                                    const DoutPrefixProvider *dpp);
 
 struct RGWBucketAdminOpState {
   rgw_user uid;
+  rgw_account_id account_id;
   std::string display_name;
   std::string bucket_name;
   std::string bucket_id;
@@ -278,6 +283,7 @@ struct RGWBucketAdminOpState {
   void set_sync_bucket(bool value) { sync_bucket = value; }
 
   rgw_user& get_user_id() { return uid; }
+  rgw_account_id& get_account_id() { return account_id; }
   std::string& get_user_display_name() { return display_name; }
   std::string& get_bucket_name() { return bucket_name; }
   std::string& get_object_name() { return object_name; }
@@ -299,6 +305,7 @@ struct RGWBucketAdminOpState {
   bool will_delete_children() { return delete_child_objects; }
   bool will_check_objects() { return check_objects; }
   bool is_user_op() { return !uid.empty(); }
+  bool is_account_op() { return !account_id.empty(); }
   bool is_system_op() { return uid.empty(); }
   bool has_bucket_stored() { return bucket_stored; }
   int get_max_aio() { return max_aio; }

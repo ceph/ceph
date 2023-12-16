@@ -204,20 +204,35 @@ int FilterDriver::delete_account(const DoutPrefixProvider* dpp,
   return next->delete_account(dpp, y, info, objv);
 }
 
-int FilterDriver::load_account_stats(const DoutPrefixProvider* dpp,
-                                     optional_yield y, std::string_view id,
-                                     RGWStorageStats& stats,
-                                     ceph::real_time& last_synced,
-                                     ceph::real_time& last_updated)
+int FilterDriver::load_stats(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const rgw_owner& owner,
+                             RGWStorageStats& stats,
+                             ceph::real_time& last_synced,
+                             ceph::real_time& last_updated)
 {
-  return next->load_account_stats(dpp, y, id, stats, last_synced, last_updated);
+  return next->load_stats(dpp, y, owner, stats, last_synced, last_updated);
 }
 
-int FilterDriver::load_account_stats_async(const DoutPrefixProvider* dpp,
-                                           std::string_view id,
-                                           boost::intrusive_ptr<ReadStatsCB> cb)
+int FilterDriver::load_stats_async(const DoutPrefixProvider* dpp,
+                                   const rgw_owner& owner,
+                                   boost::intrusive_ptr<ReadStatsCB> cb)
 {
-  return next->load_account_stats_async(dpp, id, std::move(cb));
+  return next->load_stats_async(dpp, owner, std::move(cb));
+}
+
+int FilterDriver::reset_stats(const DoutPrefixProvider *dpp,
+                              optional_yield y,
+                              const rgw_owner& owner)
+{
+  return next->reset_stats(dpp, y, owner);
+}
+
+int FilterDriver::complete_flush_stats(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       const rgw_owner& owner)
+{
+  return next->complete_flush_stats(dpp, y, owner);
 }
 
 std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
@@ -238,6 +253,15 @@ int FilterDriver::load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b
   const int ret = next->load_bucket(dpp, b, &nb, y);
   *bucket = std::make_unique<FilterBucket>(std::move(nb));
   return ret;
+}
+
+int FilterDriver::list_buckets(const DoutPrefixProvider* dpp,
+                               const rgw_owner& owner, const std::string& tenant,
+                               const std::string& marker, const std::string& end_marker,
+                               uint64_t max, bool need_stats, BucketList &buckets, optional_yield y)
+{
+  return next->list_buckets(dpp, owner, tenant, marker, end_marker,
+                            max, need_stats, buckets, y);
 }
 
 bool FilterDriver::is_meta_master()
@@ -545,14 +569,6 @@ CephContext* FilterDriver::ctx(void)
   return next->ctx();
 }
 
-int FilterUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
-			     const std::string& end_marker, uint64_t max,
-			     bool need_stats, BucketList &buckets, optional_yield y)
-{
-  return next->list_buckets(dpp, marker, end_marker, max,
-                            need_stats, buckets, y);
-}
-
 int FilterUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y)
 {
   return next->read_attrs(dpp, y);
@@ -562,24 +578,6 @@ int FilterUser::merge_and_store_attrs(const DoutPrefixProvider* dpp,
 				      Attrs& new_attrs, optional_yield y)
 {
   return next->merge_and_store_attrs(dpp, new_attrs, y);
-}
-
-int FilterUser::read_stats(const DoutPrefixProvider *dpp,
-			   optional_yield y, RGWStorageStats* stats,
-			   ceph::real_time* last_stats_sync,
-			   ceph::real_time* last_stats_update)
-{
-  return next->read_stats(dpp, y, stats, last_stats_sync, last_stats_update);
-}
-
-int FilterUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
-{
-  return next->read_stats_async(dpp, cb);
-}
-
-int FilterUser::complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  return next->complete_flush_stats(dpp, y);
 }
 
 int FilterUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,

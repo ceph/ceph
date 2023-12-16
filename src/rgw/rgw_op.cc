@@ -2604,13 +2604,20 @@ void RGWListBuckets::execute(optional_yield y)
       read_count = max_buckets;
     }
 
-    op_ret = s->user->list_buckets(this, marker, end_marker, read_count, should_get_stats(), listing, y);
+    if (s->auth.identity->is_anonymous()) {
+      ldpp_dout(this, 20) << "skipping list_buckets() for anonymous user" << dendl;
+      marker.clear();
+      break;
+    }
+
+    op_ret = driver->list_buckets(this, s->owner.id, s->auth.identity->get_tenant(),
+                                  marker, end_marker, read_count, should_get_stats(), listing, y);
 
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
-      ldpp_dout(this, 10) << "WARNING: failed on rgw_get_user_buckets uid="
-			<< s->user->get_id() << dendl;
+      ldpp_dout(this, 10) << "WARNING: failed on list_buckets owner="
+			<< s->owner.id << dendl;
       break;
     }
 
@@ -2688,7 +2695,8 @@ void RGWGetUsage::execute(optional_yield y)
     }    
   }
 
-  op_ret = rgw_user_sync_all_stats(this, driver, s->user.get(), y);
+  op_ret = rgw_sync_all_stats(this, y, driver, s->user->get_id(),
+                              s->user->get_tenant());
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to sync user stats" << dendl;
     return;
@@ -2700,7 +2708,10 @@ void RGWGetUsage::execute(optional_yield y)
     return;
   }
 
-  op_ret = s->user->read_stats(this, y, &stats);
+  ceph::real_time synced; // ignored
+  ceph::real_time updated; // ignored
+  op_ret = driver->load_stats(this, y, s->user->get_id(),
+                              stats, synced, updated);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: can't read user header"  << dendl;
     return;
@@ -2733,13 +2744,14 @@ void RGWStatAccount::execute(optional_yield y)
 
   rgw::sal::BucketList listing;
   do {
-    op_ret = s->user->list_buckets(this, listing.next_marker, string(),
-                                   max_buckets, true, listing, y);
+    op_ret = driver->list_buckets(this, s->owner.id, s->auth.identity->get_tenant(),
+                                  listing.next_marker, string(),
+                                  max_buckets, true, listing, y);
     if (op_ret < 0) {
       /* hmm.. something wrong here.. the user was authenticated, so it
          should exist */
-      ldpp_dout(this, 10) << "WARNING: failed on list_buckets uid="
-			<< s->user->get_id() << " ret=" << op_ret << dendl;
+      ldpp_dout(this, 10) << "WARNING: failed on list_buckets owner="
+			<< s->owner.id << " ret=" << op_ret << dendl;
       return;
     }
 
@@ -3152,23 +3164,59 @@ int RGWGetBucketLocation::verify_permission(optional_yield y)
   return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLocation);
 }
 
-// list the user's buckets to check whether they're at their maximum
-static int check_user_max_buckets(const DoutPrefixProvider* dpp,
-                                  rgw::sal::User& user, optional_yield y)
+static int get_account_max_buckets(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   rgw::sal::Driver* driver,
+                                   const rgw_account_id& id,
+                                   int32_t& max_buckets)
 {
-  int32_t remaining = user.get_max_buckets();
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs;
+  RGWObjVersionTracker objv;
+
+  int ret = driver->load_account_by_id(dpp, y, id, info, attrs, objv);
+  if (ret < 0) {
+    ldpp_dout(dpp, 4) << "failed to load account owner: " << cpp_strerror(ret) << dendl;
+    return ret;
+  }
+
+  max_buckets = info.max_buckets;
+  return 0;
+}
+
+// list the user's buckets to check whether they're at their maximum
+static int check_owner_max_buckets(const DoutPrefixProvider* dpp,
+                                   rgw::sal::Driver* driver, req_state* s,
+                                   optional_yield y)
+{
+  int32_t remaining = 0;
+
+  const rgw_account_id* account = std::get_if<rgw_account_id>(&s->owner.id);
+  if (account) {
+    int ret = get_account_max_buckets(dpp, y, driver, *account, remaining);
+    if (ret < 0) {
+      return ret;
+    }
+  } else {
+    remaining = s->user->get_max_buckets();
+  }
+
+  if (remaining < 0) {
+    return -EPERM;
+  }
   if (!remaining) { // unlimited
     return 0;
   }
 
-  uint64_t max_buckets = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+  const uint64_t chunk_size = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+  const std::string& tenant = s->auth.identity->get_tenant();
 
   rgw::sal::BucketList listing;
   do {
-    size_t to_read = std::max<size_t>(max_buckets, remaining);
+    size_t to_read = std::max<size_t>(chunk_size, remaining);
 
-    int ret = user.list_buckets(dpp, listing.next_marker, string(),
-                                to_read, false, listing, y);
+    int ret = driver->list_buckets(dpp, s->owner.id, tenant, listing.next_marker,
+                                   "", to_read, false, listing, y);
     if (ret < 0) {
       return ret;
     }
@@ -3210,11 +3258,7 @@ int RGWCreateBucket::verify_permission(optional_yield y)
     }
   }
 
-  if (s->user->get_max_buckets() < 0) {
-    return -EPERM;
-  }
-
-  return check_user_max_buckets(this, *s->user, y);
+  return check_owner_max_buckets(this, driver, s, y);
 }
 
 void RGWCreateBucket::pre_exec()
@@ -7671,7 +7715,7 @@ RGWBulkUploadOp::handle_upload_path(req_state *s)
 
 int RGWBulkUploadOp::handle_dir_verify_permission(optional_yield y)
 {
-  return check_user_max_buckets(this, *s->user, y);
+  return check_owner_max_buckets(this, driver, s, y);
 }
 
 static void forward_req_info(const DoutPrefixProvider *dpp, CephContext *cct, req_info& info, const std::string& bucket_name)

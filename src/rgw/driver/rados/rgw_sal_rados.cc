@@ -102,12 +102,49 @@ static int drain_aio(std::list<librados::AioCompletion*>& handles)
   return ret;
 }
 
-int RadosUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
-			       const std::string& end_marker, uint64_t max, bool need_stats,
-			       BucketList &result, optional_yield y)
+// return the {user}.buckets or {account}.buckets object
+static rgw_raw_obj get_owner_buckets_obj(RGWSI_User* svc_user,
+                                         RGWSI_Zone* svc_zone,
+                                         const rgw_owner& owner)
 {
-  return store->ctl()->user->list_buckets(dpp, get_id(), marker, end_marker,
-                                          max, need_stats, result, y);
+  struct visitor {
+    RGWSI_User* svc_user;
+    RGWSI_Zone* svc_zone;
+
+    rgw_raw_obj operator()(const rgw_user& user) {
+      return svc_user->get_buckets_obj(user);
+    }
+    rgw_raw_obj operator()(const rgw_account_id& id) {
+      const RGWZoneParams& zone = svc_zone->get_zone_params();
+      return rgwrados::account::get_buckets_obj(zone, id);
+    }
+  };
+  return std::visit(visitor{svc_user, svc_zone}, owner);
+}
+
+int RadosStore::list_buckets(const DoutPrefixProvider* dpp,
+                             const rgw_owner& owner, const std::string& tenant,
+                             const std::string& marker, const std::string& end_marker,
+                             uint64_t max, bool need_stats,
+                             BucketList& listing, optional_yield y)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
+
+  int ret = rgwrados::buckets::list(dpp, y, rados, obj, tenant,
+                                    marker, end_marker, max, listing);
+  if (ret < 0) {
+    return ret;
+  }
+
+  if (need_stats) {
+    ret = ctl()->bucket->read_buckets_stats(listing.buckets, y, dpp);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not get stats for buckets" << dendl;
+      return ret;
+    }
+  }
+  return 0;
 }
 
 int RadosBucket::create(const DoutPrefixProvider* dpp,
@@ -167,24 +204,6 @@ int RadosUser::merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_a
 	  attrs[it.first] = it.second;
   }
   return store_user(dpp, y, false);
-}
-
-int RadosUser::read_stats(const DoutPrefixProvider *dpp,
-                             optional_yield y, RGWStorageStats* stats,
-			     ceph::real_time* last_stats_sync,
-			     ceph::real_time* last_stats_update)
-{
-  return store->ctl()->user->read_stats(dpp, get_id(), stats, y, last_stats_sync, last_stats_update);
-}
-
-int RadosUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
-{
-  return store->svc()->user->read_stats_async(dpp, get_id(), cb);
-}
-
-int RadosUser::complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y)
-{
-  return store->svc()->user->complete_flush_stats(dpp, get_id(), y);
 }
 
 int RadosUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch,
@@ -1097,27 +1116,44 @@ int RadosStore::delete_account(const DoutPrefixProvider* dpp,
   return write_mdlog_entry(dpp, y, *svc()->mdlog, "account", info.id, objv);
 }
 
-int RadosStore::load_account_stats(const DoutPrefixProvider* dpp,
-                                   optional_yield y, std::string_view id,
-                                   RGWStorageStats& stats,
-                                   ceph::real_time& last_synced,
-                                   ceph::real_time& last_updated)
+int RadosStore::load_stats(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           const rgw_owner& owner,
+                           RGWStorageStats& stats,
+                           ceph::real_time& last_synced,
+                           ceph::real_time& last_updated)
 {
-  const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  const rgw_raw_obj& obj = rgwrados::account::get_buckets_obj(zone, id);
   librados::Rados& rados = *getRados()->get_rados_handle();
+  const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
   return rgwrados::buckets::read_stats(dpp, y, rados, obj, stats,
                                        &last_synced, &last_updated);
 }
 
-int RadosStore::load_account_stats_async(const DoutPrefixProvider* dpp,
-                                         std::string_view id,
-                                         boost::intrusive_ptr<ReadStatsCB> cb)
+int RadosStore::load_stats_async(const DoutPrefixProvider* dpp,
+                                 const rgw_owner& owner,
+                                 boost::intrusive_ptr<ReadStatsCB> cb)
 {
-  const RGWZoneParams& zone = svc()->zone->get_zone_params();
-  const rgw_raw_obj& obj = rgwrados::account::get_buckets_obj(zone, id);
   librados::Rados& rados = *getRados()->get_rados_handle();
+  const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
   return rgwrados::buckets::read_stats_async(dpp, rados, obj, std::move(cb));
+}
+
+int RadosStore::reset_stats(const DoutPrefixProvider *dpp,
+                            optional_yield y,
+                            const rgw_owner& owner)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
+  return rgwrados::buckets::reset_stats(dpp, y, rados, obj);
+}
+
+int RadosStore::complete_flush_stats(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     const rgw_owner& owner)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
+  return rgwrados::buckets::complete_flush_stats(dpp, y, rados, obj);
 }
 
 std::unique_ptr<Object> RadosStore::get_object(const rgw_obj_key& k)

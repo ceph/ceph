@@ -13,18 +13,19 @@
 
 using namespace std;
 
-int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
-			    rgw::sal::User* user, optional_yield y)
+int rgw_sync_all_stats(const DoutPrefixProvider *dpp,
+                       optional_yield y, rgw::sal::Driver* driver,
+                       const rgw_owner& owner, const std::string& tenant)
 {
   size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
   rgw::sal::BucketList listing;
   int ret = 0;
   do {
-    ret = user->list_buckets(dpp, listing.next_marker, string(),
-                             max_entries, false, listing, y);
+    ret = driver->list_buckets(dpp, owner, tenant, listing.next_marker,
+                               string(), max_entries, false, listing, y);
     if (ret < 0) {
-      ldpp_dout(dpp, 0) << "failed to read user buckets: ret=" << ret << dendl;
+      ldpp_dout(dpp, 0) << "failed to list buckets: " << cpp_strerror(ret) << dendl;
       return ret;
     }
 
@@ -47,9 +48,9 @@ int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* dri
     }
   } while (!listing.next_marker.empty());
 
-  ret = user->complete_flush_stats(dpp, y);
+  ret = driver->complete_flush_stats(dpp, y, owner);
   if (ret < 0) {
-    cerr << "ERROR: failed to complete syncing user stats: ret=" << ret << std::endl;
+    ldpp_dout(dpp, 0) << "ERROR: failed to complete syncing owner stats: ret=" << ret << dendl;
     return ret;
   }
 
@@ -66,8 +67,9 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
 
   rgw::sal::BucketList listing;
   do {
-    int ret = user->list_buckets(dpp, listing.next_marker, string(),
-                                 max_entries, false, listing, y);
+    int ret = driver->list_buckets(dpp, user->get_id(), user->get_tenant(),
+                                   listing.next_marker, string(),
+                                   max_entries, false, listing, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;

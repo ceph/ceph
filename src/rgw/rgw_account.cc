@@ -312,37 +312,56 @@ int info(const DoutPrefixProvider* dpp,
 int stats(const DoutPrefixProvider* dpp,
           rgw::sal::Driver* driver,
           AdminOpState& op_state,
+          bool sync_stats,
+          bool reset_stats,
           std::string& err_msg,
           RGWFormatterFlusher& flusher,
           optional_yield y)
 {
   int ret = 0;
-  std::string account_id;
+  RGWAccountInfo info;
+  rgw::sal::Attrs attrs; // ignored
+  RGWObjVersionTracker objv; // ignored
 
   if (!op_state.account_id.empty()) {
-    account_id = op_state.account_id;
+    // look up account by id
+    ret = driver->load_account_by_id(dpp, y, op_state.account_id,
+                                     info, attrs, objv);
   } else if (!op_state.account_name.empty()) {
-    // look up account id by name
-    RGWAccountInfo info;
-    rgw::sal::Attrs attrs;
-    RGWObjVersionTracker objv;
+    // look up account by tenant/name
     ret = driver->load_account_by_name(dpp, y, op_state.tenant,
                                        op_state.account_name,
                                        info, attrs, objv);
-    if (ret < 0) {
-      return ret;
-    }
-    account_id = std::move(info.id);
   } else {
     err_msg = "requires account id or name";
     return -EINVAL;
+  }
+  if (ret < 0) {
+    err_msg = "failed to load account";
+    return ret;
+  }
+
+  const rgw_owner owner = rgw_account_id{info.id};
+
+  if (sync_stats) {
+    ret = rgw_sync_all_stats(dpp, y, driver, owner, info.tenant);
+    if (ret < 0) {
+      err_msg = "failed to sync account stats";
+      return ret;
+    }
+  } else if (reset_stats) {
+    ret = driver->reset_stats(dpp, y, owner);
+    if (ret < 0) {
+      err_msg = "failed to reset account stats";
+      return ret;
+    }
   }
 
   RGWStorageStats stats;
   ceph::real_time last_synced;
   ceph::real_time last_updated;
-  ret = driver->load_account_stats(dpp, y, account_id, stats,
-                                   last_synced, last_updated);
+  ret = driver->load_stats(dpp, y, owner, stats,
+                           last_synced, last_updated);
   if (ret < 0) {
     return ret;
   }

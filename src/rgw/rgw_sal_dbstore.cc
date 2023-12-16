@@ -32,16 +32,17 @@ using namespace std;
 
 namespace rgw::sal {
 
-  int DBUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
-      const string& end_marker, uint64_t max, bool need_stats,
-      BucketList &result, optional_yield y)
+  int DBStore::list_buckets(const DoutPrefixProvider *dpp,
+      const rgw_owner& owner, const std::string& tenant,
+      const string& marker, const string& end_marker, uint64_t max,
+      bool need_stats, BucketList &result, optional_yield y)
   {
     RGWUserBuckets ulist;
     bool is_truncated = false;
 
-    std::string owner = info.user_id.to_str();
-    int ret = store->getDB()->list_buckets(dpp, "", owner, marker,
-        end_marker, max, need_stats, &ulist, &is_truncated);
+    std::string ownerstr = to_string(owner);
+    int ret = getDB()->list_buckets(dpp, "", ownerstr,
+        marker, end_marker, max, need_stats, &ulist, &is_truncated);
     if (ret < 0)
       return ret;
 
@@ -80,25 +81,6 @@ namespace rgw::sal {
     ret = store->getDB()->get_user(dpp, string("user_id"), get_id().id, info, &attrs,
         &objv_tracker);
     return ret;
-  }
-
-  int DBUser::read_stats(const DoutPrefixProvider *dpp,
-      optional_yield y, RGWStorageStats* stats,
-      ceph::real_time *last_stats_sync,
-      ceph::real_time *last_stats_update)
-  {
-    return 0;
-  }
-
-  /* stats - Not for first pass */
-  int DBUser::read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb)
-  {
-    return 0;
-  }
-
-  int DBUser::complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y)
-  {
-    return 0;
   }
 
   int DBUser::read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
@@ -1592,20 +1574,32 @@ namespace rgw::sal {
     return -ENOTSUP;
   }
 
-  int DBStore::load_account_stats(const DoutPrefixProvider* dpp,
-                                  optional_yield y, std::string_view id,
-                                  RGWStorageStats& stats,
-                                  ceph::real_time& last_synced,
-                                  ceph::real_time& last_updated)
+  int DBStore::load_stats(const DoutPrefixProvider* dpp,
+                          optional_yield y,
+                          const rgw_owner& owner,
+                          RGWStorageStats& stats,
+                          ceph::real_time& last_synced,
+                          ceph::real_time& last_updated)
+  {
+    return 0;
+  }
+  int DBStore::load_stats_async(const DoutPrefixProvider* dpp,
+                                const rgw_owner& owner,
+                                boost::intrusive_ptr<ReadStatsCB> cb)
   {
     return -ENOTSUP;
   }
-
-  int DBStore::load_account_stats_async(const DoutPrefixProvider* dpp,
-                                        std::string_view id,
-                                        boost::intrusive_ptr<ReadStatsCB> cb)
+  int DBStore::reset_stats(const DoutPrefixProvider *dpp,
+                           optional_yield y,
+                           const rgw_owner& owner)
   {
     return -ENOTSUP;
+  }
+  int DBStore::complete_flush_stats(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    const rgw_owner& owner)
+  {
+    return 0;
   }
 
   std::string DBStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)

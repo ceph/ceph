@@ -45,10 +45,11 @@ namespace rgw::sal {
 using ::ceph::decode;
 using ::ceph::encode;
 
-int DaosUser::list_buckets(const DoutPrefixProvider* dpp, const string& marker,
-                           const string& end_marker, uint64_t max,
-                           bool need_stats, BucketList& buckets,
-                           optional_yield y) {
+int DaosStore::list_buckets(const DoutPrefixProvider* dpp,
+                            const rgw_owner& owner, const std::string& tenant,
+                            const string& marker, const string& end_marker,
+                            uint64_t max, bool need_stats, BucketList& buckets,
+                            optional_yield y) {
   ldpp_dout(dpp, 20) << "DEBUG: list_user_buckets: marker=" << marker
                      << " end_marker=" << end_marker << " max=" << max << dendl;
   int ret = 0;
@@ -65,7 +66,7 @@ int DaosUser::list_buckets(const DoutPrefixProvider* dpp, const string& marker,
   char daos_marker[DS3_MAX_BUCKET_NAME];
   std::strncpy(daos_marker, marker.c_str(), sizeof(daos_marker));
   ret = ds3_bucket_list(&bcount, bucket_infos.data(), daos_marker,
-                        &is_truncated, store->ds3, nullptr);
+                        &is_truncated, ds3, nullptr);
   ldpp_dout(dpp, 20) << "DEBUG: ds3_bucket_list: bcount=" << bcount
                      << " ret=" << ret << dendl;
   if (ret != 0) {
@@ -82,7 +83,7 @@ int DaosUser::list_buckets(const DoutPrefixProvider* dpp, const string& marker,
     bl.append(reinterpret_cast<char*>(bi.encoded), bi.encoded_length);
     auto iter = bl.cbegin();
     dbinfo.decode(iter);
-    buckets.add(std::make_unique<DaosBucket>(this->store, dbinfo.info, this));
+    buckets.add(std::make_unique<DaosBucket>(this, dbinfo.info, this));
   }
 
   buckets.set_truncated(is_truncated);

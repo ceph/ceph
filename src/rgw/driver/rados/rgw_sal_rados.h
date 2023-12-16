@@ -174,19 +174,32 @@ class RadosStore : public StoreDriver {
                        optional_yield y,
                        const RGWAccountInfo& info,
                        RGWObjVersionTracker& objv) override;
-    int load_account_stats(const DoutPrefixProvider* dpp,
-                           optional_yield y, std::string_view id,
-                           RGWStorageStats& stats,
-                           ceph::real_time& last_synced,
-                           ceph::real_time& last_updated) override;
-    int load_account_stats_async(const DoutPrefixProvider* dpp,
-                                 std::string_view id,
-                                 boost::intrusive_ptr<ReadStatsCB> cb) override;
+
+    int load_stats(const DoutPrefixProvider* dpp,
+                   optional_yield y,
+                   const rgw_owner& owner,
+                   RGWStorageStats& stats,
+                   ceph::real_time& last_synced,
+                   ceph::real_time& last_updated) override;
+    int load_stats_async(const DoutPrefixProvider* dpp,
+                         const rgw_owner& owner,
+                         boost::intrusive_ptr<ReadStatsCB> cb) override;
+    int reset_stats(const DoutPrefixProvider *dpp,
+                    optional_yield y,
+                    const rgw_owner& owner) override;
+    int complete_flush_stats(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             const rgw_owner& owner) override;
 
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
     int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                     std::unique_ptr<Bucket>* bucket, optional_yield y) override;
+    int list_buckets(const DoutPrefixProvider* dpp,
+		     const rgw_owner& owner, const std::string& tenant,
+		     const std::string& marker, const std::string& end_marker,
+		     uint64_t max, bool need_stats, BucketList& buckets,
+		     optional_yield y) override;
     virtual bool is_meta_master() override;
     virtual Zone* get_zone() { return zone.get(); }
     virtual std::string zone_unique_id(uint64_t unique_num) override;
@@ -349,17 +362,8 @@ class RadosUser : public StoreUser {
     virtual std::unique_ptr<User> clone() override {
       return std::unique_ptr<User>(new RadosUser(*this));
     }
-    int list_buckets(const DoutPrefixProvider* dpp, const std::string& marker, const std::string& end_marker,
-		     uint64_t max, bool need_stats, BucketList& buckets,
-		     optional_yield y) override;
     virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) override;
-    virtual int read_stats(const DoutPrefixProvider *dpp,
-                           optional_yield y, RGWStorageStats* stats,
-			   ceph::real_time* last_stats_sync = nullptr,
-			   ceph::real_time* last_stats_update = nullptr) override;
-    virtual int read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<ReadStatsCB> cb) override;
-    virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override;
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries,
 			   bool* is_truncated, RGWUsageIter& usage_iter,
 			   std::map<rgw_user_bucket, rgw_usage_log_entry>& usage) override;

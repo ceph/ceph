@@ -93,18 +93,6 @@ public:
     return 0;
   }
 
-  virtual int read_stats(const DoutPrefixProvider *dpp, optional_yield y, RGWStorageStats* stats, ceph::real_time *last_stats_sync, ceph::real_time *last_stats_update) override {
-    return 0;
-  }
-
-  virtual int read_stats_async(const DoutPrefixProvider *dpp, boost::intrusive_ptr<sal::ReadStatsCB> cb) override {
-    return 0;
-  }
-
-  virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) override {
-    return 0;
-  }
-
   virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch, uint64_t end_epoch, uint32_t max_entries, bool *is_truncated, RGWUsageIter& usage_iter, map<rgw_user_bucket, rgw_usage_log_entry>& usage) override {
     return 0;
   }

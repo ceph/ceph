@@ -1572,8 +1572,9 @@ int RGWUser::execute_rename(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   rgw::sal::BucketList listing;
   do {
-    ret = old_user->list_buckets(dpp, listing.next_marker, "",
-                                 max_entries, false, listing, y);
+    ret = driver->list_buckets(dpp, old_user->get_id(), old_user->get_tenant(),
+                               listing.next_marker, "", max_entries, false,
+                               listing, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to list user buckets");
       return ret;
@@ -1813,8 +1814,9 @@ int RGWUser::execute_remove(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
   rgw::sal::BucketList listing;
   do {
-    ret = user->list_buckets(dpp, listing.next_marker, string(),
-                             max_buckets, false, listing, y);
+    ret = driver->list_buckets(dpp, user->get_id(), user->get_tenant(),
+                               listing.next_marker, string(),
+                               max_buckets, false, listing, y);
     if (ret < 0) {
       set_err_msg(err_msg, "unable to list user buckets");
       return ret;
@@ -1969,8 +1971,9 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
 
     rgw::sal::BucketList listing;
     do {
-      ret = user->list_buckets(dpp, listing.next_marker, string(),
-                               max_buckets, false, listing, y);
+      ret = driver->list_buckets(dpp, user->get_id(), user->get_tenant(),
+                                 listing.next_marker, string(),
+                                 max_buckets, false, listing, y);
       if (ret < 0) {
         set_err_msg(err_msg, "could not get buckets for uid:  " + user_id.to_str());
         return ret;
@@ -2182,7 +2185,7 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   ruser = driver->get_user(info.user_id);
 
   if (op_state.sync_stats) {
-    ret = rgw_user_sync_all_stats(dpp, driver, ruser.get(), y);
+    ret = rgw_sync_all_stats(dpp, y, driver, ruser->get_id(), ruser->get_tenant());
     if (ret < 0) {
       return ret;
     }
@@ -2191,7 +2194,10 @@ int RGWUserAdminOp_User::info(const DoutPrefixProvider *dpp,
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
-    int ret = ruser->read_stats(dpp, y, &stats);
+    ceph::real_time last_synced; // ignored
+    ceph::real_time last_updated; // ignored
+    int ret = driver->load_stats(dpp, y, ruser->get_id(), stats,
+                                 last_synced, last_updated);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
@@ -2784,47 +2790,6 @@ int RGWUserCtl::remove_info(const DoutPrefixProvider *dpp,
     return svc.user->remove_user_info(op->ctx(), info,
                                       params.objv_tracker,
                                       y, dpp);
-  });
-}
-
-int RGWUserCtl::list_buckets(const DoutPrefixProvider *dpp, 
-                             const rgw_user& user,
-                             const string& marker,
-                             const string& end_marker,
-                             uint64_t max,
-                             bool need_stats,
-                             rgw::sal::BucketList& listing,
-			     optional_yield y,
-                             uint64_t default_max)
-{
-  if (!max) {
-    max = default_max;
-  }
-
-  int ret = svc.user->list_buckets(dpp, user, marker, end_marker,
-                                   max, listing, y);
-  if (ret < 0) {
-    return ret;
-  }
-  if (need_stats) {
-    ret = ctl.bucket->read_buckets_stats(listing.buckets, y, dpp);
-    if (ret < 0 && ret != -ENOENT) {
-      ldpp_dout(dpp, 0) << "ERROR: could not get stats for buckets" << dendl;
-      return ret;
-    }
-  }
-  return 0;
-}
-
-int RGWUserCtl::read_stats(const DoutPrefixProvider *dpp, 
-                           const rgw_user& user, RGWStorageStats *stats,
-			   optional_yield y,
-			   ceph::real_time *last_stats_sync,
-			   ceph::real_time *last_stats_update)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    return svc.user->read_stats(dpp, op->ctx(), user, stats,
-				last_stats_sync, last_stats_update, y);
   });
 }
 

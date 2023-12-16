@@ -168,9 +168,6 @@ class DaosUser : public StoreUser {
   virtual std::unique_ptr<User> clone() override {
     return std::make_unique<DaosUser>(*this);
   }
-  int list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
-                   const std::string& end_marker, uint64_t max, bool need_stats,
-                   BucketList& buckets, optional_yield y) override;
   virtual int create_bucket(
       const DoutPrefixProvider* dpp, const rgw_bucket& b,
       const std::string& zonegroup_id, rgw_placement_rule& placement_rule,
@@ -903,6 +900,11 @@ class DaosStore : public StoreDriver {
   int load_bucket(const DoutPrefixProvider* dpp, User* u,
                   const rgw_bucket& b, std::unique_ptr<Bucket>* bucket,
                   optional_yield y) override;
+  int list_buckets(const DoutPrefixProvider* dpp,
+                   const rgw_owner& owner, const std::string& tenant,
+                   const std::string& marker, const std::string& end_marker,
+                   uint64_t max, bool need_stats,
+                   BucketList& buckets, optional_yield y) override;
   virtual bool is_meta_master() override;
   virtual Zone* get_zone() { return &zone; }
   virtual std::string zone_unique_id(uint64_t unique_num) override;
