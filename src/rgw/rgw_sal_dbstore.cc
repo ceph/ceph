@@ -1602,6 +1602,21 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBStore::load_owner_by_email(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view email,
+                                   rgw_owner& owner)
+  {
+    RGWUserInfo uinfo;
+    int ret = getDB()->get_user(dpp, "email", std::string{email},
+                                uinfo, nullptr, nullptr);
+    if (ret < 0) {
+      return ret;
+    }
+    owner = std::move(uinfo.user_id);
+    return 0;
+  }
+
   std::string DBStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)
   {
     return "PLACEHOLDER"; // for instance unique identifier

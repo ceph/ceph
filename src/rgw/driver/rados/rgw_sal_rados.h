@@ -191,6 +191,11 @@ class RadosStore : public StoreDriver {
                              optional_yield y,
                              const rgw_owner& owner) override;
 
+    int load_owner_by_email(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view email,
+                            rgw_owner& owner) override;
+
     virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
     std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
     int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
