@@ -926,6 +926,8 @@ bool PgScrubber::select_range()
 
 void PgScrubber::select_range_n_notify()
 {
+  get_counters_set().inc(scrbcnt_chunks_selected);
+
   if (select_range()) {
     // the next chunk to handle is not blocked
     dout(20) << __func__ << ": selection OK" << dendl;
@@ -935,6 +937,7 @@ void PgScrubber::select_range_n_notify()
     // we will wait for the objects range to become available for scrubbing
     dout(10) << __func__ << ": selected chunk is busy" << dendl;
     m_osds->queue_scrub_chunk_busy(m_pg, Scrub::scrub_prio_t::low_priority);
+    get_counters_set().inc(scrbcnt_chunks_busy);
   }
 }
 
@@ -944,6 +947,7 @@ bool PgScrubber::write_blocked_by_scrub(const hobject_t& soid)
     return false;
   }
 
+  get_counters_set().inc(scrbcnt_write_blocked);
   dout(20) << __func__ << " " << soid << " can preempt? "
 	   << preemption_data.is_preemptable() << " already preempted? "
 	   << preemption_data.was_preempted() << dendl;
@@ -1060,6 +1064,11 @@ void PgScrubber::update_op_mode_text()
 	   << ": repair: visible: " << (visible_repair ? "true" : "false")
 	   << ", internal: " << (m_is_repair ? "true" : "false")
 	   << ". Displayed: " << m_mode_desc << dendl;
+}
+
+std::string_view PgScrubber::get_op_mode_text() const
+{
+  return m_mode_desc;
 }
 
 void PgScrubber::_request_scrub_map(pg_shard_t replica,
@@ -2077,14 +2086,15 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 	false};
 
     } else {
-      int32_t duration = (utime_t{now_is} - scrub_begin_stamp).sec();
+      int32_t dur_seconds =
+	  duration_cast<seconds>(m_fsm->get_time_scrubbing()).count();
       return pg_scrubbing_status_t{
-	utime_t{},
-	duration,
-	pg_scrub_sched_status_t::active,
-	true,  // active
-	(m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
-	false /* is periodic? unknown, actually */};
+	  utime_t{},
+	  dur_seconds,
+	  pg_scrub_sched_status_t::active,
+	  true,	 // active
+	  (m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow),
+	  false /* is periodic? unknown, actually */};
     }
   }
   if (m_scrub_job->state != Scrub::qu_state_t::registered) {
@@ -2175,24 +2185,23 @@ PgScrubber::PgScrubber(PG* pg)
       m_osds->cct, m_pg->pg_id, m_osds->get_nodeid());
 }
 
-void PgScrubber::set_scrub_begin_time()
+void PgScrubber::set_scrub_duration(std::chrono::milliseconds duration)
 {
-  scrub_begin_stamp = ceph_clock_now();
-  m_osds->clog->debug() << fmt::format(
-    "{} {} starts",
-    m_pg->info.pgid.pgid,
-    m_mode_desc);
-}
-
-void PgScrubber::set_scrub_duration()
-{
-  utime_t stamp = ceph_clock_now();
-  utime_t duration = stamp - scrub_begin_stamp;
+  dout(20) << fmt::format("{}: to {}", __func__, duration) << dendl;
+  double dur_ms = double(duration.count());
   m_pg->recovery_state.update_stats([=](auto& history, auto& stats) {
-    stats.last_scrub_duration = ceill(duration.to_msec() / 1000.0);
-    stats.scrub_duration = double(duration);
+    stats.last_scrub_duration = ceill(dur_ms / 1000.0);
+    stats.scrub_duration = dur_ms;
     return true;
   });
+}
+
+PerfCounters& PgScrubber::get_counters_set() const
+{
+  return *m_osds->get_scrub_services().get_perf_counters(
+      (m_pg->pool.info.is_replicated() ? pg_pool_t::TYPE_REPLICATED
+				       : pg_pool_t::TYPE_ERASURE),
+      (m_is_deep ? scrub_level_t::deep : scrub_level_t::shallow));
 }
 
 void PgScrubber::cleanup_on_finish()

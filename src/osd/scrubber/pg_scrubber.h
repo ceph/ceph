@@ -363,6 +363,7 @@ class PgScrubber : public ScrubPgIF,
   int get_whoami() const final;
   spg_t get_spgid() const final { return m_pg->get_pgid(); }
   PG* get_pg() const final { return m_pg; }
+  PerfCounters& get_counters_set() const final;
 
   // temporary interface (to be discarded in a follow-up PR)
   /// set the 'resources_failure' flag in the scrub-job object
@@ -470,11 +471,8 @@ class PgScrubber : public ScrubPgIF,
 
   std::string dump_awaited_maps() const final;
 
-  void set_scrub_begin_time() final;
+  void set_scrub_duration(std::chrono::milliseconds duration) final;
 
-  void set_scrub_duration() final;
-
-  utime_t scrub_begin_stamp;
   std::ostream& gen_prefix(std::ostream& out) const final;
 
   /// facilitate scrub-backend access to SnapMapper mappings
@@ -767,6 +765,8 @@ class PgScrubber : public ScrubPgIF,
   std::string_view m_mode_desc;
 
   void update_op_mode_text();
+
+  std::string_view get_op_mode_text() const final;
 
  private:
   /**
