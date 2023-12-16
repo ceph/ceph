@@ -93,17 +93,18 @@ static void dump_mulipart_index_results(list<rgw_obj_index_key>& objs_to_unlink,
   }
 }
 
-void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& user,
-				   bool fix,
-				   optional_yield y,
-                                   const DoutPrefixProvider *dpp)
+void check_bad_owner_bucket_mapping(rgw::sal::Driver* driver,
+                                    const rgw_owner& owner,
+                                    const std::string& tenant,
+                                    bool fix, optional_yield y,
+                                    const DoutPrefixProvider *dpp)
 {
   size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
   rgw::sal::BucketList listing;
   do {
-    int ret = user.list_buckets(dpp, listing.next_marker, string(),
-                                max_entries, false, listing, y);
+    int ret = driver->list_buckets(dpp, owner, tenant, listing.next_marker,
+                                   string(), max_entries, false, listing, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "failed to read user buckets: "
           << cpp_strerror(-ret) << dendl;
@@ -112,7 +113,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
 
     for (const auto& ent : listing.buckets) {
       std::unique_ptr<rgw::sal::Bucket> bucket;
-      int r = driver->load_bucket(dpp, rgw_bucket(user.get_tenant(), ent.bucket.name),
+      int r = driver->load_bucket(dpp, rgw_bucket(tenant, ent.bucket.name),
                                   &bucket, y);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "could not get bucket info for bucket=" << bucket << dendl;
@@ -124,7 +125,7 @@ void check_bad_user_bucket_mapping(rgw::sal::Driver* driver, rgw::sal::User& use
             << " got " << bucket << std::endl;
         if (fix) {
           cout << "fixing" << std::endl;
-	  r = bucket->chown(dpp, user.get_id(), y);
+	  r = bucket->chown(dpp, owner, y);
           if (r < 0) {
             cerr << "failed to fix bucket: " << cpp_strerror(-r) << std::endl;
           }
@@ -1383,7 +1384,7 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
   formatter->open_array_section("users");
 
   for (const auto& user_id : user_ids) {
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_id));
+    const auto user = rgw_user{user_id};
 
     formatter->open_object_section("user");
     formatter->dump_string("user_id", user_id);
@@ -1391,8 +1392,8 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
 
     rgw::sal::BucketList listing;
     do {
-      ret = user->list_buckets(dpp, listing.next_marker, string(),
-                               max_entries, false, listing, y);
+      ret = driver->list_buckets(dpp, user, user.tenant, listing.next_marker,
+                                 string(), max_entries, false, listing, y);
       if (ret < 0)
         return ret;
 
@@ -1466,6 +1467,47 @@ int RGWBucketAdminOp::limit_check(rgw::sal::Driver* driver,
   return ret;
 } /* RGWBucketAdminOp::limit_check */
 
+static int list_owner_bucket_info(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  rgw::sal::Driver* driver,
+                                  const rgw_owner& owner,
+                                  const std::string& tenant,
+                                  const std::string& marker,
+                                  bool show_stats,
+                                  RGWFormatterFlusher& flusher)
+{
+  Formatter* formatter = flusher.get_formatter();
+  formatter->open_array_section("buckets");
+
+  const std::string empty_end_marker;
+  const size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+  constexpr bool no_need_stats = false; // set need_stats to false
+
+  rgw::sal::BucketList listing;
+  listing.next_marker = marker;
+  do {
+    int ret = driver->list_buckets(dpp, owner, tenant, listing.next_marker,
+                                   empty_end_marker, max_entries, no_need_stats,
+                                   listing, y);
+    if (ret < 0) {
+      return ret;
+    }
+
+    for (const auto& ent : listing.buckets) {
+      if (show_stats) {
+        bucket_stats(driver, tenant, ent.bucket.name, formatter, dpp, y);
+      } else {
+        formatter->dump_string("bucket", ent.bucket.name);
+      }
+    } // for loop
+
+    flusher.flush();
+  } while (!listing.next_marker.empty());
+
+  formatter->close_section();
+  return 0;
+}
+
 int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
 			   RGWBucketAdminOpState& op_state,
 			   RGWFormatterFlusher& flusher,
@@ -1494,34 +1536,30 @@ int RGWBucketAdminOp::info(rgw::sal::Driver* driver,
       return ret;
     }
   } else if (op_state.is_user_op()) {
-    formatter->open_array_section("buckets");
+    const rgw_user& uid = op_state.get_user_id();
+    ret = list_owner_bucket_info(dpp, y, driver, uid, uid.tenant,
+                                 op_state.marker, show_stats, flusher);
+    if (ret < 0) {
+      return ret;
+    }
+  } else if (op_state.is_account_op()) {
+    // look up the account's tenant
+    const rgw_account_id& account_id = op_state.get_account_id();
+    RGWAccountInfo info;
+    rgw::sal::Attrs attrs; // ignored
+    RGWObjVersionTracker objv; // ignored
+    int ret = driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+    if (ret < 0) {
+      ldpp_dout(dpp, 1) << "failed to load account " << account_id
+          << ": " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
 
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(op_state.get_user_id());
-    const std::string empty_end_marker;
-    const size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
-    constexpr bool no_need_stats = false; // set need_stats to false
-
-    rgw::sal::BucketList listing;
-    listing.next_marker = op_state.marker;
-    do {
-      ret = user->list_buckets(dpp, listing.next_marker, empty_end_marker,
-                               max_entries, no_need_stats, listing, y);
-      if (ret < 0) {
-        return ret;
-      }
-
-      for (const auto& ent : listing.buckets) {
-        if (show_stats) {
-          bucket_stats(driver, user_id.tenant, ent.bucket.name, formatter, dpp, y);
-	} else {
-          formatter->dump_string("bucket", ent.bucket.name);
-	}
-      } // for loop
-
-      flusher.flush();
-    } while (!listing.next_marker.empty());
-
-    formatter->close_section();
+    ret = list_owner_bucket_info(dpp, y, driver, account_id, info.tenant,
+                                 op_state.marker, show_stats, flusher);
+    if (ret < 0) {
+      return ret;
+    }
   } else {
     void *handle = nullptr;
     bool truncated = true;

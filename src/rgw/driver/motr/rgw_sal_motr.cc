@@ -157,9 +157,10 @@ void MotrMetaCache::set_enabled(bool status)
 // TODO: properly handle the number of key/value pairs to get in
 // one query. Now the POC simply tries to retrieve all `max` number of pairs
 // with starting key `marker`.
-int MotrUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
-    const string& end_marker, uint64_t max, bool need_stats,
-    BucketList &buckets, optional_yield y)
+int MotrStore::list_buckets(const DoutPrefixProvider *dpp,
+    const rgw_owner& owner, const std::string& tenant,
+    const string& marker, const string& end_marker, uint64_t max,
+    bool need_stats, BucketList &buckets, optional_yield y)
 {
   int rc;
   vector<string> keys(max);
@@ -172,9 +173,9 @@ int MotrUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
 
   // Retrieve all `max` number of pairs.
   buckets.clear();
-  string user_info_iname = "motr.rgw.user.info." + info.user_id.to_str();
+  string user_info_iname = "motr.rgw.user.info." + to_string(owner);
   keys[0] = marker;
-  rc = store->next_query_by_name(user_info_iname, keys, vals);
+  rc = next_query_by_name(user_info_iname, keys, vals);
   if (rc < 0) {
     ldpp_dout(dpp, 0) << "ERROR: NEXT query failed. " << rc << dendl;
     return rc;
@@ -197,7 +198,7 @@ int MotrUser::list_buckets(const DoutPrefixProvider *dpp, const string& marker,
          end_marker.compare(ent.bucket.marker) <= 0)
       break;
 
-    buckets.add(std::make_unique<MotrBucket>(this->store, ent, this));
+    buckets.add(std::make_unique<MotrBucket>(this, ent, this));
     bcount++;
   }
   if (bcount == max)
