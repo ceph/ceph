@@ -335,6 +335,7 @@ static int read_aclowner_by_email(const DoutPrefixProvider* dpp,
 }
 
 static int parse_grantee_str(const DoutPrefixProvider* dpp,
+                             optional_yield y,
                              rgw::sal::Driver* driver,
                              const std::string& grantee_str,
                              const s3_acl_header* perm,
@@ -352,7 +353,7 @@ static int parse_grantee_str(const DoutPrefixProvider* dpp,
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
     ACLOwner owner;
-    ret = read_aclowner_by_email(dpp, null_yield, driver, id_val, owner);
+    ret = read_aclowner_by_email(dpp, y, driver, id_val, owner);
     if (ret < 0)
       return ret;
 
@@ -360,7 +361,7 @@ static int parse_grantee_str(const DoutPrefixProvider* dpp,
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
     ACLOwner owner;
     owner.id = parse_owner(id_val);
-    ret = read_owner_display_name(dpp, null_yield, driver,
+    ret = read_owner_display_name(dpp, y, driver,
                                   owner.id, owner.display_name);
     if (ret < 0)
       return ret;
@@ -379,7 +380,8 @@ static int parse_grantee_str(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-static int parse_acl_header(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
+static int parse_acl_header(const DoutPrefixProvider* dpp,
+                            optional_yield y, rgw::sal::Driver* driver,
                             const RGWEnv& env, const s3_acl_header* perm,
                             RGWAccessControlList& acl)
 {
@@ -390,7 +392,7 @@ static int parse_acl_header(const DoutPrefixProvider* dpp, rgw::sal::Driver* dri
 
   for (std::string_view grantee : ceph::split(hacl, ",")) {
     ACLGrant grant;
-    int ret = parse_grantee_str(dpp, driver, std::string{grantee}, perm, grant);
+    int ret = parse_grantee_str(dpp, y, driver, std::string{grantee}, perm, grant);
     if (ret < 0)
       return ret;
 
@@ -685,6 +687,7 @@ int create_canned_acl(const ACLOwner& owner,
 }
 
 int create_policy_from_headers(const DoutPrefixProvider* dpp,
+                               optional_yield y,
                                rgw::sal::Driver* driver,
                                const ACLOwner& owner,
                                const RGWEnv& env,
@@ -694,7 +697,7 @@ int create_policy_from_headers(const DoutPrefixProvider* dpp,
   auto& acl = policy.get_acl();
 
   for (const s3_acl_header* p = acl_header_perms; p->rgw_perm; p++) {
-    int r = parse_acl_header(dpp, driver, env, p, acl);
+    int r = parse_acl_header(dpp, y, driver, env, p, acl);
     if (r < 0) {
       return r;
     }
