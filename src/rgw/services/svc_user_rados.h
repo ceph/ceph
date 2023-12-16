@@ -144,4 +144,7 @@ public:
                                   real_time *pmtime,
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp) override;
+
+  int read_email_index(const DoutPrefixProvider* dpp, optional_yield y,
+                       std::string_view email, RGWUID& uid) override;
 };

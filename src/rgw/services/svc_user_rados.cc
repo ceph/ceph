@@ -517,6 +517,26 @@ int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RG
   return 0;
 }
 
+static int read_index(const DoutPrefixProvider* dpp, optional_yield y,
+                      RGWSI_SysObj* svc_sysobj, const rgw_pool& pool,
+                      const std::string& key, ceph::real_time* mtime,
+                      RGWUID& uid)
+{
+  bufferlist bl;
+  int r = rgw_get_system_obj(svc_sysobj, pool, key, bl,
+                             nullptr, mtime, y, dpp);
+  if (r < 0) {
+    return r;
+  }
+  try {
+    auto iter = bl.cbegin();
+    decode(uid, iter);
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+  return 0;
+}
+
 int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
                                                const string& key,
                                                const rgw_pool& pool,
@@ -537,21 +557,11 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
   }
 
   user_info_cache_entry e;
-  bufferlist bl;
   RGWUID uid;
 
-  int ret = rgw_get_system_obj(svc.sysobj, pool, key, bl, nullptr, &e.mtime, y, dpp);
-  if (ret < 0)
+  int ret = read_index(dpp, y, svc.sysobj, pool, key, &e.mtime, uid);
+  if (ret < 0) {
     return ret;
-
-  rgw_cache_entry_info cache_info;
-
-  try {
-    auto iter = bl.cbegin();
-    decode(uid, iter);
-  } catch (const buffer::error&) {
-    ldpp_dout(dpp, 0) << "ERROR: failed to decode user info, caught buffer::error" << dendl;
-    return -EIO;
   }
 
   if (rgw::account::validate_id(uid.id)) {
@@ -559,6 +569,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context* ctx,
     return -ENOENT;
   }
 
+  rgw_cache_entry_info cache_info;
   ret = read_user_info(ctx, rgw_user{uid.id}, &e.info, &e.objv_tracker,
                        nullptr, &cache_info, nullptr, y, dpp);
   if (ret < 0) {
@@ -622,4 +633,13 @@ int RGWSI_User_RADOS::get_user_info_by_access_key(RGWSI_MetaBackend::Context *ct
                                   access_key,
                                   svc.zone->get_zone_params().user_keys_pool,
                                   info, objv_tracker, pmtime, y, dpp);
+}
+
+int RGWSI_User_RADOS::read_email_index(const DoutPrefixProvider* dpp,
+                                       optional_yield y,
+                                       std::string_view email,
+                                       RGWUID& uid)
+{
+  const rgw_pool& pool = svc.zone->get_zone_params().user_email_pool;
+  return read_index(dpp, y, svc.sysobj, pool, std::string{email}, nullptr, uid);
 }
