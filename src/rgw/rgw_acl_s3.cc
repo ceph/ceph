@@ -298,6 +298,42 @@ struct s3_acl_header {
   const char *http_header;
 };
 
+static int read_owner_display_name(const DoutPrefixProvider* dpp,
+                                   optional_yield y, rgw::sal::Driver* driver,
+                                   const rgw_owner& owner, std::string& name)
+{
+  return std::visit(fu2::overload(
+      [&] (const rgw_user& uid) {
+        auto user = driver->get_user(uid);
+        int r = user->load_user(dpp, y);
+        if (r >= 0) {
+          name = user->get_display_name();
+        }
+        return r;
+      },
+      [&] (const rgw_account_id& account_id) {
+        RGWAccountInfo info;
+        rgw::sal::Attrs attrs;
+        RGWObjVersionTracker objv;
+        // don't use account names in acls. just verify that the account exists
+        return driver->load_account_by_id(dpp, y, account_id, info, attrs, objv);
+      }), owner);
+}
+
+static int read_aclowner_by_email(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  rgw::sal::Driver* driver,
+                                  std::string_view email,
+                                  ACLOwner& aclowner)
+{
+  int ret = driver->load_owner_by_email(dpp, y, email, aclowner.id);
+  if (ret < 0) {
+    return ret;
+  }
+  return read_owner_display_name(dpp, y, driver, aclowner.id,
+                                 aclowner.display_name);
+}
+
 static int parse_grantee_str(const DoutPrefixProvider* dpp,
                              rgw::sal::Driver* driver,
                              const std::string& grantee_str,
@@ -316,18 +352,20 @@ static int parse_grantee_str(const DoutPrefixProvider* dpp,
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
     ACLOwner owner;
-    ret = driver->load_aclowner_by_email(dpp, null_yield, id_val, owner);
+    ret = read_aclowner_by_email(dpp, null_yield, driver, id_val, owner);
     if (ret < 0)
       return ret;
 
     grant.set_canon(owner.id, owner.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
-    std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(id_val));
-    ret = user->load_user(dpp, null_yield);
+    ACLOwner owner;
+    owner.id = parse_owner(id_val);
+    ret = read_owner_display_name(dpp, null_yield, driver,
+                                  owner.id, owner.display_name);
     if (ret < 0)
       return ret;
 
-    grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
+    grant.set_canon(owner.id, owner.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "uri") == 0) {
     ACLGroupTypeEnum gid = rgw::s3::acl_uri_to_group(id_val);
     if (gid == ACL_GROUP_NONE)
@@ -453,14 +491,13 @@ static int resolve_grant(const DoutPrefixProvider* dpp, optional_yield y,
 {
   const uint32_t perm = xml_grant.permission->flags;
 
-  std::unique_ptr<rgw::sal::User> user;
   ACLOwner owner;
   switch (xml_grant.type.get_type()) {
   case ACL_TYPE_EMAIL_USER:
     if (xml_grant.email.empty()) {
       return -EINVAL;
     }
-    if (driver->load_aclowner_by_email(dpp, y, xml_grant.email, owner) < 0) {
+    if (read_aclowner_by_email(dpp, y, driver, xml_grant.email, owner) < 0) {
       ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
       err_msg = "The e-mail address you provided does not match any account on record.";
       return -ERR_UNRESOLVABLE_EMAIL;
@@ -469,13 +506,14 @@ static int resolve_grant(const DoutPrefixProvider* dpp, optional_yield y,
     return 0;
 
   case ACL_TYPE_CANON_USER:
-    user = driver->get_user(rgw_user{xml_grant.id});
-    if (user->load_user(dpp, y) < 0) {
+    owner.id = parse_owner(xml_grant.id);
+    if (read_owner_display_name(dpp, y, driver, owner.id,
+                                owner.display_name) < 0) {
       ldpp_dout(dpp, 10) << "grant user does not exist: " << xml_grant.id << dendl;
       err_msg = "Invalid CanonicalUser id";
       return -EINVAL;
     }
-    grant.set_canon(user->get_id(), user->get_display_name(), perm);
+    grant.set_canon(owner.id, owner.display_name, perm);
     return 0;
 
   case ACL_TYPE_GROUP:
@@ -590,21 +628,18 @@ int parse_policy(const DoutPrefixProvider* dpp, optional_yield y,
     return -EINVAL;
   }
 
+  ACLOwner& owner = policy.get_owner();
+  owner.id = parse_owner(xml_owner->id);
+
   // owner must exist
-  std::unique_ptr<rgw::sal::User> user =
-      driver->get_user(rgw_user{xml_owner->id});
-  if (user->load_user(dpp, y) < 0) {
-    ldpp_dout(dpp, 10) << "acl owner does not exist" << dendl;
+  int r = read_owner_display_name(dpp, y, driver, owner.id, owner.display_name);
+  if (r < 0) {
+    ldpp_dout(dpp, 10) << "acl owner " << owner.id << " does not exist" << dendl;
     err_msg = "Invalid Owner ID";
     return -EINVAL;
   }
-
-  ACLOwner& owner = policy.get_owner();
-  owner.id = parse_owner(xml_owner->id);
   if (!xml_owner->display_name.empty()) {
     owner.display_name = xml_owner->display_name;
-  } else {
-    owner.display_name = user->get_display_name();
   }
 
   const auto xml_acl = static_cast<ACLOwner_S3*>(
@@ -619,7 +654,7 @@ int parse_policy(const DoutPrefixProvider* dpp, optional_yield y,
   ACLGrant_S3* xml_grant = static_cast<ACLGrant_S3*>(iter.get_next());
   while (xml_grant) {
     ACLGrant grant;
-    int r = resolve_grant(dpp, y, driver, *xml_grant, grant, err_msg);
+    r = resolve_grant(dpp, y, driver, *xml_grant, grant, err_msg);
     if (r < 0) {
       return r;
     }
