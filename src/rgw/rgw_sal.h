@@ -231,6 +231,18 @@ class ObjectProcessor : public DataProcessor {
                        uint32_t flags) = 0;
 };
 
+/**
+ * @brief A list of buckets
+ *
+ * This is the result from a bucket listing operation.
+ */
+struct BucketList {
+  /// The list of results, sorted by bucket name
+  std::vector<RGWBucketEnt> buckets;
+  /// The next marker to resume listing, or empty
+  std::string next_marker;
+};
+
 /** A list of key-value attributes */
   using Attrs = std::map<std::string, ceph::buffer::list>;
 
@@ -304,17 +316,25 @@ class Driver {
                                const RGWAccountInfo& info,
                                RGWObjVersionTracker& objv) = 0;
 
-    /** Load account storage stats */
-    virtual int load_account_stats(const DoutPrefixProvider* dpp,
-                                   optional_yield y, std::string_view id,
-                                   RGWStorageStats& stats,
-                                   ceph::real_time& last_synced,
-                                   ceph::real_time& last_updated) = 0;
-    /** Load account storage stats asynchronously */
-    virtual int load_account_stats_async(const DoutPrefixProvider* dpp,
-                                         std::string_view id,
-                                         boost::intrusive_ptr<ReadStatsCB> cb) = 0;
-
+    /** Load cumulative bucket storage stats for the given owner */
+    virtual int load_stats(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           const rgw_owner& owner,
+                           RGWStorageStats& stats,
+                           ceph::real_time& last_synced,
+                           ceph::real_time& last_updated) = 0;
+    /** Load owner storage stats asynchronously */
+    virtual int load_stats_async(const DoutPrefixProvider* dpp,
+                                 const rgw_owner& owner,
+                                 boost::intrusive_ptr<ReadStatsCB> cb) = 0;
+    /** Recalculate the sum of bucket stats */
+    virtual int reset_stats(const DoutPrefixProvider *dpp,
+                            optional_yield y,
+                            const rgw_owner& owner) = 0;
+    /** Finish syncing owner stats by updating last_synced timestamp */
+    virtual int complete_flush_stats(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     const rgw_owner& owner) = 0;
 
     /** Get a basic Object.  This Object is not looked up, and is incomplete, since is
      * does not have a bucket.  This should only be used when an Object is needed before
@@ -326,6 +346,12 @@ class Driver {
      * bucket must still be allocated to support bucket->create(). */
     virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                             std::unique_ptr<Bucket>* bucket, optional_yield y) = 0;
+    /** List the buckets of a given owner */
+    virtual int list_buckets(const DoutPrefixProvider* dpp,
+			     const rgw_owner& owner, const std::string& tenant,
+			     const std::string& marker, const std::string& end_marker,
+			     uint64_t max, bool need_stats, BucketList& buckets,
+			     optional_yield y) = 0;
     /** For multisite, this driver is the zone's master */
     virtual bool is_meta_master() = 0;
     /** Get zone info for this driver */
@@ -536,18 +562,6 @@ class ReadStatsCB : public boost::intrusive_ref_counter<ReadStatsCB> {
 };
 
 /**
- * @brief A list of buckets
- *
- * This is the result from a bucket listing operation.
- */
-struct BucketList {
-  /// The list of results, sorted by bucket name
-  std::vector<RGWBucketEnt> buckets;
-  /// The next marker to resume listing, or empty
-  std::string next_marker;
-};
-
-/**
  * @brief User abstraction
  *
  * This represents a user.  In general, there will be a @a User associated with an OP
@@ -563,11 +577,6 @@ class User {
 
     /** Clone a copy of this user.  Used when modification is necessary of the copy */
     virtual std::unique_ptr<User> clone() = 0;
-    /** List the buckets owned by a user */
-    virtual int list_buckets(const DoutPrefixProvider* dpp,
-			     const std::string& marker, const std::string& end_marker,
-			     uint64_t max, bool need_stats, BucketList& buckets,
-			     optional_yield y) = 0;
 
     /** Get the display name for this User */
     virtual std::string& get_display_name() = 0;
@@ -610,16 +619,6 @@ class User {
     /** Set the attributes in attrs, leaving any other existing attrs set, and
      * write them to the backing store; a merge operation */
     virtual int merge_and_store_attrs(const DoutPrefixProvider* dpp, Attrs& new_attrs, optional_yield y) = 0;
-    /** Read the User stats from the backing Store, synchronous */
-    virtual int read_stats(const DoutPrefixProvider *dpp,
-                           optional_yield y, RGWStorageStats* stats,
-			   ceph::real_time* last_stats_sync = nullptr,
-			   ceph::real_time* last_stats_update = nullptr) = 0;
-    /** Read the User stats from the backing Store, asynchronous */
-    virtual int read_stats_async(const DoutPrefixProvider *dpp,
-                                 boost::intrusive_ptr<ReadStatsCB> cb) = 0;
-    /** Flush accumulated stat changes for this User to the backing store */
-    virtual int complete_flush_stats(const DoutPrefixProvider *dpp, optional_yield y) = 0;
     /** Read detailed usage stats for this User from the backing store */
     virtual int read_usage(const DoutPrefixProvider *dpp, uint64_t start_epoch,
 			   uint64_t end_epoch, uint32_t max_entries,

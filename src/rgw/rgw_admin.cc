@@ -6545,6 +6545,7 @@ int main(int argc, const char **argv)
   }
 
   user_op.account_id = account_id;
+  bucket_op.account_id = account_id;
 
   // RGWUser to use for user operations
   RGWUser ruser;
@@ -8845,7 +8846,8 @@ next:
   }
 
   if (opt_cmd == OPT::USER_CHECK) {
-    check_bad_user_bucket_mapping(driver, *user.get(), fix, null_yield, dpp());
+    check_bad_owner_bucket_mapping(driver, user->get_id(), user->get_tenant(),
+                                   fix, null_yield, dpp());
   }
 
   if (opt_cmd == OPT::USER_STATS) {
@@ -8864,7 +8866,7 @@ next:
 	  "so at most one of the two should be specified" << std::endl;
 	return EINVAL;
       }
-      ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->user->reset_bucket_stats(dpp(), user->get_id(), null_yield);
+      ret = driver->reset_stats(dpp(), null_yield, user->get_id());
       if (ret < 0) {
 	cerr << "ERROR: could not reset user stats: " << cpp_strerror(-ret) <<
 	  std::endl;
@@ -8886,7 +8888,8 @@ next:
           return -ret;
         }
       } else {
-        int ret = rgw_user_sync_all_stats(dpp(), driver, user.get(), null_yield);
+        int ret = rgw_sync_all_stats(dpp(), null_yield, driver,
+                                     user->get_id(), user->get_tenant());
         if (ret < 0) {
           cerr << "ERROR: could not sync user stats: " <<
 	    cpp_strerror(-ret) << std::endl;
@@ -8899,7 +8902,8 @@ next:
     RGWStorageStats stats(omit_utilized_stats);
     ceph::real_time last_stats_sync;
     ceph::real_time last_stats_update;
-    int ret = user->read_stats(dpp(), null_yield, &stats, &last_stats_sync, &last_stats_update);
+    int ret = driver->load_stats(dpp(), null_yield, user->get_id(),
+                                 stats, last_stats_sync, last_stats_update);
     if (ret < 0) {
       if (ret == -ENOENT) { /* in case of ENOENT */
         cerr << "User has not been initialized or user does not exist" << std::endl;
@@ -11126,7 +11130,8 @@ next:
     }
 
     if (opt_cmd == OPT::ACCOUNT_STATS) {
-      ret = rgw::account::stats(dpp(), driver, op_state, err_msg,
+      ret = rgw::account::stats(dpp(), driver, op_state,
+                                sync_stats, reset_stats, err_msg,
                                 stream_flusher, null_yield);
       if (ret < 0) {
         cerr << "ERROR: failed to read account stats with " << cpp_strerror(-ret)

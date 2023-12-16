@@ -398,23 +398,27 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
    * users that didn't have quota turned on before (or existed before the user objclass
    * tracked stats) need to get their backend stats up to date.
    */
-  class UserSyncThread : public Thread {
+  class OwnerSyncThread : public Thread {
     CephContext *cct;
     RGWOwnerStatsCache *stats;
+    const std::string metadata_section;
 
-    ceph::mutex lock = ceph::make_mutex("RGWOwnerStatsCache::UserSyncThread");
+    ceph::mutex lock = ceph::make_mutex("RGWOwnerStatsCache::OwnerSyncThread");
     ceph::condition_variable cond;
   public:
 
-    UserSyncThread(CephContext *_cct, RGWOwnerStatsCache *_s) : cct(_cct), stats(_s) {}
+    OwnerSyncThread(CephContext *_cct, RGWOwnerStatsCache *_s,
+                    const std::string& metadata_section)
+      : cct(_cct), stats(_s), metadata_section(metadata_section)
+    {}
 
     void *entry() override {
-      ldout(cct, 20) << "UserSyncThread: start" << dendl;
+      ldout(cct, 20) << "OwnerSyncThread: start" << dendl;
       do {
         const DoutPrefix dp(cct, dout_subsys, "rgw user sync thread: ");
-        int ret = stats->sync_all_users(&dp, null_yield);
+        int ret = stats->sync_all_owners(&dp, metadata_section);
         if (ret < 0) {
-          ldout(cct, 5) << "ERROR: sync_all_users() returned ret=" << ret << dendl;
+          ldout(cct, 5) << "ERROR: sync_all_owners() returned ret=" << ret << dendl;
         }
 
         if (stats->going_down())
@@ -423,7 +427,7 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
 	std::unique_lock l{lock};
         cond.wait_for(l, std::chrono::seconds(cct->_conf->rgw_user_quota_sync_interval));
       } while (!stats->going_down());
-      ldout(cct, 20) << "UserSyncThread: done" << dendl;
+      ldout(cct, 20) << "OwnerSyncThread: done" << dendl;
 
       return NULL;
     }
@@ -436,8 +440,9 @@ class RGWOwnerStatsCache : public RGWQuotaCache<rgw_owner> {
 
   // TODO: AccountSyncThread and sync_all_accounts()
 
-  BucketsSyncThread *buckets_sync_thread;
-  UserSyncThread *user_sync_thread;
+  BucketsSyncThread* buckets_sync_thread = nullptr;
+  OwnerSyncThread* user_sync_thread = nullptr;
+  OwnerSyncThread* account_sync_thread = nullptr;
 protected:
   bool map_find(const rgw_owner& owner,const rgw_bucket& bucket, RGWQuotaCacheStats& qs) override {
     return stats_map.find(owner, qs);
@@ -453,9 +458,9 @@ protected:
 
   int fetch_stats_from_storage(const rgw_owner& owner, const rgw_bucket& bucket, RGWStorageStats& stats, optional_yield y, const DoutPrefixProvider *dpp) override;
   int sync_bucket(const rgw_owner& owner, const rgw_bucket& bucket, optional_yield y, const DoutPrefixProvider *dpp);
-  int sync_user(const DoutPrefixProvider *dpp, const rgw_user& user, optional_yield y);
-  int sync_all_users(const DoutPrefixProvider *dpp, optional_yield y);
-  // TODO: sync_account/sync_all_accounts
+  int sync_owner(const DoutPrefixProvider *dpp, const rgw_owner& owner, optional_yield y);
+  int sync_all_owners(const DoutPrefixProvider *dpp,
+                      const std::string& metadata_section);
 
   void data_modified(const rgw_owner& owner, const rgw_bucket& bucket) override;
 
@@ -483,11 +488,10 @@ public:
     if (quota_threads) {
       buckets_sync_thread = new BucketsSyncThread(driver->ctx(), this);
       buckets_sync_thread->create("rgw_buck_st_syn");
-      user_sync_thread = new UserSyncThread(driver->ctx(), this);
+      user_sync_thread = new OwnerSyncThread(driver->ctx(), this, "user");
       user_sync_thread->create("rgw_user_st_syn");
-    } else {
-      buckets_sync_thread = NULL;
-      user_sync_thread = NULL;
+      account_sync_thread = new OwnerSyncThread(driver->ctx(), this, "account");
+      account_sync_thread->create("rgw_acct_st_syn");
     }
   }
   ~RGWOwnerStatsCache() override {
@@ -508,6 +512,7 @@ public:
       stop_thread(&buckets_sync_thread);
     }
     stop_thread(&user_sync_thread);
+    stop_thread(&account_sync_thread);
   }
 };
 
@@ -534,14 +539,7 @@ int RGWOwnerStatsCache::init_refresh(const rgw_owner& owner, const rgw_bucket& b
 
   ldpp_dout(dpp, 20) << "initiating async quota refresh for owner=" << owner << dendl;
 
-  int r = std::visit(fu2::overload(
-      [&] (const rgw_user& user) {
-        std::unique_ptr<rgw::sal::User> ruser = driver->get_user(user);
-        return ruser->read_stats_async(dpp, std::move(cb));
-      },
-      [&] (const rgw_account_id& accountid) {
-        return driver->load_account_stats_async(dpp, accountid, std::move(cb));
-      }), owner);
+  int r = driver->load_stats_async(dpp, owner, std::move(cb));
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not read stats for owner=" << owner << dendl;
     return r;
@@ -566,16 +564,9 @@ int RGWOwnerStatsCache::fetch_stats_from_storage(const rgw_owner& owner,
                                                  optional_yield y,
                                                  const DoutPrefixProvider *dpp)
 {
-  int r = std::visit(fu2::overload(
-      [&] (const rgw_user& user) {
-        std::unique_ptr<rgw::sal::User> u = driver->get_user(user);
-        return u->read_stats(dpp, y, &stats);
-      },
-      [&] (const rgw_account_id& acct) {
-        ceph::real_time synced; // ignored
-        ceph::real_time updated; // ignored
-        return driver->load_account_stats(dpp, y, acct, stats, synced, updated);
-      }), owner);
+  ceph::real_time synced; // ignored
+  ceph::real_time updated; // ignored
+  int r = driver->load_stats(dpp, y, owner, stats, synced, updated);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "could not read stats for owner " << owner << dendl;
     return r;
@@ -605,22 +596,46 @@ int RGWOwnerStatsCache::sync_bucket(const rgw_owner& owner, const rgw_bucket& b,
   return bucket->check_bucket_shards(dpp, ent.count, y);
 }
 
-int RGWOwnerStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user& _u, optional_yield y)
+// for account owners, we need to look up the tenant name by account id
+static int get_owner_tenant(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            const rgw_owner& owner,
+                            std::string& tenant)
+{
+  return std::visit(fu2::overload(
+      [&] (const rgw_user& user) {
+        tenant = user.tenant;
+        return 0;
+      },
+      [&] (const rgw_account_id& account) {
+        RGWAccountInfo info;
+        rgw::sal::Attrs attrs;
+        RGWObjVersionTracker objv;
+        int ret = driver->load_account_by_id(dpp, y, account, info, attrs, objv);
+        if (ret >= 0) {
+          tenant = std::move(info.tenant);
+        }
+        return ret;
+      }), owner);
+}
+
+int RGWOwnerStatsCache::sync_owner(const DoutPrefixProvider *dpp,
+                                   const rgw_owner& owner, optional_yield y)
 {
   RGWStorageStats stats;
   ceph::real_time last_stats_sync;
   ceph::real_time last_stats_update;
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(_u);
 
-  int ret = user->read_stats(dpp, y, &stats, &last_stats_sync, &last_stats_update);
+  int ret = driver->load_stats(dpp, y, owner, stats, last_stats_sync, last_stats_update);
   if (ret < 0) {
-    ldpp_dout(dpp, 5) << "ERROR: can't read user header: ret=" << ret << dendl;
+    ldpp_dout(dpp, 5) << "ERROR: can't read owner stats: ret=" << ret << dendl;
     return ret;
   }
 
   if (!driver->ctx()->_conf->rgw_user_quota_sync_idle_users &&
       last_stats_update < last_stats_sync) {
-    ldpp_dout(dpp, 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
+    ldpp_dout(dpp, 20) << "owner is idle, not doing a full sync (owner=" << owner << ")" << dendl;
     return 0;
   }
 
@@ -628,9 +643,17 @@ int RGWOwnerStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user&
   when_need_full_sync += make_timespan(driver->ctx()->_conf->rgw_user_quota_sync_wait_time);
   
   // check if enough time passed since last full sync
-  /* FIXME: missing check? */
+  if (when_need_full_sync > ceph::real_clock::now()) {
+    return 0;
+  }
 
-  ret = rgw_user_sync_all_stats(dpp, driver, user.get(), y);
+  std::string tenant;
+  ret = get_owner_tenant(dpp, y, driver, owner, tenant);
+  if (ret < 0) {
+    return ret;
+  }
+
+  ret = rgw_sync_all_stats(dpp, y, driver, owner, tenant);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed user stats sync, ret=" << ret << dendl;
     return ret;
@@ -639,12 +662,11 @@ int RGWOwnerStatsCache::sync_user(const DoutPrefixProvider *dpp, const rgw_user&
   return 0;
 }
 
-int RGWOwnerStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_yield y)
+int RGWOwnerStatsCache::sync_all_owners(const DoutPrefixProvider *dpp,
+                                        const std::string& metadata_section)
 {
-  string key = "user";
   void *handle;
-
-  int ret = driver->meta_list_keys_init(dpp, key, string(), &handle);
+  int ret = driver->meta_list_keys_init(dpp, metadata_section, string(), &handle);
   if (ret < 0) {
     ldpp_dout(dpp, 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
@@ -658,25 +680,23 @@ int RGWOwnerStatsCache::sync_all_users(const DoutPrefixProvider *dpp, optional_y
     ret = driver->meta_list_keys_next(dpp, handle, max, keys, &truncated);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
-      goto done;
+      break;
     }
     for (list<string>::iterator iter = keys.begin();
          iter != keys.end() && !going_down(); 
          ++iter) {
-      rgw_user user(*iter);
-      ldpp_dout(dpp, 20) << "RGWOwnerStatsCache: sync user=" << user << dendl;
-      int ret = sync_user(dpp, user, y);
-      if (ret < 0) {
-        ldpp_dout(dpp, 5) << "ERROR: sync_user() failed, user=" << user << " ret=" << ret << dendl;
-
-        /* continuing to next user */
+      const rgw_owner owner = parse_owner(*iter);
+      ldpp_dout(dpp, 20) << "RGWOwnerStatsCache: sync owner=" << owner << dendl;
+      int r = sync_owner(dpp, owner, null_yield);
+      if (r < 0) {
+        ldpp_dout(dpp, 5) << "ERROR: sync_owner() failed, owner=" << owner
+            << " ret=" << r << dendl;
+        /* continuing to next owner */
         continue;
       }
     }
   } while (truncated);
 
-  ret = 0;
-done:
   driver->meta_list_keys_complete(handle);
   return ret;
 }
