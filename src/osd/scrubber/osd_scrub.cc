@@ -395,8 +395,9 @@ void OsdScrub::create_scrub_perf_counters()
   // create a separate set for each pool type & scrub level
   for (const auto& label : perf_labels) {
     PerfCounters* counters = build_scrub_labeled_perf(cct, label);
+    ceph_assert(counters);
     cct->get_perfcounters_collection()->add(counters);
-    m_perf_counters[*idx++] = counters;
+    m_perf_counters[*(idx++)] = counters;
   }
 }
 

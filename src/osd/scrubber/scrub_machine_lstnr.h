@@ -56,6 +56,12 @@ struct ScrubMachineListener {
   virtual spg_t get_spgid() const = 0;
   virtual PG* get_pg() const = 0;
 
+  /**
+   * access the set of performance counters relevant to this scrub
+   * (one of the four sets of counters maintained by the OSD)
+   */
+  virtual PerfCounters& get_counters_set() const = 0;
+
   using scrubber_callback_t = std::function<void(void)>;
   using scrubber_callback_cancel_token_t = Context*;
 
@@ -95,6 +101,9 @@ struct ScrubMachineListener {
   /// set the string we'd use in logs to convey the current state-machine
   /// state.
   virtual void set_state_name(const char* name) = 0;
+
+  /// access the text specifying scrub level and whether it is a repair
+  virtual std::string_view get_op_mode_text() const = 0;
 
   [[nodiscard]] virtual bool is_primary() const = 0;
 
@@ -174,9 +183,7 @@ struct ScrubMachineListener {
    */
   virtual void maps_compare_n_cleanup() = 0;
 
-  virtual void set_scrub_begin_time() = 0;
-
-  virtual void set_scrub_duration() = 0;
+  virtual void set_scrub_duration(std::chrono::milliseconds duration) = 0;
 
   /**
    * No new scrub session will start while a scrub was initiate on a PG,
