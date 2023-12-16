@@ -23,6 +23,7 @@
 #include <boost/process.hpp>
 
 #include "common/async/blocked_completion.h"
+#include "include/function2.hpp"
 
 #include "common/Clock.h"
 #include "common/errno.h"
@@ -1154,6 +1155,21 @@ int RadosStore::complete_flush_stats(const DoutPrefixProvider* dpp,
   librados::Rados& rados = *getRados()->get_rados_handle();
   const rgw_raw_obj& obj = get_owner_buckets_obj(svc()->user, svc()->zone, owner);
   return rgwrados::buckets::complete_flush_stats(dpp, y, rados, obj);
+}
+
+int RadosStore::load_owner_by_email(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view email,
+                                    rgw_owner& owner)
+{
+  // the email index stores ids which can either be a user or account
+  RGWUID uid;
+  int r = svc()->user->read_email_index(dpp, y, email, uid);
+  if (r < 0) {
+    return r;
+  }
+  owner = parse_owner(uid.id);
+  return 0;
 }
 
 std::unique_ptr<Object> RadosStore::get_object(const rgw_obj_key& k)

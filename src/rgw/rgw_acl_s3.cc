@@ -315,12 +315,12 @@ static int parse_grantee_str(const DoutPrefixProvider* dpp,
   string id_val = rgw_trim_quotes(id_val_quoted);
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
-    std::unique_ptr<rgw::sal::User> user;
-    ret = driver->get_user_by_email(dpp, id_val, null_yield, &user);
+    ACLOwner owner;
+    ret = driver->load_aclowner_by_email(dpp, null_yield, id_val, owner);
     if (ret < 0)
       return ret;
 
-    grant.set_canon(user->get_id(), user->get_display_name(), rgw_perm);
+    grant.set_canon(owner.id, owner.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
     std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(id_val));
     ret = user->load_user(dpp, null_yield);
@@ -454,17 +454,18 @@ static int resolve_grant(const DoutPrefixProvider* dpp, optional_yield y,
   const uint32_t perm = xml_grant.permission->flags;
 
   std::unique_ptr<rgw::sal::User> user;
+  ACLOwner owner;
   switch (xml_grant.type.get_type()) {
   case ACL_TYPE_EMAIL_USER:
     if (xml_grant.email.empty()) {
       return -EINVAL;
     }
-    if (driver->get_user_by_email(dpp, xml_grant.email, y, &user) < 0) {
+    if (driver->load_aclowner_by_email(dpp, y, xml_grant.email, owner) < 0) {
       ldpp_dout(dpp, 10) << "grant user email not found or other error" << dendl;
       err_msg = "The e-mail address you provided does not match any account on record.";
       return -ERR_UNRESOLVABLE_EMAIL;
     }
-    grant.set_canon(user->get_id(), user->get_display_name(), perm);
+    grant.set_canon(owner.id, owner.display_name, perm);
     return 0;
 
   case ACL_TYPE_CANON_USER:

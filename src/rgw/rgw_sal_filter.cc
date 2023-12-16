@@ -235,6 +235,14 @@ int FilterDriver::complete_flush_stats(const DoutPrefixProvider* dpp,
   return next->complete_flush_stats(dpp, y, owner);
 }
 
+int FilterDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view email,
+                                      rgw_owner& owner)
+{
+  return next->load_owner_by_email(dpp, y, email, owner);
+}
+
 std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);

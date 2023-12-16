@@ -22,7 +22,7 @@
 #include "rgw_service.h"
 #include "rgw_sal_fwd.h"
 
-class RGWUserBuckets;
+struct RGWUID;
 
 class RGWSI_User : public RGWServiceInstance
 {
@@ -90,5 +90,7 @@ public:
                                   real_time *pmtime,
                                   optional_yield y,
                                   const DoutPrefixProvider *dpp) = 0;
+  virtual int read_email_index(const DoutPrefixProvider* dpp, optional_yield y,
+                               std::string_view email, RGWUID& uid) = 0;
 };
 
