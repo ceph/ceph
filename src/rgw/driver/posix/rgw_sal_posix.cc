@@ -440,7 +440,8 @@ int POSIXDriver::close()
 }
 
 // TODO: marker and other params
-int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& marker,
+int POSIXDriver::list_buckets(const DoutPrefixProvider* dpp, const rgw_owner& owner,
+			     const std::string& tenant, const std::string& marker,
 			     const std::string& end_marker, uint64_t max,
 			     bool need_stats, BucketList &result, optional_yield y)
 {
@@ -453,7 +454,7 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
 
   /* it's not sufficient to dup(root_fd), as as the new fd would share
    * the file position of root_fd */
-  dfd = copy_dir_fd(driver->get_root_fd());
+  dfd = copy_dir_fd(get_root_fd());
   if (dfd == -1) {
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
@@ -466,7 +467,7 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
     ret = errno;
     ldpp_dout(dpp, 0) << "ERROR: could not open root to list buckets: "
       << cpp_strerror(ret) << dendl;
-    close(dfd);
+    ::close(dfd);
     return -ret;
   }
 
@@ -482,7 +483,7 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
   while ((entry = readdir(dir)) != NULL) {
     struct statx stx;
 
-    ret = statx(driver->get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
+    ret = statx(get_root_fd(), entry->d_name, AT_SYMLINK_NOFOLLOW, STATX_ALL, &stx);
     if (ret < 0) {
       ret = errno;
       ldpp_dout(dpp, 0) << "ERROR: could not stat object " << entry->d_name << ": "
@@ -512,7 +513,7 @@ int POSIXUser::list_buckets(const DoutPrefixProvider* dpp, const std::string& ma
   }
   ret = errno;
   if (ret != 0) {
-    ldpp_dout(dpp, 0) << "ERROR: could not list buckets for " << get_display_name() << ": "
+    ldpp_dout(dpp, 0) << "ERROR: could not list buckets for " << owner << ": "
       << cpp_strerror(ret) << dendl;
     return -ret;
   }

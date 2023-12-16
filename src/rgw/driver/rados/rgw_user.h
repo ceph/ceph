@@ -65,7 +65,9 @@ struct bucket_meta_entry {
   uint64_t count;
 };
 
-extern int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, rgw::sal::User* user, optional_yield y);
+int rgw_sync_all_stats(const DoutPrefixProvider *dpp,
+                       optional_yield y, rgw::sal::Driver* driver,
+                       const rgw_owner& owner, const std::string& tenant);
 extern int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
   rgw::sal::Driver* driver, rgw::sal::User* user,
   std::map<std::string, bucket_meta_entry>& buckets_usage_map, optional_yield y);
@@ -873,22 +875,6 @@ public:
   int remove_info(const DoutPrefixProvider *dpp, 
                   const RGWUserInfo& info, optional_yield y,
                   const RemoveParams& params = {});
-
-  int list_buckets(const DoutPrefixProvider *dpp, 
-                   const rgw_user& user,
-                   const std::string& marker,
-                   const std::string& end_marker,
-                   uint64_t max,
-                   bool need_stats,
-                   rgw::sal::BucketList& listing,
-		   optional_yield y,
-                   uint64_t default_max = 1000);
-
-  int read_stats(const DoutPrefixProvider *dpp, 
-                 const rgw_user& user, RGWStorageStats *stats,
-		 optional_yield y,
-		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
-		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
 };
 
 class RGWUserMetaHandlerAllocator {

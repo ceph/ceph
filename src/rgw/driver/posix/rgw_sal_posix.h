@@ -55,6 +55,11 @@ public:
   virtual std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i)  override;
   virtual int load_bucket(const DoutPrefixProvider* dpp, const rgw_bucket& b,
                           std::unique_ptr<Bucket>* bucket, optional_yield y) override;
+  virtual int list_buckets(const DoutPrefixProvider* dpp,
+			   const rgw_owner& owner, const std::string& tenant,
+			   const std::string& marker, const std::string& end_marker,
+			   uint64_t max, bool need_stats, BucketList& buckets,
+			   optional_yield y) override;
   virtual std::string zone_unique_trans_id(const uint64_t unique_num) override;
 
   virtual std::unique_ptr<Writer> get_append_writer(const DoutPrefixProvider *dpp,
@@ -116,10 +121,6 @@ public:
     driver(_driver) {}
   virtual ~POSIXUser() = default;
 
-  virtual int list_buckets(const DoutPrefixProvider* dpp,
-			   const std::string& marker, const std::string& end_marker,
-			   uint64_t max, bool need_stats, BucketList& buckets,
-			   optional_yield y) override;
   virtual Attrs& get_attrs() override { return next->get_attrs(); }
   virtual void set_attrs(Attrs& _attrs) override { next->set_attrs(_attrs); }
   virtual int read_attrs(const DoutPrefixProvider* dpp, optional_yield y) override;

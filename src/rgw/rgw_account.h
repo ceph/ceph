@@ -73,7 +73,8 @@ int info(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
 
 /// dump account storage stats
 int stats(const DoutPrefixProvider* dpp, rgw::sal::Driver* driver,
-          AdminOpState& op_state, std::string& err_msg,
+          AdminOpState& op_state, bool sync_stats,
+          bool reset_stats, std::string& err_msg,
           RGWFormatterFlusher& flusher, optional_yield y);
 
 } // namespace rgw::account
