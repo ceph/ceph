@@ -38,12 +38,22 @@ CommonClientRequest::recover_missings(
 	[pg, soid, head](auto &snaps) mutable {
 	return InterruptibleOperation::interruptor::do_for_each(
 	  snaps,
-	  [pg, soid, head](auto &snap) mutable {
+	  [pg, soid, head](auto &snap) mutable ->
+	  InterruptibleOperation::template interruptible_future<> {
 	  auto coid = head->obs.oi.soid;
 	  coid.snap = snap;
 	  auto oid = resolve_oid(head->get_head_ss(), coid);
-	  assert(oid);
-	  return do_recover_missing(pg, *oid);
+	  /* Rollback targets may legitimately not exist if, for instance,
+	   * the object is an rbd block which happened to be sparse and
+	   * therefore non-existent at the time of the specified snapshot.
+	   * In such a case, rollback will simply delete the object.  Here,
+	   * we skip the oid as there is no corresponding clone to recover.
+	   * See https://tracker.ceph.com/issues/63821 */
+	  if (oid) {
+	    return do_recover_missing(pg, *oid);
+	  } else {
+	    return seastar::now();
+	  }
 	});
       });
     });
