@@ -790,6 +790,10 @@ public:
                                optional_yield y,
                                const rgw_owner& owner) override;
 
+      int load_owner_by_email(const DoutPrefixProvider* dpp,
+                              optional_yield y,
+                              std::string_view email,
+                              rgw_owner& owner) override;
       virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
       virtual std::string get_cluster_id(const DoutPrefixProvider* dpp, optional_yield y);
       std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;
