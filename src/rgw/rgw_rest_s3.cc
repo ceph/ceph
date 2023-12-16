@@ -2381,7 +2381,7 @@ static int create_s3_policy(req_state *s, rgw::sal::Driver* driver,
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return rgw::s3::create_policy_from_headers(s, driver, owner,
+    return rgw::s3::create_policy_from_headers(s, s->yield, driver, owner,
                                                *s->info.env, policy);
   }
 
