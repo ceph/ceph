@@ -39,6 +39,15 @@ function run() {
     done
 }
 
+function perf_counters() {
+    local dir=$1
+    local OSDS=$2
+    for osd in $(seq 0 $(expr $OSDS - 1))
+    do
+      ceph tell osd.$osd counter dump | jq 'with_entries(select(.key | startswith("osd_scrub")))'
+    done
+}
+
 function TEST_scrub_test() {
     local dir=$1
     local poolname=test
@@ -115,6 +124,7 @@ function TEST_scrub_test() {
     test "$(ceph pg $pgid query | jq '.peer_info[0].stats.stat_sum.num_scrub_errors')" = "0" || return 1
     test "$(ceph pg $pgid query | jq '.peer_info[1].stats.stat_sum.num_scrub_errors')" = "0" || return 1
     ceph pg dump pgs | grep ^${pgid} | grep -vq -- +inconsistent || return 1
+    perf_counters $dir $OSDS
 }
 
 # Grab year-month-day
@@ -192,6 +202,7 @@ function TEST_interval_changes() {
     ceph osd pool set $poolname scrub_max_interval $(expr $week \* 3)
     sleep $WAIT_FOR_UPDATE
     check_dump_scrubs $primary "3 days" "3 week" || return 1
+    perf_counters $dir $OSDS
 }
 
 function TEST_scrub_extended_sleep() {
@@ -391,6 +402,7 @@ function _scrub_abort() {
     fi
     TIMEOUT=$(($objects / 2))
     wait_for_scrub $pgid "$last_scrub" || return 1
+    perf_counters $dir $OSDS
 }
 
 function TEST_scrub_abort() {
@@ -445,6 +457,7 @@ function TEST_scrub_permit_time() {
         fi
         sleep 1
     done
+    perf_counters $dir $OSDS
 }
 
 #  a test to recreate the problem described in bug #52901 - setting 'noscrub'
@@ -506,6 +519,7 @@ function TEST_just_deep_scrubs() {
     sc_data_2=()
     echo "test counter @ should be higher than before the unset: " ${sc_data_2['query_scrub_seq']}
     wait_any_cond $pgid 10 $saved_last_stamp expct_qry_duration "WaitingAfterScrub " sc_data_2 || return 1
+    perf_counters $dir ${cluster_conf['osds_num']}
 }
 
 function TEST_dump_scrub_schedule() {
@@ -624,6 +638,7 @@ function TEST_dump_scrub_schedule() {
     declare -A cond_active_dmp=( ['dmp_state_has_scrubbing']="true" ['query_active']="false" )
     sched_data=()
     wait_any_cond $pgid 10 $saved_last_stamp cond_active_dmp "WaitingActive " sched_data || return 1
+    perf_counters $dir $OSDS
 }
 
 function TEST_pg_dump_objects_scrubbed() {
@@ -659,6 +674,7 @@ function TEST_pg_dump_objects_scrubbed() {
     #Trigger a scrub on a PG
     pg_scrub $pgid || return 1
     test "$(ceph pg $pgid query | jq '.info.stats.objects_scrubbed')" '=' $objects || return 1
+    perf_counters $dir $OSDS
 
     teardown $dir || return 1
 }
