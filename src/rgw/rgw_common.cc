@@ -2816,6 +2816,9 @@ void RGWUserInfo::dump(Formatter *f) const
   case TYPE_NONE:
     user_source_type = "none";
     break;
+  case TYPE_ROOT:
+    user_source_type = "root";
+    break;
   default:
     user_source_type = "none";
     break;
@@ -2870,6 +2873,8 @@ void RGWUserInfo::decode_json(JSONObj *obj)
     type = TYPE_KEYSTONE;
   } else if (user_source_type == "ldap") {
     type = TYPE_LDAP;
+  } else if (user_source_type == "root") {
+    type = TYPE_ROOT;
   } else if (user_source_type == "none") {
     type = TYPE_NONE;
   }
