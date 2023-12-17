@@ -164,7 +164,7 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   encode_json("user_quota", info.quota.user_quota, f);
   encode_json("temp_url_keys", info.temp_url_keys, f);
 
-  string user_source_type;
+  std::string_view user_source_type;
   switch ((RGWIdentityType)info.type) {
   case TYPE_RGW:
     user_source_type = "rgw";
@@ -177,6 +177,9 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
     break;
   case TYPE_NONE:
     user_source_type = "none";
+    break;
+  case TYPE_ROOT:
+    user_source_type = "root";
     break;
   default:
     user_source_type = "none";
@@ -1716,6 +1719,14 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
     // TODO: change account on user's buckets
   }
 
+  if (op_state.account_root) {
+    if (user_info.account_id.empty()) {
+      set_err_msg(err_msg, "account-root user must belong to an account");
+      return -EINVAL;
+    }
+    user_info.type = TYPE_ROOT;
+  }
+
   // update the request
   op_state.set_user_info(user_info);
   op_state.set_populated();
@@ -2022,6 +2033,14 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       }
       // TODO: change account on user's buckets
     }
+  }
+
+  if (op_state.account_root_specified) {
+    if (op_state.account_root && user_info.account_id.empty()) {
+      set_err_msg(err_msg, "account-root user must belong to an account");
+      return -EINVAL;
+    }
+    user_info.type = op_state.account_root ? TYPE_ROOT : TYPE_RGW;
   }
 
   op_state.set_user_info(user_info);

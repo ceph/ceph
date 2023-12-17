@@ -515,6 +515,7 @@ enum RGWIdentityType
   TYPE_LDAP=3,
   TYPE_ROLE=4,
   TYPE_WEB=5,
+  TYPE_ROOT=6, // account root user
 };
 
 void encode_json(const char *name, const rgw_placement_rule& val, ceph::Formatter *f);
@@ -572,8 +573,8 @@ struct RGWUserInfo
   int32_t max_buckets;
   uint32_t op_mask;
   RGWUserCaps caps;
-  __u8 admin;
-  __u8 system;
+  __u8 admin = 0;
+  __u8 system = 0;
   rgw_placement_rule default_placement;
   std::list<std::string> placement_tags;
   std::map<int, std::string> temp_url_keys;
@@ -586,8 +587,6 @@ struct RGWUserInfo
     : suspended(0),
       max_buckets(RGW_DEFAULT_MAX_BUCKETS),
       op_mask(RGW_OP_TYPE_ALL),
-      admin(0),
-      system(0),
       type(TYPE_NONE) {
   }
 

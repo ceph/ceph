@@ -3438,6 +3438,8 @@ int main(int argc, const char **argv)
   bool admin_specified = false;
   int system = false;
   bool system_specified = false;
+  int account_root = false;
+  bool account_root_specified = false;
   int shard_id = -1;
   bool specified_shard_id = false;
   string client_id;
@@ -3695,6 +3697,8 @@ int main(int argc, const char **argv)
       admin_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &system, NULL, "--system", (char*)NULL)) {
       system_specified = true;
+    } else if (ceph_argparse_binary_flag(args, i, &account_root, NULL, "--account-root", (char*)NULL)) {
+      account_root_specified = true;
     } else if (ceph_argparse_binary_flag(args, i, &verbose, NULL, "--verbose", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &staging, NULL, "--staging", (char*)NULL)) {
@@ -6497,6 +6501,9 @@ int main(int argc, const char **argv)
 
   if (system_specified)
     user_op.set_system(system);
+
+  if (account_root_specified)
+    user_op.set_account_root(account_root);
 
   if (set_perm)
     user_op.set_perm(perm_mask);
