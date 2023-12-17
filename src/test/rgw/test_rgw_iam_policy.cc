@@ -48,7 +48,7 @@ using rgw::IAM::Environment;
 using rgw::Partition;
 using rgw::IAM::Policy;
 using rgw::IAM::s3All;
-using rgw::IAM::s3Count;
+using rgw::IAM::s3All;
 using rgw::IAM::s3GetAccelerateConfiguration;
 using rgw::IAM::s3GetBucketAcl;
 using rgw::IAM::s3GetBucketCORS;
@@ -252,7 +252,7 @@ TEST_F(PolicyTest, Parse2) {
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
   Action_t act;
-  for (auto i = 0ULL; i < s3Count; i++)
+  for (auto i = 0ULL; i < s3All; i++)
     act[i] = 1;
   act[s3All] = 1;
   EXPECT_EQ(p->statements[0].action, act);
@@ -286,7 +286,7 @@ TEST_F(PolicyTest, Eval2) {
 
   auto notacct = FakeIdentity(
     Principal::tenant("some-other-account"));
-  for (auto i = 0ULL; i < s3Count; ++i) {
+  for (auto i = 0ULL; i < s3All; ++i) {
     ARN arn1(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket");
     EXPECT_EQ(p.eval(e, trueacct, i, arn1),
@@ -484,7 +484,7 @@ TEST_F(PolicyTest, Eval3) {
 	    Effect::Allow);
 
 
-  for (auto op = 0ULL; op < s3Count; ++op) {
+  for (auto op = 0ULL; op < s3All; ++op) {
     if ((op == s3ListAllMyBuckets) || (op == s3PutBucketPolicy)) {
       continue;
     }
