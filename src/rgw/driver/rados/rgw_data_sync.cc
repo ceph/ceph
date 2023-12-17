@@ -2650,7 +2650,7 @@ class RGWUserPermHandler {
                                                          info->user_info.account_id,
                                                          RGW_PERM_FULL_CONTROL,
                                                          false, /* system_request? */
-                                                         TYPE_RGW);
+                                                         info->user_info.type);
 
       map<string, bufferlist> uattrs;
 

@@ -115,6 +115,7 @@ struct RGWUserAdminOpState {
   __u8 suspended{0};
   __u8 admin{0};
   __u8 system{0};
+  __u8 account_root{0};
   __u8 exclusive{0};
   __u8 fetch_stats{0};
   __u8 sync_stats{0};
@@ -163,6 +164,7 @@ struct RGWUserAdminOpState {
   bool suspension_op{false};
   bool admin_specified{false};
   bool system_specified{false};
+  bool account_root_specified{false};
   bool key_op{false};
   bool temp_url_key_specified{false};
   bool found_by_uid{false};
@@ -293,6 +295,11 @@ struct RGWUserAdminOpState {
   void set_system(__u8 is_system) {
     system = is_system;
     system_specified = true;
+  }
+
+  void set_account_root(__u8 is_account_root) {
+    account_root = is_account_root;
+    account_root_specified = true;
   }
 
   void set_exclusive(__u8 is_exclusive) {

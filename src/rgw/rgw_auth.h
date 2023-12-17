@@ -701,7 +701,7 @@ public:
   }
   void to_str(std::ostream& out) const override;
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override; /* out */
-  uint32_t get_identity_type() const override { return TYPE_RGW; }
+  uint32_t get_identity_type() const override { return user_info.type; }
   std::string get_acct_name() const override { return {}; }
   std::string get_subuser() const override { return subuser; }
   const std::string& get_tenant() const override {

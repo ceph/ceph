@@ -6501,7 +6501,7 @@ rgw::auth::s3::STSEngine::authenticate(
     t_attrs.principal_tags = std::move(token.principal_tags);
     auto apl = role_apl_factory->create_apl_role(cct, s, r, t_attrs);
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
-  } else { // This is for all local users of type TYPE_RGW or TYPE_NONE
+  } else { // This is for all local users of type TYPE_RGW|ROOT|NONE
     string subuser;
     auto apl = local_apl_factory->create_apl_local(cct, s, user->get_info(), subuser, token.perm_mask, std::string(_access_key_id));
     return result_t::grant(std::move(apl), completer_factory(token.secret_access_key));
