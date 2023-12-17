@@ -40,116 +40,117 @@ class Identity;
 namespace rgw {
 namespace IAM {
 
-static constexpr std::uint64_t s3GetObject = 0;
-static constexpr std::uint64_t s3GetObjectVersion = 1;
-static constexpr std::uint64_t s3PutObject = 2;
-static constexpr std::uint64_t s3GetObjectAcl = 3;
-static constexpr std::uint64_t s3GetObjectVersionAcl = 4;
-static constexpr std::uint64_t s3PutObjectAcl = 5;
-static constexpr std::uint64_t s3PutObjectVersionAcl = 6;
-static constexpr std::uint64_t s3DeleteObject = 7;
-static constexpr std::uint64_t s3DeleteObjectVersion = 8;
-static constexpr std::uint64_t s3ListMultipartUploadParts = 9;
-static constexpr std::uint64_t s3AbortMultipartUpload = 10;
-static constexpr std::uint64_t s3GetObjectTorrent = 11;
-static constexpr std::uint64_t s3GetObjectVersionTorrent = 12;
-static constexpr std::uint64_t s3RestoreObject = 13;
-static constexpr std::uint64_t s3CreateBucket = 14;
-static constexpr std::uint64_t s3DeleteBucket = 15;
-static constexpr std::uint64_t s3ListBucket = 16;
-static constexpr std::uint64_t s3ListBucketVersions = 17;
-static constexpr std::uint64_t s3ListAllMyBuckets = 18;
-static constexpr std::uint64_t s3ListBucketMultipartUploads = 19;
-static constexpr std::uint64_t s3GetAccelerateConfiguration = 20;
-static constexpr std::uint64_t s3PutAccelerateConfiguration = 21;
-static constexpr std::uint64_t s3GetBucketAcl = 22;
-static constexpr std::uint64_t s3PutBucketAcl = 23;
-static constexpr std::uint64_t s3GetBucketCORS = 24;
-static constexpr std::uint64_t s3PutBucketCORS = 25;
-static constexpr std::uint64_t s3GetBucketVersioning = 26;
-static constexpr std::uint64_t s3PutBucketVersioning = 27;
-static constexpr std::uint64_t s3GetBucketRequestPayment = 28;
-static constexpr std::uint64_t s3PutBucketRequestPayment = 29;
-static constexpr std::uint64_t s3GetBucketLocation = 30;
-static constexpr std::uint64_t s3GetBucketPolicy = 31;
-static constexpr std::uint64_t s3DeleteBucketPolicy = 32;
-static constexpr std::uint64_t s3PutBucketPolicy = 33;
-static constexpr std::uint64_t s3GetBucketNotification = 34;
-static constexpr std::uint64_t s3PutBucketNotification = 35;
-static constexpr std::uint64_t s3GetBucketLogging = 36;
-static constexpr std::uint64_t s3PutBucketLogging = 37;
-static constexpr std::uint64_t s3GetBucketTagging = 38;
-static constexpr std::uint64_t s3PutBucketTagging = 39;
-static constexpr std::uint64_t s3GetBucketWebsite = 40;
-static constexpr std::uint64_t s3PutBucketWebsite = 41;
-static constexpr std::uint64_t s3DeleteBucketWebsite = 42;
-static constexpr std::uint64_t s3GetLifecycleConfiguration = 43;
-static constexpr std::uint64_t s3PutLifecycleConfiguration = 44;
-static constexpr std::uint64_t s3PutReplicationConfiguration = 45;
-static constexpr std::uint64_t s3GetReplicationConfiguration = 46;
-static constexpr std::uint64_t s3DeleteReplicationConfiguration = 47;
-static constexpr std::uint64_t s3GetObjectTagging = 48;
-static constexpr std::uint64_t s3PutObjectTagging = 49;
-static constexpr std::uint64_t s3DeleteObjectTagging = 50;
-static constexpr std::uint64_t s3GetObjectVersionTagging = 51;
-static constexpr std::uint64_t s3PutObjectVersionTagging = 52;
-static constexpr std::uint64_t s3DeleteObjectVersionTagging = 53;
-static constexpr std::uint64_t s3PutBucketObjectLockConfiguration = 54;
-static constexpr std::uint64_t s3GetBucketObjectLockConfiguration = 55;
-static constexpr std::uint64_t s3PutObjectRetention = 56;
-static constexpr std::uint64_t s3GetObjectRetention = 57;
-static constexpr std::uint64_t s3PutObjectLegalHold = 58;
-static constexpr std::uint64_t s3GetObjectLegalHold = 59;
-static constexpr std::uint64_t s3BypassGovernanceRetention = 60;
-static constexpr std::uint64_t s3GetBucketPolicyStatus = 61;
-static constexpr std::uint64_t s3PutPublicAccessBlock = 62;
-static constexpr std::uint64_t s3GetPublicAccessBlock = 63;
-static constexpr std::uint64_t s3DeletePublicAccessBlock = 64;
-static constexpr std::uint64_t s3GetBucketPublicAccessBlock = 65;
-static constexpr std::uint64_t s3PutBucketPublicAccessBlock = 66;
-static constexpr std::uint64_t s3DeleteBucketPublicAccessBlock = 67;
-static constexpr std::uint64_t s3GetBucketEncryption = 68;
-static constexpr std::uint64_t s3PutBucketEncryption = 69;
-static constexpr std::uint64_t s3All = 70;
+enum {
+  s3GetObject,
+  s3GetObjectVersion,
+  s3PutObject,
+  s3GetObjectAcl,
+  s3GetObjectVersionAcl,
+  s3PutObjectAcl,
+  s3PutObjectVersionAcl,
+  s3DeleteObject,
+  s3DeleteObjectVersion,
+  s3ListMultipartUploadParts,
+  s3AbortMultipartUpload,
+  s3GetObjectTorrent,
+  s3GetObjectVersionTorrent,
+  s3RestoreObject,
+  s3CreateBucket,
+  s3DeleteBucket,
+  s3ListBucket,
+  s3ListBucketVersions,
+  s3ListAllMyBuckets,
+  s3ListBucketMultipartUploads,
+  s3GetAccelerateConfiguration,
+  s3PutAccelerateConfiguration,
+  s3GetBucketAcl,
+  s3PutBucketAcl,
+  s3GetBucketCORS,
+  s3PutBucketCORS,
+  s3GetBucketVersioning,
+  s3PutBucketVersioning,
+  s3GetBucketRequestPayment,
+  s3PutBucketRequestPayment,
+  s3GetBucketLocation,
+  s3GetBucketPolicy,
+  s3DeleteBucketPolicy,
+  s3PutBucketPolicy,
+  s3GetBucketNotification,
+  s3PutBucketNotification,
+  s3GetBucketLogging,
+  s3PutBucketLogging,
+  s3GetBucketTagging,
+  s3PutBucketTagging,
+  s3GetBucketWebsite,
+  s3PutBucketWebsite,
+  s3DeleteBucketWebsite,
+  s3GetLifecycleConfiguration,
+  s3PutLifecycleConfiguration,
+  s3PutReplicationConfiguration,
+  s3GetReplicationConfiguration,
+  s3DeleteReplicationConfiguration,
+  s3GetObjectTagging,
+  s3PutObjectTagging,
+  s3DeleteObjectTagging,
+  s3GetObjectVersionTagging,
+  s3PutObjectVersionTagging,
+  s3DeleteObjectVersionTagging,
+  s3PutBucketObjectLockConfiguration,
+  s3GetBucketObjectLockConfiguration,
+  s3PutObjectRetention,
+  s3GetObjectRetention,
+  s3PutObjectLegalHold,
+  s3GetObjectLegalHold,
+  s3BypassGovernanceRetention,
+  s3GetBucketPolicyStatus,
+  s3PutPublicAccessBlock,
+  s3GetPublicAccessBlock,
+  s3DeletePublicAccessBlock,
+  s3GetBucketPublicAccessBlock,
+  s3PutBucketPublicAccessBlock,
+  s3DeleteBucketPublicAccessBlock,
+  s3GetBucketEncryption,
+  s3PutBucketEncryption,
+  s3All,
 
-static constexpr std::uint64_t iamPutUserPolicy = s3All + 1;
-static constexpr std::uint64_t iamGetUserPolicy = s3All + 2;
-static constexpr std::uint64_t iamDeleteUserPolicy = s3All + 3;
-static constexpr std::uint64_t iamListUserPolicies = s3All + 4;
-static constexpr std::uint64_t iamCreateRole = s3All + 5;
-static constexpr std::uint64_t iamDeleteRole = s3All + 6;
-static constexpr std::uint64_t iamModifyRoleTrustPolicy = s3All + 7;
-static constexpr std::uint64_t iamGetRole = s3All + 8;
-static constexpr std::uint64_t iamListRoles = s3All + 9;
-static constexpr std::uint64_t iamPutRolePolicy = s3All + 10;
-static constexpr std::uint64_t iamGetRolePolicy = s3All + 11;
-static constexpr std::uint64_t iamListRolePolicies = s3All + 12;
-static constexpr std::uint64_t iamDeleteRolePolicy = s3All + 13;
-static constexpr std::uint64_t iamCreateOIDCProvider = s3All + 14;
-static constexpr std::uint64_t iamDeleteOIDCProvider = s3All + 15;
-static constexpr std::uint64_t iamGetOIDCProvider = s3All + 16;
-static constexpr std::uint64_t iamListOIDCProviders = s3All + 17;
-static constexpr std::uint64_t iamTagRole = s3All + 18;
-static constexpr std::uint64_t iamListRoleTags = s3All + 19;
-static constexpr std::uint64_t iamUntagRole = s3All + 20;
-static constexpr std::uint64_t iamUpdateRole = s3All + 21;
-static constexpr std::uint64_t iamAll = s3All + 22;
+  iamPutUserPolicy,
+  iamGetUserPolicy,
+  iamDeleteUserPolicy,
+  iamListUserPolicies,
+  iamCreateRole,
+  iamDeleteRole,
+  iamModifyRoleTrustPolicy,
+  iamGetRole,
+  iamListRoles,
+  iamPutRolePolicy,
+  iamGetRolePolicy,
+  iamListRolePolicies,
+  iamDeleteRolePolicy,
+  iamCreateOIDCProvider,
+  iamDeleteOIDCProvider,
+  iamGetOIDCProvider,
+  iamListOIDCProviders,
+  iamTagRole,
+  iamListRoleTags,
+  iamUntagRole,
+  iamUpdateRole,
+  iamAll,
 
-static constexpr std::uint64_t stsAssumeRole = iamAll + 1;
-static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = iamAll + 2;
-static constexpr std::uint64_t stsGetSessionToken = iamAll + 3;
-static constexpr std::uint64_t stsTagSession = iamAll + 4;
-static constexpr std::uint64_t stsAll = iamAll + 5;
+  stsAssumeRole,
+  stsAssumeRoleWithWebIdentity,
+  stsGetSessionToken,
+  stsTagSession,
+  stsAll,
 
-static constexpr std::uint64_t snsGetTopicAttributes = stsAll + 1;
-static constexpr std::uint64_t snsDeleteTopic = stsAll + 2;
-static constexpr std::uint64_t snsPublish = stsAll + 3;
-static constexpr std::uint64_t snsSetTopicAttributes = stsAll + 4;
-static constexpr std::uint64_t snsCreateTopic = stsAll + 5;
-static constexpr std::uint64_t snsAll = stsAll + 6;
+  snsGetTopicAttributes,
+  snsDeleteTopic,
+  snsPublish,
+  snsSetTopicAttributes,
+  snsCreateTopic,
+  snsAll,
 
-static constexpr std::uint64_t s3Count = s3All;
-static constexpr std::uint64_t allCount = snsAll + 1;
+  allCount
+};
 
 using Action_t = std::bitset<allCount>;
 using NotAction_t = Action_t;
