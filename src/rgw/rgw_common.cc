@@ -2592,6 +2592,10 @@ void RGWUserInfo::generate_test_instances(list<RGWUserInfo*>& o)
   i->user_id = "user_id";
   i->display_name =  "display_name";
   i->user_email = "user@email";
+  i->account_id = "RGW12345678901234567";
+  i->path = "/";
+  i->create_date = ceph::real_time{std::chrono::hours(1)};
+  i->tags.emplace("key", "value");
   RGWAccessKey k1, k2;
   k1.id = "id1";
   k1.key = "key1";
@@ -2825,6 +2829,9 @@ void RGWUserInfo::dump(Formatter *f) const
   encode_json("type", user_source_type, f);
   encode_json("mfa_ids", mfa_ids, f);
   encode_json("account_id", account_id, f);
+  encode_json("path", path, f);
+  encode_json("create_date", create_date, f);
+  encode_json("tags", tags, f);
 }
 
 void RGWUserInfo::decode_json(JSONObj *obj)
@@ -2879,6 +2886,9 @@ void RGWUserInfo::decode_json(JSONObj *obj)
   }
   JSONDecoder::decode_json("mfa_ids", mfa_ids, obj);
   JSONDecoder::decode_json("account_id", account_id, obj);
+  JSONDecoder::decode_json("path", path, obj);
+  JSONDecoder::decode_json("create_date", create_date, obj);
+  JSONDecoder::decode_json("tags", tags, obj);
 }
 
 

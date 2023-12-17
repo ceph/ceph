@@ -583,6 +583,9 @@ struct RGWUserInfo
   uint32_t type;
   std::set<std::string> mfa_ids;
   rgw_account_id account_id;
+  std::string path = "/";
+  ceph::real_time create_date;
+  std::multimap<std::string, std::string> tags;
 
   RGWUserInfo()
     : suspended(0),
@@ -651,6 +654,9 @@ struct RGWUserInfo
      }
      encode(user_id.ns, bl);
      encode(account_id, bl);
+     encode(path, bl);
+     encode(create_date, bl);
+     encode(tags, bl);
      ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator& bl) {
@@ -743,6 +749,11 @@ struct RGWUserInfo
     }
     if (struct_v >= 23) {
       decode(account_id, bl);
+      decode(path, bl);
+      decode(create_date, bl);
+      decode(tags, bl);
+    } else {
+      path = "/";
     }
     DECODE_FINISH(bl);
   }
