@@ -180,12 +180,13 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
     , NamedSimply(context<ScrubMachine>().m_scrbr, "Session/ReservingReplicas")
 {
   dout(10) << "-- state -->> ReservingReplicas" << dendl;
+  auto& session = context<Session>();
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   // initiate the reservation process
-  context<Session>().m_reservations.emplace(*scrbr);
+  session.m_reservations.emplace(*scrbr, *session.m_perf_set);
 
-  if (context<Session>().m_reservations->get_last_sent()) {
+  if (session.m_reservations->get_last_sent()) {
     // the 1'st reservation request was sent
 
     auto timeout = scrbr->get_pg_cct()->_conf.get_val<milliseconds>(
@@ -228,12 +229,13 @@ sc::result ReservingReplicas::react(const ReplicaGrant& ev)
 sc::result ReservingReplicas::react(const ReplicaReject& ev)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  auto& session = context<Session>();
   dout(10) << "ReservingReplicas::react(const ReplicaReject&)" << dendl;
+  session.m_reservations->log_failure_and_duration(scrbcnt_resrv_rejected);
 
   // manipulate the 'next to reserve' iterator to exclude
   // the rejecting replica from the set of replicas requiring release
-  context<Session>().m_reservations->verify_rejections_source(
-      ev.m_op, ev.m_from);
+  session.m_reservations->verify_rejections_source(ev.m_op, ev.m_from);
 
   // set 'reservation failure' as the scrub termination cause (affecting
   // the rescheduling of this PG)
@@ -246,7 +248,9 @@ sc::result ReservingReplicas::react(const ReplicaReject& ev)
 sc::result ReservingReplicas::react(const ReservationTimeout&)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  auto& session = context<Session>();
   dout(10) << "ReservingReplicas::react(const ReservationTimeout&)" << dendl;
+  session.m_reservations->log_failure_and_duration(scrbcnt_resrv_timed_out);
 
   const auto msg = fmt::format(
       "osd.{} PgScrubber: {} timeout on reserving replicas (since {})",
