@@ -24,8 +24,8 @@ struct test_extent_desc_t {
 
 struct test_block_delta_t {
   int8_t val = 0;
-  uint16_t offset = 0;
-  uint16_t len = 0;
+  extent_len_t offset = 0;
+  extent_len_t len = 0;
 
 
   DENC(test_block_delta_t, v, p) {
@@ -67,7 +67,9 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 
   ceph::bufferlist get_delta() final;
 
-  void set_contents(char c, uint16_t offset, uint16_t len) {
+  void set_contents(char c, extent_len_t offset, extent_len_t len) {
+    assert(offset + len <= get_length());
+    assert(len > 0);
     ::memset(get_bptr().c_str() + offset, c, len);
     delta.push_back({c, offset, len});
     modified_region.union_insert(offset, len);
@@ -121,7 +123,7 @@ struct TestBlockPhysical : crimson::os::seastore::CachedExtent{
     return TYPE;
   }
 
-  void set_contents(char c, uint16_t offset, uint16_t len) {
+  void set_contents(char c, extent_len_t offset, extent_len_t len) {
     ::memset(get_bptr().c_str() + offset, c, len);
     delta.push_back({c, offset, len});
   }
@@ -142,13 +144,13 @@ struct test_block_mutator_t {
     std::numeric_limits<int8_t>::min(),
     std::numeric_limits<int8_t>::max());
 
-  std::uniform_int_distribution<uint16_t>
-  offset_distribution = std::uniform_int_distribution<uint16_t>(
+  std::uniform_int_distribution<extent_len_t>
+  offset_distribution = std::uniform_int_distribution<extent_len_t>(
     0, TestBlock::SIZE - 1);
 
-  std::uniform_int_distribution<uint16_t> length_distribution(uint16_t offset) {
-    return std::uniform_int_distribution<uint16_t>(
-      0, TestBlock::SIZE - offset - 1);
+  std::uniform_int_distribution<extent_len_t> length_distribution(extent_len_t offset) {
+    return std::uniform_int_distribution<extent_len_t>(
+      1, TestBlock::SIZE - offset);
   }
 
 
