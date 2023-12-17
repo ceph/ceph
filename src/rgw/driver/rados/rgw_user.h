@@ -124,6 +124,8 @@ struct RGWUserAdminOpState {
   uint32_t op_mask{0};
   std::map<int, std::string> temp_url_keys;
   std::string account_id;
+  std::string path;
+  std::optional<ceph::real_time> create_date;
 
   // subuser attributes
   std::string subuser;

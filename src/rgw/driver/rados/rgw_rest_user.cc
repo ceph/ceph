@@ -22,6 +22,7 @@ using namespace std;
 
 int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
                                   std::map<std::string, RGWAccessKey>& keys,
+                                  ceph::real_time& create_date,
                                   optional_yield y)
 {
   bufferlist data;
@@ -36,6 +37,7 @@ int fetch_access_keys_from_master(const DoutPrefixProvider* dpp, req_state* s,
   RGWUserInfo ui;
   ui.decode_json(&jp);
   keys = std::move(ui.access_keys);
+  create_date = ui.create_date;
   return 0;
 }
 
@@ -188,6 +190,7 @@ void RGWOp_User_Create::execute(optional_yield y)
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
   RESTArgs::get_string(s, "account-id", "", &op_state.account_id);
+  RESTArgs::get_string(s, "path", "", &op_state.path);
 
   if (!s->user->get_info().system && system) {
     ldpp_dout(this, 0) << "cannot set system flag by non-system user" << dendl;
@@ -264,7 +267,9 @@ void RGWOp_User_Create::execute(optional_yield y)
   }
 
   if (!s->penv.site->is_meta_master()) {
-    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys, y);
+    op_state.create_date.emplace();
+    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys,
+                                           *op_state.create_date, y);
     if (op_ret < 0) {
       return;
     }
@@ -333,6 +338,7 @@ void RGWOp_User_Modify::execute(optional_yield y)
   RESTArgs::get_string(s, "default-placement", default_placement_str, &default_placement_str);
   RESTArgs::get_string(s, "placement-tags", placement_tags_str, &placement_tags_str);
   RESTArgs::get_string(s, "account-id", "", &op_state.account_id);
+  RESTArgs::get_string(s, "path", "", &op_state.path);
 
   if (!s->user->get_info().system && system) {
     ldpp_dout(this, 0) << "cannot set system flag by non-system user" << dendl;
@@ -414,7 +420,9 @@ void RGWOp_User_Modify::execute(optional_yield y)
   }
   
   if (!s->penv.site->is_meta_master()) {
-    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys, y);
+    op_state.create_date.emplace();
+    op_ret = fetch_access_keys_from_master(this, s, op_state.op_access_keys,
+                                           *op_state.create_date, y);
     if (op_ret < 0) {
       return;
     }
