@@ -303,6 +303,9 @@ void rgw_format_ops_log_entry(struct rgw_log_entry& entry, Formatter *formatter)
     case TYPE_ROLE:
       formatter->dump_string("authentication_type","STS");
       break;
+    case TYPE_ROOT:
+      formatter->dump_string("authentication_type", "Local Account Root");
+      break;
     default:
       break;
   }
