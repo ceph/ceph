@@ -33,6 +33,7 @@ struct state {
 
   state(Aio* aio, librados::IoCtx ctx, AioResult& r)
     : aio(aio), ctx(std::move(ctx)),
+    // coverity[ctor_dtor_leak:SUPPRESS]
       c(librados::Rados::aio_create_completion(&r, &cb)) {}
 };
 
