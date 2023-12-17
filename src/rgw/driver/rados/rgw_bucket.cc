@@ -2154,18 +2154,32 @@ int RGWMetadataHandlerPut_Bucket::put_checked(const DoutPrefixProvider *dpp)
 
 int RGWMetadataHandlerPut_Bucket::put_post(const DoutPrefixProvider *dpp)
 {
-  auto& be = obj->get_ep();
+  auto* orig_obj = static_cast<RGWBucketEntryMetadataObject *>(old_obj);
+  auto* old_be = orig_obj ? &orig_obj->get_ep() : nullptr;
+  auto& new_be = obj->get_ep();
 
-  int ret;
+  RGWBucketCtl& ctl = *bhandler->ctl.bucket;
+  constexpr bool update_entrypoint = false;
 
-  /* link bucket */
-  if (be.linked) {
-    ret = bhandler->ctl.bucket->link_bucket(rados, be.owner, be.bucket, be.creation_time, y, dpp, false);
-  } else {
-    ret = bhandler->ctl.bucket->unlink_bucket(rados, be.owner, be.bucket, y, dpp, false);
+  if (old_be && (old_be->owner != new_be.owner || // owner changed
+      (old_be->linked && !new_be.linked))) { // linked -> false
+    int ret = ctl.unlink_bucket(rados, old_be->owner, old_be->bucket,
+                                y, dpp, update_entrypoint);
+    if (ret < 0) {
+      return ret;
+    }
   }
 
-  return ret;
+  if (new_be.linked && (!old_be || !old_be->linked || // linked -> true
+      old_be->owner != new_be.owner)) { // owner changed
+    int ret = ctl.link_bucket(rados, new_be.owner, new_be.bucket,
+                              new_be.creation_time, y, dpp, update_entrypoint);
+    if (ret < 0) {
+      return ret;
+    }
+  }
+
+  return 0;
 }
 
 int update_bucket_topic_mappings(const DoutPrefixProvider* dpp,
