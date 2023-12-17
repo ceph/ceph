@@ -46,8 +46,6 @@ namespace Scrub {
  *  lost - either due to a bug or due to a network issue.)
  */
 class ReplicaReservations {
-  using clock = ceph::coarse_real_clock;
-
   ScrubMachineListener& m_scrubber;
   PG* m_pg;
 
@@ -64,14 +62,22 @@ class ReplicaReservations {
   std::vector<pg_shard_t>::const_iterator m_next_to_request;
 
   /// for logs, and for detecting slow peers
-  clock::time_point m_last_request_sent_at;
+  ScrubTimePoint m_last_request_sent_at;
 
   /// the 'slow response' timeout (in milliseconds) - as configured.
   /// Doubles as a 'do once' flag for the warning.
   std::chrono::milliseconds m_slow_response_warn_timeout;
 
+  /// access to the performance counters container relevant to this scrub
+  /// parameters
+  PerfCounters& m_perf_set;
+
+  /// used only for the 'duration of the reservation process' perf counter.
+  /// discarded once the success or failure are recorded
+  std::optional<ScrubTimePoint> m_process_started_at;
+
  public:
-  ReplicaReservations(ScrubMachineListener& scrubber);
+  ReplicaReservations(ScrubMachineListener& scrubber, PerfCounters& pc);
 
   ~ReplicaReservations();
 
@@ -112,6 +118,12 @@ class ReplicaReservations {
   /// the only replica we are expecting a reply from
   std::optional<pg_shard_t> get_last_sent() const;
 
+  /**
+   * if the start time is still set, i.e. we have not yet marked
+   * this as a success or a failure - log its duration as that of a failure.
+   */
+  void log_failure_and_duration(int failure_cause_counter);
+
   // note: 'public', as accessed via the 'standard' dout_prefix() macro
   std::ostream& gen_prefix(std::ostream& out, std::string fn) const;
 
@@ -127,6 +139,13 @@ class ReplicaReservations {
    * - if there are no more replicas to send requests to, return true
    */
   bool send_next_reservation_or_complete();
+
+  // ---   perf counters helpers
+
+  /**
+   * log the duration of the reservation process as that of a success.
+   */
+  void log_success_and_duration();
 };
 
 } // namespace Scrub

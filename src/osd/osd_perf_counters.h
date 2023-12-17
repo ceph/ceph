@@ -211,6 +211,24 @@ enum {
   /// # write blocked by the scrub
   scrbcnt_write_blocked,
 
+  // -- replicas reservation
+  /// # successfully completed reservation steps
+  scrbcnt_resrv_success,
+  /// time to complete a successful replicas reservation
+  scrbcnt_resrv_successful_elapsed,
+  /// # failed attempt to reserve replicas due to an abort
+  scrbcnt_resrv_aborted,
+  /// # reservation process timed out
+  scrbcnt_resrv_timed_out,
+  /// # reservation failed due to a 'rejected' response
+  scrbcnt_resrv_rejected,
+  /// # reservation skipped for high-priority scrubs
+  scrbcnt_resrv_skipped,
+  /// time for a replicas reservation process to fail
+  scrbcnt_resrv_failed_elapsed,
+  /// # number of replicas
+  scrbcnt_resrv_replicas_num,
+
   scrbcnt_last,
 };
 
