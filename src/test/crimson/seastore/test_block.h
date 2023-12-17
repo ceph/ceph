@@ -49,10 +49,12 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 
   std::vector<test_block_delta_t> delta = {};
 
+  interval_set<extent_len_t> modified_region;
+
   TestBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
   TestBlock(const TestBlock &other)
-    : LogicalCachedExtent(other) {}
+    : LogicalCachedExtent(other), modified_region(other.modified_region) {}
 
   CachedExtentRef duplicate_for_write(Transaction&) final {
     return CachedExtentRef(new TestBlock(*this));
@@ -68,6 +70,7 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
   void set_contents(char c, uint16_t offset, uint16_t len) {
     ::memset(get_bptr().c_str() + offset, c, len);
     delta.push_back({c, offset, len});
+    modified_region.union_insert(offset, len);
   }
 
   void set_contents(char c) {
@@ -80,22 +83,20 @@ struct TestBlock : crimson::os::seastore::LogicalCachedExtent {
 
   void apply_delta(const ceph::bufferlist &bl) final;
 
-  void clear_delta() final {
-    delta.clear();
-  }
-
   std::optional<modified_region_t> get_modified_region() final {
-    interval_set<extent_len_t> range;
-    for (auto &p : delta) {
-      if (p.len > 0) {
-	range.union_insert(p.offset, p.len);
-      }
-    }
-    if (range.empty()) {
+    if (modified_region.empty()) {
       return std::nullopt;
     }
-    return modified_region_t{range.range_start(),
-      range.range_end() - range.range_start()};
+    return modified_region_t{modified_region.range_start(),
+      modified_region.range_end() - modified_region.range_start()};
+  }
+
+  void clear_modified_region() final {
+    modified_region.clear();
+  }
+
+  void logical_on_delta_write() final {
+    delta.clear();
   }
 };
 using TestBlockRef = TCachedExtentRef<TestBlock>;

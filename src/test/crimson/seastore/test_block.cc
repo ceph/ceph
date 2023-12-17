@@ -19,6 +19,7 @@ void TestBlock::apply_delta(const ceph::bufferlist &bl) {
   decode(deltas, biter);
   for (auto &&d : deltas) {
     set_contents(d.val, d.offset, d.len);
+    modified_region.union_insert(d.offset, d.len);
   }
 }
 
