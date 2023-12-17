@@ -57,7 +57,11 @@ static int usage()
 
 /*
  * start up the RADOS connection and then handle HTTP messages as they come in
+ *
+ * This has an uncaught exception. Even if the exception is caught, the program
+ * would need to be terminated, so the warning is simply suppressed.
  */
+// coverity[root_function:SUPPRESS]
 int main(int argc, char *argv[])
 { 
   int r{0};
