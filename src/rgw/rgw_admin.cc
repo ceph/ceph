@@ -6553,6 +6553,7 @@ int main(int argc, const char **argv)
   if (!tags.empty()) {
     user_op.set_placement_tags(tags);
   }
+  user_op.path = path;
 
   user_op.account_id = account_id;
   bucket_op.account_id = account_id;
