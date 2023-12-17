@@ -22,19 +22,19 @@ template <typename ImageCtxT>
 class DiffRequest {
 public:
   static DiffRequest* create(ImageCtxT* image_ctx, uint64_t snap_id_start,
-                             uint64_t snap_id_end,
+                             uint64_t snap_id_end, bool diff_iterate_range,
                              BitVector<2>* object_diff_state,
                              Context* on_finish) {
     return new DiffRequest(image_ctx, snap_id_start, snap_id_end,
-                           object_diff_state, on_finish);
+                           diff_iterate_range, object_diff_state, on_finish);
   }
 
   DiffRequest(ImageCtxT* image_ctx, uint64_t snap_id_start,
-              uint64_t snap_id_end, BitVector<2>* object_diff_state,
-              Context* on_finish)
+              uint64_t snap_id_end, bool diff_iterate_range,
+              BitVector<2>* object_diff_state, Context* on_finish)
     : m_image_ctx(image_ctx), m_snap_id_start(snap_id_start),
-      m_snap_id_end(snap_id_end), m_object_diff_state(object_diff_state),
-      m_on_finish(on_finish) {
+      m_snap_id_end(snap_id_end), m_diff_iterate_range(diff_iterate_range),
+      m_object_diff_state(object_diff_state), m_on_finish(on_finish) {
   }
 
   void send();
@@ -58,6 +58,7 @@ private:
   ImageCtxT* m_image_ctx;
   uint64_t m_snap_id_start;
   uint64_t m_snap_id_end;
+  bool m_diff_iterate_range;
   BitVector<2>* m_object_diff_state;
   Context* m_on_finish;
 

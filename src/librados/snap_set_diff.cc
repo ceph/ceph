@@ -31,9 +31,8 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
   *clone_end_snap_id = 0;
   *whole_object = false;
 
-  for (vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
-       r != snap_set.clones.end();
-       ) {
+  auto r = snap_set.clones.begin();
+  while (r != snap_set.clones.end()) {
     // make an interval, and hide the fact that the HEAD doesn't
     // include itself in the snaps list
     librados::snap_t a, b;
@@ -77,12 +76,6 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     }
 
     if (end < a) {
-      ldout(cct, 20) << " past end " << end << ", end object does not exist" << dendl;
-      *end_exists = false;
-      diff->clear();
-      if (start_size) {
-	diff->insert(0, start_size);
-      }
       break;
     }
     if (end <= b) {
@@ -90,7 +83,7 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
       *end_size = r->size;
       *end_exists = true;
       *clone_end_snap_id = b;
-      break;
+      return;
     }
 
     // start with the max(this size, next size), and subtract off any
@@ -113,5 +106,17 @@ void calc_snap_set_diff(CephContext *cct, const librados::snap_set_t& snap_set,
     ldout(cct, 20) << "  diff_to_next " << diff_to_next << dendl;
     diff->union_of(diff_to_next);
     ldout(cct, 20) << "  diff now " << *diff << dendl;
+  }
+
+  if (r != snap_set.clones.end()) {
+    ldout(cct, 20) << " past end " << end
+                   << ", end object does not exist" << dendl;
+  } else {
+    ldout(cct, 20) << " ran out of clones before reaching end " << end
+                   << ", end object does not exist" << dendl;
+  }
+  diff->clear();
+  if (start_size) {
+    diff->insert(0, start_size);
   }
 }
