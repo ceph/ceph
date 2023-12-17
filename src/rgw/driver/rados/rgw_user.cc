@@ -1643,6 +1643,68 @@ static int validate_account_tenant(const DoutPrefixProvider* dpp,
   return 0;
 }
 
+static int adopt_user_bucket(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             rgw::sal::Driver* driver,
+                             const rgw_bucket& bucketid,
+                             const rgw_owner& new_owner)
+{
+  // retry in case of racing writes to the bucket instance metadata
+  static constexpr auto max_retries = 10;
+  int tries = 0;
+  int r = 0;
+
+  do {
+    ldpp_dout(dpp, 1) << "adopting bucket " << bucketid << "..." << dendl;
+
+    std::unique_ptr<rgw::sal::Bucket> bucket;
+    r = driver->load_bucket(dpp, bucketid, &bucket, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "failed to load bucket " << bucketid
+          << ": " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    r = bucket->chown(dpp, new_owner, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 1) << "failed to chown bucket " << bucketid
+          << ": " << cpp_strerror(r) << dendl;
+    }
+    ++tries;
+  } while (r == -ECANCELED && tries < max_retries);
+
+  return r;
+}
+
+static int adopt_user_buckets(const DoutPrefixProvider* dpp, optional_yield y,
+                              rgw::sal::Driver* driver, const rgw_user& user,
+                              const rgw_account_id& account_id)
+{
+  const size_t max_chunk = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
+  constexpr bool need_stats = false;
+
+  ldpp_dout(dpp, 1) << "adopting all buckets owned by " << user
+      << " into account " << account_id << dendl;
+
+  rgw::sal::BucketList listing;
+  do {
+    int r = driver->list_buckets(dpp, user, user.tenant, listing.next_marker,
+                                 "", max_chunk, need_stats, listing, y);
+    if (r < 0) {
+      return r;
+    }
+
+    for (const auto& ent : listing.buckets) {
+      r = adopt_user_bucket(dpp, y, driver, ent.bucket, account_id);
+      if (r < 0 && r != -ENOENT) {
+        return r;
+      }
+    }
+  } while (!listing.next_marker.empty());
+
+  return 0;
+}
+
 int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state, std::string *err_msg,
 			 optional_yield y)
 {
@@ -1716,7 +1778,6 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
       return ret;
     }
     user_info.account_id = op_state.account_id;
-    // TODO: change account on user's buckets
   }
 
   if (op_state.account_root) {
@@ -2031,7 +2092,13 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
         set_err_msg(err_msg, err);
         return ret;
       }
-      // TODO: change account on user's buckets
+      // change account on user's buckets
+      ret = adopt_user_buckets(dpp, y, driver, user_info.user_id,
+                               user_info.account_id);
+      if (ret < 0) {
+        set_err_msg(err_msg, "failed to change ownership of user's buckets");
+        return ret;
+      }
     }
   }
 
