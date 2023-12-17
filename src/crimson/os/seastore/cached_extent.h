@@ -1242,8 +1242,6 @@ public:
 
   void on_replace_prior(Transaction &t) final;
 
-  virtual void clear_delta() {}
-
   struct modified_region_t {
     extent_len_t offset;
     extent_len_t len;
@@ -1251,6 +1249,8 @@ public:
   virtual std::optional<modified_region_t> get_modified_region() {
     return std::nullopt;
   }
+
+  virtual void clear_modified_region() {}
 
   virtual ~LogicalCachedExtent();
 protected:

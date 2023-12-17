@@ -794,14 +794,11 @@ RandomBlockOolWriter::do_write(
     bufferptr bp;
     if (can_inplace_rewrite(t, ex)) {
       auto r = ex->get_modified_region();
-      if (r.has_value() && r->len > rbm->get_block_size()) {
-	offset = p2align(r->offset, rbm->get_block_size());
-	extent_len_t len =
-	  p2roundup(r->offset + r->len, rbm->get_block_size()) - offset;
-	bp = ceph::bufferptr(ex->get_bptr(), offset, len);
-      } else {
-	bp = ex->get_bptr();
-      }
+      ceph_assert(r.has_value());
+      offset = p2align(r->offset, rbm->get_block_size());
+      extent_len_t len =
+	p2roundup(r->offset + r->len, rbm->get_block_size()) - offset;
+      bp = ceph::bufferptr(ex->get_bptr(), offset, len);
     } else {
       bp = ex->get_bptr();
     }

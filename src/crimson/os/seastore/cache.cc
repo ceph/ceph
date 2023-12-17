@@ -1288,7 +1288,7 @@ record_t Cache::prepare_record(
     i->dirty_from_or_retired_at = JOURNAL_SEQ_MIN;
     i->state = CachedExtent::extent_state_t::CLEAN;
     assert(i->is_logical());
-    i->cast<LogicalCachedExtent>()->clear_delta();
+    i->clear_modified_region();
     touch_extent(*i);
     DEBUGT("inplace rewrite ool block is commmitted -- {}", t, *i);
   }
