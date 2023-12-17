@@ -1788,6 +1788,18 @@ int RGWUser::execute_add(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_
     user_info.type = TYPE_ROOT;
   }
 
+  if (!op_state.path.empty()) {
+    user_info.path = op_state.path;
+  } else {
+    user_info.path = "/";
+  }
+
+  if (op_state.create_date) {
+    user_info.create_date = *op_state.create_date;
+  } else {
+    user_info.create_date = ceph::real_clock::now();
+  }
+
   // update the request
   op_state.set_user_info(user_info);
   op_state.set_populated();
@@ -2108,6 +2120,14 @@ int RGWUser::execute_modify(const DoutPrefixProvider *dpp, RGWUserAdminOpState& 
       return -EINVAL;
     }
     user_info.type = op_state.account_root ? TYPE_ROOT : TYPE_RGW;
+  }
+
+  if (!op_state.path.empty()) {
+    user_info.path = op_state.path;
+  }
+
+  if (op_state.create_date) {
+    user_info.create_date = *op_state.create_date;
   }
 
   op_state.set_user_info(user_info);
