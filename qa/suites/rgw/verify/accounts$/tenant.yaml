@@ -1,0 +1,4 @@
+overrides:
+  s3tests:
+    accounts:
+      s3 tenant: RGW33333333333333333
