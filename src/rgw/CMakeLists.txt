@@ -199,7 +199,8 @@ set(librgw_common_srcs
   driver/rados/rgw_zone.cc
   driver/rados/sync_fairness.cc
   driver/rados/topic.cc
-  driver/rados/topic_migration.cc)
+  driver/rados/topic_migration.cc
+  driver/rados/users.cc)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
