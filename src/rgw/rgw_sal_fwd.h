@@ -33,8 +33,9 @@ namespace sal {
 
   class Driver;
   class User;
+  struct UserList;
   class Bucket;
-  class BucketList;
+  struct BucketList;
   class Object;
   class MultipartUpload;
   class Lifecycle;

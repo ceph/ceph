@@ -70,6 +70,7 @@
 
 #include "account.h"
 #include "buckets.h"
+#include "users.h"
 #include "rgw_pubsub.h"
 #include "topic.h"
 
@@ -1050,7 +1051,6 @@ int RadosStore::get_user_by_swift(const DoutPrefixProvider* dpp, const std::stri
   return 0;
 }
 
-
 int RadosStore::load_account_by_id(const DoutPrefixProvider* dpp,
                                    optional_yield y,
                                    std::string_view id,
@@ -1196,6 +1196,88 @@ int RadosStore::load_owner_by_email(const DoutPrefixProvider* dpp,
     return r;
   }
   owner = parse_owner(uid.id);
+  return 0;
+}
+
+int RadosStore::load_account_user_by_name(const DoutPrefixProvider* dpp,
+                                          optional_yield y,
+                                          std::string_view account_id,
+                                          std::string_view tenant,
+                                          std::string_view username,
+                                          std::unique_ptr<User>* user)
+{
+  rgw_user uid;
+  uid.tenant = tenant;
+
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_users_obj(zone, account_id);
+  int r = rgwrados::users::get(dpp, y, rados, obj, username, uid.id);
+  if (r < 0) {
+    ldpp_dout(dpp, 20) << "failed to find account username " << username
+        << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::unique_ptr<User> u = get_user(uid);
+  r = u->load_user(dpp, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 20) << "failed to load account user " << uid
+        << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  *user = std::move(u);
+  return 0;
+}
+
+int RadosStore::count_account_users(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_users_obj(zone, account_id);
+  return rgwrados::account::resource_count(dpp, y, rados, obj, count);
+}
+
+int RadosStore::list_account_users(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view tenant,
+                                   std::string_view path_prefix,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   UserList& listing)
+{
+  // fetch the list of user ids from cls_user
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_users_obj(zone, account_id);
+  std::vector<std::string> ids;
+  int r = rgwrados::users::list(dpp, y, rados, obj, marker, path_prefix,
+                                max_items, ids, listing.next_marker);
+  if (r < 0) {
+    return r;
+  }
+
+  // load the user metadata for each
+  for (auto& id : ids) {
+    rgw_user uid;
+    uid.tenant = tenant;
+    uid.id = std::move(id);
+
+    RGWUserInfo info;
+    r = ctl()->user->get_info_by_uid(dpp, uid, &info, y);
+    if (r == -ENOENT) {
+      continue;
+    }
+    if (r < 0) {
+      return r;
+    }
+    listing.users.push_back(std::move(info));
+  }
+
   return 0;
 }
 

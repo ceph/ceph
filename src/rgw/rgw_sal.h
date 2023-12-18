@@ -243,6 +243,14 @@ struct BucketList {
   std::string next_marker;
 };
 
+/// A list of users
+struct UserList {
+  /// The list of results, sorted by name
+  std::vector<RGWUserInfo> users;
+  /// The next marker to resume listing, or empty
+  std::string next_marker;
+};
+
 /** A list of key-value attributes */
   using Attrs = std::map<std::string, ceph::buffer::list>;
 
@@ -341,6 +349,28 @@ class Driver {
                                     optional_yield y,
                                     std::string_view email,
                                     rgw_owner& owner) = 0;
+
+    /** Load an account's user by username. */
+    virtual int load_account_user_by_name(const DoutPrefixProvider* dpp,
+                                          optional_yield y,
+                                          std::string_view account_id,
+                                          std::string_view tenant,
+                                          std::string_view username,
+                                          std::unique_ptr<User>* user) = 0;
+    /** Count the number of users belonging to the given account. */
+    virtual int count_account_users(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count) = 0;
+    /** Return a paginated listing of the account's users. */
+    virtual int list_account_users(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view tenant,
+                                   std::string_view path_prefix,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   UserList& listing) = 0;
 
     /** Get a basic Object.  This Object is not looked up, and is incomplete, since is
      * does not have a bucket.  This should only be used when an Object is needed before
