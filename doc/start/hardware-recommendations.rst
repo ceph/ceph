@@ -5,17 +5,17 @@
 ==========================
 
 Ceph is designed to run on commodity hardware, which makes building and
-maintaining petabyte-scale data clusters flexible and economically feasible. 
-When planning your cluster's hardware, you will need to balance a number 
+maintaining petabyte-scale data clusters flexible and economically feasible.
+When planning your cluster's hardware, you will need to balance a number
 of considerations, including failure domains, cost, and performance.
-Hardware planning should include distributing Ceph daemons and 
-other processes that use Ceph across many hosts. Generally, we recommend 
-running Ceph daemons of a specific type on a host configured for that type 
-of daemon. We recommend using separate hosts for processes that utilize your 
-data cluster (e.g., OpenStack, CloudStack, Kubernetes, etc).
+Hardware planning should include distributing Ceph daemons and
+other processes that use Ceph across many hosts. Generally, we recommend
+running Ceph daemons of a specific type on a host configured for that type
+of daemon. We recommend using separate hosts for processes that utilize your
+data cluster (e.g., OpenStack, OpenNebula, CloudStack, Kubernetes, etc).
 
 The requirements of one Ceph cluster are not the same as the requirements of
-another, but below are some general guidelines. 
+another, but below are some general guidelines.
 
 .. tip:: check out the `ceph blog`_ too.
 
@@ -106,7 +106,7 @@ that the OSD attempts to consume by changing the :confval:`osd_memory_target`
 configuration option.
 
 - Setting the :confval:`osd_memory_target` below 2GB is not
-  recommended. Ceph may fail to keep the memory consumption under 2GB and 
+  recommended. Ceph may fail to keep the memory consumption under 2GB and
   extremely slow performance is likely.
 
 - Setting the memory target between 2GB and 4GB typically works but may result
@@ -118,7 +118,7 @@ configuration option.
   OSD performance.
 
 - Setting the :confval:`osd_memory_target` higher than 4GB can improve
-  performance when there many (small) objects or when large (256GB/OSD 
+  performance when there many (small) objects or when large (256GB/OSD
   or more) data sets are processed.  This is especially true with fast
   NVMe OSDs.
 
@@ -130,7 +130,7 @@ configuration option.
    fragmented huge pages. Modern versions of Ceph disable transparent huge
    pages at the application level to avoid this, but that does not
    guarantee that the kernel will immediately reclaim unmapped memory. The OSD
-   may still at times exceed its memory target. We recommend budgeting 
+   may still at times exceed its memory target. We recommend budgeting
    at least 20% extra memory on your system to prevent OSDs from going OOM
    (**O**\ut **O**\f **M**\emory) during temporary spikes or due to delay in
    the kernel reclaiming freed pages. That 20% value might be more or less than
@@ -193,11 +193,11 @@ per gigabyte (i.e., $150 / 3072 = 0.0488). In the foregoing example, using the
 .. tip:: Hosting multiple OSDs on a single SAS / SATA HDD
    is **NOT** a good idea.
 
-.. tip:: Hosting an OSD with monitor, manager, or MDS data on a single 
+.. tip:: Hosting an OSD with monitor, manager, or MDS data on a single
    drive is also **NOT** a good idea.
 
 .. tip:: With spinning disks, the SATA and SAS interface increasingly
-   becomes a bottleneck at larger capacities. See also the `Storage Networking 
+   becomes a bottleneck at larger capacities. See also the `Storage Networking
    Industry Association's Total Cost of Ownership calculator`_.
 
 
@@ -219,7 +219,7 @@ Solid State Drives
 ------------------
 
 Ceph performance is much improved when using solid-state drives (SSDs). This
-reduces random access time and reduces latency while increasing throughput. 
+reduces random access time and reduces latency while increasing throughput.
 
 SSDs cost more per gigabyte than do HDDs but SSDs often offer
 access times that are, at a minimum, 100 times faster than HDDs.
@@ -236,10 +236,10 @@ to many of the limitations of HDDs.  SSDs do have significant
 limitations though. When evaluating SSDs, it is important to consider the
 performance of sequential and random reads and writes.
 
-.. important:: We recommend exploring the use of SSDs to improve performance. 
+.. important:: We recommend exploring the use of SSDs to improve performance.
    However, before making a significant investment in SSDs, we **strongly
    recommend** reviewing the performance metrics of an SSD and testing the
-   SSD in a test configuration in order to gauge performance. 
+   SSD in a test configuration in order to gauge performance.
 
 Relatively inexpensive SSDs may appeal to your sense of economy. Use caution.
 Acceptable IOPS are not the only factor to consider when selecting SSDs for
@@ -317,7 +317,7 @@ An HBA-free system may also cost hundreds of US dollars less every year if one
 purchases an annual maintenance contract or extended warranty.
 
 .. tip:: The `Ceph blog`_ is often an excellent source of information on Ceph
-   performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write 
+   performance issues. See `Ceph Write Throughput 1`_ and `Ceph Write
    Throughput 2`_ for additional details.
 
 
@@ -490,7 +490,7 @@ The faster that a placement group (PG) can recover from a degraded state to
 an ``active + clean`` state, the better. Notably, fast recovery minimizes
 the likelihood of multiple, overlapping failures that can cause data to become
 temporarily unavailable or even lost. Of course, when provisioning your
-network, you will have to balance price against performance. 
+network, you will have to balance price against performance.
 
 Some deployment tools employ VLANs to make hardware and network cabling more
 manageable. VLANs that use the 802.1q protocol require VLAN-capable NICs and
@@ -520,7 +520,7 @@ carefully consider before deploying a large scale data cluster.
 Additionally BMCs as of 2023 rarely sport network connections faster than 1 Gb/s,
 so dedicated and inexpensive 1 Gb/s switches for BMC administrative traffic
 may reduce costs by wasting fewer expenive ports on faster host switches.
- 
+
 
 Failure Domains
 ===============
