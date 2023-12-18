@@ -69,6 +69,9 @@ enum crush_opcodes {
 
 	CRUSH_RULE_SET_MSR_DESCENTS = 14,
 	CRUSH_RULE_SET_MSR_COLLISION_TRIES = 15,
+
+	/* choose variant without FIRSTN|INDEP */
+	CRUSH_RULE_CHOOSE_MSR = 16
 };
 
 /*
