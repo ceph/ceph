@@ -16,6 +16,8 @@
 #include "account.h"
 
 #include <boost/algorithm/string.hpp>
+#include "include/rados/librados.hpp"
+#include "cls/user/cls_user_types.h"
 #include "common/errno.h"
 #include "rgw_account.h"
 #include "rgw_common.h"
@@ -31,6 +33,7 @@
 namespace rgwrados::account {
 
 static constexpr std::string_view buckets_oid_prefix = "buckets.";
+static constexpr std::string_view users_oid_prefix = "users.";
 static const std::string account_oid_prefix = "account.";
 static constexpr std::string_view name_oid_prefix = "name.";
 
@@ -41,6 +44,14 @@ static std::string get_buckets_key(std::string_view account_id) {
 rgw_raw_obj get_buckets_obj(const RGWZoneParams& zone,
                             std::string_view account_id) {
   return {zone.account_pool, get_buckets_key(account_id)};
+}
+
+static std::string get_users_key(std::string_view account_id) {
+  return string_cat_reserve(users_oid_prefix, account_id);
+}
+rgw_raw_obj get_users_obj(const RGWZoneParams& zone,
+                          std::string_view account_id) {
+  return {zone.account_pool, get_users_key(account_id)};
 }
 
 static std::string get_account_key(std::string_view account_id) {
@@ -386,7 +397,60 @@ int remove(const DoutPrefixProvider* dpp,
         << obj << " with: " << cpp_strerror(r) << dendl;
     } // not fatal
   }
+  {
+    // remove the users object
+    const rgw_raw_obj obj = get_users_obj(zone, info.id);
+    r = rgw_delete_system_obj(dpp, &sysobj, obj.pool, obj.oid, nullptr, y);
+    if (r < 0) {
+      ldpp_dout(dpp, 20) << "WARNING: failed to remove users obj "
+        << obj << " with: " << cpp_strerror(r) << dendl;
+    } // not fatal
+  }
 
+  return 0;
+}
+
+// read the resource count from cls_user_account_header
+int resource_count(const DoutPrefixProvider* dpp,
+                   optional_yield y,
+                   librados::Rados& rados,
+                   const rgw_raw_obj& obj,
+                   uint32_t& count)
+{
+  rgw_rados_ref ref;
+  int r = rgw_get_rados_ref(dpp, &rados, obj, &ref);
+  if (r < 0) {
+    return r;
+  }
+
+  librados::ObjectReadOperation op;
+  bufferlist bl;
+  int ret = 0;
+  op.omap_get_header(&bl, &ret);
+
+  r = ref.operate(dpp, &op, nullptr, y);
+  if (r == -ENOENT) { // doesn't exist yet
+    count = 0;
+    return 0;
+  }
+  if (r < 0) {
+    return r;
+  }
+
+  if (!bl.length()) { // exists but no header yet
+    count = 0;
+    return 0;
+  }
+
+  cls_user_account_header header;
+  try {
+    auto p = bl.cbegin();
+    decode(header, p);
+  } catch (const buffer::error&) {
+    return -EIO;
+  }
+
+  count = header.count;
   return 0;
 }
 
