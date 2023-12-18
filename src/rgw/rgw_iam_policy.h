@@ -134,6 +134,11 @@ enum {
   iamListRoleTags,
   iamUntagRole,
   iamUpdateRole,
+  iamCreateUser,
+  iamGetUser,
+  iamUpdateUser,
+  iamDeleteUser,
+  iamListUsers,
   iamAll,
 
   stsAssumeRole,
