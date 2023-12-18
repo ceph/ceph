@@ -1051,6 +1051,13 @@ void OSDService::inc_osd_stat_repaired()
   return;
 }
 
+void OSDService::set_osd_stat_repaired(int64_t count)
+{
+  std::lock_guard l(stat_lock);
+  osd_stat.num_shards_repaired = count;
+  return;
+}
+
 float OSDService::compute_adjusted_ratio(osd_stat_t new_stat, float *pratio,
 				         uint64_t adjust_used)
 {
@@ -3128,6 +3135,11 @@ will start to track new ops received afterwards.";
     scrub_purged_snaps();
   }
 
+  else if (prefix == "clear_shards_repaired") {
+    int64_t count = cmd_getval_or<int64_t>(cmdmap, "count", 0);
+    service.set_osd_stat_repaired(count);
+  }
+
   else if (prefix == "reset_purged_snaps_last") {
     lock_guard l(osd_lock);
     superblock.purged_snaps_last = 0;
@@ -4349,6 +4361,12 @@ void OSD::final_init()
     "name=value,type=CephString,req=false",
     asok_hook,
     "debug the scrubber");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "clear_shards_repaired "
+    "name=count,type=CephInt,req=false,range=0",
+    asok_hook,
+    "clear num_shards_repaired to clear health warning");
   ceph_assert(r == 0);
 
   // -- pg commands --
