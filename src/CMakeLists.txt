@@ -947,44 +947,31 @@ add_custom_target(vstart-base DEPENDS
     monmaptool
     crushtool
     rados)
-if(NOT WIN32)
-  # WIN32 port does not build python bindings
-  # TODO: introduce an option for enabling python binding
-  add_dependencies(vstart-base
-    cython_rados)
-endif()
-
-if (WITH_MGR)
-  add_dependencies(vstart-base ceph-mgr)
-  add_dependencies(vstart-base ceph-exporter)
-endif()
+foreach(dep
+    cython_rados
+    ceph-mgr
+    ceph-exporter)
+  if(TARGET ${dep})
+    add_dependencies(vstart-base ${dep})
+  endif()
+endforeach()
 
 add_custom_target(vstart DEPENDS vstart-base)
-if(WITH_RBD AND NOT WIN32)
-  add_dependencies(vstart cython_rbd)
-endif()
-if (WITH_CEPHFS)
-  add_dependencies(vstart ceph-mds cephfs cython_cephfs)
-endif()
-if(WITH_RADOSGW)
-  add_dependencies(vstart radosgw radosgw-admin)
-endif()
-
-if(WITH_LTTNG)
-  add_dependencies(vstart tracepoint_libraries)
-endif(WITH_LTTNG)
-
-if(WITH_MGR AND WITH_MGR_DASHBOARD_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
-  add_dependencies(vstart mgr-dashboard-frontend-build)
-endif()
-
-if(WITH_MGR)
-  add_dependencies(vstart ceph-volume-venv-setup)
-endif()
-
-if(WITH_MGR)
-  add_dependencies(vstart cephadm)
-endif()
+foreach(dep
+    cython_rbd
+    cephfs
+    cython_cephfs
+    ceph-mds
+    mgr-dashboard-frontend-build
+    radosgw
+    radosgw-admin
+    tracepoint_libraries
+    ceph-volume-venv-setup
+    cephadm)
+  if(TARGET ${dep})
+    add_dependencies(vstart ${dep})
+  endif()
+endforeach()
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS
