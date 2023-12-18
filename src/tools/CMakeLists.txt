@@ -23,7 +23,8 @@ if(NOT WIN32)
   set(neorados_srcs
       neorados.cc)
   add_executable(neorados ${neorados_srcs})
-  target_link_libraries(neorados libneorados spawn ${FMT_LIB} ${CMAKE_DL_LIBS})
+  target_link_libraries(neorados libneorados ${FMT_LIB} ${CMAKE_DL_LIBS})
+  add_dependencies(tests neorados)
   #install(TARGETS neorados DESTINATION bin)
 endif()
 

@@ -440,6 +440,7 @@ private:
   ceph::bufferlist m_cmp_bl;
   ceph::bufferlist m_write_bl;
   uint64_t *m_mismatch_offset;
+  uint64_t m_mismatch_object_offset;
   int m_op_flags;
 };
 

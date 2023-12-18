@@ -102,7 +102,7 @@ bool ParentCacheObjectDispatch<I>::read(
 
   m_cache_client->lookup_object(m_image_ctx->data_ctx.get_namespace(),
                                 m_image_ctx->data_ctx.get_id(),
-                                io_context->read_snap().value_or(CEPH_NOSNAP),
+                                io_context->get_read_snap(),
                                 m_image_ctx->layout.object_size,
                                 oid, std::move(ctx));
   return true;
@@ -141,7 +141,7 @@ void ParentCacheObjectDispatch<I>::handle_read_cache(
         on_dispatched->complete(r);
       });
     m_plugin_api.read_parent(m_image_ctx, object_no, extents,
-                             io_context->read_snap().value_or(CEPH_NOSNAP),
+                             io_context->get_read_snap(),
                              parent_trace, ctx);
     return;
   }

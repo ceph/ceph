@@ -1003,14 +1003,14 @@ librados::IoCtx duplicate_io_ctx(librados::IoCtx& io_ctx) {
     auto ctx = std::make_shared<neorados::IOContext>(
       data_ctx.get_id(), data_ctx.get_namespace());
     if (snap_id != CEPH_NOSNAP) {
-      ctx->read_snap(snap_id);
+      ctx->set_read_snap(snap_id);
     }
     if (!snapc.snaps.empty()) {
-      ctx->write_snap_context(
+      ctx->set_write_snap_context(
         {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
     }
     if (data_ctx.get_pool_full_try()) {
-      ctx->full_try(true);
+      ctx->set_full_try(true);
     }
 
     // atomically reset the data IOContext to new version
