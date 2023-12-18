@@ -73,16 +73,16 @@ Notable Changes
   The user might temporarily mute this warning using
   ``ceph health mute POOL_APP_NOT_ENABLED``.
 
-* An overview page for rgw to show the overall status of rgw components
+* Dashboard: An overview page for RGW to show the overall status of RGW components.
 
-* Added management support for RGW Multi-site and Ceph FS Subvolumes and groups
+* Dashboard: Added management support for RGW Multi-site and CephFS Subvolumes and groups.
 
-* Fixed few bugs and issues around the new dashboard page like the broken layout,
+* Dashboard: Fixed few bugs and issues around the new dashboard page including the broken layout,
   some metrics giving wrong values and introduced a popover to display details
-  when there are HEALTH_WARN or HEALTH_ERR
+  when there are HEALTH_WARN or HEALTH_ERR.
 
-* Fixed several issues in ceph dashboard on rook backed clusters,
-  and improved the user experience on the rook environment
+* Dashboard: Fixed several issues in Ceph dashboard on Rook-backed clusters,
+  and improved the user experience on the Rook environment.
 
 Changelog
 ---------
