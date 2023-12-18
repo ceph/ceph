@@ -794,6 +794,26 @@ public:
                               optional_yield y,
                               std::string_view email,
                               rgw_owner& owner) override;
+
+      int load_account_user_by_name(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    std::string_view tenant,
+                                    std::string_view username,
+                                    std::unique_ptr<User>* user) override;
+      int count_account_users(const DoutPrefixProvider* dpp,
+                              optional_yield y,
+                              std::string_view account_id,
+                              uint32_t& count) override;
+      int list_account_users(const DoutPrefixProvider* dpp,
+                             optional_yield y,
+                             std::string_view account_id,
+                             std::string_view tenant,
+                             std::string_view path_prefix,
+                             std::string_view marker,
+                             uint32_t max_items,
+                             UserList& listing) override;
+
       virtual std::unique_ptr<Object> get_object(const rgw_obj_key& k) override;
       virtual std::string get_cluster_id(const DoutPrefixProvider* dpp, optional_yield y);
       std::unique_ptr<Bucket> get_bucket(const RGWBucketInfo& i) override;

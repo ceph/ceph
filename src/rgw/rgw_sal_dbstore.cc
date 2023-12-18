@@ -1617,6 +1617,36 @@ namespace rgw::sal {
     return 0;
   }
 
+  int DBStore::load_account_user_by_name(const DoutPrefixProvider* dpp,
+                                         optional_yield y,
+                                         std::string_view account_id,
+                                         std::string_view tenant,
+                                         std::string_view username,
+                                         std::unique_ptr<User>* user)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::count_account_users(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   uint32_t& count)
+  {
+    return -ENOTSUP;
+  }
+
+  int DBStore::list_account_users(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view account_id,
+                                  std::string_view tenant,
+                                  std::string_view path_prefix,
+                                  std::string_view marker,
+                                  uint32_t max_items,
+                                  UserList& listing)
+  {
+    return -ENOTSUP;
+  }
+
   std::string DBStore::get_cluster_id(const DoutPrefixProvider* dpp,  optional_yield y)
   {
     return "PLACEHOLDER"; // for instance unique identifier
