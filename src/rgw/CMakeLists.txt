@@ -111,6 +111,7 @@ set(librgw_common_srcs
   rgw_rest_metadata.cc
   rgw_rest_ratelimit.cc
   rgw_rest_role.cc
+  rgw_rest_iam_user.cc
   rgw_rest_s3.cc
   rgw_rest_pubsub.cc
   rgw_rest_zero.cc
