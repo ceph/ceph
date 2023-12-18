@@ -243,6 +243,43 @@ int FilterDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
   return next->load_owner_by_email(dpp, y, email, owner);
 }
 
+int FilterDriver::load_account_user_by_name(const DoutPrefixProvider* dpp,
+                                            optional_yield y,
+                                            std::string_view account_id,
+                                            std::string_view tenant,
+                                            std::string_view username,
+                                            std::unique_ptr<User>* user)
+{
+  std::unique_ptr<User> nu;
+  int ret = next->load_account_user_by_name(dpp, y, account_id, tenant,
+                                            username, &nu);
+  if (ret >= 0) {
+    *user = std::make_unique<FilterUser>(std::move(nu));
+  }
+  return ret;
+}
+
+int FilterDriver::count_account_users(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view account_id,
+                                      uint32_t& count)
+{
+  return next->count_account_users(dpp, y, account_id, count);
+}
+
+int FilterDriver::list_account_users(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view account_id,
+                                     std::string_view tenant,
+                                     std::string_view path_prefix,
+                                     std::string_view marker,
+                                     uint32_t max_items,
+                                     UserList& listing)
+{
+  return next->list_account_users(dpp, y, account_id, tenant, path_prefix,
+                                  marker, max_items, listing);
+}
+
 std::unique_ptr<Object> FilterDriver::get_object(const rgw_obj_key& k)
 {
   std::unique_ptr<Object> o = next->get_object(k);
