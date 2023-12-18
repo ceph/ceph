@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <regex>
 #include <boost/tokenizer.hpp>
 
 #include "rgw_auth_s3.h"
@@ -9,6 +10,7 @@
 #include "rgw_rest_role.h"
 #include "rgw_rest_user_policy.h"
 #include "rgw_rest_oidc_provider.h"
+#include "rgw_rest_iam_user.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -37,7 +39,12 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"TagRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWTagRole(bl_post_body);}},
   {"ListRoleTags", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWListRoleTags;}},
   {"UntagRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUntagRole(bl_post_body);}},
-  {"UpdateRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUpdateRole(bl_post_body);}}
+  {"UpdateRole", [](const bufferlist& bl_post_body) -> RGWOp* {return new RGWUpdateRole(bl_post_body);}},
+  {"CreateUser", make_iam_create_user_op},
+  {"GetUser", make_iam_get_user_op},
+  {"UpdateUser", make_iam_update_user_op},
+  {"DeleteUser", make_iam_delete_user_op},
+  {"ListUsers", make_iam_list_users_op},
 };
 
 bool RGWHandler_REST_IAM::action_exists(const req_state* s) 
@@ -87,4 +94,55 @@ RGWRESTMgr_IAM::get_handler(rgw::sal::Driver* driver,
 {
   bufferlist bl;
   return new RGWHandler_REST_IAM(auth_registry, bl);
+}
+
+static constexpr size_t MAX_USER_NAME_LEN = 64;
+
+bool validate_iam_user_name(const std::string& name, std::string& err)
+{
+  if (name.empty()) {
+    err = "Missing required element UserName";
+    return false;
+  }
+  if (name.size() > MAX_USER_NAME_LEN) {
+    err = "UserName too long";
+    return false;
+  }
+  const std::regex pattern("[\\w+=,.@-]+");
+  if (!std::regex_match(name, pattern)) {
+    err = "UserName contains invalid characters";
+    return false;
+  }
+  return true;
+}
+
+static constexpr size_t MAX_PATH_LEN = 512;
+
+bool validate_iam_path(const std::string& path, std::string& err)
+{
+  if (path.size() > MAX_PATH_LEN) {
+    err = "Path too long";
+    return false;
+  }
+  const std::regex pattern("(/[!-~]+/)|(/)");
+  if (!std::regex_match(path, pattern)) {
+    err = "Path contains invalid characters";
+    return false;
+  }
+  return true;
+}
+
+std::string iam_user_arn(const RGWUserInfo& info)
+{
+  if (info.type == TYPE_ROOT) {
+    return fmt::format("arn:aws:iam::{}:root", info.account_id);
+  }
+  std::string_view acct = !info.account_id.empty()
+      ? info.account_id : info.user_id.tenant;
+  std::string_view path = info.path;
+  if (path.empty()) {
+    path = "/";
+  }
+  return fmt::format("arn:aws:iam::{}:user{}{}",
+                     acct, path, info.display_name);
 }

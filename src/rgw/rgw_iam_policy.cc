@@ -153,6 +153,11 @@ static const actpair actpairs[] =
  { "iam:ListRoleTags", iamListRoleTags},
  { "iam:UntagRole", iamUntagRole},
  { "iam:UpdateRole", iamUpdateRole},
+ { "iam:CreateUser", iamCreateUser},
+ { "iam:GetUser", iamGetUser},
+ { "iam:UpdateUser", iamUpdateUser},
+ { "iam:DeleteUser", iamDeleteUser},
+ { "iam:ListUsers", iamListUsers},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
@@ -1453,6 +1458,21 @@ const char* action_bit_string(uint64_t action) {
 
   case iamUpdateRole:
     return "iam:UpdateRole";
+
+  case iamCreateUser:
+    return "iam:CreateUser";
+
+  case iamGetUser:
+    return "iam:GetUser";
+
+  case iamUpdateUser:
+    return "iam:UpdateUser";
+
+  case iamDeleteUser:
+    return "iam:DeleteUser";
+
+  case iamListUsers:
+    return "iam:ListUsers";
 
   case stsAssumeRole:
     return "sts:AssumeRole";

@@ -498,6 +498,12 @@ bool is_non_s3_op(RGWOpType op_type)
   case RGW_OP_LIST_ROLE_TAGS:
   case RGW_OP_UNTAG_ROLE:
   case RGW_OP_UPDATE_ROLE:
+
+  case RGW_OP_CREATE_USER:
+  case RGW_OP_GET_USER:
+  case RGW_OP_UPDATE_USER:
+  case RGW_OP_DELETE_USER:
+  case RGW_OP_LIST_USERS:
     return true;
   default:
     return false;
