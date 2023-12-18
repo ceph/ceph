@@ -19,7 +19,9 @@
 #include "rgw_zone.h"
 #include "rgw_rados.h"
 
+#include "driver/rados/account.h"
 #include "driver/rados/buckets.h"
+#include "driver/rados/users.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -152,6 +154,21 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
   return 0;
 }
 
+// simple struct and function to help decide whether we need to add/remove
+// links to the account users index
+struct users_entry {
+  std::string_view account_id, path, name;
+  constexpr operator bool() { return !account_id.empty(); }
+  constexpr auto operator<=>(const users_entry&) const = default;
+};
+
+static users_entry account_users_link(const RGWUserInfo* info) {
+  if (info && !info->account_id.empty() && info->type != TYPE_ROOT) {
+    return {info->account_id, info->path, info->display_name};
+  }
+  return {};
+}
+
 static bool s3_key_active(const RGWUserInfo* info, const std::string& id) {
   if (!info) {
     return false;
@@ -171,6 +188,7 @@ static bool swift_key_active(const RGWUserInfo* info, const std::string& id) {
 class PutOperation
 {
   RGWSI_User_RADOS::Svc& svc;
+  librados::Rados& rados;
   RGWSI_MetaBackend_SObj::Context_SObj *ctx;
   RGWUID ui;
   const RGWUserInfo& info;
@@ -191,6 +209,7 @@ class PutOperation
 
 public:  
   PutOperation(RGWSI_User_RADOS::Svc& svc,
+               librados::Rados& rados,
                RGWSI_MetaBackend::Context *_ctx,
                const RGWUserInfo& info,
                RGWUserInfo *old_info,
@@ -199,7 +218,7 @@ public:
                bool exclusive,
                map<string, bufferlist> *pattrs,
                optional_yield y) :
-      svc(svc), info(info), old_info(old_info),
+      svc(svc), rados(rados), info(info), old_info(old_info),
       objv_tracker(objv_tracker), mtime(mtime),
       exclusive(exclusive), pattrs(pattrs), y(y) {
     ctx = static_cast<RGWSI_MetaBackend_SObj::Context_SObj *>(_ctx);
@@ -245,6 +264,26 @@ public:
       if (r >= 0 && inf.user_id != info.user_id &&
           (!old_info || inf.user_id != old_info->user_id)) {
         ldpp_dout(dpp, 0) << "WARNING: can't store user info, access key already mapped to another user" << dendl;
+        return -EEXIST;
+      }
+    }
+
+    if (account_users_link(&info) &&
+        account_users_link(&info) != account_users_link(old_info)) {
+      if (info.display_name.empty()) {
+        ldpp_dout(dpp, 0) << "WARNING: can't store user info, display name "
+            "can't be empty in an account" << dendl;
+        return -EINVAL;
+      }
+
+      const RGWZoneParams& zone = svc.zone->get_zone_params();
+      const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
+      std::string existing_uid;
+      int r = rgwrados::users::get(dpp, y, rados, users,
+                                   info.display_name, existing_uid);
+      if (r >= 0 && existing_uid != info.user_id.id) {
+        ldpp_dout(dpp, 0) << "WARNING: can't store user info, display name "
+            "already exists in account" << dendl;
         return -EEXIST;
       }
     }
@@ -314,6 +353,23 @@ public:
       }
     }
 
+    if (account_users_link(&info) &&
+        account_users_link(&info) != account_users_link(old_info)) {
+      // link the user to its account
+      const RGWZoneParams& zone = svc.zone->get_zone_params();
+      const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
+      ret = rgwrados::users::add(dpp, y, rados, users, info, false,
+                                 std::numeric_limits<uint32_t>::max());
+      if (ret < 0) {
+        ldpp_dout(dpp, 20) << "WARNING: failed to link user "
+            << info.user_id << " to account " << info.account_id
+            << ": " << cpp_strerror(ret) << dendl;
+        return ret;
+      }
+      ldpp_dout(dpp, 20) << "linked user " << info.user_id
+          << " to account " << info.account_id << dendl;
+    }
+
     return 0;
   }
 
@@ -362,6 +418,18 @@ public:
       }
     }
 
+    if (account_users_link(&old_info) &&
+        account_users_link(&old_info) != account_users_link(&info)) {
+      // unlink the old name from its account
+      const RGWZoneParams& zone = svc.zone->get_zone_params();
+      const auto& users = rgwrados::account::get_users_obj(zone, old_info.account_id);
+      ret = rgwrados::users::remove(dpp, y, rados, users, old_info.display_name);
+      if (ret < 0 && ret != -ENOENT) {
+        set_err_msg("ERROR: could not unlink from account " + old_info.account_id);
+        return ret;
+      }
+    }
+
     return 0;
   }
 
@@ -380,7 +448,7 @@ int RGWSI_User_RADOS::store_user_info(RGWSI_MetaBackend::Context *ctx,
                                 optional_yield y,
                                 const DoutPrefixProvider *dpp)
 {
-  PutOperation op(svc, ctx,
+  PutOperation op(svc, *rados, ctx,
                   info, old_info,
                   objv_tracker,
                   mtime, exclusive,
@@ -482,13 +550,25 @@ int RGWSI_User_RADOS::remove_user_info(RGWSI_MetaBackend::Context *ctx,
     return ret;
   }
 
-  rgw_raw_obj uid_bucks = get_buckets_obj(info.user_id);
-  ldpp_dout(dpp, 10) << "removing user buckets index" << dendl;
-  auto sysobj = svc.sysobj->get_obj(uid_bucks);
-  ret = sysobj.wop().remove(dpp, y);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
-    return ret;
+  if (info.account_id.empty()) {
+    rgw_raw_obj uid_bucks = get_buckets_obj(info.user_id);
+    ldpp_dout(dpp, 10) << "removing user buckets index" << dendl;
+    auto sysobj = svc.sysobj->get_obj(uid_bucks);
+    ret = sysobj.wop().remove(dpp, y);
+    if (ret < 0 && ret != -ENOENT) {
+      ldpp_dout(dpp, 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
+      return ret;
+    }
+  } else if (info.type != TYPE_ROOT) {
+    // unlink the name from its account
+    const RGWZoneParams& zone = svc.zone->get_zone_params();
+    const auto& users = rgwrados::account::get_users_obj(zone, info.account_id);
+    ret = rgwrados::users::remove(dpp, y, *rados, users, info.display_name);
+    if (ret < 0) {
+      ldpp_dout(dpp, 0) << "ERROR: could not unlink from account "
+          << info.account_id << ": " << cpp_strerror(ret) << dendl;
+      return ret;
+    }
   }
 
   ret = remove_uid_index(ctx, info, objv_tracker, y, dpp);
