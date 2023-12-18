@@ -81,7 +81,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_ENCRYPTION_ALGORITHM, {400, "InvalidEncryptionAlgorithmError" }},
     { ERR_INVALID_RETENTION_PERIOD,{400, "InvalidRetentionPeriod"}},
-    { ERR_LIMIT_EXCEEDED, {400, "LimitExceeded" }},
+    { ERR_LIMIT_EXCEEDED, {409, "LimitExceeded" }},
     { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
     { EACCES, {403, "AccessDenied" }},
     { EPERM, {403, "AccessDenied" }},
@@ -135,6 +135,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_BUCKET_ENCRYPTION_CONFIGURATION, {404, "ServerSideEncryptionConfigurationNotFoundError"}},
     { ERR_NO_SUCH_PUBLIC_ACCESS_BLOCK_CONFIGURATION, {404, "NoSuchPublicAccessBlockConfiguration"}},
     { ERR_ACCOUNT_EXISTS, {409, "AccountAlreadyExists"}},
+    { ECANCELED, {409, "ConcurrentModification"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({

@@ -8,6 +8,13 @@
 #include "rgw_rest.h"
 
 
+struct RGWUserInfo;
+
+bool validate_iam_user_name(const std::string& name, std::string& err);
+bool validate_iam_path(const std::string& path, std::string& err);
+
+std::string iam_user_arn(const RGWUserInfo& info);
+
 class RGWHandler_REST_IAM : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
   bufferlist bl_post_body;
