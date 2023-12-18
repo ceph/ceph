@@ -263,18 +263,67 @@ void mClockScheduler::ClientRegistry::set_info(
       return lim_req * capacity_per_shard;
     };
 
-    double res = get_res();
-    double lim = get_lim();
-    double wgt = double(qos_params.weight);
-    // Add/update QoS profile params for the client in the client infos map
-    auto r =
-     external_client_infos.emplace(
-        std::piecewise_construct,
-        std::forward_as_tuple(id.client_profile_id),
-        std::forward_as_tuple(res, wgt, lim));
-    if (!r.second) {
-      r.first->second.update(res, wgt, lim);
+    double res;
+    double lim;
+    double wgt;
+    bool client_info_changed = false;
+    auto ci = external_client_infos_tracker.find(id.client_profile_id);
+    if (ci == external_client_infos_tracker.end()) {
+      res = get_res();
+      lim = get_lim();
+      wgt = double(qos_params.weight);
+      client_info_changed = true;
+    } else {
+      enum { RES, WGT, LIM };
+      // Return changed client info parameter
+      auto get_ci_param = [&](int type, uint64_t val) -> std::optional<double> {
+        switch (type) {
+          case RES:
+            if (val != qos_params.reservation) {
+              return get_res();
+            }
+            break;
+          case LIM:
+            if (val != qos_params.limit) {
+              return get_lim();
+            }
+            break;
+          case WGT:
+            if (val != qos_params.weight) {
+              return double(qos_params.weight);
+            }
+            break;
+          default:
+            ceph_assert(0 == "Unknown client info type");
+        }
+        return std::nullopt;
+      };
+
+      auto _res = get_ci_param(RES, ci->second.res_iops);
+      auto _lim = get_ci_param(LIM, ci->second.lim_iops);
+      auto _wgt = get_ci_param(WGT, ci->second.wgt);
+      client_info_changed =
+        (_res.has_value() || _lim.has_value() || _wgt.has_value());
+
+      res = _res.value_or(ci->second.res_bw);
+      lim = _lim.value_or(ci->second.lim_bw);
+      wgt = _wgt.value_or(ci->second.wgt);
     }
+
+    // Add/update QoS profile params for the client in the client infos map
+    if (client_info_changed) {
+      auto r =
+        external_client_infos.emplace(
+          std::piecewise_construct,
+          std::forward_as_tuple(id.client_profile_id),
+          std::forward_as_tuple(res, wgt, lim));
+      if (!r.second) {
+        r.first->second.update(res, wgt, lim);
+      }
+    }
+
+    // Set/update tick version for the client in the client infos tracker map
+    set_client_infos_tracker(id.client_profile_id, qos_params, res, lim, wgt);
   }
 }
 
@@ -285,6 +334,76 @@ void mClockScheduler::ClientRegistry::clear_info(const scheduler_id_t &id)
   if (ret != external_client_infos.end()) {
     external_client_infos.erase(ret);
   }
+}
+
+void mClockScheduler::ClientRegistry::set_client_infos_tracker(
+  const client_profile_id_t &id,
+  const client_qos_params_t &qos_params,
+  const double res_bw,
+  const double lim_bw,
+  const double wgt)
+{
+  ceph_assert(ceph_mutex_is_locked(reg_lock));
+  ++tick;
+  auto r =
+    external_client_infos_tracker.emplace(
+      std::piecewise_construct,
+      std::forward_as_tuple(id),
+      std::forward_as_tuple(
+        tick,
+        qos_params.reservation,
+        qos_params.limit,
+        res_bw,
+        lim_bw,
+        wgt));
+  if (!r.second) {
+    r.first->second.update(tick, qos_params.reservation, qos_params.limit,
+      res_bw, lim_bw, wgt);
+  }
+}
+
+/*
+ * This is being called regularly by the clear_timer thread. Every
+ * time it's called it notes the time and version counter (mark
+ * point) in a deque. It also looks at the deque to find the most
+ * recent mark point that is older than clear_age. It then walks
+ * the map and delete all external client entries that were last
+ * used before that mark point.
+ */
+void mClockScheduler::ClientRegistry::do_clean()
+{
+  ceph_assert(ceph_mutex_is_locked(reg_lock));
+  TimePoint now = std::chrono::steady_clock::now();
+  clear_mark_points.emplace_back(MarkPoint(now, tick));
+
+  counter_t clear_point = 0;
+  auto point = clear_mark_points.front();
+  while (point.first <= now - ceph::make_timespan(clear_age)) {
+    clear_point = point.second;
+    clear_mark_points.pop_front();
+    point = clear_mark_points.front();
+  }
+
+  counter_t cleared_num = 0;
+  if (clear_point > 0) {
+    for (auto i = external_client_infos_tracker.begin();
+         i != external_client_infos_tracker.end();
+         /* empty */) {
+      auto i2 = i++;
+      if (cleared_num < clear_max &&
+          i2->second.tick_count <= clear_point) {
+        // Clear the entry from both the external client infos
+        // and external client infos tracker map.
+        auto ci = external_client_infos.find(i2->first);
+        if (ci != external_client_infos.end()) {
+          external_client_infos.erase(ci);
+        }
+        external_client_infos_tracker.erase(i2);
+        cleared_num++;
+      }
+    }
+  }
+  clear_timer->add_event_after(clear_period, new Clear_Registry(this));
 }
 
 void mClockScheduler::set_osd_capacity_params_from_config()
@@ -763,6 +882,7 @@ void mClockScheduler::handle_conf_change(
 mClockScheduler::~mClockScheduler()
 {
   cct->_conf.remove_observer(this);
+  client_registry.shutdown_clear_timer();
   if (logger) {
     cct->get_perfcounters_collection()->remove(logger);
     delete logger;

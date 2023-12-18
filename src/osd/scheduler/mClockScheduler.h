@@ -24,9 +24,11 @@
 
 #include "dmclock/src/dmclock_server.h"
 
-#include "osd/scheduler/OpScheduler.h"
 #include "common/config.h"
 #include "common/ceph_context.h"
+#include "common/Timer.h"
+
+#include "osd/scheduler/OpScheduler.h"
 #include "osd/scheduler/OpSchedulerItem.h"
 
 
@@ -46,6 +48,11 @@ constexpr double default_min = 0.0;
 constexpr double default_max = std::numeric_limits<double>::is_iec559 ?
   std::numeric_limits<double>::infinity() :
   std::numeric_limits<double>::max();
+constexpr double default_clear_period = 60.0;
+constexpr double default_clear_age = 600.0;
+constexpr unsigned default_clear_max = 1000;
+
+using counter_t = uint64_t;
 
 /**
  * client_profile_id_t
@@ -170,9 +177,79 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
     crimson::dmclock::ClientInfo default_external_client_info = {1, 1, 1};
     std::map<client_profile_id_t,
              crimson::dmclock::ClientInfo> external_client_infos;
+
+    struct client_tracker_t {
+      counter_t tick_count;
+      uint64_t res_iops;
+      uint64_t lim_iops;
+      double res_bw;
+      double lim_bw;
+      double wgt;
+
+      client_tracker_t(const counter_t _tick,
+                       const uint64_t _res_iops,
+                       const uint64_t _lim_iops,
+                       const double _res_bw,
+                       const double _lim_bw,
+                       const double _wgt) {
+         update(_tick, _res_iops, _lim_iops, _res_bw, _lim_bw, _wgt);
+      }
+
+      inline void update(const counter_t _tick,
+                         const uint64_t _res_iops,
+                         const uint64_t _lim_iops,
+                         const double _res_bw,
+                         const double _lim_bw,
+                         const double _wgt) {
+        tick_count = _tick;
+        res_iops = _res_iops;
+        lim_iops = _lim_iops;
+        res_bw = _res_bw;
+        lim_bw = _lim_bw;
+        wgt = _wgt;
+      }
+
+      auto operator<=>(const client_tracker_t&) const = default;
+      friend std::ostream& operator<<(std::ostream &out,
+                                      const client_tracker_t &t) {
+        return out << "[tick: " << t.tick_count
+                   << " res_iops: " << t.res_iops
+                   << " res_bw: " << t.res_bw
+                   << " lim_iops: " << t.lim_iops
+                   << " lim_bw: " << t.lim_bw
+                   << " wgt: " << t.wgt
+                   << "]";
+      }
+    };
+    std::map<client_profile_id_t,
+             client_tracker_t> external_client_infos_tracker;
     const crimson::dmclock::ClientInfo *get_external_client(
       const client_profile_id_t &client) const;
-    mutable ceph::mutex reg_lock = ceph::make_mutex("ClientRegistry::lock");
+    void set_client_infos_tracker(const client_profile_id_t &id,
+      const client_qos_params_t &qos_params, const double res_bw,
+      const double lim_bw, const double wgt);
+
+    // External client registry clean-up job
+    class Clear_Registry : public Context {
+      ClientRegistry *client_registry;
+      public:
+        explicit Clear_Registry(ClientRegistry *c) : client_registry(c) {}
+        void finish(int r) override {
+          client_registry->do_clean();
+        }
+    };
+    SafeTimer *clear_timer = nullptr;
+    using TimePoint = decltype(std::chrono::steady_clock::now());
+    using MarkPoint = std::pair<TimePoint, counter_t>;
+    std::deque<MarkPoint> clear_mark_points;
+    // Period between runs of do_clean()
+    double clear_period = default_clear_period;
+    // Max age of a client entry in the ClientRegistry
+    double clear_age = default_clear_age;
+    // Max number of clients to clear at a time
+    unsigned clear_max = default_clear_max;
+    // Every add/update to the ClientRegistry increments a tick for a client
+    counter_t tick = 0;
   public:
     /**
      * update_from_config
@@ -200,6 +277,58 @@ class mClockScheduler : public OpScheduler, md_config_obs_t {
       std::lock_guard rl(reg_lock);
       return external_client_infos.size();
     }
+
+    unsigned get_external_client_infos_tracker_size() {
+      std::lock_guard rl(reg_lock);
+      return external_client_infos_tracker.size();
+    }
+
+    void set_clear_period(double _clear_period) {
+      std::lock_guard rl(reg_lock);
+      if (clear_period != _clear_period) {
+        clear_period = _clear_period;
+        clear_timer->cancel_all_events();
+        clear_timer->add_event_after(clear_period, new Clear_Registry(this));
+      }
+    }
+
+    double get_clear_period() {
+      std::lock_guard rl(reg_lock);
+      return clear_period;
+    }
+
+    void set_clear_age(double _clear_age) {
+      std::lock_guard rl(reg_lock);
+      if (clear_age != _clear_age) {
+        clear_age = _clear_age;
+      }
+    }
+
+    double get_clear_age() {
+      std::lock_guard rl(reg_lock);
+      return clear_age;
+    }
+
+    void do_clean();
+
+    void init_clear_timer(CephContext *cct) {
+      clear_timer = new SafeTimer(cct, reg_lock);
+      clear_timer->init();
+      {
+        std::lock_guard rl(reg_lock);
+        clear_timer->add_event_after(clear_period, new Clear_Registry(this));
+      }
+    }
+
+    void shutdown_clear_timer() {
+      {
+        std::lock_guard rl(reg_lock);
+        clear_timer->shutdown();
+      }
+      delete clear_timer;
+      clear_timer = nullptr;
+    }
+
   } client_registry;
 
   using mclock_queue_t = crimson::dmclock::PullPriorityQueue<
@@ -289,6 +418,7 @@ public:
     set_config_defaults_from_profile();
     client_registry.update_from_config(
       cct->_conf, osd_bandwidth_capacity_per_shard);
+    client_registry.init_clear_timer(cct);
 
     if (init_perfcounter) {
       _init_logger();
@@ -331,6 +461,32 @@ public:
   unsigned get_external_client_registry_size() {
     return client_registry.get_external_client_infos_size();
   }
+
+  // Get the size of the external client registry tracker map
+  unsigned get_external_client_registry_tracker_size() {
+    return client_registry.get_external_client_infos_tracker_size();
+  }
+
+  // Set clear age for the client registry
+  void set_client_registry_clear_age(double clear_age) {
+    client_registry.set_clear_age(clear_age);
+  }
+
+  // Get clear age for the client registry
+  double get_client_registry_clear_age() {
+    return client_registry.get_clear_age();
+  }
+
+  // Set the period between runs of do_clean() for the client registry
+  void set_client_registry_clear_period(double clear_period) {
+    client_registry.set_clear_period(clear_period);
+  }
+
+  // Get the period between runs of do_clean() for the client registry
+  double get_client_registry_clear_period() {
+    return client_registry.get_clear_period();
+  }
+
   // Formatted output of the queue
   void dump(ceph::Formatter &f) const final;
 

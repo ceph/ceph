@@ -565,3 +565,65 @@ TEST_F(mClockSchedulerTest, TestMultiDistributedEnqueuePullReservation) {
 
   ASSERT_TRUE(q.empty());
 }
+
+TEST_F(mClockSchedulerTest, TestClientRegistryClean) {
+  ASSERT_TRUE(q.empty());
+
+  // Client QoS profile
+  client_qos_params_t c1_params = {0, 1, 0, 1};
+  std::map<uint64_t, client_qos_params_t> client_qos_params;
+  client_qos_params[client1] = c1_params;
+
+  // Client request params
+  dmc::ReqParams c1_rparams = {1, 1};
+  std::map<uint64_t, dmc::ReqParams> client_req_params;
+  client_req_params[client1] = c1_rparams;
+
+  // Modify the ClientRegistry's clear_age and clear_period
+  // values for the test
+  double clear_age = 3.0;
+  double clear_period = 2.0;
+  q.set_client_registry_clear_age(clear_age);
+  q.set_client_registry_clear_period(clear_period);
+
+  // Verify clear_age & clear_period
+  ASSERT_EQ(clear_age, q.get_client_registry_clear_age());
+  ASSERT_EQ(clear_period, q.get_client_registry_clear_period());
+
+  /* Timeline of events:
+   * 0 seconds: Request created
+   * 1 seconds: ClientRegistry size is 1
+   * 2 seconds: Clean-up job marks the first mark point
+   * 4 seconds: Clean-up job marks the second mark point
+   * 5 seconds: Before third mark point, check ClientRegistry size is still 1
+   * 6 seconds: Third mark point: Entry exceeds clear_age, client entry erased
+   * 7 seconds: Verify client is removed from the ClientRegistry
+   */
+
+  // t = 0: Start point - Create and enqueue request
+  q.enqueue(create_item(100, client1, op_scheduler_class::client,
+    client_req_params[client1], &op_tracker, hobj, spgid, client_qos_params[client1]));
+
+  // Confirm client is added to the client registry
+  ASSERT_EQ(1u, q.get_external_client_registry_size());
+  ASSERT_EQ(1u, q.get_external_client_registry_tracker_size());
+
+  // Sleep until clean-up job marks second mark point
+  std::this_thread::sleep_for(std::chrono::seconds(4));
+
+  // t = 4 secs:  Dequeue the request before the next mark point
+  ASSERT_FALSE(q.empty());
+  dequeue_item();
+  ASSERT_TRUE(q.empty());
+
+  // t = ~4+ secs: Confirm that client registry still has the client entry
+  ASSERT_EQ(1u, q.get_external_client_registry_size());
+  ASSERT_EQ(1u, q.get_external_client_registry_tracker_size());
+
+  // t = ~7 secs: Sleep until after the clear age elapses
+  std::this_thread::sleep_for(std::chrono::seconds(3));
+
+  // Confirm that the client entry is removed from the client registry
+  ASSERT_EQ(0u, q.get_external_client_registry_size());
+  ASSERT_EQ(0u, q.get_external_client_registry_tracker_size());
+}
