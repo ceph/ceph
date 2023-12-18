@@ -54,6 +54,7 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
     _step_set_msr_collision_tries,
     _step_choose,
     _step_chooseleaf,
+    _step_choose_msr,
     _step_emit,
     _step,
     _crushrule,
@@ -97,6 +98,7 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_set_msr_collision_tries> >    step_set_msr_collision_tries;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_choose> >    step_choose;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_chooseleaf> >      step_chooseleaf;
+    boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_choose_msr> >      step_choose_msr;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step_emit> >      step_emit;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_step> >      step;
     boost::spirit::rule<ScannerT, boost::spirit::parser_context<>, boost::spirit::parser_tag<_crushrule> >      crushrule;
@@ -163,6 +165,9 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
 	>> ( str_p("indep") | str_p("firstn") )
 	>> integer
 	>> str_p("type") >> name;
+      step_choose_msr = str_p("choosemsr")
+	>> integer
+	>> str_p("type") >> name;
       step_emit = str_p("emit");
       step = str_p("step") >> ( step_take |
 				step_set_choose_tries |
@@ -175,6 +180,7 @@ struct crush_grammar : public boost::spirit::grammar<crush_grammar>
 				step_set_msr_collision_tries |
 				step_choose |
 				step_chooseleaf |
+				step_choose_msr |
 				step_emit );
       crushrule = str_p("rule") >> !name >> '{'
 				>> (str_p("id") | str_p("ruleset")) >> posint
