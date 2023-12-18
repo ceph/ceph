@@ -195,11 +195,13 @@ class BlueRocksWritableFile : public rocksdb::WritableFile {
     return c_DefaultPageSize;
     }*/
 
+  using rocksdb::WritableFile::Append;
   rocksdb::Status Append(const rocksdb::Slice& data) override {
     fs->append_try_flush(h, data.data(), data.size());
     return rocksdb::Status::OK();
   }
 
+  using rocksdb::WritableFile::PositionedAppend;
   // Positioned write for unbuffered access default forward
   // to simple append as most of the tests are buffered by default
   rocksdb::Status PositionedAppend(
