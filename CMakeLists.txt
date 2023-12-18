@@ -4,17 +4,6 @@ project(ceph
   VERSION 18.0.0
   LANGUAGES CXX C ASM)
 
-cmake_policy(SET CMP0028 NEW)
-cmake_policy(SET CMP0046 NEW)
-cmake_policy(SET CMP0048 NEW)
-cmake_policy(SET CMP0051 NEW)
-cmake_policy(SET CMP0054 NEW)
-cmake_policy(SET CMP0056 NEW)
-cmake_policy(SET CMP0065 NEW)
-cmake_policy(SET CMP0074 NEW)
-cmake_policy(SET CMP0075 NEW)
-cmake_policy(SET CMP0093 NEW)
-cmake_policy(SET CMP0094 NEW)
 foreach(policy CMP0127 CMP0135)
   if(POLICY ${policy})
     cmake_policy(SET ${policy} NEW)
