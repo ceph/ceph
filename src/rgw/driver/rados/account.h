@@ -20,6 +20,7 @@
 #include <memory>
 #include <string>
 #include "include/encoding.h"
+#include "include/rados/librados_fwd.hpp"
 #include "common/async/yield_context.h"
 
 namespace ceph { class Formatter; }
@@ -44,6 +45,11 @@ auto create_metadata_handler(RGWSI_SysObj& sysobj, const RGWZoneParams& zone)
 /// can be used with the cls_user interface in namespace rgwrados::buckets.
 rgw_raw_obj get_buckets_obj(const RGWZoneParams& zone,
                             std::string_view account_id);
+
+/// Return the rados object that tracks the given account's users. This
+/// can be used with the cls_user interface in namespace rgwrados::users.
+rgw_raw_obj get_users_obj(const RGWZoneParams& zone,
+                          std::string_view account_id);
 
 
 /// Read account info by id
@@ -97,5 +103,13 @@ int remove(const DoutPrefixProvider* dpp,
            const RGWZoneParams& zone,
            const RGWAccountInfo& info,
            RGWObjVersionTracker& objv);
+
+
+/// Read the resource count from an account index object.
+int resource_count(const DoutPrefixProvider* dpp,
+                   optional_yield y,
+                   librados::Rados& rados,
+                   const rgw_raw_obj& obj,
+                   uint32_t& count);
 
 } // namespace rgwrados::account
