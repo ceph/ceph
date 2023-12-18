@@ -32,9 +32,9 @@ the ``librbd`` library.
 
 Ceph's block devices deliver high performance with vast scalability to
 `kernel modules`_, or to :abbr:`KVMs (kernel virtual machines)` such as `QEMU`_, and
-cloud-based computing systems like `OpenStack`_ and `CloudStack`_ that rely on
-libvirt and QEMU to integrate with Ceph block devices. You can use the same cluster
-to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
+cloud-based computing systems like `OpenStack`_, `OpenNebula`_ and `CloudStack`_
+that rely on libvirt and QEMU to integrate with Ceph block devices. You can use
+the same cluster to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
 :ref:`Ceph File System <ceph-file-system>`, and Ceph block devices simultaneously.
 
 .. important:: To use Ceph Block Devices, you must have access to a running
@@ -69,4 +69,5 @@ to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
 .. _kernel modules: ./rbd-ko/
 .. _QEMU: ./qemu-rbd/
 .. _OpenStack: ./rbd-openstack
+.. _OpenNebula: https://docs.opennebula.io/stable/open_cluster_deployment/storage_setup/ceph_ds.html
 .. _CloudStack: ./rbd-cloudstack
