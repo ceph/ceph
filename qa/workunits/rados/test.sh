@@ -48,6 +48,22 @@ do
     fi
 done
 
+for f in \
+    cls cmd handler_error io list misc pool read_operations snapshots \
+    watch_notify write_operations
+do
+    if [ $parallel -eq 1 ]; then
+	r=`printf '%25s' $f`
+	ff=`echo $f | awk '{print $1}'`
+	bash -o pipefail -exc "ceph_test_neorados_$f $color 2>&1 | tee ceph_test_neorados_$ff.log | sed \"s/^/$r: /\"" &
+	pid=$!
+	echo "test $f on pid $pid"
+	pids[$f]=$pid
+    else
+	ceph_test_neorados_$f
+    fi
+done
+
 ret=0
 if [ $parallel -eq 1 ]; then
 for t in "${!pids[@]}"

@@ -10,7 +10,8 @@
 #include "librbd/migration/QCOW.h"
 #include "acconfig.h"
 #include "json_spirit/json_spirit.h"
-#include <boost/asio/io_context_strand.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/strand.hpp>
 #include <boost/iostreams/filter/zlib.hpp>
 #include <deque>
 #include <vector>
@@ -142,7 +143,7 @@ private:
   json_spirit::mObject m_json_object;
   const SourceSpecBuilder<ImageCtxT>* m_source_spec_builder;
 
-  boost::asio::io_context::strand m_strand;
+  boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
   std::shared_ptr<StreamInterface> m_stream;
 
   bufferlist m_bl;
