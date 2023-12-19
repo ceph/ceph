@@ -11,14 +11,14 @@ class RedFishClient(BaseClient):
 
     def __init__(self,
                  host: str = '',
-                 port: int = 443,
+                 port: str = '443',
                  username: str = '',
                  password: str = ''):
         super().__init__(host, username, password)
         self.log: Logger = Logger(__name__)
         self.log.logger.info(f'Initializing redfish client {__name__}')
         self.host: str = host
-        self.port: int = port
+        self.port: str = port
         self.url: str = f'https://{self.host}:{self.port}'
         self.token: str = ''
         self.location: str = ''
