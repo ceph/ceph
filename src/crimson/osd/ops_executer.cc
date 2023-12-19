@@ -638,8 +638,10 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_ROLLBACK:
     return do_write_op([this, &head=obc,
                         &osd_op](auto& backend, auto& os, auto& txn) {
-      return backend.rollback(os, osd_op, txn, *osd_op_params, delta_stats,
-                              head, pg->obc_loader);
+      ceph_assert(obc->ssc);
+      return backend.rollback(os, obc->ssc->snapset,
+			      osd_op, txn, *osd_op_params, delta_stats,
+                              head, pg->obc_loader, snapc);
     });
   case CEPH_OSD_OP_APPEND:
     return do_write_op([this, &osd_op](auto& backend, auto& os, auto& txn) {
@@ -666,9 +668,7 @@ OpsExecuter::do_execute_op(OSDOp& osd_op)
   case CEPH_OSD_OP_DELETE:
   {
     bool whiteout = false;
-    if (!obc->ssc->snapset.clones.empty() ||
-        (snapc.snaps.size() &&                      // there are snaps
-        snapc.snaps[0] > obc->ssc->snapset.seq)) {  // existing obj is old
+    if (should_whiteout(obc->ssc->snapset, snapc)) {  // existing obj is old
       logger().debug("{} has or will have clones, will whiteout {}",
                      __func__, obc->obs.oi.soid);
       whiteout = true;
