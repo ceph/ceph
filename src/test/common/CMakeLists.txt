@@ -75,17 +75,6 @@ add_executable(unittest_prioritized_queue
 target_link_libraries(unittest_prioritized_queue ceph-common)
 add_ceph_unittest(unittest_prioritized_queue)
 
-if(NOT WIN32)
-# unittest_mclock_priority_queue
-add_executable(unittest_mclock_priority_queue
-  test_mclock_priority_queue.cc
-  )
-add_ceph_unittest(unittest_mclock_priority_queue)
-target_link_libraries(unittest_mclock_priority_queue
-  ceph-common
-  dmclock::dmclock)
-endif(NOT WIN32)
-
 # unittest_str_map
 add_executable(unittest_str_map
   test_str_map.cc
