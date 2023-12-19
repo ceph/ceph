@@ -14,6 +14,8 @@ void weighted_shuffle(RandomIt first, RandomIt last,
 {
   if (first == last) {
     return;
+  } else if (std::accumulate(weight_first, weight_last, 0) == 0) {
+    return;
   } else {
     std::discrete_distribution d{weight_first, weight_last};
     if (auto n = d(g); n > 0) {

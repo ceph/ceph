@@ -37,3 +37,55 @@ TEST(WeightedShuffle, Basic) {
 		epsilon);
   }
 }
+
+TEST(WeightedShuffle, ZeroedWeights) {
+  std::array<char, 5> choices{'a', 'b', 'c', 'd', 'e'};
+  std::array<int, 5> weights{0, 0, 0, 0, 0};
+  std::map<char, std::array<unsigned, 5>> frequency {
+    {'a', {0, 0, 0, 0, 0}},
+    {'b', {0, 0, 0, 0, 0}},
+    {'c', {0, 0, 0, 0, 0}},
+    {'d', {0, 0, 0, 0, 0}},
+    {'e', {0, 0, 0, 0, 0}}
+  }; // count each element appearing in each position
+  const int samples = 10000;
+  std::random_device rd;
+  for (auto i = 0; i < samples; i++) {
+    weighted_shuffle(begin(choices), end(choices),
+		     begin(weights), end(weights),
+		     std::mt19937{rd()});
+    for (size_t j = 0; j < choices.size(); ++j)
+      ++frequency[choices[j]][j];
+  }
+
+  for (char ch : choices) {
+    // all samples on the diagonal
+    ASSERT_EQ(std::accumulate(begin(frequency[ch]), end(frequency[ch]), 0),
+	      samples);
+    ASSERT_EQ(frequency[ch][ch-'a'], samples);
+  }
+}
+
+TEST(WeightedShuffle, SingleNonZeroWeight) {
+  std::array<char, 5> choices{'a', 'b', 'c', 'd', 'e'};
+  std::array<int, 5> weights{0, 42, 0, 0, 0};
+  std::map<char, std::array<unsigned, 5>> frequency {
+    {'a', {0, 0, 0, 0, 0}},
+    {'b', {0, 0, 0, 0, 0}},
+    {'c', {0, 0, 0, 0, 0}},
+    {'d', {0, 0, 0, 0, 0}},
+    {'e', {0, 0, 0, 0, 0}}
+  }; // count each element appearing in each position
+  const int samples = 10000;
+  std::random_device rd;
+  for (auto i = 0; i < samples; i++) {
+    weighted_shuffle(begin(choices), end(choices),
+		     begin(weights), end(weights),
+		     std::mt19937{rd()});
+    for (size_t j = 0; j < choices.size(); ++j)
+      ++frequency[choices[j]][j];
+  }
+
+  // 'b' is always first
+  ASSERT_EQ(frequency['b'][0], samples);
+}
