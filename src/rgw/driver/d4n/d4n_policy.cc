@@ -163,7 +163,7 @@ int LFUDAPolicy::get_local_weight_sum(optional_yield y) {
   }
 }
 
-CacheBlock* LFUDAPolicy::find_victim(const DoutPrefixProvider* dpp, optional_yield y) {
+CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optional_yield y) {
   const std::lock_guard l(lfuda_lock);
   if (entries_heap.empty())
     return nullptr;
@@ -245,7 +245,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
   uint64_t freeSpace = cacheDriver->get_free_space(dpp);
 
   while (freeSpace < size) { // TODO: Think about parallel reads and writes; can this turn into an infinite loop? 
-    CacheBlock* victim = find_victim(dpp, y);
+    CacheBlock* victim = get_victim_block(dpp, y);
 
     if (victim == nullptr) {
       ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Could not retrieve victim block." << dendl;
@@ -253,7 +253,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       return -1;
     }
 
-    std::string key = victim->cacheObj.bucketName + "_" + victim->cacheObj.objName + "_" + std::to_string(victim->blockID) + "_" + std::to_string(victim->size);
+    std::string key = entries_heap.top()->key;
     auto it = entries_map.find(key);
     if (it == entries_map.end()) {
       delete victim;
