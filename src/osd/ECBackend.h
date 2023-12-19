@@ -68,7 +68,8 @@ public:
     pg_shard_t from,
     OpRequestRef msg,
     ECSubWrite &op,
-    const ZTracer::Trace &trace
+    const ZTracer::Trace &trace,
+    ECListener& eclistener
     ) override;
   void handle_sub_read(
     pg_shard_t from,
