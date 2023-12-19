@@ -16,5 +16,6 @@ overrides:
         rgw sync obj etag verify: true
         rgw sync meta inject err probability: 0.1
         rgw sync data inject err probability: 0.1
+        rgw thread pool size: 2048
   rgw:
     compression type: random
