@@ -4532,6 +4532,9 @@ void RGWPutObj::execute(optional_yield y)
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
                                rctx);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
+  if (op_ret < 0) {
+    return;
+  }
 
   // send request to notification manager
   int ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
@@ -5383,6 +5386,10 @@ void RGWDeleteObj::execute(optional_yield y)
     rgw::op_counters::inc(counters, l_rgw_op_del_obj_b, obj_size);
     rgw::op_counters::tinc(counters, l_rgw_op_del_obj_lat, s->time_elapsed());
 
+    if (op_ret < 0) {
+      return;
+    }
+
     // send request to notification manager
     int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
     if (ret < 0) {
@@ -5834,6 +5841,10 @@ void RGWCopyObj::execute(optional_yield y)
 	   copy_obj_progress_cb, (void *)this,
 	   this,
 	   s->yield);
+
+  if (op_ret < 0) {
+    return;
+  }
 
   // send request to notification manager
   int ret = res->publish_commit(this, obj_size, mtime, etag, s->object->get_instance());
@@ -7266,13 +7277,13 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
-
-
-  // send request to notification manager
-  int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
-  if (ret < 0) {
-    ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
-    // too late to rollback operation, hence op_ret is not set here
+  if (op_ret == 0) {
+    // send request to notification manager
+    int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
+    if (ret < 0) {
+      ldpp_dout(this, 1) << "ERROR: publishing notification failed, with error: " << ret << dendl;
+      // too late to rollback operation, hence op_ret is not set here
+    }
   }
   
   send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret, formatter_flush_cond);
