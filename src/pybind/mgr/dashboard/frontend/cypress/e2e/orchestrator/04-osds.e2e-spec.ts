@@ -1,9 +1,19 @@
 import { OSDsPageHelper } from '../cluster/osds.po';
 import { DashboardPageHelper } from '../ui/dashboard.po';
+import { ManagerModulesPageHelper } from '../cluster/mgr-modules.po';
 
 describe('OSDs page', () => {
   const osds = new OSDsPageHelper();
   const dashboard = new DashboardPageHelper();
+  const mgrmodules = new ManagerModulesPageHelper();
+
+  before(() => {
+    cy.login();
+    mgrmodules.navigateTo();
+    mgrmodules.navigateEdit('dashboard');
+    cy.get('#FEATURE_TOGGLE_DASHBOARD').uncheck();
+    cy.contains('button', 'Update').click();
+  });
 
   beforeEach(() => {
     cy.login();
