@@ -43,9 +43,9 @@ class Reporter:
             # scenario probably we should just send the sub-parts
             # that have changed to minimize the traffic in
             # dense clusters
-            self.log.logger.debug('waiting for a lock.')
+            self.log.logger.debug('waiting for a lock in reporter loop.')
             self.system.lock.acquire()
-            self.log.logger.debug('lock acquired.')
+            self.log.logger.debug('lock acquired in reporter loop.')
             if self.system.data_ready:
                 self.log.logger.info('data ready to be sent to the mgr.')
                 if not self.system.get_system() == self.system.previous_data:
@@ -70,5 +70,5 @@ class Reporter:
                 else:
                     self.log.logger.info('no diff, not sending data to the mgr.')
             self.system.lock.release()
-            self.log.logger.debug('lock released.')
+            self.log.logger.debug('lock released in reporter loop.')
             time.sleep(5)

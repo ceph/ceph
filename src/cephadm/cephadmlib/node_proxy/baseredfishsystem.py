@@ -49,9 +49,9 @@ class BaseRedfishSystem(BaseSystem):
         #  this loop can have:
         #  - caching logic
         while self.run:
-            self.log.logger.debug('waiting for a lock.')
+            self.log.logger.debug('waiting for a lock in the update loop.')
             self.lock.acquire()
-            self.log.logger.debug('lock acquired.')
+            self.log.logger.debug('lock acquired in the update loop.')
             try:
                 self._update_system()
                 self._update_sn()
@@ -74,19 +74,19 @@ class BaseRedfishSystem(BaseSystem):
                 self.client.logout()
             finally:
                 self.lock.release()
-                self.log.logger.debug('lock released.')
+                self.log.logger.debug('lock released in the update loop.')
 
     def flush(self) -> None:
-        self.log.logger.info('Acquiring lock to flush data.')
+        self.log.logger.debug('Acquiring lock to flush data.')
         self.lock.acquire()
-        self.log.logger.info('Lock acquired, flushing data.')
+        self.log.logger.debug('Lock acquired, flushing data.')
         self._system = {}
         self.previous_data = {}
         self.log.logger.info('Data flushed.')
         self.data_ready = False
-        self.log.logger.info('Data marked as not ready.')
+        self.log.logger.debug('Data marked as not ready.')
         self.lock.release()
-        self.log.logger.info('Lock released.')
+        self.log.logger.debug('Released the lock after flushing data.')
 
     @retry(retries=10, delay=2)
     def _get_path(self, path: str) -> Dict:
