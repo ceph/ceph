@@ -76,7 +76,7 @@ class LFUDAPolicy : public CachePolicy {
     int get_age(optional_yield y);
     int set_local_weight_sum(size_t weight, optional_yield y);
     int get_local_weight_sum(optional_yield y);
-    CacheBlock* find_victim(const DoutPrefixProvider* dpp, optional_yield y);
+    CacheBlock* get_victim_block(const DoutPrefixProvider* dpp, optional_yield y);
 
   public:
     LFUDAPolicy(net::io_context& io_context, rgw::cache::CacheDriver* cacheDriver) : CachePolicy(), io(io_context), cacheDriver{cacheDriver} {
