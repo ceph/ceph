@@ -1,0 +1,14 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true
+      global:
+        ms cluster mode: crc
+        ms service mode: crc
+        ms client mode: crc
+        ms mon service mode: crc
+        ms mon cluster mode: crc
+        ms mon client mode: crc
