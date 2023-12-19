@@ -197,6 +197,7 @@ region_sse2_xor(char** src,
   return;
 }
 
+#if defined(__aarch64__) && defined(__ARM_NEON)
 void
 // -----------------------------------------------------------------------------
 region_neon_xor(char **src,
@@ -205,7 +206,6 @@ region_neon_xor(char **src,
                 unsigned size)
 // -----------------------------------------------------------------------------
 {
-#if defined(__aarch64__) && defined(__ARM_NEON)
   ceph_assert(!(size % EC_ISA_VECTOR_NEON_WORDSIZE));
   unsigned char *p = (unsigned char *)parity;
   unsigned char *vbuf[256] = { NULL };
@@ -232,6 +232,6 @@ region_neon_xor(char **src,
     vst1q_u64((uint64_t *)(p + 16), d0_2);
     p += EC_ISA_VECTOR_NEON_WORDSIZE;
   }
-#endif // __aarch64__ && __ARM_NEON
   return;
 }
+#endif // __aarch64__ && __ARM_NEON
