@@ -840,7 +840,7 @@ bool ECBackend::_handle_message(
     MOSDECSubOpWrite *op = static_cast<MOSDECSubOpWrite*>(
       _op->get_nonconst_req());
     parent->maybe_preempt_replica_scrub(op->op.soid);
-    handle_sub_write(op->op.from, _op, op->op, _op->pg_trace);
+    handle_sub_write(op->op.from, _op, op->op, _op->pg_trace, *get_parent()->get_eclistener());
     return true;
   }
   case MSG_OSD_EC_WRITE_REPLY: {
@@ -958,7 +958,8 @@ void ECBackend::handle_sub_write(
   pg_shard_t from,
   OpRequestRef msg,
   ECSubWrite &op,
-  const ZTracer::Trace &trace)
+  const ZTracer::Trace &trace,
+  ECListener&)
 {
   if (msg) {
     msg->mark_event("sub_op_started");
@@ -1454,10 +1455,15 @@ void ECCommon::ReadPipeline::filter_read_op(
      *    the pull on the affected objects and pushes from in-memory buffers
      *    on any now complete unaffected objects.
      */
+#ifndef WITH_SEASTAR
     get_parent()->schedule_recovery_work(
       get_parent()->bless_unlocked_gencontext(
         new FinishReadOp(*this, op.tid)),
       1);
+#else
+    // TODO
+    ceph_abort_msg("not yet implemented");
+#endif
   }
 }
 
