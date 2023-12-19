@@ -15,7 +15,7 @@ class BaseRedfishSystem(BaseSystem):
         self.chassis_endpoint: str = kw.get('chassis_endpoint', '/Chassis/System.Embedded.1')
         self.log = Logger(__name__)
         self.host: str = kw['host']
-        self.port: int = kw['port']
+        self.port: str = kw['port']
         self.username: str = kw['username']
         self.password: str = kw['password']
         # move the following line (class attribute?)

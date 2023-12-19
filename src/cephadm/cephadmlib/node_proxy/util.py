@@ -104,7 +104,7 @@ def retry(exceptions: Any = Exception, retries: int = 20, delay: int = 1) -> Cal
 
 
 def http_req(hostname: str = '',
-             port: int = 443,
+             port: str = '443',
              method: Optional[str] = None,
              headers: MutableMapping[str, str] = {},
              data: Optional[str] = None,
@@ -122,7 +122,7 @@ def http_req(hostname: str = '',
         else:
             ssl_ctx.verify_mode = ssl.CERT_REQUIRED
 
-    url: str = f'{scheme}://{hostname}:{str(port)}{endpoint}'
+    url: str = f'{scheme}://{hostname}:{port}{endpoint}'
     _data = bytes(data, 'ascii') if data else None
 
     try:

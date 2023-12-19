@@ -12,7 +12,7 @@ class Reporter:
                  cephx: Dict[str, Any],
                  reporter_scheme: str = 'https',
                  reporter_hostname: str = '',
-                 reporter_port: int = 443,
+                 reporter_port: str = '443',
                  reporter_endpoint: str = '/node-proxy/data') -> None:
         self.system = system
         self.data: Dict[str, Any] = {}
@@ -21,7 +21,7 @@ class Reporter:
         self.data['cephx'] = self.cephx
         self.reporter_scheme: str = reporter_scheme
         self.reporter_hostname: str = reporter_hostname
-        self.reporter_port: int = reporter_port
+        self.reporter_port: str = reporter_port
         self.reporter_endpoint: str = reporter_endpoint
         self.log = Logger(__name__)
         self.reporter_url: str = (f'{reporter_scheme}:{reporter_hostname}:'
