@@ -574,13 +574,12 @@ static int remove_expired_obj(
       fmt::format("ERROR: {} failed, with error: {}", __func__, ret) << dendl;
   } else {
     // send request to notification manager
-    ret = notify->publish_commit(dpp, obj_state->size,
+    int publish_ret = notify->publish_commit(dpp, obj_state->size,
 				 ceph::real_clock::now(),
 				 obj_state->attrset[RGW_ATTR_ETAG].to_str(),
 				 version_id);
-    if (ret < 0) {
-      ldpp_dout(dpp, 1) << "ERROR: notify publish_commit failed, with error: "
-												<< ret << dendl;
+    if (publish_ret < 0) {
+      ldpp_dout(dpp, 5) << "WARNING: notify publish_commit failed, with error: " << publish_ret << dendl;
     }
   }
 
@@ -860,13 +859,13 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
       ret = mpu->abort(this, cct, null_yield);
       if (ret == 0) {
-        ret = notify->publish_commit(
+        int publish_ret = notify->publish_commit(
             this, sal_obj->get_obj_size(), ceph::real_clock::now(),
             sal_obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
 						version_id);
-        if (ret < 0) {
-          ldpp_dout(wk->get_lc(), 1)
-              << "ERROR: notify publish_commit failed, with error: " << ret
+        if (publish_ret < 0) {
+          ldpp_dout(wk->get_lc(), 5)
+              << "WARNING: notify publish_commit failed, with error: " << publish_ret
               << dendl;
         }
         if (perfcounter) {
@@ -1366,13 +1365,13 @@ public:
       return ret;
     } else {
       // send request to notification manager
-      ret =  notify->publish_commit(oc.dpp, obj->get_obj_size(),
+      int publish_ret = notify->publish_commit(oc.dpp, obj->get_obj_size(),
 				    ceph::real_clock::now(),
 				    obj->get_attrs()[RGW_ATTR_ETAG].to_str(),
 				    version_id);
-      if (ret < 0) {
-	ldpp_dout(oc.dpp, 1) <<
-	  "ERROR: notify publish_commit failed, with error: " << ret << dendl;
+      if (publish_ret < 0) {
+	ldpp_dout(oc.dpp, 5) <<
+	  "WARNING: notify publish_commit failed, with error: " << publish_ret << dendl;
       }
     }
 
