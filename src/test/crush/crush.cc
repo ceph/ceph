@@ -388,6 +388,309 @@ INSTANTIATE_TEST_SUITE_P(
   ::testing::Values(RuleType(true), RuleType(false)),
   testing::PrintToStringParamName());
 
+class FirstnTest : public ::testing::TestWithParam<RuleType>
+{
+public:
+  void SetUp() final
+  {
+    CephInitParameters params(CEPH_ENTITY_TYPE_CLIENT);
+    cct = common_preinit(params, CODE_ENVIRONMENT_UTILITY,
+			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
+  }
+  void TearDown() final
+  {
+    cct->put();
+    cct = nullptr;
+  }
+
+  std::unique_ptr<CrushWrapper> build_firstn_map(
+    CephContext *cct, int num_rack, int num_host, int num_osd)
+  {
+    std::unique_ptr<CrushWrapper> c(new CrushWrapper);
+    c->create();
+    c->set_tunables_optimal();
+
+    c->set_type_name(5, "root");
+    c->set_type_name(4, "row");
+    c->set_type_name(3, "rack");
+    c->set_type_name(2, "chasis");
+    c->set_type_name(1, "host");
+    c->set_type_name(0, "osd");
+
+    int rootno;
+    c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
+		  5, 0, nullptr, nullptr, &rootno);
+    c->set_item_name(rootno, "default");
+
+    map<string,string> loc;
+    loc["root"] = "default";
+
+    int osd = 0;
+    for (int r=0; r<num_rack; ++r) {
+      loc["rack"] = string("rack-") + stringify(r);
+      for (int h=0; h<num_host; ++h) {
+	loc["host"] = string("host-") + stringify(r) + string("-") + stringify(h);
+	for (int o=0; o<num_osd; ++o, ++osd) {
+	  c->insert_item(cct, osd, 1.0, string("osd.") + stringify(osd), loc);
+	}
+      }
+    }
+    int ret;
+    int ruleno = 0;
+
+    if (GetParam().is_msr()) {
+      unsigned step_id = 0;
+      ret = c->add_rule(ruleno, 4, CRUSH_RULE_TYPE_MSR_FIRSTN);
+      ceph_assert(ret == ruleno);
+      ret = c->set_rule_step(ruleno, step_id++, CRUSH_RULE_TAKE, rootno, 0);
+      ceph_assert(ret == 0);
+      ret = c->set_rule_step(
+	ruleno, step_id++, CRUSH_RULE_CHOOSE_MSR, CRUSH_CHOOSE_N, 1);
+      ceph_assert(ret == 0);
+      ret = c->set_rule_step(ruleno, step_id++, CRUSH_RULE_CHOOSE_MSR, 1, 0);
+      ceph_assert(ret == 0);
+      ret = c->set_rule_step(ruleno, step_id++, CRUSH_RULE_EMIT, 0, 0);
+      ceph_assert(ret == 0);
+    } else {
+      unsigned step_id = 0;
+      ret = c->add_rule(ruleno, 4, CRUSH_RULE_TYPE_ERASURE);
+      ceph_assert(ret == ruleno);
+      ret = c->set_rule_step(
+	ruleno, step_id++, CRUSH_RULE_SET_CHOOSELEAF_TRIES, 0, 0);
+      ceph_assert(ret == 0);
+      ret = c->set_rule_step(ruleno, step_id++, CRUSH_RULE_TAKE, rootno, 0);
+      ceph_assert(ret == 0);
+      ret = c->set_rule_step(
+	ruleno, step_id++, CRUSH_RULE_CHOOSELEAF_FIRSTN, CRUSH_CHOOSE_N, 1);
+      ceph_assert(ret == 0);
+      ret = c->set_rule_step(ruleno, step_id++, CRUSH_RULE_EMIT, 0, 0);
+      ceph_assert(ret == 0);
+    }
+
+    c->set_rule_name(ruleno, "data");
+    c->finalize();
+
+    if (false) {
+      Formatter *f = Formatter::create("json-pretty");
+      f->open_object_section("crush_map");
+      c->dump(f);
+      f->close_section();
+      f->flush(cout);
+      delete f;
+    }
+
+    return c;
+  }
+
+protected:
+  CephContext *cct = nullptr;
+};
+
+TEST_P(FirstnTest, basic) {
+  std::unique_ptr<CrushWrapper> c(build_firstn_map(cct, 3, 3, 3));
+  vector<__u32> weight(c->get_max_devices(), 0x10000);
+  c->dump_tree(&cout, nullptr);
+
+  for (int x = 0; x < 100; ++x) {
+    vector<int> out;
+    c->do_rule(0, x, out, 3, weight, 0);
+    cout << x << " -> " << out << std::endl;
+    for (unsigned i=0; i<out.size(); ++i) {
+      EXPECT_NE(out[i], CRUSH_ITEM_NONE);
+    }
+    ASSERT_EQ(3, out.size());
+    ASSERT_EQ(0, get_num_dups(out));
+  }
+}
+
+TEST_P(FirstnTest, toosmall) {
+  std::unique_ptr<CrushWrapper> c(build_firstn_map(cct, 1, 3, 1));
+  vector<__u32> weight(c->get_max_devices(), 0x10000);
+  c->dump_tree(&cout, nullptr);
+
+  for (int x = 0; x < 100; ++x) {
+    vector<int> out;
+    c->do_rule(0, x, out, 5, weight, 0);
+    cout << x << " -> " << out << std::endl;
+    for (unsigned i=0; i<out.size(); ++i) {
+      EXPECT_NE(out[i], CRUSH_ITEM_NONE);
+    }
+    ASSERT_EQ(3, out.size());
+    ASSERT_EQ(0, get_num_dups(out));
+  }
+}
+
+TEST_P(FirstnTest, single_out_first) {
+  std::unique_ptr<CrushWrapper> c(build_firstn_map(cct, 3, 3, 3));
+  c->dump_tree(&cout, nullptr);
+
+  for (int x = 0; x < 1000; ++x) {
+    vector<__u32> weight(c->get_max_devices(), 0x10000);
+    vector<int> out;
+    c->do_rule(0, x, out, 3, weight, 0);
+
+    for (unsigned i=0; i<out.size(); ++i) {
+      EXPECT_NE(out[i], CRUSH_ITEM_NONE);
+    }
+    ASSERT_EQ(3, out.size());
+    ASSERT_EQ(0, get_num_dups(out));
+
+    // mark first osd out
+    weight[out[0]] = 0;
+
+    vector<int> out2;
+    c->do_rule(0, x, out2, 3, weight, 0);
+
+    cout << "input " << x
+	 << " marked out " << out[0]
+	 << " out " << out
+	 << " -> out2 " << out2
+	 << std::endl;
+
+    ASSERT_EQ(3, out2.size());
+    ASSERT_EQ(0, get_num_dups(out2));
+    for (unsigned i=0; i<out2.size(); ++i) {
+      EXPECT_NE(out2[i], out[0]);
+    }
+    if (GetParam().is_msr()) {
+      // normal crush doesn't guarantee this reliably
+      ASSERT_EQ(out2[0], out[1]);
+      ASSERT_EQ(out2[1], out[2]);
+      ASSERT_NE(out2[2], out[0]);
+    }
+  }
+}
+
+TEST_P(FirstnTest, single_out_last) {
+  std::unique_ptr<CrushWrapper> c(build_firstn_map(cct, 3, 3, 3));
+  c->dump_tree(&cout, nullptr);
+
+  for (int x = 0; x < 1000; ++x) {
+    vector<__u32> weight(c->get_max_devices(), 0x10000);
+    vector<int> out;
+    c->do_rule(0, x, out, 3, weight, 0);
+
+    for (unsigned i=0; i<out.size(); ++i) {
+      EXPECT_NE(out[i], CRUSH_ITEM_NONE);
+    }
+    ASSERT_EQ(3, out.size());
+    ASSERT_EQ(0, get_num_dups(out));
+
+    // mark first osd out
+    weight[out[2]] = 0;
+
+    vector<int> out2;
+    c->do_rule(0, x, out2, 3, weight, 0);
+
+    cout << "input " << x
+	 << " marked out " << out[0]
+	 << " out " << out
+	 << " -> out2 " << out2
+	 << std::endl;
+
+    ASSERT_EQ(3, out2.size());
+    ASSERT_EQ(0, get_num_dups(out2));
+    for (unsigned i=0; i<out2.size(); ++i) {
+      EXPECT_NE(out2[i], out[2]);
+    }
+    ASSERT_EQ(out2[0], out[0]);
+    ASSERT_EQ(out2[1], out[1]);
+    ASSERT_NE(out2[2], out[2]);
+  }
+}
+
+TEST_P(FirstnTest, out_alt) {
+  std::unique_ptr<CrushWrapper> c(build_firstn_map(cct, 3, 3, 3));
+  vector<__u32> weight(c->get_max_devices(), 0x10000);
+
+  // mark a bunch of osds out
+  int num = 3*3*3;
+  for (int i=0; i<num / 2; ++i)
+    weight[i*2] = 0;
+  c->dump_tree(&cout, nullptr);
+
+  // need more retries to get 9/9 hosts for x in 0..99
+  if (!GetParam().is_msr()) {
+    c->set_choose_total_tries(500);
+  }
+  for (int x = 0; x < 100; ++x) {
+    vector<int> out;
+    c->do_rule(0, x, out, 9, weight, 0);
+    cout << x << " -> " << out << std::endl;
+    ASSERT_EQ(9, out.size());
+    ASSERT_EQ(0, get_num_dups(out));
+  }
+}
+
+TEST_P(FirstnTest, out_contig) {
+  std::unique_ptr<CrushWrapper> c(build_firstn_map(cct, 3, 3, 3));
+  vector<__u32> weight(c->get_max_devices(), 0x10000);
+
+  // mark a bunch of osds out
+  int num = 3*3*3;
+  for (int i=0; i<num / 3; ++i)
+    weight[i] = 0;
+  c->dump_tree(&cout, nullptr);
+
+  // need more retries to get 7/7 hosts for x in 0..99
+  if (!GetParam().is_msr()) {
+    c->set_choose_total_tries(500);
+  }
+  for (int x = 0; x < 100; ++x) {
+    vector<int> out;
+    c->do_rule(0, x, out, 7, weight, 0);
+    cout << x << " -> " << out << std::endl;
+    ASSERT_EQ(6, out.size());
+    ASSERT_EQ(0, get_num_dups(out));
+  }
+}
+
+TEST_P(FirstnTest, out_progressive) {
+  std::unique_ptr<CrushWrapper> c(build_firstn_map(cct, 3, 3, 3));
+  if (!GetParam().is_msr()) {
+    c->set_choose_total_tries(500);
+  }
+  vector<__u32> tweight(c->get_max_devices(), 0x10000);
+  c->dump_tree(&cout, nullptr);
+
+  int tchanged = 0;
+  for (int x = 1; x < 5; ++x) {
+    vector<__u32> weight(c->get_max_devices(), 0x10000);
+
+    std::set<int> prev;
+    for (unsigned i=0; i<weight.size(); ++i) {
+      vector<int> out;
+      c->do_rule(0, x, out, 7, weight, 0);
+      cout << "(" << i << "/" << weight.size() << " out) ";
+      if (i > 0) cout << "marked out " << i - 1 << " ";
+      cout << x << " -> " << out << std::endl;
+
+      ASSERT_EQ(0, get_num_dups(out));
+
+      int changed = 0;
+      for (unsigned j=0; j<out.size(); ++j) {
+	if (i && prev.count(out[j]) == 0) {
+	  ++changed;
+	  ++tchanged;
+	}
+      }
+      if (changed)
+	cout << " " << changed << " changed" << std::endl;
+      ASSERT_LE(changed, 3);
+
+      // mark another osd out
+      weight[i] = 0;
+      prev = std::set<int>{out.begin(), out.end()};
+    }
+  }
+  cout << tchanged << " total changed" << std::endl;
+}
+
+INSTANTIATE_TEST_SUITE_P(
+  FirstnTest,
+  FirstnTest,
+  ::testing::Values(RuleType(true), RuleType(false)),
+  testing::PrintToStringParamName());
 
 class CRUSHTest : public ::testing::Test
 {
