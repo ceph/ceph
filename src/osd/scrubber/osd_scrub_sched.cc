@@ -149,6 +149,7 @@ void ScrubQueue::update_job(Scrub::ScrubJobRef scrub_job,
   // adjust the suggested scrub time according to OSD-wide status
   auto adjusted = adjust_target_time(suggested);
   scrub_job->update_schedule(adjusted);
+  scrub_job->high_priority = suggested.is_must == must_scrub_t::mandatory;
 }
 
 sched_params_t ScrubQueue::determine_scrub_time(
@@ -299,11 +300,13 @@ void ScrubQueue::rm_unregistered_jobs(ScrubQContainer& group)
 }
 
 namespace {
-struct cmp_sched_time_t {
-  bool operator()(const Scrub::ScrubJobRef& lhs,
-		  const Scrub::ScrubJobRef& rhs) const
+struct cmp_time_n_priority_t {
+  bool operator()(const Scrub::ScrubJobRef& lhs, const Scrub::ScrubJobRef& rhs)
+      const
   {
-    return lhs->schedule.scheduled_at < rhs->schedule.scheduled_at;
+    return lhs->is_high_priority() > rhs->is_high_priority() ||
+	   (lhs->is_high_priority() == rhs->is_high_priority() &&
+	    lhs->schedule.scheduled_at < rhs->schedule.scheduled_at);
   }
 };
 }  // namespace
@@ -314,11 +317,11 @@ ScrubQContainer ScrubQueue::collect_ripe_jobs(
     OSDRestrictions restrictions,
     utime_t time_now)
 {
-  auto filtr = [time_now, restrictions](const auto& jobref) -> bool {
+  auto filtr = [time_now, rst = restrictions](const auto& jobref) -> bool {
     return jobref->schedule.scheduled_at <= time_now &&
-	   (!restrictions.only_deadlined ||
-	    (!jobref->schedule.deadline.is_zero() &&
-	     jobref->schedule.deadline <= time_now));
+	   (!rst.high_priority_only || jobref->high_priority) &&
+	   (!rst.only_deadlined || (!jobref->schedule.deadline.is_zero() &&
+				    jobref->schedule.deadline <= time_now));
   };
 
   rm_unregistered_jobs(group);
@@ -327,7 +330,7 @@ ScrubQContainer ScrubQueue::collect_ripe_jobs(
   ripes.reserve(group.size());
 
   std::copy_if(group.begin(), group.end(), std::back_inserter(ripes), filtr);
-  std::sort(ripes.begin(), ripes.end(), cmp_sched_time_t{});
+  std::sort(ripes.begin(), ripes.end(), cmp_time_n_priority_t{});
 
   if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
     for (const auto& jobref : group) {

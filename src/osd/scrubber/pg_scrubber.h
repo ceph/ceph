@@ -87,20 +87,8 @@ Main Scrubber interfaces:
 namespace Scrub {
 class ScrubMachine;
 struct BuildMap;
+class LocalResourceWrapper;
 
-
-/**
- *  wraps the local OSD scrub resource reservation in an RAII wrapper
- */
-class LocalReservation {
-  OSDService* m_osds;
-  bool m_holding_local_reservation{false};
-
- public:
-  explicit LocalReservation(OSDService* osds);
-  ~LocalReservation();
-  bool is_reserved() const { return m_holding_local_reservation; }
-};
 
 /**
  * Once all replicas' scrub maps are received, we go on to compare the maps.
@@ -628,9 +616,11 @@ class PgScrubber : public ScrubPgIF,
 
   epoch_t m_last_aborted{};  // last time we've noticed a request to abort
 
-  // 'optional', as 'LocalReservation' is
-  // 'RAII-designed' to guarantee un-reserving when deleted.
-  std::optional<Scrub::LocalReservation> m_local_osd_resource;
+  /**
+   * once we acquire the local OSD resource, this is set to a wrapper that
+   * guarantees that the resource will be released when the scrub is done
+   */
+  std::unique_ptr<Scrub::LocalResourceWrapper> m_local_osd_resource;
 
   void cleanup_on_finish();  // scrub_clear_state() as called for a Primary when
 			     // Active->NotActive
