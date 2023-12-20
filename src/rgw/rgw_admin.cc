@@ -194,9 +194,9 @@ void usage()
   cout << "  period list                      list all periods\n";
   cout << "  period update                    update the staging period\n";
   cout << "  period commit                    commit the staging period\n";
-  cout << "  quota set                        set quota params\n";
-  cout << "  quota enable                     enable quota\n";
-  cout << "  quota disable                    disable quota\n";
+  cout << "  quota set                        set quota params for a user/bucket/account\n";
+  cout << "  quota enable                     enable quota for a user/bucket/account\n";
+  cout << "  quota disable                    disable quota for a user/bucket/account\n";
   cout << "  ratelimit get                    get ratelimit params\n";
   cout << "  ratelimit set                    set ratelimit params\n";
   cout << "  ratelimit enable                 enable ratelimit\n";
@@ -10360,11 +10360,6 @@ next:
   bool quota_op = (opt_cmd == OPT::QUOTA_SET || opt_cmd == OPT::QUOTA_ENABLE || opt_cmd == OPT::QUOTA_DISABLE);
 
   if (quota_op) {
-    if (bucket_name.empty() && rgw::sal::User::empty(user)) {
-      cerr << "ERROR: bucket name or uid is required for quota operation" << std::endl;
-      return EINVAL;
-    }
-
     if (!bucket_name.empty()) {
       if (!quota_scope.empty() && quota_scope != "bucket") {
         cerr << "ERROR: invalid quota scope specification." << std::endl;
@@ -10381,6 +10376,36 @@ next:
         cerr << "ERROR: invalid quota scope specification. Please specify either --quota-scope=bucket, or --quota-scope=user" << std::endl;
         return EINVAL;
       }
+    } else if (!account_id.empty() || !account_name.empty()) {
+      // set account quota
+      rgw::account::AdminOpState op_state;
+      op_state.account_id = account_id;
+      op_state.tenant = tenant;
+      op_state.account_name = account_name;
+
+      if (opt_cmd == OPT::QUOTA_ENABLE) {
+        op_state.quota_enabled = true;
+      } else if (opt_cmd == OPT::QUOTA_DISABLE) {
+        op_state.quota_enabled = false;
+      }
+      if (have_max_objects) {
+        op_state.quota_max_objects = std::max<int64_t>(-1, max_objects);
+      }
+      if (have_max_size) {
+        op_state.quota_max_size = std::max<int64_t>(-1, rgw_rounded_kb(max_size) * 1024);
+      }
+
+      std::string err_msg;
+      ret = rgw::account::modify(dpp(), driver, op_state, err_msg,
+                                 stream_flusher, null_yield);
+      if (ret < 0) {
+        cerr << "ERROR: failed to set account quota with "
+            << cpp_strerror(-ret) << ": " << err_msg << std::endl;
+        return -ret;
+      }
+    } else {
+      cerr << "ERROR: bucket name or uid or account is required for quota operation" << std::endl;
+      return EINVAL;
     }
   }
 

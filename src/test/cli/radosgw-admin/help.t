@@ -61,9 +61,9 @@
     period list                      list all periods
     period update                    update the staging period
     period commit                    commit the staging period
-    quota set                        set quota params
-    quota enable                     enable quota
-    quota disable                    disable quota
+    quota set                        set quota params for a user/bucket/account
+    quota enable                     enable quota for a user/bucket/account
+    quota disable                    disable quota for a user/bucket/account
     ratelimit get                    get ratelimit params
     ratelimit set                    set ratelimit params
     ratelimit enable                 enable ratelimit
