@@ -486,6 +486,11 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             default=0,
             desc='Delay clone begin operation by snapshot_clone_delay seconds'),
         Option(
+            'clone_delay_every_regfile',
+            type='int',
+            default=0,
+            desc='Sleep for specified seconds after copying a regfile'),
+        Option(
             'periodic_async_work',
             type='bool',
             default=False,
@@ -497,6 +502,7 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         # for mypy
         self.max_concurrent_clones = None
         self.snapshot_clone_delay = None
+        self.clone_delay_every_regfile = None
         self.periodic_async_work = False
         self.lock = threading.Lock()
         super(Module, self).__init__(*args, **kwargs)
@@ -525,6 +531,9 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                         self.vc.cloner.reconfigure_max_concurrent_clones(self.max_concurrent_clones)
                     elif opt['name'] == "snapshot_clone_delay":
                         self.vc.cloner.reconfigure_snapshot_clone_delay(self.snapshot_clone_delay)
+                    elif opt['name'] == "clone_delay_every_regfile":
+                        self.vc.cloner.reconfigure_clone_delay_every_regfile(
+                                self.clone_delay_every_regfile)
                     elif opt['name'] == "periodic_async_work":
                         if self.periodic_async_work:
                             self.vc.cloner.set_wakeup_timeout()
