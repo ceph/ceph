@@ -30,6 +30,16 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWUserBuckets;
 
+// generate a random secret access key of SECRET_KEY_LEN=40
+void rgw_generate_secret_key(CephContext* cct,
+                             std::string& secret_key);
+
+// generate a unique random access key id of PUBLIC_ID_LEN=20
+int rgw_generate_access_key(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            std::string& access_key_id);
+
 /**
  * A string wrapper that includes encode/decode functions for easily accessing
  * a UID in all forms. In some objects, this may refer to an account id instead

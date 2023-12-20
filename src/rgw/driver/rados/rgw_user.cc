@@ -495,6 +495,41 @@ int RGWAccessKeyPool::check_op(RGWUserAdminOpState& op_state,
   return 0;
 }
 
+void rgw_generate_secret_key(CephContext* cct,
+                             std::string& secret_key)
+{
+  char secret_key_buf[SECRET_KEY_LEN + 1];
+  gen_rand_alphanumeric_plain(cct, secret_key_buf, sizeof(secret_key_buf));
+  secret_key = secret_key_buf;
+}
+
+int rgw_generate_access_key(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            rgw::sal::Driver* driver,
+                            std::string& access_key_id)
+{
+  std::string id;
+  int r = 0;
+
+  do {
+    id.resize(PUBLIC_ID_LEN + 1);
+    gen_rand_alphanumeric_upper(dpp->get_cct(), id.data(), id.size());
+    id.pop_back(); // remove trailing null
+
+    if (!validate_access_key(id))
+      continue;
+
+    std::unique_ptr<rgw::sal::User> duplicate_check;
+    r = driver->get_user_by_access_key(dpp, id, y, &duplicate_check);
+  } while (r == 0);
+
+  if (r == -ENOENT) {
+    access_key_id = std::move(id);
+    return 0;
+  }
+  return r;
+}
+
 // Generate a new random key
 int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOpState& op_state,
 				   optional_yield y, std::string *err_msg)
@@ -557,23 +592,16 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
 
     key = op_state.get_secret_key();
   } else {
-    char secret_key_buf[SECRET_KEY_LEN + 1];
-    gen_rand_alphanumeric_plain(g_ceph_context, secret_key_buf, sizeof(secret_key_buf));
-    key = secret_key_buf;
+    rgw_generate_secret_key(dpp->get_cct(), key);
   }
 
   // Generate the access key
   if (key_type == KEY_TYPE_S3 && gen_access) {
-    char public_id_buf[PUBLIC_ID_LEN + 1];
-
-    do {
-      int id_buf_size = sizeof(public_id_buf);
-      gen_rand_alphanumeric_upper(g_ceph_context, public_id_buf, id_buf_size);
-      id = public_id_buf;
-      if (!validate_access_key(id))
-        continue;
-
-    } while (!driver->get_user_by_access_key(dpp, id, y, &duplicate_check));
+    int r = rgw_generate_access_key(dpp, y, driver, id);
+    if (r < 0) {
+      set_err_msg(err_msg, "failed to generate s3 access key");
+      return -ERR_INVALID_ACCESS_KEY;
+    }
   }
 
   if (key_type == KEY_TYPE_SWIFT) {
