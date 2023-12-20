@@ -95,8 +95,9 @@ class HostDetails:
 
         if self._facts:
             self.server = f"{self._facts.get('vendor', '').strip()} {self._facts.get('model', '').strip()}"
-            _cores = self._facts.get('cpu_cores', 0) * self._facts.get('cpu_count', 0)
-            _threads = self._facts.get('cpu_threads', 0) * _cores
+            _cpu_count = self._facts.get('cpu_count', 1)
+            _cores = self._facts.get('cpu_cores', 0) * _cpu_count
+            _threads = self._facts.get('cpu_threads', 0) * _cpu_count
             self.os = self._facts.get('operating_system', 'N/A')
             self.cpu_summary = f"{_cores}C/{_threads}T" if _cores > 0 else 'N/A'
 
