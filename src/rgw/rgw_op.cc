@@ -1492,15 +1492,11 @@ int RGWOp::init_quota()
 
   RGWQuota user_quotas;
 
-  if (s->owner.id == s->bucket_owner.id) {
-    user_quotas = s->user->get_info().quota;
-  } else {
-    // consult the bucket owner's quota
-    int r = get_owner_quota_info(this, s->yield, driver,
-                                 s->bucket_owner.id, user_quotas);
-    if (r < 0) {
-      return r;
-    }
+  // consult the bucket owner's quota
+  int r = get_owner_quota_info(this, s->yield, driver,
+                               s->bucket_owner.id, user_quotas);
+  if (r < 0) {
+    return r;
   }
 
   driver->get_quota(quota);
