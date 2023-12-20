@@ -49,12 +49,16 @@ enum class scrub_prio_t : bool { low_priority = false, high_priority = true };
 using act_token_t = uint32_t;
 
 /// "environment" preconditions affecting which PGs are eligible for scrubbing
+/// (note: struct size should be kept small, as it is copied around)
 struct OSDRestrictions {
+  /// high local OSD concurrency. Thus - only high priority scrubs are allowed
+  bool high_priority_only{false};
   bool allow_requested_repair_only{false};
-  bool load_is_low{true};
-  bool time_permit{true};
   bool only_deadlined{false};
+  bool load_is_low:1{true};
+  bool time_permit:1{true};
 };
+static_assert(sizeof(Scrub::OSDRestrictions) <= sizeof(uint32_t));
 
 }  // namespace Scrub
 
@@ -68,7 +72,8 @@ struct formatter<Scrub::OSDRestrictions> {
   {
     return fmt::format_to(
       ctx.out(),
-      "overdue-only:{} load:{} time:{} repair-only:{}",
+      "priority-only:{} overdue-only:{} load:{} time:{} repair-only:{}",
+        conds.high_priority_only,
         conds.only_deadlined,
         conds.load_is_low ? "ok" : "high",
         conds.time_permit ? "ok" : "no",
