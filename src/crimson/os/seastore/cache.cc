@@ -1732,14 +1732,16 @@ Cache::replay_delta(
               segment_seq_printer_t{delta_paddr_segment_seq},
               delta_paddr_segment_type,
               delta);
-        return replay_delta_ertr::make_ready_future<bool>(false);
+        return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+	  std::make_pair(false, nullptr));
       }
     }
   }
 
   if (delta.type == extent_types_t::JOURNAL_TAIL) {
     // this delta should have been dealt with during segment cleaner mounting
-    return replay_delta_ertr::make_ready_future<bool>(false);
+    return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+      std::make_pair(false, nullptr));
   }
 
   // replay alloc
@@ -1747,7 +1749,8 @@ Cache::replay_delta(
     if (journal_seq < alloc_tail) {
       DEBUG("journal_seq {} < alloc_tail {}, don't replay {}",
 	journal_seq, alloc_tail, delta);
-      return replay_delta_ertr::make_ready_future<bool>(false);
+      return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+	std::make_pair(false, nullptr));
     }
 
     alloc_delta_t alloc_delta;
@@ -1771,14 +1774,16 @@ Cache::replay_delta(
     if (!backref_list.empty()) {
       backref_batch_update(std::move(backref_list), journal_seq);
     }
-    return replay_delta_ertr::make_ready_future<bool>(true);
+    return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+      std::make_pair(true, nullptr));
   }
 
   // replay dirty
   if (journal_seq < dirty_tail) {
     DEBUG("journal_seq {} < dirty_tail {}, don't replay {}",
       journal_seq, dirty_tail, delta);
-    return replay_delta_ertr::make_ready_future<bool>(false);
+    return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+      std::make_pair(false, nullptr));
   }
 
   if (delta.type == extent_types_t::ROOT) {
@@ -1792,7 +1797,8 @@ Cache::replay_delta(
           journal_seq, record_base, delta, *root);
     root->set_modify_time(modify_time);
     add_extent(root);
-    return replay_delta_ertr::make_ready_future<bool>(true);
+    return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+      std::make_pair(true, root));
   } else {
     auto _get_extent_if_cached = [this](paddr_t addr)
       -> get_extent_ertr::future<CachedExtentRef> {
@@ -1832,7 +1838,8 @@ Cache::replay_delta(
 	DEBUG("replay extent is not present, so delta is obsolete at {} {} -- {}",
 	      journal_seq, record_base, delta);
 	assert(delta.pversion > 0);
-	return replay_delta_ertr::make_ready_future<bool>(true);
+	return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+	  std::make_pair(true, nullptr));
       }
 
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
@@ -1840,20 +1847,16 @@ Cache::replay_delta(
 
       if (delta.paddr.get_addr_type() == paddr_types_t::SEGMENT ||
 	  !can_inplace_rewrite(delta.type)) {
-	assert(extent->last_committed_crc == delta.prev_crc);
+	ceph_assert_always(extent->last_committed_crc == delta.prev_crc);
 	assert(extent->version == delta.pversion);
 	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
 	extent->set_modify_time(modify_time);
-	assert(extent->last_committed_crc == delta.final_crc);
+	ceph_assert_always(extent->last_committed_crc == delta.final_crc);
       } else {
 	assert(delta.paddr.get_addr_type() == paddr_types_t::RANDOM_BLOCK);
 	extent->apply_delta_and_adjust_crc(record_base, delta.bl);
 	extent->set_modify_time(modify_time);
-	// Since rewrite_dirty can conflict with other transaction after 
-	// inplace rewrite is complete, crc may not be matched
-	if (delta.final_crc == extent->last_committed_crc) {
-	  assert(extent->version == delta.pversion);
-	}
+	// crc will be checked after journal replay is done
       }
 
       extent->version++;
@@ -1866,7 +1869,8 @@ Cache::replay_delta(
               journal_seq, record_base, delta, *extent);
       }
       mark_dirty(extent);
-      return replay_delta_ertr::make_ready_future<bool>(true);
+      return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
+	std::make_pair(true, extent));
     });
   }
 }
