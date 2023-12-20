@@ -23,6 +23,7 @@ from libc cimport errno
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 from libc.string cimport strdup, memset
+cimport libcpp
 
 try:
     from collections.abc import Iterable
@@ -1935,12 +1936,12 @@ class RBD(object):
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             const char *_name = name
-            bint _exists = False
+            libcpp.bool _exists = False
         with nogil:
             ret = rbd_namespace_exists(_ioctx, _name, &_exists)
         if ret != 0:
             raise make_ex(ret, 'error verifying namespace')
-        return bool(_exists != 0)
+        return _exists
 
     def namespace_list(self, ioctx):
         """
@@ -3679,12 +3680,12 @@ cdef class Image(object):
         name = cstr(name, 'name')
         cdef:
             char *_name = name
-            bint _exists = False
+            libcpp.bool _exists = False
         with nogil:
             ret = rbd_snap_exists(self.image, _name, &_exists)
         if ret != 0:
             raise make_ex(ret, 'error getting snapshot exists for %s' % self.name)
-        return bool(_exists != 0)
+        return _exists
 
     @requires_not_closed
     def get_snap_limit(self):

@@ -2,6 +2,7 @@
 
 from libc.stdint cimport *
 from ctime cimport time_t, timespec
+cimport libcpp
 
 cdef extern from "rados/librados.h":
     enum:
@@ -525,7 +526,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_unprotect(rbd_image_t image, const char *snap_name)
     int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
                               int *is_protected)
-    int rbd_snap_exists(rbd_image_t image, const char *snapname, bint *exists)
+    int rbd_snap_exists(rbd_image_t image, const char *snapname, libcpp.bool *exists)
     int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit)
     int rbd_snap_set_limit(rbd_image_t image, uint64_t limit)
     int rbd_snap_get_timestamp(rbd_image_t image, uint64_t snap_id, timespec *timestamp)
@@ -711,7 +712,7 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_namespace_list(rados_ioctx_t io, char *namespace_names,
                            size_t *size)
     int rbd_namespace_exists(rados_ioctx_t io, const char *namespace_name,
-                             bint *exists)
+                             libcpp.bool *exists)
 
     int rbd_pool_init(rados_ioctx_t, bint force)
 
