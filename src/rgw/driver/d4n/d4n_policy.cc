@@ -193,6 +193,7 @@ void LFUDAPolicy::shutdown() {
 }
 
 int LFUDAPolicy::exist_key(std::string key) {
+  const std::lock_guard l(lfuda_lock);
   if (entries_map.count(key) != 0) {
     return true;
   }
@@ -253,6 +254,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
       return -1;
     }
 
+    const std::lock_guard l(lfuda_lock);
     std::string key = entries_heap.top()->key;
     auto it = entries_map.find(key);
     if (it == entries_map.end()) {
@@ -268,7 +270,6 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 
     if (victim->hostsList.size() == 1 && victim->hostsList[0] == dir->cct->_conf->rgw_local_cache_address) { /* Last copy */
       if (victim->globalWeight) {
-	const std::lock_guard l(lfuda_lock);
 	it->second->localWeight += victim->globalWeight;
         (*it->second->handle)->localWeight = it->second->localWeight;
 	entries_heap.increase(it->second->handle);
@@ -326,6 +327,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
 void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y)
 {
   using handle_type = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>::handle_type;
+  const std::lock_guard l(lfuda_lock);
 
   int age = get_age(y); 
   if (age < 0) {
@@ -341,7 +343,6 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
 
   erase(dpp, key, y);
   
-  const std::lock_guard l(lfuda_lock);
   LFUDAEntry *e = new LFUDAEntry(key, offset, len, version, localWeight);
   handle_type handle = entries_heap.push(e);
   e->set_handle(handle);
@@ -358,7 +359,6 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
 
 bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y)
 {
-  const std::lock_guard l(lfuda_lock);
   auto p = entries_map.find(key);
   if (p == entries_map.end()) {
     return false;
