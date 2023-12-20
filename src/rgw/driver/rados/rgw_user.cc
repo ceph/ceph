@@ -537,7 +537,6 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
   std::string id;
   std::string key;
 
-  std::pair<std::string, RGWAccessKey> key_pair;
   RGWAccessKey new_key;
   std::unique_ptr<rgw::sal::User> duplicate_check;
 
@@ -622,13 +621,16 @@ int RGWAccessKeyPool::generate_key(const DoutPrefixProvider *dpp, RGWUserAdminOp
   new_key.id = id;
   new_key.key = key;
 
-  key_pair.first = id;
-  key_pair.second = new_key;
+  if (op_state.create_date) {
+    new_key.create_date = *op_state.create_date;
+  } else {
+    new_key.create_date = ceph::real_clock::now();
+  }
 
   if (key_type == KEY_TYPE_S3) {
-    access_keys->insert(key_pair);
+    access_keys->emplace(id, new_key);
   } else if (key_type == KEY_TYPE_SWIFT) {
-    swift_keys->insert(key_pair);
+    swift_keys->emplace(id, new_key);
   }
 
   return 0;
@@ -691,6 +693,9 @@ int RGWAccessKeyPool::modify_key(RGWUserAdminOpState& op_state, std::string *err
   }
   if (op_state.access_key_active) {
     modify_key.active = *op_state.access_key_active;
+  }
+  if (op_state.create_date) {
+    modify_key.create_date = *op_state.create_date;
   }
 
   if (key_type == KEY_TYPE_S3) {
