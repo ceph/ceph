@@ -49,6 +49,9 @@ struct AdminOpState {
   std::optional<int32_t> max_groups;
   std::optional<int32_t> max_access_keys;
   std::optional<int32_t> max_buckets;
+  std::optional<int64_t> quota_max_size;
+  std::optional<int64_t> quota_max_objects;
+  std::optional<bool> quota_enabled;
 };
 
 /// create an account

@@ -225,6 +225,16 @@ int modify(const DoutPrefixProvider* dpp,
     info.max_buckets = *op_state.max_buckets;
   }
 
+  if (op_state.quota_max_size) {
+    info.quota.max_size = *op_state.quota_max_size;
+  }
+  if (op_state.quota_max_objects) {
+    info.quota.max_objects = *op_state.quota_max_objects;
+  }
+  if (op_state.quota_enabled) {
+    info.quota.enabled = *op_state.quota_enabled;
+  }
+
   constexpr bool exclusive = false;
 
   ret = driver->store_account(dpp, y, exclusive, info, &old_info, attrs, objv);
