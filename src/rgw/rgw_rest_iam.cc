@@ -45,6 +45,10 @@ static const std::unordered_map<std::string_view, op_generator> op_generators = 
   {"UpdateUser", make_iam_update_user_op},
   {"DeleteUser", make_iam_delete_user_op},
   {"ListUsers", make_iam_list_users_op},
+  {"CreateAccessKey", make_iam_create_access_key_op},
+  {"UpdateAccessKey", make_iam_update_access_key_op},
+  {"DeleteAccessKey", make_iam_delete_access_key_op},
+  {"ListAccessKeys", make_iam_list_access_keys_op},
 };
 
 bool RGWHandler_REST_IAM::action_exists(const req_state* s) 

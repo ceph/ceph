@@ -593,6 +593,494 @@ void RGWListUsers_IAM::send_response()
 }
 
 
+void dump_access_key(const RGWAccessKey& key, Formatter* f)
+{
+  encode_json("AccessKeyId", key.id, f);
+  encode_json("Status", key.active ? "Active" : "Inactive", f);
+  encode_json("CreateDate", key.create_date, f);
+}
+
+// CreateAccessKey
+class RGWCreateAccessKey_IAM : public RGWOp {
+  std::unique_ptr<rgw::sal::User> user;
+  RGWAccessKey key;
+ public:
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "create_access_key"; }
+  RGWOpType get_type() override { return RGW_OP_CREATE_ACCESS_KEY; }
+};
+
+int RGWCreateAccessKey_IAM::init_processing(optional_yield y)
+{
+  // use account id from authenticated user/role. with AssumeRole, this may not
+  // match the account of s->user
+  rgw_account_id account_id;
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account_id = *id;
+  } else {
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
+  const std::string username = s->info.args.get("UserName");
+  if (username.empty()) {
+    // If you do not specify a user name, IAM determines the user name
+    // implicitly based on the AWS access key ID signing the request.
+    // This operation works for access keys under the AWS account.
+    // Consequently, you can use this operation to manage AWS account
+    // root user credentials.
+    user = s->user->clone();
+    return 0;
+  }
+  if (!validate_iam_user_name(username, s->err.message)) {
+    return -EINVAL;
+  }
+
+  // look up user by UserName
+  const std::string& tenant = s->auth.identity->get_tenant();
+  int r = driver->load_account_user_by_name(this, y, account_id,
+                                            tenant, username, &user);
+  if (r == -ENOENT) {
+    s->err.message = "No such UserName in the account";
+    return -ERR_NO_SUCH_ENTITY;
+  }
+  return r;
+}
+
+int RGWCreateAccessKey_IAM::verify_permission(optional_yield y)
+{
+  const RGWUserInfo& info = user->get_info();
+  const std::string resource_name = make_resource_name(info);
+  const rgw::ARN arn{resource_name, "user", info.account_id, true};
+  if (verify_user_permission(this, s, arn, rgw::IAM::iamCreateAccessKey, true)) {
+    return 0;
+  }
+  return -EACCES;
+}
+
+void RGWCreateAccessKey_IAM::execute(optional_yield y)
+{
+  RGWUserInfo& info = user->get_info();
+  RGWUserInfo old_info = info;
+
+  std::optional<int> max_keys;
+  {
+    // read account's access key limit
+    RGWAccountInfo account;
+    rgw::sal::Attrs attrs; // unused
+    RGWObjVersionTracker objv; // unused
+    op_ret = driver->load_account_by_id(this, y, info.account_id,
+                                        account, attrs, objv);
+    if (op_ret < 0) {
+      ldpp_dout(this, 4) << "failed to load iam account "
+          << info.account_id << ": " << cpp_strerror(op_ret) << dendl;
+      return;
+    }
+    if (account.max_access_keys >= 0) { // max < 0 means unlimited
+      max_keys = account.max_access_keys;
+    }
+  }
+
+  if (rgw_generate_access_key(this, y, driver, key.id) < 0) {
+    s->err.message = "failed to generate s3 access key";
+    op_ret = -ERR_INTERNAL_ERROR;
+    return;
+  }
+  rgw_generate_secret_key(get_cct(), key.key);
+  key.create_date = ceph::real_clock::now();
+  info.access_keys[key.id] = key;
+
+  // check the current count against account limit
+  if (max_keys && std::cmp_greater(info.access_keys.size(), *max_keys)) {
+    s->err.message = fmt::format("Access key limit {} exceeded", *max_keys);
+    op_ret = -ERR_LIMIT_EXCEEDED;
+    return;
+  }
+
+  constexpr bool exclusive = false;
+  op_ret = user->store_user(this, y, exclusive, &old_info);
+}
+
+void RGWCreateAccessKey_IAM::send_response()
+{
+  if (!op_ret) {
+    dump_start(s); // <?xml block ?>
+    Formatter* f = s->formatter;
+    Formatter::ObjectSection response{*f, "CreateAccessKeyResponse", RGW_REST_IAM_XMLNS};
+    {
+      Formatter::ObjectSection result{*f, "CreateAccessKeyResult"};
+      Formatter::ObjectSection accesskey{*f, "AccessKey"};
+      encode_json("UserName", user->get_display_name(), f);
+      dump_access_key(key, f);
+      encode_json("SecretAccessKey", key.key, f);
+      // /AccessKey
+      // /CreateAccessKeyResult
+    }
+    Formatter::ObjectSection metadata{*f, "ResponseMetadata"};
+    f->dump_string("RequestId", s->trans_id);
+    // /ResponseMetadata
+    // /CreateAccessKeyResponse
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+}
+
+
+// UpdateAccessKey
+class RGWUpdateAccessKey_IAM : public RGWOp {
+  std::string access_key_id;
+  bool new_status = false;
+  std::unique_ptr<rgw::sal::User> user;
+ public:
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "update_access_key"; }
+  RGWOpType get_type() override { return RGW_OP_UPDATE_ACCESS_KEY; }
+};
+
+int RGWUpdateAccessKey_IAM::init_processing(optional_yield y)
+{
+  // use account id from authenticated user/role. with AssumeRole, this may not
+  // match the account of s->user
+  rgw_account_id account_id;
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account_id = *id;
+  } else {
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
+  access_key_id = s->info.args.get("AccessKeyId");
+  if (access_key_id.empty()) {
+    s->err.message = "Missing required element AccessKeyId";
+    return -EINVAL;
+  }
+
+  const std::string status = s->info.args.get("Status");
+  if (status == "Active") {
+    new_status = true;
+  } else if (status == "Inactive") {
+    new_status = false;
+  } else {
+    if (status.empty()) {
+      s->err.message = "Missing required element Status";
+    } else {
+      s->err.message = "Invalid value for Status";
+    }
+    return -EINVAL;
+  }
+
+  const std::string username = s->info.args.get("UserName");
+  if (username.empty()) {
+    // If you do not specify a user name, IAM determines the user name
+    // implicitly based on the AWS access key ID signing the request.
+    // This operation works for access keys under the AWS account.
+    // Consequently, you can use this operation to manage AWS account
+    // root user credentials.
+    user = s->user->clone();
+    return 0;
+  }
+  if (!validate_iam_user_name(username, s->err.message)) {
+    return -EINVAL;
+  }
+
+  // look up user by UserName
+  const std::string& tenant = s->auth.identity->get_tenant();
+  int r = driver->load_account_user_by_name(this, y, account_id,
+                                            tenant, username, &user);
+  if (r == -ENOENT) {
+    s->err.message = "No such UserName in the account";
+    return -ERR_NO_SUCH_ENTITY;
+  }
+  return r;
+}
+
+int RGWUpdateAccessKey_IAM::verify_permission(optional_yield y)
+{
+  const RGWUserInfo& info = user->get_info();
+  const std::string resource_name = make_resource_name(info);
+  const rgw::ARN arn{resource_name, "user", info.account_id, true};
+  if (verify_user_permission(this, s, arn, rgw::IAM::iamUpdateAccessKey, true)) {
+    return 0;
+  }
+  return -EACCES;
+}
+
+void RGWUpdateAccessKey_IAM::execute(optional_yield y)
+{
+  RGWUserInfo& info = user->get_info();
+  RGWUserInfo old_info = info;
+
+  auto key = info.access_keys.find(access_key_id);
+  if (key == info.access_keys.end()) {
+    s->err.message = "No such AccessKeyId in the user";
+    op_ret = -ERR_NO_SUCH_ENTITY;
+    return;
+  }
+
+  if (key->second.active == new_status) {
+    return; // nothing to do, return success
+  }
+
+  key->second.active = new_status;
+
+  constexpr bool exclusive = false;
+  op_ret = user->store_user(this, y, exclusive, &old_info);
+}
+
+void RGWUpdateAccessKey_IAM::send_response()
+{
+  if (!op_ret) {
+    dump_start(s); // <?xml block ?>
+    Formatter* f = s->formatter;
+    Formatter::ObjectSection response{*f, "UpdateAccessKeyResponse", RGW_REST_IAM_XMLNS};
+    Formatter::ObjectSection metadata{*f, "ResponseMetadata"};
+    f->dump_string("RequestId", s->trans_id);
+    // /ResponseMetadata
+    // /UpdateAccessKeyResponse
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+}
+
+// DeleteAccessKey
+class RGWDeleteAccessKey_IAM : public RGWOp {
+  std::string access_key_id;
+  std::unique_ptr<rgw::sal::User> user;
+ public:
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "delete_access_key"; }
+  RGWOpType get_type() override { return RGW_OP_DELETE_ACCESS_KEY; }
+};
+
+int RGWDeleteAccessKey_IAM::init_processing(optional_yield y)
+{
+  // use account id from authenticated user/role. with AssumeRole, this may not
+  // match the account of s->user
+  rgw_account_id account_id;
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account_id = *id;
+  } else {
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
+  access_key_id = s->info.args.get("AccessKeyId");
+  if (access_key_id.empty()) {
+    s->err.message = "Missing required element AccessKeyId";
+    return -EINVAL;
+  }
+
+  const std::string username = s->info.args.get("UserName");
+  if (username.empty()) {
+    // If you do not specify a user name, IAM determines the user name
+    // implicitly based on the AWS access key ID signing the request.
+    // This operation works for access keys under the AWS account.
+    // Consequently, you can use this operation to manage AWS account
+    // root user credentials.
+    user = s->user->clone();
+    return 0;
+  }
+  if (!validate_iam_user_name(username, s->err.message)) {
+    return -EINVAL;
+  }
+
+  // look up user by UserName
+  const std::string& tenant = s->auth.identity->get_tenant();
+  int r = driver->load_account_user_by_name(this, y, account_id,
+                                            tenant, username, &user);
+  if (r == -ENOENT) {
+    s->err.message = "No such UserName in the account";
+    return -ERR_NO_SUCH_ENTITY;
+  }
+  return r;
+}
+
+int RGWDeleteAccessKey_IAM::verify_permission(optional_yield y)
+{
+  const RGWUserInfo& info = user->get_info();
+  const std::string resource_name = make_resource_name(info);
+  const rgw::ARN arn{resource_name, "user", info.account_id, true};
+  if (verify_user_permission(this, s, arn, rgw::IAM::iamDeleteAccessKey, true)) {
+    return 0;
+  }
+  return -EACCES;
+}
+
+void RGWDeleteAccessKey_IAM::execute(optional_yield y)
+{
+  RGWUserInfo& info = user->get_info();
+  RGWUserInfo old_info = info;
+
+  auto key = info.access_keys.find(access_key_id);
+  if (key == info.access_keys.end()) {
+    s->err.message = "No such AccessKeyId in the user";
+    op_ret = -ERR_NO_SUCH_ENTITY;
+    return;
+  }
+
+  info.access_keys.erase(key);
+
+  constexpr bool exclusive = false;
+  op_ret = user->store_user(this, y, exclusive, &old_info);
+}
+
+void RGWDeleteAccessKey_IAM::send_response()
+{
+  if (!op_ret) {
+    dump_start(s); // <?xml block ?>
+    Formatter* f = s->formatter;
+    Formatter::ObjectSection response{*f, "DeleteAccessKeyResponse", RGW_REST_IAM_XMLNS};
+    Formatter::ObjectSection metadata{*f, "ResponseMetadata"};
+    f->dump_string("RequestId", s->trans_id);
+    // /ResponseMetadata
+    // /DeleteAccessKeyResponse
+  }
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this);
+}
+
+
+// ListAccessKeys
+class RGWListAccessKeys_IAM : public RGWOp {
+  std::unique_ptr<rgw::sal::User> user;
+  std::string marker;
+  int max_items = 100;
+
+  bool started_response = false;
+  void start_response();
+ public:
+  int init_processing(optional_yield y) override;
+  int verify_permission(optional_yield y) override;
+  void execute(optional_yield y) override;
+  void send_response() override;
+
+  const char* name() const override { return "list_access_keys"; }
+  RGWOpType get_type() override { return RGW_OP_LIST_ACCESS_KEYS; }
+};
+
+int RGWListAccessKeys_IAM::init_processing(optional_yield y)
+{
+  // use account id from authenticated user/role. with AssumeRole, this may not
+  // match the account of s->user
+  rgw_account_id account_id;
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account_id = *id;
+  } else {
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
+  marker = s->info.args.get("Marker");
+
+  int r = s->info.args.get_int("MaxItems", &max_items, max_items);
+  if (r < 0 || max_items > 1000) {
+    s->err.message = "Invalid value for MaxItems";
+    return -EINVAL;
+  }
+
+  const std::string username = s->info.args.get("UserName");
+  if (username.empty()) {
+    // If you do not specify a user name, IAM determines the user name
+    // implicitly based on the AWS access key ID signing the request.
+    // This operation works for access keys under the AWS account.
+    // Consequently, you can use this operation to manage AWS account
+    // root user credentials.
+    user = s->user->clone();
+    return 0;
+  }
+  if (!validate_iam_user_name(username, s->err.message)) {
+    return -EINVAL;
+  }
+
+  // look up user by UserName
+  const std::string& tenant = s->auth.identity->get_tenant();
+  r = driver->load_account_user_by_name(this, y, account_id,
+                                        tenant, username, &user);
+  if (r == -ENOENT) {
+    return -ERR_NO_SUCH_ENTITY;
+  }
+  return r;
+}
+
+int RGWListAccessKeys_IAM::verify_permission(optional_yield y)
+{
+  const RGWUserInfo& info = user->get_info();
+  const std::string resource_name = make_resource_name(info);
+  const rgw::ARN arn{resource_name, "user", info.account_id, true};
+  if (verify_user_permission(this, s, arn, rgw::IAM::iamListAccessKeys, true)) {
+    return 0;
+  }
+  return -EACCES;
+}
+
+void RGWListAccessKeys_IAM::execute(optional_yield y)
+{
+  start_response();
+  started_response = true;
+
+  dump_start(s); // <?xml block ?>
+
+  Formatter* f = s->formatter;
+  f->open_object_section_in_ns("ListAccessKeysResponse", RGW_REST_IAM_XMLNS);
+  f->open_object_section("ListAccessKeysResult");
+  encode_json("UserName", user->get_display_name(), f);
+  f->open_array_section("AccessKeyMetadata");
+
+  const RGWUserInfo& info = user->get_info();
+
+  auto key = info.access_keys.lower_bound(marker);
+  for (int i = 0; i < max_items && key != info.access_keys.end(); ++i, ++key) {
+    f->open_object_section("member");
+    encode_json("UserName", user->get_display_name(), f);
+    dump_access_key(key->second, f);
+    f->close_section(); // member
+  }
+
+  f->close_section(); // AccessKeyMetadata
+
+  const bool truncated = (key != info.access_keys.end());
+  f->dump_bool("IsTruncated", truncated);
+  if (truncated) {
+    f->dump_string("Marker", key->second.id);
+  }
+
+  f->close_section(); // ListAccessKeysResult
+  f->close_section(); // ListAccessKeysResponse
+  rgw_flush_formatter_and_reset(s, f);
+}
+
+void RGWListAccessKeys_IAM::start_response()
+{
+  const int64_t proposed_content_length =
+      op_ret ? NO_CONTENT_LENGTH : CHUNKED_TRANSFER_ENCODING;
+
+  set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, to_mime_type(s->format), proposed_content_length);
+}
+
+void RGWListAccessKeys_IAM::send_response()
+{
+  if (!started_response) { // errored out before execute() wrote anything
+    start_response();
+  }
+}
+
+
 RGWOp* make_iam_create_user_op(const ceph::bufferlist&) {
   return new RGWCreateUser_IAM;
 }
@@ -607,4 +1095,17 @@ RGWOp* make_iam_delete_user_op(const ceph::bufferlist&) {
 }
 RGWOp* make_iam_list_users_op(const ceph::bufferlist&) {
   return new RGWListUsers_IAM;
+}
+
+RGWOp* make_iam_create_access_key_op(const ceph::bufferlist& unused) {
+  return new RGWCreateAccessKey_IAM;
+}
+RGWOp* make_iam_update_access_key_op(const ceph::bufferlist& unused) {
+  return new RGWUpdateAccessKey_IAM;
+}
+RGWOp* make_iam_delete_access_key_op(const ceph::bufferlist& unused) {
+  return new RGWDeleteAccessKey_IAM;
+}
+RGWOp* make_iam_list_access_keys_op(const ceph::bufferlist& unused) {
+  return new RGWListAccessKeys_IAM;
 }
