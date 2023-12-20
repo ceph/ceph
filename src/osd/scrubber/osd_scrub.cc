@@ -4,6 +4,7 @@
 #include "./osd_scrub.h"
 
 #include "osd/OSD.h"
+#include "osd/osd_perf_counters.h"
 #include "osdc/Objecter.h"
 
 #include "pg_scrubber.h"
@@ -37,7 +38,14 @@ OsdScrub::OsdScrub(
     , m_queue{cct, m_osd_svc}
     , m_log_prefix{fmt::format("osd.{} osd-scrub:", m_osd_svc.get_nodeid())}
     , m_load_tracker{cct, conf, m_osd_svc.get_nodeid()}
-{}
+{
+  create_scrub_perf_counters();
+}
+
+OsdScrub::~OsdScrub()
+{
+  destroy_scrub_perf_counters();
+}
 
 std::ostream& OsdScrub::gen_prefix(std::ostream& out, std::string_view fn) const
 {
@@ -375,6 +383,37 @@ std::chrono::milliseconds OsdScrub::scrub_sleep_time(
 		  regular_sleep_period, extended_sleep)
 	   << dendl;
   return std::max(extended_sleep, regular_sleep_period);
+}
+
+
+// ////////////////////////////////////////////////////////////////////////// //
+// scrub-related performance counters
+
+void OsdScrub::create_scrub_perf_counters()
+{
+  auto idx = perf_counters_indices.begin();
+  // create a separate set for each pool type & scrub level
+  for (const auto& label : perf_labels) {
+    PerfCounters* counters = build_scrub_labeled_perf(cct, label);
+    ceph_assert(counters);
+    cct->get_perfcounters_collection()->add(counters);
+    m_perf_counters[*(idx++)] = counters;
+  }
+}
+
+void OsdScrub::destroy_scrub_perf_counters()
+{
+  for (const auto& [label, counters] : m_perf_counters) {
+    std::ignore = label;
+    cct->get_perfcounters_collection()->remove(counters);
+    delete counters;
+  }
+  m_perf_counters.clear();
+}
+
+PerfCounters* OsdScrub::get_perf_counters(int pool_type, scrub_level_t level)
+{
+  return m_perf_counters[pc_index_t{level, pool_type}];
 }
 
 // ////////////////////////////////////////////////////////////////////////// //
