@@ -378,7 +378,7 @@ COMMAND("fs set "
         "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer"
         "|standby_count_wanted|session_timeout|session_autoclose"
         "|allow_standby_replay|down|joinable|min_compat_client|bal_rank_mask"
-	"|refuse_client_session "
+	"|refuse_client_session|max_xattr_size|refuse_standby_for_another_fs "
 	"name=val,type=CephString "
 	"name=yes_i_really_mean_it,type=CephBool,req=false "
 	"name=yes_i_really_really_mean_it,type=CephBool,req=false",

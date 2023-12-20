@@ -177,6 +177,7 @@ void MDSMap::dump(Formatter *f) const
   cephfs_dump_features(f, required_client_features);
   f->close_section();
   f->dump_int("max_file_size", max_file_size);
+  f->dump_int("max_xattr_size", max_xattr_size);
   f->dump_int("last_failure", last_failure);
   f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
   f->open_object_section("compat");
@@ -235,6 +236,7 @@ void MDSMap::dump_flags_state(Formatter *f) const
     f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS), allows_multimds_snaps());
     f->dump_bool(flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY), allows_standby_replay());
     f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION), test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION));
+    f->dump_bool(flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS), test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS));
     f->close_section();
 }
 
@@ -268,6 +270,7 @@ void MDSMap::print(ostream& out) const
   out << "session_timeout\t" << session_timeout << "\n"
       << "session_autoclose\t" << session_autoclose << "\n";
   out << "max_file_size\t" << max_file_size << "\n";
+  out << "max_xattr_size\t" << max_xattr_size << "\n";
   out << "required_client_features\t" << cephfs_stringify_features(required_client_features) << "\n";
   out << "last_failure\t" << last_failure << "\n"
       << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";
@@ -376,6 +379,8 @@ void MDSMap::print_flags(std::ostream& out) const {
     out << " " << flag_display.at(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
   if (test_flag(CEPH_MDSMAP_REFUSE_CLIENT_SESSION))
     out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_CLIENT_SESSION);
+  if (test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS))
+    out << " " << flag_display.at(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS);
 }
 
 void MDSMap::get_health(list<pair<health_status_t,string> >& summary,
@@ -763,7 +768,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(data_pools, bl);
   encode(cas_pool, bl);
 
-  __u16 ev = 17;
+  __u16 ev = 18;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -790,6 +795,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
     encode(min_compat_client, bl);
   }
   encode(required_client_features, bl);
+  encode(max_xattr_size, bl);
   encode(bal_rank_mask, bl);
   ENCODE_FINISH(bl);
 }
@@ -939,6 +945,10 @@ void MDSMap::decode(bufferlist::const_iterator& p)
   }
 
   if (ev >= 17) {
+    decode(max_xattr_size, p);
+  }
+
+  if (ev >= 18) {
     decode(bal_rank_mask, p);
   }
 

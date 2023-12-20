@@ -792,7 +792,8 @@ const MDSMap::mds_info_t* FSMap::get_available_standby(const Filesystem& fs) con
       break;
     } else if (info.join_fscid == FS_CLUSTER_ID_NONE) {
       who = &info; /* vanilla standby */
-    } else if (who == nullptr) {
+    } else if (who == nullptr &&
+	       !fs.mds_map.test_flag(CEPH_MDSMAP_REFUSE_STANDBY_FOR_ANOTHER_FS)) {
       who = &info; /* standby for another fs, last resort */
     }
   }
