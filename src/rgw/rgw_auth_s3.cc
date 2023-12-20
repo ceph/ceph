@@ -504,6 +504,10 @@ bool is_non_s3_op(RGWOpType op_type)
   case RGW_OP_UPDATE_USER:
   case RGW_OP_DELETE_USER:
   case RGW_OP_LIST_USERS:
+  case RGW_OP_CREATE_ACCESS_KEY:
+  case RGW_OP_UPDATE_ACCESS_KEY:
+  case RGW_OP_DELETE_ACCESS_KEY:
+  case RGW_OP_LIST_ACCESS_KEYS:
     return true;
   default:
     return false;
