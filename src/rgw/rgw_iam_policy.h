@@ -139,6 +139,10 @@ enum {
   iamUpdateUser,
   iamDeleteUser,
   iamListUsers,
+  iamCreateAccessKey,
+  iamUpdateAccessKey,
+  iamDeleteAccessKey,
+  iamListAccessKeys,
   iamAll,
 
   stsAssumeRole,
