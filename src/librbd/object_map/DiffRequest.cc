@@ -235,48 +235,46 @@ void DiffRequest<I>::handle_load_object_map(int r) {
 
   bool diff_from_start = (m_snap_id_start == 0);
   auto end_it = m_object_map.end();
-  if (m_object_map.size() > prev_object_diff_state_size) {
-    for (; it != end_it; ++it,++diff_it, ++i) {
-      uint8_t object_map_state = *it;
-      if (object_map_state == OBJECT_NONEXISTENT) {
-        *diff_it = DIFF_STATE_HOLE;
-      } else if (diff_from_start ||
-                 (m_object_diff_state_valid &&
-                  object_map_state != OBJECT_EXISTS_CLEAN)) {
-        // diffing against the beginning of time or image was grown
-        // (implicit) starting state is HOLE, this is the first object
-        // map after
-        if (m_diff_iterate_range) {
-          // for diff-iterate, if the object is discarded prior to or
-          // in the end version, result should be HOLE
-          // since DATA_UPDATED can transition only to HOLE_UPDATED,
-          // stay in HOLE on intermediate snapshots -- another way to
-          // put this is that when starting with a hole, intermediate
-          // snapshots can be ignored as the result depends only on the
-          // end version
-          if (m_current_snap_id == m_snap_id_end) {
-            *diff_it = DIFF_STATE_DATA_UPDATED;
-          } else {
-            *diff_it = DIFF_STATE_HOLE;
-          }
-        } else {
-          // for deep-copy, if the object is discarded prior to or
-          // in the end version, result should be HOLE_UPDATED
+  for (; it != end_it; ++it, ++diff_it, ++i) {
+    uint8_t object_map_state = *it;
+    if (object_map_state == OBJECT_NONEXISTENT) {
+      *diff_it = DIFF_STATE_HOLE;
+    } else if (diff_from_start ||
+               (m_object_diff_state_valid &&
+                object_map_state != OBJECT_EXISTS_CLEAN)) {
+      // diffing against the beginning of time or image was grown
+      // (implicit) starting state is HOLE, this is the first object
+      // map after
+      if (m_diff_iterate_range) {
+        // for diff-iterate, if the object is discarded prior to or
+        // in the end version, result should be HOLE
+        // since DATA_UPDATED can transition only to HOLE_UPDATED,
+        // stay in HOLE on intermediate snapshots -- another way to
+        // put this is that when starting with a hole, intermediate
+        // snapshots can be ignored as the result depends only on the
+        // end version
+        if (m_current_snap_id == m_snap_id_end) {
           *diff_it = DIFF_STATE_DATA_UPDATED;
+        } else {
+          *diff_it = DIFF_STATE_HOLE;
         }
       } else {
-        // diffing against a snapshot, this is its object map
-        if (object_map_state != OBJECT_PENDING) {
-          *diff_it = DIFF_STATE_DATA;
-        } else {
-          *diff_it = DIFF_STATE_DATA_UPDATED;
-        }
+        // for deep-copy, if the object is discarded prior to or
+        // in the end version, result should be HOLE_UPDATED
+        *diff_it = DIFF_STATE_DATA_UPDATED;
       }
-
-      ldout(cct, 20) << "object state: " << i << " "
-                     << "->" << static_cast<uint32_t>(*diff_it) << " ("
-                     << static_cast<uint32_t>(*it) << ")" << dendl;
+    } else {
+      // diffing against a snapshot, this is its object map
+      if (object_map_state != OBJECT_PENDING) {
+        *diff_it = DIFF_STATE_DATA;
+      } else {
+        *diff_it = DIFF_STATE_DATA_UPDATED;
+      }
     }
+
+    ldout(cct, 20) << "object state: " << i << " "
+                   << "->" << static_cast<uint32_t>(*diff_it) << " ("
+                   << static_cast<uint32_t>(*it) << ")" << dendl;
   }
   ldout(cct, 20) << "computed resize diffs" << dendl;
 
