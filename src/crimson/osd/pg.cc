@@ -821,16 +821,6 @@ PG::do_osd_ops_execute(
     return obc_loader.reload_obc(obc).handle_error_interruptible(
       load_obc_ertr::assert_all{"can't live with object state messed up"});
   });
-  auto maybe_submit_error_log = [&, op_info, m, obc]
-    (const std::error_code& e, const ceph_tid_t& rep_tid) {
-    // call submit_error_log only for non-internal clients
-    if constexpr (!std::is_same_v<Ret, void>) {
-      if(op_info.may_write()) {
-        return submit_error_log(m, op_info, obc, e, rep_tid);
-      }
-    }
-    return seastar::make_ready_future<std::optional<eversion_t>>(std::nullopt);
-  };
   auto failure_func_ptr = seastar::make_lw_shared(std::move(failure_func));
   return interruptor::do_for_each(ops, [ox](OSDOp& osd_op) {
     logger().debug(
@@ -927,16 +917,24 @@ PG::do_osd_ops_execute(
       std::move(all_completed_fut)
     );
   }, OpsExecuter::osd_op_errorator::all_same_way(
-    [this, maybe_submit_error_log=std::move(maybe_submit_error_log),
+    [this, op_info, m, obc,
      rollbacker, failure_func_ptr]
     (const std::error_code& e) mutable {
-
     ceph_tid_t rep_tid = shard_services.get_tid();
     return rollbacker.rollback_obc_if_modified(e).then_interruptible(
-    [maybe_submit_error_log=std::move(maybe_submit_error_log),
+    [&, op_info, m, obc,
      this, e, rep_tid, failure_func_ptr] {
       // record error log
-      return maybe_submit_error_log(e, rep_tid).then(
+      auto maybe_submit_error_log =
+        seastar::make_ready_future<std::optional<eversion_t>>(std::nullopt);
+      // call submit_error_log only for non-internal clients
+      if constexpr (!std::is_same_v<Ret, void>) {
+        if(op_info.may_write()) {
+          maybe_submit_error_log =
+            submit_error_log(m, op_info, obc, e, rep_tid);
+        }
+      }
+      return maybe_submit_error_log.then(
       [this, failure_func_ptr, e, rep_tid] (auto version) {
         auto all_completed =
         [this, failure_func_ptr, e, rep_tid,  version] {
