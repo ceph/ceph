@@ -4,6 +4,7 @@
 
 #include <fmt/ranges.h>
 
+#include "common/ceph_time.h"
 #include "common/scrub_types.h"
 #include "include/types.h"
 #include "os/ObjectStore.h"
@@ -15,6 +16,8 @@ class Formatter;
 }
 
 struct PGPool;
+using ScrubClock = ceph::coarse_real_clock;
+using ScrubTimePoint = ScrubClock::time_point;
 
 namespace Scrub {
   class ReplicaReservations;

@@ -29,11 +29,14 @@ static std::ostream& _prefix_fn(std::ostream* _dout, T* t, std::string fn = "")
 
 namespace Scrub {
 
-ReplicaReservations::ReplicaReservations(ScrubMachineListener& scrbr)
+ReplicaReservations::ReplicaReservations(
+    ScrubMachineListener& scrbr,
+    PerfCounters& pc)
     : m_scrubber{scrbr}
     , m_pg{m_scrubber.get_pg()}
     , m_pgid{m_scrubber.get_spgid().pgid}
     , m_osds{m_pg->get_pg_osd(ScrubberPasskey())}
+    , m_perf_set{pc}
 {
   // the acting set is sorted by pg_shard_t. The reservations are to be issued
   // in this order, so that the OSDs will receive the requests in a consistent
@@ -47,13 +50,17 @@ ReplicaReservations::ReplicaReservations(ScrubMachineListener& scrbr)
       [whoami = m_pg->pg_whoami](const pg_shard_t& shard) {
 	return shard != whoami;
       });
+  m_perf_set.set(scrbcnt_resrv_replicas_num, m_sorted_secondaries.size());
 
   m_next_to_request = m_sorted_secondaries.cbegin();
   if (m_scrubber.is_high_priority()) {
     // for high-priority scrubs (i.e. - user-initiated), no reservations are
-    // needed.
+    // needed. Note: not perf-counted as either success or failure.
     dout(10) << "high-priority scrub - no reservations needed" << dendl;
+    m_perf_set.inc(scrbcnt_resrv_skipped);
   } else {
+    m_process_started_at = ScrubClock::now();
+
     // send out the 1'st request (unless we have no replicas)
     send_next_reservation_or_complete();
     m_slow_response_warn_timeout =
@@ -88,9 +95,34 @@ void ReplicaReservations::discard_remote_reservations()
   m_next_to_request = m_sorted_secondaries.cbegin();
 }
 
+void ReplicaReservations::log_success_and_duration()
+{
+  auto logged_duration = ScrubClock::now() - m_process_started_at.value();
+  m_perf_set.tinc(scrbcnt_resrv_successful_elapsed, logged_duration);
+  m_perf_set.inc(scrbcnt_resrv_success);
+  m_osds->logger->hinc(
+      l_osd_scrub_reservation_dur_hist, m_sorted_secondaries.size(),
+      logged_duration.count());
+  m_process_started_at.reset();
+}
+
+void ReplicaReservations::log_failure_and_duration(int failure_cause_counter)
+{
+  if (!m_process_started_at.has_value()) {
+    // outcome (success/failure) already logged
+    return;
+  }
+  auto logged_duration = ScrubClock::now() - m_process_started_at.value();
+  m_perf_set.tinc(scrbcnt_resrv_failed_elapsed, logged_duration);
+  m_process_started_at.reset();
+  // note: not counted into l_osd_scrub_reservation_dur_hist
+  m_perf_set.inc(failure_cause_counter);
+}
+
 ReplicaReservations::~ReplicaReservations()
 {
   release_all();
+  log_failure_and_duration(scrbcnt_resrv_aborted);
 }
 
 bool ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
@@ -106,7 +138,7 @@ bool ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
     return false;
   }
 
-  auto elapsed = clock::now() - m_last_request_sent_at;
+  auto elapsed = ScrubClock::now() - m_last_request_sent_at;
 
   // log a warning if the response was slow to arrive
   if ((m_slow_response_warn_timeout > 0ms) &&
@@ -131,6 +163,7 @@ bool ReplicaReservations::send_next_reservation_or_complete()
   if (m_next_to_request == m_sorted_secondaries.cend()) {
     // granted by all replicas
     dout(10) << "remote reservation complete" << dendl;
+    log_success_and_duration();
     return true;  // done
   }
 
@@ -141,7 +174,7 @@ bool ReplicaReservations::send_next_reservation_or_complete()
       spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::REQUEST,
       m_pg->pg_whoami);
   m_pg->send_cluster_message(peer.osd, m, epoch, false);
-  m_last_request_sent_at = clock::now();
+  m_last_request_sent_at = ScrubClock::now();
   dout(10) << fmt::format(
 		  "reserving {} (the {} of {} replicas)", *m_next_to_request,
 		  active_requests_cnt() + 1, m_sorted_secondaries.size())
