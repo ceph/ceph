@@ -60,6 +60,7 @@ struct health_check_t {
 
   static void generate_test_instances(std::list<health_check_t*>& ls) {
     ls.push_back(new health_check_t);
+    ls.back()->severity = HEALTH_WARN;
     ls.push_back(new health_check_t);
     ls.back()->severity = HEALTH_ERR;
     ls.back()->summary = "summarization";
