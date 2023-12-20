@@ -271,10 +271,20 @@ class AsyncJobs(threading.Thread):
             log.critical('A job is being aborted. Progress made so far is '
                          f'{self.job_stats[subvolname].progress_fraction}.')
 
-        self.job_stats.pop(subvolname)
-
         msg = f'Cloning failed for {subvolname}'
         self.vc.mgr.remote('progress', 'fail', self.clone_ongoing_ev_id, msg)
+
+        self.job_stats.pop(subvolname)
+
+    def abort_all_job_progress_reporting(self):
+        msg = 'All clones have been cancelled'
+
+        if self.clone_ongoing_ev_id:
+            self.vc.mgr.remote('progress', 'fail', self.clone_ongoing_ev_id, msg)
+        if self.clone_onpen_ev_id:
+            self.vc.mgr.remote('progress', 'fail', self.clone_onpen_ev_id, msg)
+
+        self.job_stats.clear()
 
     def run(self):
         log.debug("tick thread {} starting".format(self.name))
@@ -295,6 +305,7 @@ class AsyncJobs(threading.Thread):
 
     def shutdown(self):
         self.stopping.set()
+        self.abort_all_job_progress_reporting()
         self.cancel_all_jobs()
         with lock_timeout_log(self.lock):
             self.cv.notifyAll()

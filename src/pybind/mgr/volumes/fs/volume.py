@@ -116,8 +116,11 @@ class VolumeClient(CephfsClient["Module"]):
         metadata_pool, data_pools = get_pool_names(self.mgr, volname)
         if not metadata_pool:
             return -errno.ENOENT, "", "volume {0} doesn't exist".format(volname)
+
         self.purge_queue.cancel_jobs(volname)
+        self.cloner.abort_all_job_progress_reporting()
         self.connection_pool.del_connections(volname, wait=True)
+
         return delete_volume(self.mgr, volname, metadata_pool, data_pools)
 
     def list_fs_volumes(self):
