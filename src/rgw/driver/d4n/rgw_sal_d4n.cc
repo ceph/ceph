@@ -673,7 +673,10 @@ int D4NFilterObject::D4NFilterReadOp::D4NFilterGetCB::handle_data(bufferlist& bl
     block.hostsList.push_back(blockDir->cct->_conf->rgw_local_cache_address); 
     block.cacheObj.objName = source->get_key().get_oid();
     block.cacheObj.bucketName = source->get_bucket()->get_name();
-    block.cacheObj.creationTime = to_iso_8601(source->get_mtime()); 
+    std::stringstream s;
+    utime_t ut(source->get_mtime());
+    ut.gmtime(s);
+    block.cacheObj.creationTime = s.str(); 
     block.cacheObj.dirty = false;
 
     //populating fields needed for building directory index
