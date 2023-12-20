@@ -2912,6 +2912,7 @@ void RGWAccessKey::dump(Formatter *f) const
   encode_json("access_key", id, f);
   encode_json("secret_key", key, f);
   encode_json("subuser", subuser, f);
+  encode_json("active", active, f);
 }
 
 void RGWAccessKey::dump_plain(Formatter *f) const
@@ -2932,6 +2933,7 @@ void RGWAccessKey::dump(Formatter *f, const string& user, bool swift) const
     encode_json("access_key", id, f);
   }
   encode_json("secret_key", key, f);
+  encode_json("active", active, f);
 }
 
 void RGWAccessKey::decode_json(JSONObj *obj) {
@@ -2945,6 +2947,7 @@ void RGWAccessKey::decode_json(JSONObj *obj) {
       subuser = user.substr(pos + 1);
     }
   }
+  JSONDecoder::decode_json("active", active, obj);
 }
 
 void RGWAccessKey::decode_json(JSONObj *obj, bool swift) {
@@ -2961,6 +2964,7 @@ void RGWAccessKey::decode_json(JSONObj *obj, bool swift) {
     }
   }
   JSONDecoder::decode_json("secret_key", key, obj, true);
+  JSONDecoder::decode_json("active", active, obj);
 }
 
 void RGWStorageStats::dump(Formatter *f) const

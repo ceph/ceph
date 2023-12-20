@@ -1163,6 +1163,13 @@ Request Parameters
 :Example: True [True]
 :Required: No
 
+``active``
+
+:Description: Activate or deactivate a key.
+:Type: Boolean
+:Example: True [True]
+:Required: No
+
 
 Response Entities
 ~~~~~~~~~~~~~~~~~
