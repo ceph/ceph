@@ -336,6 +336,7 @@ void usage()
   cout << "   --gen-access-key                  generate random access key (for S3)\n";
   cout << "   --gen-secret                      generate random secret key\n";
   cout << "   --key-type=<type>                 key type, options are: swift, s3\n";
+  cout << "   --key-active=<bool>               activate or deactivate a key\n";
   cout << "   --temp-url-key[-2]=<key>          temp url key\n";
   cout << "   --access=<access>                 Set access permissions for sub-user, should be one\n";
   cout << "                                     of read, write, readwrite, full\n";
@@ -3357,6 +3358,8 @@ int main(int argc, const char **argv)
   int commit = false;
   int staging = false;
   int key_type = KEY_TYPE_UNDEFINED;
+  int key_active = true;
+  bool key_active_specified = false;
   std::unique_ptr<rgw::sal::Bucket> bucket;
   uint32_t perm_mask = 0;
   RGWUserInfo info;
@@ -3610,6 +3613,8 @@ int main(int argc, const char **argv)
         cerr << "bad key type: " << key_type_str << std::endl;
         exit(1);
       }
+    } else if (ceph_argparse_binary_flag(args, i, &key_active, NULL, "--key-active", (char*)NULL)) {
+      key_active_specified = true;
     } else if (ceph_argparse_witharg(args, i, &val, "--job-id", (char*)NULL)) {
       job_id = val;
     } else if (ceph_argparse_binary_flag(args, i, &gen_access_key, NULL, "--gen-access-key", (char*)NULL)) {
@@ -6442,6 +6447,10 @@ int main(int argc, const char **argv)
 
   if (key_type != KEY_TYPE_UNDEFINED)
     user_op.set_key_type(key_type);
+
+  if (key_active_specified) {
+    user_op.access_key_active = key_active;
+  }
 
   // set suspension operation parameters
   if (opt_cmd == OPT::USER_ENABLE)
