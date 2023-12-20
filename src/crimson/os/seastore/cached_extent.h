@@ -611,6 +611,10 @@ public:
     return prior_instance;
   }
 
+  uint32_t get_last_committed_crc() const {
+    return last_committed_crc;
+  }
+
 private:
   template <typename T>
   friend class read_set_item_t;
