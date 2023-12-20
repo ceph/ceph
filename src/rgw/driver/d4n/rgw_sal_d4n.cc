@@ -897,7 +897,7 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
 				 .bucketName = obj->get_bucket()->get_name(),
 				 .creationTime = to_iso_8601(*mtime), 
 				 .dirty = false,
-				 .hostsList = { driver->get_block_dir()->cct->_conf->rgw_local_cache_address } 
+				 .hostsList = { /*driver->get_block_dir()->cct->_conf->rgw_local_cache_address*/ } //TODO: Object is not currently being cached 
                                };
 
   if (driver->get_obj_dir()->set(&object, y) < 0) 
