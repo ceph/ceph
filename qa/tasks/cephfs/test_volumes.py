@@ -24,6 +24,12 @@ class WrongCloneStatus(Exception):
         self.msg = msg
 
 
+class RsizeDoesntMatch(Exception):
+
+    def __init__(self, msg):
+        self.msg = msg
+
+
 class TestVolumesHelper(CephFSTestCase):
     """Helper class for testing FS volume, subvolume group and subvolume operations."""
     TEST_FILE_NAME_PREFIX="subvolume_file"
@@ -7541,6 +7547,818 @@ class TestSubvolumeSnapshotClones(TestVolumesHelper):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+
+class TestCloneProgress(TestVolumesHelper):
+    '''
+    This class contains tests for features that show clone progress.
+    '''
+
+    def _loop_cmd(self, cmdargs):
+        i = 1
+
+        while True:
+            p = self.run_ceph_cmd(cmdargs, check_status=False,
+                                  stdout=StringIO())
+            if p.exitstatus == 11:
+                i += 1
+                if i == 50:
+                    raise RuntimeError(f'This cmd failed 50 times: {cmdargs}')
+                time.sleep(2)
+                continue
+            elif p.exitstatus == 0:
+                return p
+            else:
+                raise RuntimeError('Command exited with non-zero status')
+
+    def tearDown(self):
+        v = self.volname
+        o = self.get_ceph_cmd_stdout('fs volume ls')
+        if self.volname not in o:
+            super(self.__class__, self).tearDown()
+            return
+
+        subvols = self.get_ceph_cmd_stdout(f'fs subvolume ls {v} --format '
+                                           'json')
+        subvols = json.loads(subvols)
+
+        for i in subvols:
+            sv = tuple(i.values())[0]
+            if 'clone' in sv:
+                self._loop_cmd(f'fs subvolume rm --force {v} {sv}')
+                continue
+
+            p = self._loop_cmd(f'fs subvolume snapshot ls {v} {sv} --format '
+                               'json')
+            snaps = p.stdout.getvalue().strip()
+            snaps = json.loads(snaps)
+            for j in snaps:
+                ss = tuple(j.values())[0]
+                self._loop_cmd('fs subvolume snapshot rm --force --format '
+                               f'json {v} {sv} {ss}')
+
+            self.run_ceph_cmd(f'fs subvolume rm {v} {sv}')
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
+        # delete volumes so that all async purge threads, async cloner
+        # threads, progress bars, etc. associated with it are removed from
+        # Ceph cluster.
+        self.run_ceph_cmd(f'fs volume rm {self.volname} --yes-i-really-mean-it')
+        super(self.__class__, self).tearDown()
+
+    def _wait_till_rbytes_is_right(self, v, sv, sleep=2, max_count=60):
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        # all tests in this class generate 3 files on the subvolume of 1 GB
+        # each.
+        exp_size = 3 * 1024 * 1024 * 1024
+
+        for i in range(max_count):
+            r_size = self.mount_a.get_shell_stdout(
+                f'getfattr -n ceph.dir.rbytes {sv_path}').split('rbytes=')[1]
+            r_size = int(r_size.replace('"', '').replace('"', ''))
+            log.info(f'r_size = {r_size}')
+            if exp_size == r_size:
+                break
+
+            time.sleep(sleep)
+        else:
+            msg = ('size reported by rstat is not the expected size.\n'
+                   f'expected size = {exp_size}\n'
+                   f'size by reported by rstat = {r_size}')
+            raise RsizeDoesntMatch(msg)
+
+    def _test_stats_are_printed(self):
+        '''
+        Test that the command "ceph fs clone status" prints progress stats
+        for the clone.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        # "clone" must be part of clone name for sake of tearDown()
+        c = 'ss1clone1'
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.config_set('mgr', 'mgr/volumes/clone_delay_every_regfile', 2)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        self._wait_for_clone_to_be_in_progress(c)
+
+        p = 0
+        while p < 100:
+            try:
+                time.sleep(2)
+                o = self.get_ceph_cmd_stdout(f'fs clone status {v} {c}')
+                o = json.loads(o)
+                p = o['status']['progress_report']['percentage completed']
+                log.info(f'percetange completed = {p}')
+            except KeyError:
+                # at this point, either progress_report is present or clone
+                # is complete
+                log.info(f'o - {o}')
+                self.assertEqual(o['status']['state'], 'complete')
+                break
+
+        self._wait_for_clone_to_complete(c)
+
+    def _rm_global_recovery_event(self, progress_events):
+        gre_key = None # key for global recovery event
+
+        for k, v in progress_events.items():
+            if 'global recovery event' in v['message'].lower():
+                gre_key = k
+
+        if gre_key is not None:
+            progress_events.pop(gre_key)
+
+        return progress_events
+
+    def test_progress_bar_for_1_clone(self):
+        '''
+        Test that when one clone is in progress, one progress bar is printed
+        output of command "ceph -s" that shows progress of this clone.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        # "clone" must be part of clone name for sake of tearDown()
+        c = 'ss1clone1'
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.config_set('mgr', 'mgr/volumes/clone_delay_every_regfile', 2)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        self._wait_for_clone_to_be_in_progress(c)
+
+        p = 0.0
+        while p < 1.0:
+            try:
+                o = self.get_ceph_cmd_stdout('status --format json-pretty')
+                o = json.loads(o)
+                pev = o['progress_events']
+            except KeyError as e:
+                try:
+                    self.__check_clone_state('completed', clone=c, max_count=1)
+                except:
+                    msg = ('Didn\'t find expected entries in dictionary '
+                           '"progress_events" which is obtained from the '
+                           'output of command "ceph status".\n'
+                           f'Exception - {e}\npev -\n{pev}')
+                    raise Exception(msg)
+
+            pev = self._rm_global_recovery_event(pev)
+
+            # XXX: it it is assumed that by this point cloning must have
+            # begun.
+            if len(pev) < 1:
+                    break
+            elif len(pev) > 1:
+                raise RuntimeError('For 1 clone "ceph status" output has 2 '
+                                   'progress bars, it should have only 1 '
+                                   'progress bar.\npev -\n {pev}\no -\n{o}')
+
+            # ensure that exactly 1 progress bar for cloning is present in
+            # "ceph status" output
+            msg = ('"progress_events" dict in "ceph status" output must have '
+                   f'exactly one entry.\nprogress_event dict -\n{pev}')
+            self.assertEqual(len(pev), 1, msg)
+
+            v = pev.popitem()[1] # get value from dict
+
+            # make sure tha the  progress bar is for clone initiated in this
+            # test.
+            self.assertIn(f'Subvolume "{c}" has been', v['message'])
+
+            # let's make sure that clone finishes. for this let's wait till
+            # value of variable "p" reaches 1.0. let's make sure that
+            # happens.
+            p = v['progress']
+
+            time.sleep(2)
+
+        self._wait_for_clone_to_complete(c)
+
+    def test_progress_bar_for_4_clones(self):
+        '''
+        X = number of clones issued.
+        Y = number of threads that can be spawned for async cloning.
+
+        Test that one progress bar is printed when X <= Y. Also, test that
+        this progress bar shows average of progresses made by all clones.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(4)
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 10)
+        self.config_set('mgr', 'mgr/volumes/clone_delay_every_regfile', 2)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+        self._wait_for_clone_to_be_in_progress(c[0])
+
+        p = 0.0 # progress fraction for ongoing events
+        while p < 1.0:
+            try:
+                o = self.get_ceph_cmd_stdout('status --format json-pretty')
+                o = json.loads(o)
+                pev = o['progress_events'] # pevs = progress events
+            except KeyError as e:
+                try:
+                    self.__check_clone_state('completed', clone=c, max_count=1)
+                except:
+                    msg = ('Didn\'t find expected entries in dictionary '
+                           '"progress_events" which is obtained from the '
+                           'output of command "ceph status".\n'
+                           f'Exception - {e}\npev -\n{pev}')
+                    raise Exception(msg)
+
+            pev = self._rm_global_recovery_event(pev)
+
+            if len(pev) < 1:
+                break # the clone has finished
+
+            # ensure that there are not more than 1 progress bar for cloning
+            msg = ('"progress_events" dict in "ceph -s" output must have only '
+                   f'two entries.\n{pev}')
+            self.assertEqual(len(pev), 1, msg)
+
+            # let's make sure that clone finishes. for this let's wait till
+            # values of variables "p1" and "p2" reaches 1.0. let's make sure
+            # that happens.
+            p = tuple(pev.popitem())[1]['progress']
+
+            time.sleep(2)
+
+        # ensure that cloning is complete.
+        for i in c:
+            self._wait_for_clone_to_complete(i)
+
+    def _wait_for_both_progress_bars_to_appear(self, sleep=1, iters=20):
+        i = 0
+        pevs = []
+        while len(pevs) < 2:
+            if i > iters:
+                raise RuntimeError(f'Waited for {iter*sleep} seconds but '
+                                   'couldn\'t 2 progress bars in output of'
+                                   '"ceph status" command.')
+
+            o = self.get_ceph_cmd_stdout('status --format json-pretty')
+            o = json.loads(o)
+            pevs = o['progress_events']
+            pevs = self._rm_global_recovery_event(pevs)
+            if len(pevs) == 2:
+                v = tuple(pevs.values())
+                if 'ongoing+pending' in v[1]['message']:
+                    self.assertIn('ongoing', v[0]['message'])
+                else:
+                    self.assertIn('ongoing', v[1]['message'])
+                    self.assertIn('ongoing+pending', v[0]['message'])
+            ++i
+            time.sleep(sleep)
+
+    def test_progress_bars_for_7_clones(self):
+        '''
+        X = number of clones issued.
+        Y = number of threads that can be spawned for async cloning.
+
+        Test that 2 progress bars are printed when X > Y. Also, test that
+        one of these progress bars is for ongoing clones and other progress
+        bar for ongoing+pending clones.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(7)
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 10)
+        self.config_set('mgr', 'mgr/volumes/clone_delay_every_regfile', 2)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+        # this wait will allow for the first progress bar to appear
+        self._wait_for_clone_to_be_in_progress(c[0])
+        # second progress bar will appear soon after this
+        self._wait_for_clone_to_be_in_pending_state(c[6])
+        # this wait will allow for the second progress bar to appear
+        self._wait_for_both_progress_bars_to_appear()
+
+        p1 = 0.0 # progress fraction for ongoing events
+        p2 = 0.0 # progress fraction for ongoing+pending events
+        while p1 < 1.0 and p2 < 1.0:
+            try:
+                o = self.get_ceph_cmd_stdout('status --format json-pretty')
+                o = json.loads(o)
+                pevs = o['progress_events']
+            except KeyError as e:
+                try:
+                    self.__check_clone_state('completed', clone=c, max_count=1)
+                except:
+                    msg = ('Didn\'t find expected entries in dictionary '
+                           '"progress_events" which is obtained from the '
+                           'output of command "ceph status".\n'
+                           f'Exception - {e}\npevs -\n{pevs}')
+                    raise Exception(msg)
+
+            pevs = self._rm_global_recovery_event(pevs)
+
+            if len(pevs) < 1:
+                break # the clone has finished
+            elif len(pevs) == 1:
+                continue # let's wait for second progress bar to appear
+            elif len(pevs) > 2:
+                raise RuntimeError('More than 2 progress bars were found in '
+                                   'the output of "ceph status" command.\n'
+                                   f'progress events -\n{pevs}\n'
+                                   f'full "ceph status" output -\n{o}')
+
+            # ensure "ceph status" output has two progress bars
+            msg = ('"progress_events" dict in "ceph -s" output must have '
+                   f'only two entries.\n{pevs}')
+            self.assertEqual(len(pevs), 2, msg)
+
+            # ensure that one of progress bar is for ongoing+pending cloning
+            # jobs and other for ongoing cloning jobs.
+            v1, v2 = pevs.values()
+            if 'ongoing cloning jobs' in v1['message'] or \
+               f'Subvolume "{c[6]}"' in v1['message']:
+                self.assertIn('ongoing+pending cloning jobs', v2['message'])
+            else:
+                try:
+                    self.assertIn('ongoing cloning jobs', v2['message'])
+                # it can be that 6/7 clones are complete during this
+                # iteration and now we have 2 progress bars, one for the
+                # ongoing+pending clones and 1 one for the ongoing clones.
+                # Since only 1 clone is ongoing now, the progress bar message
+                # will specifically print the name of the ongoing clone.
+                except AssertionError:
+                    self.assertIn(f'Subvolume "{c[6]}"', v2['message'])
+                self.assertIn('ongoing+pending cloning jobs', v1['message'])
+
+            # let's make sure that clone finishes. for this let's wait till
+            # value of variable "p1" and "p2" reaches 1.0. let's make sure
+            # that happens.
+            pev1, pev2 = tuple(pevs.values())
+            p1 = pev1['progress']
+            p2 = pev2['progress']
+
+            time.sleep(2)
+
+        for i in c:
+            self._wait_for_clone_to_complete(i)
+
+    def _get_onpen_count(self, pev):
+        i = pev['message'].find('ongoing+pending')
+        count = pev['message'][:i]
+        count = count[:-1] # remomve trailing space
+        count = int(count)
+        return count
+
+    def _get_both_progress_fractions_and_onpen_count(self):
+        o = self.get_ceph_cmd_stdout('status --format=json-pretty')
+        o = json.loads(o)
+        pevs = o['progress_events']
+        pevs = self._rm_global_recovery_event(pevs)
+
+        # on_p - progress fraction for ongoing clone jobs
+        # onpen_p - progress fraction for ongoing+pending clone jobs
+
+        self.assertEqual(len(pevs), 2)
+        pev1, pev2 = tuple(pevs.values())
+        if 'ongoing+pending' in pev1['message']:
+            onpen_p = pev1['progress']
+            onpen_count = self._get_onpen_count(pev1)
+            on_p = pev2['progress']
+        else:
+            onpen_p = pev2['progress']
+            onpen_count = self._get_onpen_count(pev2)
+            on_p = pev1['progress']
+
+        on_p = float(on_p)
+        onpen_p = float(onpen_p)
+
+        return on_p, onpen_p, onpen_count
+
+    def _cancel_clones(self, clones, check_status=True):
+        v = self.volname
+        if not isinstance(clones, (tuple, list)):
+            clones = (clones, )
+
+        for i in clones:
+            self.run_ceph_cmd(f'fs clone cancel {v} {i}',
+                              check_status=check_status)
+            time.sleep(2)
+
+    # check status is False since this method is meant to cleanup clones at
+    # the end of a test case and some clones might already be complete.
+    def _cancel_clones_and_confirm(self, clones, check_status=False):
+        if not isinstance(clones, (tuple, list)):
+            clones = (clones, )
+
+        self._cancel_clones(clones, check_status)
+
+        for i in clones:
+            self._wait_for_clone_to_be_canceled(i)
+
+    def _cancel_clones_and_assert(self, clones):
+        v = self.volname
+        if not isinstance(clones, (tuple, list)):
+            clones = (clones, )
+
+        self._cancel_clones(clones, check_status=True)
+
+        for i in clones:
+            o = self.get_ceph_cmd_stdout(f'fs clone status {v} {i}')
+            self.assertIn('canceled', o)
+
+    def test_progress_drops_when_new_jobs_are_added(self):
+        '''
+        X = number of clones issued.
+        Y = number of threads that can be spawned for async cloning.
+
+        Keep X > Y. Then add few more clones and check if progress bar for
+        ongoing+pending clones moves back.
+
+        Progress bar will move back because average progress made will drop
+        down when a new clone is added to the queue.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        # XXX: we launch 7 clone (4 clone for 4 async threads and 3 that
+        # would particle). now 2-3 clone on top of this is enough for this
+        # test. but that is hard to automate since drop is progress for
+        # ongoing+pending job will be very less. it will also be easy to
+        # miss.
+        #
+        # having 7 more clones works well with automation. but even in this
+        # case 1 test failue in 10 test run was seen. therefore, this number
+        # is being increased to 20.
+        c = self._gen_subvol_clone_name(20)
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.config_set('mgr', 'mgr/volumes/clone_delay_every_regfile', 10)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        for i in c[:7]:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+        # this wait will allow for the first progress bar to appear
+        self._wait_for_clone_to_be_in_progress(c[3])
+        # second progress bar will appear soon after this
+        self._wait_for_clone_to_be_in_pending_state(c[6])
+        # this will wait for second progress bar to appear
+        self._wait_for_both_progress_bars_to_appear()
+        # so that on (ongoing) and onpen (ongoing+pending) progress bars have
+        # made sufficient progress beforehand. if progress is too low (like
+        # 0.06), new progress won't be and can't be lesser than this.
+        onpen_p = 0
+        while onpen_p < 0.2:
+            tuple_ = self._get_both_progress_fractions_and_onpen_count()
+            on_p, onpen_p, onpen_count = tuple_
+            time.sleep(1)
+
+        # this should cause onpen progress bar to go back
+        for i in c[7:]:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+        for i in range(0, 30):
+            tuple_ = self._get_both_progress_fractions_and_onpen_count()
+            new_on_p, new_onpen_p, new_onpen_count = tuple_
+            if new_onpen_p < onpen_p:
+                log.info('new_onpen_p is less than onpen_p.')
+                log.info(f'new_onpen_p = {new_onpen_p}; onpen_p = {onpen_p}')
+                break
+            log.info(f'on_p = {on_p} new_on_p = {new_on_p}')
+            log.info(f'onpen_p = {onpen_p} new_onpen_p = {new_onpen_p}')
+            log.info(f'onpen_count = {onpen_count} new_onpen_count = '
+                     f'{new_onpen_count}')
+            time.sleep(1)
+        else:
+            self._cancel_clones_and_confirm(c)
+            raise RuntimeError('It was expected for "new_onpen_p < onpen_p" '
+                                'to be true.')
+
+        try:
+            # average progress for "ongoing" job will rise as jobs move
+            # towards completion.
+            self.assertGreater(new_on_p, on_p)
+            # average progress for "ongoing + pending" clone jobs must
+            # reduce since a new job was added to penidng state
+            self.assertLess(new_onpen_p, onpen_p)
+        except AssertionError:
+            # cancel clones before tearDown() deletes the volume.
+            self._cancel_clones_and_confirm(c)
+            raise
+
+        # allowing clones will consume too much time and space and not
+        # allowing cloning to complete doesnt affect this test case. so, let's
+        # cancel ongoing clone jobs as well as pending clone jobs.
+        self._cancel_clones_and_confirm(c)
+
+    def test_when_1_clone_is_cancelled(self):
+        '''
+        Test that the progress bars for ongoing clones is removed from the
+        output of "ceph status" command when a clone is cancelled.
+
+        For this test, number of clones launched is LESS than number of async
+        thread.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        # "clone" must be part of clone name for sake of tearDown()
+        c = 'ss1clone1'
+
+        # make sure clone doesn't begin and cancellation happens when it is
+        # in pending state.
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 10)
+        # so that clone proceeds slowly even if somehow it begins, so that
+        # less, CPU is consumed.
+        self.config_set('mgr', 'mgr/volumes/clone_delay_every_regfile', 120)
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {c}')
+        self._wait_for_clone_to_be_in_pending_state(c)
+
+        self._cancel_clones_and_assert(c)
+        # ensure that progress bar was removed from "ceph status" output
+        o = self.get_ceph_cmd_stdout('status --format json-pretty')
+        o = json.loads(o)
+        pevs = o['progress_events']
+        try:
+            self.assertEqual(len(pevs), 0)
+        except AssertionError:
+            log.info(f'pevs - {pevs}')
+            raise
+
+        try:
+            sv_path = sv_path.replace(sv, c)
+            o = self.mount_a.run_shell(f'ls -lh {sv_path}')
+            o = o.stdout.getvalue().strip()
+            log.info(o)
+            # ensure that all files were not copied
+            self.assertLess(len(o.split('\n')), 4)
+        except CommandFailedError as cfe:
+            # if command failed due to errno 2 (no such file or dir), that
+            # too is fine
+            if cfe.exitstatus == 2:
+                pass
+            else:
+                raise
+
+    def test_when_3_clones_are_cancelled(self):
+        '''
+        Test that the progress bars for ongoing clones is removed from the
+        output of "ceph status" command when clones are cancelled.
+
+        For this test, number of clones launched is LESS than number of async
+        thread.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(3)
+
+        # make sure clone doesn't begin and cancellation happens when it is
+        # in pending state.
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 10)
+        # so that clone proceeds slowly even if somehow it begins, so that
+        # less, CPU is consumed.
+        self.config_set('mgr', 'mgr/volumes/clone_delay_every_regfile', 120)
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+        self._wait_for_clone_to_be_in_pending_state(c[2])
+
+        self._cancel_clones_and_assert(c)
+        # ensure that progress bar was removed from "ceph status" output
+        o = self.get_ceph_cmd_stdout('status --format json-pretty')
+        o = json.loads(o)
+        pevs = o['progress_events']
+        pevs = self._rm_global_recovery_event(pevs)
+        try:
+            self.assertEqual(len(pevs), 0)
+        except AssertionError:
+            log.info(f'pevs - {pevs}')
+            raise
+
+        try:
+            sv_path = sv_path.replace(sv, c[0])
+            o = self.mount_a.run_shell(f'ls -lh {sv_path}')
+            o = o.stdout.getvalue().strip()
+            log.info(o)
+            # ensure that all files were not copied
+            self.assertLess(len(o.split('\n')), 4)
+        except CommandFailedError as cfe:
+            # if command failed due to errno 2 (no such file or dir), that
+            # too is fine
+            if cfe.exitstatus == 2:
+                pass
+            else:
+                raise
+
+    def test_when_7_clones_are_cancelled(self):
+        '''
+        Test that both progress bars, one for ongoing clones and other for
+        ongoing+pending clones, are removed from the output of "ceph status"
+        command when clones are cancelled.
+
+        For this test, number of clones launched is MORE than number of async
+        thread.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(7)
+
+        # make sure clone doesn't begin and cancellation happens when it is
+        # in pending state.
+        self.config_set('mgr', 'mgr/volumes/snapshot_clone_delay', 30)
+        # so that clone proceeds slowly even if somehow it begins, so that
+        # less, CPU is consumed.
+        self.config_set('mgr', 'mgr/volumes/clone_delay_every_regfile', 120)
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        sv_path = sv_path[1:]
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+        self._wait_for_clone_to_be_in_pending_state(c[6])
+
+        self._cancel_clones_and_assert(c)
+        # ensure that progress bar was removed from "ceph status" output
+        o = self.get_ceph_cmd_stdout('status --format json-pretty')
+        o = json.loads(o)
+        pevs = o['progress_events']
+        pevs = self._rm_global_recovery_event(pevs)
+        try:
+            self.assertEqual(len(pevs), 0)
+        except AssertionError:
+            log.info(f'pevs - {pevs}')
+            raise
+
+        try:
+            sv_path = sv_path.replace(sv, c[0])
+            o = self.mount_a.run_shell(f'ls -lh {sv_path}')
+            o = o.stdout.getvalue().strip()
+            log.info(o)
+            # ensure that all files were not copied.
+            # 'ls -lh' will print 1 file per line with an extra line for
+            # summary, so this command must print less than 4 lines
+            self.assertLess(len(o.split('\n')), 4)
+        except CommandFailedError as cfe:
+            # if command failed due to errno 2 (no such file or dir), that
+            # too is fine
+            if cfe.exitstatus == 2:
+                pass
+            else:
+                raise
+
+    # TODO: When a volume is deleted without cancelling clones beforehand,
+    # new clones on a new volume don't make any progress. this is due to a
+    # bug in mgr/vols codebase. blocking this test until this bug is fixed.
+    def _test_rm_1_progress_bar_when_vol_is_deleted(self):
+        '''
+        Test that the progress bar for ongoing clones is removed from the
+        output of "ceph status" command when the volume is deleted while
+        several clones are in progress.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(4)
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        try:
+            # this will wait for first progress bar to appear
+            self._wait_for_clone_to_be_in_progress(c[3], sleep=2)
+        except WrongCloneStatus:
+            self._cancel_clones_and_confirm(c)
+
+        # now delete the volume and expect the progress bar to be removed
+        # from the output of "ceph status" command.
+        self.run_ceph_cmd(f'fs volume rm {v} --yes-i-really-mean-it')
+
+        # wait for the progress bar to be removed from the output of the
+        # "ceph status" command.
+        for i in range(1, 11):
+            o = self.get_ceph_cmd_stdout('status --format json-pretty')
+            o = json.loads(o)
+            pevs = o['progress_events']
+            pevs = self._rm_global_recovery_event(pevs)
+            try:
+                self.assertEqual(len(pevs), 0)
+            except AssertionError:
+                if i < 10:
+                    time.sleep(1)
+                    continue
+                else:
+                    log.info('progress_events from "ceph status" command '
+                             'output after deleting progress event for '
+                             f'"global recovery event" -\n{pevs}')
+                    raise RuntimeError('Expected 0 progress bar, but found '
+                                       '{len(pevs)}. despite of running this '
+                                       'command 10 times')
+
+    # TODO: When a volume is deleted without cancelling clones beforehand,
+    # new clones on a new volume don't make any progress. this is due to a
+    # bug in mgr/vols codebase. blocking this test until this bug is fixed.
+    def _test_rm_2_progress_bars_when_vol_is_deleted(self):
+        '''
+        Test that both the progress bars are removed from the output of
+        "ceph status" command when the volume is deleted while several clones
+        are in progress as well as pending.
+        '''
+        v = self.volname
+        sv = 'sv1'
+        ss = 'ss1'
+        c = self._gen_subvol_clone_name(7)
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+        self._do_subvolume_io(sv, None, None, 3, 1024)
+        self.run_ceph_cmd(f'fs subvolume snapshot create {v} {sv} {ss}')
+        self._wait_till_rbytes_is_right(v, sv)
+
+        for i in c:
+            self.run_ceph_cmd(f'fs subvolume snapshot clone {v} {sv} {ss} {i}')
+
+        try:
+            # this will wait for first progress bar to appear
+            self._wait_for_clone_to_be_in_progress(c[3], max_count=20, sleep=2)
+            # second progress bar will appear soon after this
+            self._wait_for_clone_to_be_in_pending_state(c[6])
+        except WrongCloneStatus:
+            self._cancel_clones_and_confirm(c)
+        # this will wait for second progress bar to appear
+        self._wait_for_both_progress_bars_to_appear()
+
+        # now delete the volume and expect the progress bars to be removed
+        # from the output of "ceph status" command.
+        self.run_ceph_cmd(f'fs volume rm {v} --yes-i-really-mean-it')
+
+        # wait for the progress bar to be removed from the output of the
+        # "ceph status" command.
+        for i in range(1, 11):
+            o = self.get_ceph_cmd_stdout('status --format json-pretty')
+            o = json.loads(o)
+            pevs = o['progress_events']
+            pevs = self._rm_global_recovery_event(pevs)
+            try:
+                self.assertEqual(len(pevs), 0)
+            except AssertionError:
+                if i < 10:
+                    time.sleep(1)
+                    continue
+                else:
+                    log.info('progress_events from "ceph status" command '
+                             'output after deleting progress event for '
+                             f'"global recovery event" -\n{pevs}')
+                    raise RuntimeError('Expected 0 progress bar, but found '
+                                       '{len(pevs}. despite of running this '
+                                       'command 10 times')
 
 
 class TestMisc(TestVolumesHelper):
