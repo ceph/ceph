@@ -207,7 +207,7 @@ TEST_P(TestMockObjectMapDiffRequest, InvalidStartSnap) {
   InSequence seq;
 
   C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, CEPH_NOSNAP, 0,
+  auto req = new MockDiffRequest(&mock_image_ctx, CEPH_NOSNAP, CEPH_NOSNAP,
                                  is_diff_iterate(), &m_object_diff_state,
                                  &ctx);
   req->send();
