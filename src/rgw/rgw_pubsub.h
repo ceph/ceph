@@ -602,19 +602,13 @@ public:
     int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_bucket_topics& result, optional_yield y) const {
       return read_topics(dpp, result, nullptr, y);
     }
-    // get a bucket_topic with by its name and populate it into "result"
-    // return -ENOENT if the topic does not exists
-    // return 0 on success, error code otherwise
-    int get_notification_by_id(const DoutPrefixProvider *dpp, const std::string& notification_id, rgw_pubsub_topic_filter& result, optional_yield y) const;
     // adds a topic + filter (event list, and possibly name metadata or tags filters) to a bucket
     // assigning a notification name is optional (needed for S3 compatible notifications)
     // if the topic already exist on the bucket, the filter event list may be updated
     // for S3 compliant notifications the version with: s3_filter and notif_name should be used
     // return -ENOENT if the topic does not exists
     // return 0 on success, error code otherwise
-    int create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
-        const rgw::notify::EventTypeList& events, optional_yield y) const;
-    int create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name, 
+    int create_notification(const DoutPrefixProvider *dpp, const std::string& topic_name,
         const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name, optional_yield y) const;
     // remove a topic and filter from bucket
     // if the topic does not exists on the bucket it is a no-op (considered success)
@@ -633,9 +627,15 @@ public:
     return read_topics(dpp, result, nullptr, y);
   }
   // get a topic with by its name and populate it into "result"
-  // return -ENOENT if the topic does not exists 
-  // return 0 on success, error code otherwise
-  int get_topic(const DoutPrefixProvider *dpp, const std::string& name, rgw_pubsub_topic& result, optional_yield y) const;
+  // return -ENOENT if the topic does not exists
+  // return 0 on success, error code otherwise.
+  // if |subscribed_buckets| valid, then for notification_v2 read the bucket
+  // topic mapping object.
+  int get_topic(const DoutPrefixProvider* dpp,
+                const std::string& name,
+                rgw_pubsub_topic& result,
+                optional_yield y,
+                std::set<std::string>* subscribed_buckets) const;
   // create a topic with a name only
   // if the topic already exists it is a no-op (considered success)
   // return 0 on success, error code otherwise

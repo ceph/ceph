@@ -218,7 +218,33 @@ public:
                       const DoutPrefixProvider* dpp) override {
     return next->remove_topic_v2(topic_name, tenant, objv_tracker, y, dpp);
   }
-
+  int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                  const std::string& bucket_key,
+                                  bool add_mapping,
+                                  optional_yield y,
+                                  const DoutPrefixProvider* dpp) override {
+    return next->update_bucket_topic_mapping(topic, bucket_key, add_mapping, y,
+                                             dpp);
+  }
+  int remove_bucket_mapping_from_topics(
+      const rgw_pubsub_bucket_topics& bucket_topics,
+      const std::string& bucket_key,
+      optional_yield y,
+      const DoutPrefixProvider* dpp) override {
+    return next->remove_bucket_mapping_from_topics(bucket_topics, bucket_key, y,
+                                                   dpp);
+  }
+  int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                               std::set<std::string>& bucket_keys,
+                               optional_yield y,
+                               const DoutPrefixProvider* dpp) override {
+    return next->get_bucket_topic_mapping(topic, bucket_keys, y, dpp);
+  }
+  int delete_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                  optional_yield y,
+                                  const DoutPrefixProvider* dpp) override {
+    return next->delete_bucket_topic_mapping(topic, y, dpp);
+  }
   virtual RGWLC* get_rgwlc(void) override;
   virtual RGWCoroutinesManagerRegistry* get_cr_registry() override;
 

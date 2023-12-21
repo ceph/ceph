@@ -94,3 +94,5 @@ std::string get_topic_key(const std::string& topic_name,
 void parse_topic_entry(const std::string& topic_entry,
                        std::string* tenant_name,
                        std::string* topic_name);
+
+std::string get_bucket_topic_mapping_oid(const rgw_pubsub_topic& topic);
