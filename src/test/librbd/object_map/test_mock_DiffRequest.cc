@@ -18,6 +18,8 @@ struct MockTestImageCtx : public MockImageCtx {
   }
 };
 
+void noop(MockTestImageCtx&) {}
+
 } // anonymous namespace
 } // namespace librbd
 
@@ -160,7 +162,7 @@ public:
   }
 
   bool is_diff_iterate() const {
-    return GetParam();
+    return !GetParam();
   }
 
   void expect_get_flags(MockTestImageCtx& mock_image_ctx, uint64_t snap_id,
@@ -197,69 +199,88 @@ public:
     expect_load_map(mock_image_ctx, snap_id, object_map, r, [](){});
   }
 
+  template <typename F>
+  int do_diff(F&& f, uint64_t start_snap_id, uint64_t end_snap_id,
+              bool diff_iterate_range) {
+    InSequence seq;
+
+    MockTestImageCtx mock_image_ctx(*m_image_ctx);
+    std::forward<F>(f)(mock_image_ctx);
+
+    C_SaferCond ctx;
+    auto req = new MockDiffRequest(&mock_image_ctx, start_snap_id,
+                                   end_snap_id, diff_iterate_range,
+                                   &m_diff_state, &ctx);
+    req->send();
+    return ctx.wait();
+  }
+
+  template <typename F>
+  void test_diff_iterate(F&& f, uint64_t start_snap_id, uint64_t end_snap_id,
+                         const BitVector<2>& expected_diff_state) {
+    ASSERT_EQ(0, do_diff(std::forward<F>(f), start_snap_id, end_snap_id, true));
+    ASSERT_EQ(expected_diff_state, m_diff_state);
+  }
+
+  template <typename F>
+  void test_deep_copy(F&& f, uint64_t start_snap_id, uint64_t end_snap_id,
+                      const BitVector<2>& expected_diff_state) {
+    ASSERT_EQ(0, do_diff(std::forward<F>(f), start_snap_id, end_snap_id, false));
+    ASSERT_EQ(expected_diff_state, m_diff_state);
+  }
+
   librbd::ImageCtx* m_image_ctx = nullptr;
-  BitVector<2> m_object_diff_state;
+  BitVector<2> m_diff_state;
 };
 
 TEST_P(TestMockObjectMapDiffRequest, InvalidStartSnap) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-
-  InSequence seq;
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, CEPH_NOSNAP, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-EINVAL, do_diff(noop, CEPH_NOSNAP, CEPH_NOSNAP, true));
+  } else {
+    ASSERT_EQ(-EINVAL, do_diff(noop, CEPH_NOSNAP, CEPH_NOSNAP, false));
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, StartEndSnapEqual) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  BitVector<2> expected_diff_state;
 
-  InSequence seq;
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, 1, is_diff_iterate(),
-                                 &m_object_diff_state, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-  ASSERT_EQ(0U, m_object_diff_state.size());
+  if (is_diff_iterate()) {
+    ASSERT_EQ(0, do_diff(noop, 1, 1, true));
+  } else {
+    ASSERT_EQ(0, do_diff(noop, 1, 1, false));
+  }
+  ASSERT_EQ(expected_diff_state, m_diff_state);
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FastDiffDisabled) {
   // negative test -- object-map implicitly enables fast-diff
   REQUIRE(!is_feature_enabled(RBD_FEATURE_OBJECT_MAP));
 
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-
-  InSequence seq;
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-EINVAL, do_diff(noop, 0, CEPH_NOSNAP, true));
+  } else {
+    ASSERT_EQ(-EINVAL, do_diff(noop, 0, CEPH_NOSNAP, false));
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FastDiffInvalid) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, {}, {}, {}, {}, {}}}
+  uint32_t object_count = 5;
+  m_image_ctx->size = object_count * (1 << m_image_ctx->order);
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
+          {}, {}, {}}}
   };
 
-  InSequence seq;
-  expect_get_flags(mock_image_ctx, 1U, RBD_FLAG_FAST_DIFF_INVALID, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
+  auto get_flags = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, RBD_FLAG_FAST_DIFF_INVALID, 0);
+  };
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, CEPH_NOSNAP, true));
+  } else {
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, CEPH_NOSNAP, false));
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnap) {
@@ -267,10 +288,8 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnap) {
 
   uint32_t object_count = std::size(from_beginning_table);
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -283,18 +302,15 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnap) {
     expected_diff_state[i] = from_beginning_table[i][1];
   }
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, 1, is_diff_iterate(),
-                                 &m_object_diff_state, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, 1, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, 1, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnap) {
@@ -302,12 +318,10 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnap) {
 
   uint32_t object_count = std::size(from_beginning_intermediate_table);
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}},
-    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -327,21 +341,17 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnap) {
     }
   }
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
-
-  expect_get_flags(mock_image_ctx, 2U, 0, 0);
-  expect_load_map(mock_image_ctx, 2U, object_map_2, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, 2, is_diff_iterate(),
-                                 &m_object_diff_state, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, 2, 0, 0);
+    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, 2, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, 2, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHead) {
@@ -349,8 +359,6 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHead) {
 
   uint32_t object_count = std::size(from_beginning_table);
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
 
   BitVector<2> object_map_head;
   object_map_head.resize(object_count);
@@ -361,19 +369,15 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHead) {
     expected_diff_state[i] = from_beginning_table[i][1];
   }
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-  expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnap) {
@@ -381,10 +385,8 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnap) {
 
   uint32_t object_count = std::size(from_beginning_intermediate_table);
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -404,22 +406,17 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnap) {
     }
   }
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
-
-  expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-  expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnap) {
@@ -427,12 +424,10 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnap) {
 
   uint32_t object_count = std::size(from_snap_table);
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}},
-    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -448,21 +443,17 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnap) {
     expected_diff_state[i] = from_snap_table[i][2];
   }
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
-
-  expect_get_flags(mock_image_ctx, 2U, 0, 0);
-  expect_load_map(mock_image_ctx, 2U, object_map_2, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, 2, is_diff_iterate(),
-                                 &m_object_diff_state, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, 2, 0, 0);
+    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 1, 2, expected_diff_state);
+  } else {
+    test_deep_copy(load, 1, 2, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnapIntermediateSnap) {
@@ -470,14 +461,12 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnapIntermediateSnap) {
 
   uint32_t object_count = std::size(from_snap_intermediate_table);
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}},
-    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}},
-    {3U, {"snap3", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+    {3U, {"snap3", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -500,24 +489,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnapIntermediateSnap) {
     }
   }
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
-
-  expect_get_flags(mock_image_ctx, 2U, 0, 0);
-  expect_load_map(mock_image_ctx, 2U, object_map_2, 0);
-
-  expect_get_flags(mock_image_ctx, 3U, 0, 0);
-  expect_load_map(mock_image_ctx, 3U, object_map_3, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, 3, is_diff_iterate(),
-                                 &m_object_diff_state, &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, 2, 0, 0);
+    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    expect_get_flags(mock_image_ctx, 3, 0, 0);
+    expect_load_map(mock_image_ctx, 3, object_map_3, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 1, 3, expected_diff_state);
+  } else {
+    test_deep_copy(load, 1, 3, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FromSnapToHead) {
@@ -525,10 +509,8 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToHead) {
 
   uint32_t object_count = std::size(from_snap_table);
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -544,22 +526,17 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToHead) {
     expected_diff_state[i] = from_snap_table[i][2];
   }
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
-
-  expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-  expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 1, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 1, CEPH_NOSNAP, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FromSnapToHeadIntermediateSnap) {
@@ -567,12 +544,10 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToHeadIntermediateSnap) {
 
   uint32_t object_count = std::size(from_snap_intermediate_table);
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}},
-    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -595,25 +570,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToHeadIntermediateSnap) {
     }
   }
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
-
-  expect_get_flags(mock_image_ctx, 2U, 0, 0);
-  expect_load_map(mock_image_ctx, 2U, object_map_2, 0);
-
-  expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-  expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, 2, 0, 0);
+    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 1, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 1, CEPH_NOSNAP, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, StartSnapDNE) {
@@ -621,21 +590,16 @@ TEST_P(TestMockObjectMapDiffRequest, StartSnapDNE) {
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
-  InSequence seq;
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(-ENOENT, ctx.wait());
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-ENOENT, do_diff(noop, 1, CEPH_NOSNAP, true));
+  } else {
+    ASSERT_EQ(-ENOENT, do_diff(noop, 1, CEPH_NOSNAP, false));
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, EndSnapDNE) {
@@ -643,26 +607,23 @@ TEST_P(TestMockObjectMapDiffRequest, EndSnapDNE) {
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-
   BitVector<2> object_map_1;
   object_map_1.resize(object_count);
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
 
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 1, 2, is_diff_iterate(),
-                                 &m_object_diff_state, &ctx);
-  req->send();
-  ASSERT_EQ(-ENOENT, ctx.wait());
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+  };
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-ENOENT, do_diff(load, 1, 2, true));
+  } else {
+    ASSERT_EQ(-ENOENT, do_diff(load, 1, 2, false));
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, IntermediateSnapDNE) {
@@ -670,43 +631,34 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateSnapDNE) {
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}},
-    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-
   BitVector<2> object_map_1;
   object_map_1.resize(object_count);
-  object_map_1[1] = OBJECT_EXISTS_CLEAN;
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0,
-                  [&mock_image_ctx]() { mock_image_ctx.snap_info.erase(2); });
-
-  expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-
   BitVector<2> object_map_head;
   object_map_head.resize(object_count);
   object_map_head[1] = OBJECT_EXISTS_CLEAN;
-  expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
   BitVector<2> expected_diff_state;
   expected_diff_state.resize(object_count);
   expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0,
+                    [&mock_image_ctx]() { mock_image_ctx.snap_info.erase(2); });
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, LoadObjectMapDNE) {
@@ -715,21 +667,17 @@ TEST_P(TestMockObjectMapDiffRequest, LoadObjectMapDNE) {
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
 
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-
   BitVector<2> object_map_head;
-  expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, -ENOENT);
 
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(-ENOENT, ctx.wait());
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, -ENOENT);
+  };
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-ENOENT, do_diff(load, 0, CEPH_NOSNAP, true));
+  } else {
+    ASSERT_EQ(-ENOENT, do_diff(load, 0, CEPH_NOSNAP, false));
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, LoadIntermediateObjectMapDNE) {
@@ -737,38 +685,30 @@ TEST_P(TestMockObjectMapDiffRequest, LoadIntermediateObjectMapDNE) {
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-
   BitVector<2> object_map_1;
-  expect_load_map(mock_image_ctx, 1U, object_map_1, -ENOENT);
-
-  expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-
   BitVector<2> object_map_head;
   object_map_head.resize(object_count);
   object_map_head[1] = OBJECT_EXISTS_CLEAN;
-  expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(0, ctx.wait());
-
   BitVector<2> expected_diff_state;
   expected_diff_state.resize(object_count);
   expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
-  ASSERT_EQ(expected_diff_state, m_object_diff_state);
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, -ENOENT);
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, LoadObjectMapError) {
@@ -776,26 +716,22 @@ TEST_P(TestMockObjectMapDiffRequest, LoadObjectMapError) {
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-
   BitVector<2> object_map_1;
-  expect_load_map(mock_image_ctx, 1U, object_map_1, -EPERM);
 
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(-EPERM, ctx.wait());
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, -EPERM);
+  };
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-EPERM, do_diff(load, 0, CEPH_NOSNAP, true));
+  } else {
+    ASSERT_EQ(-EPERM, do_diff(load, 0, CEPH_NOSNAP, false));
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, ObjectMapTooSmall) {
@@ -803,26 +739,23 @@ TEST_P(TestMockObjectMapDiffRequest, ObjectMapTooSmall) {
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
-
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
-  mock_image_ctx.snap_info = {
-    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, mock_image_ctx.size, {},
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
-  InSequence seq;
-
-  expect_get_flags(mock_image_ctx, 1U, 0, 0);
-
   BitVector<2> object_map_1;
-  expect_load_map(mock_image_ctx, 1U, object_map_1, 0);
+  object_map_1.resize(object_count - 1);
 
-  C_SaferCond ctx;
-  auto req = new MockDiffRequest(&mock_image_ctx, 0, CEPH_NOSNAP,
-                                 is_diff_iterate(), &m_object_diff_state,
-                                 &ctx);
-  req->send();
-  ASSERT_EQ(-EINVAL, ctx.wait());
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+  };
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-EINVAL, do_diff(load, 0, CEPH_NOSNAP, true));
+  } else {
+    ASSERT_EQ(-EINVAL, do_diff(load, 0, CEPH_NOSNAP, false));
+  }
 }
 
 INSTANTIATE_TEST_SUITE_P(MockObjectMapDiffRequestTests,
