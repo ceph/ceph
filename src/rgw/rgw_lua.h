@@ -57,11 +57,17 @@ int remove_package(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, opti
 // list lua packages in the allowlist
 int list_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y, packages_t& packages);
 
+// reload lua packages
+int reload_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver, optional_yield y);
+
 // install all packages from the allowlist
-// return the list of packages that failed to install and the output of the install command
+// return (by reference) the list of packages that failed to install
+// and return (by reference) the temporary director in which the packages were installed
 int install_packages(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
                      optional_yield y, const std::string& luarocks_path,
-                     packages_t& failed_packages, std::string& output);
+                     packages_t& failed_packages,
+                     std::string& install_dir);
+
 #endif
 }
 

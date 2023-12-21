@@ -7,6 +7,10 @@
 #include "crush/CrushWrapper.h"
 #include "common/entity_name.h"
 
+#define dout_subsys ceph_subsys_mon
+#undef dout_prefix
+#include "common/dout.h"
+
 using namespace std::literals;
 
 using std::cerr;
@@ -66,7 +70,7 @@ void OptionMask::dump(Formatter *f) const
 
 void MaskedOption::dump(Formatter *f) const
 {
-  f->dump_string("name", opt->name);
+  f->dump_string("name", localized_name);
   f->dump_string("value", raw_value);
   f->dump_string("level", Option::level_to_str(opt->level));
   f->dump_bool("can_update_at_runtime", opt->can_update_at_runtime());
@@ -76,7 +80,7 @@ void MaskedOption::dump(Formatter *f) const
 
 ostream& operator<<(ostream& out, const MaskedOption& o)
 {
-  out << o.opt->name;
+  out << o.localized_name;
   if (o.mask.location_type.size()) {
     out << "@" << o.mask.location_type << '=' << o.mask.location_value;
   }
@@ -136,7 +140,7 @@ ConfigMap::generate_entity_map(
   const map<std::string,std::string>& crush_location,
   const CrushWrapper *crush,
   const std::string& device_class,
-  std::map<std::string,pair<std::string,const MaskedOption*>> *src)
+  std::unordered_map<std::string, ValueSource> *src)
 {
   // global, then by type, then by name prefix component(s), then name.
   // name prefix components are .-separated,
@@ -185,7 +189,7 @@ ConfigMap::generate_entity_map(
       }
       out[i.first] = o.raw_value;
       if (src) {
-	(*src)[i.first] = make_pair(s.first, &o);
+	(*src).emplace(i.first, ConfigMap::ValueSource(s.first, &o));
       }
       prev = &o;
     }
@@ -248,6 +252,59 @@ void ConfigMap::parse_key(
     *name = key.substr(last_slash + 1);
     *who = key.substr(0, last_slash);
   }
+}
+
+int ConfigMap::add_option(
+  CephContext *cct,
+  const std::string& name,
+  const std::string& who,
+  const std::string& orig_value,
+  std::function<const Option *(const std::string&)> get_opt)
+{
+  const Option *opt = get_opt(name);
+  if (!opt) {
+    ldout(cct, 10) << __func__ << " unrecognized option '" << name << "'" << dendl;
+    stray_options.push_back(
+      std::unique_ptr<Option>(
+	new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
+    opt = stray_options.back().get();
+  }
+
+  string err;
+  string value = orig_value;
+  int r = opt->pre_validate(&value, &err);
+  if (r < 0) {
+    ldout(cct, 10) << __func__ << " pre-validate failed on '" << name << "' = '"
+		   << value << "' for " << name << dendl;
+  }
+
+  int ret = 0;
+  MaskedOption mopt(opt);
+  mopt.raw_value = value;
+  mopt.localized_name = name;
+  string section_name;
+  if (who.size() &&
+      !ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
+    lderr(cct) << __func__ << " invalid mask for option " << name << " mask " << who
+	       << dendl;
+    ret = -EINVAL;
+  } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
+    ldout(cct, 10) << __func__ << " NO_MON_UPDATE option '"
+		   << name << "' = '" << value << "' for " << name
+		   << dendl;
+    ret = -EINVAL;
+  } else {
+    Section *section = &global;;
+    if (section_name.size() && section_name != "global") {
+      if (section_name.find('.') != std::string::npos) {
+	section = &by_id[section_name];
+      } else {
+	section = &by_type[section_name];
+      }
+    }
+    section->options.insert(make_pair(name, std::move(mopt)));
+  }
+  return ret;
 }
 
 

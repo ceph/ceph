@@ -144,18 +144,18 @@ class Watcher : public librados::WatchCtx2 {
     }
 
     // register a watch on the control object
-    r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
     if (r == -ENOENT) {
       constexpr bool exclusive = true;
-      r = ref.pool.ioctx().create(ref.obj.oid, exclusive);
+      r = ref.ioctx.create(ref.obj.oid, exclusive);
       if (r == -EEXIST || r == 0) {
-        r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+        r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
       }
     }
     if (r < 0) {
       ldpp_dout(dpp, -1) << "Failed to watch " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
-      ref.pool.ioctx().close();
+      ref.ioctx.close();
       return r;
     }
 
@@ -165,16 +165,16 @@ class Watcher : public librados::WatchCtx2 {
 
   int restart()
   {
-    int r = ref.pool.ioctx().unwatch2(handle);
+    int r = ref.ioctx.unwatch2(handle);
     if (r < 0) {
       ldpp_dout(dpp, -1) << "Failed to unwatch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
     }
-    r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
+    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
     if (r < 0) {
       ldpp_dout(dpp, -1) << "Failed to restart watch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
-      ref.pool.ioctx().close();
+      ref.ioctx.close();
     }
     return r;
   }
@@ -182,8 +182,8 @@ class Watcher : public librados::WatchCtx2 {
   void stop()
   {
     if (handle) {
-      ref.pool.ioctx().unwatch2(handle);
-      ref.pool.ioctx().close();
+      ref.ioctx.unwatch2(handle);
+      ref.ioctx.close();
     }
   }
 
@@ -210,7 +210,7 @@ class Watcher : public librados::WatchCtx2 {
     bufferlist reply;
     encode(response, reply);
 
-    ref.pool.ioctx().notify_ack(ref.obj.oid, notify_id, cookie, reply);
+    ref.ioctx.notify_ack(ref.obj.oid, notify_id, cookie, reply);
   }
 
   // reestablish the watch if it gets disconnected
@@ -289,7 +289,7 @@ class RadosBidManager : public BidManager, public Server, public DoutPrefix {
     my_bids = this->my_bids;
   }
 
-  bool is_highest_bidder(std::size_t index)
+  bool is_highest_bidder(std::size_t index) override
   {
     auto lock = std::scoped_lock{mutex};
     const bid_value my_bid = my_bids.at(index); // may throw
@@ -303,7 +303,7 @@ class RadosBidManager : public BidManager, public Server, public DoutPrefix {
     return true;
   }
 
-  RGWCoroutine* notify_cr()
+  RGWCoroutine* notify_cr() override
   {
     auto lock = std::scoped_lock{mutex};
     return new NotifyCR(store, this, obj, my_bids);

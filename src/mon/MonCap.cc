@@ -690,3 +690,62 @@ bool MonCap::parse(const string& str, ostream *err)
   return false; 
 }
 
+bool MonCap::merge(MonCap newcap)
+{
+  ceph_assert(newcap.grants.size() == 1);
+  auto& ng = newcap.grants[0];
+
+  for (auto& g : grants) {
+    /* TODO: check case where cap is "allow rw *". */
+
+    if (g.fs_name == ng.fs_name) {
+      if (g.allow == ng.allow) {
+	// no update required; maintain idempotency.
+	return false;
+      } else {
+	// cap for given fs name is present, let's update it.
+	g.allow = ng.allow;
+	return true;
+      }
+    }
+  }
+
+  // cap for given fs name is absent, let's add a new cap for it.
+  grants.push_back(MonCapGrant(ng.allow, ng.fs_name));
+  return true;
+}
+
+string MonCapGrant::to_string()
+{
+  string str = "allow ";
+
+  if (allow & MON_CAP_R) {
+      str+= "r";
+  } else if (allow & MON_CAP_W) {
+      str+= "w";
+  } else if (allow & MON_CAP_X) {
+      str+= "x";
+  } else if (allow == MON_CAP_ANY) {
+      str+= "*";
+  }
+
+  if (not fs_name.empty()) {
+    str += " fsname=" + fs_name;
+  }
+
+  return str;
+}
+
+string MonCap::to_string()
+{
+  string str;
+
+  for (size_t i = 0; i < grants.size(); ++i) {
+    str += grants[i].to_string();
+    if (i < grants.size () - 1) {
+      str += ", ";
+    }
+  }
+
+  return str;
+}

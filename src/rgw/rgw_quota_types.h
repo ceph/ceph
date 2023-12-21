@@ -28,8 +28,6 @@ static inline int64_t rgw_rounded_kb(int64_t bytes)
 class JSONObj;
 
 struct RGWQuotaInfo {
-  template<class T> friend class RGWQuotaCache;
-public:
   int64_t max_size;
   int64_t max_objects;
   bool enabled;
@@ -75,7 +73,7 @@ public:
   }
 
   void dump(Formatter *f) const;
-
+  static void generate_test_instances(std::list<RGWQuotaInfo*>& o);
   void decode_json(JSONObj *obj);
 
 };

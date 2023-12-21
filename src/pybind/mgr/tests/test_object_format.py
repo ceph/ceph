@@ -115,11 +115,17 @@ def test_format_yaml(obj: Any, compatible: bool, yaml_val: str):
 
 
 class Retty:
-    def __init__(self, v) -> None:
+    def __init__(self, v, status="") -> None:
         self.value = v
+        self.status = status
 
     def mgr_return_value(self) -> int:
         return self.value
+
+    def mgr_status_value(self) -> str:
+        if self.status:
+            return self.status
+        return "NOPE"
 
 
 @pytest.mark.parametrize(
@@ -137,6 +143,24 @@ def test_return_value(obj: Any, ret: int):
     # a ReturnValueAdapter instance meets the ReturnValueProvider protocol.
     assert object_format._is_return_value_provider(rva)
     assert rva.mgr_return_value() == ret
+
+
+@pytest.mark.parametrize(
+    "obj, ret",
+    [
+        ({}, ""),
+        ({"fish": "sticks"}, ""),
+        (-55, ""),
+        (Retty(0), "NOPE"),
+        (Retty(-55, "cake"), "cake"),
+        (Retty(-50, "pie"), "pie"),
+    ],
+)
+def test_return_status(obj: Any, ret: str):
+    rva = object_format.StatusValueAdapter(obj)
+    # a StatusValueAdapter instance meets the StatusValueProvider protocol.
+    assert object_format._is_status_value_provider(rva)
+    assert rva.mgr_status_value() == ret
 
 
 def test_valid_formats():

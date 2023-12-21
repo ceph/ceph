@@ -137,6 +137,8 @@ struct MonCapGrant {
       command.length() == 0 &&
       fs_name.empty();
   }
+
+  std::string to_string();
 };
 
 std::ostream& operator<<(std::ostream& out, const MonCapGrant& g);
@@ -151,10 +153,12 @@ struct MonCap {
   std::string get_str() const {
     return text;
   }
+  std::string to_string();
 
   bool is_allow_all() const;
   void set_allow_all();
   bool parse(const std::string& str, std::ostream *err=NULL);
+  bool merge(MonCap newcap);
 
   /**
    * check if we are capable of something

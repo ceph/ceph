@@ -41,7 +41,8 @@ struct EntityName
     decode(id_, bl);
     set(type_, id_);
   }
-
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<EntityName*>& ls);
   const std::string& to_str() const;
   const char *to_cstr() const;
   bool from_str(std::string_view s);

@@ -175,8 +175,8 @@ public:
   // too large by refusing to reshard the bucket until the old logs get trimmed
   static constexpr size_t max_bilog_history = 4;
 
-  static bool can_reshard(const RGWBucketInfo& bucket,
-                          const RGWSI_Zone* zone_svc);
+  static bool should_zone_reshard_now(const RGWBucketInfo& bucket,
+				      const RGWSI_Zone* zone_svc);
 }; // RGWBucketReshard
 
 

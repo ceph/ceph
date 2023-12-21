@@ -13,7 +13,10 @@
  */
 
 #include "common/async/shared_mutex.h"
+#include <future>
 #include <optional>
+#include <boost/asio/bind_executor.hpp>
+#include <boost/asio/io_context.hpp>
 #include <gtest/gtest.h>
 
 namespace ceph::async {

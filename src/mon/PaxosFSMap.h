@@ -35,7 +35,7 @@ protected:
   FSMap &create_pending() {
     ceph_assert(is_leader());
     pending_fsmap = fsmap;
-    pending_fsmap.epoch++;
+    pending_fsmap.inc_epoch();
     return pending_fsmap;
   }
 

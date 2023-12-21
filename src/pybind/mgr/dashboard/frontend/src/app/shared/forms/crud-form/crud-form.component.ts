@@ -4,7 +4,7 @@ import { DataGatewayService } from '~/app/shared/services/data-gateway.service';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { Location } from '@angular/common';
-import { FormGroup } from '@angular/forms';
+import { UntypedFormGroup } from '@angular/forms';
 import { mergeMap } from 'rxjs/operators';
 import { CrudTaskInfo, JsonFormUISchema } from './crud-form.model';
 import { Observable } from 'rxjs';
@@ -20,7 +20,7 @@ export class CrudFormComponent implements OnInit {
   model: any = {};
   resource: string;
   task: { message: string; id: string } = { message: '', id: '' };
-  form = new FormGroup({});
+  form = new UntypedFormGroup({});
   formUISchema$: Observable<JsonFormUISchema>;
   methodType: string;
   urlFormName: string;

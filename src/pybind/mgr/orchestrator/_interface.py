@@ -359,7 +359,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_host(self, host: str, force: bool, offline: bool) -> OrchResult[str]:
+    def remove_host(self, host: str, force: bool, offline: bool, rm_crush_entry: bool) -> OrchResult[str]:
         """
         Remove a host from the orchestrator inventory.
 
@@ -367,7 +367,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False) -> OrchResult[str]:
+    def drain_host(self, hostname: str, force: bool = False, keep_conf_keyring: bool = False, zap_osd_devices: bool = False) -> OrchResult[str]:
         """
         drain all daemons from a host
 

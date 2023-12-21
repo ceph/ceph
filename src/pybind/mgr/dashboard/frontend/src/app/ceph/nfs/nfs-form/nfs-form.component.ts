@@ -2,7 +2,7 @@ import { ChangeDetectorRef, Component, OnInit, ViewChild } from '@angular/core';
 import {
   AbstractControl,
   AsyncValidatorFn,
-  FormControl,
+  UntypedFormControl,
   ValidationErrors,
   Validators
 } from '@angular/forms';
@@ -55,8 +55,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
   fsalAvailabilityError: string = null;
 
   defaultAccessType = { RGW: 'RO' };
-  nfsAccessType: any[] = this.nfsService.nfsAccessType;
-  nfsSquash: any[] = Object.keys(this.nfsService.nfsSquash);
+  nfsAccessType: any[] = [];
+  nfsSquash: any[] = [];
 
   action: string;
   resource: string;
@@ -93,10 +93,12 @@ export class NfsFormComponent extends CdForm implements OnInit {
     super();
     this.permission = this.authStorageService.getPermissions().pool;
     this.resource = $localize`NFS export`;
-    this.createForm();
   }
 
   ngOnInit() {
+    this.nfsAccessType = this.nfsService.nfsAccessType;
+    this.nfsSquash = Object.keys(this.nfsService.nfsSquash);
+    this.createForm();
     const promises: Observable<any>[] = [
       this.nfsService.listClusters(),
       this.nfsService.fsals(),
@@ -138,14 +140,14 @@ export class NfsFormComponent extends CdForm implements OnInit {
 
   createForm() {
     this.nfsForm = new CdFormGroup({
-      cluster_id: new FormControl('', {
+      cluster_id: new UntypedFormControl('', {
         validators: [Validators.required]
       }),
       fsal: new CdFormGroup({
-        name: new FormControl('', {
+        name: new UntypedFormControl('', {
           validators: [Validators.required]
         }),
-        fs_name: new FormControl('', {
+        fs_name: new UntypedFormControl('', {
           validators: [
             CdValidators.requiredIf({
               name: 'CEPH'
@@ -153,24 +155,24 @@ export class NfsFormComponent extends CdForm implements OnInit {
           ]
         })
       }),
-      path: new FormControl('/'),
-      protocolNfsv4: new FormControl(true),
-      pseudo: new FormControl('', {
+      path: new UntypedFormControl('/'),
+      protocolNfsv4: new UntypedFormControl(true),
+      pseudo: new UntypedFormControl('', {
         validators: [
           CdValidators.requiredIf({ protocolNfsv4: true }),
           Validators.pattern('^/[^><|&()]*$')
         ]
       }),
-      access_type: new FormControl('RW'),
-      squash: new FormControl(this.nfsSquash[0]),
-      transportUDP: new FormControl(true, {
+      access_type: new UntypedFormControl('RW'),
+      squash: new UntypedFormControl(this.nfsSquash[0]),
+      transportUDP: new UntypedFormControl(true, {
         validators: [
           CdValidators.requiredIf({ transportTCP: false }, (value: boolean) => {
             return !value;
           })
         ]
       }),
-      transportTCP: new FormControl(true, {
+      transportTCP: new UntypedFormControl(true, {
         validators: [
           CdValidators.requiredIf({ transportUDP: false }, (value: boolean) => {
             return !value;
@@ -178,8 +180,8 @@ export class NfsFormComponent extends CdForm implements OnInit {
         ]
       }),
       clients: this.formBuilder.array([]),
-      security_label: new FormControl(false),
-      sec_label_xattr: new FormControl(
+      security_label: new UntypedFormControl(false),
+      sec_label_xattr: new UntypedFormControl(
         'security.selinux',
         CdValidators.requiredIf({ security_label: true, 'fsal.name': 'CEPH' })
       )

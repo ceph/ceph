@@ -1,6 +1,4 @@
-#include <cassert>
-#include <boost/asio.hpp>
-#include <boost/system/system_error.hpp>
+#include <boost/asio/io_context.hpp>
 
 constexpr int max_completions = 10'000'000;
 int completed = 0;

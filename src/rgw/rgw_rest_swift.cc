@@ -92,7 +92,7 @@ static void dump_account_metadata(req_state * const s,
                                   /* const */map<string, bufferlist>& attrs,
                                   const RGWQuotaInfo& quota,
                                   int32_t max_buckets,
-                                  const RGWAccessControlPolicy_SWIFTAcct &policy)
+                                  const RGWAccessControlPolicy& policy)
 {
   /* Adding X-Timestamp to keep align with Swift API */
   dump_header(s, "X-Timestamp", ceph_clock_now());
@@ -159,13 +159,13 @@ static void dump_account_metadata(req_state * const s,
       dump_header(s, geniter->second, iter->second);
     } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
       dump_header_prefixed(s, "X-Account-Meta-",
-                           camelcase_dash_http_attr(name + PREFIX_LEN),
+                           camelcase_dash_http_attr(name + PREFIX_LEN, false),
                            iter->second);
     }
   }
 
-  /* Dump account ACLs */
-  auto account_acls = policy.to_str();
+  /* Dump account ACLs, if any */
+  auto account_acls = rgw::swift::format_account_acl(policy);
   if (account_acls) {
     dump_header(s, "X-Account-Access-Control", std::move(*account_acls));
   }
@@ -188,7 +188,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
             s->user->get_attrs(),
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
+            s->user_acl);
     dump_errno(s);
     dump_header(s, "Accept-Ranges", "bytes");
     end_header(s, NULL, NULL, NO_CONTENT_LENGTH, true);
@@ -203,18 +203,36 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_begin(bool has_buckets)
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(rgw::sal::BucketList&& buckets)
+static bool bucket_prefix_less(const RGWBucketEnt& e, std::string_view p)
 {
-  if (wants_reversed) {
-    /* Just store in the reversal buffer. Its content will be handled later,
-     * in send_response_end(). */
-    reverse_buffer.emplace(std::begin(reverse_buffer), std::move(buckets));
-  } else {
+  return e.bucket.name < p;
+}
+
+void RGWListBuckets_ObjStore_SWIFT::handle_listing_chunk(std::span<RGWBucketEnt> buckets)
+{
+  if (!wants_reversed) {
     return send_response_data(buckets);
+  }
+
+  /* Just store in the reversal buffer. Its content will be handled later,
+   * in send_response_end(). */
+  if (prefix.empty()) {
+    reverse_buffer.insert(reverse_buffer.begin(),
+                          std::make_move_iterator(buckets.rbegin()),
+                          std::make_move_iterator(buckets.rend()));
+    return;
+  }
+
+  // only keep the entries that match the prefix
+  auto i = std::lower_bound(buckets.begin(), buckets.end(),
+                            prefix, bucket_prefix_less);
+  for (; i != buckets.end() && boost::algorithm::starts_with(i->bucket.name, prefix);
+       ++i) {
+    reverse_buffer.push_front(std::move(*i));
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::BucketList& buckets)
+void RGWListBuckets_ObjStore_SWIFT::send_response_data(std::span<const RGWBucketEnt> buckets)
 {
   if (! sent_data) {
     return;
@@ -224,22 +242,22 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_data(rgw::sal::BucketList& buc
    * in applying the filter earlier as we really need to go through all
    * entries regardless of it (the headers like X-Account-Container-Count
    * aren't affected by specifying prefix). */
-  const auto& m = buckets.get_buckets();
-  for (auto iter = m.lower_bound(prefix);
-       iter != m.end() && boost::algorithm::starts_with(iter->first, prefix);
-       ++iter) {
-    dump_bucket_entry(*iter->second);
+  auto i = std::lower_bound(buckets.begin(), buckets.end(),
+                            prefix, bucket_prefix_less);
+  for (; i != buckets.end() && boost::algorithm::starts_with(i->bucket.name, prefix);
+       ++i) {
+    dump_bucket_entry(*i);
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::Bucket& bucket)
+void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const RGWBucketEnt& ent)
 {
   s->formatter->open_object_section("container");
-  s->formatter->dump_string("name", bucket.get_name());
+  s->formatter->dump_string("name", ent.bucket.name);
 
   if (need_stats) {
-    s->formatter->dump_int("count", bucket.get_count());
-    s->formatter->dump_int("bytes", bucket.get_size());
+    s->formatter->dump_int("count", ent.count);
+    s->formatter->dump_int("bytes", ent.size);
   }
 
   s->formatter->close_section();
@@ -249,37 +267,11 @@ void RGWListBuckets_ObjStore_SWIFT::dump_bucket_entry(const rgw::sal::Bucket& bu
   }
 }
 
-void RGWListBuckets_ObjStore_SWIFT::send_response_data_reversed(rgw::sal::BucketList& buckets)
-{
-  if (! sent_data) {
-    return;
-  }
-
-  /* Take care of the prefix parameter of Swift API. There is no business
-   * in applying the filter earlier as we really need to go through all
-   * entries regardless of it (the headers like X-Account-Container-Count
-   * aren't affected by specifying prefix). */
-  auto& m = buckets.get_buckets();
-
-  auto iter = m.rbegin();
-  for (/* initialized above */;
-       iter != m.rend() && !boost::algorithm::starts_with(iter->first, prefix);
-       ++iter) {
-    /* NOP */;
-  }
-
-  for (/* iter carried */;
-       iter != m.rend() && boost::algorithm::starts_with(iter->first, prefix);
-       ++iter) {
-    dump_bucket_entry(*iter->second);
-  }
-}
-
 void RGWListBuckets_ObjStore_SWIFT::send_response_end()
 {
   if (wants_reversed) {
-    for (auto& buckets : reverse_buffer) {
-      send_response_data_reversed(buckets);
+    for (const auto& ent : reverse_buffer) {
+      dump_bucket_entry(ent);
     }
   }
 
@@ -295,7 +287,7 @@ void RGWListBuckets_ObjStore_SWIFT::send_response_end()
             s->user->get_attrs(),
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
+            s->user_acl);
     dump_errno(s);
     end_header(s, nullptr, nullptr, s->formatter->get_len(), true);
   }
@@ -353,6 +345,7 @@ int RGWListBucket_ObjStore_SWIFT::get_params(optional_yield y)
 
 static void dump_container_metadata(req_state *,
                                     const rgw::sal::Bucket*,
+                                    const std::optional<RGWStorageStats>& stats,
                                     const RGWQuotaInfo&,
                                     const RGWBucketWebsiteConf&);
 
@@ -362,7 +355,7 @@ void RGWListBucket_ObjStore_SWIFT::send_response()
   map<string, bool>::iterator pref_iter = common_prefixes.begin();
 
   dump_start(s);
-  dump_container_metadata(s, s->bucket.get(), quota.bucket_quota,
+  dump_container_metadata(s, s->bucket.get(), stats, quota.bucket_quota,
                           s->bucket->get_info().website_conf);
 
   s->formatter->open_array_section_with_attrs("container",
@@ -463,21 +456,22 @@ next:
 
 static void dump_container_metadata(req_state *s,
                                     const rgw::sal::Bucket* bucket,
+                                    const std::optional<RGWStorageStats>& stats,
                                     const RGWQuotaInfo& quota,
                                     const RGWBucketWebsiteConf& ws_conf)
 {
   /* Adding X-Timestamp to keep align with Swift API */
   dump_header(s, "X-Timestamp", utime_t(s->bucket->get_info().creation_time));
 
-  dump_header(s, "X-Container-Object-Count", bucket->get_count());
-  dump_header(s, "X-Container-Bytes-Used", bucket->get_size());
-  dump_header(s, "X-Container-Bytes-Used-Actual", bucket->get_size_rounded());
+  if (stats) {
+    dump_header(s, "X-Container-Object-Count", stats->num_objects);
+    dump_header(s, "X-Container-Bytes-Used", stats->size);
+    dump_header(s, "X-Container-Bytes-Used-Actual", stats->size_rounded);
+  }
 
   if (rgw::sal::Object::empty(s->object.get())) {
-    auto swift_policy = \
-      static_cast<RGWAccessControlPolicy_SWIFT*>(s->bucket_acl.get());
     std::string read_acl, write_acl;
-    swift_policy->to_str(read_acl, write_acl);
+    rgw::swift::format_container_acls(s->bucket_acl, read_acl, write_acl);
 
     if (read_acl.size()) {
       dump_header(s, "X-Container-Read", read_acl);
@@ -503,7 +497,7 @@ static void dump_container_metadata(req_state *s,
         dump_header(s, geniter->second, iter->second);
       } else if (strncmp(name, RGW_ATTR_META_PREFIX, PREFIX_LEN) == 0) {
         dump_header_prefixed(s, "X-Container-Meta-",
-                             camelcase_dash_http_attr(name + PREFIX_LEN),
+                             camelcase_dash_http_attr(name + PREFIX_LEN, false),
                              iter->second);
       }
     }
@@ -571,7 +565,7 @@ void RGWStatAccount_ObjStore_SWIFT::send_response()
             attrs,
             s->user->get_info().quota.user_quota,
             s->user->get_max_buckets(),
-            static_cast<RGWAccessControlPolicy_SWIFTAcct&>(*s->user_acl));
+            s->user_acl);
   }
 
   set_req_state_err(s, op_ret);
@@ -586,7 +580,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 {
   if (op_ret >= 0) {
     op_ret = STATUS_NO_CONTENT;
-    dump_container_metadata(s, bucket.get(), quota.bucket_quota,
+    dump_container_metadata(s, bucket.get(), stats, quota.bucket_quota,
                             s->bucket->get_info().website_conf);
   }
 
@@ -599,7 +593,7 @@ void RGWStatBucket_ObjStore_SWIFT::send_response()
 
 static int get_swift_container_settings(req_state * const s,
                                         rgw::sal::Driver*  const driver,
-                                        RGWAccessControlPolicy * const policy,
+                                        RGWAccessControlPolicy& policy,
                                         bool * const has_policy,
                                         uint32_t * rw_mask,
                                         RGWCORSConfiguration * const cors_config,
@@ -611,18 +605,17 @@ static int get_swift_container_settings(req_state * const s,
   *has_policy = false;
 
   if (read_list || write_list) {
-    RGWAccessControlPolicy_SWIFT swift_policy(s->cct);
-    const auto r = swift_policy.create(s, driver,
-                                       s->user->get_id(),
-                                       s->user->get_display_name(),
-                                       read_list,
-                                       write_list,
-                                       *rw_mask);
+    int r = rgw::swift::create_container_policy(s, driver,
+                                                s->user->get_id(),
+                                                s->user->get_display_name(),
+                                                read_list,
+                                                write_list,
+                                                *rw_mask,
+                                                policy);
     if (r < 0) {
       return r;
     }
 
-    *policy = swift_policy;
     *has_policy = true;
   }
 
@@ -678,7 +671,12 @@ static void get_rmattrs_from_headers(const req_state * const s,
 
     if (prefix_len > 0) {
       string name(RGW_ATTR_META_PREFIX);
-      name.append(lowercase_dash_http_attr(p + prefix_len));
+      /* For backward compatibility */
+      name.append(lowercase_dash_http_attr(p + prefix_len, true));
+      rmattr_names.insert(name);
+
+      name = RGW_ATTR_META_PREFIX;
+      name.append(lowercase_dash_http_attr(p + prefix_len, false));
       rmattr_names.insert(name);
     }
   }
@@ -686,14 +684,14 @@ static void get_rmattrs_from_headers(const req_state * const s,
 
 static int get_swift_versioning_settings(
   req_state * const s,
-  boost::optional<std::string>& swift_ver_location)
+  std::optional<std::string>& swift_ver_location)
 {
   /* Removing the Swift's versions location has lower priority than setting
    * a new one. That's the reason why we're handling it first. */
   const std::string vlocdel =
     s->info.env->get("HTTP_X_REMOVE_VERSIONS_LOCATION", "");
   if (vlocdel.size()) {
-    swift_ver_location = boost::in_place(std::string());
+    swift_ver_location.emplace();
   }
 
   if (s->info.env->exists("HTTP_X_VERSIONS_LOCATION")) {
@@ -715,7 +713,7 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
   bool has_policy;
   uint32_t policy_rw_mask = 0;
 
-  int r = get_swift_container_settings(s, driver, &policy, &has_policy,
+  int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
@@ -728,9 +726,10 @@ int RGWCreateBucket_ObjStore_SWIFT::get_params(optional_yield y)
   location_constraint = driver->get_zone()->get_zonegroup().get_api_name();
   get_rmattrs_from_headers(s, CONT_PUT_ATTR_PREFIX,
                            CONT_REMOVE_ATTR_PREFIX, rmattr_names);
-  placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""), s->info.storage_class);
+  createparams.placement_rule.init(s->info.env->get("HTTP_X_STORAGE_POLICY", ""),
+                                   s->info.storage_class);
 
-  return get_swift_versioning_settings(s, swift_ver_location);
+  return get_swift_versioning_settings(s, createparams.swift_ver_location);
 }
 
 static inline int handle_metadata_errors(req_state* const s, const int op_ret)
@@ -861,7 +860,8 @@ int RGWPutObj_ObjStore_SWIFT::update_slo_segment_size(rgw_slo_entry& entry) {
   std::unique_ptr<rgw::sal::Bucket> bucket;
 
   if (bucket_name.compare(s->bucket->get_name()) != 0) {
-    r = driver->get_bucket(s, s->user.get(), s->user->get_id().tenant, bucket_name, &bucket, s->yield);
+    r = driver->load_bucket(s, rgw_bucket(s->user->get_tenant(), bucket_name),
+                            &bucket, s->yield);
     if (r < 0) {
       ldpp_dout(this, 0) << "could not get bucket info for bucket="
 			 << bucket_name << dendl;
@@ -1057,23 +1057,21 @@ void RGWPutObj_ObjStore_SWIFT::send_response()
 
 static int get_swift_account_settings(req_state * const s,
                                       rgw::sal::Driver*  const driver,
-                                      RGWAccessControlPolicy_SWIFTAcct*  const policy,
+                                      RGWAccessControlPolicy& policy,
                                       bool * const has_policy)
 {
   *has_policy = false;
 
   const char * const acl_attr = s->info.env->get("HTTP_X_ACCOUNT_ACCESS_CONTROL");
   if (acl_attr) {
-    RGWAccessControlPolicy_SWIFTAcct swift_acct_policy(s->cct);
-    const bool r = swift_acct_policy.create(s, driver,
-                                     s->user->get_id(),
-                                     s->user->get_display_name(),
-                                     string(acl_attr));
-    if (r != true) {
-      return -EINVAL;
+    int r = rgw::swift::create_account_policy(s, driver,
+                                              s->user->get_id(),
+                                              s->user->get_display_name(),
+                                              acl_attr, policy);
+    if (r < 0) {
+      return r;
     }
 
-    *policy = swift_acct_policy;
     *has_policy = true;
   }
 
@@ -1086,12 +1084,7 @@ int RGWPutMetadataAccount_ObjStore_SWIFT::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  int ret = get_swift_account_settings(s,
-                                       driver,
-                                       // FIXME: we need to carry unique_ptr in generic class
-                                       // and allocate appropriate ACL class in the ctor
-                                       static_cast<RGWAccessControlPolicy_SWIFTAcct *>(&policy),
-                                       &has_policy);
+  int ret = get_swift_account_settings(s, driver, policy, &has_policy);
   if (ret < 0) {
     return ret;
   }
@@ -1124,7 +1117,7 @@ int RGWPutMetadataBucket_ObjStore_SWIFT::get_params(optional_yield y)
     return -EINVAL;
   }
 
-  int r = get_swift_container_settings(s, driver, &policy, &has_policy,
+  int r = get_swift_container_settings(s, driver, policy, &has_policy,
 				       &policy_rw_mask, &cors_config, &has_cors);
   if (r < 0) {
     return r;
@@ -1341,7 +1334,7 @@ static void dump_object_metadata(const DoutPrefixProvider* dpp, req_state * cons
 		       sizeof(RGW_ATTR_META_PREFIX)-1) == 0) {
       name += sizeof(RGW_ATTR_META_PREFIX) - 1;
       dump_header_prefixed(s, "X-Object-Meta-",
-                           camelcase_dash_http_attr(name), kv.second);
+                           camelcase_dash_http_attr(name, false), kv.second);
     }
   }
 
@@ -1617,7 +1610,7 @@ int RGWBulkDelete_ObjStore_SWIFT::get_data(
     const size_t start_pos = path_str.find_first_not_of('/');
 
     if (string::npos != start_pos) {
-      /* Seperator is the first slash after the leading ones. */
+      /* Separator is the first slash after the leading ones. */
       const size_t sep_pos = path_str.find('/', start_pos);
 
       if (string::npos != sep_pos) {
@@ -1822,7 +1815,7 @@ void RGWGetHealthCheck_ObjStore_SWIFT::send_response()
 
 const vector<pair<string, RGWInfo_ObjStore_SWIFT::info>> RGWInfo_ObjStore_SWIFT::swift_info =
 {
-    {"bulk_delete", {false, nullptr}},
+    {"bulk_delete", {false, RGWInfo_ObjStore_SWIFT::list_bulk_delete}},
     {"container_quotas", {false, nullptr}},
     {"swift", {false, RGWInfo_ObjStore_SWIFT::list_swift_data}},
     {"tempurl", { false, RGWInfo_ObjStore_SWIFT::list_tempurl_data}},
@@ -1874,6 +1867,16 @@ void RGWInfo_ObjStore_SWIFT::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
+void RGWInfo_ObjStore_SWIFT::list_bulk_delete(Formatter& formatter,
+                                                const ConfigProxy& config,
+                                                rgw::sal::Driver* driver)
+{
+  formatter.open_object_section("bulk_delete");
+  formatter.dump_int("max_deletes_per_request", config->rgw_delete_multi_obj_max_num); 
+  formatter.close_section();
+
+}
+
 void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
                                               const ConfigProxy& config,
                                               rgw::sal::Driver* driver)
@@ -1908,14 +1911,13 @@ void RGWInfo_ObjStore_SWIFT::list_swift_data(Formatter& formatter,
   const rgw::sal::ZoneGroup& zonegroup = driver->get_zone()->get_zonegroup();
 
   std::set<std::string> targets;
-  if (zonegroup.get_placement_target_names(targets)) {
-    for (const auto& placement_targets : targets) {
-      formatter.open_object_section("policy");
-      if (placement_targets.compare(zonegroup.get_default_placement_name()) == 0)
-	formatter.dump_bool("default", true);
-      formatter.dump_string("name", placement_targets.c_str());
-      formatter.close_section();
-    }
+  zonegroup.get_placement_target_names(targets);
+  for (const auto& placement_targets : targets) {
+    formatter.open_object_section("policy");
+    if (placement_targets.compare(zonegroup.get_default_placement_name()) == 0)
+      formatter.dump_bool("default", true);
+    formatter.dump_string("name", placement_targets.c_str());
+    formatter.close_section();
   }
   formatter.close_section();
 
@@ -2115,7 +2117,8 @@ void RGWFormPost::get_owner_info(const req_state* const s,
 
   /* Need to get user info of bucket owner. */
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  int ret = driver->get_bucket(s, user.get(), bucket_tenant, bucket_name, &bucket, s->yield);
+  int ret = driver->load_bucket(s, rgw_bucket(bucket_tenant, bucket_name),
+                                &bucket, s->yield);
   if (ret < 0) {
     throw ret;
   }
@@ -2510,7 +2513,7 @@ RGWOp* RGWSwiftWebsiteHandler::get_ws_listing_op()
       /* Generate the header now. */
       set_req_state_err(s, op_ret);
       dump_errno(s);
-      dump_container_metadata(s, s->bucket.get(), quota.bucket_quota,
+      dump_container_metadata(s, s->bucket.get(), stats, quota.bucket_quota,
                               s->bucket->get_info().website_conf);
       end_header(s, this, "text/html");
       if (op_ret < 0) {

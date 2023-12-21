@@ -31,7 +31,12 @@ class Monitor;
 #define MIN_GLOBAL_ID 0x1000
 
 class AuthMonitor : public PaxosService {
+
 public:
+  typedef enum {
+    CAPS_UPDATE_NOT_REQD, CAPS_UPDATE_REQD, CAPS_PARSING_ERR
+  } caps_update;
+
   enum IncType {
     GLOBAL_ID,
     AUTH_DATA,
@@ -186,14 +191,23 @@ private:
 
   int _update_or_create_entity(const EntityName& entity,
     const std::map<std::string, std::string>& caps, MonOpRequestRef op,
-    std::stringstream& ds, bufferlist* rdata=nullptr, Formatter* fmtr=nullptr,
-    bool create_entity=false);
+    std::stringstream& ss, std::stringstream& ds, bufferlist* rdata=nullptr,
+    Formatter* fmtr=nullptr, bool create_entity=false);
   int _create_entity(const EntityName& entity,
     const std::map<std::string, std::string>& caps, MonOpRequestRef op,
-    std::stringstream& ds, bufferlist* rdata, Formatter* fmtr);
+    std::stringstream& ss, std::stringstream& ds, bufferlist* rdata,
+    Formatter* fmtr);
   int _update_caps(const EntityName& entity,
     const std::map<std::string, std::string>& caps, MonOpRequestRef op,
-    std::stringstream& ds, bufferlist* rdata, Formatter* fmtr);
+    std::stringstream& ss, std::stringstream& ds, bufferlist* rdata,
+    Formatter* fmtr);
+
+  caps_update _gen_wanted_caps(EntityAuth& e_auth,
+    std::map<std::string, std::string>& newcaps, std::ostream& out);
+  template<typename CAP_ENTITY_CLASS>
+  caps_update _merge_caps(const std::string& cap_entity,
+    const std::string& new_cap_str, const std::string& cur_cap_str,
+    std::map<std::string, std::string>& newcaps, std::ostream& out);
 
   bool check_rotate();
   void process_used_pending_keys(const std::map<EntityName,CryptoKey>& keys);
@@ -231,9 +245,9 @@ private:
       EntityName& cephx_entity,
       EntityName& lockbox_entity,
       std::stringstream& ss);
-  int do_osd_destroy(
-      const EntityName& cephx_entity,
-      const EntityName& lockbox_entity);
+  void do_osd_destroy(
+       const EntityName& cephx_entity,
+       const EntityName& lockbox_entity);
 
   int do_osd_new(
       const auth_entity_t& cephx_entity,

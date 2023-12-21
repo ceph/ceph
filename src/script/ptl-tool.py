@@ -250,6 +250,8 @@ def get_credits(session, pr, pr_req):
 def build_branch(args):
     base = args.base
     branch = datetime.datetime.utcnow().strftime(args.branch).format(user=USER)
+    if args.debug_build:
+        branch = branch + "-debug"
     label = args.label
     merge_branch_name = args.merge_branch_name
     if merge_branch_name is False:
@@ -300,12 +302,13 @@ def build_branch(args):
         try:
             base_path = args.base_path + base
             base = next(ref for ref in G.refs if ref.path == base_path)
+            # So we know that we're not on an old test branch, detach HEAD onto ref:
+            base.checkout()
         except StopIteration:
-            log.error("Branch " + base + " does not exist!")
-            sys.exit(1)
-
-        # So we know that we're not on an old test branch, detach HEAD onto ref:
-        base.checkout()
+            log.info(f"Trying to checkout uninterpreted base {base}")
+            c = G.commit(base)
+            G.git.checkout(c)
+        assert G.head.is_detached
 
     for pr in prs:
         pr = int(pr)
@@ -389,6 +392,7 @@ def main():
     else:
         argv = sys.argv[1:]
     parser.add_argument('--branch', dest='branch', action='store', default=default_branch, help='branch to create ("HEAD" leaves HEAD detached; i.e. no branch is made)')
+    parser.add_argument('--debug-build', dest='debug_build', action='store_true', help='append -debug to branch name prompting ceph-build to build with CMAKE_BUILD_TYPE=Debug')
     parser.add_argument('--merge-branch-name', dest='merge_branch_name', action='store', default=False, help='name of the branch for merge messages')
     parser.add_argument('--base', dest='base', action='store', default=default_base, help='base for branch')
     parser.add_argument('--base-path', dest='base_path', action='store', default=BASE_PATH, help='base for branch')

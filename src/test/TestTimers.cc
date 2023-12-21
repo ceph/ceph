@@ -244,6 +244,74 @@ static int safe_timer_cancellation_test(SafeTimer &safe_timer,
   return ret;
 }
 
+class TestLoopContext : public Context
+{
+public:
+  explicit TestLoopContext(SafeTimer &_t,
+                           ceph::mono_clock::time_point _deadline,
+                           double _interval,
+                           bool& _test_finished)
+    : t(_t)
+    , deadline(_deadline)
+    , interval(_interval)
+    , test_finished(_test_finished)
+  {
+  }
+
+  ~TestLoopContext() override
+  {
+  }
+
+  void finish(int r) override
+  {
+    if (ceph::mono_clock::now() > deadline) {
+      test_finished = true;
+    } else {
+      // We have to create a new context.
+      TestLoopContext* new_ctx = new TestLoopContext(
+        t,
+        deadline,
+        interval,
+        test_finished);
+      t.add_event_after(ceph::make_timespan(interval), new_ctx);
+    }
+  }
+
+protected:
+  SafeTimer &t;
+  ceph::mono_clock::time_point deadline;
+  double interval;
+  bool& test_finished;
+};
+
+static int safe_timer_loop_test(SafeTimer &safe_timer,
+                                ceph::mutex& safe_timer_lock) {
+  // TODO: consider using gtest.
+  cout << __PRETTY_FUNCTION__ << std::endl;
+
+  bool test_finished = false;
+  int test_duration = 10;
+  double tick_interval = 0.00004;
+  auto deadline = ceph::mono_clock::now() +
+                  std::chrono::seconds(test_duration);
+  TestLoopContext* ctx = new TestLoopContext(
+    safe_timer,
+    deadline,
+    tick_interval,
+    test_finished);
+
+  safe_timer.add_event_after(ceph::make_timespan(tick_interval), ctx);
+
+  std::this_thread::sleep_for(std::chrono::seconds(test_duration + 2));
+  if (!test_finished) {
+    std::cerr << "The timer loop job didn't complete, it probably hung."
+              << std::endl;
+    return -1;
+  }
+
+  return 0;
+}
+
 int main(int argc, const char **argv)
 {
   auto args = argv_to_vec(argc, argv);
@@ -271,6 +339,10 @@ int main(int argc, const char **argv)
     goto done;
 
   ret = test_out_of_order_insertion(safe_timer, &safe_timer_lock);
+  if (ret)
+    goto done;
+
+  ret = safe_timer_loop_test(safe_timer, safe_timer_lock);
   if (ret)
     goto done;
 

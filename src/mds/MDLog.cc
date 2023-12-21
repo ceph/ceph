@@ -286,7 +286,9 @@ LogSegment* MDLog::_start_new_segment(SegmentBoundary* sb)
   sb->set_seq(event_seq);
 
   // Adjust to next stray dir
-  mds->mdcache->advance_stray();
+  if (!mds->is_stopping()) {
+    mds->mdcache->advance_stray();
+  }
   return ls;
 }
 
@@ -679,17 +681,15 @@ void MDLog::trim(int m)
     
     if (pending_events.count(ls->seq) ||
 	ls->end > safe_pos) {
-      dout(5) << "trim segment " << ls->seq << "/" << ls->offset << ", not fully flushed yet, safe "
+      dout(5) << "trim " << *ls << " is not fully flushed yet: safe "
 	      << journaler->get_write_safe_pos() << " < end " << ls->end << dendl;
       break;
     }
 
     if (expiring_segments.count(ls)) {
-      dout(5) << "trim already expiring segment " << ls->seq << "/" << ls->offset
-	      << ", " << ls->num_events << " events" << dendl;
+      dout(5) << "trim already expiring " << *ls << dendl;
     } else if (expired_segments.count(ls)) {
-      dout(5) << "trim already expired segment " << ls->seq << "/" << ls->offset
-	      << ", " << ls->num_events << " events" << dendl;
+      dout(5) << "trim already expired " << *ls << dendl;
     } else {
       ceph_assert(expiring_segments.count(ls) == 0);
       new_expiring_segments++;
@@ -753,17 +753,15 @@ int MDLog::trim_all()
 
     // Caller should have flushed journaler before calling this
     if (pending_events.count(ls->seq)) {
-      dout(5) << __func__ << ": segment " << ls->seq << " has pending events" << dendl;
+      dout(5) << __func__ << ": " << *ls << " has pending events" << dendl;
       submit_mutex.unlock();
       return -CEPHFS_EAGAIN;
     }
 
     if (expiring_segments.count(ls)) {
-      dout(5) << "trim already expiring segment " << ls->seq << "/" << ls->offset
-	      << ", " << ls->num_events << " events" << dendl;
+      dout(5) << "trim already expiring " << *ls << dendl;
     } else if (expired_segments.count(ls)) {
-      dout(5) << "trim already expired segment " << ls->seq << "/" << ls->offset
-	      << ", " << ls->num_events << " events" << dendl;
+      dout(5) << "trim already expired " << *ls << dendl;
     } else {
       ceph_assert(expiring_segments.count(ls) == 0);
       expiring_segments.insert(ls);
@@ -790,11 +788,11 @@ void MDLog::try_expire(LogSegment *ls, int op_prio)
   ls->try_to_expire(mds, gather_bld, op_prio);
 
   if (gather_bld.has_subs()) {
-    dout(5) << "try_expire expiring segment " << ls->seq << "/" << ls->offset << dendl;
+    dout(5) << "try_expire expiring " << *ls << dendl;
     gather_bld.set_finisher(new C_MaybeExpiredSegment(this, ls, op_prio));
     gather_bld.activate();
   } else {
-    dout(10) << "try_expire expired segment " << ls->seq << "/" << ls->offset << dendl;
+    dout(10) << "try_expire expired " << *ls << dendl;
     submit_mutex.lock();
     ceph_assert(expiring_segments.count(ls));
     expiring_segments.erase(ls);
@@ -814,8 +812,7 @@ void MDLog::_maybe_expired(LogSegment *ls, int op_prio)
     return;
   }
 
-  dout(10) << "_maybe_expired segment " << ls->seq << "/" << ls->offset
-	   << ", " << ls->num_events << " events" << dendl;
+  dout(10) << "_maybe_expired " << *ls << dendl;
   try_expire(ls, op_prio);
 }
 
@@ -830,10 +827,10 @@ void MDLog::_trim_expired_segments()
   uint64_t end = 0;
   for (auto it = segments.begin(); it != segments.end(); ++it) {
     auto& [seq, ls] = *it;
-    dout(20) << __func__ << ": examining seq=" << seq << " ls=" << *ls << dendl;
+    dout(20) << __func__ << ": examining " << *ls << dendl;
 
     if (auto msit = major_segments.find(seq); msit != major_segments.end() && end > 0) {
-      dout(10) << __func__ << ": expiring up to this major segment " << seq << dendl;
+      dout(10) << __func__ << ": expiring up to this major segment seq=" << seq << dendl;
       uint64_t expire_pos = 0;
       for (auto& [seq2, ls2] : segments) {
         if (seq <= seq2) {
@@ -896,12 +893,10 @@ void MDLog::_expired(LogSegment *ls)
 {
   ceph_assert(ceph_mutex_is_locked_by_me(submit_mutex));
 
-  dout(5) << "_expired segment " << ls->seq << "/" << ls->offset
-	  << ", " << ls->num_events << " events" << dendl;
+  dout(5) << "_expired " << *ls << dendl;
 
   if (!mds_is_shutting_down && ls == peek_current_segment()) {
-    dout(5) << "_expired not expiring " << ls->seq << "/" << ls->offset
-	    << ", last one and !mds_is_shutting_down" << dendl;
+    dout(5) << "_expired not expiring current segment, and !mds_is_shutting_down" << dendl;
   } else {
     // expired.
     expired_segments.insert(ls);
@@ -1512,11 +1507,10 @@ void MDLog::standby_trim_segments()
 
   bool removed_segment = false;
   while (have_any_segments()) {
-    LogSegment *seg = get_oldest_segment();
-    dout(10) << " segment seq=" << seg->seq << " " << seg->offset <<
-      "~" << seg->end - seg->offset << dendl;
+    LogSegment *ls = get_oldest_segment();
+    dout(10) << " maybe trim " << *ls << dendl;
 
-    if (seg->end > expire_pos) {
+    if (ls->end > expire_pos) {
       dout(10) << " won't remove, not expired!" << dendl;
       break;
     }
@@ -1527,8 +1521,11 @@ void MDLog::standby_trim_segments()
     }
 
     dout(10) << " removing segment" << dendl;
-    mds->mdcache->standby_trim_segment(seg);
+    mds->mdcache->standby_trim_segment(ls);
     remove_oldest_segment();
+    if (pre_segments_size > 0) {
+      --pre_segments_size;
+    }
     removed_segment = true;
   }
 

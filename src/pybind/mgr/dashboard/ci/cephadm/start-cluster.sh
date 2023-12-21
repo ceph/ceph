@@ -60,9 +60,13 @@ npm run build ${FRONTEND_BUILD_OPTS} &
 
 cd ${CEPH_DEV_FOLDER}
 : ${VM_IMAGE:='fedora36'}
-: ${VM_IMAGE_URL:='https://download.fedoraproject.org/pub/fedora/linux/releases/36/Cloud/x86_64/images/Fedora-Cloud-Base-36-1.5.x86_64.qcow2'}
+: ${VM_IMAGE_URL:='https://archives.fedoraproject.org/pub/archive/fedora/linux/releases/36/Cloud/x86_64/images/Fedora-Cloud-Base-36-1.5.x86_64.qcow2'}
 kcli download image -p ceph-dashboard -u ${VM_IMAGE_URL} ${VM_IMAGE}
 kcli delete plan -y ceph || true
+# Compile cephadm locally for the shared_ceph_folder to pick it up
+cd ${CEPH_DEV_FOLDER}/src/cephadm
+./build.sh ${CEPH_DEV_FOLDER}/src/cephadm/cephadm
+cd ${CEPH_DEV_FOLDER}
 kcli create plan -f src/pybind/mgr/dashboard/ci/cephadm/ceph_cluster.yml \
     -P ceph_dev_folder=${CEPH_DEV_FOLDER} \
     ${EXTRA_PARAMS} ceph

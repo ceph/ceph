@@ -6,7 +6,13 @@
 #include <thread>
 #include <vector>
 
-#include <boost/asio.hpp>
+#include <boost/asio/error.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/ip/tcp.hpp>
+#include <boost/asio/ip/v6_only.hpp>
+#include <boost/asio/read.hpp>
+#include <boost/asio/write.hpp>
+
 #include <boost/intrusive/list.hpp>
 #include <boost/smart_ptr/intrusive_ref_counter.hpp>
 
@@ -167,8 +173,15 @@ struct log_ms_remainder {
 };
 std::ostream& operator<<(std::ostream& out, const log_ms_remainder& m) {
   using namespace std::chrono;
-  return out << std::setfill('0') << std::setw(3)
+
+  std::ios oldState(nullptr);
+  oldState.copyfmt(out);
+
+  out << std::setfill('0') << std::setw(3)
       << duration_cast<milliseconds>(m.t.time_since_epoch()).count() % 1000;
+
+  out.copyfmt(oldState);
+  return out;
 }
 
 // log time in apache format: day/month/year:hour:minute:second zone
@@ -500,7 +513,7 @@ tcp::endpoint parse_endpoint(boost::asio::string_view input,
       return endpoint;
     }
     if (addr_end + 1 < input.size()) {
-      // :port must must follow [ipv6]
+      // :port must follow [ipv6]
       if (input[addr_end + 1] != ':') {
         ec = boost::asio::error::invalid_argument;
         return endpoint;

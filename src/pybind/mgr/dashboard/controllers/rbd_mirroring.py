@@ -238,6 +238,17 @@ class ReplayingData(NamedTuple):
     entries_behind_primary: Optional[int] = None
 
 
+def _get_mirror_mode(ioctx, image_name):
+    with rbd.Image(ioctx, image_name) as img:
+        mirror_mode = img.mirror_image_get_mode()
+        mirror_mode_str = 'Disabled'
+        if mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_JOURNAL:
+            mirror_mode_str = 'journal'
+        elif mirror_mode == rbd.RBD_MIRROR_IMAGE_MODE_SNAPSHOT:
+            mirror_mode_str = 'snapshot'
+        return mirror_mode_str
+
+
 @ViewCache()
 @no_type_check
 def _get_pool_datum(pool_name):
@@ -300,7 +311,8 @@ def _get_pool_datum(pool_name):
         data['mirror_images'] = sorted([
             dict({
                 'name': image['name'],
-                'description': image['description']
+                'description': image['description'],
+                'mirror_mode': _get_mirror_mode(ioctx, image['name'])
             }, **mirror_state['down' if not image['up'] else image['state']])
             for image in mirror_image_status
         ], key=lambda k: k['name'])
@@ -363,7 +375,8 @@ def _get_content_data():  # pylint: disable=R0914
                 'pool_name': pool_name,
                 'name': mirror_image['name'],
                 'state_color': mirror_image['state_color'],
-                'state': mirror_image['state']
+                'state': mirror_image['state'],
+                'mirror_mode': mirror_image['mirror_mode']
             }
 
             if mirror_image['health'] == 'ok':

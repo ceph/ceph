@@ -1,6 +1,6 @@
 import { Location } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
-import { AbstractControl, FormControl, Validators } from '@angular/forms';
+import { AbstractControl, UntypedFormControl, Validators } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
@@ -51,7 +51,7 @@ export class PoolEditModeModalComponent implements OnInit, OnDestroy {
 
   createForm() {
     this.editModeForm = new CdFormGroup({
-      mirrorMode: new FormControl('', {
+      mirrorMode: new UntypedFormControl('', {
         validators: [Validators.required, this.validateMode.bind(this)]
       })
     });

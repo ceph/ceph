@@ -103,13 +103,13 @@ bool DataScan::parse_kwarg(
     dout(10) << "Applying tag filter: '" << filter_tag << "'" << dendl;
     return true;
   } else if (arg == std::string("--filesystem")) {
-    std::shared_ptr<const Filesystem> fs;
+    Filesystem const* fs;
     *r = fsmap->parse_filesystem(val, &fs);
     if (*r != 0) {
       std::cerr << "Invalid filesystem '" << val << "'" << std::endl;
       return false;
     }
-    fscid = fs->fscid;
+    fscid = fs->get_fscid();
     return true;
   } else if (arg == std::string("--alternate-pool")) {
     metadata_pool_name = val;
@@ -223,14 +223,13 @@ int DataScan::main(const std::vector<const char*> &args)
   // one if only one exists
   if (fscid == FS_CLUSTER_ID_NONE) {
     if (fsmap->filesystem_count() == 1) {
-      fscid = fsmap->get_filesystem()->fscid;
+      fscid = fsmap->get_filesystem().get_fscid();
     } else {
       std::cerr << "Specify a filesystem with --filesystem" << std::endl;
       return -EINVAL;
     }
   }
-  auto fs =  fsmap->get_filesystem(fscid);
-  ceph_assert(fs != nullptr);
+  auto& fs = fsmap->get_filesystem(fscid);
 
   // Default to output to metadata pool
   if (driver == NULL) {
@@ -265,7 +264,7 @@ int DataScan::main(const std::vector<const char*> &args)
   if (command == "scan_inodes" ||
       command == "scan_extents" ||
       command == "cleanup") {
-    data_pool_id = fs->mds_map.get_first_data_pool();
+    data_pool_id = fs.get_mds_map().get_first_data_pool();
 
     std::string pool_name;
     r = rados.pool_reverse_lookup(data_pool_id, &pool_name);
@@ -309,7 +308,7 @@ int DataScan::main(const std::vector<const char*> &args)
     if (autodetect_data_pools) {
       ceph_assert(extra_data_pool_names.empty());
 
-      for (auto &pool_id : fs->mds_map.get_data_pools()) {
+      for (auto &pool_id : fs.get_mds_map().get_data_pools()) {
 	if (pool_id == data_pool_id) {
 	  continue;
 	}
@@ -335,7 +334,7 @@ int DataScan::main(const std::vector<const char*> &args)
 		<< dendl;
       }
 
-      if (!fs->mds_map.is_data_pool(pool_id)) {
+      if (!fs.get_mds_map().is_data_pool(pool_id)) {
 	std::cerr << "Warning: pool '" << data_pool_name << "' is not a "
 	  "CephFS data pool!" << std::endl;
 	if (!force_pool) {
@@ -355,12 +354,8 @@ int DataScan::main(const std::vector<const char*> &args)
 
   // Initialize metadata_io from MDSMap for scan_frags
   if (command == "scan_frags" || command == "scan_links") {
-    const auto fs = fsmap->get_filesystem(fscid);
-    if (fs == nullptr) {
-      std::cerr << "Filesystem id " << fscid << " does not exist" << std::endl;
-      return -ENOENT;
-    }
-    int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
+    auto& fs = fsmap->get_filesystem(fscid);
+    int64_t const metadata_pool_id = fs.get_mds_map().get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);
@@ -375,7 +370,7 @@ int DataScan::main(const std::vector<const char*> &args)
       return r;
     }
 
-    data_pools = fs->mds_map.get_data_pools();
+    data_pools = fs.get_mds_map().get_data_pools();
   }
 
   // Finally, dispatch command
@@ -390,7 +385,7 @@ int DataScan::main(const std::vector<const char*> &args)
   } else if (command == "cleanup") {
     return cleanup();
   } else if (command == "init") {
-    return driver->init_roots(fs->mds_map.get_first_data_pool());
+    return driver->init_roots(fs.get_mds_map().get_first_data_pool());
   } else {
     std::cerr << "Unknown command '" << command << "'" << std::endl;
     return -EINVAL;
@@ -864,8 +859,8 @@ int DataScan::scan_inodes()
         // ID, so if the pool from loaded_layout is not found in the list of
         // the data pools, we'll force the injected layout to point to the
         // pool we read from.
-	if (!fsmap->get_filesystem(fscid)->mds_map.is_data_pool(
-	      guessed_layout.pool_id)) {
+        auto& fs = fsmap->get_filesystem(fscid);
+	if (!fs.get_mds_map().is_data_pool(guessed_layout.pool_id)) {
 	  dout(20) << "overwriting layout pool_id " << data_pool_id << dendl;
 	  guessed_layout.pool_id = data_pool_id;
 	}
@@ -2185,9 +2180,8 @@ int MetadataDriver::init(
   fs_cluster_id_t fscid)
 {
   if (metadata_pool_name.empty()) {
-    auto fs =  fsmap->get_filesystem(fscid);
-    ceph_assert(fs != nullptr);
-    int64_t const metadata_pool_id = fs->mds_map.get_metadata_pool();
+    auto& fs =  fsmap->get_filesystem(fscid);
+    int64_t const metadata_pool_id = fs.get_mds_map().get_metadata_pool();
 
     dout(4) << "resolving metadata pool " << metadata_pool_id << dendl;
     int r = rados.pool_reverse_lookup(metadata_pool_id, &metadata_pool_name);

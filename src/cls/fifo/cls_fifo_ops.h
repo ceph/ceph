@@ -67,6 +67,31 @@ struct create_meta
     decode(exclusive, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("id", id);
+    f->dump_object("version", version.value_or(objv()));
+    f->dump_string("pool_name", pool.name);
+    f->dump_string("pool_ns", pool.ns);
+    f->dump_string("oid_prefix", oid_prefix.value_or(""));
+    f->dump_unsigned("max_part_size", max_part_size);
+    f->dump_unsigned("max_entry_size", max_entry_size);
+    f->dump_bool("exclusive", exclusive);
+  }
+  static void generate_test_instances(std::list<create_meta*>& o) {
+    o.push_back(new create_meta);
+    o.push_back(new create_meta);
+    o.back()->id = "id";
+    objv v1;
+    v1.instance = "inst1";
+    v1.ver = 1;
+    o.back()->version = v1;
+    o.back()->pool.name = "pool";
+    o.back()->pool.ns = "ns";
+    o.back()->oid_prefix = "prefix";
+    o.back()->max_part_size = 1024;
+    o.back()->max_entry_size = 1024;
+    o.back()->exclusive = true;
+  }
 };
 WRITE_CLASS_ENCODER(create_meta)
 
@@ -83,6 +108,17 @@ struct get_meta
     DECODE_START(1, bl);
     decode(version, bl);
     DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("version", version.value_or(objv()));
+  }
+  static void generate_test_instances(std::list<get_meta*>& o) {
+    o.push_back(new get_meta);
+    o.push_back(new get_meta);
+    objv v1;
+    v1.instance = "inst1";
+    v1.ver = 1;
+    o.back()->version = v1;
   }
 };
 WRITE_CLASS_ENCODER(get_meta)
@@ -107,6 +143,18 @@ struct get_meta_reply
     decode(part_header_size, bl);
     decode(part_entry_overhead, bl);
     DECODE_FINISH(bl);
+  }
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("info", info);
+    f->dump_unsigned("part_header_size", part_header_size);
+    f->dump_unsigned("part_entry_overhead", part_entry_overhead);
+  }
+  static void generate_test_instances(std::list<get_meta_reply*>& o) {
+    o.push_back(new get_meta_reply);
+    o.push_back(new get_meta_reply);
+    o.back()->info = fifo::info();
+    o.back()->part_header_size = 1024;
+    o.back()->part_entry_overhead = 1024;
   }
 };
 WRITE_CLASS_ENCODER(get_meta_reply)

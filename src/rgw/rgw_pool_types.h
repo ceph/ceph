@@ -90,6 +90,16 @@ struct rgw_pool {
     DECODE_FINISH(bl);
   }
 
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("name", name);
+    f->dump_string("ns", ns);
+  }
+
+  static void generate_test_instances(std::list<rgw_pool*>& o) {
+    o.push_back(new rgw_pool);
+    o.push_back(new rgw_pool("pool", "ns"));
+  }
+
   rgw_pool& operator=(const rgw_pool&) = default;
 
   bool operator==(const rgw_pool& p) const {

@@ -36,6 +36,14 @@ struct Config {
   unsigned long max_path_len = 256;
   mode_t file_mode = 0755;
   mode_t dir_mode = 0755;
+
+  bool case_sensitive = true;
+  // Convert new file paths to upper case in case of case insensitive mounts.
+  // Visual Studio recommends normalizing to uppercase in order to avoid
+  // locale issues (CA1308).
+  bool convert_to_uppercase = true;
+  // TODO: consider adding an option to preserve the original case.
+  // It could be stored using an extended attribute.
 };
 
 extern Config *g_cfg;

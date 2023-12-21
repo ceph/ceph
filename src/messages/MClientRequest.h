@@ -60,6 +60,17 @@ struct SnapPayload {
     decode(metadata, iter);
     DECODE_FINISH(iter);
   }
+  void dump(ceph::Formatter *f) const {
+    for (const auto &i : metadata) {
+      f->dump_string(i.first.c_str(), i.second);
+    }
+  }
+  static void generate_test_instances(std::list<SnapPayload *> &o) {
+    o.push_back(new SnapPayload);
+    o.push_back(new SnapPayload);
+    o.back()->metadata["key1"] = "val1";
+    o.back()->metadata["key2"] = "val2";
+  }
 };
 
 WRITE_CLASS_ENCODER(SnapPayload)
@@ -94,6 +105,26 @@ public:
       using ceph::decode;
       decode(item, bl);
       ceph::decode_nohead(item.dname_len, dname, bl);
+    }
+
+    void dump(ceph::Formatter *f) const {
+      f->dump_string("dname", dname);
+      f->dump_unsigned("ino", item.ino);
+      f->dump_unsigned("cap_id", item.cap_id);
+      f->dump_unsigned("caps", item.caps);
+      f->dump_unsigned("wanted", item.wanted);
+      f->dump_unsigned("seq", item.seq);
+      f->dump_unsigned("issue_seq", item.issue_seq);
+      f->dump_unsigned("mseq", item.mseq);
+      f->dump_unsigned("dname_seq", item.dname_seq);
+      f->dump_unsigned("dname_len", item.dname_len);
+    }
+
+    static void generate_test_instances(std::list<Release*>& ls) {
+      ls.push_back(new Release);
+      ls.push_back(new Release);
+      ls.back()->item.dname_len = 4;
+      ls.back()->dname = "test";
     }
   };
   mutable std::vector<Release> releases; /* XXX HACK! */
@@ -233,6 +264,12 @@ public:
       decode(old_mds_head, p);
       copy_from_legacy_head(&head, &old_mds_head);
       head.version = 0;
+
+      head.ext_num_retry = head.num_retry;
+      head.ext_num_fwd = head.num_fwd;
+
+      head.owner_uid = head.caller_uid;
+      head.owner_gid = head.caller_gid;
 
       /* Can't set the btime from legacy struct */
       if (head.op == CEPH_MDS_OP_SETATTR) {

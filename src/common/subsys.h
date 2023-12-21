@@ -83,6 +83,7 @@ SUBSYS(prioritycache, 1, 5)
 SUBSYS(test, 0, 5)
 SUBSYS(cephfs_mirror, 0, 5)
 SUBSYS(cephsqlite, 0, 5)
+SUBSYS(crimson_interrupt, 0, 5)
 SUBSYS(seastore, 0, 5)       // logs above seastore tm
 SUBSYS(seastore_onode, 0, 5)
 SUBSYS(seastore_odata, 0, 5)
@@ -102,6 +103,7 @@ SUBSYS(mclock, 1, 5)
 SUBSYS(cyanstore, 0, 5)
 SUBSYS(ceph_exporter, 1, 5)
 SUBSYS(memstore, 1, 5)
+SUBSYS(trace, 1, 5)
 // *********************************************************************
 // Developers should update /doc/rados/troubleshooting/log-and-debug.rst
 // when adding or removing a subsystem accordingly.

@@ -30,10 +30,11 @@ struct onode_item_t {
   uint32_t cnt_modify = 0;
 
   void initialize(Transaction& t, Onode& value) const {
-    auto& layout = value.get_mutable_layout(t);
-    layout.size = size;
-    layout.omap_root.update(omap_root_t(id, cnt_modify,
-      value.get_metadata_hint(block_size)));
+    auto &ftvalue = static_cast<FLTreeOnode&>(value);
+    ftvalue.update_onode_size(t, size);
+    auto oroot = omap_root_t(id, cnt_modify,
+      value.get_metadata_hint(block_size));
+    ftvalue.update_omap_root(t, oroot);
     validate(value);
   }
 
@@ -119,13 +120,6 @@ struct fltree_onode_manager_test_t
         return manager->get_or_create_onode(t, p_kv->key);
       }).unsafe_get0();
       std::invoke(f, t, *onode, p_kv->value);
-      with_trans_intr(t, [&](auto &t) {
-	if (onode->is_alive()) {
-	  return manager->write_dirty(t, {onode});
-	} else {
-	  return OnodeManager::write_dirty_iertr::now();
-	}
-      }).unsafe_get0();
     });
   }
 
@@ -180,9 +174,6 @@ struct fltree_onode_manager_test_t
         boost::tie(onode, p_item) = tup;
         std::invoke(f, t, *onode, *p_item);
       }
-      with_trans_intr(t, [&](auto &t) {
-        return manager->write_dirty(t, onodes);
-      }).unsafe_get0();
     });
   }
 
@@ -239,7 +230,7 @@ struct fltree_onode_manager_test_t
   fltree_onode_manager_test_t() {}
 };
 
-TEST_F(fltree_onode_manager_test_t, 1_single)
+TEST_P(fltree_onode_manager_test_t, 1_single)
 {
   run_async([this] {
     uint64_t block_size = tm->get_block_size();
@@ -267,18 +258,19 @@ TEST_F(fltree_onode_manager_test_t, 1_single)
   });
 }
 
-TEST_F(fltree_onode_manager_test_t, 2_synthetic)
+TEST_P(fltree_onode_manager_test_t, 2_synthetic)
 {
   run_async([this] {
     uint64_t block_size = tm->get_block_size();
     auto pool = KVPool<onode_item_t>::create_range(
-        {0, 100}, {32, 64, 128, 256, 512}, block_size);
+        {0, 10000}, {32, 64, 128, 256, 512}, block_size);
     auto start = pool.begin();
     auto end = pool.end();
     with_onodes_write(start, end,
         [](auto& t, auto& onode, auto& item) {
       item.initialize(t, onode);
     });
+    restart();
     validate_onodes(start, end);
 
     validate_list_onodes(pool);
@@ -289,6 +281,7 @@ TEST_F(fltree_onode_manager_test_t, 2_synthetic)
         [](auto& t, auto& onode, auto& item) {
       item.modify(t, onode);
     });
+    restart();
     validate_onodes(start, end);
 
     pool.shuffle();
@@ -298,6 +291,7 @@ TEST_F(fltree_onode_manager_test_t, 2_synthetic)
         [](auto& t, auto& onode, auto& item) {
       item.modify(t, onode);
     });
+    restart();
     validate_onodes(start, end);
 
     pool.shuffle();
@@ -310,6 +304,7 @@ TEST_F(fltree_onode_manager_test_t, 2_synthetic)
         return manager->erase_onode(t, onode_ref);
       }).unsafe_get0();
     });
+    restart();
     validate_erased(rd_start, rd_end);
     pool.erase_from_random(rd_start, rd_end);
     start = pool.begin();
@@ -319,3 +314,12 @@ TEST_F(fltree_onode_manager_test_t, 2_synthetic)
     validate_list_onodes(pool);
   });
 }
+
+INSTANTIATE_TEST_SUITE_P(
+  fltree_onode__manager_test,
+  fltree_onode_manager_test_t,
+  ::testing::Values (
+    "segmented",
+    "circularbounded"
+  )
+);

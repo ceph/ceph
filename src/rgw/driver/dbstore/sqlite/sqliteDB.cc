@@ -758,7 +758,7 @@ int SQLiteDB::createUserTable(const DoutPrefixProvider *dpp, DBOpParams *params)
   if (ret)
     ldpp_dout(dpp, 0)<<"CreateUserTable failed" << dendl;
 
-  ldpp_dout(dpp, 20)<<"CreateUserTable suceeded" << dendl;
+  ldpp_dout(dpp, 20)<<"CreateUserTable succeeded" << dendl;
 
   return ret;
 }
@@ -774,7 +774,7 @@ int SQLiteDB::createBucketTable(const DoutPrefixProvider *dpp, DBOpParams *param
   if (ret)
     ldpp_dout(dpp, 0)<<"CreateBucketTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"CreateBucketTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"CreateBucketTable succeeded " << dendl;
 
   return ret;
 }
@@ -790,7 +790,7 @@ int SQLiteDB::createObjectTable(const DoutPrefixProvider *dpp, DBOpParams *param
   if (ret)
     ldpp_dout(dpp, 0)<<"CreateObjectTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"CreateObjectTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"CreateObjectTable succeeded " << dendl;
 
   return ret;
 }
@@ -806,7 +806,7 @@ int SQLiteDB::createObjectTableTrigger(const DoutPrefixProvider *dpp, DBOpParams
   if (ret)
     ldpp_dout(dpp, 0)<<"CreateObjectTableTrigger failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"CreateObjectTableTrigger suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"CreateObjectTableTrigger succeeded " << dendl;
 
   return ret;
 }
@@ -822,7 +822,7 @@ int SQLiteDB::createObjectView(const DoutPrefixProvider *dpp, DBOpParams *params
   if (ret)
     ldpp_dout(dpp, 0)<<"CreateObjectView failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"CreateObjectView suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"CreateObjectView succeeded " << dendl;
 
   return ret;
 }
@@ -838,7 +838,7 @@ int SQLiteDB::createQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params
   if (ret)
     ldpp_dout(dpp, 0)<<"CreateQuotaTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"CreateQuotaTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"CreateQuotaTable succeeded " << dendl;
 
   return ret;
 }
@@ -854,7 +854,7 @@ int SQLiteDB::createObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *p
   if (ret)
     ldpp_dout(dpp, 0)<<"CreateObjectDataTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"CreateObjectDataTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"CreateObjectDataTable succeeded " << dendl;
 
   return ret;
 }
@@ -875,7 +875,7 @@ int SQLiteDB::createLCTables(const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 0)<<"CreateLCEntryTable failed" << dendl;
     return ret;
   }
-  ldpp_dout(dpp, 20)<<"CreateLCEntryTable suceeded" << dendl;
+  ldpp_dout(dpp, 20)<<"CreateLCEntryTable succeeded" << dendl;
 
   schema = CreateTableSchema("LCHead", &params);
   ret = exec(dpp, schema.c_str(), NULL);
@@ -883,7 +883,7 @@ int SQLiteDB::createLCTables(const DoutPrefixProvider *dpp)
     ldpp_dout(dpp, 0)<<"CreateLCHeadTable failed" << dendl;
     (void)DeleteLCEntryTable(dpp, &params);
   }
-  ldpp_dout(dpp, 20)<<"CreateLCHeadTable suceeded" << dendl;
+  ldpp_dout(dpp, 20)<<"CreateLCHeadTable succeeded" << dendl;
 
   return ret;
 }
@@ -899,7 +899,7 @@ int SQLiteDB::DeleteUserTable(const DoutPrefixProvider *dpp, DBOpParams *params)
   if (ret)
     ldpp_dout(dpp, 0)<<"DeleteUserTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"DeleteUserTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteUserTable succeeded " << dendl;
 
   return ret;
 }
@@ -915,7 +915,7 @@ int SQLiteDB::DeleteBucketTable(const DoutPrefixProvider *dpp, DBOpParams *param
   if (ret)
     ldpp_dout(dpp, 0)<<"DeletebucketTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"DeletebucketTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"DeletebucketTable succeeded " << dendl;
 
   return ret;
 }
@@ -931,7 +931,7 @@ int SQLiteDB::DeleteObjectTable(const DoutPrefixProvider *dpp, DBOpParams *param
   if (ret)
     ldpp_dout(dpp, 0)<<"DeleteObjectTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"DeleteObjectTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteObjectTable succeeded " << dendl;
 
   return ret;
 }
@@ -947,7 +947,7 @@ int SQLiteDB::DeleteObjectDataTable(const DoutPrefixProvider *dpp, DBOpParams *p
   if (ret)
     ldpp_dout(dpp, 0)<<"DeleteObjectDataTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"DeleteObjectDataTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteObjectDataTable succeeded " << dendl;
 
   return ret;
 }
@@ -963,7 +963,7 @@ int SQLiteDB::DeleteQuotaTable(const DoutPrefixProvider *dpp, DBOpParams *params
   if (ret)
     ldpp_dout(dpp, 0)<<"DeleteQuotaTable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"DeleteQuotaTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteQuotaTable succeeded " << dendl;
 
   return ret;
 }
@@ -977,7 +977,7 @@ int SQLiteDB::DeleteLCEntryTable(const DoutPrefixProvider *dpp, DBOpParams *para
   ret = exec(dpp, schema.c_str(), NULL);
   if (ret)
     ldpp_dout(dpp, 0)<<"DeleteLCEntryTable failed " << dendl;
-  ldpp_dout(dpp, 20)<<"DeleteLCEntryTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteLCEntryTable succeeded " << dendl;
 
   return ret;
 }
@@ -991,7 +991,7 @@ int SQLiteDB::DeleteLCHeadTable(const DoutPrefixProvider *dpp, DBOpParams *param
   ret = exec(dpp, schema.c_str(), NULL);
   if (ret)
     ldpp_dout(dpp, 0)<<"DeleteLCHeadTable failed " << dendl;
-  ldpp_dout(dpp, 20)<<"DeleteLCHeadTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"DeleteLCHeadTable succeeded " << dendl;
 
   return ret;
 }
@@ -1006,7 +1006,7 @@ int SQLiteDB::ListAllUsers(const DoutPrefixProvider *dpp, DBOpParams *params)
   if (ret)
     ldpp_dout(dpp, 0)<<"GetUsertable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"GetUserTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"GetUserTable succeeded " << dendl;
 
   return ret;
 }
@@ -1022,7 +1022,7 @@ int SQLiteDB::ListAllBuckets(const DoutPrefixProvider *dpp, DBOpParams *params)
   if (ret)
     ldpp_dout(dpp, 0)<<"Listbuckettable failed " << dendl;
 
-  ldpp_dout(dpp, 20)<<"ListbucketTable suceeded " << dendl;
+  ldpp_dout(dpp, 20)<<"ListbucketTable succeeded " << dendl;
 
   return ret;
 }
@@ -1049,7 +1049,7 @@ int SQLiteDB::ListAllObjects(const DoutPrefixProvider *dpp, DBOpParams *params)
     if (ret)
       ldpp_dout(dpp, 0)<<"ListObjecttable failed " << dendl;
 
-    ldpp_dout(dpp, 20)<<"ListObjectTable suceeded " << dendl;
+    ldpp_dout(dpp, 20)<<"ListObjectTable succeeded " << dendl;
   }
 
   return ret;

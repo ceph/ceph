@@ -13,6 +13,8 @@
  */
 
 #include "common/async/completion.h"
+#include <boost/asio/error.hpp>
+#include <boost/asio/io_context.hpp>
 #include <optional>
 #include <boost/intrusive/list.hpp>
 #include <gtest/gtest.h>

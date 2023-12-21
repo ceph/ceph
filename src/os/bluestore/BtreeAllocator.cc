@@ -25,7 +25,7 @@ uint64_t BtreeAllocator::_pick_block_after(uint64_t *cursor,
 {
   auto rs_start = range_tree.lower_bound(*cursor);
   for (auto rs = rs_start; rs != range_tree.end(); ++rs) {
-    uint64_t offset = p2roundup(rs->first, align);
+    uint64_t offset = rs->first;
     if (offset + size <= rs->second) {
       *cursor = offset + size;
       return offset;
@@ -37,7 +37,7 @@ uint64_t BtreeAllocator::_pick_block_after(uint64_t *cursor,
   }
   // If we reached end, start from beginning till cursor.
   for (auto rs = range_tree.begin(); rs != rs_start; ++rs) {
-    uint64_t offset = p2roundup(rs->first, align);
+    uint64_t offset = rs->first;
     if (offset + size <= rs->second) {
       *cursor = offset + size;
       return offset;
@@ -53,7 +53,7 @@ uint64_t BtreeAllocator::_pick_block_fits(uint64_t size,
   // the needs
   auto rs_start = range_size_tree.lower_bound(range_value_t{0,size});
   for (auto rs = rs_start; rs != range_size_tree.end(); ++rs) {
-    uint64_t offset = p2roundup(rs->start, align);
+    uint64_t offset = rs->start;
     if (offset + size <= rs->start + rs->size) {
       return offset;
     }
@@ -132,14 +132,17 @@ void BtreeAllocator::_process_range_removal(uint64_t start, uint64_t end,
 
   // | left <|////|  right |
   if (left_over && right_over) {
+    // shink the left seg in offset tree
+    // this should be done before calling any emplace/emplace_hint
+    // on range_tree since they invalidate rs iterator.
+    rs->second = start;
+    // insert the shrinked left seg back into size tree
+    range_size_tree.emplace(seg_whole.start, start);
+
     // add the spin-off right seg
     range_seg_t seg_after{end, seg_whole.end};
     range_tree.emplace_hint(rs, seg_after.start, seg_after.end);
     range_size_tree.emplace(seg_after);
-    // shink the left seg in offset tree
-    rs->second = start;
-    // insert the shrinked left seg back into size tree
-    range_size_tree.emplace(seg_whole.start, start);
   } else if (left_over) {
     // | left <|///////////|
     // shrink the left seg in the offset tree
@@ -167,8 +170,11 @@ void BtreeAllocator::_remove_from_tree(uint64_t start, uint64_t size)
   ceph_assert(size != 0);
   ceph_assert(size <= num_free);
 
-  auto rs = range_tree.find(start);
-  /* Make sure we completely overlap with someone */
+  // Make sure we completely overlap with someone
+  auto rs = range_tree.lower_bound(start);
+  if ((rs == range_tree.end() || rs->first > start) && rs != range_tree.begin()) {
+    --rs;
+  }
   ceph_assert(rs != range_tree.end());
   ceph_assert(rs->first <= start);
   ceph_assert(rs->second >= end);
@@ -192,6 +198,11 @@ void BtreeAllocator::_try_remove_from_tree(uint64_t start, uint64_t size,
 
   do {
 
+    //FIXME: this is apparently wrong since _process_range_removal might
+    // invalidate existing iterators.
+    // Not a big deal so far since this method is not in use - it's called
+    // when making Hybrid allocator from a regular one. Which isn't an option
+    // for BtreeAllocator for now.
     auto next_rs = rs;
     ++next_rs;
 

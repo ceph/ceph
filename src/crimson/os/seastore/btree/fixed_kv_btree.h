@@ -505,13 +505,15 @@ public:
           i->get_val().maybe_relative_to(node->get_paddr()),
           &child_node);
       } else {
-        assert(i->get_val().pladdr.is_paddr());
+        if (i->get_val().pladdr.is_laddr()) {
+          continue;
+        }
         ret = c.trans.get_extent(
           i->get_val().pladdr.get_paddr().maybe_relative_to(node->get_paddr()),
           &child_node);
       }
       if (ret == Transaction::get_extent_ret::PRESENT) {
-        if (child_node->is_stable()) {
+        if (child_node->is_stable_written()) {
           assert(child_node->is_valid());
           auto cnode = child_node->template cast<child_node_t>();
           assert(cnode->has_parent_tracker());

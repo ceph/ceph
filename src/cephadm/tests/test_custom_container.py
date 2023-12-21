@@ -1,4 +1,5 @@
 import unittest
+from unittest import mock
 
 from .fixtures import (
     cephadm_fs,
@@ -71,14 +72,20 @@ class TestCustomContainer(unittest.TestCase):
         self.assertEqual(result, ['SECRET=password'])
 
     def test_get_container_mounts(self):
-        result = self.cc.get_container_mounts('/xyz')
+        # TODO: get_container_mounts was made private. test the private func for
+        # now. in the future update to test base class func
+        # customize_container_mounts
+        result = self.cc._get_container_mounts('/xyz')
         self.assertDictEqual(result, {
             '/CONFIG_DIR': '/foo/conf',
             '/xyz/bar/config': '/bar:ro'
         })
 
     def test_get_container_binds(self):
-        result = self.cc.get_container_binds('/xyz')
+        # TODO: get_container_binds was made private. test the private func for
+        # now. in the future update to test base class fune
+        # customize_container_binds
+        result = self.cc._get_container_binds('/xyz')
         self.assertEqual(result, [
             [
                 'type=bind',
@@ -96,8 +103,12 @@ class TestCustomContainer(unittest.TestCase):
 
 
 def test_deploy_custom_container(cephadm_fs):
+    m1 = mock.patch(
+        'cephadmlib.container_types.call', return_value=('', '', 0)
+    )
+    m2 = mock.patch('cephadmlib.container_types.call_throws', return_value=0)
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
-    with with_cephadm_ctx([]) as ctx:
+    with with_cephadm_ctx([]) as ctx, m1, m2:
         ctx.container_engine = mock_podman()
         ctx.fsid = fsid
         ctx.name = 'container.tdcc'
@@ -110,6 +121,9 @@ def test_deploy_custom_container(cephadm_fs):
             '--servers',
             '192.168.8.42,192.168.8.43,192.168.12.11',
         ]
+        ctx.config_blobs = {
+            'envs': ['FOO=1', 'BAR=77'],
+        }
 
         _cephadm._common_deploy(ctx)
 
@@ -127,6 +141,8 @@ def test_deploy_custom_container(cephadm_fs):
             ' --cgroups=split --no-hosts'
             ' -e CONTAINER_IMAGE=quay.io/foobar/quux:latest'
             ' -e NODE_NAME=host1'
+            ' -e FOO=1'
+            ' -e BAR=77'
             ' quay.io/foobar/quux:latest'
             ' --label frobnicationist --servers 192.168.8.42,192.168.8.43,192.168.12.11'
         )
@@ -138,8 +154,12 @@ def test_deploy_custom_container(cephadm_fs):
 
 
 def test_deploy_custom_container_and_inits(cephadm_fs):
+    m1 = mock.patch(
+        'cephadmlib.container_types.call', return_value=('', '', 0)
+    )
+    m2 = mock.patch('cephadmlib.container_types.call_throws', return_value=0)
     fsid = 'b01dbeef-701d-9abe-0000-e1e5a47004a7'
-    with with_cephadm_ctx([]) as ctx:
+    with with_cephadm_ctx([]) as ctx, m1, m2:
         ctx.container_engine = mock_podman()
         ctx.fsid = fsid
         ctx.name = 'container.tdccai'

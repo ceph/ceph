@@ -1,22 +1,31 @@
-<ng-container *ngIf="subVolumes$ | async as subVolumes">
-  <cd-table [data]="subVolumes"
-            columnMode="flex"
-            [columns]="columns"
-            selectionType="single"
-            [hasDetails]="false"
-            (fetchData)="fetchData()"
-            (updateSelection)="updateSelection($event)">
+<div class="row">
+  <div class="col-sm-1"
+       *ngIf="subVolumeGroups$ | async as subVolumeGroups">
+    <cd-vertical-navigation title="Groups"
+                            [items]="subvolumeGroupList"
+                            inputIdentifier="group-filter"
+                            (emitActiveItem)="selectSubVolumeGroup($event)"></cd-vertical-navigation>
+  </div>
+  <div class="col-11 vertical-line">
+    <cd-table [data]="subVolumes$ | async"
+              columnMode="flex"
+              [columns]="columns"
+              selectionType="single"
+              [hasDetails]="false"
+              (fetchData)="fetchData()"
+              (updateSelection)="updateSelection($event)">
 
-    <div class="table-actions btn-toolbar">
-      <cd-table-actions [permission]="permissions.cephfs"
-                        [selection]="selection"
-                        class="btn-group"
-                        id="cephfs-subvolume-actions"
-                        [tableActions]="tableActions">
-      </cd-table-actions>
-    </div>
-  </cd-table>
-</ng-container>
+      <div class="table-actions btn-toolbar">
+        <cd-table-actions [permission]="permissions.cephfs"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="cephfs-subvolume-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </cd-table>
+  </div>
+</div>
 
 <ng-template #quotaUsageTpl
              let-row="row">
@@ -73,4 +82,31 @@
   <cd-label value="namespaced"
             *ngIf="row.info.pool_namespace"
             [tooltipText]="row.info.pool_namespace"></cd-label>
+</ng-template>
+
+<ng-template #removeTmpl
+             let-form="form">
+  <ng-container [formGroup]="form">
+    <ng-container formGroupName="child">
+      <cd-alert-panel *ngIf="errorMessage.length > 1"
+                      type="error">
+              {{errorMessage}}
+      </cd-alert-panel>
+      <div class="form-group">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox"
+                 class="custom-control-input"
+                 name="retainSnapshots"
+                 id="retainSnapshots"
+                 formControlName="retainSnapshots">
+          <label class="custom-control-label"
+                 for="retainSnapshots"
+                 i18n>Retain snapshots <cd-helper>The subvolume can be removed retaining
+                  existing snapshots using this option.
+                   If snapshots are retained, the subvolume is considered empty for all
+                    operations not involving the retained snapshots.</cd-helper></label>
+        </div>
+      </div>
+    </ng-container>
+  </ng-container>
 </ng-template>

@@ -142,7 +142,6 @@ describe('RbdFormComponent', () => {
       expect(component['rbdImage'].observers.length).toEqual(0);
       component.ngOnInit(); // Subscribes to image once during init
       component.submit();
-      expect(component['rbdImage'].observers.length).toEqual(1);
       expect(createAction).toHaveBeenCalledTimes(0);
       expect(editAction).toHaveBeenCalledTimes(1);
       expect(cloneAction).toHaveBeenCalledTimes(0);

@@ -115,8 +115,8 @@ class MDSMonitor : public PaxosService, public PaxosFSMap, protected CommandHand
 
   std::list<std::shared_ptr<FileSystemCommandHandler> > handlers;
 
-  bool maybe_promote_standby(FSMap& fsmap, Filesystem& fs);
-  bool maybe_resize_cluster(FSMap &fsmap, fs_cluster_id_t fscid);
+  bool maybe_promote_standby(FSMap& fsmap, const Filesystem& fs);
+  bool maybe_resize_cluster(FSMap &fsmap, const Filesystem& fs);
   bool drop_mds(FSMap &fsmap, mds_gid_t gid, const mds_info_t* rep_info, bool* osd_propose);
   bool check_health(FSMap &fsmap, bool* osd_propose);
   void tick() override;     // check state, take actions

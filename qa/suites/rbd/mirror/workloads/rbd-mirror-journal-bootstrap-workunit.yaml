@@ -10,4 +10,4 @@ tasks:
       RBD_MIRROR_INSTANCES: '1'
       RBD_MIRROR_USE_EXISTING_CLUSTER: '1'
       MIRROR_POOL_MODE: 'pool'
-      MIRROR_IMAGE_MODE: 'journal'
+      RBD_MIRROR_MODE: 'journal'

@@ -49,10 +49,12 @@ protected:
   interruptible_future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
   interruptible_future<PushOp> prep_push(
+    const crimson::osd::ObjectContextRef &head_obc,
     const hobject_t& soid,
     eversion_t need,
     pg_shard_t pg_shard);
   void prepare_pull(
+    const crimson::osd::ObjectContextRef &head_obc,
     PullOp& pull_op,
     pull_info_t& pull_info,
     const hobject_t& soid,
@@ -124,6 +126,7 @@ private:
       load_obc_ertr>;
 
   interruptible_future<> maybe_push_shards(
+    const crimson::osd::ObjectContextRef &head_obc,
     const hobject_t& soid,
     eversion_t need);
 

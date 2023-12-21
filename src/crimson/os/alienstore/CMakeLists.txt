@@ -76,7 +76,7 @@ endif()
 target_link_libraries(crimson-alienstore
   PRIVATE
     alien::cflags
-    fmt::fmt
+    ${FMT_LIB}
     kv
     heap_profiler
     crimson-alien-common

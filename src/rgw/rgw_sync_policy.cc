@@ -774,6 +774,12 @@ void rgw_sync_policy_info::dump(Formatter *f) const
   }
 }
 
+void rgw_sync_policy_info::generate_test_instances(list<rgw_sync_policy_info*>& o)
+{
+  rgw_sync_policy_info *info = new rgw_sync_policy_info;
+  o.push_back(info);
+}
+
 void rgw_sync_policy_info::decode_json(JSONObj *obj)
 {
   vector<rgw_sync_policy_group> groups_vec;

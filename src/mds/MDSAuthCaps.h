@@ -19,6 +19,7 @@
 #include <string_view>
 #include <vector>
 
+#include "include/encoding.h"
 #include "include/common_fwd.h"
 #include "include/types.h"
 #include "common/debug.h"
@@ -93,6 +94,17 @@ struct MDSCapSpec {
   bool allow_full() const {
     return (caps & FULL);
   }
+
+  unsigned get_caps() {
+    return caps;
+  }
+
+  void set_caps(unsigned int _caps) {
+    caps = _caps;
+  }
+
+  std::string to_string();
+
 private:
   unsigned caps = 0;
 };
@@ -115,8 +127,17 @@ struct MDSCapMatch {
     normalize_path();
   }
 
+  const MDSCapMatch& operator=(const MDSCapMatch& m) {
+    uid = m.uid;
+    gids = m.gids;
+    path = m.path;
+    fs_name = m.fs_name;
+    root_squash = m.root_squash;
+    return *this;
+  }
+
   void normalize_path();
-  
+
   bool is_match_all() const
   {
     return uid == MDS_AUTH_UID_ANY && path == "";
@@ -135,6 +156,27 @@ struct MDSCapMatch {
    * @param target_path filesystem path without leading '/'
    */
   bool match_path(std::string_view target_path) const;
+  std::string to_string();
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(uid, bl);
+    encode(gids, bl);
+    encode(path, bl);
+    encode(fs_name, bl);
+    encode(root_squash, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(uid, p);
+    decode(gids, p);
+    decode(path, p);
+    decode(fs_name, p);
+    decode(root_squash, p);
+    DECODE_FINISH(p);
+  }
 
   // Require UID to be equal to this, if !=MDS_AUTH_UID_ANY
   int64_t uid = MDS_AUTH_UID_ANY;
@@ -143,6 +185,41 @@ struct MDSCapMatch {
   std::string fs_name;
   bool root_squash=false;
 };
+WRITE_CLASS_ENCODER(MDSCapMatch)
+
+struct MDSCapAuth {
+  MDSCapAuth() {}
+  MDSCapAuth(MDSCapMatch m, bool r, bool w) :
+    match(m), readable(r), writeable(w) {}
+
+  const MDSCapAuth& operator=(const MDSCapAuth& m) {
+    match = m.match;
+    readable = m.readable;
+    writeable = m.writeable;
+    return *this;
+  }
+
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(match, bl);
+    encode(readable, bl);
+    encode(writeable, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(ceph::buffer::list::const_iterator& p) {
+    DECODE_START(1, p);
+    decode(match, p);
+    decode(readable, p);
+    decode(writeable, p);
+    DECODE_FINISH(p);
+  }
+
+  MDSCapMatch match;
+  bool readable;
+  bool writeable;
+};
+WRITE_CLASS_ENCODER(MDSCapAuth)
 
 struct MDSCapGrant {
   MDSCapGrant(const MDSCapSpec &spec_, const MDSCapMatch &match_,
@@ -156,6 +233,7 @@ struct MDSCapGrant {
   MDSCapGrant() {}
 
   void parse_network();
+  std::string to_string();
 
   MDSCapSpec spec;
   MDSCapMatch match;
@@ -181,6 +259,7 @@ public:
 
   void set_allow_all();
   bool parse(std::string_view str, std::ostream *err);
+  bool merge(MDSAuthCaps newcap);
 
   bool allow_all() const;
   bool is_capable(std::string_view inode_path,
@@ -211,12 +290,32 @@ public:
     return false;
   }
 
+  void get_cap_auths(std::vector<MDSCapAuth> *cap_auths)
+  {
+    for (const auto& grant : grants) {
+      cap_auths->emplace_back(MDSCapAuth(grant.match,
+                                grant.spec.allow_read(),
+                                grant.spec.allow_write()));
+    }
+  }
+
+  bool root_squash_in_caps() const {
+    for (const MDSCapGrant &g : grants) {
+      if (g.match.root_squash) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   friend std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);
+  std::string to_string();
 private:
   std::vector<MDSCapGrant> grants;
 };
 
 std::ostream &operator<<(std::ostream &out, const MDSCapMatch &match);
+std::ostream &operator<<(std::ostream &out, const MDSCapAuth &auth);
 std::ostream &operator<<(std::ostream &out, const MDSCapSpec &spec);
 std::ostream &operator<<(std::ostream &out, const MDSCapGrant &grant);
 std::ostream &operator<<(std::ostream &out, const MDSAuthCaps &cap);

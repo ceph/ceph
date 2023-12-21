@@ -114,11 +114,6 @@ private:
 
 template <typename ImageCtxT = ImageCtx>
 class AbstractImageWriteRequest : public ImageRequest<ImageCtxT> {
-public:
-  inline void flag_synchronous() {
-    m_synchronous = true;
-  }
-
 protected:
   using typename ImageRequest<ImageCtxT>::ObjectRequests;
 
@@ -127,8 +122,7 @@ protected:
                             const char *trace_name,
 			    const ZTracer::Trace &parent_trace)
     : ImageRequest<ImageCtxT>(image_ctx, aio_comp, std::move(image_extents),
-                              area, trace_name, parent_trace),
-      m_synchronous(false) {
+                              area, trace_name, parent_trace) {
   }
 
   void send_request() override;
@@ -144,11 +138,8 @@ protected:
       const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) = 0;
 
-  virtual uint64_t append_journal_event(bool synchronous) = 0;
+  virtual uint64_t append_journal_event() = 0;
   virtual void update_stats(size_t length) = 0;
-
-private:
-  bool m_synchronous;
 };
 
 template <typename ImageCtxT = ImageCtx>
@@ -180,7 +171,7 @@ protected:
       const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
-  uint64_t append_journal_event(bool synchronous) override;
+  uint64_t append_journal_event() override;
   void update_stats(size_t length) override;
 
 private:
@@ -215,7 +206,7 @@ protected:
       const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
-  uint64_t append_journal_event(bool synchronous) override;
+  uint64_t append_journal_event() override;
   void update_stats(size_t length) override;
 
   int prune_object_extents(
@@ -283,7 +274,7 @@ protected:
       const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
-  uint64_t append_journal_event(bool synchronous) override;
+  uint64_t append_journal_event() override;
   void update_stats(size_t length) override;
 private:
   bufferlist m_data_bl;
@@ -315,7 +306,7 @@ protected:
       const LightweightObjectExtent &object_extent, IOContext io_context,
       uint64_t journal_tid, bool single_extent, Context *on_finish) override;
 
-  uint64_t append_journal_event(bool synchronous) override;
+  uint64_t append_journal_event() override;
   void update_stats(size_t length) override;
 
   aio_type_t get_aio_type() const override {

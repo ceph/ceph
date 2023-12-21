@@ -131,11 +131,11 @@ The output will resemble the following::
   if a ``pg_num`` change is in progress, the current number of PGs that the
   pool is working towards. 
 
-- **NEW PG_NUM** (if present) is the value that the system is recommending the
-  ``pg_num`` of the pool to be changed to. It is always a power of 2, and it is
-  present only if the recommended value varies from the current value by more
-  than the default factor of ``3``. To adjust this factor (in the following
-  example, it is changed to ``2``), run the following command:
+- **NEW PG_NUM** (if present) is the value that the system recommends that the
+  ``pg_num`` of the pool should be. It is always a power of two, and it
+  is present only if the recommended value varies from the current value by
+  more than the default factor of ``3``. To adjust this multiple (in the
+  following example, it is changed to ``2``), run the following command:
 
   .. prompt:: bash #
 
@@ -209,6 +209,11 @@ overlapping roots because this condition can cause problems with the scaling
 process. We recommend constraining each pool so that it belongs to only one
 root (that is, one OSD class) to silence the warning and ensure a successful
 scaling process.
+
+.. _managing_bulk_flagged_pools:
+
+Managing pools that are flagged with ``bulk``
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 If a pool is flagged ``bulk``, then the autoscaler starts the pool with a full
 complement of PGs and then scales down the number of PGs only if the usage
@@ -659,6 +664,7 @@ In releases of Ceph that are Nautilus and later (inclusive), when the
 ``pg_num``. This process manifests as periods of remapping of PGs and of
 backfill, and is expected behavior and normal.
 
+.. _rados_ops_pgs_get_pg_num:
 
 Get the Number of PGs
 =====================

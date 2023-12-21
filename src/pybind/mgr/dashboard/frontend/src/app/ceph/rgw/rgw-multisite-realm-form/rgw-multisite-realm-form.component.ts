@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
@@ -47,7 +47,7 @@ export class RgwMultisiteRealmFormComponent implements OnInit {
 
   createForm() {
     this.multisiteRealmForm = new CdFormGroup({
-      realmName: new FormControl(null, {
+      realmName: new UntypedFormControl(null, {
         validators: [
           Validators.required,
           CdValidators.custom('uniqueName', (realmName: string) => {
@@ -59,7 +59,7 @@ export class RgwMultisiteRealmFormComponent implements OnInit {
           })
         ]
       }),
-      default_realm: new FormControl(false)
+      default_realm: new UntypedFormControl(false)
     });
   }
 

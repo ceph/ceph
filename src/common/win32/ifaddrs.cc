@@ -46,7 +46,7 @@ int getifaddrs(struct ifaddrs **ifap)
       if (unicast_sockaddr->sa_family != AF_INET &&
           unicast_sockaddr->sa_family != AF_INET6)
         continue;
-      out_list_curr = calloc(sizeof(*out_list_curr), 1);
+      out_list_curr = (struct ifaddrs*)calloc(sizeof(*out_list_curr), 1);
       if (!out_list_curr) {
         errno = ENOMEM;
         ret = -1;

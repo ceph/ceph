@@ -550,7 +550,6 @@ bool PrimaryLogPG::should_send_op(
   const hobject_t &hoid) {
   if (peer == get_primary())
     return true;
-  ceph_assert(recovery_state.has_peer_info(peer));
   bool should_send =
       hoid.pool != (int64_t)info.pgid.pool() ||
       hoid <= last_backfill_started ||
@@ -999,7 +998,7 @@ PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
 // ==========================================================
 
 void PrimaryLogPG::do_command(
-  const string_view& orig_prefix,
+  string_view orig_prefix,
   const cmdmap_t& cmdmap,
   const bufferlist& idata,
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
@@ -1158,39 +1157,26 @@ void PrimaryLogPG::do_command(
     f->close_section();
   }
 
-  else if (prefix == "scrub" ||
-	   prefix == "deep_scrub") {
-    bool deep = (prefix == "deep_scrub");
-    int64_t time = cmd_getval_or<int64_t>(cmdmap, "time", 0);
-
+  else if (prefix == "scrub" || prefix == "deep-scrub") {
     if (is_primary()) {
-      const pg_pool_t *p = &pool.info;
-      double pool_scrub_max_interval = 0;
-      double scrub_max_interval;
-      if (deep) {
-        p->opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_deep_scrub_interval;
-      } else {
-        p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_scrub_max_interval;
-      }
-      // Instead of marking must_scrub force a schedule scrub
-      utime_t stamp = ceph_clock_now();
-      if (time == 0)
-        stamp -= scrub_max_interval;
-      else
-        stamp -=  (float)time;
-      stamp -= 100.0;  // push back last scrub more for good measure
-      if (deep) {
-        set_last_deep_scrub_stamp(stamp);
-      }
-      set_last_scrub_stamp(stamp); // for 'deep' as well, as we use this value to order scrubs
-      f->open_object_section("result");
-      f->dump_bool("deep", deep);
-      f->dump_stream("stamp") << stamp;
-      f->close_section();
+      scrub_level_t deep = (prefix == "deep-scrub") ? scrub_level_t::deep
+						    : scrub_level_t::shallow;
+      m_scrubber->on_operator_forced_scrub(f.get(), deep, m_planned_scrub);
+    } else {
+      ss << "Not primary";
+      ret = -EPERM;
+    }
+    outbl.append(ss.str());
+  }
+
+  // the test/debug commands that schedule a scrub by modifying timestamps
+  else if (prefix == "schedule-scrub" || prefix == "schedule-deep-scrub") {
+    if (is_primary()) {
+      scrub_level_t deep = (prefix == "schedule-deep-scrub")
+			       ? scrub_level_t::deep
+			       : scrub_level_t::shallow;
+      const int64_t offst = cmd_getval_or<int64_t>(cmdmap, "time", 0);
+      m_scrubber->on_operator_periodic_cmd(f.get(), deep, offst);
     } else {
       ss << "Not primary";
       ret = -EPERM;
@@ -1214,6 +1200,7 @@ void PrimaryLogPG::do_command(
     }
     outbl.append(ss.str());
   }
+
   else {
     ret = -ENOSYS;
     ss << "prefix '" << prefix << "' not implemented";
@@ -1936,27 +1923,11 @@ void PrimaryLogPG::do_request(
     break;
 
   case MSG_OSD_SCRUB_RESERVE:
-    {
-      if (!m_scrubber) {
-        osd->reply_op_error(op, -EAGAIN);
-        return;
-      }
-      auto m = op->get_req<MOSDScrubReserve>();
-      switch (m->type) {
-      case MOSDScrubReserve::REQUEST:
-	m_scrubber->handle_scrub_reserve_request(op);
-	break;
-      case MOSDScrubReserve::GRANT:
-	m_scrubber->handle_scrub_reserve_grant(op, m->from);
-	break;
-      case MOSDScrubReserve::REJECT:
-	m_scrubber->handle_scrub_reserve_reject(op, m->from);
-	break;
-      case MOSDScrubReserve::RELEASE:
-	m_scrubber->handle_scrub_reserve_release(op);
-	break;
-      }
+    if (!m_scrubber) {
+      osd->reply_op_error(op, -EAGAIN);
+      return;
     }
+    m_scrubber->handle_scrub_reserve_msgs(op);
     break;
 
   case MSG_OSD_REP_SCRUB:
@@ -2573,6 +2544,11 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     return cache_result_t::HANDLED_PROXY;
   case object_manifest_t::TYPE_CHUNKED:
     {
+      // in case of metadata handling ops don't need to promote chunk objects
+      if (op->may_read() && !op->may_read_data() && !op->may_write()) {
+        return cache_result_t::NOOP;
+      }
+
       if (can_proxy_chunked_read(op, obc)) {
 	map<hobject_t,FlushOpRef>::iterator p = flush_ops.find(obc->obs.oi.soid);
         if (p != flush_ops.end()) {
@@ -5957,8 +5933,8 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
     encode(m, osd_op.outdata); // re-encode since it might be modified
     ::encode_destructively(data_bl, osd_op.outdata);
 
-    dout(10) << " sparse_read got " << r << " bytes from object "
-	     << soid << dendl;
+    dout(10) << " sparse_read got " << m.size() << " extents and " << r
+             << " bytes from object " << soid << dendl;
   }
 
   ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);

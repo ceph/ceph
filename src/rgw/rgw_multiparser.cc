@@ -14,6 +14,10 @@
 
 using namespace std;
 
+
+// This has an uncaught exception. Even if the exception is caught, the program
+// would need to be terminated, so the warning is simply suppressed.
+// coverity[root_function:SUPPRESS]
 int main(int argc, char **argv) {
   RGWMultiXMLParser parser;
 

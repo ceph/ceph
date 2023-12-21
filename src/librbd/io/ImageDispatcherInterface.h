@@ -30,9 +30,6 @@ public:
   virtual void wait_on_writes_unblocked(Context *on_unblocked) = 0;
 
   virtual void invalidate_cache(Context* on_finish) = 0;
-
-  virtual void remap_to_physical(Extents& image_extents, ImageArea area) = 0;
-  virtual ImageArea remap_to_logical(Extents& image_extents) = 0;
 };
 
 } // namespace io

@@ -5,7 +5,6 @@
 #include "rgw_lc.h"
 #include "rgw_lc_s3.h"
 #include <gtest/gtest.h>
-//#include <spawn/spawn.hpp>
 #include <string>
 #include <vector>
 #include <stdexcept>
@@ -106,4 +105,240 @@ TEST(TestLCFilterInvalidAnd, XMLDoc3)
   */
   /* check our flags */
   ASSERT_EQ(filter.get_flags(), uint32_t(LCFlagType::none));
+}
+
+struct LCWorkTimeTests : ::testing::Test
+{
+   CephContext* cct;
+   std::unique_ptr<RGWLC::LCWorker> worker;
+
+   // expects input in the form of "%m/%d/%y %H:%M:%S"; e.g., "01/15/23 23:59:01"
+   utime_t get_utime_by_date_time_string(const std::string& date_time_str)
+   {
+      struct tm tm{};
+      struct timespec ts = {0};
+
+      strptime(date_time_str.c_str(), "%m/%d/%y %H:%M:%S", &tm);
+      ts.tv_sec = mktime(&tm);
+
+      return utime_t(ts);
+   }
+
+   // expects a map from input value (date & time string) to expected result (boolean)
+   void run_should_work_test(const auto& test_values_to_expectations_map) {
+      for (const auto& [date_time_str, expected_value] : test_values_to_expectations_map) {
+         auto ut = get_utime_by_date_time_string(date_time_str);
+         auto should_work = worker->should_work(ut);
+
+         ASSERT_EQ(should_work, expected_value)
+            << "input time: " << ut
+            << " expected: " << expected_value
+            << " should_work: " << should_work
+            << " work-time-window: " << cct->_conf->rgw_lifecycle_work_time << std::endl;
+      }
+   }
+
+   // expects a map from input value (a tuple of date & time strings) to expected result (seconds)
+   void run_schedule_next_start_time_test(const auto& test_values_to_expectations_map) {
+      for (const auto& [date_time_str_tuple, expected_value] : test_values_to_expectations_map) {
+         auto work_started_at = get_utime_by_date_time_string(std::get<0>(date_time_str_tuple));
+         auto work_completed_at = get_utime_by_date_time_string(std::get<1>(date_time_str_tuple));
+         auto wait_secs_till_next_start = worker->schedule_next_start_time(work_started_at, work_completed_at);
+
+         ASSERT_EQ(wait_secs_till_next_start, expected_value)
+            << "work_started_at: " << work_started_at
+            << " work_completed_at: " << work_completed_at
+            << " expected: " << expected_value
+            << " wait_secs_till_next_start: " << wait_secs_till_next_start
+            << " work-time-window: " << cct->_conf->rgw_lifecycle_work_time << std::endl;
+      }
+   }
+
+protected:
+
+   void SetUp() override {
+      cct = (new CephContext(CEPH_ENTITY_TYPE_ANY))->get();
+
+      cct->_conf->set_value("rgw_lc_max_wp_worker", 0, 0); // no need to create a real workpool
+      worker = std::make_unique<RGWLC::LCWorker>(nullptr, cct, nullptr, 0);
+   }
+
+   void TearDown() override {
+      worker.reset();
+      cct->put();
+   }
+};
+
+TEST_F(LCWorkTimeTests, ShouldWorkDefaultWorkTime)
+{
+   std::unordered_map<std::string, bool> test_values_to_expectations = {
+      {"01/01/23 00:00:00", true},
+      {"01/01/24 00:00:00", true}, // date is not relevant, but only the time-window
+      {"01/01/23 00:00:01", true},
+      {"01/01/23 03:00:00", true},
+      {"01/01/23 05:59:59", true},
+      {"01/01/23 06:00:00", true},
+      {"01/01/23 06:00:59", true}, // seconds don't matter, but only hours and minutes
+      {"01/01/23 06:01:00", false},
+      {"01/01/23 23:59:59", false},
+      {"01/02/23 23:59:59", false},
+      {"01/01/23 12:00:00", false},
+      {"01/01/23 14:00:00", false}
+   };
+
+   run_should_work_test(test_values_to_expectations);
+}
+
+TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeEndTimeInTheSameDay)
+{
+   cct->_conf->rgw_lifecycle_work_time = "14:00-16:00";
+
+   std::unordered_map<std::string, bool> test_values_to_expectations = {
+      {"01/01/23 00:00:00", false},
+      {"01/01/23 12:00:00", false},
+      {"01/01/24 13:59:59", false},
+      {"01/01/23 14:00:00", true},
+      {"01/01/23 16:00:00", true},
+      {"01/01/23 16:00:59", true},
+      {"01/01/23 16:01:00", false},
+      {"01/01/23 17:00:00", false},
+      {"01/01/23 23:59:59", false},
+   };
+
+   run_should_work_test(test_values_to_expectations);
+}
+
+TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeEndTimeInTheSameDay24Hours)
+{
+   cct->_conf->rgw_lifecycle_work_time = "00:00-23:59";
+
+   std::unordered_map<std::string, bool> test_values_to_expectations = {
+      {"01/01/23 23:59:00", true},
+      {"01/01/23 23:59:59", true},
+      {"01/01/23 00:00:00", true},
+      {"01/01/23 00:00:01", true},
+      {"01/01/23 00:01:00", true},
+      {"01/01/23 01:00:00", true},
+      {"01/01/23 12:00:00", true},
+      {"01/01/23 17:00:00", true},
+      {"01/01/23 23:00:00", true}
+   };
+
+   run_should_work_test(test_values_to_expectations);
+}
+
+
+TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeEndTimeInTheNextDay)
+{
+   cct->_conf->rgw_lifecycle_work_time = "14:00-01:00";
+
+   std::unordered_map<std::string, bool> test_values_to_expectations = {
+      {"01/01/23 13:59:00", false},
+      {"01/01/23 13:59:59", false},
+      {"01/01/24 14:00:00", true}, // used-to-fail
+      {"01/01/24 17:00:00", true}, // used-to-fail
+      {"01/01/24 23:59:59", true}, // used-to-fail
+      {"01/01/23 00:00:00", true}, // used-to-fail
+      {"01/01/23 00:59:59", true}, // used-to-fail
+      {"01/01/23 01:00:00", true}, // used-to-fail
+      {"01/01/23 01:00:59", true}, // used-to-fail
+      {"01/01/23 01:01:00", false},
+      {"01/01/23 05:00:00", false},
+      {"01/01/23 12:00:00", false},
+      {"01/01/23 13:00:00", false}
+   };
+
+   run_should_work_test(test_values_to_expectations);
+}
+
+TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeEndTimeInTheNextDay24Hours)
+{
+   cct->_conf->rgw_lifecycle_work_time = "14:00-13:59";
+
+   // all of the below cases used-to-fail
+   std::unordered_map<std::string, bool> test_values_to_expectations = {
+      {"01/01/23 00:00:00", true},
+      {"01/01/23 00:00:01", true},
+      {"01/01/23 00:01:00", true},
+      {"01/01/24 01:00:00", true},
+      {"01/01/24 12:00:00", true},
+      {"01/01/24 13:00:00", true},
+      {"01/01/24 13:59:00", true},
+      {"01/01/24 13:59:59", true},
+      {"01/01/23 14:00:00", true},
+      {"01/01/23 14:00:01", true},
+      {"01/01/23 14:01:00", true},
+      {"01/01/23 16:00:00", true},
+      {"01/01/23 23:59:00", true},
+      {"01/01/23 23:59:59", true},
+   };
+
+   run_should_work_test(test_values_to_expectations);
+}
+
+TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeEndTimeInTheNextDayIrregularMins)
+{
+   cct->_conf->rgw_lifecycle_work_time = "22:15-03:33";
+
+   std::unordered_map<std::string, bool> test_values_to_expectations = {
+      {"01/01/23 22:14:59", false},
+      {"01/01/23 22:15:00", true}, // used-to-fail
+      {"01/01/24 00:00:00", true}, // used-to-fail
+      {"01/01/24 01:00:00", true}, // used-to-fail
+      {"01/01/24 02:00:00", true}, // used-to-fail
+      {"01/01/23 03:33:00", true}, // used-to-fail
+      {"01/01/23 03:33:59", true}, // used-to-fail
+      {"01/01/23 03:34:00", false},
+      {"01/01/23 04:00:00", false},
+      {"01/01/23 12:00:00", false},
+      {"01/01/23 22:00:00", false},
+   };
+
+   run_should_work_test(test_values_to_expectations);
+}
+
+TEST_F(LCWorkTimeTests, ShouldWorkCustomWorkTimeStartEndSameHour)
+{
+   cct->_conf->rgw_lifecycle_work_time = "22:15-22:45";
+
+   std::unordered_map<std::string, bool> test_values_to_expectations = {
+      {"01/01/23 22:14:59", false},
+      {"01/01/23 22:15:00", true},
+      {"01/01/24 22:44:59", true},
+      {"01/01/24 22:45:59", true},
+      {"01/01/24 22:46:00", false},
+      {"01/01/23 23:00:00", false},
+      {"01/01/23 00:00:00", false},
+      {"01/01/23 12:00:00", false},
+      {"01/01/23 21:00:00", false},
+   };
+
+   run_should_work_test(test_values_to_expectations);
+}
+
+TEST_F(LCWorkTimeTests, ScheduleNextStartTime)
+{
+   cct->_conf->rgw_lifecycle_work_time = "22:15-03:33";
+
+   // items of the map: [ (work_started_time, work_completed_time), expected_value (seconds) ]
+   //
+   // expected_value is the difference between configured start time (i.e, 22:15:00) and
+   // the second item of the tuple (i.e., work_completed_time).
+   //
+   // Note that "seconds" of work completion time is taken into account but date is not relevant.
+   // e.g., the first testcase: 75713 == 01:13:07 - 22:15:00 (https://tinyurl.com/ydm86752)
+   std::map<std::tuple<std::string, std::string>, int> test_values_to_expectations = {
+      {{"01/01/23 22:15:05", "01/01/23 01:13:07"}, 75713},
+      {{"01/01/23 22:15:05", "01/02/23 01:13:07"}, 75713},
+      {{"01/01/23 22:15:05", "01/01/23 22:17:07"}, 86273},
+      {{"01/01/23 22:15:05", "01/02/23 22:17:07"}, 86273},
+      {{"01/01/23 22:15:05", "01/01/23 22:14:00"}, 60},
+      {{"01/01/23 22:15:05", "01/02/23 22:14:00"}, 60},
+      {{"01/01/23 22:15:05", "01/01/23 22:15:00"}, 24 * 60 * 60},
+      {{"01/01/23 22:15:05", "01/02/23 22:15:00"}, 24 * 60 * 60},
+      {{"01/01/23 22:15:05", "01/01/23 22:15:01"}, 24 * 60 * 60 - 1},
+      {{"01/01/23 22:15:05", "01/02/23 22:15:01"}, 24 * 60 * 60 - 1},
+   };
+
+   run_schedule_next_start_time_test(test_values_to_expectations);
 }

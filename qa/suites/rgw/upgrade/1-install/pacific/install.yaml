@@ -1,5 +1,0 @@
-tasks:
-- install:
-    branch: pacific
-    exclude_packages:
-      - ceph-volume

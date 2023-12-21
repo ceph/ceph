@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include <boost/asio.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/json/object.hpp>
 #include <filesystem>
 #include <map>
@@ -34,8 +34,7 @@ class DaemonMetricCollector {
 public:
   void main();
   std::string get_metrics();
-  std::pair<labels_t, std::string>
-  get_labels_and_metric_name(std::string daemon_name, std::string metric_name);
+  labels_t get_extra_labels(std::string daemon_name);
 
 private:
   std::map<std::string, AdminSocketClient> clients;

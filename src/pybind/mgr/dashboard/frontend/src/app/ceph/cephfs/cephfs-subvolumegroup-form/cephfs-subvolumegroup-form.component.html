@@ -27,6 +27,9 @@
             <span class="invalid-feedback"
                   *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'notUnique')"
                   i18n>The subvolume group already exists.</span>
+            <span *ngIf="subvolumegroupForm.showError('subvolumegroupName', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Subvolume name can only contain letters, numbers, '.', '-' or '_'</span>
           </div>
         </div>
 
@@ -61,6 +64,9 @@
                    placeholder="e.g., 10GiB"
                    defaultUnit="GiB"
                    cdDimlessBinary>
+            <span *ngIf="subvolumegroupForm.showError('size', formDir, 'pattern')"
+                  class="invalid-feedback"
+                  i18n>Size must be a number or in a valid format. eg: 5 GiB</span>
           </div>
         </div>
 

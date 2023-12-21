@@ -105,4 +105,13 @@ seastar::future<> PGShardManager::set_up_epoch(epoch_t e) {
     });
 }
 
+seastar::future<> PGShardManager::set_superblock(OSDSuperblock superblock) {
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  get_osd_singleton_state().set_singleton_superblock(superblock);
+  return shard_services.invoke_on_all(
+  [superblock = std::move(superblock)](auto &local_service) {
+    return local_service.local_state.update_shard_superblock(superblock);
+  });
+}
+
 }

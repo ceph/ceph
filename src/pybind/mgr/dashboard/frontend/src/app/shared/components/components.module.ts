@@ -51,6 +51,8 @@ import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { WizardComponent } from './wizard/wizard.component';
 import { CardComponent } from './card/card.component';
 import { CardRowComponent } from './card-row/card-row.component';
+import { CodeBlockComponent } from './code-block/code-block.component';
+import { VerticalNavigationComponent } from './vertical-navigation/vertical-navigation.component';
 
 @NgModule({
   imports: [
@@ -105,7 +107,9 @@ import { CardRowComponent } from './card-row/card-row.component';
     CdLabelComponent,
     ColorClassFromTextPipe,
     CardComponent,
-    CardRowComponent
+    CardRowComponent,
+    CodeBlockComponent,
+    VerticalNavigationComponent
   ],
   providers: [],
   exports: [
@@ -137,7 +141,9 @@ import { CardRowComponent } from './card-row/card-row.component';
     CustomLoginBannerComponent,
     CdLabelComponent,
     CardComponent,
-    CardRowComponent
+    CardRowComponent,
+    CodeBlockComponent,
+    VerticalNavigationComponent
   ]
 })
 export class ComponentsModule {}

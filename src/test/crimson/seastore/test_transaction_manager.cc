@@ -56,8 +56,7 @@ struct fmt::formatter<test_extent_record_t> : fmt::formatter<std::string_view> {
 
 struct transaction_manager_test_t :
   public seastar_test_suite_t,
-  TMTestState,
-  ::testing::WithParamInterface<const char*> {
+  TMTestState {
 
   std::random_device rd;
   std::mt19937 gen;
@@ -76,14 +75,7 @@ struct transaction_manager_test_t :
   }
 
   seastar::future<> set_up_fut() final {
-    std::string j_type = GetParam();
-    if (j_type == "segmented") {
-      return tm_setup(journal_type_t::SEGMENTED);
-    } else if (j_type == "circularbounded") {
-      return tm_setup(journal_type_t::RANDOM_BLOCK);
-    } else {
-      ceph_assert(0 == "no support");
-    }
+    return tm_setup();
   }
 
   seastar::future<> tear_down_fut() final {
@@ -247,12 +239,15 @@ struct transaction_manager_test_t :
 
     void check_hint(
       laddr_t hint,
+      laddr_t intermediate_hint,
       laddr_t addr,
       extent_len_t len,
       delta_t &delta) const {
       delta_overlay_t overlay(*this, delta);
-      auto iter = overlay.lower_bound(hint);
-      laddr_t last = hint;
+      auto real_hint = intermediate_hint == L_ADDR_NULL
+	? hint : intermediate_hint;
+      auto iter = overlay.lower_bound(real_hint);
+      laddr_t last = real_hint;
       while (true) {
 	if (iter == overlay.end() || iter->first > addr) {
 	  EXPECT_EQ(addr, last);
@@ -294,8 +289,18 @@ struct transaction_manager_test_t :
 	test_extent_record_t{extent.get_desc(), 1};
     }
 
-    void alloced(laddr_t hint, TestBlock &extent, delta_t &delta) const {
-      check_hint(hint, extent.get_laddr(), extent.get_length(), delta);
+    void alloced(
+      laddr_t hint,
+      TestBlock &extent,
+      delta_t &delta,
+      laddr_t intermediate_hint = L_ADDR_NULL) const
+    {
+      check_hint(
+	hint,
+	intermediate_hint,
+	extent.get_laddr(),
+	extent.get_length(),
+	delta);
       insert(extent, delta);
     }
 
@@ -421,6 +426,25 @@ struct transaction_manager_test_t :
     check_mappings(t);
   }
 
+  TestBlockRef read_pin(
+    test_transaction_t &t,
+    LBAMappingRef pin) {
+    auto addr = pin->is_indirect()
+      ? pin->get_intermediate_base()
+      : pin->get_key();
+    auto len = pin->is_indirect()
+      ? pin->get_intermediate_length()
+      : pin->get_length();
+    ceph_assert(test_mappings.contains(addr, t.mapping_delta));
+    ceph_assert(test_mappings.get(addr, t.mapping_delta).desc.len == len);
+
+    auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
+      return tm->read_pin<TestBlock>(trans, std::move(pin));
+    }).unsafe_get0();
+    EXPECT_EQ(addr, ext->get_laddr());
+    return ext;
+  }
+
   TestBlockRef get_extent(
     test_transaction_t &t,
     laddr_t addr,
@@ -492,7 +516,9 @@ struct transaction_manager_test_t :
     LBAMappingRef &&pin) {
     using ertr = with_trans_ertr<TransactionManager::base_iertr>;
     using ret = ertr::future<TestBlockRef>;
+    bool indirect = pin->is_indirect();
     auto addr = pin->get_key();
+    auto im_addr = indirect ? pin->get_intermediate_base() : L_ADDR_NULL;
     auto ext = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->read_pin<TestBlock>(trans, std::move(pin));
     }).safe_then([](auto ext) -> ret {
@@ -506,7 +532,11 @@ struct transaction_manager_test_t :
       }
     ).get0();
     if (ext) {
-      EXPECT_EQ(addr, ext->get_laddr());
+      if (indirect) {
+	EXPECT_EQ(im_addr, ext->get_laddr());
+      } else {
+	EXPECT_EQ(addr, ext->get_laddr());
+      }
     }
     if (t.t->is_conflicted()) {
       return nullptr;
@@ -552,6 +582,20 @@ struct transaction_manager_test_t :
     return pin;
   }
 
+  LBAMappingRef clone_pin(
+    test_transaction_t &t,
+    laddr_t offset,
+    const LBAMapping &mapping) {
+    auto pin = with_trans_intr(*(t.t), [&](auto &trans) {
+      return tm->clone_pin(trans, offset, mapping);
+    }).unsafe_get0();
+    EXPECT_EQ(offset, pin->get_key());
+    EXPECT_EQ(mapping.get_key(), pin->get_intermediate_key());
+    EXPECT_EQ(mapping.get_key(), pin->get_intermediate_base());
+    test_mappings.inc_ref(pin->get_intermediate_key(), t.mapping_delta);
+    return pin;
+  }
+
   LBAMappingRef try_get_pin(
     test_transaction_t &t,
     laddr_t offset) {
@@ -592,7 +636,7 @@ struct transaction_manager_test_t :
     ceph_assert(test_mappings.get(offset, t.mapping_delta).refcount > 0);
 
     auto refcnt = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->dec_ref(trans, offset);
+      return tm->remove(trans, offset);
     }).unsafe_get0();
     auto check_refcnt = test_mappings.dec_ref(offset, t.mapping_delta);
     EXPECT_EQ(refcnt, check_refcnt);
@@ -605,7 +649,7 @@ struct transaction_manager_test_t :
     for (const auto &i: overlay) {
       logger().debug("check_mappings: {}->{}", i.first, i.second);
       auto ext = get_extent(t, i.first, i.second.desc.len);
-      EXPECT_EQ(i.second, ext->get_desc());
+      assert(i.second == ext->get_desc());
     }
     with_trans_intr(
       *t.t,
@@ -1000,6 +1044,9 @@ struct transaction_manager_test_t :
       return nullptr;
     }
     auto o_laddr = opin->get_key();
+    auto data_laddr = opin->is_indirect()
+      ? opin->get_intermediate_base()
+      : o_laddr;
     auto pin = with_trans_intr(*(t.t), [&](auto& trans) {
       return tm->remap_pin<TestBlock>(
         trans, std::move(opin), std::array{
@@ -1014,16 +1061,24 @@ struct transaction_manager_test_t :
     if (t.t->is_conflicted()) {
       return nullptr;
     }
-    test_mappings.dec_ref(o_laddr, t.mapping_delta);
-    EXPECT_FALSE(test_mappings.contains(o_laddr, t.mapping_delta));
+    if (opin->is_indirect()) {
+      test_mappings.inc_ref(data_laddr, t.mapping_delta);
+    } else {
+      test_mappings.dec_ref(data_laddr, t.mapping_delta);
+      EXPECT_FALSE(test_mappings.contains(data_laddr, t.mapping_delta));
+    }
     EXPECT_TRUE(pin);
     EXPECT_EQ(pin->get_length(), new_len);
     EXPECT_EQ(pin->get_key(), o_laddr + new_offset);
 
     auto extent = try_read_pin(t, pin->duplicate());
     if (extent) {
-      test_mappings.alloced(pin->get_key(), *extent, t.mapping_delta);
-      EXPECT_TRUE(extent->is_exist_clean());
+      if (!pin->is_indirect()) {
+	test_mappings.alloced(pin->get_key(), *extent, t.mapping_delta);
+	EXPECT_TRUE(extent->is_exist_clean());
+      } else {
+	EXPECT_TRUE(extent->is_stable_written());
+      }
     } else {
       ceph_assert(t.t->is_conflicted());
       return nullptr;
@@ -1228,7 +1283,7 @@ struct transaction_manager_test_t :
         ASSERT_TRUE(pin2);
         auto pin3 = remap_pin(t, std::move(pin2), 0, 4 << 10);
         ASSERT_TRUE(pin3);
-        auto lext = get_extent(t, pin3->get_key(), pin3->get_length());
+        auto lext = read_pin(t, std::move(pin3));
         EXPECT_EQ('l', lext->get_bptr().c_str()[0]);
 	auto mlext = mutate_extent(t, lext);
 	ASSERT_TRUE(mlext->is_exist_mutation_pending());
@@ -1241,11 +1296,64 @@ struct transaction_manager_test_t :
         ASSERT_TRUE(pin5);
         auto pin6 = remap_pin(t, std::move(pin5), 4 << 10, 4 << 10);
         ASSERT_TRUE(pin6);
-        auto rext = get_extent(t, pin6->get_key(), pin6->get_length());
+        auto rext = read_pin(t, std::move(pin6));
         EXPECT_EQ('r', rext->get_bptr().c_str()[0]);
 	auto mrext = mutate_extent(t, rext);
 	ASSERT_TRUE(mrext->is_exist_mutation_pending());
 	ASSERT_TRUE(mrext.get() == rext.get());
+
+	submit_transaction(std::move(t));
+	check();
+      }
+      replay();
+      check();
+    });
+  }
+
+  void test_clone_and_remap_pin() {
+    run_async([this] {
+      constexpr size_t l_offset = 32 << 10;
+      constexpr size_t l_len = 32 << 10;
+      constexpr size_t r_offset = 64 << 10;
+      constexpr size_t r_len = 32 << 10;
+      constexpr size_t l_clone_offset = 96 << 10;
+      constexpr size_t r_clone_offset = 128 << 10;
+      {
+	auto t = create_transaction();
+	auto lext = alloc_extent(t, l_offset, l_len);
+        lext->set_contents('l', 0, 16 << 10);
+	test_mappings.update(l_offset, lext->get_desc(), t.mapping_delta);
+        auto rext = alloc_extent(t, r_offset, r_len);
+        rext->set_contents('r', 16 << 10, 16 << 10);
+	test_mappings.update(r_offset, rext->get_desc(), t.mapping_delta);
+	submit_transaction(std::move(t));
+      }
+      {
+	auto t = create_transaction();
+        auto lpin = get_pin(t, l_offset);
+        auto rpin = get_pin(t, r_offset);
+	auto l_clone_pin = clone_pin(t, l_clone_offset, *lpin);
+	auto r_clone_pin = clone_pin(t, r_clone_offset, *rpin);
+        //split left
+        auto pin1 = remap_pin(t, std::move(l_clone_pin), 0, 16 << 10);
+        ASSERT_TRUE(pin1);
+        auto pin2 = remap_pin(t, std::move(pin1), 0, 8 << 10);  
+        ASSERT_TRUE(pin2);
+        auto pin3 = remap_pin(t, std::move(pin2), 0, 4 << 10);
+        ASSERT_TRUE(pin3);
+        auto lext = read_pin(t, std::move(pin3));
+        EXPECT_EQ('l', lext->get_bptr().c_str()[0]);
+
+        //split right
+        auto pin4 = remap_pin(t, std::move(r_clone_pin), 16 << 10, 16 << 10);
+        ASSERT_TRUE(pin4);
+        auto pin5 = remap_pin(t, std::move(pin4), 8 << 10, 8 << 10);  
+        ASSERT_TRUE(pin5);
+        auto pin6 = remap_pin(t, std::move(pin5), 4 << 10, 4 << 10);
+        ASSERT_TRUE(pin6);
+	auto int_offset = pin6->get_intermediate_offset();
+        auto rext = read_pin(t, std::move(pin6));
+        EXPECT_EQ('r', rext->get_bptr().c_str()[int_offset]);
 
 	submit_transaction(std::move(t));
 	check();
@@ -1960,6 +2068,11 @@ TEST_P(tm_single_device_test_t, parallel_extent_read)
 TEST_P(tm_single_device_test_t, test_remap_pin)
 {
   test_remap_pin();
+}
+
+TEST_P(tm_single_device_test_t, test_clone_and_remap_pin)
+{
+  test_clone_and_remap_pin();
 }
 
 TEST_P(tm_single_device_test_t, test_overwrite_pin)

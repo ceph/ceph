@@ -132,6 +132,8 @@ public:
     object_snaps() {}
     void encode(ceph::buffer::list &bl) const;
     void decode(ceph::buffer::list::const_iterator &bp);
+    void dump(ceph::Formatter *f) const;
+    static void generate_test_instances(std::list<object_snaps*>& o);
   };
 
   struct Mapping {
@@ -151,6 +153,16 @@ public:
       decode(snap, bl);
       decode(hoid, bl);
       DECODE_FINISH(bl);
+    }
+    void dump(ceph::Formatter *f) const {
+      f->dump_unsigned("snap", snap);
+      f->dump_stream("hoid") << hoid;
+    }
+    static void generate_test_instances(std::list<Mapping*>& o) {
+      o.push_back(new Mapping);
+      o.push_back(new Mapping);
+      o.back()->snap = 1;
+      o.back()->hoid = hobject_t(object_t("objname"), "key", 123, 456, 0, "");
     }
   };
 
@@ -281,6 +293,20 @@ private:
   tl::expected<object_snaps, SnapMapReaderI::result_t> get_snaps_common(
     const hobject_t &hoid) const;
 
+  /// file @out vector with the first objects with @snap as a snap
+  void get_objects_by_prefixes(
+    snapid_t snap,
+    unsigned max,
+    std::vector<hobject_t> *out);
+
+  std::set<std::string>           prefixes;
+  // maintain a current active prefix
+  std::set<std::string>::iterator prefix_itr;
+  // associate the active prefix with a snap
+  snapid_t                        prefix_itr_snap;
+
+  // reset the prefix iterator to the first prefix hash
+  void reset_prefix_itr(snapid_t snap, const char *s);
  public:
   static std::string make_shard_prefix(shard_id_t shard) {
     if (shard == shard_id_t::NO_SHARD)
@@ -290,6 +316,7 @@ private:
     ceph_assert(r < (int)sizeof(buf));
     return std::string(buf, r) + '_';
   }
+
   uint32_t mask_bits;
   const uint32_t match;
   std::string last_key_checked;
@@ -309,7 +336,6 @@ private:
     update_bits(mask_bits);
   }
 
-  std::set<std::string> prefixes;
   /// Update bits in case of pg split or merge
   void update_bits(
     uint32_t new_bits  ///< [in] new split bits
@@ -323,6 +349,12 @@ private:
     for (auto i = _prefixes.begin(); i != _prefixes.end(); ++i) {
       prefixes.insert(shard_prefix + *i);
     }
+
+    reset_prefix_itr(CEPH_NOSNAP, "update_bits");
+  }
+
+  const std::set<std::string>::iterator get_prefix_itr() {
+    return prefix_itr;
   }
 
   /// Update snaps for oid, empty new_snaps removes the mapping

@@ -529,7 +529,7 @@ void rgw::AppMain::init_tracepoints()
 {
   TracepointProvider::initialize<rgw_rados_tracepoint_traits>(dpp->get_cct());
   TracepointProvider::initialize<rgw_op_tracepoint_traits>(dpp->get_cct());
-  tracing::rgw::tracer.init("rgw");
+  tracing::rgw::tracer.init(dpp->get_cct(), "rgw");
 } /* init_tracepoints() */
 
 void rgw::AppMain::init_notification_endpoints()
@@ -550,37 +550,29 @@ void rgw::AppMain::init_lua()
 {
   rgw::sal::Driver* driver = env.driver;
   int r{0};
-  std::string path = g_conf().get_val<std::string>("rgw_luarocks_location");
-  if (!path.empty()) {
-    path += "/" + g_conf()->name.to_str();
-  }
-  env.lua.luarocks_path = path;
+  std::string install_dir;
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
-  std::string output;
-  r = rgw::lua::install_packages(dpp, driver, null_yield, path,
-                                 failed_packages, output);
+  r = rgw::lua::install_packages(dpp, driver, null_yield, g_conf().get_val<std::string>("rgw_luarocks_location"),
+                                 failed_packages, install_dir);
   if (r < 0) {
-    dout(1) << "WARNING: failed to install lua packages from allowlist. error: " << r
+    ldpp_dout(dpp, 5) << "WARNING: failed to install Lua packages from allowlist. error: " << r
             << dendl;
   }
-  if (!output.empty()) {
-    dout(10) << "INFO: lua packages installation output: \n" << output << dendl;
-  }
   for (const auto &p : failed_packages) {
-    dout(5) << "WARNING: failed to install lua package: " << p
+    ldpp_dout(dpp, 5) << "WARNING: failed to install Lua package: " << p
             << " from allowlist" << dendl;
   }
 #endif
 
-  env.lua.manager = env.driver->get_lua_manager();
-
+  env.lua.manager = env.driver->get_lua_manager(install_dir);
   if (driver->get_name() == "rados") { /* Supported for only RadosStore */
     lua_background = std::make_unique<
-      rgw::lua::Background>(driver, dpp->get_cct(), path);
+      rgw::lua::Background>(driver, dpp->get_cct(), env.lua.manager.get());
     lua_background->start();
     env.lua.background = lua_background.get();
+    static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->watch_reload(dpp);
   }
 } /* init_lua */
 
@@ -588,6 +580,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 {
   if (env.driver->get_name() == "rados") {
     reloader.reset(); // stop the realm reloader
+    static_cast<rgw::sal::RadosLuaManager*>(env.lua.manager.get())->unwatch_reload(dpp);
   }
 
   for (auto& fe : fes) {

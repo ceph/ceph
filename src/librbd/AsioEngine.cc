@@ -20,8 +20,8 @@ AsioEngine::AsioEngine(std::shared_ptr<librados::Rados> rados)
       neorados::RADOS::make_with_librados(*rados))),
     m_cct(m_rados_api->cct()),
     m_io_context(m_rados_api->get_io_context()),
-    m_api_strand(std::make_unique<boost::asio::io_context::strand>(
-      m_io_context)),
+    m_api_strand(std::make_unique<boost::asio::strand<executor_type>>(
+      boost::asio::make_strand(m_io_context))),
     m_context_wq(std::make_unique<asio::ContextWQ>(m_cct, m_io_context)) {
   ldout(m_cct, 20) << dendl;
 

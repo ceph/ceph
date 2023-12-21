@@ -973,8 +973,8 @@ std::string expand_key_name(req_state *s, const std::string_view&t)
   return r;
 }
 
-static int get_sse_s3_bucket_key(req_state *s,
-                          std::string &key_id)
+static int get_sse_s3_bucket_key(req_state *s, optional_yield y,
+                                 std::string &key_id)
 {
   int res;
   std::string saved_key;
@@ -993,7 +993,7 @@ static int get_sse_s3_bucket_key(req_state *s,
     ldpp_dout(s, 5) << "Found KEK ID: " << key_id << dendl;
   }
   if (saved_key != key_id) {
-    res = create_sse_s3_bucket_key(s, s->cct, key_id);
+    res = create_sse_s3_bucket_key(s, key_id, y);
     if (res != 0) {
       return res;
     }
@@ -1020,7 +1020,7 @@ static int get_sse_s3_bucket_key(req_state *s,
   return 0;
 }
 
-int rgw_s3_prepare_encrypt(req_state* s,
+int rgw_s3_prepare_encrypt(req_state* s, optional_yield y,
                            std::map<std::string, ceph::bufferlist>& attrs,
                            std::unique_ptr<BlockCrypt>* block_crypt,
                            std::map<std::string, std::string>& crypt_http_responses)
@@ -1169,7 +1169,7 @@ int rgw_s3_prepare_encrypt(req_state* s,
         set_attr(attrs, RGW_ATTR_CRYPT_KEYSEL, key_selector);
         set_attr(attrs, RGW_ATTR_CRYPT_CONTEXT, cooked_context);
         std::string actual_key;
-        res = make_actual_key_from_kms(s, s->cct, attrs, actual_key);
+        res = make_actual_key_from_kms(s, attrs, y, actual_key);
         if (res != 0) {
           ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
           s->err.message = "Failed to retrieve the actual key, kms-keyid: " + std::string(key_id);
@@ -1215,7 +1215,7 @@ int rgw_s3_prepare_encrypt(req_state* s,
         return res;
 
       std::string key_id;
-      res = get_sse_s3_bucket_key(s, key_id);
+      res = get_sse_s3_bucket_key(s, y, key_id);
       if (res != 0) {
         return res;
       }
@@ -1226,7 +1226,7 @@ int rgw_s3_prepare_encrypt(req_state* s,
       set_attr(attrs, RGW_ATTR_CRYPT_MODE, "AES256");
       set_attr(attrs, RGW_ATTR_CRYPT_KEYID, key_id);
       std::string actual_key;
-      res = make_actual_key_from_sse_s3(s, s->cct, attrs, actual_key);
+      res = make_actual_key_from_sse_s3(s, attrs, y, actual_key);
       if (res != 0) {
         ldpp_dout(s, 5) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
         s->err.message = "Failed to retrieve the actual key";
@@ -1293,10 +1293,10 @@ int rgw_s3_prepare_encrypt(req_state* s,
 }
 
 
-int rgw_s3_prepare_decrypt(req_state* s,
-                       map<string, bufferlist>& attrs,
-                       std::unique_ptr<BlockCrypt>* block_crypt,
-                       std::map<std::string, std::string>& crypt_http_responses)
+int rgw_s3_prepare_decrypt(req_state* s, optional_yield y,
+                           map<string, bufferlist>& attrs,
+                           std::unique_ptr<BlockCrypt>* block_crypt,
+                           std::map<std::string, std::string>& crypt_http_responses)
 {
   int res = 0;
   std::string stored_mode = get_str_attribute(attrs, RGW_ATTR_CRYPT_MODE);
@@ -1400,7 +1400,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
-    res = reconstitute_actual_key_from_kms(s, s->cct, attrs, actual_key);
+    res = reconstitute_actual_key_from_kms(s, attrs, y, actual_key);
     if (res != 0) {
       ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key from key_id: " << key_id << dendl;
       s->err.message = "Failed to retrieve the actual key, kms-keyid: " + key_id;
@@ -1470,7 +1470,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
     /* try to retrieve actual key */
     std::string key_id = get_str_attribute(attrs, RGW_ATTR_CRYPT_KEYID);
     std::string actual_key;
-    res = reconstitute_actual_key_from_sse_s3(s, s->cct, attrs, actual_key);
+    res = reconstitute_actual_key_from_sse_s3(s, attrs, y, actual_key);
     if (res != 0) {
       ldpp_dout(s, 10) << "ERROR: failed to retrieve actual key" << dendl;
       s->err.message = "Failed to retrieve the actual key";
@@ -1497,7 +1497,7 @@ int rgw_s3_prepare_decrypt(req_state* s,
   return 0;
 }
 
-int rgw_remove_sse_s3_bucket_key(req_state *s)
+int rgw_remove_sse_s3_bucket_key(req_state *s, optional_yield y)
 {
   int res;
   auto key_id { expand_key_name(s, s->cct->_conf->rgw_crypt_sse_s3_key_template) };
@@ -1523,7 +1523,7 @@ int rgw_remove_sse_s3_bucket_key(req_state *s)
     return 0;
   }
   ldpp_dout(s, 5) << "Removing valid KEK ID: " << saved_key << dendl;
-  res = remove_sse_s3_bucket_key(s, s->cct, saved_key);
+  res = remove_sse_s3_bucket_key(s, saved_key, y);
   if (res != 0) {
     ldpp_dout(s, 0) << "ERROR: Unable to remove KEK ID: " << saved_key << " got " << res << dendl;
   }
@@ -1535,7 +1535,7 @@ int rgw_remove_sse_s3_bucket_key(req_state *s)
 *	I've left some commented out lines above.  They are there for
 *	a reason, which I will explain.  The "canonical" json constructed
 *	by the code above as a crypto context must take a json object and
-*	turn it into a unique determinstic fixed form.  For most json
+*	turn it into a unique deterministic fixed form.  For most json
 *	types this is easy.  The hardest problem that is handled above is
 *	detailing with unicode strings; they must be turned into
 *	NFC form and sorted in a fixed order.  Numbers, however,

@@ -130,7 +130,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._load_drive_groups()
         self._shutdown = threading.Event()
-        
+
     def config_notify(self) -> None:
         """
         This method is called whenever one of our config options is changed.
@@ -147,7 +147,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         assert isinstance(self.drive_group_interval, float)
 
         if self._rook_cluster:
-            self._rook_cluster.storage_class = self.storage_class
+            self._rook_cluster.storage_class_name = self.storage_class
 
     def shutdown(self) -> None:
         self._shutdown.set()
@@ -457,7 +457,17 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         for p in pods:
             sd = orchestrator.DaemonDescription()
             sd.hostname = p['hostname']
-            sd.daemon_type = p['labels']['app'].replace('rook-ceph-', '')
+
+            # In Rook environments, the 'ceph-exporter' daemon is named 'exporter' whereas
+            # in the orchestrator interface, it is named 'ceph-exporter'. The purpose of the
+            # following adjustment is to ensure that the 'daemon_type' is correctly set.
+            # Without this adjustment, the 'service_to_daemon_types' lookup would fail, as
+            # it would be searching for a non-existent entry called 'exporter
+            if p['labels']['app'] == 'rook-ceph-exporter':
+                sd.daemon_type = 'ceph-exporter'
+            else:
+                sd.daemon_type = p['labels']['app'].replace('rook-ceph-', '')
+
             status = {
                 'Pending': orchestrator.DaemonDescriptionStatus.starting,
                 'Running': orchestrator.DaemonDescriptionStatus.running,

@@ -24,7 +24,7 @@ private:
 public:
   spg_t pgid;
   epoch_t map_epoch;
-  enum {
+  enum ReserveMsgOp {
     REQUEST = 0,
     GRANT = 1,
     RELEASE = 2,

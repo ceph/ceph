@@ -4,6 +4,7 @@ if(${WITH_CEPHFS})
     alternate_name.cc
     ops.cc
     nonblocking.cc
+    commands.cc
     )
   target_link_libraries(ceph_test_client
     client

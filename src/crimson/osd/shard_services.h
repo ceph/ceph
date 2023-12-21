@@ -70,8 +70,16 @@ class PerShardState {
   OSDState &osd_state;
   OSD_OSDMapGate osdmap_gate;
 
+  PerShardPipeline client_request_pipeline;
+  PerShardPipeline peering_request_pipeline;
+  PerShardPipeline replicated_request_pipeline;
+
   PerfCounters *perf = nullptr;
   PerfCounters *recoverystate_perf = nullptr;
+
+  const epoch_t& get_osdmap_tlb() {
+    return per_shard_superblock.cluster_osdmap_trim_lower_bound;
+  }
 
   // Op Management
   OSDOperationRegistry registry;
@@ -111,7 +119,7 @@ class PerShardState {
   PGMap pg_map;
 
   seastar::future<> stop_pgs();
-  std::map<pg_t, pg_stat_t> get_pg_stats() const;
+  std::map<pg_t, pg_stat_t> get_pg_stats();
   seastar::future<> broadcast_map_to_pgs(
     ShardServices &shard_services,
     epoch_t epoch);
@@ -177,12 +185,16 @@ class PerShardState {
   HeartbeatStampsRef get_hb_stamps(int peer);
   std::map<int, HeartbeatStampsRef> heartbeat_stamps;
 
+  seastar::future<> update_shard_superblock(OSDSuperblock superblock);
+
   // Time state
   const ceph::mono_time startup_time;
   ceph::signedspan get_mnow() const {
     assert_core();
     return ceph::mono_clock::now() - startup_time;
   }
+
+  OSDSuperblock per_shard_superblock;
 
 public:
   PerShardState(
@@ -252,7 +264,7 @@ private:
   }
 
   OSDSuperblock superblock;
-  void set_superblock(OSDSuperblock _superblock) {
+  void set_singleton_superblock(OSDSuperblock _superblock) {
     superblock = std::move(_superblock);
   }
 
@@ -312,6 +324,7 @@ private:
                     epoch_t e, bufferlist&& bl);
   seastar::future<> store_maps(ceph::os::Transaction& t,
                                epoch_t start, Ref<MOSDMap> m);
+  void trim_maps(ceph::os::Transaction& t, OSDSuperblock& superblock);
 };
 
 /**
@@ -453,6 +466,18 @@ public:
     return dispatch_context({}, std::move(ctx));
   }
 
+  PerShardPipeline &get_client_request_pipeline() {
+    return local_state.client_request_pipeline;
+  }
+
+  PerShardPipeline &get_peering_request_pipeline() {
+    return local_state.peering_request_pipeline;
+  }
+
+  PerShardPipeline &get_replicated_request_pipeline() {
+    return local_state.replicated_request_pipeline;
+  }
+
   /// Return per-core tid
   ceph_tid_t get_tid() { return local_state.get_tid(); }
 
@@ -492,6 +517,8 @@ public:
   FORWARD_TO_OSD_SINGLETON(send_pg_temp)
   FORWARD_TO_LOCAL_CONST(get_mnow)
   FORWARD_TO_LOCAL(get_hb_stamps)
+  FORWARD_TO_LOCAL(update_shard_superblock)
+  FORWARD_TO_LOCAL(get_osdmap_tlb)
 
   FORWARD(pg_created, pg_created, local_state.pg_map)
 

@@ -78,10 +78,8 @@ add_definitions(
   -D_THREAD_SAFE
   -D__STDC_FORMAT_MACROS
   -D_FILE_OFFSET_BITS=64
-  -DBOOST_ASIO_DISABLE_THREAD_KEYWORD_EXTENSION)
-if(Boost_VERSION VERSION_GREATER_EQUAL 1.74)
-  add_definitions(-DBOOST_ASIO_USE_TS_EXECUTOR_AS_DEFAULT)
-endif()
+  -DBOOST_ASIO_DISABLE_THREAD_KEYWORD_EXTENSION
+  -DBOOST_ASIO_NO_TS_EXECUTORS)
 
 if(LINUX)
   add_definitions("-D_GNU_SOURCE")
@@ -306,6 +304,7 @@ endif(WITH_BLKIN)
 set(mds_files)
 list(APPEND mds_files
   mds/MDSMap.cc
+  mds/MDSAuthCaps.cc
   mds/FSMap.cc
   mds/FSMapUser.cc
   mds/inode_backtrace.cc
@@ -325,13 +324,21 @@ if(NOT TARGET RapidJSON::RapidJSON)
 endif()
 
 option(WITH_FMT_HEADER_ONLY "use header-only version of fmt library" OFF)
-set(WITH_FMT_VERSION "8.1.1" CACHE
-  STRING "build with fmt version")
-find_package(fmt ${WITH_FMT_VERSION} QUIET)
-if(fmt_FOUND)
-  include_directories(SYSTEM "${fmt_INCLUDE_DIR}")
+option(WITH_SYSTEM_FMT "build against system fmt" OFF)
+if(WITH_SYSTEM_FMT)
+  find_package(fmt 8.1.1...<10.0.0 REQUIRED)
+endif()
+if (WITH_FMT_HEADER_ONLY)
+  message(STATUS "Using fmt header-only.")
+  set(FMT_LIB fmt::fmt-header-only)
 else()
-  message(STATUS "Could not find fmt, will build it")
+  message(STATUS "Linking to fmt library.")
+  set(FMT_LIB fmt::fmt)
+endif()
+if(fmt_FOUND)
+  message(STATUS "Building with system fmt.")
+else()
+  message(STATUS "Building fmt as submodule")
   set(old_BUILD_SHARED_LIBS ${BUILD_SHARED_LIBS})
   set(BUILD_SHARED_LIBS FALSE)
   add_subdirectory(fmt)
@@ -430,7 +437,7 @@ set_source_files_properties(ceph_ver.c
   APPEND PROPERTY OBJECT_DEPENDS ${CMAKE_BINARY_DIR}/src/include/ceph_ver.h)
 add_library(common-objs OBJECT ${libcommon_files})
 target_compile_definitions(common-objs PRIVATE
-  $<TARGET_PROPERTY:fmt::fmt,INTERFACE_COMPILE_DEFINITIONS>)
+  $<TARGET_PROPERTY:${FMT_LIB},INTERFACE_COMPILE_DEFINITIONS>)
 add_dependencies(common-objs legacy-option-headers)
 
 if(WITH_JAEGER)
@@ -473,7 +480,7 @@ set(ceph_common_deps
   Boost::date_time
   Boost::iostreams
   StdFilesystem::filesystem
-  fmt::fmt
+  ${FMT_LIB}
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}
@@ -567,7 +574,7 @@ endif()
 set_target_properties(ceph-common PROPERTIES
   SOVERSION 2
   SKIP_RPATH TRUE)
-if(NOT APPLE AND NOT FREEBSD)
+if(NOT APPLE AND NOT FREEBSD AND NOT WIN32)
   # Apple uses Mach-O, not ELF. so this option does not apply to APPLE.
   #
   # prefer the local symbol definitions when binding references to global
@@ -811,7 +818,8 @@ if(WITH_LIBCEPHFS)
       OUTPUT_NAME cephfs
       VERSION 2.0.0
       SOVERSION 2)
-    if(NOT APPLE)
+    if(NOT APPLE AND NOT
+        (WIN32 AND CMAKE_CXX_COMPILER_ID STREQUAL Clang))
       foreach(name ceph-common client osdc)
         set_property(TARGET cephfs APPEND_STRING PROPERTY
           LINK_FLAGS " -Wl,--exclude-libs,lib${name}.a")
@@ -937,44 +945,31 @@ add_custom_target(vstart-base DEPENDS
     monmaptool
     crushtool
     rados)
-if(NOT WIN32)
-  # WIN32 port does not build python bindings
-  # TODO: introduce an option for enabling python binding
-  add_dependencies(vstart-base
-    cython_rados)
-endif()
-
-if (WITH_MGR)
-  add_dependencies(vstart-base ceph-mgr)
-  add_dependencies(vstart-base ceph-exporter)
-endif()
+foreach(dep
+    cython_rados
+    ceph-mgr
+    ceph-exporter)
+  if(TARGET ${dep})
+    add_dependencies(vstart-base ${dep})
+  endif()
+endforeach()
 
 add_custom_target(vstart DEPENDS vstart-base)
-if(WITH_RBD AND NOT WIN32)
-  add_dependencies(vstart cython_rbd)
-endif()
-if (WITH_CEPHFS)
-  add_dependencies(vstart ceph-mds cephfs cython_cephfs)
-endif()
-if(WITH_RADOSGW)
-  add_dependencies(vstart radosgw radosgw-admin)
-endif()
-
-if(WITH_LTTNG)
-  add_dependencies(vstart tracepoint_libraries)
-endif(WITH_LTTNG)
-
-if(WITH_MGR AND WITH_MGR_DASHBOARD_FRONTEND AND CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|amd64")
-  add_dependencies(vstart mgr-dashboard-frontend-build)
-endif()
-
-if(WITH_MGR)
-  add_dependencies(vstart ceph-volume-venv-setup)
-endif()
-
-if(WITH_MGR)
-  add_dependencies(vstart cephadm)
-endif()
+foreach(dep
+    cython_rbd
+    cephfs
+    cython_cephfs
+    ceph-mds
+    mgr-dashboard-frontend-build
+    radosgw
+    radosgw-admin
+    tracepoint_libraries
+    ceph-volume-venv-setup
+    cephadm)
+  if(TARGET ${dep})
+    add_dependencies(vstart ${dep})
+  endif()
+endforeach()
 
 # Everything you need to run CephFS tests
 add_custom_target(cephfs_testing DEPENDS

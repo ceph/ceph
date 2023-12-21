@@ -209,6 +209,14 @@ For example: for the above test ID, the path is::
 
 This method can be used to view the log more quickly than would be possible through a browser.
 
+In addition to teuthology.log, there are other files included for debugging purposes:
+
+* unit_test_summary.yaml: It provides a summary of all unit test failures and 
+  is optionally generated when the ``unit_test_scan`` configuration option is 
+  used in the job's YAML file.
+
+* valgrind.yaml: It summarizes any Valgrind errors that may occur.
+
 .. note:: To access archives more conveniently, ``/a/`` has been symbolically
    linked to ``/ceph/teuthology-archive/``. For instance, to access the previous
    example, we can use something like::

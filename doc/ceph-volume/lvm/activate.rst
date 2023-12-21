@@ -3,18 +3,20 @@
 ``activate``
 ============
 
-Once :ref:`ceph-volume-lvm-prepare` is completed, and all the various steps
-that entails are done, the volume is ready to get "activated".
+After :ref:`ceph-volume-lvm-prepare` has completed its run, the volume can be
+activated. 
 
-This activation process enables a systemd unit that persists the OSD ID and its
-UUID (also called ``fsid`` in Ceph CLI tools), so that at boot time it can
-understand what OSD is enabled and needs to be mounted.
+Activating the volume involves enabling a ``systemd`` unit that persists the
+``OSD ID`` and its ``UUID`` (which is also called the ``fsid`` in the Ceph CLI
+tools). After this information has been persisted, the cluster can determine
+which OSD is enabled and must be mounted.
 
-.. note:: The execution of this call is fully idempotent, and there is no
-          side-effects when running multiple times
+.. note:: The execution of this call is fully idempotent. This means that the
+   call can be executed multiple times without changing the result of its first
+   successful execution.
 
-For OSDs deployed by cephadm, please refer to :ref:`cephadm-osd-activate`
-instead.
+For information about OSDs deployed by cephadm, refer to
+:ref:`cephadm-osd-activate`.
 
 New OSDs
 --------

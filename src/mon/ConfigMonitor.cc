@@ -71,7 +71,7 @@ void ConfigMonitor::create_initial()
 {
   dout(10) << __func__ << dendl;
   version = 0;
-  pending.clear();
+  create_pending();
 }
 
 void ConfigMonitor::update_from_paxos(bool *need_bootstrap)
@@ -89,6 +89,7 @@ void ConfigMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
   pending.clear();
+  pending_cleanup.clear();
   pending_description.clear();
 }
 
@@ -264,20 +265,20 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
     } else {
       f->open_array_section("config");
     }
-    for (auto s : sections) {
-      for (auto& i : s.second->options) {
+    for (auto& [sec_name, section] : sections) {
+      for (auto& [opt_name, masked_opt] : section->options) {
 	if (!f) {
-	  tbl << s.first;
-	  tbl << i.second.mask.to_str();
-	  tbl << Option::level_to_str(i.second.opt->level);
-          tbl << i.first;
-	  tbl << i.second.raw_value;
-	  tbl << (i.second.opt->can_update_at_runtime() ? "" : "*");
+	  tbl << sec_name;
+	  tbl << masked_opt.mask.to_str();
+	  tbl << Option::level_to_str(masked_opt.opt->level);
+          tbl << opt_name;
+	  tbl << masked_opt.raw_value;
+	  tbl << (masked_opt.opt->can_update_at_runtime() ? "" : "*");
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section("option");
-	  f->dump_string("section", s.first);
-	  i.second.dump(f.get());
+	  f->dump_string("section", sec_name);
+	  masked_opt.dump(f.get());
 	  f->close_section();
 	}
       }
@@ -313,7 +314,7 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	       << " class " << device_class << dendl;
     }
 
-    std::map<std::string,pair<std::string,const MaskedOption*>> src;
+    std::unordered_map<std::string,ConfigMap::ValueSource> src;
     auto config = config_map.generate_entity_map(
       entity,
       crush_location,
@@ -377,20 +378,20 @@ bool ConfigMonitor::preprocess_command(MonOpRequestRef op)
 	  continue;
 	}
 	if (!f) {
-	  tbl << q->second.first;
-	  tbl << q->second.second->mask.to_str();
-	  tbl << Option::level_to_str(q->second.second->opt->level);
+	  tbl << q->second.section;
+	  tbl << q->second.option->mask.to_str();
+	  tbl << Option::level_to_str(q->second.option->opt->level);
 	  tbl << p->first;
 	  tbl << p->second;
-	  tbl << (q->second.second->opt->can_update_at_runtime() ? "" : "*");
+	  tbl << (q->second.option->opt->can_update_at_runtime() ? "" : "*");
 	  tbl << TextTable::endrow;
 	} else {
 	  f->open_object_section(p->first.c_str());
 	  f->dump_string("value", p->second);
-	  f->dump_string("section", q->second.first);
-	  f->dump_object("mask", q->second.second->mask);
+	  f->dump_string("section", q->second.section);
+	  f->dump_object("mask", q->second.option->mask);
 	  f->dump_bool("can_update_at_runtime",
-		       q->second.second->opt->can_update_at_runtime());
+		       q->second.option->opt->can_update_at_runtime());
 	  f->close_section();
 	}
       }
@@ -736,7 +737,7 @@ update:
   mon.kvmon()->propose_pending();
   paxos.unplug();
   force_immediate_propose();
-  wait_for_finished_proposal(
+  wait_for_commit(
     op,
     new Monitor::C_Command(
       mon, op, 0, ss.str(), odata,
@@ -779,14 +780,15 @@ void ConfigMonitor::load_config()
     { "mds_session_blacklist_on_evict", "mds_session_blocklist_on_evict" },
   };
 
-  unsigned num = 0;
-  KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
-  it->lower_bound(KEY_PREFIX);
   config_map.clear();
   current.clear();
-  pending_cleanup.clear();
-  while (it->valid() &&
-	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0) {
+
+  unsigned num = 0;
+  KeyValueDB::Iterator it = mon.store->get_iterator(KV_PREFIX);
+  for (it->lower_bound(KEY_PREFIX);
+       it->valid() &&
+	 it->key().compare(0, KEY_PREFIX.size(), KEY_PREFIX) == 0;
+       it->next(), ++num) {
     string key = it->key().substr(KEY_PREFIX.size());
     string value = it->value().to_str();
 
@@ -810,57 +812,19 @@ void ConfigMonitor::load_config()
       }
     }
 
-    const Option *opt = g_conf().find_option(name);
-    if (!opt) {
-      opt = mon.mgrmon()->find_module_option(name);
-    }
-    if (!opt) {
-      dout(10) << __func__ << " unrecognized option '" << name << "'" << dendl;
-      config_map.stray_options.push_back(
-	std::unique_ptr<Option>(
-	  new Option(name, Option::TYPE_STR, Option::LEVEL_UNKNOWN)));
-      opt = config_map.stray_options.back().get();
-    }
-
-    string err;
-    int r = opt->pre_validate(&value, &err);
-    if (r < 0) {
-      dout(10) << __func__ << " pre-validate failed on '" << name << "' = '"
-	       << value << "' for " << name << dendl;
-    }
-    
-    MaskedOption mopt(opt);
-    mopt.raw_value = value;
-    string section_name;
-    if (who.size() &&
-	!ConfigMap::parse_mask(who, &section_name, &mopt.mask)) {
-      derr << __func__ << " invalid mask for key " << key << dendl;
-      pending_cleanup[key].reset();
-    } else if (opt->has_flag(Option::FLAG_NO_MON_UPDATE)) {
-      dout(10) << __func__ << " NO_MON_UPDATE option '"
-	       << name << "' = '" << value << "' for " << name
-	       << dendl;
-      pending_cleanup[key].reset();
-    } else {
-      if (section_name.empty()) {
-	// we prefer global/$option instead of just $option
-	derr << __func__ << " adding global/ prefix to key '" << key << "'"
-	     << dendl;
-	pending_cleanup[key].reset();
-	pending_cleanup["global/"s + key] = it->value();
-      }
-      Section *section = &config_map.global;;
-      if (section_name.size() && section_name != "global") {
-	if (section_name.find('.') != std::string::npos) {
-	  section = &config_map.by_id[section_name];
-	} else {
-	  section = &config_map.by_type[section_name];
+    int r = config_map.add_option(
+      g_ceph_context, name, who, value,
+      [&](const std::string& name) {
+	const Option *opt = g_conf().find_option(name);
+	if (!opt) {
+	  opt = mon.mgrmon()->find_module_option(name);
 	}
-      }
-      section->options.insert(make_pair(name, std::move(mopt)));
-      ++num;
+	return opt;
+      });
+    if (r == -EINVAL) {
+      dout(10) << __func__ << " will clean up key " << key << dendl;
+      pending_cleanup[key].reset();
     }
-    it->next();
   }
   dout(10) << __func__ << " got " << num << " keys" << dendl;
 

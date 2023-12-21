@@ -32,24 +32,30 @@ static const std::string RGW_SSE_KMS_KMIP_SE_KV = "kv";
  * TODO
  * \return
  */
-int make_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
-                            std::map<std::string, bufferlist>& attrs,
-                            std::string& actual_key);
-int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp, CephContext *cct,
-                            std::map<std::string, bufferlist>& attrs,
-                            std::string& actual_key);
-int make_actual_key_from_sse_s3(const DoutPrefixProvider *dpp, CephContext *cct,
-                            std::map<std::string, bufferlist>& attrs,
-                            std::string& actual_key);
-int reconstitute_actual_key_from_sse_s3(const DoutPrefixProvider *dpp, CephContext *cct,
-                            std::map<std::string, bufferlist>& attrs,
-                            std::string& actual_key);
+int make_actual_key_from_kms(const DoutPrefixProvider *dpp,
+                             std::map<std::string, bufferlist>& attrs,
+                             optional_yield y,
+                             std::string& actual_key);
+int reconstitute_actual_key_from_kms(const DoutPrefixProvider *dpp,
+                                     std::map<std::string, bufferlist>& attrs,
+                                     optional_yield y,
+                                     std::string& actual_key);
+int make_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
+                                std::map<std::string, bufferlist>& attrs,
+                                optional_yield y,
+                                std::string& actual_key);
+int reconstitute_actual_key_from_sse_s3(const DoutPrefixProvider *dpp,
+                                        std::map<std::string, bufferlist>& attrs,
+                                        optional_yield y,
+                                        std::string& actual_key);
 
-int create_sse_s3_bucket_key(const DoutPrefixProvider *dpp, CephContext *cct,
-                            const std::string& actual_key);
+int create_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
+                             const std::string& actual_key,
+                             optional_yield y);
 
-int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp, CephContext *cct,
-                            const std::string& actual_key);
+int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp,
+                             const std::string& actual_key,
+                             optional_yield y);
 
 /**
  * SecretEngine Interface
@@ -59,6 +65,7 @@ int remove_sse_s3_bucket_key(const DoutPrefixProvider *dpp, CephContext *cct,
 class SecretEngine {
 
 public:
-  virtual int get_key(const DoutPrefixProvider *dpp, std::string_view key_id, std::string& actual_key) = 0;
+  virtual int get_key(const DoutPrefixProvider *dpp, std::string_view key_id,
+                      optional_yield y, std::string& actual_key) = 0;
   virtual ~SecretEngine(){};
 };

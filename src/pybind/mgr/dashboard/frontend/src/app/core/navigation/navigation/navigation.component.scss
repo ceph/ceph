@@ -195,9 +195,7 @@ $sidebar-width: 200px;
         color: vv.$white;
         display: block;
         font-size: 1.3em;
-        padding: 10px;
-        padding-left: 27px;
-
+        padding: 10px 23px 10px 10px;
         text-decoration: none;
 
         &:hover {
@@ -207,6 +205,25 @@ $sidebar-width: 200px;
 
         > .badge {
           margin-left: 5px;
+        }
+
+        i.fa.fa-circle {
+          animation: blink 2s ease-in infinite;
+          font-size: 0.875em;
+          margin-top: 4px;
+          position: absolute;
+          right: 35px;
+        }
+
+        @keyframes blink {
+          from,
+          to {
+            opacity: 1;
+          }
+
+          50% {
+            opacity: 0;
+          }
         }
       }
 
@@ -239,7 +256,7 @@ $sidebar-width: 200px;
   ul ul a {
     background: lighten(vv.$secondary, 10);
     font-size: 1.1em !important;
-    padding-left: 40px !important;
+    padding-left: 35px !important;
   }
 
   .cd-navbar-primary a:focus {

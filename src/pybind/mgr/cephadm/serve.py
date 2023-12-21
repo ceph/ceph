@@ -379,11 +379,14 @@ class CephadmServe:
 
     def _refresh_host_devices(self, host: str) -> Optional[str]:
         with_lsm = self.mgr.device_enhanced_scan
+        list_all = self.mgr.inventory_list_all
         inventory_args = ['--', 'inventory',
                           '--format=json-pretty',
                           '--filter-for-batch']
         if with_lsm:
             inventory_args.insert(-1, "--with-lsm")
+        if list_all:
+            inventory_args.insert(-1, "--list-all")
 
         try:
             try:
@@ -1057,6 +1060,11 @@ class CephadmServe:
                     diff = list(set(last_deps) - set(deps))
                     if any('secure_monitoring_stack' in e for e in diff):
                         action = 'redeploy'
+                elif dd.daemon_type == 'jaeger-agent':
+                    # changes to jaeger-agent deps affect the way the unit.run for
+                    # the daemon is written, which we rewrite on redeploy, but not
+                    # on reconfig.
+                    action = 'redeploy'
 
             elif spec is not None and hasattr(spec, 'extra_container_args') and dd.extra_container_args != spec.extra_container_args:
                 self.log.debug(
@@ -1573,6 +1581,11 @@ class CephadmServe:
             # the asyncio based timeout in the mgr module
             timeout -= 5
         final_args += ['--timeout', str(timeout)]
+
+        if self.mgr.cephadm_log_destination:
+            values = self.mgr.cephadm_log_destination.split(',')
+            for value in values:
+                final_args.append(f'--log-dest={value}')
 
         # subcommand
         if isinstance(command, list):

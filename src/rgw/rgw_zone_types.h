@@ -79,6 +79,7 @@ struct RGWNameToId {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWNameToId*>& o);
 };
 WRITE_CLASS_ENCODER(RGWNameToId)
 
@@ -122,6 +123,7 @@ struct RGWZoneStorageClass {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWZoneStorageClass*>& o);
 };
 WRITE_CLASS_ENCODER(RGWZoneStorageClass)
 
@@ -209,6 +211,7 @@ public:
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWZoneStorageClasses*>& o);
 };
 WRITE_CLASS_ENCODER(RGWZoneStorageClasses)
 
@@ -305,6 +308,7 @@ struct RGWZonePlacementInfo {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWZonePlacementInfo*>& o);
 
 };
 WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
@@ -328,7 +332,7 @@ struct RGWZone {
  */
   uint32_t bucket_index_max_shards;
 
-  // pre-shard buckets on creation to enable some write-parallism by default,
+  // pre-shard buckets on creation to enable some write-parallelism by default,
   // delay the need to reshard as the bucket grows, and (in multisite) get some
   // bucket index sharding where dynamic resharding is not supported
   static constexpr uint32_t default_bucket_index_max_shards = 11;
@@ -574,6 +578,12 @@ struct RGWZoneGroupPlacementTier {
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWZoneGroupPlacementTier*>& o) {
+    o.push_back(new RGWZoneGroupPlacementTier);
+    o.push_back(new RGWZoneGroupPlacementTier);
+    o.back()->tier_type = "cloud-s3";
+    o.back()->storage_class = "STANDARD";
+  }
 };
 WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTier)
 
@@ -621,5 +631,16 @@ struct RGWZoneGroupPlacementTarget {
   }
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(std::list<RGWZoneGroupPlacementTarget*>& o) {
+    o.push_back(new RGWZoneGroupPlacementTarget);
+    o.back()->storage_classes.insert("STANDARD");
+    o.push_back(new RGWZoneGroupPlacementTarget);
+    o.back()->name = "target";
+    o.back()->tags.insert("tag1");
+    o.back()->tags.insert("tag2");
+    o.back()->storage_classes.insert("STANDARD_IA");
+    o.back()->tier_targets["cloud-s3"].tier_type = "cloud-s3";
+    o.back()->tier_targets["cloud-s3"].storage_class = "STANDARD";
+  }
 };
 WRITE_CLASS_ENCODER(RGWZoneGroupPlacementTarget)

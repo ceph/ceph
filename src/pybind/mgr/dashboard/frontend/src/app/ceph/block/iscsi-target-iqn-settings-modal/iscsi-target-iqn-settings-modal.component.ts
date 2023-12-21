@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { UntypedFormControl } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -14,7 +14,7 @@ import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
   styleUrls: ['./iscsi-target-iqn-settings-modal.component.scss']
 })
 export class IscsiTargetIqnSettingsModalComponent implements OnInit {
-  target_controls: FormControl;
+  target_controls: UntypedFormControl;
   target_default_controls: any;
   target_controls_limits: any;
 
@@ -27,9 +27,9 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
   ) {}
 
   ngOnInit() {
-    const fg: Record<string, FormControl> = {};
+    const fg: Record<string, UntypedFormControl> = {};
     _.forIn(this.target_default_controls, (_value, key) => {
-      fg[key] = new FormControl(this.target_controls.value[key]);
+      fg[key] = new UntypedFormControl(this.target_controls.value[key]);
     });
 
     this.settingsForm = new CdFormGroup(fg);

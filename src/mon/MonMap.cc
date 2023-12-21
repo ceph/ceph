@@ -21,6 +21,7 @@
 #include "include/ceph_features.h"
 #include "include/addr_parsing.h"
 #include "common/ceph_argparse.h"
+#include "common/ceph_json.h"
 #include "common/dns_resolve.h"
 #include "common/errno.h"
 #include "common/dout.h"
@@ -110,6 +111,26 @@ void mon_info_t::print(ostream& out) const
       << " crush location " << crush_loc;
 }
 
+void mon_info_t::dump(ceph::Formatter *f) const
+{
+  f->dump_string("name", name);
+  f->dump_stream("addr") << public_addrs;
+  f->dump_int("priority", priority);
+  f->dump_float("weight", weight);
+  encode_json("crush_location", crush_loc, f);
+}
+
+void mon_info_t::generate_test_instances(list<mon_info_t*>& ls)
+{
+  ls.push_back(new mon_info_t);
+  ls.push_back(new mon_info_t);
+  ls.back()->name = "noname";
+  ls.back()->public_addrs.parse("v1:1.2.3.4:567/890");
+  ls.back()->priority = 1;
+  ls.back()->weight = 1.0;
+  ls.back()->crush_loc.emplace("root", "default");
+  ls.back()->crush_loc.emplace("host", "foo");
+}
 namespace {
   struct rank_cmp {
     bool operator()(const mon_info_t &a, const mon_info_t &b) const {
@@ -369,6 +390,7 @@ void MonMap::print_summary(ostream& out) const
     has_printed = true;
   }
   out << "}" << " removed_ranks: {" << removed_ranks << "}";
+  out << " disallowed_leaders: {" << disallowed_leaders << "}";
 }
  
 void MonMap::print(ostream& out) const

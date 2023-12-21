@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { Observable, Subject } from 'rxjs';
@@ -50,10 +50,10 @@ export class RbdSnapshotFormModalComponent implements OnInit {
 
   createForm() {
     this.snapshotForm = new CdFormGroup({
-      snapshotName: new FormControl('', {
+      snapshotName: new UntypedFormControl('', {
         validators: [Validators.required]
       }),
-      mirrorImageSnapshot: new FormControl(false, {})
+      mirrorImageSnapshot: new UntypedFormControl(false, {})
     });
   }
 
@@ -73,6 +73,7 @@ export class RbdSnapshotFormModalComponent implements OnInit {
     } else {
       this.snapshotForm.get('snapshotName').setValue(this.snapName);
       this.snapshotForm.get('snapshotName').setValidators([Validators.required]);
+      this.snapshotForm.get('snapshotName').updateValueAndValidity();
     }
   }
 

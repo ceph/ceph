@@ -6,6 +6,9 @@ import pytest
 
 from tests.fixtures import with_cephadm_ctx, cephadm_fs, import_cephadm
 
+from cephadmlib.host_facts import _parse_ipv4_route, _parse_ipv6_route
+from cephadmlib.net_utils import get_ipv6_address
+
 _cephadm = import_cephadm()
 
 
@@ -69,7 +72,7 @@ class TestCommandListNetworks:
         ),
     ])
     def test_parse_ipv4_route(self, test_input, expected):
-        assert _cephadm._parse_ipv4_route(test_input) == expected
+        assert _parse_ipv4_route(test_input) == expected
 
     @pytest.mark.parametrize("test_routes, test_ips, expected", [
         (
@@ -222,10 +225,26 @@ class TestCommandListNetworks:
         ),
     ])
     def test_parse_ipv6_route(self, test_routes, test_ips, expected):
-        assert _cephadm._parse_ipv6_route(test_routes, test_ips) == expected
+        assert _parse_ipv6_route(test_routes, test_ips) == expected
 
-    @mock.patch.object(_cephadm, 'call_throws', return_value=('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', ''))
-    def test_command_list_networks(self, cephadm_fs, capsys):
+    @mock.patch('cephadmlib.net_utils.read_file')
+    def test_get_ipv6_addr(self, _read_file):
+        proc_net_if_net6 = """fe80000000000000505400fffe347999 02 40 20 80     eth0
+fe80000000000000505400fffe04c154 03 40 20 80     eth1
+00000000000000000000000000000001 01 80 10 80       lo"""
+        _read_file.return_value = proc_net_if_net6
+
+        ipv6_addr = get_ipv6_address('eth0')
+        assert ipv6_addr == 'fe80::5054:ff:fe34:7999/64'
+
+        ipv6_addr = get_ipv6_address('eth1')
+        assert ipv6_addr == 'fe80::5054:ff:fe04:c154/64'
+
+    @mock.patch('cephadmlib.host_facts.call_throws')
+    @mock.patch('cephadmlib.host_facts.find_executable')
+    def test_command_list_networks(self, _find_exe, _call_throws, cephadm_fs, capsys):
+        _call_throws.return_value = ('10.4.0.1 dev tun0 proto kernel scope link src 10.4.0.2 metric 50\n', '', '')
+        _find_exe.return_value = 'ip'
         with with_cephadm_ctx([]) as ctx:
             _cephadm.command_list_networks(ctx)
             assert json.loads(capsys.readouterr().out) == {

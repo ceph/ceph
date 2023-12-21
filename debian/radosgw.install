@@ -7,3 +7,4 @@ usr/bin/radosgw-token
 usr/share/man/man8/ceph-diff-sorted.8
 usr/share/man/man8/radosgw.8
 usr/share/man/man8/rgw-orphan-list.8
+usr/share/man/man8/rgw-restore-bucket-index.8

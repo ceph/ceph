@@ -411,11 +411,12 @@ def _mk_fake_call(enabled, active):
 )
 def test_check_unit(enabled_out, active_out, expected):
     with with_cephadm_ctx([]) as ctx:
-        _cephadm.call.side_effect = _mk_fake_call(
-            enabled=enabled_out,
-            active=active_out,
-        )
-        enabled, state, installed = _cephadm.check_unit(ctx, "foobar")
+        with mock.patch('cephadmlib.systemd.call') as _call:
+            _call.side_effect = _mk_fake_call(
+                enabled=enabled_out,
+                active=active_out,
+            )
+            enabled, state, installed = _cephadm.check_unit(ctx, "foobar")
     assert (enabled, state, installed) == expected
 
 
@@ -489,11 +490,12 @@ def test_check_time_sync(call_fn, enabler, expected):
     is enabled. It is also the only consumer of check_units.
     """
     with with_cephadm_ctx([]) as ctx:
-        _cephadm.call.side_effect = call_fn
-        result = _cephadm.check_time_sync(ctx, enabler=enabler)
-        assert result == expected
-        if enabler is not None:
-            enabler.check_expected()
+        with mock.patch('cephadmlib.systemd.call') as _call:
+            _call.side_effect = call_fn
+            result = _cephadm.check_time_sync(ctx, enabler=enabler)
+            assert result == expected
+            if enabler is not None:
+                enabler.check_expected()
 
 
 @pytest.mark.parametrize(
@@ -542,11 +544,13 @@ VERSION_CODENAME=hpec nimda
     ],
 )
 def test_get_distro(monkeypatch, content, expected):
+    from cephadmlib.packagers import get_distro
+
     def _fake_open(*args, **kwargs):
         return io.StringIO(content)
 
     monkeypatch.setattr("builtins.open", _fake_open)
-    assert _cephadm.get_distro() == expected
+    assert get_distro() == expected
 
 
 class FakeContext:

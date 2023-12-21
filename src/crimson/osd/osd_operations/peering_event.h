@@ -120,14 +120,6 @@ protected:
   ) override;
 
 public:
-  class OSDPipeline {
-    struct AwaitActive : OrderedExclusivePhaseT<AwaitActive> {
-      static constexpr auto type_name =
-	"PeeringRequest::OSDPipeline::await_active";
-    } await_active;
-    friend class RemotePeeringEvent;
-  };
-
   template <typename... Args>
   RemotePeeringEvent(crimson::net::ConnectionRef conn, Args&&... args) :
     PeeringEvent(std::forward<Args>(args)...),
@@ -139,12 +131,12 @@ public:
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
-    ConnectionPipeline::GetPG::BlockingEvent,
+    ConnectionPipeline::GetPGMapping::BlockingEvent,
+    PerShardPipeline::CreateOrWaitPG::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
     PGPeeringPipeline::AwaitMap::BlockingEvent,
     PG_OSDMapGate::OSDMapBlocker::BlockingEvent,
     PGPeeringPipeline::Process::BlockingEvent,
-    OSDPipeline::AwaitActive::BlockingEvent,
     CompletionEvent
   > tracking_events;
 
@@ -157,6 +149,14 @@ public:
   epoch_t get_epoch() const { return evt.get_epoch_sent(); }
 
   ConnectionPipeline &get_connection_pipeline();
+
+  PerShardPipeline &get_pershard_pipeline(ShardServices &);
+
+  crimson::net::Connection &get_connection() {
+    assert(conn);
+    return *conn;
+  };
+
   seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
     assert(conn);
     return conn.get_foreign(

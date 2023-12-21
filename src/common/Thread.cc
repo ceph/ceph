@@ -223,7 +223,7 @@ std::string get_thread_name(const std::thread& t) {
 
 void kill(std::thread& t, int signal)
 {
-  auto r = pthread_kill(t.native_handle(), signal);
+  auto r = ceph_pthread_kill(t.native_handle(), signal);
   if (r != 0) {
     throw std::system_error(r, std::generic_category());
   }

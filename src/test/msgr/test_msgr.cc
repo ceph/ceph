@@ -220,7 +220,7 @@ class FakeDispatcher : public Dispatcher {
     cond.notify_all();
   }
 
-  int ms_handle_authentication(Connection *con) override {
+  int ms_handle_fast_authentication(Connection *con) override {
     return 1;
   }
 
@@ -1709,7 +1709,7 @@ class SyntheticDispatcher : public Dispatcher {
     }
   }
 
-  int ms_handle_authentication(Connection *con) override {
+  int ms_handle_fast_authentication(Connection *con) override {
     return 1;
   }
 
@@ -2322,7 +2322,7 @@ class MarkdownDispatcher : public Dispatcher {
   void ms_fast_dispatch(Message *m) override {
     ceph_abort();
   }
-  int ms_handle_authentication(Connection *con) override {
+  int ms_handle_fast_authentication(Connection *con) override {
     return 1;
   }
 };

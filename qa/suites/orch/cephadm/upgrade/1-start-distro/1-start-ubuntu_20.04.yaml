@@ -3,12 +3,9 @@ os_version: "20.04"
 
 tasks:
 - cephadm:
-    image: quay.io/ceph/ceph:v16.2.0
-    cephadm_branch: v16.2.0
+    image: quay.io/ceph/ceph:v17.2.0
+    cephadm_branch: v17.2.0
     cephadm_git_url: https://github.com/ceph/ceph
-    # avoid --cap-add=PTRACE + --privileged for older cephadm versions
-    allow_ptrace: false
-    avoid_pacific_features: true
 
 roles:
 - - mon.a

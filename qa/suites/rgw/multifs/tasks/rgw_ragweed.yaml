@@ -13,8 +13,3 @@ tasks:
       default-branch: ceph-master
       rgw_server: client.0
       stages: check
-overrides:
-  ceph:
-    conf:
-      client:
-        rgw lc debug interval: 10

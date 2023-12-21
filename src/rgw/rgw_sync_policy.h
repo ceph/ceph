@@ -591,7 +591,7 @@ WRITE_CLASS_ENCODER(rgw_sync_data_flow_group)
 struct rgw_sync_policy_group {
   std::string id;
 
-  rgw_sync_data_flow_group data_flow; /* override data flow, howver, will not be able to
+  rgw_sync_data_flow_group data_flow; /* override data flow, however, will not be able to
                                                         add new flows that don't exist at higher level */
   std::vector<rgw_sync_bucket_pipes> pipes; /* if not defined then applies to all
                                                               buckets (DR sync) */
@@ -667,6 +667,7 @@ struct rgw_sync_policy_info {
   }
 
   void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<rgw_sync_policy_info*>& o);
   void decode_json(JSONObj *obj);
 
   bool empty() const {

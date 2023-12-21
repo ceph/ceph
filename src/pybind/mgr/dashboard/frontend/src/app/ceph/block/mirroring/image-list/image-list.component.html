@@ -64,3 +64,13 @@
                      [showValue]="true"></ngb-progressbar>
   </div>
 </ng-template>
+
+<ng-template #entriesBehindPrimaryTpl
+             let-row="row"
+             let-value="value">
+  <span *ngIf="row.mirror_mode === 'journal'">
+    {{ value }}
+  </span>
+  <span *ngIf="row.mirror_mode === 'snapshot'"
+        ngbTooltip="Not available with mirroring snapshot mode">-</span>
+</ng-template>

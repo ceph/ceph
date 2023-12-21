@@ -140,13 +140,14 @@ size_t PGRecovery::start_primary_recovery_ops(
 
     hobject_t head = soid.get_head();
 
+    bool head_missing = missing.is_missing(head);
     logger().info(
       "{} {} item.need {} {} {} {} {}",
       __func__,
       soid,
       item.need,
       missing.is_missing(soid) ? " (missing)":"",
-      missing.is_missing(head) ? " (missing head)":"",
+      head_missing ? " (missing head)":"",
       pg->get_recovery_backend()->is_recovering(soid) ? " (recovering)":"",
       pg->get_recovery_backend()->is_recovering(head) ? " (recovering head)":"");
 
@@ -158,7 +159,15 @@ size_t PGRecovery::start_primary_recovery_ops(
     } else if (pg->get_recovery_backend()->is_recovering(head)) {
       ++skipped;
     } else {
-      out->emplace_back(recover_missing(trigger, soid, item.need));
+      if (head_missing) {
+	auto it = missing.get_items().find(head);
+	assert(it != missing.get_items().end());
+	auto head_need = it->second.need;
+	out->emplace_back(recover_missing(trigger, head, head_need));
+	++skipped;
+      } else {
+	out->emplace_back(recover_missing(trigger, soid, item.need));
+      }
       ++started;
     }
 
@@ -266,20 +275,27 @@ PGRecovery::recover_missing(
   RecoveryBackend::RecoveryBlockingEvent::TriggerI& trigger,
   const hobject_t &soid, eversion_t need)
 {
-  if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
-    return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
-      trigger,
-      pg->get_recovery_backend()->recover_delete(soid, need));
+  logger().info("{} {} v {}", __func__, soid, need);
+  auto [recovering, added] = pg->get_recovery_backend()->add_recovering(soid);
+  if (added) {
+    logger().info("{} {} v {}, new recovery", __func__, soid, need);
+    if (pg->get_peering_state().get_missing_loc().is_deleted(soid)) {
+      return recovering.wait_track_blocking(
+	trigger,
+	pg->get_recovery_backend()->recover_delete(soid, need));
+    } else {
+      return recovering.wait_track_blocking(
+	trigger,
+	pg->get_recovery_backend()->recover_object(soid, need)
+	.handle_exception_interruptible(
+	  [=, this, soid = std::move(soid)] (auto e) {
+	  on_failed_recover({ pg->get_pg_whoami() }, soid, need);
+	  return seastar::make_ready_future<>();
+	})
+      );
+    }
   } else {
-    return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
-      trigger,
-      pg->get_recovery_backend()->recover_object(soid, need)
-      .handle_exception_interruptible(
-	[=, this, soid = std::move(soid)] (auto e) {
-	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
-	return seastar::make_ready_future<>();
-      })
-    );
+    return recovering.wait_for_recovered();
   }
 }
 
@@ -288,16 +304,23 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_deletes(
   const hobject_t& soid,
   eversion_t need)
 {
-  return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
-    trigger,
-    pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
-      [=, this] {
-      object_stat_sum_t stat_diff;
-      stat_diff.num_objects_recovered = 1;
-      on_global_recover(soid, stat_diff, true);
-      return seastar::make_ready_future<>();
-    })
-  );
+  logger().info("{} {} v {}", __func__, soid, need);
+  auto [recovering, added] = pg->get_recovery_backend()->add_recovering(soid);
+  if (added) {
+    logger().info("{} {} v {}, new recovery", __func__, soid, need);
+    return recovering.wait_track_blocking(
+      trigger,
+      pg->get_recovery_backend()->push_delete(soid, need).then_interruptible(
+	[=, this] {
+	object_stat_sum_t stat_diff;
+	stat_diff.num_objects_recovered = 1;
+	on_global_recover(soid, stat_diff, true);
+	return seastar::make_ready_future<>();
+      })
+    );
+  } else {
+    return recovering.wait_for_recovered();
+  }
 }
 
 RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_pushes(
@@ -305,18 +328,26 @@ RecoveryBackend::interruptible_future<> PGRecovery::prep_object_replica_pushes(
   const hobject_t& soid,
   eversion_t need)
 {
-  return pg->get_recovery_backend()->add_recovering(soid).wait_track_blocking(
-    trigger,
-    pg->get_recovery_backend()->recover_object(soid, need)
-    .handle_exception_interruptible(
-      [=, this, soid = std::move(soid)] (auto e) {
-      on_failed_recover({ pg->get_pg_whoami() }, soid, need);
-      return seastar::make_ready_future<>();
-    })
-  );
+  logger().info("{} {} v {}", __func__, soid, need);
+  auto [recovering, added] = pg->get_recovery_backend()->add_recovering(soid);
+  if (added) {
+    logger().info("{} {} v {}, new recovery", __func__, soid, need);
+    return recovering.wait_track_blocking(
+      trigger,
+      pg->get_recovery_backend()->recover_object(soid, need)
+      .handle_exception_interruptible(
+	[=, this, soid = std::move(soid)] (auto e) {
+	on_failed_recover({ pg->get_pg_whoami() }, soid, need);
+	return seastar::make_ready_future<>();
+      })
+    );
+  } else {
+    return recovering.wait_for_recovered();
+  }
 }
 
-void PGRecovery::on_local_recover(
+RecoveryBackend::interruptible_future<>
+PGRecovery::on_local_recover(
   const hobject_t& soid,
   const ObjectRecoveryInfo& recovery_info,
   const bool is_delete,
@@ -332,20 +363,38 @@ void PGRecovery::on_local_recover(
       ceph_abort("mark_unfound_lost (LOST_REVERT) is not implemented yet");
     }
   }
-  pg->get_peering_state().recover_got(soid,
-      recovery_info.version, is_delete, t);
 
-  if (pg->is_primary()) {
-    if (!is_delete) {
-      auto& obc = pg->get_recovery_backend()->get_recovering(soid).obc; //TODO: move to pg backend?
-      obc->obs.exists = true;
-      obc->obs.oi = recovery_info.oi;
+  return RecoveryBackend::interruptor::async(
+    [soid, &recovery_info, is_delete, &t, this] {
+    if (soid.is_snap()) {
+      OSDriver::OSTransaction _t(pg->get_osdriver().get_transaction(&t));
+      int r = pg->get_snap_mapper().remove_oid(soid, &_t);
+      assert(r == 0 || r == -ENOENT);
+
+      if (!is_delete) {
+	set<snapid_t> snaps;
+	auto p = recovery_info.ss.clone_snaps.find(soid.snap);
+	assert(p != recovery_info.ss.clone_snaps.end());
+	snaps.insert(p->second.begin(), p->second.end());
+	pg->get_snap_mapper().add_oid(recovery_info.soid, snaps, &_t);
+      }
     }
-    if (!pg->is_unreadable_object(soid)) {
-      pg->get_recovery_backend()->get_recovering(soid).set_readable();
+
+    pg->get_peering_state().recover_got(soid,
+	recovery_info.version, is_delete, t);
+
+    if (pg->is_primary()) {
+      if (!is_delete) {
+	auto& obc = pg->get_recovery_backend()->get_recovering(soid).obc; //TODO: move to pg backend?
+	obc->obs.exists = true;
+	obc->obs.oi = recovery_info.oi;
+      }
+      if (!pg->is_unreadable_object(soid)) {
+	pg->get_recovery_backend()->get_recovering(soid).set_readable();
+      }
+      pg->publish_stats_to_osd();
     }
-    pg->publish_stats_to_osd();
-  }
+  });
 }
 
 void PGRecovery::on_global_recover (
@@ -449,9 +498,11 @@ void PGRecovery::enqueue_push(
   const hobject_t& obj,
   const eversion_t& v)
 {
-  logger().debug("{}: obj={} v={}",
+  logger().info("{}: obj={} v={}",
                  __func__, obj, v);
-  pg->get_recovery_backend()->add_recovering(obj);
+  auto [recovering, added] = pg->get_recovery_backend()->add_recovering(obj);
+  if (!added)
+    return;
   std::ignore = pg->get_recovery_backend()->recover_object(obj, v).\
   handle_exception_interruptible([] (auto) {
     ceph_abort_msg("got exception on backfill's push");

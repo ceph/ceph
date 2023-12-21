@@ -7,7 +7,6 @@
 
 #include "rgw_service.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj_types.h"
 #include "svc_sys_obj_core_types.h"
 
@@ -108,13 +107,13 @@ public:
         return *this;
       }
 
-      WOp& set_attrs(std::map<std::string, bufferlist>& _attrs) {
+      WOp& set_attrs(const std::map<std::string, bufferlist>& _attrs) {
         attrs = _attrs;
         return *this;
       }
 
       WOp& set_attrs(std::map<std::string, bufferlist>&& _attrs) {
-        attrs = _attrs;
+        attrs = std::move(_attrs);
         return *this;
       }
 
@@ -246,12 +245,12 @@ public:
   friend class Pool::Op;
 
 protected:
-  RGWSI_RADOS *rados_svc{nullptr};
+  librados::Rados* rados{nullptr};
   RGWSI_SysObj_Core *core_svc{nullptr};
 
-  void init(RGWSI_RADOS *_rados_svc,
+  void init(librados::Rados* rados_,
             RGWSI_SysObj_Core *_core_svc) {
-    rados_svc = _rados_svc;
+    rados = rados_;
     core_svc = _core_svc;
   }
 

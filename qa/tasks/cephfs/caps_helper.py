@@ -124,7 +124,7 @@ def get_fsnames_from_moncap(moncap):
 
 
 def assert_equal(first, second):
-    msg = f'Variables are not equal.\nfirst = {first}\nsecond = {second}'
+    msg = f'Variables are not equal.\nfirst -\n{first}\nsecond -\n{second}'
     assert first == second, msg
 
 
@@ -268,10 +268,10 @@ class MdsCapTester:
         else:
             raise RuntimeError(f'perm = {perm}\nIt should be "r" or "rw".')
 
-    def conduct_pos_test_for_read_caps(self):
+    def conduct_pos_test_for_read_caps(self, sudo_read=False):
         log.info(f'test read perm: read file {self.path} and expect data '
                  f'"{self.data}"')
-        contents = self.mount.read_file(self.path)
+        contents = self.mount.read_file(self.path, sudo_read)
         assert_equal(self.data, contents)
         log.info(f'read perm was tested successfully: "{self.data}" was '
                  f'successfully read from path {self.path}')
@@ -318,3 +318,34 @@ class CapTester(MonCapTester, MdsCapTester):
     def run_cap_tests(self, fs, client_id, perm, mntpt=None):
         self.run_mon_cap_tests(fs, client_id)
         self.run_mds_cap_tests(perm, mntpt)
+
+    def _conduct_neg_test_for_root_squash_caps(self, _cmdargs, sudo_write=False):
+        possible_errmsgs = ('permission denied', 'operation not permitted')
+        cmdargs = ['sudo'] if sudo_write else ['']
+        cmdargs += _cmdargs
+
+        log.info(f'test absence of {_cmdargs[0]} perm: expect failure {self.path}.')
+
+        # open the file and hold it. The MDS will issue CEPH_CAP_EXCL_*
+        # to mount
+        proc = self.mount.open_background(self.path)
+
+        cmdargs.append(self.path)
+        self.mount.negtestcmd(args=cmdargs, retval=1, errmsgs=possible_errmsgs)
+        cmdargs.pop(-1)
+
+        self.mount._kill_background(proc)
+
+        log.info(f'absence of {_cmdargs[0]} perm was tested successfully')
+
+    def conduct_neg_test_for_chown_caps(self, sudo_write=True):
+        # flip ownership to nobody. assumption: nobody's id is 65534
+        cmdargs = ['chown', '-h', '65534:65534']
+        self._conduct_neg_test_for_root_squash_caps(cmdargs, sudo_write)
+
+    def conduct_neg_test_for_truncate_caps(self, sudo_write=True):
+        cmdargs = ['truncate', '-s', '10GB']
+        self._conduct_neg_test_for_root_squash_caps(cmdargs, sudo_write)
+
+    def conduct_pos_test_for_open_caps(self, sudo_read=True):
+        self.conduct_pos_test_for_read_caps(sudo_read)

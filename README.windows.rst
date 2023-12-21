@@ -29,6 +29,8 @@ Flag               Description                      Default value
 =================  ===============================  ===============================
 OS                 Host OS distribution, for mingw  ubuntu (also valid: suse)
                    and other OS specific settings.
+TOOLCHAIN          Mingw toolchain: mingw-llvm or   mingw-llvm
+                   mingw-gcc.
 CEPH_DIR           The Ceph source code directory.  The same as the script.
 BUILD_DIR          The directory where the          $CEPH_DIR/build
                    generated artifacts will be
@@ -52,7 +54,7 @@ EMBEDDED_DBG_SYM   By default, the generated
                    symbols. If this flag is set,
                    the debug symbols will remain
                    embedded in the executables.
-ENABLE_SHARED      Dynamically link Ceph libs.      False
+ENABLE_SHARED      Dynamically link Ceph libs.      ON
 =================  ===============================  ===============================
 
 The following command will build the binaries and add them to a zip archive

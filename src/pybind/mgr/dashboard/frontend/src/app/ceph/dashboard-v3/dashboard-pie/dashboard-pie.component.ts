@@ -22,91 +22,7 @@ export class DashboardPieComponent implements OnChanges, OnInit {
 
   color: string;
 
-  chartConfig: any = {
-    chartType: 'doughnut',
-    labels: ['', '', ''],
-    dataset: [
-      {
-        label: null,
-        backgroundColor: [
-          this.cssHelper.propertyValue('chart-color-light-gray'),
-          this.cssHelper.propertyValue('chart-color-slight-dark-gray'),
-          this.cssHelper.propertyValue('chart-color-dark-gray')
-        ]
-      },
-      {
-        label: null,
-        borderWidth: 0,
-        backgroundColor: [
-          this.cssHelper.propertyValue('chart-color-blue'),
-          this.cssHelper.propertyValue('chart-color-white')
-        ]
-      }
-    ],
-    options: {
-      cutoutPercentage: 70,
-      events: ['click', 'mouseout', 'touchstart'],
-      legend: {
-        display: true,
-        position: 'right',
-        labels: {
-          boxWidth: 10,
-          usePointStyle: false,
-          generateLabels: (chart: any) => {
-            const labels = { 0: {}, 1: {}, 2: {} };
-            labels[0] = {
-              text: $localize`Used: ${chart.data.datasets[1].data[2]}`,
-              fillStyle: chart.data.datasets[1].backgroundColor[0],
-              strokeStyle: chart.data.datasets[1].backgroundColor[0]
-            };
-            labels[1] = {
-              text: $localize`Warning: ${chart.data.datasets[0].data[0]}%`,
-              fillStyle: chart.data.datasets[0].backgroundColor[1],
-              strokeStyle: chart.data.datasets[0].backgroundColor[1]
-            };
-            labels[2] = {
-              text: $localize`Danger: ${
-                chart.data.datasets[0].data[0] + chart.data.datasets[0].data[1]
-              }%`,
-              fillStyle: chart.data.datasets[0].backgroundColor[2],
-              strokeStyle: chart.data.datasets[0].backgroundColor[2]
-            };
-
-            return labels;
-          }
-        }
-      },
-      plugins: {
-        center_text: true
-      },
-      tooltips: {
-        enabled: true,
-        displayColors: false,
-        backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
-        cornerRadius: 0,
-        bodyFontSize: 14,
-        bodyFontStyle: '600',
-        position: 'nearest',
-        xPadding: 12,
-        yPadding: 12,
-        filter: (tooltipItem: any) => {
-          return tooltipItem.datasetIndex === 1;
-        },
-        callbacks: {
-          label: (item: Record<string, any>, data: Record<string, any>) => {
-            let text = data.labels[item.index];
-            if (!text.includes('%')) {
-              text = `${text} (${data.datasets[item.datasetIndex].data[item.index]}%)`;
-            }
-            return text;
-          }
-        }
-      },
-      title: {
-        display: false
-      }
-    }
-  };
+  chartConfig: any = {};
 
   public doughnutChartPlugins: PluginServiceGlobalRegistrationAndOptions[] = [
     {
@@ -141,7 +57,93 @@ export class DashboardPieComponent implements OnChanges, OnInit {
     }
   ];
 
-  constructor(private cssHelper: CssHelper, private dimlessBinary: DimlessBinaryPipe) {}
+  constructor(private cssHelper: CssHelper, private dimlessBinary: DimlessBinaryPipe) {
+    this.chartConfig = {
+      chartType: 'doughnut',
+      labels: ['', '', ''],
+      dataset: [
+        {
+          label: null,
+          backgroundColor: [
+            this.cssHelper.propertyValue('chart-color-light-gray'),
+            this.cssHelper.propertyValue('chart-color-slight-dark-gray'),
+            this.cssHelper.propertyValue('chart-color-dark-gray')
+          ]
+        },
+        {
+          label: null,
+          borderWidth: 0,
+          backgroundColor: [
+            this.cssHelper.propertyValue('chart-color-blue'),
+            this.cssHelper.propertyValue('chart-color-white')
+          ]
+        }
+      ],
+      options: {
+        cutoutPercentage: 70,
+        events: ['click', 'mouseout', 'touchstart'],
+        legend: {
+          display: true,
+          position: 'right',
+          labels: {
+            boxWidth: 10,
+            usePointStyle: false,
+            generateLabels: (chart: any) => {
+              const labels = { 0: {}, 1: {}, 2: {} };
+              labels[0] = {
+                text: $localize`Used: ${chart.data.datasets[1].data[2]}`,
+                fillStyle: chart.data.datasets[1].backgroundColor[0],
+                strokeStyle: chart.data.datasets[1].backgroundColor[0]
+              };
+              labels[1] = {
+                text: $localize`Warning: ${chart.data.datasets[0].data[0]}%`,
+                fillStyle: chart.data.datasets[0].backgroundColor[1],
+                strokeStyle: chart.data.datasets[0].backgroundColor[1]
+              };
+              labels[2] = {
+                text: $localize`Danger: ${
+                  chart.data.datasets[0].data[0] + chart.data.datasets[0].data[1]
+                }%`,
+                fillStyle: chart.data.datasets[0].backgroundColor[2],
+                strokeStyle: chart.data.datasets[0].backgroundColor[2]
+              };
+
+              return labels;
+            }
+          }
+        },
+        plugins: {
+          center_text: true
+        },
+        tooltips: {
+          enabled: true,
+          displayColors: false,
+          backgroundColor: this.cssHelper.propertyValue('chart-color-tooltip-background'),
+          cornerRadius: 0,
+          bodyFontSize: 14,
+          bodyFontStyle: '600',
+          position: 'nearest',
+          xPadding: 12,
+          yPadding: 12,
+          filter: (tooltipItem: any) => {
+            return tooltipItem.datasetIndex === 1;
+          },
+          callbacks: {
+            label: (item: Record<string, any>, data: Record<string, any>) => {
+              let text = data.labels[item.index];
+              if (!text.includes('%')) {
+                text = `${text} (${data.datasets[item.datasetIndex].data[item.index]}%)`;
+              }
+              return text;
+            }
+          }
+        },
+        title: {
+          display: false
+        }
+      }
+    };
+  }
 
   ngOnInit() {
     this.prepareRawUsage(this.chartConfig, this.data);

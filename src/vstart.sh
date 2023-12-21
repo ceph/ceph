@@ -168,6 +168,7 @@ fi
 ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
+rgw_store="rados"
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 # disable SPDK by default
 pmem_enabled=0
@@ -229,6 +230,7 @@ options:
 	--rgw_frontend specify the rgw frontend configuration
 	--rgw_arrow_flight start arrow flight frontend
 	--rgw_compression specify the rgw compression plugin
+	--rgw_store storage backend: rados|dbstore|posix
 	--seastore use seastore as crimson osd backend
 	-b, --bluestore use bluestore as the osd objectstore backend (default)
 	-K, --kstore use kstore as the osd objectstore backend
@@ -257,6 +259,7 @@ options:
 	--no-parallel: dont start all OSDs in parallel
 	--no-restart: dont restart process when using ceph-run
 	--jaeger: use jaegertracing for tracing
+	--seastore-device-size: set total size of seastore
 	--seastore-devs: comma-separated list of blockdevs to use for seastore
 	--seastore-secondary-devs: comma-separated list of secondary blockdevs to use for seastore
 	--seastore-secondary-devs-type: device type of all secondary blockdevs. HDD, SSD(default), ZNS or RANDOM_BLOCK_SSD
@@ -460,6 +463,10 @@ case $1 in
         rgw_compression=$2
         shift
         ;;
+    --rgw_store)
+        rgw_store=$2
+        shift
+        ;;
     --kstore_path)
         kstore_path=$2
         shift
@@ -534,6 +541,10 @@ case $1 in
         ;;
     --with-restful)
         with_mgr_restful=true
+        ;;
+    --seastore-device-size)
+        seastore_size="$2"
+        shift
         ;;
     --seastore-devs)
         parse_block_devs --seastore-devs "$2"
@@ -687,6 +698,22 @@ done
 
 }
 
+do_rgw_dbstore_conf() {
+    if [ $CEPH_NUM_RGW -gt 1 ]; then
+        echo "dbstore is not distributed so only works with CEPH_NUM_RGW=1"
+        exit 1
+    fi
+
+    prun mkdir -p "$CEPH_DEV_DIR/rgw/dbstore"
+    wconf <<EOF
+        rgw backend store = dbstore
+        rgw config store = dbstore
+        dbstore db dir = $CEPH_DEV_DIR/rgw/dbstore
+        dbstore_config_uri = file://$CEPH_DEV_DIR/rgw/dbstore/config.db
+
+EOF
+}
+
 format_conf() {
     local opts=$1
     local indent="        "
@@ -832,6 +859,14 @@ EOF
         bdev ioring = true"
         fi
     fi
+
+    if [ "$objectstore" == "seastore" ]; then
+      if [[ ${seastore_size+x} ]]; then
+        SEASTORE_OPTS="
+        seastore device size = $seastore_size"
+      fi
+    fi
+
     wconf <<EOF
 [client]
 $CCLIENTDEBUG
@@ -848,6 +883,20 @@ $CCLIENTDEBUG
         ; rgw lc debug interval = 10
         $(format_conf "${extra_conf}")
 EOF
+    if [ "$rgw_store" == "dbstore" ] ; then
+        do_rgw_dbstore_conf
+    elif [ "$rgw_store" == "posix" ] ; then
+        # use dbstore as the backend and posix as the filter
+        do_rgw_dbstore_conf
+        posix_dir="$CEPH_DEV_DIR/rgw/posix"
+        prun mkdir -p $posix_dir/root $posix_dir/lmdb
+        wconf <<EOF
+        rgw filter = posix
+        rgw posix base path = $posix_dir/root
+        rgw posix database root = $posix_dir/lmdb
+
+EOF
+    fi
 	do_rgw_conf
 	wconf << EOF
 [mds]
@@ -883,6 +932,7 @@ $BLUESTORE_OPTS
         ; kstore
         kstore fsck on mount = true
         osd objectstore = $objectstore
+$SEASTORE_OPTS
 $COSDSHORT
         $(format_conf "${extra_conf}")
 [mon]
@@ -1573,7 +1623,7 @@ EOF
     fi
     if [ "$cephadm" -gt 0 ]; then
         debug echo Setting mon public_network ...
-        public_network=$(ip route list | grep -w "$IP" | awk '{print $1}')
+        public_network=$(ip route list | grep -w "$IP" | grep -v default | awk '{print $1}')
         ceph_adm config set mon public_network $public_network
     fi
 fi
@@ -1771,18 +1821,20 @@ do_rgw()
     for n in $(seq 1 $CEPH_NUM_RGW); do
         rgw_name="client.rgw.${current_port}"
 
-        ceph_adm auth get-or-create $rgw_name \
-            mon 'allow rw' \
-            osd 'allow rwx' \
-            mgr 'allow rw' \
-            >> "$keyring_fn"
+        if [ "$CEPH_NUM_MON" -gt 0 ]; then
+            ceph_adm auth get-or-create $rgw_name \
+                mon 'allow rw' \
+                osd 'allow rwx' \
+                mgr 'allow rw' \
+                >> "$keyring_fn"
+        fi
 
         debug echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
         run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn \
             --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log \
             --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok \
             --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid \
-            --rgw_luarocks_location=${CEPH_OUT_DIR}/luarocks \
+            --rgw_luarocks_location=${CEPH_OUT_DIR}/radosgw.${current_port}.luarocks  \
             ${RGWDEBUG} \
             -n ${rgw_name} \
             "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}${flight_conf:+,arrow_flight}"

@@ -11,7 +11,7 @@ import re
 import xml.etree.ElementTree as ET  # noqa: N814
 from subprocess import SubprocessError
 
-from mgr_util import build_url
+from mgr_util import build_url, name_to_config_section
 
 from .. import mgr
 from ..awsauth import S3Auth
@@ -19,6 +19,7 @@ from ..exceptions import DashboardException
 from ..rest_client import RequestException, RestClient
 from ..settings import Settings
 from ..tools import dict_contains_path, dict_get, json_str_to_object, str_to_bool
+from .ceph_service import CephService
 
 try:
     from typing import Any, Dict, List, Optional, Tuple, Union
@@ -87,8 +88,18 @@ def _determine_rgw_addr(daemon_info: Dict[str, Any]) -> RgwDaemon:
     Parse RGW daemon info to determine the configured host (IP address) and port.
     """
     daemon = RgwDaemon()
-    daemon.host = daemon_info['metadata']['hostname']
+    rgw_dns_name = CephService.send_command('mon', 'config get',
+                                            who=name_to_config_section('rgw.' + daemon_info['metadata']['id']),  # noqa E501 #pylint: disable=line-too-long
+                                            key='rgw_dns_name').rstrip()
+
     daemon.port, daemon.ssl = _parse_frontend_config(daemon_info['metadata']['frontend_config#0'])
+
+    if rgw_dns_name:
+        daemon.host = rgw_dns_name
+    elif daemon.ssl:
+        daemon.host = daemon_info['metadata']['hostname']
+    else:
+        daemon.host = _parse_addr(daemon_info['addr'])
 
     return daemon
 
@@ -691,6 +702,19 @@ class RgwClient(RestClient):
         except RequestException as e:
             raise DashboardException(msg=str(e), component='rgw')
 
+    @RestClient.api_put('/{bucket_name}?tagging')
+    def set_tags(self, bucket_name, tags, request=None):
+        # pylint: disable=unused-argument
+        try:
+            ET.fromstring(tags)
+        except ET.ParseError:
+            return "Data must be properly formatted"
+        try:
+            result = request(data=tags)  # type: ignore
+        except RequestException as e:
+            raise DashboardException(msg=str(e), component='rgw')
+        return result
+
     @RestClient.api_get('/{bucket_name}?object-lock')
     def get_bucket_locking(self, bucket_name, request=None):
         # type: (str, Optional[object]) -> dict
@@ -840,6 +864,52 @@ class RgwClient(RestClient):
                    'Looks like the document has a wrong format.'
                    f' For more information about the format look at {link}')
             raise DashboardException(msg=msg, component='rgw')
+
+    def get_role(self, role_name: str):
+        rgw_get_role_command = ['role', 'get', '--role-name', role_name]
+        code, role, _err = mgr.send_rgwadmin_command(rgw_get_role_command)
+        if code != 0:
+            raise DashboardException(msg=f'Error getting role with code {code}: {_err}',
+                                     component='rgw')
+        return role
+
+    def update_role(self, role_name: str, max_session_duration: str):
+        rgw_update_role_command = ['role', 'update', '--role-name',
+                                   role_name, '--max_session_duration', max_session_duration]
+        code, _, _err = mgr.send_rgwadmin_command(rgw_update_role_command,
+                                                  stdout_as_json=False)
+        if code != 0:
+            raise DashboardException(msg=f'Error updating role with code {code}: {_err}',
+                                     component='rgw')
+
+    def delete_role(self, role_name: str) -> None:
+        rgw_delete_role_command = ['role', 'delete', '--role-name', role_name]
+        code, _, _err = mgr.send_rgwadmin_command(rgw_delete_role_command,
+                                                  stdout_as_json=False)
+        if code != 0:
+            raise DashboardException(msg=f'Error deleting role with code {code}: {_err}',
+                                     component='rgw')
+
+    @RestClient.api_get('/{bucket_name}?policy')
+    def get_bucket_policy(self, bucket_name: str, request=None):
+        """
+        Gets the bucket policy for a bucket.
+        :param bucket_name: The name of the bucket.
+        :type bucket_name: str
+        :rtype: None
+        """
+        # pylint: disable=unused-argument
+
+        try:
+            request = request()
+            return request
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get(
+                        'Code') == 'NoSuchBucketPolicy':
+                    return None
+            raise e
 
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:
@@ -1534,7 +1604,7 @@ class RgwMultisite:
         try:
             exit_code, out, _ = mgr.send_rgwadmin_command(rgw_multisite_sync_status_cmd, False)
             if exit_code > 0:
-                raise DashboardException('Unable to get multisite sync status',
+                raise DashboardException('Unable to get sync status',
                                          http_status_code=500, component='rgw')
             if out:
                 return self.process_data(out)
@@ -1544,8 +1614,10 @@ class RgwMultisite:
 
     def process_data(self, data):
         primary_zone_data, metadata_sync_data = self.extract_metadata_and_primary_zone_data(data)
-        datasync_info = self.extract_datasync_info(data)
-        replica_zones_info = [self.extract_replica_zone_data(item) for item in datasync_info]
+        replica_zones_info = []
+        if metadata_sync_data != {}:
+            datasync_info = self.extract_datasync_info(data)
+            replica_zones_info = [self.extract_replica_zone_data(item) for item in datasync_info]
 
         replica_zones_info_object = {
             'metadataSyncInfo': metadata_sync_data,
@@ -1564,7 +1636,10 @@ class RgwMultisite:
         zone = self.get_primary_zonedata(primary_zone_tree[2])
 
         primary_zone_data = [realm, zonegroup, zone]
-        metadata_sync_data = self.extract_metadata_sync_data(metadata_sync_infoormation)
+        zonegroup_info = self.get_zonegroup(zonegroup)
+        metadata_sync_data = {}
+        if len(zonegroup_info['zones']) > 1:
+            metadata_sync_data = self.extract_metadata_sync_data(metadata_sync_infoormation)
 
         return primary_zone_data, metadata_sync_data
 
@@ -1582,25 +1657,17 @@ class RgwMultisite:
 
         metadata_sync_data = {}
         metadata_sync_info_array = metadata_sync_info.split('\n') if metadata_sync_info else []
-        metadata_sync_data['syncstatus'] = metadata_sync_info_array[1].strip() if len(metadata_sync_info_array) > 1 else None  # noqa E501  #pylint: disable=line-too-long
+        metadata_sync_data['syncstatus'] = metadata_sync_info_array[0].strip() if len(metadata_sync_info_array) > 0 else None  # noqa E501  #pylint: disable=line-too-long
 
         for item in metadata_sync_info_array:
             self.extract_metadata_sync_info(metadata_sync_data, item)
 
-        metadata_sync_data['totalShards'] = metadata_sync_data['incrementalSync'][1] if len(metadata_sync_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
-        metadata_sync_data['usedShards'] = int(metadata_sync_data['incrementalSync'][1]) - int(metadata_sync_data['behindShards'])  # noqa E501  #pylint: disable=line-too-long
+        metadata_sync_data['fullSyncStatus'] = metadata_sync_info_array
         return metadata_sync_data
 
     def extract_metadata_sync_info(self, metadata_sync_data, item):
-        if 'full sync' in item and item.endswith('shards'):
-            metadata_sync_data['fullSync'] = self.get_shards_info(item.strip()).split('/')
-        elif 'incremental sync' in item:
-            metadata_sync_data['incrementalSync'] = self.get_shards_info(item.strip()).split('/')
-        elif 'data is behind' in item or 'data is caught up' in item:
-            metadata_sync_data['dataSyncStatus'] = item.strip()
-
-            if 'data is behind' in item:
-                metadata_sync_data['behindShards'] = self.get_behind_shards(item)
+        if 'oldest incremental change not applied:' in item:
+            metadata_sync_data['timestamp'] = item.split('applied:')[1].split()[0].strip()
 
     def extract_datasync_info(self, data):
         metadata_sync_infoormation = data.split('metadata sync')[1] if 'metadata sync' in data else None  # noqa E501  #pylint: disable=line-too-long
@@ -1618,15 +1685,6 @@ class RgwMultisite:
         replica_zone_data['fullSyncStatus'] = datasync_info_array
         for item in datasync_info_array:
             self.extract_metadata_sync_info(replica_zone_data, item)
-
-        if 'incrementalSync' in replica_zone_data:
-            replica_zone_data['totalShards'] = int(replica_zone_data['incrementalSync'][1]) if len(replica_zone_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
-
-            if 'behindShards' in replica_zone_data:
-                replica_zone_data['usedShards'] = (int(replica_zone_data['incrementalSync'][1]) - int(replica_zone_data['behindShards'])) if len(replica_zone_data['incrementalSync']) > 1 else 0  # noqa E501  #pylint: disable=line-too-long
-            else:
-                replica_zone_data['usedShards'] = replica_zone_data['totalShards']
-
         return replica_zone_data
 
     def get_primary_zonedata(self, data):
@@ -1637,21 +1695,3 @@ class RgwMultisite:
             return match.group(1)
 
         return ''
-
-    def get_shards_info(self, data):
-        regex = r'\d+/\d+'
-        match = re.search(regex, data)
-
-        if match:
-            return match.group(0)
-
-        return None
-
-    def get_behind_shards(self, data):
-        regex = r'on\s+(\d+)\s+shards'
-        match = re.search(regex, data, re.IGNORECASE)
-
-        if match:
-            return match.group(1)
-
-        return None

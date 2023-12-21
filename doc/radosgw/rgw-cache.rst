@@ -90,7 +90,8 @@ $ sudo ln -sf /usr/local/openresty/bin/openresty /usr/bin/nginx
 
 Put in-place your Nginx configuration files and edit them according to your environment:
 
-All Nginx conf files are under: https://github.com/ceph/ceph/tree/main/examples/rgw/rgw-cache
+All Nginx conf files are under:
+https://github.com/ceph/ceph/tree/main/examples/rgw/rgw-cache
 
 `nginx.conf` should go to `/etc/nginx/nginx.conf`
 

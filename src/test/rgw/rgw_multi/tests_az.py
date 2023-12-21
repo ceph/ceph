@@ -192,7 +192,7 @@ def test_az_create_empty_bucket():
 
 
 def test_az_check_empty_bucket_versioning():
-     """ test bucket vesioning with empty bucket """
+     """ test bucket versioning with empty bucket """
      zones, az_zones = init_env()
      bucket_name = gen_bucket_name()
      # create bucket on the non archive zone

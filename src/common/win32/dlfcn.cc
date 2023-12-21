@@ -25,11 +25,11 @@ void* dlopen(const char *filename, int flags) {
 
 int dlclose(void* handle) {
   //FreeLibrary returns 0 on error, as opposed to dlclose.
-  return !FreeLibrary(handle);
+  return !FreeLibrary((HMODULE)handle);
 }
 
 void* dlsym(void* handle, const char* symbol) {
-  return (void*)GetProcAddress(handle, symbol);
+  return (void*)GetProcAddress((HMODULE)handle, symbol);
 }
 
 dl_errmsg_t dlerror() {

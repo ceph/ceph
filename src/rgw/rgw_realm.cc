@@ -64,7 +64,7 @@ int RGWRealm::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclu
   RGWPeriod period;
   if (current_period.empty()) {
     /* create new period for the realm */
-    ret = period.init(dpp, cct, sysobj_svc, id, y, name, false);
+    ret = period.init(dpp, cct, sysobj_svc, id, y, false);
     if (ret < 0 ) {
       return ret;
     }
@@ -75,7 +75,7 @@ int RGWRealm::create(const DoutPrefixProvider *dpp, optional_yield y, bool exclu
     }
   } else {
     period = RGWPeriod(current_period, 0);
-    int ret = period.init(dpp, cct, sysobj_svc, id, y, name);
+    int ret = period.init(dpp, cct, sysobj_svc, id, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "ERROR: failed to init period " << current_period << dendl;
       return ret;
@@ -228,7 +228,7 @@ int RGWRealm::find_zone(const DoutPrefixProvider *dpp,
   epoch_t epoch = 0;
 
   RGWPeriod period(period_id, epoch);
-  int r = period.init(dpp, cct, sysobj_svc, get_id(), y, get_name());
+  int r = period.init(dpp, cct, sysobj_svc, get_id(), y);
   if (r < 0) {
     ldpp_dout(dpp, 0) << "WARNING: period init failed: " << cpp_strerror(-r) << " ... skipping" << dendl;
     return r;

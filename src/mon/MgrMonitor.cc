@@ -779,7 +779,7 @@ void MgrMonitor::tick()
   const auto mgr_tick_period =
       g_conf().get_val<std::chrono::seconds>("mgr_tick_period");
 
-  if (last_tick != ceph::coarse_mono_clock::time_point::min()
+  if (last_tick != ceph::coarse_mono_clock::zero()
       && (now - last_tick > (mgr_beacon_grace - mgr_tick_period))) {
     // This case handles either local slowness (calls being delayed
     // for whatever reason) or cluster election slowness (a long gap
@@ -1321,7 +1321,7 @@ out:
 
   if (r >= 0) {
     // success.. delay reply
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
+    wait_for_commit(op, new Monitor::C_Command(mon, op, r, rs,
 					      get_last_committed() + 1));
   } else {
     // reply immediately

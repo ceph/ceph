@@ -342,6 +342,7 @@ namespace librbd {
     ObjectMap<ImageCtx> *create_object_map(uint64_t snap_id);
     Journal<ImageCtx> *create_journal();
 
+    uint64_t get_data_offset() const;
     void set_image_name(const std::string &name);
 
     void notify_update();
