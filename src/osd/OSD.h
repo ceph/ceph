@@ -1674,6 +1674,9 @@ protected:
   friend struct send_map_on_destruct;
 
   void handle_osd_map(class MOSDMap *m);
+  void track_pools_and_pg_num_changes(const std::map<epoch_t,OSDMapRef>& added_maps,
+                                      ObjectStore::Transaction& t,
+                                      epoch_t last);
   void _committed_osd_maps(epoch_t first, epoch_t last, class MOSDMap *m);
   void trim_maps(epoch_t oldest);
   void note_down_osd(int osd);

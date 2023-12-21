@@ -8262,7 +8262,64 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.clean_thru = last;
   }
 
-  // check for pg_num changes and deleted pools
+  track_pools_and_pg_num_changes(added_maps, t, last);
+
+  {
+    bufferlist bl;
+    ::encode(pg_num_history, bl);
+    auto oid = make_pg_num_history_oid();
+    t.truncate(coll_t::meta(), oid, 0); // we don't need bytes left if new data
+                                        // block is shorter than the previous
+                                        // one. And better to trim them, e.g.
+                                        // this allows to avoid csum eroors
+                                        // when issuing overwrite
+                                        // (which happens to be partial)
+                                        // and original data is corrupted.
+                                        // Another side effect is that the
+                                        // superblock is not permanently
+                                        // anchored to a fixed disk location
+                                        // any more.
+    t.write(coll_t::meta(), oid, 0, bl.length(), bl);
+    dout(20) << __func__ << " pg_num_history " << pg_num_history << dendl;
+  }
+
+  // record new purged_snaps
+  if (superblock.purged_snaps_last == start - 1) {
+    OSDriver osdriver{store.get(), service.meta_ch, make_purged_snaps_oid()};
+    SnapMapper::record_purged_snaps(
+      cct,
+      osdriver,
+      osdriver.get_transaction(&t),
+      purged_snaps);
+    superblock.purged_snaps_last = last;
+  } else {
+    dout(10) << __func__ << " superblock purged_snaps_last is "
+	     << superblock.purged_snaps_last
+	     << ", not recording new purged_snaps" << dendl;
+  }
+
+  // superblock and commit
+  write_superblock(cct, superblock, t);
+  t.register_on_commit(new C_OnMapCommit(this, start, last, m));
+  store->queue_transaction(
+    service.meta_ch,
+    std::move(t));
+  service.publish_superblock(superblock);
+}
+
+/*
+ *  For each added map which was sent in this MOSDMap [first, last]:
+ *
+ *  1) Check if a pool was deleted
+ *  2) For existing pools, check if pg_num was changed
+ *  3) Check if a pool was created
+ *
+ *  Track all of the changes above in pg_num_history
+ */
+void OSD::track_pools_and_pg_num_changes(const map<epoch_t,OSDMapRef>& added_maps,
+                                         ObjectStore::Transaction& t,
+                                         epoch_t last)
+{
   OSDMapRef lastmap;
   for (auto& [added_map_epoch, added_map] : added_maps) {
     if (!lastmap) {
@@ -8310,47 +8367,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     lastmap = added_map;
   }
   pg_num_history.epoch = last;
-  {
-    bufferlist bl;
-    ::encode(pg_num_history, bl);
-    auto oid = make_pg_num_history_oid();
-    t.truncate(coll_t::meta(), oid, 0); // we don't need bytes left if new data
-                                        // block is shorter than the previous
-                                        // one. And better to trim them, e.g.
-                                        // this allows to avoid csum eroors
-                                        // when issuing overwrite
-                                        // (which happens to be partial)
-                                        // and original data is corrupted.
-                                        // Another side effect is that the
-                                        // superblock is not permanently
-                                        // anchored to a fixed disk location
-                                        // any more.
-    t.write(coll_t::meta(), oid, 0, bl.length(), bl);
-    dout(20) << __func__ << " pg_num_history " << pg_num_history << dendl;
-  }
-
-  // record new purged_snaps
-  if (superblock.purged_snaps_last == start - 1) {
-    OSDriver osdriver{store.get(), service.meta_ch, make_purged_snaps_oid()};
-    SnapMapper::record_purged_snaps(
-      cct,
-      osdriver,
-      osdriver.get_transaction(&t),
-      purged_snaps);
-    superblock.purged_snaps_last = last;
-  } else {
-    dout(10) << __func__ << " superblock purged_snaps_last is "
-	     << superblock.purged_snaps_last
-	     << ", not recording new purged_snaps" << dendl;
-  }
-
-  // superblock and commit
-  write_superblock(cct, superblock, t);
-  t.register_on_commit(new C_OnMapCommit(this, start, last, m));
-  store->queue_transaction(
-    service.meta_ch,
-    std::move(t));
-  service.publish_superblock(superblock);
 }
 
 void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
