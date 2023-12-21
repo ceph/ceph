@@ -332,6 +332,34 @@ class Driver {
                                 RGWObjVersionTracker* objv_tracker,
                                 optional_yield y,
                                 const DoutPrefixProvider* dpp) = 0;
+    /** Update the bucket-topic mapping in the store, if |add_mapping|=true then
+     * adding the |bucket_key| |topic| mapping to store, else delete the
+     * |bucket_key| |topic| mapping from the store.  The |bucket_key| is
+     * in the format |tenant_name + "/" + bucket_name| if tenant is not empty
+     * else |bucket_name|*/
+    virtual int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                            const std::string& bucket_key,
+                                            bool add_mapping,
+                                            optional_yield y,
+                                            const DoutPrefixProvider* dpp) = 0;
+    /** Remove the |bucket_key| from bucket-topic mapping in the store, for all
+    the topics under |bucket_topics|*/
+    virtual int remove_bucket_mapping_from_topics(
+        const rgw_pubsub_bucket_topics& bucket_topics,
+        const std::string& bucket_key,
+        optional_yield y,
+        const DoutPrefixProvider* dpp) = 0;
+    /** Get the bucket-topic mapping from the backend store. The |bucket_keys|
+     * are in the format |tenant_name + "/" + bucket_name| if tenant is not
+     * empty else |bucket_name|*/
+    virtual int get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                         std::set<std::string>& bucket_keys,
+                                         optional_yield y,
+                                         const DoutPrefixProvider* dpp) = 0;
+    /** Remove the bucket-topic mapping from the backend store. */
+    virtual int delete_bucket_topic_mapping(const rgw_pubsub_topic& topic,
+                                            optional_yield y,
+                                            const DoutPrefixProvider* dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
     /** Get access to the coroutine registry.  Used to create new coroutine managers */
