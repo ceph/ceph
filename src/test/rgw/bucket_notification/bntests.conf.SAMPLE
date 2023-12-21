@@ -1,6 +1,8 @@
 [DEFAULT]
 port = 8000
 host = localhost
+zonegroup = default
+cluster = noname
 
 [s3 main]
 access_key = 0555b35654ad1656d804
