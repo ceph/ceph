@@ -8264,50 +8264,50 @@ void OSD::handle_osd_map(MOSDMap *m)
 
   // check for pg_num changes and deleted pools
   OSDMapRef lastmap;
-  for (auto& i : added_maps) {
+  for (auto& [added_map_epoch, added_map] : added_maps) {
     if (!lastmap) {
-      if (!(lastmap = service.try_get_map(i.first - 1))) {
-        dout(10) << __func__ << " can't get previous map " << i.first - 1
+      if (!(lastmap = service.try_get_map(added_map_epoch - 1))) {
+        dout(10) << __func__ << " can't get previous map " << added_map_epoch - 1
                  << " probably first start of this osd" << dendl;
         continue;
       }
     }
-    ceph_assert(lastmap->get_epoch() + 1 == i.second->get_epoch());
-    for (auto& j : lastmap->get_pools()) {
-      if (!i.second->have_pg_pool(j.first)) {
-	pg_num_history.log_pool_delete(i.first, j.first);
+    ceph_assert(lastmap->get_epoch() + 1 == added_map->get_epoch());
+    for (auto& [pool_id, pg_pool] : lastmap->get_pools()) {
+      if (!added_map->have_pg_pool(pool_id)) {
+	pg_num_history.log_pool_delete(added_map_epoch, pool_id);
 	dout(10) << __func__ << " recording final pg_pool_t for pool "
-		 << j.first << dendl;
+		 << pool_id << dendl;
 	// this information is needed by _make_pg() if have to restart before
 	// the pool is deleted and need to instantiate a new (zombie) PG[Pool].
-	ghobject_t obj = make_final_pool_info_oid(j.first);
+	ghobject_t obj = make_final_pool_info_oid(pool_id);
 	bufferlist bl;
-	encode(j.second, bl, CEPH_FEATURES_ALL);
-	string name = lastmap->get_pool_name(j.first);
+	encode(pg_pool, bl, CEPH_FEATURES_ALL);
+	string name = lastmap->get_pool_name(pool_id);
 	encode(name, bl);
 	map<string,string> profile;
-	if (lastmap->get_pg_pool(j.first)->is_erasure()) {
+	if (lastmap->get_pg_pool(pool_id)->is_erasure()) {
 	  profile = lastmap->get_erasure_code_profile(
-	    lastmap->get_pg_pool(j.first)->erasure_code_profile);
+	    lastmap->get_pg_pool(pool_id)->erasure_code_profile);
 	}
 	encode(profile, bl);
 	t.write(coll_t::meta(), obj, 0, bl.length(), bl);
-      } else if (unsigned new_pg_num = i.second->get_pg_num(j.first);
-		 new_pg_num != j.second.get_pg_num()) {
-	dout(10) << __func__ << " recording pool " << j.first << " pg_num "
-		 << j.second.get_pg_num() << " -> " << new_pg_num << dendl;
-	pg_num_history.log_pg_num_change(i.first, j.first, new_pg_num);
+      } else if (unsigned new_pg_num = added_map->get_pg_num(pool_id);
+		 new_pg_num != pg_pool.get_pg_num()) {
+	dout(10) << __func__ << " recording pool " << pool_id << " pg_num "
+		 << pg_pool.get_pg_num() << " -> " << new_pg_num << dendl;
+	pg_num_history.log_pg_num_change(added_map_epoch, pool_id, new_pg_num);
       }
     }
-    for (auto& j : i.second->get_pools()) {
-      if (!lastmap->have_pg_pool(j.first)) {
-	dout(10) << __func__ << " recording new pool " << j.first << " pg_num "
-		 << j.second.get_pg_num() << dendl;
-	pg_num_history.log_pg_num_change(i.first, j.first,
-					 j.second.get_pg_num());
+    for (auto& [pool_id, pg_pool] : added_map->get_pools()) {
+      if (!lastmap->have_pg_pool(pool_id)) {
+	dout(10) << __func__ << " recording new pool " <<pool_id << " pg_num "
+		 << pg_pool.get_pg_num() << dendl;
+	pg_num_history.log_pg_num_change(added_map_epoch, pool_id,
+					 pg_pool.get_pg_num());
       }
     }
-    lastmap = i.second;
+    lastmap = added_map;
   }
   pg_num_history.epoch = last;
   {
