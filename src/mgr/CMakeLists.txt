@@ -32,6 +32,8 @@ if(WITH_MGR)
     PyOSDMap.cc
     StandbyPyModules.cc
     mgr_commands.cc
+    MgrOpRequest.cc
+    ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
     $<TARGET_OBJECTS:mgr_cap_obj>)
   add_executable(ceph-mgr ${mgr_srcs})
   target_compile_definitions(ceph-mgr PRIVATE PY_SSIZE_T_CLEAN)
@@ -50,5 +52,8 @@ if(WITH_MGR)
     ${GSSAPI_LIBRARIES})
   set_target_properties(ceph-mgr PROPERTIES
     POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+  if(WITH_LTTNG)
+    add_dependencies(ceph-mgr mgr_op_tp)
+  endif()
   install(TARGETS ceph-mgr DESTINATION bin)
 endif()
