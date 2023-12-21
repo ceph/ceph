@@ -81,13 +81,13 @@ public:
     ConnectionPipeline::AwaitActive::BlockingEvent,
     ConnectionPipeline::AwaitMap::BlockingEvent,
     OSD_OSDMapGate::OSDMapBlocker::BlockingEvent,
-    ConnectionPipeline::GetPG::BlockingEvent,
+    ConnectionPipeline::GetPGMapping::BlockingEvent,
+    PerShardPipeline::CreateOrWaitPG::BlockingEvent,
     PGMap::PGCreationBlockingEvent,
     CompletionEvent
   > tracking_events;
 
-  class instance_handle_t : public boost::intrusive_ref_counter<
-    instance_handle_t, boost::thread_unsafe_counter> {
+  class instance_handle_t : public boost::intrusive_ref_counter<instance_handle_t> {
   public:
     // intrusive_ptr because seastar::lw_shared_ptr includes a cpu debug check
     // that we will fail since the core on which we allocate the request may not
@@ -160,6 +160,20 @@ public:
   }
   auto get_instance_handle() { return instance_handle; }
 
+  std::set<snapid_t> snaps_need_to_recover() {
+    std::set<snapid_t> ret;
+    auto target = m->get_hobj();
+    if (!target.is_head()) {
+      ret.insert(target.snap);
+    }
+    for (auto &op : m->ops) {
+      if (op.op.op == CEPH_OSD_OP_ROLLBACK) {
+	ret.insert((snapid_t)op.op.snap.snapid);
+      }
+    }
+    return ret;
+  }
+
   using ordering_hook_t = boost::intrusive::list_member_hook<>;
   ordering_hook_t ordering_hook;
   class Orderer {
@@ -206,6 +220,14 @@ public:
   epoch_t get_epoch() const { return m->get_min_epoch(); }
 
   ConnectionPipeline &get_connection_pipeline();
+
+  PerShardPipeline &get_pershard_pipeline(ShardServices &);
+
+  crimson::net::Connection &get_connection() {
+    assert(conn);
+    return *conn;
+  };
+
   seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
     assert(conn);
     return conn.get_foreign(

@@ -12,6 +12,7 @@ import socket
 import time
 import logging
 import sys
+from ipaddress import ip_address
 from threading import Lock, Condition, Event
 from typing import no_type_check, NewType
 import urllib
@@ -413,7 +414,9 @@ def test_port_allocation(addr: str, port: int) -> None:
     If no exception is raised, the port can be assumed available
     """
     try:
-        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        ip_version = ip_address(addr).version
+        addr_family = socket.AF_INET if ip_version == 4 else socket.AF_INET6
+        sock = socket.socket(addr_family, socket.SOCK_STREAM)
         sock.bind((addr, port))
         sock.close()
     except socket.error as e:

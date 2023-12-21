@@ -92,60 +92,6 @@ describe('RbdListComponent', () => {
     });
   });
 
-  describe('handling of provisioned columns', () => {
-    let rbdServiceListSpy: jasmine.Spy;
-
-    const images = [
-      {
-        name: 'img1',
-        pool_name: 'rbd',
-        features_name: ['layering', 'exclusive-lock'],
-        disk_usage: null,
-        total_disk_usage: null
-      },
-      {
-        name: 'img2',
-        pool_name: 'rbd',
-        features_name: ['layering', 'exclusive-lock', 'object-map', 'fast-diff'],
-        disk_usage: 1024,
-        total_disk_usage: 1024
-      }
-    ];
-
-    beforeEach(() => {
-      component.images = images;
-      refresh({ executing_tasks: [], finished_tasks: [] });
-      rbdServiceListSpy = spyOn(rbdService, 'list');
-    });
-
-    it('should display N/A for Provisioned & Total Provisioned columns if disk usage is null', () => {
-      rbdServiceListSpy.and.callFake(() =>
-        of([{ pool_name: 'rbd', value: images, headers: headers }])
-      );
-      fixture.detectChanges();
-      const spanWithoutFastDiff = fixture.debugElement.nativeElement.querySelectorAll(
-        '.datatable-body-cell-label span'
-      );
-      // check image with disk usage = null & fast-diff disabled
-      expect(spanWithoutFastDiff[6].textContent).toBe('N/A');
-
-      images[0]['features_name'] = ['layering', 'exclusive-lock', 'object-map', 'fast-diff'];
-      component.images = images;
-      refresh({ executing_tasks: [], finished_tasks: [] });
-
-      rbdServiceListSpy.and.callFake(() =>
-        of([{ pool_name: 'rbd', value: images, headers: headers }])
-      );
-      fixture.detectChanges();
-
-      const spanWithFastDiff = fixture.debugElement.nativeElement.querySelectorAll(
-        '.datatable-body-cell-label span'
-      );
-      // check image with disk usage = null & fast-diff changed to enabled
-      expect(spanWithFastDiff[6].textContent).toBe('-');
-    });
-  });
-
   describe('handling of deletion', () => {
     beforeEach(() => {
       fixture.detectChanges();

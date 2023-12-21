@@ -502,8 +502,8 @@ CREATE TABLE DeviceHealthMetrics (
 
     def put_device_metrics(self, devid: str, data: Any) -> None:
         SQL = """
-        INSERT INTO DeviceHealthMetrics (devid, raw_smart)
-            VALUES (?, ?);
+        INSERT OR REPLACE INTO DeviceHealthMetrics (devid, raw_smart, time)
+            VALUES (?, ?, strftime('%s', 'now'));
         """
 
         with self._db_lock, self.db:

@@ -216,6 +216,7 @@ struct OSDCapGrant {
                   std::vector<bool>* class_allowed) const;
 
   void expand_profile();
+  std::string to_string();
 };
 
 ostream& operator<<(ostream& out, const OSDCapGrant& g);
@@ -230,6 +231,8 @@ struct OSDCap {
   bool allow_all() const;
   void set_allow_all();
   bool parse(const std::string& str, ostream *err=NULL);
+  bool merge(OSDCap newcap);
+  std::string to_string();
 
   /**
    * check if we are capable of something

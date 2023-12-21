@@ -63,23 +63,6 @@ void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_
   lock_info(ioctx, oid, name, lockers, NULL, NULL);
 }
 
-bool lock_expired(IoCtx *ioctx, string& oid, string& name)
-{
-  ClsLockType lock_type = ClsLockType::NONE;
-  string tag;
-  map<locker_id_t, locker_info_t> lockers;
-  if (0 == get_lock_info(ioctx, oid, name, &lockers, &lock_type, &tag))
-    return false;
-  utime_t now = ceph_clock_now();
-  map<locker_id_t, locker_info_t>::iterator liter;
-  for (liter = lockers.begin(); liter != lockers.end(); ++liter) {
-    if (liter->second.expiration > now)
-      return false;
-  }
-
-  return true;
-}
-
 TEST(ClsLock, TestMultiLocking) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
@@ -315,6 +298,7 @@ TEST(ClsLock, TestLockDuration) {
     ASSERT_EQ(-EEXIST, r);
   }
 
+  // coverity[store_truncates_time_t:SUPPRESS]
   sleep(dur.sec());
   ASSERT_EQ(0, l.lock_exclusive(&ioctx, oid));
 
@@ -493,7 +477,7 @@ TEST(ClsLock, TestExclusiveEphemeralBasic) {
   string lock_name2 = "mylock2";
 
   Lock l1(lock_name1);
-  l1.set_duration(utime_t(5, 0));
+  l1.set_duration(utime_t(300, 0));
 
   uint64_t size;
   time_t mod_time;
@@ -502,23 +486,18 @@ TEST(ClsLock, TestExclusiveEphemeralBasic) {
   ASSERT_EQ(0, l1.lock_exclusive_ephemeral(&ioctx, oid1));
   ASSERT_EQ(0, ioctx.stat(oid1, &size, &mod_time));
   sleep(2);
-  int r1 = l1.unlock(&ioctx, oid1);
-  EXPECT_TRUE(r1 == 0 || ((r1 == -ENOENT) && (lock_expired(&ioctx, oid1, lock_name1))))
-    << "unlock should return 0 or -ENOENT return: " << r1;
+  ASSERT_EQ(0, l1.unlock(&ioctx, oid1));
   ASSERT_EQ(-ENOENT, ioctx.stat(oid1, &size, &mod_time));
 
   // ***********************************************
 
   Lock l2(lock_name2);
-  utime_t lock_duration2(5, 0);
-  l2.set_duration(utime_t(5, 0));
+  l2.set_duration(utime_t(300, 0));
 
   ASSERT_EQ(0, l2.lock_exclusive(&ioctx, oid2));
   ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
   sleep(2);
-  int r2 = l2.unlock(&ioctx, oid2);
-  EXPECT_TRUE(r2 == 0 || ((r2 == -ENOENT) && (lock_expired(&ioctx, oid2, lock_name2))))
-    << "unlock should return 0 or -ENOENT return: " << r2;
+  ASSERT_EQ(0, l2.unlock(&ioctx, oid2));
   ASSERT_EQ(0, ioctx.stat(oid2, &size, &mod_time));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));

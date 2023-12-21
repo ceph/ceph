@@ -116,7 +116,7 @@ def task(ctx, config):
         if role == "all":
             continue
 
-        assert 'client' in role
+        assert 'client' in role, f"unexpected client name: {role}"
         created_mnt_dir = _make_scratch_dir(ctx, role, config.get('subdir'))
         created_mountpoint[role] = created_mnt_dir
 
@@ -421,11 +421,21 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                         workunit=workunit,
                     ),
                 ])
-                remote.run(
-                    logger=log.getChild(role),
-                    args=args + optional_args,
-                    label="workunit test {workunit}".format(workunit=workunit)
-                )
+                if 'unit_test_scan' in optional_args:
+                    optional_args.remove('unit_test_scan')
+                    remote.run_unit_test(
+                        logger=log.getChild(role),
+                        args=args + optional_args,
+                        label="workunit test {workunit}".format(workunit=workunit),
+                        xml_path_regex=f'{testdir}/archive/gtest_xml_report-*.xml',
+                        output_yaml=os.path.join(ctx.archive, 'unit_test_summary.yaml'),
+                    )
+                else:
+                    remote.run(
+                        logger=log.getChild(role),
+                        args=args + optional_args,
+                        label="workunit test {workunit}".format(workunit=workunit)
+                    )
                 if cleanup:
                     args=['sudo', 'rm', '-rf', '--', scratch_tmp]
                     remote.run(logger=log.getChild(role), args=args, timeout=(60*60))

@@ -178,6 +178,7 @@ TransactionManager::close_ertr::future<> TransactionManager::close() {
   });
 }
 
+#ifdef UNIT_TESTS_BUILT
 TransactionManager::ref_ret TransactionManager::inc_ref(
   Transaction &t,
   LogicalCachedExtentRef &ref)
@@ -209,12 +210,13 @@ TransactionManager::ref_ret TransactionManager::inc_ref(
     return result.refcount;
   });
 }
+#endif
 
-TransactionManager::ref_ret TransactionManager::dec_ref(
+TransactionManager::ref_ret TransactionManager::remove(
   Transaction &t,
   LogicalCachedExtentRef &ref)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   TRACET("{}", t, *ref);
   return lba_manager->decref_extent(t, ref->get_laddr(), true
   ).si_then([this, FNAME, &t, ref](auto result) {
@@ -253,17 +255,17 @@ TransactionManager::ref_ret TransactionManager::_dec_ref(
   });
 }
 
-TransactionManager::refs_ret TransactionManager::dec_ref(
+TransactionManager::refs_ret TransactionManager::remove(
   Transaction &t,
   std::vector<laddr_t> offsets)
 {
-  LOG_PREFIX(TransactionManager::dec_ref);
+  LOG_PREFIX(TransactionManager::remove);
   DEBUG("{} offsets", offsets.size());
   return seastar::do_with(std::move(offsets), std::vector<unsigned>(),
       [this, &t] (auto &&offsets, auto &refcnt) {
       return trans_intr::do_for_each(offsets.begin(), offsets.end(),
         [this, &t, &refcnt] (auto &laddr) {
-        return this->dec_ref(t, laddr).si_then([&refcnt] (auto ref) {
+        return this->remove(t, laddr).si_then([&refcnt] (auto ref) {
           refcnt.push_back(ref);
           return ref_iertr::now();
         });

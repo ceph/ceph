@@ -15,6 +15,11 @@
 # GNU Library Public License for more details.
 #
 
+
+# 30.11.2023: the test is now disabled, as the reservation mechanism has been
+# thoroughly reworked and the test is no longer valid.  The test is left here
+# as a basis for a new set of primary vs. replicas scrub activation tests.
+
 source $CEPH_ROOT/qa/standalone/ceph-helpers.sh
 
 MAX_SCRUBS=4
@@ -22,6 +27,8 @@ SCRUB_SLEEP=3
 POOL_SIZE=3
 
 function run() {
+    echo "This test is disabled"
+    return 0
     local dir=$1
     shift
     local CHUNK_MAX=5
@@ -123,7 +130,7 @@ function TEST_recover_unexpected() {
 	for o in $(seq 0 $(expr $OSDS - 1))
 	do
 		CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations
-		scrubs=$(CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations | jq '.scrubs_local + .scrubs_remote')
+		scrubs=$(CEPH_ARGS='' ceph daemon $(get_asok_path osd.$o) dump_scrub_reservations | jq '.scrubs_local + .granted_reservations')
 		if [ $scrubs -gt $MAX_SCRUBS ]; then
 		    echo "ERROR: More than $MAX_SCRUBS currently reserved"
 		    return 1

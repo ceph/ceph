@@ -20,9 +20,9 @@
 
 #include "svc_meta_be.h"
 #include "svc_user.h"
-#include "rgw_bucket.h"
 
-class RGWSI_RADOS;
+#include "driver/rados/rgw_bucket.h" // FIXME: subclass dependency
+
 class RGWSI_Zone;
 class RGWSI_SysObj;
 class RGWSI_SysObj_Cache;
@@ -33,7 +33,6 @@ class RGWSI_MetaBackend_Handler;
 struct rgw_cache_entry_info;
 
 class RGWGetUserHeader_CB;
-class RGWGetUserStats_CB;
 
 template <class T>
 class RGWChainedCacheImpl;
@@ -96,9 +95,10 @@ class RGWSI_User_RADOS : public RGWSI_User
 
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
 public:
+  librados::Rados* rados{nullptr};
+
   struct Svc {
     RGWSI_User_RADOS *user{nullptr};
-    RGWSI_RADOS *rados{nullptr};
     RGWSI_Zone *zone{nullptr};
     RGWSI_SysObj *sysobj{nullptr};
     RGWSI_SysObj_Cache *cache{nullptr};
@@ -110,7 +110,7 @@ public:
   RGWSI_User_RADOS(CephContext *cct);
   ~RGWSI_User_RADOS();
 
-  void init(RGWSI_RADOS *_rados_svc,
+  void init(librados::Rados* rados_,
             RGWSI_Zone *_zone_svc, RGWSI_SysObj *_sysobj_svc,
 	    RGWSI_SysObj_Cache *_cache_svc, RGWSI_Meta *_meta_svc,
             RGWSI_MetaBackend *_meta_be_svc,
@@ -206,6 +206,6 @@ public:
                  optional_yield y) override;  /* last time a stats update was done */
 
   int read_stats_async(const DoutPrefixProvider *dpp, const rgw_user& user,
-                       RGWGetUserStats_CB *cb) override;
+                       boost::intrusive_ptr<rgw::sal::ReadStatsCB> cb) override;
 };
 

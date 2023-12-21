@@ -1,5 +1,7 @@
 overrides:
   ceph:
+    log-ignorelist:
+    - \(POOL_APP_NOT_ENABLED\)
     conf:
       global:
         enable experimental unrecoverable data corrupting features: crimson

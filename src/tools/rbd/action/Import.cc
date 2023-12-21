@@ -526,8 +526,9 @@ int execute_diff(const po::variables_map &vm,
 }
 
 Shell::Action action_diff(
-  {"import-diff"}, {}, "Import an incremental diff.", "", &get_arguments_diff,
-  &execute_diff);
+  {"import-diff"}, {},
+  "Apply an incremental diff to image HEAD, then create a snapshot.", "",
+  &get_arguments_diff, &execute_diff);
 
 class C_Import : public Context {
 public:

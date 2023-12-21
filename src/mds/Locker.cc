@@ -3097,7 +3097,7 @@ void Locker::handle_client_caps(const cref_t<MClientCaps> &m)
   snapid_t follows = m->get_snap_follows();
   auto op = m->get_op();
   auto dirty = m->get_dirty();
-  dout(7) << "handle_client_caps "
+  dout(7) << "handle_client_caps"
 	  << " on " << m->get_ino()
 	  << " tid " << m->get_client_tid() << " follows " << follows
 	  << " op " << ceph_cap_op_name(op)
@@ -3885,13 +3885,6 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
 
   if (!dirty && !change_max)
     return false;
-
-  Session *session = mds->get_session(m);
-  if (session->check_access(in, MAY_WRITE,
-			    m->caller_uid, m->caller_gid, NULL, 0, 0) < 0) {
-    dout(10) << "check_access failed, dropping cap update on " << *in << dendl;
-    return false;
-  }
 
   // do the update.
   EUpdate *le = new EUpdate(mds->mdlog, "cap update");

@@ -6,7 +6,7 @@
 #define RGW_CLASS "rgw"
 
 /* Special error code returned by cls bucket list operation if it was
- * unable to skip past enough not visibile entries to return any
+ * unable to skip past enough not visible entries to return any
  * entries in the call. */
 constexpr int RGWBIAdvanceAndRetryError = -EFBIG;
 

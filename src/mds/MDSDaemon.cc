@@ -157,6 +157,7 @@ void MDSDaemon::asok_command(
 		    // our response before seeing us disappear from mdsmap
 		    sleep(1);
 		    std::lock_guard l(mds_lock);
+                    derr << "Exiting due to admin socket command" << dendl;
 		    suicide();
 		  });
     t.detach();
@@ -754,7 +755,7 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
        * immediately be assigned a rank).
        */
       if (old_state == DS::STATE_NULL) {
-        dout(1) << "Monitors have assigned me to become a standby." << dendl;
+        dout(1) << "Monitors have assigned me to become a standby" << dendl;
         beacon.set_want_state(*mdsmap, new_state);
       } else if (old_state == DS::STATE_STANDBY) {
         dout(5) << "I am still standby" << dendl;
@@ -1087,7 +1088,7 @@ bool MDSDaemon::parse_caps(const AuthCapsInfo& info, MDSAuthCaps& caps)
   }
 }
 
-int MDSDaemon::ms_handle_authentication(Connection *con)
+int MDSDaemon::ms_handle_fast_authentication(Connection *con)
 {
   /* N.B. without mds_lock! */
   MDSAuthCaps caps;

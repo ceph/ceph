@@ -385,6 +385,32 @@
           </div>
         </fieldset>
 
+        <!-- Tags -->
+        <legend class="cd-header"
+                i18n>Tags
+          <cd-helper>Tagging gives you a way to categorize storage</cd-helper>
+        </legend>
+        <span *ngFor="let tag of tags; let i=index;">
+          <ng-container *ngTemplateOutlet="tagTpl; context:{index: i, tag: tag}"></ng-container>
+        </span>
+
+        <div class="row">
+          <div class="col-12">
+            <strong *ngIf="tags.length > 19"
+                    class="text-warning"
+                    i18n>Maximum of 20 tags reached</strong>
+            <button type="button"
+                    id="add-tag"
+                    class="btn btn-light float-end my-3"
+                    [disabled]="tags.length > 19"
+                    (click)="showTagModal()">
+              <i [ngClass]="[icons.add]"></i>
+              <ng-container i18n>Add tag</ng-container>
+            </button>
+          </div>
+        </div>
+
+
       </div>
       <div class="card-footer">
         <cd-form-button-panel (submitActionEvent)="submit()"
@@ -395,3 +421,37 @@
     </div>
   </form>
 </div>
+
+<ng-template #tagTpl
+             let-tag="tag"
+             let-index="index">
+  <div class="input-group my-2">
+    <ng-container *ngFor="let config of tagConfig">
+      <input type="text"
+             id="tag-{{config.attribute}}-{{index}}"
+             class="form-control"
+             [ngbTooltip]="config.attribute"
+             [value]="tag[config.attribute]"
+             disabled
+             readonly>
+    </ng-container>
+
+    <!-- Tag actions -->
+    <button type="button"
+            class="btn btn-light"
+            id="tag-edit-{{index}}"
+            i18n-ngbTooltip
+            ngbTooltip="Edit"
+            (click)="showTagModal(index)">
+      <i [ngClass]="[icons.edit]"></i>
+    </button>
+    <button type="button"
+            class="btn btn-light"
+            id="tag-delete-{{index}}"
+            i18n-ngbTooltip
+            ngbTooltip="Delete"
+            (click)="deleteTag(index)">
+      <i [ngClass]="[icons.trash]"></i>
+    </button>
+  </div>
+</ng-template>

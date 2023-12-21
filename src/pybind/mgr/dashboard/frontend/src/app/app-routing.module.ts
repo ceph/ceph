@@ -124,7 +124,7 @@ const routes: Routes = [
         path: 'ceph-users',
         component: CRUDTableComponent,
         data: {
-          breadcrumbs: 'Cluster/Ceph Users',
+          breadcrumbs: 'Administration/Ceph Users',
           resource: 'api.cluster.user@1.0'
         }
       },
@@ -132,7 +132,7 @@ const routes: Routes = [
         path: 'cluster/user/create',
         component: CrudFormComponent,
         data: {
-          breadcrumbs: 'Cluster/Ceph Users/Create',
+          breadcrumbs: 'Administration/Ceph Users/Create',
           resource: 'api.cluster.user@1.0'
         }
       },
@@ -140,7 +140,7 @@ const routes: Routes = [
         path: 'cluster/user/import',
         component: CrudFormComponent,
         data: {
-          breadcrumbs: 'Cluster/Ceph Users/Import',
+          breadcrumbs: 'Administration/Ceph Users/Import',
           resource: 'api.cluster.user@1.0'
         }
       },
@@ -148,7 +148,7 @@ const routes: Routes = [
         path: 'cluster/user/edit',
         component: CrudFormComponent,
         data: {
-          breadcrumbs: 'Cluster/Ceph Users/Edit',
+          breadcrumbs: 'Administration/Ceph Users/Edit',
           resource: 'api.cluster.user@1.0'
         }
       },
@@ -169,7 +169,7 @@ const routes: Routes = [
             section_info: 'Orchestrator',
             header: 'Orchestrator is not available'
           },
-          breadcrumbs: 'Cluster/Services'
+          breadcrumbs: 'Administration/Services'
         },
         children: [
           {
@@ -213,7 +213,7 @@ const routes: Routes = [
       },
       {
         path: 'configuration',
-        data: { breadcrumbs: 'Cluster/Configuration' },
+        data: { breadcrumbs: 'Administration/Configuration' },
         children: [
           { path: '', component: ConfigurationComponent },
           {
@@ -231,7 +231,7 @@ const routes: Routes = [
       {
         path: 'logs',
         component: LogsComponent,
-        data: { breadcrumbs: 'Cluster/Logs' }
+        data: { breadcrumbs: 'Observability/Logs' }
       },
       {
         path: 'telemetry',
@@ -240,7 +240,7 @@ const routes: Routes = [
       },
       {
         path: 'monitoring',
-        data: { breadcrumbs: 'Cluster/Alerts' },
+        data: { breadcrumbs: 'Observability/Alerts' },
         children: [
           { path: '', redirectTo: 'active-alerts', pathMatch: 'full' },
           {
@@ -297,7 +297,7 @@ const routes: Routes = [
             section_info: 'Orchestrator',
             header: 'Orchestrator is not available'
           },
-          breadcrumbs: 'Cluster/Upgrade'
+          breadcrumbs: 'Administration/Upgrade'
         },
         children: [
           {
@@ -321,7 +321,7 @@ const routes: Routes = [
       // Mgr modules
       {
         path: 'mgr-modules',
-        data: { breadcrumbs: 'Cluster/Manager Modules' },
+        data: { breadcrumbs: 'Administrator/Manager Modules' },
         children: [
           {
             path: '',
@@ -339,7 +339,7 @@ const routes: Routes = [
       // Pools
       {
         path: 'pool',
-        data: { breadcrumbs: 'Pools' },
+        data: { breadcrumbs: 'Cluster/Pools' },
         loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
       },
       // Block
@@ -352,13 +352,18 @@ const routes: Routes = [
       {
         path: 'cephfs',
         canActivate: [FeatureTogglesGuardService],
-        data: { breadcrumbs: 'File Systems' },
+        data: { breadcrumbs: 'File/File Systems' },
         children: [
           { path: '', component: CephfsListComponent },
           {
             path: URLVerbs.CREATE,
             component: CephfsVolumeFormComponent,
             data: { breadcrumbs: ActionLabels.CREATE }
+          },
+          {
+            path: `${URLVerbs.EDIT}/:id`,
+            component: CephfsVolumeFormComponent,
+            data: { breadcrumbs: ActionLabels.EDIT }
           }
         ]
       },
@@ -375,7 +380,7 @@ const routes: Routes = [
             header: 'The Object Gateway Service is not configured'
           },
           breadcrumbs: true,
-          text: 'Object Gateway',
+          text: 'Object',
           path: null
         },
         loadChildren: () => import('./ceph/rgw/rgw.module').then((m) => m.RoutedRgwModule)
@@ -452,8 +457,7 @@ const routes: Routes = [
   imports: [
     RouterModule.forRoot(routes, {
       useHash: true,
-      preloadingStrategy: PreloadAllModules,
-      relativeLinkResolution: 'legacy'
+      preloadingStrategy: PreloadAllModules
     })
   ],
   exports: [RouterModule],

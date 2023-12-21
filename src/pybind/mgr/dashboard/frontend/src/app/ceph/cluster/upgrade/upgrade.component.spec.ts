@@ -179,4 +179,52 @@ describe('UpgradeComponent', () => {
     const loading = fixture.debugElement.nativeElement.querySelector('#upgrade-status-error');
     expect(loading.textContent).toContain('Failed to retrieve');
   });
+
+  it('should show popover when health warning is present', () => {
+    const healthPayload: Record<string, any> = {
+      health: {
+        status: 'HEALTH_WARN',
+        checks: [
+          {
+            severity: 'HEALTH_WARN',
+            summary: { message: '1 pool(s) do not have an application enabled', count: 1 },
+            detail: [
+              { message: "application not enabled on pool 'scbench'" },
+              {
+                message:
+                  "use 'ceph osd pool application enable <pool-name> <app-name>', where <app-name> is 'cephfs', 'rbd', 'rgw', or freeform for custom applications."
+              }
+            ],
+            muted: false,
+            type: 'POOL_APP_NOT_ENABLED'
+          }
+        ],
+        mutes: []
+      }
+    };
+
+    getHealthSpy.and.returnValue(of(healthPayload));
+    component.ngOnInit();
+    fixture.detectChanges();
+
+    const popover = fixture.debugElement.nativeElement.querySelector(
+      '.info-card-content-clickable'
+    );
+    expect(popover).not.toBeNull();
+  });
+
+  it('should not show popover when health warning is not present', () => {
+    const healthPayload: Record<string, any> = {
+      health: {
+        status: 'HEALTH_OK'
+      }
+    };
+    getHealthSpy.and.returnValue(of(healthPayload));
+    component.ngOnInit();
+    fixture.detectChanges();
+    const popover = fixture.debugElement.nativeElement.querySelector(
+      '.info-card-content-clickable'
+    );
+    expect(popover).toBeNull();
+  });
 });

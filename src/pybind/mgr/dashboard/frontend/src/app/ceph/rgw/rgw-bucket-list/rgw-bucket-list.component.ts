@@ -41,7 +41,7 @@ export class RgwBucketListComponent extends ListWithDetails implements OnInit {
   columns: CdTableColumn[] = [];
   buckets: object[] = [];
   selection: CdTableSelection = new CdTableSelection();
-  staleTimeout: number;
+  declare staleTimeout: number;
 
   constructor(
     private authStorageService: AuthStorageService,

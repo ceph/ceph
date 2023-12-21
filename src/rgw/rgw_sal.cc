@@ -36,11 +36,11 @@
 #endif
 
 #ifdef WITH_RADOSGW_MOTR
-#include "rgw_sal_motr.h"
+#include "driver/motr/rgw_sal_motr.h"
 #endif
 
 #ifdef WITH_RADOSGW_DAOS
-#include "rgw_sal_daos.h"
+#include "driver/daos/rgw_sal_daos.h"
 #endif
 
 #define dout_subsys ceph_subsys_rgw
@@ -55,6 +55,9 @@ extern rgw::sal::Driver* newMotrStore(CephContext *cct);
 #endif
 #ifdef WITH_RADOSGW_DAOS
 extern rgw::sal::Driver* newDaosStore(CephContext *cct);
+#endif
+#ifdef WITH_RADOSGW_POSIX
+extern rgw::sal::Driver* newPOSIXDriver(rgw::sal::Driver* next);
 #endif
 extern rgw::sal::Driver* newBaseFilter(rgw::sal::Driver* next);
 #ifdef WITH_RADOSGW_D4N
@@ -198,7 +201,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
     ((rgw::sal::MotrStore *)driver)->init_metadata_cache(dpp, cct);
 
-    return store;
+    return driver;
   }
 #endif
 
@@ -217,6 +220,7 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   }
 #endif
+  ldpp_dout(dpp, 20) << "Filter name: " << cfg.filter_name << dendl;
 
   if (cfg.filter_name.compare("base") == 0) {
     rgw::sal::Driver* next = driver;
@@ -240,6 +244,19 @@ rgw::sal::Driver* DriverManager::init_storage_provider(const DoutPrefixProvider*
     }
   }
 #endif
+#ifdef WITH_RADOSGW_POSIX
+  else if (cfg.filter_name.compare("posix") == 0) {
+    rgw::sal::Driver* next = driver;
+    ldpp_dout(dpp, 20) << "Creating POSIX driver" << dendl;
+    driver = newPOSIXDriver(next);
+
+    if (driver->initialize(cct, dpp) < 0) {
+      delete driver;
+      delete next;
+      return nullptr;
+    }
+  }
+#endif
 
   return driver;
 }
@@ -253,6 +270,11 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
 
     rados->set_context(cct);
 
+    if (rados->init_rados() < 0) {
+      delete driver;
+      return nullptr;
+    }
+
     int ret = rados->init_svc(true, dpp);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: failed to init services (ret=" << cpp_strerror(-ret) << ")" << dendl;
@@ -260,10 +282,6 @@ rgw::sal::Driver* DriverManager::init_raw_storage_provider(const DoutPrefixProvi
       return nullptr;
     }
 
-    if (rados->init_rados() < 0) {
-      delete driver;
-      return nullptr;
-    }
     if (driver->initialize(cct, dpp) < 0) {
       delete driver;
       return nullptr;
@@ -365,6 +383,8 @@ DriverManager::Config DriverManager::get_config(bool admin, CephContext* cct)
   const auto& config_filter = g_conf().get_val<std::string>("rgw_filter");
   if (config_filter == "base") {
     cfg.filter_name = "base";
+  } else if (config_filter == "posix") {
+    cfg.filter_name = "posix";
   }
 #ifdef WITH_RADOSGW_D4N
   else if (config_filter == "d4n") {

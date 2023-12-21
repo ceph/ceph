@@ -827,8 +827,9 @@ static ceph::spinlock debug_lock;
   {
     length = std::min<size_t>(length, get_remaining());
     while (length > 0) {
-      const char *p;
+      const char *p = nullptr;
       size_t l = get_ptr_and_advance(length, &p);
+      ceph_assert(p);
       crc = ceph_crc32c(crc, (unsigned char*)p, l);
       length -= l;
     }

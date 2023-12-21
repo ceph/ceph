@@ -50,6 +50,9 @@ void usage(std::string_view cmdname)
 	    << std::endl;
 }
 
+// This has an uncaught exception. Even if the exception is caught, the program
+// would need to be terminated, so the warning is simply suppressed.
+// coverity[root_function:SUPPRESS]
 int main(int argc, const char** argv)
 {
   std::string_view cmdname = argv[0];
@@ -76,11 +79,6 @@ int main(int argc, const char** argv)
     } else {
       ++i;
     }
-  }
-
-  if (tenant.empty()) {
-    std::cerr << cmdname << ": must specify tenant name" << std::endl;
-    helpful_exit(cmdname);
   }
 
   bool success = true;

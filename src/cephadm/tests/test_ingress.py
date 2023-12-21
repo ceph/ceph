@@ -90,7 +90,7 @@ def test_haproxy_container_mounts():
             good_haproxy_json(),
             SAMPLE_HAPROXY_IMAGE,
         )
-        cmounts = hap.get_container_mounts("/var/tmp")
+        cmounts = hap._get_container_mounts("/var/tmp")
         assert len(cmounts) == 1
         assert cmounts["/var/tmp/haproxy"] == "/var/lib/haproxy"
 
@@ -166,9 +166,9 @@ def test_haproxy_extract_uid_gid_haproxy():
             good_haproxy_json(),
             SAMPLE_HAPROXY_IMAGE,
         )
-        with mock.patch("cephadm.CephContainer") as cc:
+        with mock.patch("cephadmlib.container_types.CephContainer") as cc:
             cc.return_value.run.return_value = "500 500"
-            uid, gid = hap.extract_uid_gid_haproxy()
+            uid, gid = hap.uid_gid(ctx)
             cc.return_value.run.assert_called()
         assert uid == 500
         assert gid == 500
@@ -244,7 +244,7 @@ def test_keepalived_container_mounts():
             good_keepalived_json(),
             SAMPLE_KEEPALIVED_IMAGE,
         )
-        cmounts = kad.get_container_mounts("/var/tmp")
+        cmounts = kad._get_container_mounts("/var/tmp")
         assert len(cmounts) == 1
         assert (
             cmounts["/var/tmp/keepalived.conf"]
@@ -329,9 +329,9 @@ def test_keepalived_extract_uid_gid_keepalived():
             good_keepalived_json(),
             SAMPLE_KEEPALIVED_IMAGE,
         )
-        with mock.patch("cephadm.CephContainer") as cc:
+        with mock.patch("cephadmlib.container_types.CephContainer") as cc:
             cc.return_value.run.return_value = "500 500"
-            uid, gid = kad.extract_uid_gid_keepalived()
+            uid, gid = kad.uid_gid(ctx)
             cc.return_value.run.assert_called()
         assert uid == 500
         assert gid == 500

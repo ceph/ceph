@@ -10,6 +10,13 @@
 namespace crimson::osd {
 
 struct CommonClientRequest {
+
+  static InterruptibleOperation::template interruptible_future<>
+  recover_missings(
+    Ref<PG> &pg,
+    const hobject_t& soid,
+    std::set<snapid_t> &&snaps);
+
   static InterruptibleOperation::template interruptible_future<>
   do_recover_missing(Ref<PG>& pg, const hobject_t& soid);
 

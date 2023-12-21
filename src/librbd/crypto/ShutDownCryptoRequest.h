@@ -26,8 +26,6 @@ public:
     void send();
     void shut_down_object_dispatch();
     void handle_shut_down_object_dispatch(int r);
-    void shut_down_image_dispatch();
-    void handle_shut_down_image_dispatch(int r);
     void finish(int r);
 
 private:

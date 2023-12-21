@@ -1,67 +1,33 @@
-.alerts {
-  height: 17rem;
+.details {
+  font-size: larger;
 
-  div {
-    padding-top: 0;
+  dt {
+    margin-bottom: 0.3rem;
+  }
+
+  dd {
+    margin-bottom: 0.8rem;
   }
 }
 
-div {
-  padding-top: 20px;
-}
-
-ngx-simplebar {
-  height: 18rem;
-}
-
-hr {
-  margin-bottom: 2px;
-  margin-top: 2px;
-}
-
-.position-right {
-  margin-left: auto;
-  order: 2;
-}
-
-.center-content {
-  align-items: center;
-  margin-top: 30px;
-  position: relative;
-}
-
-button.dropdown-toggle {
-  position: relative;
-
-  &::after {
-    border: 0;
-    content: '\f054';
-    font-family: 'ForkAwesome';
-    font-size: 1rem;
+.status {
+  .viewAlert {
     position: absolute;
-    right: 20px;
-    transition: transform 0.3s ease-in-out;
-  }
-
-  &[aria-expanded='true']::after {
-    transform: rotate(90deg);
-  }
-
-  &:focus {
-    box-shadow: none;
+    right: 2rem;
+    top: 2rem;
   }
 }
 
-.list-group-item {
-  border: 0;
-}
+.alerts {
+  ngx-simplebar {
+    height: 13.5rem;
+    overflow-x: hidden;
+  }
 
-dt {
-  font-size: larger;
-  margin-bottom: 0.3rem;
-}
-
-dd {
-  font-size: larger;
-  margin-bottom: 0.8rem;
+  .text-truncate {
+    -webkit-box-orient: vertical; /* stylelint-disable-line property-no-vendor-prefix */
+    display: -webkit-box; /* stylelint-disable-line value-no-vendor-prefix */
+    -webkit-line-clamp: 2;
+    white-space: normal;
+  }
 }

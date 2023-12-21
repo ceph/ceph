@@ -3,56 +3,46 @@
 
 #pragma once
 
-#include <map>
-#include <vector>
 #include <string>
-#include <include/types.h>
+#include "rgw_sal_fwd.h"
+#include "rgw_user_types.h"
 
-#include <boost/optional.hpp>
+class DoutPrefixProvider;
+class RGWAccessControlPolicy;
 
-#include "rgw_acl.h"
+namespace rgw::swift {
 
-class RGWUserCtl;
+/// Create a policy based on swift container acl headers
+/// X-Container-Read/X-Container-Write.
+int create_container_policy(const DoutPrefixProvider *dpp,
+                            rgw::sal::Driver* driver,
+                            const rgw_user& id,
+                            const std::string& name,
+                            const char* read_list,
+                            const char* write_list,
+                            uint32_t& rw_mask,
+                            RGWAccessControlPolicy& policy);
 
-class RGWAccessControlPolicy_SWIFT : public RGWAccessControlPolicy
-{
-  int add_grants(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
-                 const std::vector<std::string>& uids,
-                 uint32_t perm);
+/// Copy grants matching the permission mask (SWIFT_PERM_READ/WRITE) from
+/// one policy to another.
+void merge_policy(uint32_t rw_mask, const RGWAccessControlPolicy& src,
+                  RGWAccessControlPolicy& dest);
 
-public:
-  explicit RGWAccessControlPolicy_SWIFT(CephContext* const cct)
-    : RGWAccessControlPolicy(cct) {
-  }
-  ~RGWAccessControlPolicy_SWIFT() override = default;
+/// Format the policy in terms of X-Container-Read/X-Container-Write strings.
+void format_container_acls(const RGWAccessControlPolicy& policy,
+                           std::string& read, std::string& write);
 
-  int create(const DoutPrefixProvider *dpp,
-	     rgw::sal::Driver* driver,
-             const rgw_user& id,
-             const std::string& name,
-             const char* read_list,
-             const char* write_list,
-             uint32_t& rw_mask);
-  void filter_merge(uint32_t mask, RGWAccessControlPolicy_SWIFT *policy);
-  void to_str(std::string& read, std::string& write);
-};
+/// Create a policy based on swift account acl header X-Account-Access-Control.
+int create_account_policy(const DoutPrefixProvider* dpp,
+                          rgw::sal::Driver* driver,
+                          const rgw_user& id,
+                          const std::string& name,
+                          const std::string& acl_str,
+                          RGWAccessControlPolicy& policy);
 
-class RGWAccessControlPolicy_SWIFTAcct : public RGWAccessControlPolicy
-{
-public:
-  explicit RGWAccessControlPolicy_SWIFTAcct(CephContext * const cct)
-    : RGWAccessControlPolicy(cct) {
-  }
-  ~RGWAccessControlPolicy_SWIFTAcct() override {}
+/// Format the policy in terms of the X-Account-Access-Control string. Returns
+/// std::nullopt if there are no admin/read-write/read-only entries.
+auto format_account_acl(const RGWAccessControlPolicy& policy)
+  -> std::optional<std::string>;
 
-  void add_grants(const DoutPrefixProvider *dpp,
-		  rgw::sal::Driver* driver,
-                  const std::vector<std::string>& uids,
-                  uint32_t perm);
-  bool create(const DoutPrefixProvider *dpp,
-	      rgw::sal::Driver* driver,
-              const rgw_user& id,
-              const std::string& name,
-              const std::string& acl_str);
-  boost::optional<std::string> to_str() const;
-};
+} // namespace rgw::swift

@@ -96,7 +96,7 @@ curl-based installation
 
 * First, determine what version of Ceph you will need. You can use the releases
   page to find the `latest active releases <https://docs.ceph.com/en/latest/releases/#active-releases>`_.
-  For example, we might look at that page and find that ``17.2.6`` is the latest
+  For example, we might look at that page and find that ``18.2.0`` is the latest
   active release.
 
 * Use ``curl`` to fetch a build of cephadm for that release.
@@ -104,7 +104,7 @@ curl-based installation
   .. prompt:: bash #
      :substitutions:
 
-     CEPH_RELEASE=17.2.6 # replace this with the active release
+     CEPH_RELEASE=18.2.0 # replace this with the active release
      curl --silent --remote-name --location https://download.ceph.com/rpm-${CEPH_RELEASE}/el9/noarch/cephadm
 
   Ensure the ``cephadm`` file is executable:
@@ -165,6 +165,9 @@ bootstrap`` command on the Ceph cluster's first host. The act of running the
 cluster's first "monitor daemon", and that monitor daemon needs an IP address.
 You must pass the IP address of the Ceph cluster's first host to the ``ceph
 bootstrap`` command, so you'll need to know the IP address of that host.
+
+.. important:: ``ssh`` must be installed and running in order for the
+   bootstrapping procedure to succeed.
 
 .. note:: If there are multiple networks and interfaces, be sure to choose one
    that will be accessible by any host accessing the Ceph cluster.
@@ -314,17 +317,20 @@ its status with:
 Adding Hosts
 ============
 
-Next, add all hosts to the cluster by following :ref:`cephadm-adding-hosts`.
+Add all hosts to the cluster by following the instructions in
+:ref:`cephadm-adding-hosts`.
 
-By default, a ``ceph.conf`` file and a copy of the ``client.admin`` keyring
-are maintained in ``/etc/ceph`` on all hosts with the ``_admin`` label, which is initially
-applied only to the bootstrap host. We usually recommend that one or more other hosts be
-given the ``_admin`` label so that the Ceph CLI (e.g., via ``cephadm shell``) is easily
-accessible on multiple hosts. To add the ``_admin`` label to additional host(s):
+By default, a ``ceph.conf`` file and a copy of the ``client.admin`` keyring are
+maintained in ``/etc/ceph`` on all hosts that have the ``_admin`` label. This
+label is initially applied only to the bootstrap host. We usually recommend
+that one or more other hosts be given the ``_admin`` label so that the Ceph CLI
+(for example, via ``cephadm shell``) is easily accessible on multiple hosts. To add
+the ``_admin`` label to additional host(s), run a command of the following form:
 
   .. prompt:: bash #
 
     ceph orch host label add *<host>* _admin
+
 
 Adding additional MONs
 ======================

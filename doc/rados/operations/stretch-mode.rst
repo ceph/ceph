@@ -121,8 +121,6 @@ your CRUSH map. This procedure shows how to do this.
 
       rule stretch_rule {
              id 1
-             min_size 1
-             max_size 10
              type replicated
              step take site1
              step chooseleaf firstn 2 type host
@@ -141,11 +139,15 @@ your CRUSH map. This procedure shows how to do this.
 
 #. Run the monitors in connectivity mode. See `Changing Monitor Elections`_.
 
+   .. prompt:: bash $
+
+      ceph mon set election_strategy connectivity
+
 #. Command the cluster to enter stretch mode. In this example, ``mon.e`` is the
    tiebreaker monitor and we are splitting across data centers. The tiebreaker
    monitor must be assigned a data center that is neither ``site1`` nor
-   ``site2``. For this purpose you can create another data-center bucket named
-   ``site3`` in your CRUSH and place ``mon.e`` there:
+   ``site2``. This data center **should not** be defined in your CRUSH map, here 
+   we are placing ``mon.e`` in a virtual data center called ``site3``:
 
    .. prompt:: bash $
 

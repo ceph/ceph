@@ -158,8 +158,15 @@ parent_tracker_t::~parent_tracker_t() {
 
 std::ostream &operator<<(std::ostream &out, const LBAMapping &rhs)
 {
-  return out << "LBAMapping(" << rhs.get_key() << "~" << rhs.get_length()
-	     << "->" << rhs.get_val();
+  out << "LBAMapping(" << rhs.get_key() << "~" << rhs.get_length()
+      << "->" << rhs.get_val();
+  if (rhs.is_indirect()) {
+    out << " indirect(" << rhs.get_intermediate_base() << "~"
+	<< rhs.get_intermediate_key() << "~"
+	<< rhs.get_intermediate_length() << ")";
+  }
+  out << ")";
+  return out;
 }
 
 std::ostream &operator<<(std::ostream &out, const lba_pin_list_t &rhs)

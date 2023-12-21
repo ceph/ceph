@@ -1528,6 +1528,11 @@ void pool_opts_t::decode(ceph::buffer::list::const_iterator& bl)
   DECODE_FINISH(bl);
 }
 
+void pool_opts_t::generate_test_instances(std::list<pool_opts_t*>& o)
+{
+  o.push_back(new pool_opts_t);
+}
+
 ostream& operator<<(ostream& out, const pool_opts_t& opts)
 {
   for (auto i = opt_mapping.begin(); i != opt_mapping.end(); ++i) {
@@ -3614,6 +3619,7 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
 void pg_info_t::dump(Formatter *f) const
 {
   f->dump_stream("pgid") << pgid;
+  f->dump_stream("shared") << pgid.shard;
   f->dump_stream("last_update") << last_update;
   f->dump_stream("last_complete") << last_complete;
   f->dump_stream("log_tail") << log_tail;
@@ -3714,10 +3720,11 @@ void pg_notify_t::dump(Formatter *f) const
 
 void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 {
+  o.push_back(new pg_notify_t);
   o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1,
-			      pg_info_t(), PastIntervals()));
-  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10,
-			      pg_info_t(), PastIntervals()));
+            pg_info_t(spg_t(pg_t(0,10), shard_id_t(-1))), PastIntervals()));
+  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(2), 3, 10,
+            pg_info_t(spg_t(pg_t(10,10), shard_id_t(2))), PastIntervals()));
 }
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
@@ -3811,9 +3818,6 @@ void PastIntervals::pg_interval_t::generate_test_instances(list<pg_interval_t*>&
   o.back()->last = 5;
   o.back()->maybe_went_rw = true;
 }
-
-WRITE_CLASS_ENCODER(PastIntervals::pg_interval_t)
-
 
 /**
  * pi_compact_rep
@@ -5705,12 +5709,12 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
 
 void OSDSuperblock::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(10, 5, bl);
+  ENCODE_START(11, 5, bl);
   encode(cluster_fsid, bl);
   encode(whoami, bl);
   encode(current_epoch, bl);
-  encode(oldest_map, bl);
-  encode(newest_map, bl);
+  encode((epoch_t)0, bl); // oldest_map
+  encode((epoch_t)0, bl); // newest_map
   encode(weight, bl);
   compat_features.encode(bl);
   encode(clean_thru, bl);
@@ -5721,12 +5725,13 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode(purged_snaps_last, bl);
   encode(last_purged_snaps_scrub, bl);
   encode(cluster_osdmap_trim_lower_bound, bl);
+  encode(maps, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(10, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(11, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     decode(magic, bl);
@@ -5734,6 +5739,7 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
   decode(cluster_fsid, bl);
   decode(whoami, bl);
   decode(current_epoch, bl);
+  epoch_t oldest_map, newest_map;
   decode(oldest_map, bl);
   decode(newest_map, bl);
   decode(weight, bl);
@@ -5765,6 +5771,11 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     cluster_osdmap_trim_lower_bound = 0;
   }
+  if (struct_v >= 11) {
+    decode(maps, bl);
+  } else {
+    insert_osdmap_epochs(oldest_map, newest_map);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5774,8 +5785,6 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_stream("osd_fsid") << osd_fsid;
   f->dump_int("whoami", whoami);
   f->dump_int("current_epoch", current_epoch);
-  f->dump_int("oldest_map", oldest_map);
-  f->dump_int("newest_map", newest_map);
   f->dump_float("weight", weight);
   f->open_object_section("compat");
   compat_features.dump(f);
@@ -5786,6 +5795,7 @@ void OSDSuperblock::dump(Formatter *f) const
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
   f->dump_int("cluster_osdmap_trim_lower_bound",
               cluster_osdmap_trim_lower_bound);
+  f->dump_stream("maps") << maps;
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
@@ -5796,8 +5806,7 @@ void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
   z.osd_fsid.parse("02020202-0202-0202-0202-020202020202");
   z.whoami = 3;
   z.current_epoch = 4;
-  z.oldest_map = 5;
-  z.newest_map = 9;
+  z.insert_osdmap_epochs(5, 9);
   z.mounted = 8;
   z.clean_thru = 7;
   o.push_back(new OSDSuperblock(z));
@@ -6054,6 +6063,14 @@ void chunk_info_t::dump(Formatter *f) const
   f->dump_unsigned("flags", flags);
 }
 
+void chunk_info_t::generate_test_instances(std::list<chunk_info_t*>& o)
+{
+  o.push_back(new chunk_info_t);
+  o.push_back(new chunk_info_t);
+  o.back()->length = 123;
+  o.back()->oid = hobject_t(object_t("foo"), "", 123, 456, -1, "");
+  o.back()->flags = cflag_t::FLAG_DIRTY;
+}
 
 bool chunk_info_t::operator==(const chunk_info_t& cit) const
 {
@@ -7398,4 +7415,32 @@ bool PGLSPlainFilter::filter(const hobject_t& obj,
                              const ceph::bufferlist& xattr_data) const
 {
   return xattr_data.contents_equal(val.c_str(), val.size());
+}
+
+std::string_view get_op_queue_type_name(const op_queue_type_t &q)
+{
+  switch (q) {
+    case op_queue_type_t::WeightedPriorityQueue:
+      return "wpq";
+    case op_queue_type_t::mClockScheduler:
+      return "mclock_scheduler";
+    case op_queue_type_t::PrioritizedQueue:
+      return "PrioritizedQueue";
+    default:
+      return "unknown";
+  }
+}
+
+std::optional<op_queue_type_t> get_op_queue_type_by_name(
+  const std::string_view &s)
+{
+  if (s == "wpq") {
+    return op_queue_type_t::WeightedPriorityQueue;
+  } else if (s == "mclock_scheduler") {
+    return op_queue_type_t::mClockScheduler;
+  } else if (s == "PrioritizedQueue") {
+    return op_queue_type_t::PrioritizedQueue;
+  } else {
+    return std::nullopt;
+  }
 }

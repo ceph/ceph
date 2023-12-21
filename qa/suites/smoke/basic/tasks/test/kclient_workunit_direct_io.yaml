@@ -5,6 +5,8 @@ overrides:
         ms die on skipped message: false
 tasks:
 - ceph:
+    log-ignorelist:
+      - \(POOL_APP_NOT_ENABLED\)
 - kclient:
 - workunit:
     clients:

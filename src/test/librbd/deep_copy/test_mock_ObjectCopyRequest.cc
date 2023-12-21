@@ -126,7 +126,7 @@ MATCHER(IsListSnaps, "") {
 MATCHER_P2(IsRead, snap_id, image_interval, "") {
   auto req = boost::get<io::ImageDispatchSpec::Read>(&arg->request);
   if (req == nullptr ||
-      arg->io_context->read_snap().value_or(CEPH_NOSNAP) != snap_id) {
+      arg->io_context->get_read_snap() != snap_id) {
     return false;
   }
 

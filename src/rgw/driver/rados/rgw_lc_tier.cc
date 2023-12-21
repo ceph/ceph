@@ -454,7 +454,7 @@ int RGWLCStreamRead::init_rest_obj() {
     rest_obj.content_len = m_part_size;
   }
 
-  /* For mulitpart attrs are sent as part of InitMultipartCR itself */
+  /* For multipart attrs are sent as part of InitMultipartCR itself */
   if (multipart) {
     return 0;
   }
@@ -464,7 +464,6 @@ int RGWLCStreamRead::init_rest_obj() {
    */
   init_headers(attrs, rest_obj.attrs);
 
-  rest_obj.acls.set_ctx(cct);
   const auto aiter = attrs.find(RGW_ATTR_ACL);
   if (aiter != attrs.end()) {
     bufferlist& bl = aiter->second;

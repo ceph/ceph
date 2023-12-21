@@ -15,24 +15,24 @@ Synopsis
 Description
 ===========
 
-:program:`ceph-monstore-tool` is similar to `ceph-kvstore-tool`. It allows
-users to manipulate MonitorDBStore's data (monmap, osdmap, etc.) offline.
-The default RocksDB debug level is `0`. This can be changed using `--debug`.
+:program:`ceph-monstore-tool` is used to manipulate MonitorDBStore's data
+(monmap, osdmap, etc.) offline. It is similar to `ceph-kvstore-tool`.
 
-Please Note:
-    Ceph-specific options should be in the format `--option-name=VAL`
-    (specifically, do not forget the '='!!)
-    Command-specific options need to be passed after a `--`
-    e.g., `get monmap --debug -- --version 10 --out /tmp/foo`
+Note:
+    Ceph-specific options take the format `--option-name=VAL`
+    DO NOT FORGET THE EQUALS SIGN. ('=')
+    for example, `dump-keys --debug-rocksdb=0`
+
+    Command-specific options must be passed after a `--`
+    for example, `get monmap -- --version 10 --out /tmp/foo`
 
 Commands
 ========
 
-:program:`ceph-monstore-tool` utility uses many commands for debugging purpose
-which are as follows:
+:program:`ceph-monstore-tool` uses many commands for debugging purposes:
 
 :command:`store-copy <path>`
-    Copies the store to PATH.
+    Copy the store to PATH.
 
 :command:`get monmap [-- options]`
     Get monmap (version VER if specified) (default: last committed).
@@ -49,14 +49,17 @@ which are as follows:
 :command:`get crushmap [-- options]`
     Get crushmap (version VER if specified) (default: last committed).
 
-:command:`get osd_snap <key> [-- options]`
-    Get osd_snap key (`purged_snap` or `purged_epoch`).
+:command:`get-key <prefix> <key> [-- options]`
+    Get key to FILE (default: stdout).
+
+:command:`remove-key <prefix> <key> [-- options]`
+    Remove key.
 
 :command:`dump-keys`
-    Dumps store keys to FILE (default: stdout).
+    Dump store keys to FILE (default: stdout).
 
 :command:`dump-paxos [-- options]`
-    Dumps Paxos transactions  (-- -- help for more info).
+    Dump Paxos transactions  (-- -- help for more info).
 
 :command:`dump-trace FILE  [-- options]`
     Dump contents of trace file FILE (-- --help for more info).
@@ -73,14 +76,12 @@ which are as follows:
 :command:`rebuild`
     Rebuild store.
 
-:command:`rm <prefix> <key>`
-    Remove specified key from the store.
-
 Availability
 ============
 
-**ceph-kvstore-tool** is part of Ceph, a massively scalable, open-source, distributed storage system. Please refer to
-the Ceph documentation at https://docs.ceph.com for more information.
+**ceph-monstore-tool** is part of Ceph, a massively scalable, open-source,
+distributed storage system. See the Ceph documentation at
+https://docs.ceph.com for more information.
 
 
 See also

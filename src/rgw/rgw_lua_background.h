@@ -135,6 +135,7 @@ struct RGWTable : EmptyMetaTable {
 class Background : public RGWRealmReloader::Pauser {
 public:
   static const BackgroundMapValue empty_table_value;
+
 private:
   BackgroundMap rgw_map;
   bool stopped = false;
@@ -142,9 +143,8 @@ private:
   bool paused = false;
   int execute_interval;
   const DoutPrefix dp;
-  std::unique_ptr<rgw::sal::LuaManager> lua_manager; 
+  rgw::sal::LuaManager* lua_manager; 
   CephContext* const cct;
-  const std::string luarocks_path;
   std::thread runner;
   mutable std::mutex table_mutex;
   std::mutex cond_mutex;
@@ -158,25 +158,27 @@ protected:
   virtual int read_script();
 
 public:
-  Background(rgw::sal::Driver* driver,
-      CephContext* cct,
-      const std::string& luarocks_path,
-      int execute_interval = INIT_EXECUTE_INTERVAL);
+  Background(rgw::sal::Driver* _driver,
+      CephContext* _cct,
+      rgw::sal::LuaManager* _lua_manager,
+      int _execute_interval = INIT_EXECUTE_INTERVAL);
 
-    virtual ~Background() = default;
-    void start();
-    void shutdown();
-    void create_background_metatable(lua_State* L);
-    const BackgroundMapValue& get_table_value(const std::string& key) const;
-    template<typename T>
-    void put_table_value(const std::string& key, T value) {
-      std::unique_lock cond_lock(table_mutex);
-      rgw_map[key] = value;
-    }
-    
-    void pause() override;
-    void resume(rgw::sal::Driver* _driver) override;
+  ~Background() override = default;
+  void start();
+  void shutdown();
+  void create_background_metatable(lua_State* L);
+  const BackgroundMapValue& get_table_value(const std::string& key) const;
+  template<typename T>
+  void put_table_value(const std::string& key, T value) {
+    std::unique_lock cond_lock(table_mutex);
+    rgw_map[key] = value;
+  }
+   
+  // update the manager after 
+  void set_manager(rgw::sal::LuaManager* _lua_manager);
+  void pause() override;
+  void resume(rgw::sal::Driver* _driver) override;
 };
 
-} //namepsace rgw::lua
+} //namespace rgw::lua
 

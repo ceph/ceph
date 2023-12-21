@@ -92,6 +92,16 @@ struct cls_log_header {
     decode(max_time, bl);
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter* f) const {
+    f->dump_string("max_marker", max_marker);
+    f->dump_stream("max_time") << max_time;
+  }
+  static void generate_test_instances(std::list<cls_log_header*>& o) {
+    o.push_back(new cls_log_header);
+    o.push_back(new cls_log_header);
+    o.back()->max_marker = "test_marker";
+    o.back()->max_time = utime_t();
+  }
 };
 inline bool operator ==(const cls_log_header& lhs, const cls_log_header& rhs) {
   return (lhs.max_marker == rhs.max_marker &&

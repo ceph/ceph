@@ -133,10 +133,10 @@ IOContext MockImageCtx::get_data_io_context() {
   auto ctx = std::make_shared<neorados::IOContext>(
     data_ctx.get_id(), data_ctx.get_namespace());
   if (snap_id != CEPH_NOSNAP) {
-    ctx->read_snap(snap_id);
+    ctx->set_read_snap(snap_id);
   }
   if (!snapc.snaps.empty()) {
-    ctx->write_snap_context(
+    ctx->set_write_snap_context(
       {{snapc.seq, {snapc.snaps.begin(), snapc.snaps.end()}}});
   }
   return ctx;
@@ -144,6 +144,13 @@ IOContext MockImageCtx::get_data_io_context() {
 
 IOContext MockImageCtx::duplicate_data_io_context() {
   return std::make_shared<neorados::IOContext>(*get_data_io_context());
+}
+
+uint64_t MockImageCtx::get_data_offset() const {
+  if (encryption_format != nullptr) {
+    return encryption_format->get_crypto()->get_data_offset();
+  }
+  return 0;
 }
 
 } // namespace librbd

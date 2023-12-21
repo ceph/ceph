@@ -55,16 +55,19 @@ using ceph::Formatter;
 static ostream& _prefix(std::ostream *_dout, ECBackend *pgb) {
   return pgb->get_parent()->gen_dbg_prefix(*_dout);
 }
+static ostream& _prefix(std::ostream *_dout, ECBackend::RMWPipeline *rmw_pipeline) {
+  return rmw_pipeline->get_parent()->gen_dbg_prefix(*_dout);
+}
 
 struct ECRecoveryHandle : public PGBackend::RecoveryHandle {
   list<ECBackend::RecoveryOp> ops;
 };
 
-ostream &operator<<(ostream &lhs, const ECBackend::pipeline_state_t &rhs) {
+ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::pipeline_state_t &rhs) {
   switch (rhs.pipeline_state) {
-  case ECBackend::pipeline_state_t::CACHE_VALID:
+  case ECBackend::RMWPipeline::pipeline_state_t::CACHE_VALID:
     return lhs << "CACHE_VALID";
-  case ECBackend::pipeline_state_t::CACHE_INVALID:
+  case ECBackend::RMWPipeline::pipeline_state_t::CACHE_INVALID:
     return lhs << "CACHE_INVALID";
   default:
     ceph_abort_msg("invalid pipeline state");
@@ -155,7 +158,7 @@ void ECBackend::ReadOp::dump(Formatter *f) const
   f->dump_stream("in_progress") << in_progress;
 }
 
-ostream &operator<<(ostream &lhs, const ECBackend::Op &rhs)
+ostream &operator<<(ostream &lhs, const ECBackend::RMWPipeline::Op &rhs)
 {
   lhs << "Op(" << rhs.hoid
       << " v=" << rhs.version
@@ -218,6 +221,7 @@ ECBackend::ECBackend(
   ErasureCodeInterfaceRef ec_impl,
   uint64_t stripe_width)
   : PGBackend(cct, pg, store, coll, ch),
+    rmw_pipeline(cct, ec_impl, this->sinfo, get_parent(), *this),
     ec_impl(ec_impl),
     sinfo(ec_impl->get_data_chunk_count(), stripe_width) {
   ceph_assert((ec_impl->get_data_chunk_count() *
@@ -1160,32 +1164,32 @@ void ECBackend::handle_sub_write_reply(
   const ECSubWriteReply &op,
   const ZTracer::Trace &trace)
 {
-  map<ceph_tid_t, Op>::iterator i = tid_to_op_map.find(op.tid);
-  ceph_assert(i != tid_to_op_map.end());
+  map<ceph_tid_t, RMWPipeline::OpRef>::iterator i = rmw_pipeline.tid_to_op_map.find(op.tid);
+  ceph_assert(i != rmw_pipeline.tid_to_op_map.end());
   if (op.committed) {
     trace.event("sub write committed");
-    ceph_assert(i->second.pending_commit.count(from));
-    i->second.pending_commit.erase(from);
+    ceph_assert(i->second->pending_commit.count(from));
+    i->second->pending_commit.erase(from);
     if (from != get_parent()->whoami_shard()) {
       get_parent()->update_peer_last_complete_ondisk(from, op.last_complete);
     }
   }
   if (op.applied) {
     trace.event("sub write applied");
-    ceph_assert(i->second.pending_apply.count(from));
-    i->second.pending_apply.erase(from);
+    ceph_assert(i->second->pending_apply.count(from));
+    i->second->pending_apply.erase(from);
   }
 
-  if (i->second.pending_commit.empty() &&
-      i->second.on_all_commit &&
+  if (i->second->pending_commit.empty() &&
+      i->second->on_all_commit &&
       // also wait for apply, to preserve ordering with luminous peers.
-      i->second.pending_apply.empty()) {
+      i->second->pending_apply.empty()) {
     dout(10) << __func__ << " Calling on_all_commit on " << i->second << dendl;
-    i->second.on_all_commit->complete(0);
-    i->second.on_all_commit = 0;
-    i->second.trace.event("ec write all committed");
+    i->second->on_all_commit->complete(0);
+    i->second->on_all_commit = 0;
+    i->second->trace.event("ec write all committed");
   }
-  check_ops();
+  rmw_pipeline.check_ops();
 }
 
 void ECBackend::handle_sub_read_reply(
@@ -1476,7 +1480,7 @@ void ECBackend::check_recovery_sources(const OSDMapRef& osdmap)
   }
 }
 
-void ECBackend::on_change()
+void ECBackend::RMWPipeline::on_change()
 {
   dout(10) << __func__ << dendl;
 
@@ -1487,10 +1491,14 @@ void ECBackend::on_change()
   waiting_state.clear();
   waiting_commit.clear();
   for (auto &&op: tid_to_op_map) {
-    cache.release_write_pin(op.second.pin);
+    cache.release_write_pin(op.second->pin);
   }
   tid_to_op_map.clear();
+}
 
+void ECBackend::on_change()
+{
+  rmw_pipeline.on_change();
   for (map<ceph_tid_t, ReadOp>::iterator i = tid_to_read_map.begin();
        i != tid_to_read_map.end();
        ++i) {
@@ -1504,8 +1512,8 @@ void ECBackend::on_change()
     }
   }
   tid_to_read_map.clear();
-  in_progress_client_reads.clear();
   shard_to_read_map.clear();
+  in_progress_client_reads.clear();
   clear_recovery_state();
 }
 
@@ -1536,6 +1544,52 @@ void ECBackend::dump_recovery_info(Formatter *f) const
   f->close_section();
 }
 
+struct ECClassicalOp : ECBackend::RMWPipeline::Op {
+  PGTransactionUPtr t;
+
+  void generate_transactions(
+      ceph::ErasureCodeInterfaceRef &ecimpl,
+      pg_t pgid,
+      const ECUtil::stripe_info_t &sinfo,
+      std::map<hobject_t,extent_map> *written,
+      std::map<shard_id_t, ObjectStore::Transaction> *transactions,
+      DoutPrefixProvider *dpp,
+      const ceph_release_t require_osd_release) final
+  {
+    // there is the special case of t-empty op generated in try_finish_rmw()
+    if (t) {
+      ECTransaction::generate_transactions(
+        t.get(),
+        plan,
+        ecimpl,
+        pgid,
+        sinfo,
+        remote_read_result,
+        log_entries,
+        written,
+        transactions,
+        &temp_added,
+        &temp_cleared,
+        dpp,
+        require_osd_release);
+    }
+  }
+
+  template <typename F>
+  static ECTransaction::WritePlan get_write_plan(
+    const ECUtil::stripe_info_t &sinfo,
+    PGTransaction& t,
+    F &&get_hinfo,
+    DoutPrefixProvider *dpp)
+  {
+    return ECTransaction::get_write_plan(
+      sinfo,
+      t,
+      std::forward<F>(get_hinfo),
+      dpp);
+  }
+};
+
 void ECBackend::submit_transaction(
   const hobject_t &hoid,
   const object_stat_sum_t &delta_stats,
@@ -1551,13 +1605,13 @@ void ECBackend::submit_transaction(
   OpRequestRef client_op
   )
 {
-  ceph_assert(!tid_to_op_map.count(tid));
-  Op *op = &(tid_to_op_map[tid]);
+  auto op = std::make_unique<ECClassicalOp>();
+  op->t = std::move(t);
   op->hoid = hoid;
   op->delta_stats = delta_stats;
   op->version = at_version;
   op->trim_to = trim_to;
-  op->roll_forward_to = std::max(min_last_complete_ondisk, committed_to);
+  op->roll_forward_to = std::max(min_last_complete_ondisk, rmw_pipeline.committed_to);
   op->log_entries = log_entries;
   std::swap(op->updated_hit_set_history, hset_history);
   op->on_all_commit = on_all_commit;
@@ -1567,11 +1621,26 @@ void ECBackend::submit_transaction(
   if (client_op) {
     op->trace = client_op->pg_trace;
   }
+  op->plan = op->get_write_plan(
+    sinfo,
+    *(op->t),
+    [&](const hobject_t &i) {
+      ECUtil::HashInfoRef ref = get_hash_info(i, true);
+      if (!ref) {
+	derr << __func__ << ": get_hash_info(" << i << ")"
+	     << " returned a null pointer and there is no "
+	     << " way to recover from such an error in this "
+	     << " context" << dendl;
+	ceph_abort();
+      }
+      return ref;
+    },
+    get_parent()->get_dpp());
   dout(10) << __func__ << ": op " << *op << " starting" << dendl;
-  start_rmw(op, std::move(t));
+  rmw_pipeline.start_rmw(std::move(op));
 }
 
-void ECBackend::call_write_ordered(std::function<void(void)> &&cb) {
+void ECBackend::RMWPipeline::call_write_ordered(std::function<void(void)> &&cb) {
   if (!waiting_state.empty()) {
     waiting_state.back().on_write.emplace_back(std::move(cb));
   } else if (!waiting_reads.empty()) {
@@ -1895,33 +1964,18 @@ ECUtil::HashInfoRef ECBackend::get_hash_info(
   return ref;
 }
 
-void ECBackend::start_rmw(Op *op, PGTransactionUPtr &&t)
+void ECBackend::RMWPipeline::start_rmw(OpRef op)
 {
   ceph_assert(op);
-
-  op->plan = ECTransaction::get_write_plan(
-    sinfo,
-    std::move(t),
-    [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = get_hash_info(i, true);
-      if (!ref) {
-	derr << __func__ << ": get_hash_info(" << i << ")"
-	     << " returned a null pointer and there is no "
-	     << " way to recover from such an error in this "
-	     << " context" << dendl;
-	ceph_abort();
-      }
-      return ref;
-    },
-    get_parent()->get_dpp());
-
   dout(10) << __func__ << ": " << *op << dendl;
 
+  ceph_assert(!tid_to_op_map.count(op->tid));
   waiting_state.push_back(*op);
+  tid_to_op_map[op->tid] = std::move(op);
   check_ops();
 }
 
-bool ECBackend::try_state_to_reads()
+bool ECBackend::RMWPipeline::try_state_to_reads()
 {
   if (waiting_state.empty())
     return false;
@@ -1984,7 +2038,7 @@ bool ECBackend::try_state_to_reads()
     ceph_assert(get_parent()->get_pool().allows_ecoverwrites());
     objects_read_async_no_cache(
       op->remote_read,
-      [this, op](map<hobject_t,pair<int, extent_map> > &&results) {
+      [op, this](map<hobject_t,pair<int, extent_map> > &&results) {
 	for (auto &&i: results) {
 	  op->remote_read_result.emplace(i.first, i.second.second);
 	}
@@ -1995,7 +2049,7 @@ bool ECBackend::try_state_to_reads()
   return true;
 }
 
-bool ECBackend::try_reads_to_commit()
+bool ECBackend::RMWPipeline::try_reads_to_commit()
 {
   if (waiting_reads.empty())
     return false;
@@ -2036,21 +2090,14 @@ bool ECBackend::try_reads_to_commit()
   op->trace.event("start ec write");
 
   map<hobject_t,extent_map> written;
-  if (op->plan.t) {
-    ECTransaction::generate_transactions(
-      op->plan,
-      ec_impl,
-      get_parent()->get_info().pgid.pgid,
-      sinfo,
-      op->remote_read_result,
-      op->log_entries,
-      &written,
-      &trans,
-      &(op->temp_added),
-      &(op->temp_cleared),
-      get_parent()->get_dpp(),
-      get_osdmap()->require_osd_release);
-  }
+  op->generate_transactions(
+    ec_impl,
+    get_parent()->get_info().pgid.pgid,
+    sinfo,
+    &written,
+    &trans,
+    get_parent()->get_dpp(),
+    get_osdmap()->require_osd_release);
 
   dout(20) << __func__ << ": " << cache << dendl;
   dout(20) << __func__ << ": written: " << written << dendl;
@@ -2101,7 +2148,7 @@ bool ECBackend::try_reads_to_commit()
     const pg_stat_t &stats =
       (should_send || !backfill_shards.count(*i)) ?
       get_info().stats :
-      parent->get_shard_info().find(*i)->second.stats;
+      get_parent()->get_shard_info().find(*i)->second.stats;
 
     ECSubWrite sop(
       get_parent()->whoami_shard(),
@@ -2160,7 +2207,7 @@ bool ECBackend::try_reads_to_commit()
   return true;
 }
 
-bool ECBackend::try_finish_rmw()
+bool ECBackend::RMWPipeline::try_finish_rmw()
 {
   if (waiting_commit.empty())
     return false;
@@ -2181,15 +2228,16 @@ bool ECBackend::try_finish_rmw()
     if (op->version > get_parent()->get_log().get_can_rollback_to() &&
 	waiting_reads.empty() &&
 	waiting_commit.empty()) {
-      // submit a dummy transaction to kick the rollforward
+      // submit a dummy, transaction-empty op to kick the rollforward
       auto tid = get_parent()->get_tid();
-      Op *nop = &(tid_to_op_map[tid]);
+      auto nop = std::make_unique<ECClassicalOp>();
       nop->hoid = op->hoid;
       nop->trim_to = op->trim_to;
       nop->roll_forward_to = op->version;
       nop->tid = tid;
       nop->reqid = op->reqid;
       waiting_reads.push_back(*nop);
+      tid_to_op_map[tid] = std::move(nop);
     }
   }
 
@@ -2208,7 +2256,7 @@ bool ECBackend::try_finish_rmw()
   return true;
 }
 
-void ECBackend::check_ops()
+void ECBackend::RMWPipeline::check_ops()
 {
   while (try_state_to_reads() ||
 	 try_reads_to_commit() ||
@@ -2284,7 +2332,7 @@ void ECBackend::objects_read_async(
       auto dpp = ec->get_parent()->get_dpp();
       ldpp_dout(dpp, 20) << "objects_read_async_cb: got: " << results
 			 << dendl;
-      ldpp_dout(dpp, 20) << "objects_read_async_cb: cache: " << ec->cache
+      ldpp_dout(dpp, 20) << "objects_read_async_cb: cache: " << ec->rmw_pipeline.cache
 			 << dendl;
 
       auto &got = results[hoid];

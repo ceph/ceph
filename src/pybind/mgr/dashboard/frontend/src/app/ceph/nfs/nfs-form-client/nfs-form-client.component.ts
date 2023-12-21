@@ -1,5 +1,5 @@
 import { Component, ContentChild, Input, OnInit, TemplateRef } from '@angular/core';
-import { FormArray, FormControl, NgForm, Validators } from '@angular/forms';
+import { UntypedFormArray, UntypedFormControl, NgForm, Validators } from '@angular/forms';
 
 import _ from 'lodash';
 
@@ -21,19 +21,21 @@ export class NfsFormClientComponent implements OnInit {
 
   @ContentChild('squashHelper', { static: true }) squashHelperTpl: TemplateRef<any>;
 
-  nfsSquash: any[] = Object.keys(this.nfsService.nfsSquash);
-  nfsAccessType: any[] = this.nfsService.nfsAccessType;
+  nfsSquash: any[] = [];
+  nfsAccessType: any[] = [];
   icons = Icons;
-  clientsFormArray: FormArray;
+  clientsFormArray: UntypedFormArray;
 
   constructor(private nfsService: NfsService) {}
 
   ngOnInit() {
+    this.nfsSquash = Object.keys(this.nfsService.nfsSquash);
+    this.nfsAccessType = this.nfsService.nfsAccessType;
     _.forEach(this.clients, (client) => {
       const fg = this.addClient();
       fg.patchValue(client);
     });
-    this.clientsFormArray = this.form.get('clients') as FormArray;
+    this.clientsFormArray = this.form.get('clients') as UntypedFormArray;
   }
 
   getNoAccessTypeDescr() {
@@ -58,16 +60,16 @@ export class NfsFormClientComponent implements OnInit {
   }
 
   addClient() {
-    this.clientsFormArray = this.form.get('clients') as FormArray;
+    this.clientsFormArray = this.form.get('clients') as UntypedFormArray;
 
     const REGEX_IP = `(([0-9]{1,3})\\.([0-9]{1,3})\\.([0-9]{1,3})\.([0-9]{1,3})([/](\\d|[1-2]\\d|3[0-2]))?)`;
     const REGEX_LIST_IP = `${REGEX_IP}([ ,]{1,2}${REGEX_IP})*`;
     const fg = new CdFormGroup({
-      addresses: new FormControl('', {
+      addresses: new UntypedFormControl('', {
         validators: [Validators.required, Validators.pattern(REGEX_LIST_IP)]
       }),
-      access_type: new FormControl(''),
-      squash: new FormControl('')
+      access_type: new UntypedFormControl(''),
+      squash: new UntypedFormControl('')
     });
 
     this.clientsFormArray.push(fg);
@@ -75,7 +77,7 @@ export class NfsFormClientComponent implements OnInit {
   }
 
   removeClient(index: number) {
-    this.clientsFormArray = this.form.get('clients') as FormArray;
+    this.clientsFormArray = this.form.get('clients') as UntypedFormArray;
     this.clientsFormArray.removeAt(index);
   }
 
@@ -84,7 +86,7 @@ export class NfsFormClientComponent implements OnInit {
   }
 
   getValue(index: number, control: string) {
-    this.clientsFormArray = this.form.get('clients') as FormArray;
+    this.clientsFormArray = this.form.get('clients') as UntypedFormArray;
     const client = this.clientsFormArray.at(index) as CdFormGroup;
     return client.getValue(control);
   }

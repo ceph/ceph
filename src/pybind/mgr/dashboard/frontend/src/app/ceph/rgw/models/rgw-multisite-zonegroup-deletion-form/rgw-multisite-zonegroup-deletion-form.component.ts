@@ -1,5 +1,5 @@
 import { AfterViewInit, Component, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { UntypedFormControl } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { PoolService } from '~/app/shared/api/pool.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
@@ -46,7 +46,7 @@ export class RgwMultisiteZonegroupDeletionFormComponent implements OnInit, After
 
   createForm() {
     this.zonegroupForm = new CdFormGroup({
-      deletePools: new FormControl(false)
+      deletePools: new UntypedFormControl(false)
     });
   }
 

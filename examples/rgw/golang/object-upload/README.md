@@ -2,7 +2,7 @@
 This directory contains Golang code examples on how to upload an object to an S3 bucket running on a Ceph RGW cluster.
 
 # Prerequisite
-Linux machine running an RGW Ceph cluster. Preferrably started with the ``OSD=1 MON=1 MDS=0 MGR=0 RGW=1 ../src/vstart.sh --debug --new `` command.
+Linux machine running an RGW Ceph cluster. Preferably started with the ``OSD=1 MON=1 MDS=0 MGR=0 RGW=1 ../src/vstart.sh --debug --new `` command.
 Go installed on the Linux machine.
 
 ## Workflow Procedure

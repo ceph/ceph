@@ -335,9 +335,8 @@ int TableTool::main(std::vector<const char*> &argv)
     return r;
   }
 
-  auto fs =  fsmap->get_filesystem(role_selector.get_ns());
-  ceph_assert(fs != nullptr);
-  int64_t const pool_id = fs->mds_map.get_metadata_pool();
+  auto& fs = fsmap->get_filesystem(role_selector.get_ns());
+  int64_t const pool_id = fs.get_mds_map().get_metadata_pool();
   dout(4) << "resolving pool " << pool_id << dendl;
   std::string pool_name;
   r = rados.pool_reverse_lookup(pool_id, &pool_name);

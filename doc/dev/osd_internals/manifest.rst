@@ -289,40 +289,6 @@ This seems complicated, but it gets us two valuable properties:
 All clone operations will need to consider adjacent ``chunk_maps``
 when adding or removing references.
 
-Cache/Tiering
--------------
-
-There already exists a cache/tiering mechanism based on whiteouts.
-One goal here should ultimately be for this manifest machinery to
-provide a complete replacement.
-
-See ``cache-pool.rst``
-
-The manifest machinery already shares some code paths with the
-existing cache/tiering code, mainly ``stat_flush``.
-
-In no particular order, here's in incomplete list of things that need
-to be wired up to provide feature parity:
-
-* Online object access information: The osd already has pool configs
-  for maintaining bloom filters which provide estimates of access
-  recency for objects.  We probably need to modify this to permit
-  hitset maintenance for a normal pool -- there are already
-  ``CEPH_OSD_OP_PG_HITSET*`` interfaces for querying them.
-* Tiering agent: The osd already has a background tiering agent which
-  would need to be modified to instead flush and evict using
-  manifests.
-
-* Use exiting existing features regarding the cache flush policy such as
-  histset, age, ratio.
-  - hitset
-  - age, ratio, bytes
-
-* Add tiering-mode to ``manifest-tiering``
-  - Writeback
-  - Read-only
-
-
 Data Structures
 ===============
 

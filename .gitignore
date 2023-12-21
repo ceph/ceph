@@ -83,3 +83,17 @@ GTAGS
 # Python building things where it shouldn't
 /src/python-common/build/
 .cache
+
+# Doc build output
+src/pybind/cephfs/build/
+src/pybind/cephfs/cephfs.c
+src/pybind/cephfs/cephfs.egg-info/
+src/pybind/rados/build/
+src/pybind/rados/rados.c
+src/pybind/rados/rados.egg-info/
+src/pybind/rbd/build/
+src/pybind/rbd/rbd.c
+src/pybind/rbd/rbd.egg-info/
+src/pybind/rgw/build/
+src/pybind/rgw/rgw.c
+src/pybind/rgw/rgw.egg-info/

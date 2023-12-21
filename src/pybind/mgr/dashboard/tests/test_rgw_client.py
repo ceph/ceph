@@ -14,6 +14,8 @@ from ..tests import CLICommandTestMixin, RgwStub
 
 @patch('dashboard.services.rgw_client.RgwClient._get_user_id', Mock(
     return_value='dummy_admin'))
+@patch('dashboard.services.ceph_service.CephService.send_command', Mock(
+    return_value=''))
 class RgwClientTest(TestCase, CLICommandTestMixin):
     _dashboard_user_realm1_access_key = 'VUOFXZFK24H81ISTVBTR'
     _dashboard_user_realm1_secret_key = '0PGsCvXPGWS3AGgibUZEcd9efLrbbshlUkY3jruR'

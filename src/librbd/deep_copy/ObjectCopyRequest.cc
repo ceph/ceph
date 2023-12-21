@@ -58,10 +58,12 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
 
   m_dst_oid = m_dst_image_ctx->get_object_name(dst_object_number);
 
-  ldout(m_cct, 20) << "dst_oid=" << m_dst_oid << ", "
-                   << "src_snap_id_start=" << m_src_snap_id_start << ", "
-                   << "dst_snap_id_start=" << m_dst_snap_id_start << ", "
-                   << "snap_map=" << m_snap_map << dendl;
+  ldout(m_cct, 20) << "src_image_id=" << m_src_image_ctx->id
+		   << ", dst_image_id=" << m_dst_image_ctx->id
+	           << ", dst_oid=" << m_dst_oid
+		   << ", src_snap_id_start=" << m_src_snap_id_start
+		   << ", dst_snap_id_start=" << m_dst_snap_id_start
+                   << ", snap_map=" << m_snap_map << dendl;
 }
 
 template <typename I>
@@ -148,7 +150,7 @@ void ObjectCopyRequest<I>::send_read() {
   }
 
   auto io_context = m_src_image_ctx->duplicate_data_io_context();
-  io_context->read_snap(index.second);
+  io_context->set_read_snap(index.second);
 
   io::Extents image_extents{read_op.image_interval.begin(),
                             read_op.image_interval.end()};

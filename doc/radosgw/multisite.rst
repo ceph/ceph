@@ -464,8 +464,8 @@ For example:
 
 .. important:: The following steps assume a multi-site configuration that uses
    newly installed systems that have not yet begun storing data. **DO NOT
-   DELETE the ``default`` zone or its pools** if you are already using it to
-   store data, or the data will be irretrievably lost.
+   DELETE the** ``default`` **zone or its pools** if you are already using it
+   to store data, or the data will be irretrievably lost.
 
 Delete the default zone if needed:
 
@@ -527,6 +527,17 @@ running the following commands on the object gateway host:
 
    systemctl start ceph-radosgw@rgw.`hostname -s`
    systemctl enable ceph-radosgw@rgw.`hostname -s`
+
+If the ``cephadm`` command was used to deploy the cluster, you will not be able
+to use ``systemctl`` to start the gateway because no services will exist on
+which ``systemctl`` could operate. This is due to the containerized nature of
+the ``cephadm``-deployed Ceph cluster. If you have used the ``cephadm`` command
+and you have a containerized cluster, you must run a command of the following
+form to start the gateway:
+
+.. prompt:: bash #
+
+   ceph orch apply rgw <name> --realm=<realm> --zone=<zone> --placement --port
 
 Checking Synchronization Status
 -------------------------------
@@ -770,7 +781,13 @@ to a multi-site system, follow these steps:
       radosgw-admin zonegroup rename --rgw-zonegroup default --zonegroup-new-name=<name>
       radosgw-admin zone rename --rgw-zone default --zone-new-name us-east-1 --rgw-zonegroup=<name>
 
-3. Configure the master zonegroup. Replace ``<name>`` with the realm name or
+3. Rename the default zonegroup's ``api_name``. Replace ``<name>`` with the zonegroup name:
+
+   .. prompt:: bash #
+
+      radosgw-admin zonegroup modify --api-name=<name> --rgw-zonegroup=<name>
+
+4. Configure the master zonegroup. Replace ``<name>`` with the realm name or
    zonegroup name. Replace ``<fqdn>`` with the fully qualified domain name(s)
    in the zonegroup:
 
@@ -778,7 +795,7 @@ to a multi-site system, follow these steps:
 
       radosgw-admin zonegroup modify --rgw-realm=<name> --rgw-zonegroup=<name> --endpoints http://<fqdn>:80 --master --default
 
-4. Configure the master zone. Replace ``<name>`` with the realm name, zone
+5. Configure the master zone. Replace ``<name>`` with the realm name, zone
    name, or zonegroup name. Replace ``<fqdn>`` with the fully qualified domain
    name(s) in the zonegroup:
 
@@ -789,7 +806,7 @@ to a multi-site system, follow these steps:
                                 --access-key=<access-key> --secret=<secret-key> \
                                 --master --default
 
-5. Create a system user. Replace ``<user-id>`` with the username.  Replace
+6. Create a system user. Replace ``<user-id>`` with the username.  Replace
    ``<display-name>`` with a display name. The display name is allowed to
    contain spaces:
 
@@ -800,13 +817,13 @@ to a multi-site system, follow these steps:
       --access-key=<access-key> \ 
       --secret=<secret-key> --system
 
-6. Commit the updated configuration:
+7. Commit the updated configuration:
 
    .. prompt:: bash #
 
       radosgw-admin period update --commit
 
-7. Restart the Ceph Object Gateway:
+8. Restart the Ceph Object Gateway:
 
    .. prompt:: bash #
 

@@ -30,7 +30,7 @@ tasks:
       - sudo -u postgres -- postgresql-setup --initdb
       - sudo ls -lZaR /tmp/cephfs/postgres/
       - sudo systemctl start postgresql
-      - sudo -u postgres -- pgbench -s 500 -i
+      - sudo -u postgres -- pgbench -s 32 -i
       - sudo -u postgres -- pgbench -c 100 -j 4 --progress=5 --time=900
       - sudo systemctl stop postgresql
       - sudo ls -lZaR /tmp/cephfs/postgres/

@@ -5,7 +5,7 @@
 
 #include "rgw_service.h"
 
-#include "svc_rados.h"
+#include "rgw_tools.h"
 
 
 class Context;
@@ -21,14 +21,14 @@ class RGWSI_Notify : public RGWServiceInstance
 {
   friend class RGWWatcher;
   friend class RGWSI_Notify_ShutdownCB;
-  friend class RGWServices_Def;
+  friend struct RGWServices_Def;
 
 public:
   class CB;
 
 private:
   RGWSI_Zone *zone_svc{nullptr};
-  RGWSI_RADOS *rados_svc{nullptr};
+  librados::Rados *rados{nullptr};
   RGWSI_Finisher *finisher_svc{nullptr};
 
   ceph::shared_mutex watchers_lock = ceph::make_shared_mutex("watchers_lock");
@@ -37,7 +37,7 @@ private:
   int num_watchers{0};
   RGWWatcher **watchers{nullptr};
   std::set<int> watchers_set;
-  std::vector<RGWSI_RADOS::Obj> notify_objs;
+  std::vector<rgw_rados_ref> notify_objs;
 
   bool enabled{false};
 
@@ -45,7 +45,7 @@ private:
   uint64_t max_notify_retries = 10;
 
   std::string get_control_oid(int i);
-  RGWSI_RADOS::Obj pick_control_obj(const std::string& key);
+  rgw_rados_ref pick_control_obj(const std::string& key);
 
   CB *cb{nullptr};
 
@@ -58,16 +58,16 @@ private:
   void finalize_watch();
 
   void init(RGWSI_Zone *_zone_svc,
-            RGWSI_RADOS *_rados_svc,
+            librados::Rados* rados_,
             RGWSI_Finisher *_finisher_svc) {
     zone_svc = _zone_svc;
-    rados_svc = _rados_svc;
+    rados = rados_;
     finisher_svc = _finisher_svc;
   }
   int do_start(optional_yield, const DoutPrefixProvider *dpp) override;
   void shutdown() override;
 
-  int unwatch(RGWSI_RADOS::Obj& obj, uint64_t watch_handle);
+  int unwatch(rgw_rados_ref& obj, uint64_t watch_handle);
   void add_watcher(int i);
   void remove_watcher(int i);
 
@@ -79,7 +79,7 @@ private:
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(const DoutPrefixProvider *dpp, RGWSI_RADOS::Obj& notify_obj,
+  int robust_notify(const DoutPrefixProvider *dpp, rgw_rados_ref& notify_obj,
 		    const RGWCacheNotifyInfo& bl, optional_yield y);
 
   void schedule_context(Context *c);

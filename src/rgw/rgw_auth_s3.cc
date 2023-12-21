@@ -482,6 +482,7 @@ bool is_non_s3_op(RGWOpType op_type)
       op_type == RGW_OP_PUBSUB_TOPIC_CREATE ||
       op_type == RGW_OP_PUBSUB_TOPICS_LIST ||
       op_type == RGW_OP_PUBSUB_TOPIC_GET ||
+      op_type == RGW_OP_PUBSUB_TOPIC_SET ||
       op_type == RGW_OP_PUBSUB_TOPIC_DELETE ||
       op_type == RGW_OP_TAG_ROLE ||
       op_type == RGW_OP_LIST_ROLE_TAGS ||
@@ -574,7 +575,7 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
 
   /* Handle case when query string exists. Step 3 described in: http://docs.
    * aws.amazon.com/general/latest/gr/sigv4-create-canonical-request.html */
-  std::map<std::string, std::string> canonical_qs_map;
+  std::multimap<std::string, std::string> canonical_qs_map;
   for (const auto& s : get_str_vec<5>(*params, "&")) {
     std::string_view key, val;
     const auto parsed_pair = parse_key_value(s);
@@ -595,7 +596,7 @@ std::string get_v4_canonical_qs(const req_info& info, const bool using_qs)
     // while awsv4 specs ask for all slashes to be encoded, s3 itself is relaxed
     // in its implementation allowing non-url-encoded slashes to be present in
     // presigned urls for instance
-    canonical_qs_map[aws4_uri_recode(key, true)] = aws4_uri_recode(val, true);
+    canonical_qs_map.insert({{aws4_uri_recode(key, true), aws4_uri_recode(val, true)}});
   }
 
   /* Thanks to the early exist we have the guarantee that canonical_qs_map has
@@ -1141,7 +1142,7 @@ bool AWSv4ComplMulti::is_signature_mismatched()
   }
 }
 
-size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
+size_t AWSv4ComplMulti::recv_chunk(char* const buf, const size_t buf_max, bool& eof)
 {
   /* Buffer stores only parsed stream. Raw values reflect the stream
    * we're getting from a client. */
@@ -1166,6 +1167,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
                                                    to_extract);
       parsing_buf.resize(parsing_buf.size() - (to_extract - received));
       if (received == 0) {
+        eof = true;
         break;
       }
 
@@ -1215,6 +1217,7 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
     dout(30) << "AWSv4ComplMulti: to_extract=" << to_extract << ", received=" << received << dendl;
 
     if (received == 0) {
+      eof = true;
       break;
     }
 
@@ -1227,6 +1230,19 @@ size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
 
   dout(20) << "AWSv4ComplMulti: filled=" << buf_pos << dendl;
   return buf_pos;
+}
+
+size_t AWSv4ComplMulti::recv_body(char* const buf, const size_t buf_max)
+{
+  bool eof = false;
+  size_t total = 0;
+
+  while (total < buf_max && !eof) {
+    const size_t received = recv_chunk(buf + total, buf_max - total, eof);
+    total += received;
+  }
+  dout(20) << "AWSv4ComplMulti: received=" << total << dendl;
+  return total;
 }
 
 void AWSv4ComplMulti::modify_request_state(const DoutPrefixProvider* dpp, req_state* const s_rw)

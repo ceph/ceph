@@ -626,6 +626,21 @@ For example, the following commands are equivalent to each other:
    ceph daemon osd.0 foo
    ceph daemon /var/run/ceph/ceph-osd.0.asok foo
 
+There are two methods of running admin socket commands: (1)
+using ``ceph daemon`` as described above, which bypasses
+the monitor and assumes a direct login to the daemon's host,
+and (2) using the ``ceph tell {daemon-type}.{id}`` command,
+which is relayed by monitors and does not require access
+to the daemon's host.
+
+Use the ``raise`` command to send a signal to a daemon, as if by running ``kill -X {daemon.pid}``.
+When run via ``ceph tell`` it allows signalling a daemon without access to its host:
+
+.. prompt:: bash $
+
+   ceph daemon {daemon-name} raise HUP
+   ceph tell {daemon-type}.{id} raise -9
+
 To view the available admin-socket commands, run the following command:
 
 .. prompt:: bash $
@@ -634,11 +649,7 @@ To view the available admin-socket commands, run the following command:
 
 Admin-socket commands enable you to view and set your configuration at runtime.
 For more on viewing your configuration, see `Viewing a Configuration at
-Runtime`_. There are two methods of setting configuration value at runtime: (1)
-using the admin socket, which bypasses the monitor and requires a direct login
-to the host in question, and (2) using the ``ceph tell {daemon-type}.{id}
-config set`` command, which relies on the monitor and does not require a direct
-login.
+Runtime`_.
 
 .. _Viewing a Configuration at Runtime: ../../configuration/ceph-conf#viewing-a-configuration-at-runtime
 .. _Storage Capacity: ../../configuration/mon-config-ref#storage-capacity

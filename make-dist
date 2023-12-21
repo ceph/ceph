@@ -35,7 +35,7 @@ echo "version $version"
 # update submodules
 echo "updating submodules..."
 force=$(if git submodule usage 2>&1 | grep --quiet 'update.*--force'; then echo --force ; fi)
-if ! git submodule sync || ! git submodule update $force --init --recursive; then
+if ! git submodule sync || ! git submodule update $force --init --recursive --progress; then
     echo "Error: could not initialize submodule projects"
     echo "  Network connectivity might be required."
     exit 1
@@ -132,7 +132,7 @@ build_dashboard_frontend() {
 
   $CURR_DIR/src/tools/setup-virtualenv.sh $TEMP_DIR
   $TEMP_DIR/bin/pip install nodeenv
-  $TEMP_DIR/bin/nodeenv --verbose -p --node=16.20.1
+  $TEMP_DIR/bin/nodeenv --verbose -p --node=18.17.0
   cd src/pybind/mgr/dashboard/frontend
 
   . $TEMP_DIR/bin/activate

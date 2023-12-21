@@ -20,7 +20,7 @@ from teuthology import contextutil
 
 from tasks.ceph_manager import write_conf
 from tasks.ceph_manager import CephManager
-from tasks.cephfs.cephfs_test_case import RunCephCmd
+from tasks.ceph_test_case import RunCephCmd
 
 
 log = logging.getLogger(__name__)
@@ -630,6 +630,9 @@ class Filesystem(MDSCluster):
     def set_refuse_client_session(self, yes):
         self.set_var("refuse_client_session", yes)
 
+    def set_refuse_standby_for_another_fs(self, yes):
+        self.set_var("refuse_standby_for_another_fs", yes)
+
     def compat(self, *args):
         a = map(lambda x: str(x).lower(), args)
         self.run_ceph_cmd("fs", "compat", self.name, *a)
@@ -770,17 +773,30 @@ class Filesystem(MDSCluster):
                 assert(isinstance(subvols['create'], int))
                 assert(subvols['create'] > 0)
 
+                self.run_ceph_cmd('fs', 'subvolumegroup', 'create', self.name, 'qa')
+                subvol_options = self.fs_config.get('subvol_options', '')
+
                 for sv in range(0, subvols['create']):
                     sv_name = f'sv_{sv}'
-                    self.run_ceph_cmd('fs', 'subvolume', 'create', self.name,
-                                      sv_name,
-                                      self.fs_config.get('subvol_options', ''))
+                    cmd = [
+                      'fs',
+                      'subvolume',
+                      'create',
+                      self.name,
+                      sv_name,
+                      '--group_name', 'qa',
+                    ]
+                    if subvol_options:
+                        cmd.append(subvol_options)
+                    self.run_ceph_cmd(*cmd)
 
                     if self.name not in self._ctx.created_subvols:
                         self._ctx.created_subvols[self.name] = []
                     
                     subvol_path = self.get_ceph_cmd_stdout(
-                        'fs', 'subvolume', 'getpath', self.name, sv_name)
+                        'fs', 'subvolume', 'getpath', self.name,
+                        '--group_name', 'qa',
+                        sv_name)
                     subvol_path = subvol_path.strip()
                     self._ctx.created_subvols[self.name].append(subvol_path)
             else:

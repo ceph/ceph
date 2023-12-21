@@ -19,6 +19,9 @@ import { CephfsSubvolumeListComponent } from './cephfs-subvolume-list/cephfs-sub
 import { CephfsSubvolumeFormComponent } from './cephfs-subvolume-form/cephfs-subvolume-form.component';
 import { CephfsSubvolumeGroupComponent } from './cephfs-subvolume-group/cephfs-subvolume-group.component';
 import { CephfsSubvolumegroupFormComponent } from './cephfs-subvolumegroup-form/cephfs-subvolumegroup-form.component';
+import { CephfsSubvolumeSnapshotsListComponent } from './cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component';
+import { CephfsSnapshotscheduleListComponent } from './cephfs-snapshotschedule-list/cephfs-snapshotschedule-list.component';
+import { DataTableModule } from '../../shared/datatable/datatable.module';
 
 @NgModule({
   imports: [
@@ -31,7 +34,8 @@ import { CephfsSubvolumegroupFormComponent } from './cephfs-subvolumegroup-form/
     FormsModule,
     ReactiveFormsModule,
     NgbTypeaheadModule,
-    NgbTooltipModule
+    NgbTooltipModule,
+    DataTableModule
   ],
   declarations: [
     CephfsDetailComponent,
@@ -45,7 +49,9 @@ import { CephfsSubvolumegroupFormComponent } from './cephfs-subvolumegroup-form/
     CephfsSubvolumeFormComponent,
     CephfsDirectoriesComponent,
     CephfsSubvolumeGroupComponent,
-    CephfsSubvolumegroupFormComponent
+    CephfsSubvolumegroupFormComponent,
+    CephfsSubvolumeSnapshotsListComponent,
+    CephfsSnapshotscheduleListComponent
   ]
 })
 export class CephfsModule {}

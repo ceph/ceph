@@ -16,41 +16,36 @@ using namespace std;
 int rgw_user_sync_all_stats(const DoutPrefixProvider *dpp, rgw::sal::Driver* driver,
 			    rgw::sal::User* user, optional_yield y)
 {
-  rgw::sal::BucketList user_buckets;
+  size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
-  CephContext *cct = driver->ctx();
-  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-  string marker;
-  int ret;
-
+  rgw::sal::BucketList listing;
+  int ret = 0;
   do {
-    ret = user->list_buckets(dpp, marker, string(), max_entries, false, user_buckets, y);
+    ret = user->list_buckets(dpp, listing.next_marker, string(),
+                             max_entries, false, listing, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
-    auto& buckets = user_buckets.get_buckets();
-    for (auto i = buckets.begin(); i != buckets.end(); ++i) {
-      marker = i->first;
 
-      auto& bucket = i->second;
-
-      ret = bucket->load_bucket(dpp, y);
+    for (auto& ent : listing.buckets) {
+      std::unique_ptr<rgw::sal::Bucket> bucket;
+      ret = driver->load_bucket(dpp, ent.bucket, &bucket, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "ERROR: could not read bucket info: bucket=" << bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = bucket->sync_user_stats(dpp, y);
+      ret = bucket->sync_user_stats(dpp, y, &ent);
       if (ret < 0) {
-        ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
+        ldpp_dout(dpp, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
       }
-      ret = bucket->check_bucket_shards(dpp, y);
+      ret = bucket->check_bucket_shards(dpp, ent.count, y);
       if (ret < 0) {
 	ldpp_dout(dpp, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }
     }
-  } while (user_buckets.is_truncated());
+  } while (!listing.next_marker.empty());
 
   ret = user->complete_flush_stats(dpp, y);
   if (ret < 0) {
@@ -67,38 +62,26 @@ int rgw_user_get_all_buckets_stats(const DoutPrefixProvider *dpp,
 				   map<string, bucket_meta_entry>& buckets_usage_map,
 				   optional_yield y)
 {
-  CephContext *cct = driver->ctx();
-  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
-  bool done;
-  string marker;
-  int ret;
+  size_t max_entries = dpp->get_cct()->_conf->rgw_list_buckets_max_chunk;
 
+  rgw::sal::BucketList listing;
   do {
-    rgw::sal::BucketList buckets;
-    ret = user->list_buckets(dpp, marker, string(), max_entries, false, buckets, y);
+    int ret = user->list_buckets(dpp, listing.next_marker, string(),
+                                 max_entries, false, listing, y);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "failed to read user buckets: ret=" << ret << dendl;
       return ret;
     }
-    auto& m = buckets.get_buckets();
-    for (const auto& i :  m) {
-      marker = i.first;
 
-      auto& bucket_ent = i.second;
-      ret = bucket_ent->load_bucket(dpp, y, true /* load user stats */);
-      if (ret < 0) {
-        ldpp_dout(dpp, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
-        return ret;
-      }
+    for (const auto& ent : listing.buckets) {
       bucket_meta_entry entry;
-      entry.size = bucket_ent->get_size();
-      entry.size_rounded = bucket_ent->get_size_rounded();
-      entry.creation_time = bucket_ent->get_creation_time();
-      entry.count = bucket_ent->get_count();
-      buckets_usage_map.emplace(bucket_ent->get_name(), entry);
+      entry.size = ent.size;
+      entry.size_rounded = ent.size_rounded;
+      entry.creation_time = ent.creation_time;
+      entry.count = ent.count;
+      buckets_usage_map.emplace(ent.bucket.name, entry);
     }
-    done = (buckets.count() < max_entries);
-  } while (!done);
+  } while (!listing.next_marker.empty());
 
   return 0;
 }

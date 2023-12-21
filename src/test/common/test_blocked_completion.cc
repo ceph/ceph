@@ -13,7 +13,9 @@
  */
 
 
-#include <boost/asio.hpp>
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/post.hpp>
+#include <boost/asio/steady_timer.hpp>
 #include <boost/system/error_code.hpp>
 
 #include <gtest/gtest.h>
@@ -70,11 +72,9 @@ auto id(const Executor& executor, CompletionToken&& token,
 	Args&& ...args)
 {
   ba::async_completion<CompletionToken, void(Args...)> init(token);
-  auto a = ba::get_associated_allocator(init.completion_handler);
-  executor.post(ca::forward_handler(
+  boost::asio::post(ca::forward_handler(
 		  ca::bind_handler(std::move(init.completion_handler),
-				   std::forward<Args>(args)...)),
-		a);
+				   std::forward<Args>(args)...)));
   return init.result.get();
 }
 

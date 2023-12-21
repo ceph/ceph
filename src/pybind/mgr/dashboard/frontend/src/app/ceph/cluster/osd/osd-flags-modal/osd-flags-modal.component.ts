@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormGroup } from '@angular/forms';
+import { UntypedFormGroup } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -19,7 +19,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 export class OsdFlagsModalComponent implements OnInit {
   permissions: Permissions;
 
-  osdFlagsForm = new FormGroup({});
+  osdFlagsForm = new UntypedFormGroup({});
 
   allFlags = {
     noin: {

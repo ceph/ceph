@@ -16,13 +16,14 @@ import shlex
 import stat
 import errno
 
-from distutils.version import LooseVersion
+from pkg_resources import packaging  # type: ignore
 
 from cmd2 import Cmd
 from cmd2 import __version__ as cmd2_version
 # XXX: In cmd2 versions < 1.0.1, we'll get SystemExit(2) instead of
 # Cmd2ArgparseError
-if LooseVersion(cmd2_version) >= LooseVersion("1.0.1"):
+Version = packaging.version.Version
+if Version(cmd2_version) >= Version("1.0.1"):
     from cmd2.exceptions import Cmd2ArgparseError
 else:
     # HACK: so that we don't have check for version everywhere
@@ -1633,7 +1634,7 @@ class CephFSShell(Cmd):
         """
         try:
             poutput('{}'.format(cephfs.getxattr(args.path,
-                                to_bytes(args.name)).decode('utf-8')))
+                                to_bytes(args.name), size=65536).decode('utf-8')))
         except libcephfs.Error as e:
             set_exit_code_msg(msg=e)
 
@@ -1700,11 +1701,11 @@ def read_shell_conf(shell, shell_conf_file):
 
     sec = 'cephfs-shell'
     opts = []
-    if LooseVersion(cmd2_version) >= LooseVersion("0.10.0"):
+    if Version(cmd2_version) >= Version("0.10.0"):
         for attr in shell.settables.keys():
             opts.append(attr)
     else:
-        if LooseVersion(cmd2_version) <= LooseVersion("0.9.13"):
+        if Version(cmd2_version) <= Version("0.9.13"):
             # hardcoding options for 0.7.9 because -
             # 1. we use cmd2 v0.7.9 with teuthology and
             # 2. there's no way distinguish between a shell setting and shell
@@ -1713,7 +1714,7 @@ def read_shell_conf(shell, shell_conf_file):
                     'continuation_prompt', 'debug', 'echo', 'editor',
                     'feedback_to_output', 'locals_in_py', 'prompt', 'quiet',
                     'timing']
-        elif LooseVersion(cmd2_version) >= LooseVersion("0.9.23"):
+        elif Version(cmd2_version) >= Version("0.9.23"):
             opts.append('allow_style')
         # no equivalent option was defined by cmd2.
         else:
@@ -1768,7 +1769,7 @@ def manage_args():
     args.exe_and_quit = False    # Execute and quit, don't launch the shell.
 
     if args.batch:
-        if LooseVersion(cmd2_version) <= LooseVersion("0.9.13"):
+        if Version(cmd2_version) <= Version("0.9.13"):
             args.commands = ['load ' + args.batch, ',quit']
         else:
             args.commands = ['run_script ' + args.batch, ',quit']
@@ -1813,7 +1814,7 @@ def execute_cmds_and_quit(args):
     # value to indicate whether the execution of the commands should stop, but
     # since 0.9.7 it returns the return value of do_* methods only if it's
     # not None. When it is None it returns False instead of None.
-    if LooseVersion(cmd2_version) <= LooseVersion("0.9.6"):
+    if Version(cmd2_version) <= Version("0.9.6"):
         stop_exec_val = None
     else:
         stop_exec_val = False

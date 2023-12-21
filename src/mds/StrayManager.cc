@@ -280,17 +280,6 @@ void StrayManager::_purge_stray_logged(CDentry *dn, version_t pdv, MutationRef& 
     dir->remove_dentry(dn);
   }
 
-  // Once we are here normally the waiter list are mostly empty
-  // but in corner case that the clients pass a invalidate ino,
-  // which maybe under unlinking, the link caller will add the
-  // request to the waiter list. We need try to wake them up
-  // anyway.
-  MDSContext::vec finished;
-  in->take_waiting(CInode::WAIT_UNLINK, finished);
-  if (!finished.empty()) {
-    mds->queue_waiters(finished);
-  }
-
   // drop inode
   inodeno_t ino = in->ino();
   if (in->is_dirty())
@@ -684,6 +673,12 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 {
   dout(10) << __func__ << " " << *straydn << " to " << *rdn << dendl;
 
+  if (straydn->reintegration_reqid) {
+    dout(20) << __func__ << ": stray dentry " << *straydn
+             << " is already under reintegrating" << dendl;
+    return;
+  }
+
   logger->inc(l_mdc_strays_reintegrated);
 
   // rename it to remote linkage .
@@ -697,11 +692,8 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   req->set_filepath2(src);
   req->set_tid(tid);
 
-  rdn->state_set(CDentry::STATE_REINTEGRATING);
-  mds->internal_client_requests.emplace(std::piecewise_construct,
-                                        std::make_tuple(tid),
-                                        std::make_tuple(CEPH_MDS_OP_RENAME,
-                                                        rdn, tid));
+  auto ptr = std::make_unique<StrayEvalRequest>(CEPH_MDS_OP_RENAME, tid, straydn);
+  mds->internal_client_requests.emplace(tid, std::move(ptr));
 
   mds->send_message_mds(req, rdn->authority().first);
 }
@@ -709,6 +701,12 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 {
   dout(10) << __func__ << " " << *dn << " to mds." << to << dendl;
+
+  if (dn->reintegration_reqid) {
+    dout(20) << __func__ << ": stray dentry " << *dn
+             << " is already under migrating" << dendl;
+    return;
+  }
 
   logger->inc(l_mdc_strays_migrated);
 
@@ -726,10 +724,8 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   req->set_filepath2(src);
   req->set_tid(tid);
 
-  mds->internal_client_requests.emplace(std::piecewise_construct,
-                                        std::make_tuple(tid),
-                                        std::make_tuple(CEPH_MDS_OP_RENAME,
-                                                        nullptr, tid));
+  auto ptr = std::make_unique<StrayEvalRequest>(CEPH_MDS_OP_RENAME, tid, dn);
+  mds->internal_client_requests.emplace(tid, std::move(ptr));
 
   mds->send_message_mds(req, to);
 }

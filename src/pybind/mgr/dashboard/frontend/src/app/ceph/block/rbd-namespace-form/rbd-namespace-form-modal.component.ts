@@ -2,7 +2,7 @@ import { Component, OnInit } from '@angular/core';
 import {
   AbstractControl,
   AsyncValidatorFn,
-  FormControl,
+  UntypedFormControl,
   ValidationErrors,
   ValidatorFn
 } from '@angular/forms';
@@ -53,8 +53,8 @@ export class RbdNamespaceFormModalComponent implements OnInit {
   createForm() {
     this.namespaceForm = new CdFormGroup(
       {
-        pool: new FormControl(''),
-        namespace: new FormControl('')
+        pool: new UntypedFormControl(''),
+        namespace: new UntypedFormControl('')
       },
       this.validator(),
       this.asyncValidator()

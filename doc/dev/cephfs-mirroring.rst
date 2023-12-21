@@ -377,7 +377,7 @@ information. To check which mirror daemon a directory has been mapped to use::
     "state": "mapped"
   }
 
-.. note:: `instance_id` is the RAODS instance-id associated with a mirror daemon.
+.. note:: `instance_id` is the RADOS instance-id associated with a mirror daemon.
 
 Other information such as `state` and `last_shuffled` are interesting when running
 multiple mirror daemons.

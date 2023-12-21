@@ -18,8 +18,7 @@
 
 #include <netdb.h>
 
-#include <boost/system/error_code.hpp>
-#include <boost/asio.hpp>
+#include <boost/system.hpp>
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wnon-virtual-dtor"

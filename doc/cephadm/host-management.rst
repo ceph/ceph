@@ -123,6 +123,14 @@ All OSDs on the host will be scheduled to be removed. You can check the progress
 
 See :ref:`cephadm-osd-removal` for more details about OSD removal.
 
+The ``orch host drain`` command also supports a ``--zap-osd-devices``
+flag. Setting this flag while draining a host will cause cephadm to zap
+the devices of the OSDs it is removing as part of the drain process
+
+.. prompt:: bash #
+
+   ceph orch host drain *<host>* --zap-osd-devices
+
 Use the following command to determine whether any daemons are still on the
 host:
 
@@ -308,9 +316,32 @@ create a new CRUSH host located in the specified hierarchy.
 
   The ``location`` attribute will be only affect the initial CRUSH location. Subsequent
   changes of the ``location`` property will be ignored. Also, removing a host will not remove
-  any CRUSH buckets.
+  any CRUSH buckets unless the ``--rm-crush-entry`` flag is provided to the ``orch host rm`` command
 
 See also :ref:`crush_map_default_types`.
+
+Removing a host from the CRUSH map
+==================================
+
+The ``ceph orch host rm`` command has support for removing the bucket entry for the host
+in the CRUSH map. This is done by providing the ``--rm-crush-entry`` flag.
+
+.. prompt:: bash [ceph:root@host1/]#
+
+   ceph orch host rm host1 --rm-crush-entry
+
+When this flag is specified, cephadm will attempt to remove the bucket entry
+for the host from the CRUSH map as part of the host removal process. Note that if
+it fails to do so, cephadm will report the failure and the host will remain under
+cephadm control.
+
+.. note:: 
+
+  The removal from the CRUSH map will fail if there are OSDs deployed on the
+  host. If you would like to remove all the host's OSDs as well, please start
+  by using  the ``ceph orch host drain`` command to do so. Once the OSDs
+  are all gone, then you may have cephadm remove the CRUSH entry along with the
+  host using the ``--rm-crush-entry`` flag.
 
 OS Tuning Profiles
 ==================

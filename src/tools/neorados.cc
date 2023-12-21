@@ -13,25 +13,26 @@
  *
  */
 
-#define BOOST_COROUTINES_NO_DEPRECATION_WARNING
-
 #include <algorithm>
 #include <cassert>
+#include <coroutine>
 #include <iostream>
 #include <string>
 #include <string_view>
 #include <tuple>
 #include <vector>
 
-#include <boost/asio.hpp>
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/redirect_error.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
+
 #include <boost/io/ios_state.hpp>
 #include <boost/program_options.hpp>
 #include <boost/system/system_error.hpp>
 
 #include <fmt/format.h>
 #include <fmt/ostream.h>
-
-#include <spawn/spawn.hpp>
 
 #include "include/buffer.h" // :(
 
@@ -42,7 +43,6 @@ using namespace std::literals;
 namespace ba = boost::asio;
 namespace bs = boost::system;
 namespace R = neorados;
-namespace s = spawn;
 
 std::string verstr(const std::tuple<uint32_t, uint32_t, uint32_t>& v)
 {
@@ -68,91 +68,94 @@ void printseq(const V& v, std::ostream& m, F&& f)
 		});
 }
 
-std::int64_t lookup_pool(R::RADOS& r, const std::string& pname,
-			 s::yield_context y)
+ba::awaitable<R::IOContext> lookup_pool(R::RADOS& r, const std::string& pname)
 {
   bs::error_code ec;
-  auto p = r.lookup_pool(pname, y[ec]);
+  auto p = co_await r.lookup_pool(pname,
+				  ba::redirect_error(ba::use_awaitable, ec));
   if (ec)
     throw bs::system_error(
       ec, fmt::format("when looking up '{}'", pname));
-  return p;
+  co_return R::IOContext(p);
 }
 
 
-void lspools(R::RADOS& r, const std::vector<std::string>&,
-	     s::yield_context y)
+ba::awaitable<void> lspools(R::RADOS& r, const std::vector<std::string>&)
 {
-  const auto l = r.list_pools(y);
+  const auto l = co_await r.list_pools(ba::use_awaitable);
   printseq(l, std::cout, [](const auto& p) -> const std::string& {
 			   return p.second;
 			 });
+  co_return;
 }
 
 
-void ls(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
+ba::awaitable<void> ls(R::RADOS& r, const std::vector<std::string>& p)
 {
   const auto& pname = p[0];
-  const auto pool = lookup_pool(r, pname, y);
-
+  const auto pool = (co_await lookup_pool(r, pname)).set_ns(R::all_nspaces);
   std::vector<R::Entry> ls;
   R::Cursor next = R::Cursor::begin();
   bs::error_code ec;
   do {
-    std::tie(ls, next) = r.enumerate_objects(pool, next, R::Cursor::end(),
-					     1000, {}, y[ec], R::all_nspaces);
+    std::tie(ls, next) =
+      co_await r.enumerate_objects(pool, next, R::Cursor::end(), 1000, {},
+				   ba::redirect_error(ba::use_awaitable, ec));
     if (ec)
       throw bs::system_error(ec, fmt::format("when listing {}", pname));
     printseq(ls, std::cout);
     ls.clear();
   } while (next != R::Cursor::end());
+  co_return;
 }
 
-void mkpool(R::RADOS& r, const std::vector<std::string>& p,
-	    s::yield_context y)
+ba::awaitable<void> mkpool(R::RADOS& r, const std::vector<std::string>& p)
 {
   const auto& pname = p[0];
   bs::error_code ec;
-  r.create_pool(pname, std::nullopt, y[ec]);
+  co_await r.create_pool(pname, std::nullopt,
+			 ba::redirect_error(ba::use_awaitable, ec));
   if (ec)
     throw bs::system_error(ec, fmt::format("when creating pool '{}'", pname));
+  co_return;
 }
 
-void rmpool(R::RADOS& r, const std::vector<std::string>& p,
-	    s::yield_context y)
+ba::awaitable<void> rmpool(R::RADOS& r, const std::vector<std::string>& p)
 {
   const auto& pname = p[0];
   bs::error_code ec;
-  r.delete_pool(pname, y[ec]);
+  co_await r.delete_pool(pname, ba::redirect_error(ba::use_awaitable, ec));
   if (ec)
     throw bs::system_error(ec, fmt::format("when removing pool '{}'", pname));
+  co_return;
 }
 
-void create(R::RADOS& r, const std::vector<std::string>& p,
-	    s::yield_context y)
+ba::awaitable<void> create(R::RADOS& r, const std::vector<std::string>& p)
 {
   const auto& pname = p[0];
   const R::Object obj = p[1];
-  const auto pool = lookup_pool(r, pname, y);
+  const auto pool = co_await lookup_pool(r, pname);
 
   bs::error_code ec;
   R::WriteOp op;
   op.create(true);
-  r.execute(obj, pool, std::move(op), y[ec]);
+  co_await r.execute(obj, pool, std::move(op),
+		     ba::redirect_error(ba::use_awaitable, ec));
   if (ec)
     throw bs::system_error(ec,
 			   fmt::format(
 			     "when creating object '{}' in pool '{}'",
 			     obj, pname));
+  co_return;
 }
 
 inline constexpr std::size_t io_size = 4 << 20;
 
-void write(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
+ba::awaitable<void> write(R::RADOS& r, const std::vector<std::string>& p)
 {
   const auto& pname = p[0];
   const R::Object obj(p[1]);
-  const auto pool = lookup_pool(r, pname, y);
+  const auto pool = co_await lookup_pool(r, pname);
 
   bs::error_code ec;
   std::unique_ptr<char[]> buf = std::make_unique<char[]>(io_size);
@@ -174,28 +177,30 @@ void write(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
     bl.append(buffer::create_static(len, buf.get()));
     R::WriteOp op;
     op.write(curoff, std::move(bl));
-    r.execute(obj, pool, std::move(op), y[ec]);
+    co_await r.execute(obj, pool, std::move(op),
+		       ba::redirect_error(ba::use_awaitable, ec));
 
     if (ec)
       throw bs::system_error(ec, fmt::format(
 			       "when writing object '{}' in pool '{}'",
 			       obj, pname));
   }
+  co_return;
 }
 
-void read(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
+ba::awaitable<void> read(R::RADOS& r, const std::vector<std::string>& p)
 {
   const auto& pname = p[0];
   const R::Object obj(p[1]);
-  const auto pool = lookup_pool(r, pname, y);
+  const auto pool = co_await lookup_pool(r, pname);
 
   bs::error_code ec;
   std::uint64_t len;
   {
     R::ReadOp op;
     op.stat(&len, nullptr);
-    r.execute(obj, pool, std::move(op),
-	      nullptr, y[ec]);
+    co_await r.execute(obj, pool, std::move(op),
+		       nullptr, ba::redirect_error(ba::use_awaitable, ec));
     if (ec)
       throw bs::system_error(
 	ec,
@@ -205,10 +210,11 @@ void read(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
 
   std::size_t off = 0;
   ceph::buffer::list bl;
-  while (auto toread = std::max(len - off, io_size)) {
+  while (auto toread = std::min(len - off, io_size)) {
     R::ReadOp op;
     op.read(off, toread, &bl);
-    r.execute(obj, pool, std::move(op), nullptr, y[ec]);
+    co_await r.execute(obj, pool, std::move(op), nullptr,
+		       ba::redirect_error(ba::use_awaitable, ec));
     if (ec)
       throw bs::system_error(
 	ec,
@@ -219,28 +225,31 @@ void read(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
     bl.write_stream(std::cout);
     bl.clear();
   }
+  co_return;
 }
 
-void rm(R::RADOS& r, const std::vector<std::string>& p, s::yield_context y)
+ba::awaitable<void> rm(R::RADOS& r, const std::vector<std::string>& p)
 {
   const auto& pname = p[0];
   const R::Object obj = p[1];
-  const auto pool = lookup_pool(r, pname, y);
+  const auto pool = co_await lookup_pool(r, pname);
 
   bs::error_code ec;
   R::WriteOp op;
   op.remove();
-  r.execute(obj, pool, std::move(op), y[ec]);
+  co_await r.execute(obj, pool, std::move(op),
+		     ba::redirect_error(ba::use_awaitable, ec));
   if (ec)
     throw bs::system_error(ec, fmt::format(
 			     "when removing object '{}' in pool '{}'",
 			     obj, pname));
+  co_return;
 }
 
 static constexpr auto version = std::make_tuple(0ul, 0ul, 1ul);
 
-using cmdfunc = void (*)(R::RADOS& r, const std::vector<std::string>& p,
-			 s::yield_context);
+using cmdfunc =
+  ba::awaitable<void> (*)(R::RADOS& r, const std::vector<std::string>& p);
 
 struct cmdesc {
   std::string_view name;
@@ -371,10 +380,14 @@ int main(int argc, char* argv[])
 		   prog, command, ci->name, ci->usage);
 	return 1;
       }
-      s::spawn(c, [&](s::yield_context y) {
-		    auto r = R::RADOS::Builder{}.build(c, y);
-		    ci->f(r, parameters, y);
-		  });
+      ba::co_spawn(c,
+		   [&]() -> ba::awaitable<void> {
+		     auto r = co_await R::RADOS::Builder{}.build(
+		       c, ba::use_awaitable);
+		     co_await ci->f(r, parameters);
+		   }, [](std::exception_ptr e) {
+		     if (e) std::rethrow_exception(e);
+		   });
     } else {
       fmt::print(std::cerr, "{}: {}: unknown command\n", prog, command);
       return 1;

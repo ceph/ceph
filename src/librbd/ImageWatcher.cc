@@ -576,8 +576,7 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
     return;
   }
 
-  std::shared_lock watch_locker{this->m_watch_lock};
-  if (this->is_registered(this->m_watch_lock)) {
+  if (is_registered()) {
     ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
 
     auto ctx = new LambdaContext([this](int r) {

@@ -16,6 +16,8 @@ namespace {
   }
 }
 
+SET_SUBSYS(osd);
+
 namespace crimson::osd {
 
 LogMissingRequest::LogMissingRequest(crimson::net::ConnectionRef&& conn,
@@ -49,6 +51,12 @@ ConnectionPipeline &LogMissingRequest::get_connection_pipeline()
   return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
 }
 
+PerShardPipeline &LogMissingRequest::get_pershard_pipeline(
+    ShardServices &shard_services)
+{
+  return shard_services.get_replicated_request_pipeline();
+}
+
 ClientRequest::PGPipeline &LogMissingRequest::client_pp(PG &pg)
 {
   return pg.request_pg_pipeline;
@@ -57,11 +65,13 @@ ClientRequest::PGPipeline &LogMissingRequest::client_pp(PG &pg)
 seastar::future<> LogMissingRequest::with_pg(
   ShardServices &shard_services, Ref<PG> pg)
 {
-  logger().debug("{}: LogMissingRequest::with_pg", *this);
+  LOG_PREFIX(LogMissingRequest::with_pg);
+  DEBUGI("{}: LogMissingRequest::with_pg", *this);
 
   IRef ref = this;
   return interruptor::with_interruption([this, pg] {
-    logger().debug("{}: pg present", *this);
+    LOG_PREFIX(LogMissingRequest::with_pg);
+    DEBUGI("{}: pg present", *this);
     return this->template enter_stage<interruptor>(client_pp(*pg).await_map
     ).then_interruptible([this, pg] {
       return this->template with_blocking_event<
@@ -72,8 +82,16 @@ seastar::future<> LogMissingRequest::with_pg(
       });
     }).then_interruptible([this, pg](auto) {
       return pg->do_update_log_missing(req, conn);
+    }).then_interruptible([this] {
+      logger().debug("{}: complete", *this);
+      return handle.complete();
     });
-  }, [ref](std::exception_ptr) { return seastar::now(); }, pg);
+  }, [](std::exception_ptr) {
+    return seastar::now();
+  }, pg).finally([this, ref=std::move(ref)] {
+    logger().debug("{}: exit", *this);
+    handle.exit();
+  });
 }
 
 }

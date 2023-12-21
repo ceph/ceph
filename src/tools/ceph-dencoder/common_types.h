@@ -23,12 +23,29 @@ TYPE(filepath)
 
 #include "include/fs_types.h"
 TYPE_FEATUREFUL(file_layout_t)
+TYPE(inodeno_t)
 
 #include "include/util.h"
 TYPE(ceph_data_stats)
 
+#include "include/object.h"
+TYPE(object_t)
+TYPE(sobject_t)
+
+#include "include/frag.h"
+TYPE(fragtree_t)
+TYPE(frag_t)
+
+#include "include/types.h"
+TYPE(shard_id_t)
+TYPE(inline_data_t)
+TYPE(sha256_digest_t)
+TYPE(errorcode32_t)
+TYPE(client_t)
+
 #include "common/bit_vector.hpp"
 TYPE(BitVector<2>)
+TYPE(ceph::BitVector<2>)
 
 #include "common/bloom_filter.hpp"
 TYPE(bloom_filter)
@@ -36,6 +53,9 @@ TYPE(compressible_bloom_filter)
 
 #include "common/DecayCounter.h"
 TYPE(DecayCounter)
+
+#include "common/entity_name.h"
+TYPE(EntityName)
 
 #include "common/histogram.h"
 TYPE(pow2_hist_t)
@@ -71,11 +91,17 @@ TYPE(cls_cas_chunk_put_ref_op)
 
 #include "cls/cas/cls_cas_internal.h"
 TYPE(chunk_refs_t)
+TYPE(chunk_refs_count_t)
+TYPE(chunk_refs_by_object_t)
 
 #include "cls/lock/cls_lock_types.h"
 TYPE(rados::cls::lock::locker_id_t)
 TYPE_FEATUREFUL(rados::cls::lock::locker_info_t)
 TYPE_FEATUREFUL(rados::cls::lock::lock_info_t)
+using namespace rados::cls::lock;
+TYPE(locker_id_t)
+TYPE_FEATUREFUL(locker_info_t)
+TYPE_FEATUREFUL(lock_info_t)
 
 #include "cls/lock/cls_lock_ops.h"
 TYPE(cls_lock_lock_op)
@@ -97,6 +123,64 @@ TYPE(obj_refcount)
 
 #include "cls/timeindex/cls_timeindex_types.h"
 TYPE(cls_timeindex_entry)
+
+#include "cls/timeindex/cls_timeindex_ops.h"
+TYPE(cls_timeindex_list_op)
+TYPE(cls_timeindex_list_ret)
+
+#include "cls/queue/cls_queue_types.h"
+TYPE(cls_queue_entry)
+TYPE(cls_queue_marker)
+TYPE(cls_queue_head)
+
+#include "cls/queue/cls_queue_ops.h"
+TYPE(cls_queue_get_capacity_ret)
+TYPE(cls_queue_remove_op)
+TYPE(cls_queue_enqueue_op)
+TYPE(cls_queue_list_op)
+TYPE(cls_queue_list_ret)
+TYPE(cls_queue_init_op)
+
+#include "cls/2pc_queue/cls_2pc_queue_ops.h"
+TYPE(cls_2pc_queue_abort_op)
+TYPE(cls_2pc_queue_commit_op)
+TYPE(cls_2pc_queue_expire_op)
+TYPE_NONDETERMINISTIC(cls_2pc_queue_reservations_ret)
+TYPE(cls_2pc_queue_reserve_op)
+TYPE(cls_2pc_queue_reserve_ret)
+TYPE(cls_queue_init_op)
+
+#include "cls/2pc_queue/cls_2pc_queue_types.h"
+TYPE(cls_2pc_reservation)
+TYPE_NONDETERMINISTIC(cls_2pc_urgent_data)
+
+#include "cls/log/cls_log_types.h"
+TYPE(cls_log_header)
+
+#include "cls/log/cls_log_ops.h"
+TYPE(cls_log_info_op)
+TYPE(cls_log_list_op)
+TYPE(cls_log_list_ret)
+TYPE(cls_log_trim_op)
+
+#include "cls/version/cls_version_ops.h"
+TYPE(cls_version_check_op)
+TYPE(cls_version_read_ret)
+TYPE(cls_version_inc_op)
+TYPE(cls_version_set_op)
+
+
+#include "cls/fifo/cls_fifo_ops.h"
+using namespace rados::cls::fifo::op;
+TYPE(create_meta)
+TYPE(get_meta)
+TYPE(get_meta_reply)
+
+#include "cls/fifo/cls_fifo_types.h"
+using namespace rados::cls::fifo;
+TYPE(data_params)
+TYPE(objv)
+TYPE(info)
 
 #include "journal/Entry.h"
 TYPE(journal::Entry)
@@ -125,9 +209,12 @@ MESSAGE(MClientReconnect)
 
 #include "messages/MClientReply.h"
 MESSAGE(MClientReply)
+TYPE(openc_response_t)
 
 #include "messages/MClientRequest.h"
 MESSAGE(MClientRequest)
+TYPE(SnapPayload)
+TYPE(MClientRequest::Release)
 
 #include "messages/MClientRequestForward.h"
 MESSAGE(MClientRequestForward)
@@ -251,6 +338,9 @@ MESSAGE(MMDSBeacon)
 
 #include "messages/MMDSCacheRejoin.h"
 MESSAGE(MMDSCacheRejoin)
+TYPE(MMDSCacheRejoin::dirfrag_strong)
+TYPE(MMDSCacheRejoin::dn_strong)
+TYPE(MMDSCacheRejoin::inode_strong)
 
 #include "messages/MMDSFindIno.h"
 MESSAGE(MMDSFindIno)
@@ -265,10 +355,14 @@ MESSAGE(MMDSFragmentNotify)
 MESSAGE(MMDSLoadTargets)
 
 #include "messages/MMDSMap.h"
-MESSAGE(MMDSMap)
+MESSAGE(MMDSMap) 
+
+#include "messages/MMgrBeacon.h"
+MESSAGE(MMgrBeacon)
 
 #include "messages/MMgrReport.h"
 MESSAGE(MMgrReport)
+TYPE(PerfCounterType)
 
 #include "messages/MMDSResolve.h"
 MESSAGE(MMDSResolve)
@@ -320,6 +414,9 @@ MESSAGE(MMonGetVersionReply)
 
 #include "messages/MMonGlobalID.h"
 MESSAGE(MMonGlobalID)
+
+#include "messages/MMonHealth.h"
+MESSAGE(MMonHealth)
 
 #include "messages/MMonJoin.h"
 MESSAGE(MMonJoin)
@@ -452,3 +549,74 @@ MESSAGE(MWatchNotify)
 
 #include "messages/MMgrUpdate.h" 
 MESSAGE(MMgrUpdate)
+
+#include "messages/MOSDECSubOpRead.h"
+MESSAGE(MOSDECSubOpRead)
+
+#include "messages/MOSDECSubOpReadReply.h"
+MESSAGE(MOSDECSubOpReadReply)
+
+#include "messages/MOSDECSubOpWrite.h"
+MESSAGE(MOSDECSubOpWrite)
+
+#include "messages/MOSDECSubOpWriteReply.h"
+MESSAGE(MOSDECSubOpWriteReply)
+
+#include "messages/MOSDMarkMeDown.h"
+MESSAGE(MOSDMarkMeDown)
+
+#include "messages/MOSDPGCreated.h"
+MESSAGE(MOSDPGCreated)
+
+#include "messages/MOSDPGPush.h"
+MESSAGE(MOSDPGPush)
+
+#include "messages/MOSDPGPushReply.h"
+MESSAGE(MOSDPGPushReply)
+
+#include "messages/MOSDPGUpdateLogMissing.h"
+MESSAGE(MOSDPGUpdateLogMissing)
+
+#include "messages/MOSDPGUpdateLogMissingReply.h"
+MESSAGE(MOSDPGUpdateLogMissingReply)
+
+#include "messages/MOSDRepOp.h"
+MESSAGE(MOSDRepOp)
+
+#include "messages/MOSDRepOpReply.h"
+MESSAGE(MOSDRepOpReply)
+
+#include "messages/MRecoveryReserve.h"
+MESSAGE(MRecoveryReserve)
+
+
+#include "auth/cephx/CephxProtocol.h"
+TYPE(CephXAuthenticate)
+TYPE(CephXAuthorize)
+TYPE(CephXAuthorizeChallenge)
+TYPE(CephXAuthorizeReply)
+TYPE(CephXChallengeBlob)
+TYPE(CephXRequestHeader)
+TYPE(CephXResponseHeader)
+TYPE(CephXServerChallenge)
+TYPE(CephXServiceTicket)
+TYPE(CephXServiceTicketInfo)
+TYPE(CephXServiceTicketRequest)
+TYPE(CephXTicketBlob)
+
+#include "auth/cephx/CephxKeyServer.h"
+TYPE(KeyServerData)
+TYPE(KeyServerData::Incremental)
+
+#include "auth/Auth.h"
+TYPE(RotatingSecrets)
+TYPE(ExpiringCryptoKey)
+TYPE(AuthCapsInfo)
+TYPE(AuthTicket)
+TYPE(EntityAuth)
+
+#include "auth/Crypto.h"
+TYPE(CryptoKey)
+
+#include "common/ceph_json.h"
+TYPE(JSONFormattable)

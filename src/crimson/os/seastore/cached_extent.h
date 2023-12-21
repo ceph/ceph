@@ -416,11 +416,18 @@ public:
     return is_mutable() || state == extent_state_t::EXIST_CLEAN;
   }
 
-  /// Returns true if extent is stable and shared among transactions
-  bool is_stable() const {
+  /// Returns true if extent is stable, written and shared among transactions
+  bool is_stable_written() const {
     return state == extent_state_t::CLEAN_PENDING ||
       state == extent_state_t::CLEAN ||
       state == extent_state_t::DIRTY;
+  }
+
+  /// Returns true if extent is stable and shared among transactions
+  bool is_stable() const {
+    return is_stable_written() ||
+           (is_mutation_pending() &&
+            is_pending_io());
   }
 
   /// Returns true if extent has a pending delta
@@ -440,6 +447,13 @@ public:
            state == extent_state_t::CLEAN ||
            state == extent_state_t::CLEAN_PENDING ||
            state == extent_state_t::EXIST_CLEAN;
+  }
+
+  // Returs true if extent is stable and clean
+  bool is_stable_clean() const {
+    ceph_assert(is_valid());
+    return state == extent_state_t::CLEAN ||
+           state == extent_state_t::CLEAN_PENDING;
   }
 
   /// Ruturns true if data is persisted while metadata isn't
@@ -588,7 +602,7 @@ public:
 
   // a rewrite extent has an invalid prior_instance,
   // and a mutation_pending extent has a valid prior_instance
-  CachedExtentRef get_prior_instance() {
+  CachedExtentRef get_prior_instance() const {
     return prior_instance;
   }
 
@@ -707,9 +721,10 @@ protected:
       length(other.get_length()),
       version(other.version),
       poffset(other.poffset) {
+      assert((length % CEPH_PAGE_SIZE) == 0);
       if (other.is_fully_loaded()) {
-        ptr = std::make_optional<ceph::bufferptr>
-          (other.ptr->c_str(), other.ptr->length());
+        ptr.emplace(buffer::create_page_aligned(length));
+        other.ptr->copy_out(0, length, ptr->c_str());
       } else {
         // the extent must be fully loaded before CoW
         assert(length == 0); // in case of root
@@ -1038,6 +1053,12 @@ public:
     child_pos->link_child(c);
   }
 
+  virtual bool is_stable() const = 0;
+  virtual bool is_clone() const = 0;
+  bool is_zero_reserved() const {
+    return !get_val().is_real();
+  }
+
   virtual ~PhysicalNodeMapping() {}
 protected:
   std::optional<child_pos_t> child_pos = std::nullopt;
@@ -1198,7 +1219,7 @@ public:
 
   void maybe_set_intermediate_laddr(LBAMapping &mapping) {
     laddr = mapping.is_indirect()
-      ? mapping.get_intermediate_key()
+      ? mapping.get_intermediate_base()
       : mapping.get_key();
   }
 
@@ -1233,6 +1254,8 @@ protected:
   }
 
 private:
+  // the logical address of the extent, and if shared,
+  // it is the intermediate_base, see BtreeLBAMapping comments.
   laddr_t laddr = L_ADDR_NULL;
 };
 

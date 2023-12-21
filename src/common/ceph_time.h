@@ -119,11 +119,11 @@ public:
   }
 
   static bool is_zero(const time_point& t) {
-    return (t == time_point::min());
+    return (t == zero());
   }
 
   static time_point zero() {
-    return time_point::min();
+    return time_point();
   }
 
   // Allow conversion to/from any clock with the same interface as
@@ -222,11 +222,11 @@ public:
   }
 
   static bool is_zero(const time_point& t) {
-    return (t == time_point::min());
+    return (t == zero());
   }
 
   static time_point zero() {
-    return time_point::min();
+    return time_point();
   }
 
   static time_t to_time_t(const time_point& t) noexcept {
@@ -283,7 +283,7 @@ public:
 // High-resolution monotonic clock
 class mono_clock {
 public:
-  typedef timespan duration;
+  typedef signedspan duration;
   typedef duration::rep rep;
   typedef duration::period period;
   typedef std::chrono::time_point<mono_clock> time_point;
@@ -297,11 +297,11 @@ public:
   }
 
   static bool is_zero(const time_point& t) {
-    return (t == time_point::min());
+    return (t == zero());
   }
 
   static time_point zero() {
-    return time_point::min();
+    return time_point();
   }
 };
 
@@ -309,7 +309,7 @@ public:
 // monotonic clock
 class coarse_mono_clock {
 public:
-  typedef timespan duration;
+  typedef signedspan duration;
   typedef duration::rep rep;
   typedef duration::period period;
   typedef std::chrono::time_point<coarse_mono_clock> time_point;
@@ -334,11 +334,11 @@ public:
   }
 
   static bool is_zero(const time_point& t) {
-    return (t == time_point::min());
+    return (t == zero());
   }
 
   static time_point zero() {
-    return time_point::min();
+    return time_point();
   }
 };
 
@@ -447,11 +447,11 @@ auto ceil(const std::chrono::time_point<Clock, Duration>& timepoint,
 	ceil(timepoint.time_since_epoch(), precision));
 }
 
-inline timespan make_timespan(const double d) {
-  return std::chrono::duration_cast<timespan>(
+inline signedspan make_timespan(const double d) {
+  return std::chrono::duration_cast<signedspan>(
     std::chrono::duration<double>(d));
 }
-inline std::optional<timespan> maybe_timespan(const double d) {
+inline std::optional<signedspan> maybe_timespan(const double d) {
   return d ? std::make_optional(make_timespan(d)) : std::nullopt;
 }
 
@@ -528,6 +528,9 @@ struct converts_to_timespec<Clock, std::void_t<decltype(
 
 template <typename Clock>
 constexpr bool converts_to_timespec_v = converts_to_timespec<Clock>::value;
+
+template <typename Clock>
+concept clock_with_timespec = converts_to_timespec_v<Clock>;
 
 template<typename Rep, typename T>
 static Rep to_seconds(T t) {

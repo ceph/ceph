@@ -1,6 +1,6 @@
 export interface CephfsSubvolumeGroup {
   name: string;
-  info: CephfsSubvolumeGroupInfo;
+  info?: CephfsSubvolumeGroupInfo;
 }
 
 export interface CephfsSubvolumeGroupInfo {

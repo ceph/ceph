@@ -836,13 +836,6 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule, MgrModuleLoggingMixin):
         # for backwards compatibility
         self._logger = self.getLogger()
 
-    def __del__(self) -> None:
-        self._cleanup()
-        self._unconfigure_logging()
-
-    def _cleanup(self) -> None:
-        pass
-
     @classmethod
     def _register_options(cls, module_name: str) -> None:
         cls.MODULE_OPTIONS.append(
@@ -1044,9 +1037,6 @@ class MgrModule(ceph_module.BaseMgrModule, MgrModuleLoggingMixin):
         self._mgr_ips: Optional[str] = None
 
         self._db_lock = threading.Lock()
-
-    def __del__(self) -> None:
-        self._unconfigure_logging()
 
     @classmethod
     def _register_options(cls, module_name: str) -> None:

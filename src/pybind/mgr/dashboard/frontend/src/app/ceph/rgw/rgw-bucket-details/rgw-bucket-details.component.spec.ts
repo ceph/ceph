@@ -8,6 +8,7 @@ import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { SharedModule } from '~/app/shared/shared.module';
 import { configureTestBed } from '~/testing/unit-test-helper';
 import { RgwBucketDetailsComponent } from './rgw-bucket-details.component';
+import { NgbNavModule } from '@ng-bootstrap/ng-bootstrap';
 
 describe('RgwBucketDetailsComponent', () => {
   let component: RgwBucketDetailsComponent;
@@ -17,7 +18,7 @@ describe('RgwBucketDetailsComponent', () => {
 
   configureTestBed({
     declarations: [RgwBucketDetailsComponent],
-    imports: [SharedModule, HttpClientTestingModule]
+    imports: [SharedModule, HttpClientTestingModule, NgbNavModule]
   });
 
   beforeEach(() => {

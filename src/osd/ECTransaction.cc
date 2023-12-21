@@ -34,7 +34,7 @@ using ceph::decode;
 using ceph::encode;
 using ceph::ErasureCodeInterfaceRef;
 
-void encode_and_write(
+static void encode_and_write(
   pg_t pgid,
   const hobject_t &oid,
   const ECUtil::stripe_info_t &sinfo,
@@ -46,7 +46,8 @@ void encode_and_write(
   ECUtil::HashInfoRef hinfo,
   extent_map &written,
   map<shard_id_t, ObjectStore::Transaction> *transactions,
-  DoutPrefixProvider *dpp) {
+  DoutPrefixProvider *dpp)
+{
   const uint64_t before_size = hinfo->get_total_logical_size(sinfo);
   ceph_assert(sinfo.logical_offset_is_stripe_aligned(offset));
   ceph_assert(sinfo.logical_offset_is_stripe_aligned(bl.length()));
@@ -94,6 +95,7 @@ void encode_and_write(
 }
 
 void ECTransaction::generate_transactions(
+  PGTransaction* _t,
   WritePlan &plan,
   ErasureCodeInterfaceRef &ecimpl,
   pg_t pgid,
@@ -111,8 +113,8 @@ void ECTransaction::generate_transactions(
   ceph_assert(transactions);
   ceph_assert(temp_added);
   ceph_assert(temp_removed);
-  ceph_assert(plan.t);
-  auto &t = *(plan.t);
+  ceph_assert(_t);
+  auto &t = *_t;
 
   auto &hash_infos = plan.hash_infos;
 

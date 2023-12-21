@@ -61,6 +61,7 @@ namespace crimson::os {
 namespace crimson::osd {
 class OpsExecuter;
 class BackfillRecovery;
+class SnapTrimEvent;
 
 class PG : public boost::intrusive_ref_counter<
   PG,
@@ -331,6 +332,8 @@ public:
 
   void on_removal(ceph::os::Transaction &t) final;
 
+  void clear_log_entry_maps();
+
   std::pair<ghobject_t, bool>
   do_delete_work(ceph::os::Transaction &t, ghobject_t _next) final;
 
@@ -345,8 +348,7 @@ public:
   void on_active_advmap(const OSDMapRef &osdmap) final;
 
   epoch_t cluster_osdmap_trim_lower_bound() final {
-    // TODO
-    return 0;
+    return shard_services.get_osdmap_tlb();
   }
 
   void on_backfill_reserved() final {
@@ -503,7 +505,7 @@ public:
 
 public:
   using with_obc_func_t =
-    std::function<load_obc_iertr::future<> (ObjectContextRef)>;
+    std::function<load_obc_iertr::future<> (ObjectContextRef, ObjectContextRef)>;
 
   load_obc_iertr::future<> with_locked_obc(
     const hobject_t &hobj,
@@ -536,10 +538,23 @@ public:
     const OpInfo &op_info,
     ObjectContextRef obc,
     const std::error_code e,
-    ceph_tid_t rep_tid,
-    eversion_t &version);
+    ceph_tid_t rep_tid);
 
 private:
+
+  struct SnapTrimMutex {
+    struct WaitPG : OrderedConcurrentPhaseT<WaitPG> {
+      static constexpr auto type_name = "SnapTrimEvent::wait_pg";
+    } wait_pg;
+    seastar::shared_mutex mutex;
+
+    interruptible_future<> lock(SnapTrimEvent &st_event) noexcept;
+
+    void unlock() noexcept {
+      mutex.unlock();
+    }
+  } snaptrim_mutex;
+
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
   using do_osd_ops_iertr =
@@ -556,21 +571,22 @@ private:
     ObjectContextRef obc,
     const OpInfo &op_info,
     const SnapContext& snapc);
-  using do_osd_ops_success_func_t =
-    std::function<do_osd_ops_iertr::future<>()>;
-  using do_osd_ops_failure_func_t =
-    std::function<do_osd_ops_iertr::future<>(const std::error_code&)>;
+
   struct do_osd_ops_params_t;
+  do_osd_ops_iertr::future<MURef<MOSDOpReply>> log_reply(
+    Ref<MOSDOp> m,
+    const std::error_code& e);
   do_osd_ops_iertr::future<pg_rep_op_fut_t<>> do_osd_ops(
     ObjectContextRef obc,
     std::vector<OSDOp>& ops,
     const OpInfo &op_info,
-    const do_osd_ops_params_t &&params,
-    do_osd_ops_success_func_t success_func,
-    do_osd_ops_failure_func_t failure_func);
+    const do_osd_ops_params_t &&params);
   template <class Ret, class SuccessFunc, class FailureFunc>
   do_osd_ops_iertr::future<pg_rep_op_fut_t<Ret>> do_osd_ops_execute(
     seastar::lw_shared_ptr<OpsExecuter> ox,
+    ObjectContextRef obc,
+    const OpInfo &op_info,
+    Ref<MOSDOp> m,
     std::vector<OSDOp>& ops,
     SuccessFunc&& success_func,
     FailureFunc&& failure_func);
@@ -593,9 +609,9 @@ private:
 
 public:
   cached_map_t get_osdmap() { return peering_state.get_osdmap(); }
-  eversion_t next_version() {
+  eversion_t get_next_version() {
     return eversion_t(get_osdmap_epoch(),
-		      ++projected_last_update.version);
+		      projected_last_update.version + 1);
   }
   ShardServices& get_shard_services() final {
     return shard_services;
@@ -626,6 +642,12 @@ private:
   std::optional<pg_stat_t> pg_stats;
 
 public:
+  OSDriver &get_osdriver() final {
+    return osdriver;
+  }
+  SnapMapper &get_snap_mapper() final {
+    return snap_mapper;
+  }
   RecoveryBackend* get_recovery_backend() final {
     return recovery_backend.get();
   }
@@ -756,6 +778,7 @@ private:
   };
 
   std::map<ceph_tid_t, log_update_t> log_entry_update_waiting_on;
+  std::map<ceph_tid_t, eversion_t> log_entry_version;
   // snap trimming
   interval_set<snapid_t> snap_trimq;
 };

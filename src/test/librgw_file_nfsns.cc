@@ -20,9 +20,9 @@
 
 #include "include/rados/librgw.h"
 #include "include/rados/rgw_file.h"
-#include "rgw_file.h"
 #include "rgw_lib.h"
-#include "rgw_lib_frontend.h" // direct requests
+#include "rgw/rgw_file_int.h"
+#include "rgw/rgw_lib_frontend.h" // direct requests
 
 #include "gtest/gtest.h"
 #include "common/ceph_argparse.h"

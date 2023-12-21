@@ -38,9 +38,11 @@ Platforms
 The chart below shows which Linux platforms Ceph provides packages for, and
 which platforms Ceph has been tested on. 
 
-Ceph does not depend upon any specific distributions and can run on any
-distribution with supported kernels and system initialization packages (
-`sysvinit` or `systemd`).
+Ceph does not require a specific Linux distribution. Ceph can run on any
+distribution that includes a supported kernel and supported system startup
+framework, for example ``sysvinit`` or ``systemd``. Ceph is sometimes ported to
+non-Linux systems but these are not supported by the core Ceph effort.
+
 
 +---------------+---------------+-----------------+------------------+------------------+
 |               | Reef (18.2.z) | Quincy (17.2.z) | Pacific (16.2.z) | Octopus (15.2.z) |
@@ -51,13 +53,13 @@ distribution with supported kernels and system initialization packages (
 +---------------+---------------+-----------------+------------------+------------------+
 | Centos 9      |    A          |                 |                  |                  |
 +---------------+---------------+-----------------+------------------+------------------+
-| Debian 10     |    C          |     C           |         C        |      C           |
+| Debian 10     |    C          |                 |         C        |      C           |
 +---------------+---------------+-----------------+------------------+------------------+
-| Debian 11     |    C          |     C           |         C        |      C           |
+| Debian 11     |    C          |     C           |         C        |                  |
 +---------------+---------------+-----------------+------------------+------------------+
-| OpenSUSE 15.2 |    C          |     C           |         C        |      C           |
+| OpenSUSE 15.2 |    C          |                 |         C        |      C           |
 +---------------+---------------+-----------------+------------------+------------------+
-| OpenSUSE 15.3 |    C          |     C           |         C        |      C           |
+| OpenSUSE 15.3 |    C          |     C           |                  |                  |
 +---------------+---------------+-----------------+------------------+------------------+
 | Ubuntu 18.04  |               |                 |         C        |      C           |
 +---------------+---------------+-----------------+------------------+------------------+

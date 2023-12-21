@@ -908,6 +908,7 @@ template <typename Context, typename Iter> inline bool _parse(Context &ctx, inpu
       {
         errno = 0;
         intmax_t ival = strtoimax(num_str.c_str(), &endp, 10);
+        // coverity[result_independent_of_operands:SUPPRESS]
         if (errno == 0 && std::numeric_limits<int64_t>::min() <= ival && ival <= std::numeric_limits<int64_t>::max() &&
             endp == num_str.c_str() + num_str.size()) {
           ctx.set_int64(ival);

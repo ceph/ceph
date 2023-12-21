@@ -1,7 +1,7 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import _ from 'lodash';
-import { Observable, ReplaySubject, Subscription } from 'rxjs';
+import { Observable, ReplaySubject, Subscription, of } from 'rxjs';
 
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
@@ -11,15 +11,13 @@ import { RgwRealmService } from '~/app/shared/api/rgw-realm.service';
 import { RgwZoneService } from '~/app/shared/api/rgw-zone.service';
 import { RgwZonegroupService } from '~/app/shared/api/rgw-zonegroup.service';
 import { RgwBucketService } from '~/app/shared/api/rgw-bucket.service';
-import { RgwUserService } from '~/app/shared/api/rgw-user.service';
 import { PrometheusService } from '~/app/shared/api/prometheus.service';
 
 import { RgwPromqls as queries } from '~/app/shared/enum/dashboard-promqls.enum';
 import { HealthService } from '~/app/shared/api/health.service';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RgwMultisiteService } from '~/app/shared/api/rgw-multisite.service';
-import { shareReplay, switchMap, tap } from 'rxjs/operators';
-import { RgwZonegroup } from '../models/rgw-multisite';
+import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
 
 @Component({
   selector: 'cd-rgw-overview-dashboard',
@@ -46,7 +44,6 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
   multisiteInfo: object[] = [];
   ZonegroupSub: Subscription;
   ZoneSUb: Subscription;
-  UserSub: Subscription;
   HealthSub: Subscription;
   BucketSub: Subscription;
   queriesResults: any = {
@@ -78,7 +75,6 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     private rgwZonegroupService: RgwZonegroupService,
     private rgwZoneService: RgwZoneService,
     private rgwBucketService: RgwBucketService,
-    private rgwUserService: RgwUserService,
     private prometheusService: PrometheusService,
     private rgwMultisiteService: RgwMultisiteService
   ) {
@@ -90,12 +86,6 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
       this.daemonSub = this.rgwDaemonService.list().subscribe((data: any) => {
         this.rgwDaemonCount = data.length;
       });
-      this.BucketSub = this.rgwBucketService.list().subscribe((data: any) => {
-        this.rgwBucketCount = data.length;
-      });
-      this.UserSub = this.rgwUserService.list().subscribe((data: any) => {
-        this.UserCount = data.length;
-      });
       this.HealthSub = this.healthService.getClusterCapacity().subscribe((data: any) => {
         this.objectCount = data['total_objects'];
         this.totalPoolUsedBytes = data['total_pool_bytes_used'];
@@ -103,6 +93,12 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
       });
       this.getSyncStatus();
     });
+    this.BucketSub = this.rgwBucketService
+      .getTotalBucketsAndUsersLength()
+      .subscribe((data: any) => {
+        this.rgwBucketCount = data['buckets_count'];
+        this.UserCount = data['users_count'];
+      });
     this.realmSub = this.rgwRealmService.list().subscribe((data: any) => {
       this.rgwRealmCount = data['realms'].length;
     });
@@ -120,18 +116,22 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
             this.loading = false;
             this.replicaZonesInfo = data['dataSyncInfo'];
             this.metadataSyncInfo = data['metadataSyncInfo'];
+            if (this.replicaZonesInfo.length === 0) {
+              this.showMultisiteCard = false;
+              this.syncCardLoading = false;
+              this.loading = false;
+            }
             [this.realm, this.zonegroup, this.zone] = data['primaryZoneData'];
+          }),
+          catchError((err) => {
+            this.showMultisiteCard = false;
+            this.syncCardLoading = false;
+            this.loading = false;
+            err.preventDefault();
+            return of(true);
           })
         )
       ),
-      tap(() => {
-        const zonegroup = new RgwZonegroup();
-        zonegroup.name = this.zonegroup;
-        this.rgwZonegroupService.get(zonegroup).subscribe((data: any) => {
-          this.showMultisiteCard = data['zones'].length !== 1;
-          this.syncCardLoading = false;
-        });
-      }),
       shareReplay(1)
     );
   }
@@ -143,11 +143,8 @@ export class RgwOverviewDashboardComponent implements OnInit, OnDestroy {
     this.ZonegroupSub.unsubscribe();
     this.ZoneSUb.unsubscribe();
     this.BucketSub.unsubscribe();
-    this.UserSub.unsubscribe();
     this.HealthSub.unsubscribe();
-    if (this.timerGetPrometheusDataSub) {
-      this.timerGetPrometheusDataSub.unsubscribe();
-    }
+    this.prometheusService.unsubscribe();
   }
 
   getPrometheusData(selectedTime: any) {

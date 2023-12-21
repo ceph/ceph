@@ -157,7 +157,7 @@ struct FixedKVNode : ChildableCachedExtent {
       (get_node_size() - offset - 1) * sizeof(ChildableCachedExtent*));
   }
 
-  FixedKVNode& get_stable_for_key(node_key_t key) {
+  FixedKVNode& get_stable_for_key(node_key_t key) const {
     ceph_assert(is_pending());
     if (is_mutation_pending()) {
       return (FixedKVNode&)*get_prior_instance();
@@ -228,6 +228,8 @@ struct FixedKVNode : ChildableCachedExtent {
 
   virtual get_child_ret_t<LogicalCachedExtent>
   get_logical_child(op_context_t<node_key_t> c, uint16_t pos) = 0;
+
+  virtual bool is_child_stable(uint16_t pos) const = 0;
 
   template <typename T, typename iter_t>
   get_child_ret_t<T> get_child(op_context_t<node_key_t> c, iter_t iter) {
@@ -590,6 +592,11 @@ struct FixedKVInternalNode
   get_logical_child(op_context_t<NODE_KEY>, uint16_t pos) final {
     ceph_abort("impossible");
     return get_child_ret_t<LogicalCachedExtent>(child_pos_t(nullptr, 0));
+  }
+
+  bool is_child_stable(uint16_t pos) const final {
+    ceph_abort("impossible");
+    return false;
   }
 
   bool validate_stable_children() final {
@@ -981,6 +988,30 @@ struct FixedKVLeafNode
       }
     } else {
       return child_pos_t(this, pos);
+    }
+  }
+
+  // children are considered stable if any of the following case is true:
+  // 1. The child extent is absent in cache
+  // 2. The child extent is stable
+  bool is_child_stable(uint16_t pos) const final {
+    auto child = this->children[pos];
+    if (is_valid_child_ptr(child)) {
+      ceph_assert(child->is_logical());
+      return child->is_stable();
+    } else if (this->is_pending()) {
+      auto key = this->iter_idx(pos).get_key();
+      auto &sparent = this->get_stable_for_key(key);
+      auto spos = sparent.child_pos_for_key(key);
+      auto child = sparent.children[spos];
+      if (is_valid_child_ptr(child)) {
+	ceph_assert(child->is_logical());
+	return child->is_stable();
+      } else {
+	return true;
+      }
+    } else {
+      return true;
     }
   }
 

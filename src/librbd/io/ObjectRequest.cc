@@ -44,7 +44,7 @@ template <typename I>
 inline bool is_copy_on_read(I *ictx, const IOContext& io_context) {
   std::shared_lock image_locker{ictx->image_lock};
   return (ictx->clone_copy_on_read && !ictx->read_only &&
-          io_context->read_snap().value_or(CEPH_NOSNAP) == CEPH_NOSNAP &&
+          io_context->get_read_snap() == CEPH_NOSNAP &&
           (ictx->exclusive_lock == nullptr ||
            ictx->exclusive_lock->is_lock_owner()));
 }
@@ -155,7 +155,7 @@ bool ObjectRequest<I>::compute_parent_extents(Extents *parent_extents,
 
   uint64_t raw_overlap;
   int r = m_ictx->get_parent_overlap(
-      m_io_context->read_snap().value_or(CEPH_NOSNAP), &raw_overlap);
+      m_io_context->get_read_snap(), &raw_overlap);
   if (r < 0) {
     // NOTE: it's possible for a snapshot to be deleted while we are
     // still reading from it
@@ -222,7 +222,7 @@ void ObjectReadRequest<I>::read_object() {
   I *image_ctx = this->m_ictx;
 
   std::shared_lock image_locker{image_ctx->image_lock};
-  auto read_snap_id = this->m_io_context->read_snap().value_or(CEPH_NOSNAP);
+  auto read_snap_id = this->m_io_context->get_read_snap();
   if (read_snap_id == image_ctx->snap_id &&
       image_ctx->object_map != nullptr &&
       !image_ctx->object_map->object_may_exist(this->m_object_no)) {
@@ -289,7 +289,7 @@ void ObjectReadRequest<I>::read_parent() {
 
   io::util::read_parent<I>(
     image_ctx, this->m_object_no, this->m_extents,
-    this->m_io_context->read_snap().value_or(CEPH_NOSNAP), this->m_trace,
+    this->m_io_context->get_read_snap(), this->m_trace,
     ctx);
 }
 
@@ -389,7 +389,7 @@ void AbstractObjectWriteRequest<I>::compute_parent_info() {
 
   if (!this->has_parent() ||
       (m_full_object &&
-       !this->m_io_context->write_snap_context() &&
+       !this->m_io_context->get_write_snap_context() &&
        !is_post_copyup_write_required())) {
     m_copyup_enabled = false;
   }
@@ -491,8 +491,8 @@ void AbstractObjectWriteRequest<I>::write_object() {
   neorados::WriteOp write_op;
   if (m_copyup_enabled) {
     if (m_guarding_migration_write) {
-      auto snap_seq = (this->m_io_context->write_snap_context() ?
-          this->m_io_context->write_snap_context()->first : 0);
+      auto snap_seq = (this->m_io_context->get_write_snap_context() ?
+          this->m_io_context->get_write_snap_context()->first : 0);
       ldout(image_ctx->cct, 20) << "guarding write: snap_seq=" << snap_seq
                                 << dendl;
 
@@ -698,7 +698,7 @@ void ObjectWriteSameRequest<I>::add_write_ops(neorados::WriteOp* wr) {
 
 template <typename I>
 void ObjectCompareAndWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
-  wr->cmpext(this->m_object_off, bufferlist{m_cmp_bl}, nullptr);
+  wr->cmpext(this->m_object_off, bufferlist{m_cmp_bl}, &m_mismatch_object_offset);
 
   if (this->m_full_object) {
     wr->write_full(bufferlist{m_write_bl});
@@ -710,13 +710,14 @@ void ObjectCompareAndWriteRequest<I>::add_write_ops(neorados::WriteOp* wr) {
 
 template <typename I>
 int ObjectCompareAndWriteRequest<I>::filter_write_result(int r) const {
-  if (r <= -MAX_ERRNO) {
+  // Error code value for cmpext mismatch. Works for both neorados and
+  // mock image, which seems to be short-circuiting on nonexistence.
+  if (r == -MAX_ERRNO) {
     I *image_ctx = this->m_ictx;
 
     // object extent compare mismatch
-    uint64_t offset = -MAX_ERRNO - r;
     auto [image_extents, _] = io::util::object_to_area_extents(
-        image_ctx, this->m_object_no, {{offset, this->m_object_len}});
+        image_ctx, this->m_object_no, {{m_mismatch_object_offset, this->m_object_len}});
     ceph_assert(image_extents.size() == 1);
 
     if (m_mismatch_offset) {
@@ -738,7 +739,7 @@ ObjectListSnapsRequest<I>::ObjectListSnapsRequest(
     m_object_extents(std::move(object_extents)),
     m_snap_ids(std::move(snap_ids)), m_list_snaps_flags(list_snaps_flags),
     m_snapshot_delta(snapshot_delta) {
-  this->m_io_context->read_snap(CEPH_SNAPDIR);
+  this->m_io_context->set_read_snap(CEPH_SNAPDIR);
 }
 
 template <typename I>
@@ -834,16 +835,17 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
                        end_snap_id, &diff, &end_size, &exists,
                        &clone_end_snap_id, &read_whole_object);
 
-    if (read_whole_object ||
-        (!diff.empty() &&
-         ((m_list_snaps_flags & LIST_SNAPS_FLAG_WHOLE_OBJECT) != 0))) {
+    if (read_whole_object) {
       ldout(cct, 1) << "need to read full object" << dendl;
-      diff.clear();
       diff.insert(0, image_ctx->layout.object_size);
+      exists = true;
       end_size = image_ctx->layout.object_size;
       clone_end_snap_id = end_snap_id;
-    } else if (!exists) {
-      end_size = 0;
+    } else if ((m_list_snaps_flags & LIST_SNAPS_FLAG_WHOLE_OBJECT) != 0 &&
+               !diff.empty()) {
+      ldout(cct, 20) << "expanding diff from " << diff << dendl;
+      diff.clear();
+      diff.insert(0, image_ctx->layout.object_size);
     }
 
     if (exists) {
@@ -884,7 +886,7 @@ void ObjectListSnapsRequest<I>::handle_list_snaps(int r) {
                    << "end_size=" << end_size << ", "
                    << "prev_end_size=" << prev_end_size << ", "
                    << "exists=" << exists << ", "
-                   << "whole_object=" << read_whole_object << dendl;
+                   << "read_whole_object=" << read_whole_object << dendl;
 
     // check if object exists prior to start of incremental snap delta so that
     // we don't DNE the object if no additional deltas exist

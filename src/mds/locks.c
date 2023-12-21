@@ -117,7 +117,7 @@ const struct sm_state_t filelock[LOCK_MAX] = {
     [LOCK_XSYN_EXCL] = { LOCK_EXCL, true,  LOCK_LOCK, AUTH, 0,   XCL, 0,   0,   0,   0,   0,CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0 },
 
     [LOCK_XSYN]      = { 0,         true,  LOCK_LOCK, AUTH, AUTH,AUTH,XCL, 0,   0,   0,   0,CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0 },
-    [LOCK_EXCL_XSYN] = { LOCK_XSYN, false, LOCK_LOCK, 0,    0,   XCL, 0,   0,   0,   0,   0,CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0 },
+    [LOCK_EXCL_XSYN] = { LOCK_XSYN, true,  LOCK_LOCK, 0,    0,   XCL, 0,   0,   0,   0,   0,CEPH_CAP_GCACHE|CEPH_CAP_GBUFFER,0,0 },
 
     [LOCK_PRE_SCAN]  = { LOCK_SCAN, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },
     [LOCK_SCAN]      = { LOCK_LOCK, false, LOCK_LOCK, 0,    0,   0,   0,   0,   0,   0,   0,0,0,0 },

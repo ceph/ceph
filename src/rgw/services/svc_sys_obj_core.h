@@ -5,7 +5,6 @@
 
 #include "rgw_service.h"
 
-#include "svc_rados.h"
 #include "svc_sys_obj.h"
 #include "svc_sys_obj_core_types.h"
 
@@ -16,22 +15,22 @@ struct rgw_cache_entry_info;
 
 class RGWSI_SysObj_Core : public RGWServiceInstance
 {
-  friend class RGWServices_Def;
+  friend struct RGWServices_Def;
   friend class RGWSI_SysObj;
 
 protected:
-  RGWSI_RADOS *rados_svc{nullptr};
+  librados::Rados* rados{nullptr};
   RGWSI_Zone *zone_svc{nullptr};
 
   using GetObjState = RGWSI_SysObj_Core_GetObjState;
   using PoolListImplInfo = RGWSI_SysObj_Core_PoolListImplInfo;
 
-  void core_init(RGWSI_RADOS *_rados_svc,
+  void core_init(librados::Rados* rados_,
                  RGWSI_Zone *_zone_svc) {
-    rados_svc = _rados_svc;
+    rados = rados_;
     zone_svc = _zone_svc;
   }
-  int get_rados_obj(const DoutPrefixProvider *dpp, RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, RGWSI_RADOS::Obj *pobj);
+  int get_rados_obj(const DoutPrefixProvider *dpp, RGWSI_Zone *zone_svc, const rgw_raw_obj& obj, rgw_rados_ref* pobj);
 
   virtual int raw_stat(const DoutPrefixProvider *dpp, const rgw_raw_obj& obj,
                        uint64_t *psize, real_time *pmtime,

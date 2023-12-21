@@ -1,4 +1,3 @@
-import os
 import errno
 
 import cephfs
@@ -25,7 +24,7 @@ def pin(fs, path, pin_type, pin_setting):
 
     try:
         pin_setting = _pin_value[pin_type](pin_setting)
-    except ValueError as e:
+    except ValueError:
         raise VolumeException(-errno.EINVAL, f"pin value wrong type: {pin_setting}")
 
     try:

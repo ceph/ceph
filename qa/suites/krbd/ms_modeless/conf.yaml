@@ -2,4 +2,5 @@ overrides:
   ceph:
     conf:
       global:
+        mon warn on pool no app: false
         ms die on skipped message: false

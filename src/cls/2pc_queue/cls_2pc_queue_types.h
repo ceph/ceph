@@ -8,9 +8,9 @@ struct cls_2pc_reservation
 {
   using id_t = uint32_t;
   inline static const id_t NO_ID{0};
-  uint64_t size;                     // how much size to reserve (bytes)
+  uint64_t size = 0;                 // how much size to reserve (bytes)
   ceph::coarse_real_time timestamp;  // when the reservation was done (used for cleaning stale reservations)
-  uint32_t entries;                  // how many entries are reserved
+  uint32_t entries = 0;              // how many entries are reserved
 
   cls_2pc_reservation(uint64_t _size, ceph::coarse_real_time _timestamp, uint32_t _entries) :
       size(_size), timestamp(_timestamp), entries(_entries) {}
@@ -33,6 +33,19 @@ struct cls_2pc_reservation
       decode(entries, bl);
     }
     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("size", size);
+    f->dump_stream("timestamp") << timestamp;
+  }
+
+  static void generate_test_instances(std::list<cls_2pc_reservation*>& ls) {
+    ls.push_back(new cls_2pc_reservation);
+    ls.back()->size = 0;
+    ls.push_back(new cls_2pc_reservation);
+    ls.back()->size = 123;
+    ls.back()->timestamp = ceph::coarse_real_clock::zero();
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_reservation)
@@ -67,6 +80,29 @@ struct cls_2pc_urgent_data
       decode(committed_entries, bl);
     }
     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_unsigned("reserved_size", reserved_size);
+    f->dump_unsigned("last_id", last_id);
+    f->open_array_section("reservations");
+    for (const auto& [id, res] : reservations) {
+      f->open_object_section("reservation");
+      f->dump_unsigned("id", id);
+      res.dump(f);
+      f->close_section();
+    }
+    f->close_section();
+    f->dump_bool("has_xattrs", has_xattrs);
+  }
+
+  static void generate_test_instances(std::list<cls_2pc_urgent_data*>& ls) {
+    ls.push_back(new cls_2pc_urgent_data);
+    ls.push_back(new cls_2pc_urgent_data);
+    ls.back()->reserved_size = 123;
+    ls.back()->last_id = 456;
+    ls.back()->reservations.emplace(789, cls_2pc_reservation(1, ceph::coarse_real_clock::zero(), 2));
+    ls.back()->has_xattrs = true;
   }
 };
 WRITE_CLASS_ENCODER(cls_2pc_urgent_data)

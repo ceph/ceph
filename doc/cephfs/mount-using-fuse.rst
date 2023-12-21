@@ -28,7 +28,7 @@ To FUSE-mount the Ceph file system, use the ``ceph-fuse`` command::
     mkdir /mnt/mycephfs
     ceph-fuse --id foo /mnt/mycephfs
 
-Option ``-id`` passes the name of the CephX user whose keyring we intend to
+Option ``--id`` passes the name of the CephX user whose keyring we intend to
 use for mounting CephFS. In the above command, it's ``foo``. You can also use
 ``-n`` instead, although ``--id`` is evidently easier::
 

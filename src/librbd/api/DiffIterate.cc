@@ -150,11 +150,12 @@ private:
 };
 
 int simple_diff_cb(uint64_t off, size_t len, int exists, void *arg) {
-  // it's possible for a discard to create a hole in the parent image -- ignore
-  if (exists) {
-    interval_set<uint64_t> *diff = static_cast<interval_set<uint64_t> *>(arg);
-    diff->insert(off, len);
-  }
+  // This reads the existing extents in a parent from the beginning
+  // of time.  Since images are thin-provisioned, the extents will
+  // always represent data, not holes.
+  ceph_assert(exists);
+  auto diff = static_cast<interval_set<uint64_t>*>(arg);
+  diff->insert(off, len);
   return 0;
 }
 
@@ -249,7 +250,7 @@ int DiffIterate<I>::execute() {
   if (m_whole_object) {
     C_SaferCond ctx;
     auto req = object_map::DiffRequest<I>::create(&m_image_ctx, from_snap_id,
-                                                  end_snap_id,
+                                                  end_snap_id, true,
                                                   &object_diff_state, &ctx);
     req->send();
 

@@ -35,34 +35,8 @@ struct Entry {
   std::string oid;
   std::string locator;
 
-  Entry() {}
-  Entry(std::string nspace, std::string oid, std::string locator) :
-    nspace(std::move(nspace)), oid(std::move(oid)), locator(locator) {}
+  friend auto operator <=>(const Entry&, const Entry&) = default;
 };
-inline bool operator ==(const Entry& l, const Entry r) {
-  return std::tie(l.nspace, l.oid, l.locator) ==
-    std::tie(r.nspace, r.oid, r.locator);
-}
-inline bool operator !=(const Entry& l, const Entry r) {
-  return std::tie(l.nspace, l.oid, l.locator) !=
-    std::tie(r.nspace, r.oid, r.locator);
-}
-inline bool operator <(const Entry& l, const Entry r) {
-  return std::tie(l.nspace, l.oid, l.locator) <
-    std::tie(r.nspace, r.oid, r.locator);
-}
-inline bool operator <=(const Entry& l, const Entry r) {
-  return std::tie(l.nspace, l.oid, l.locator) <=
-    std::tie(r.nspace, r.oid, r.locator);
-}
-inline bool operator >=(const Entry& l, const Entry r) {
-  return std::tie(l.nspace, l.oid, l.locator) >=
-    std::tie(r.nspace, r.oid, r.locator);
-}
-inline bool operator >(const Entry& l, const Entry r) {
-  return std::tie(l.nspace, l.oid, l.locator) >
-    std::tie(r.nspace, r.oid, r.locator);
-}
 
 inline std::ostream& operator <<(std::ostream& out, const Entry& entry) {
   if (!entry.nspace.empty())

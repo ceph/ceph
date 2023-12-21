@@ -9,3 +9,4 @@ autopep8==1.5.7
 pyfakefs==4.5.0
 isort==5.5.3
 jsonschema~=4.0
+PyJWT~=2.0

@@ -1,15 +1,14 @@
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { RgwSyncPrimaryZoneComponent } from './rgw-sync-primary-zone.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwSyncPrimaryZoneComponent', () => {
   let component: RgwSyncPrimaryZoneComponent;
   let fixture: ComponentFixture<RgwSyncPrimaryZoneComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      declarations: [RgwSyncPrimaryZoneComponent]
-    }).compileComponents();
+  configureTestBed({
+    declarations: [RgwSyncPrimaryZoneComponent]
   });
 
   beforeEach(() => {

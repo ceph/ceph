@@ -502,7 +502,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
   }
 
   std::unique_ptr<rgw::sal::Bucket> cur_bucket;
-  ret = store->get_bucket(dpp, nullptr, orphan_bucket, &cur_bucket, null_yield);
+  ret = store->load_bucket(dpp, orphan_bucket, &cur_bucket, null_yield);
   if (ret < 0) {
     if (ret == -ENOENT) {
       /* probably raced with bucket removal */
@@ -529,7 +529,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const DoutPrefixProvider *dpp,
   rgw_bucket b;
   rgw_bucket_parse_bucket_key(store->ctx(), bucket_instance_id, &b, nullptr);
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(dpp, nullptr, b, &bucket, null_yield);
+  ret = store->load_bucket(dpp, b, &bucket, null_yield);
   if (ret < 0) {
     if (ret == -ENOENT) {
       /* probably raced with bucket removal */
@@ -1241,8 +1241,7 @@ int RGWRadosList::process_bucket(
 	continue;
       }
 
-      std::unique_ptr<rgw::sal::Bucket> bucket;
-      store->get_bucket(nullptr, bucket_info, &bucket);
+      auto bucket = store->get_bucket(bucket_info);
       // we need to do this in two cases below, so use a lambda
       auto do_stat_key =
 	[&](const rgw_obj_key& key) -> int {
@@ -1389,7 +1388,8 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
     bucket_process_map.erase(front);
 
     std::unique_ptr<rgw::sal::Bucket> bucket;
-    ret = store->get_bucket(dpp, nullptr, tenant_name, bucket_name, &bucket, null_yield);
+    ret = store->load_bucket(dpp, rgw_bucket(tenant_name, bucket_name),
+                             &bucket, null_yield);
     if (ret == -ENOENT) {
       std::cerr << "WARNING: bucket " << bucket_name <<
 	" does not exist; could it have been deleted very recently?" <<
@@ -1460,7 +1460,8 @@ int RGWRadosList::run(const DoutPrefixProvider *dpp,
   // initial bucket
 
   std::unique_ptr<rgw::sal::Bucket> bucket;
-  ret = store->get_bucket(dpp, nullptr, tenant_name, start_bucket_name, &bucket, null_yield);
+  ret = store->load_bucket(dpp, rgw_bucket(tenant_name, start_bucket_name),
+                           &bucket, null_yield);
   if (ret == -ENOENT) {
     // bucket deletion race?
     return 0;

@@ -189,14 +189,7 @@ WRITE_CLASS_ENCODER(MirrorInfo)
 class Filesystem
 {
 public:
-  using ref = std::shared_ptr<Filesystem>;
-  using const_ref = std::shared_ptr<Filesystem const>;
-
-  template<typename... Args>
-  static ref create(Args&&... args)
-  {
-    return std::make_shared<Filesystem>(std::forward<Args>(args)...);
-  }
+  Filesystem() = default;
 
   void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& p);
@@ -205,8 +198,16 @@ public:
   void print(std::ostream& out) const;
 
   bool is_upgradeable() const {
-    return (mds_map.allows_standby_replay() && mds_map.get_num_in_mds() == 0)
-       || (!mds_map.allows_standby_replay() && mds_map.get_num_in_mds() <= 1);
+    bool asr = mds_map.allows_standby_replay();
+    auto in_mds = mds_map.get_num_in_mds();
+    auto up_mds = mds_map.get_num_up_mds();
+    return
+              /* fs was "down" */
+              (in_mds == 0)
+              /* max_mds was set to 1; asr must be disabled */
+           || (!asr && in_mds == 1)
+              /* max_mds any value and all MDS were failed; asr must be disabled */
+           || (!asr && up_mds == 0);
   }
 
   /**
@@ -228,6 +229,36 @@ public:
     return false;
   }
 
+  const auto& get_mds_map() const
+  {
+    return mds_map;
+  }
+  auto& get_mds_map()
+  {
+    return mds_map;
+  }
+
+  const auto& get_mirror_info() const
+  {
+    return mirror_info;
+  }
+  auto& get_mirror_info()
+  {
+    return mirror_info;
+  }
+
+  auto get_fscid() const
+  {
+    return fscid;
+  }
+
+private:
+  void set_fscid(fs_cluster_id_t new_fscid) {
+    fscid = new_fscid;
+  }
+
+  friend class FSMap;
+
   fs_cluster_id_t fscid = FS_CLUSTER_ID_NONE;
   MDSMap mds_map;
   MirrorInfo mirror_info;
@@ -236,9 +267,10 @@ WRITE_CLASS_ENCODER_FEATURES(Filesystem)
 
 class FSMap {
 public:
-  friend class MDSMonitor;
-  friend class PaxosFSMap;
   using mds_info_t = MDSMap::mds_info_t;
+  using fsmap = typename std::map<fs_cluster_id_t, Filesystem>;
+  using const_iterator = typename fsmap::const_iterator;
+  using iterator = typename fsmap::iterator;
 
   static const version_t STRUCT_VERSION = 7;
   static const version_t STRUCT_VERSION_TRIM_TO = 7;
@@ -259,15 +291,20 @@ public:
       struct_version(rhs.struct_version)
   {
     filesystems.clear();
-    for (const auto &i : rhs.filesystems) {
-      const auto &fs = i.second;
-      filesystems[fs->fscid] = std::make_shared<Filesystem>(*fs);
-    }
+    filesystems = rhs.filesystems;
   }
 
   FSMap &operator=(const FSMap &rhs);
 
-  const CompatSet &get_default_compat() const {return default_compat;}
+  const_iterator begin() const {
+    return filesystems.begin();
+  }
+  const_iterator end() const {
+    return filesystems.end();
+  }
+
+  const CompatSet& get_default_compat() const {return default_compat;}
+  CompatSet& get_default_compat() {return default_compat;}
 
   void filter(const std::vector<std::string>& allowed)
   {
@@ -276,7 +313,7 @@ public:
     }
 
     erase_if(filesystems, [&](const auto& f) {
-      return std::find(allowed.begin(), allowed.end(), f.second->mds_map.get_fs_name()) == allowed.end();
+      return std::find(allowed.begin(), allowed.end(), f.second.mds_map.get_fs_name()) == allowed.end();
     });
 
     erase_if(mds_roles, [&](const auto& r) {
@@ -381,7 +418,7 @@ public:
    */
   void promote(
       mds_gid_t standby_gid,
-      Filesystem& filesystem,
+      fs_cluster_id_t fscid,
       mds_rank_t assigned_rank);
 
   /**
@@ -417,10 +454,9 @@ public:
    * Caller must already have validated all arguments vs. the existing
    * FSMap and OSDMap contents.
    */
-  Filesystem::ref create_filesystem(
-      std::string_view name, int64_t metadata_pool,
-      int64_t data_pool, uint64_t features,
-      fs_cluster_id_t fscid, bool recover);
+  const Filesystem& create_filesystem(
+      std::string_view name, int64_t metadata_pool, int64_t data_pool,
+      uint64_t features, fs_cluster_id_t fscid, bool recover);
 
   /**
    * Remove the filesystem (it must exist).  Caller should already
@@ -444,8 +480,14 @@ public:
   {
     auto& fs = filesystems.at(fscid);
     fn(fs);
-    fs->mds_map.epoch = epoch;
+    fs.mds_map.epoch = epoch;
+    fs.mds_map.modified = ceph_clock_now();
   }
+
+  /* This is method is written for the option of "ceph fs swap" commmand
+   * that intiates swap of FSCIDs.
+   */
+  void swap_fscids(fs_cluster_id_t fscid1, fs_cluster_id_t fscid2);
 
   /**
    * Apply a mutation to the mds_info_t structure for a particular
@@ -462,9 +504,10 @@ public:
       standby_epochs[who] = epoch;
     } else {
       auto& fs = filesystems.at(fscid);
-      auto& info = fs->mds_map.mds_info.at(who);
+      auto& info = fs.mds_map.mds_info.at(who);
       fn(info);
-      fs->mds_map.epoch = epoch;
+      fs.mds_map.epoch = epoch;
+      fs.mds_map.modified = ceph_clock_now();
     }
   }
 
@@ -478,7 +521,7 @@ public:
     if (fscid == FS_CLUSTER_ID_NONE) {
       return standby_daemons.at(gid);
     } else {
-      return filesystems.at(fscid)->mds_map.mds_info.at(gid);
+      return filesystems.at(fscid).mds_map.mds_info.at(gid);
     }
   }
 
@@ -488,26 +531,26 @@ public:
     if (fscid == FS_CLUSTER_ID_NONE or !filesystem_exists(fscid)) {
       return std::string_view();
     } else {
-      return get_filesystem(fscid)->mds_map.get_fs_name();
+      return filesystems.at(fscid).mds_map.get_fs_name();
     }
   }
 
   bool is_standby_replay(mds_gid_t who) const
   {
-    return filesystems.at(mds_roles.at(who))->is_standby_replay(who);
+    return filesystems.at(mds_roles.at(who)).is_standby_replay(who);
   }
 
   mds_gid_t get_standby_replay(mds_gid_t who) const
   {
-    return filesystems.at(mds_roles.at(who))->get_standby_replay(who);
+    return filesystems.at(mds_roles.at(who)).get_standby_replay(who);
   }
 
-  Filesystem::const_ref get_legacy_filesystem()
+  const Filesystem* get_legacy_filesystem() const
   {
     if (legacy_client_fscid == FS_CLUSTER_ID_NONE) {
       return nullptr;
     } else {
-      return filesystems.at(legacy_client_fscid);
+      return &filesystems.at(legacy_client_fscid);
     }
   }
 
@@ -518,7 +561,7 @@ public:
   {
     auto fscid = mds_roles.at(who);
     modify_filesystem(fscid, [who, &targets](auto&& fs) {
-      fs->mds_map.mds_info.at(who).export_targets = targets;
+      fs.mds_map.mds_info.at(who).export_targets = targets;
     });
   }
 
@@ -530,25 +573,24 @@ public:
     return struct_version < STRUCT_VERSION_TRIM_TO;
   }
 
-  size_t filesystem_count() const {return filesystems.size();}
-  bool filesystem_exists(fs_cluster_id_t fscid) const {return filesystems.count(fscid) > 0;}
-  Filesystem::const_ref get_filesystem(fs_cluster_id_t fscid) const {return std::const_pointer_cast<const Filesystem>(filesystems.at(fscid));}
-  Filesystem::ref get_filesystem(fs_cluster_id_t fscid) {return filesystems.at(fscid);}
-  Filesystem::ref get_filesystem(mds_gid_t gid) {
-    return filesystems.at(mds_roles.at(gid));
+  size_t filesystem_count() const {
+    return filesystems.size();
   }
-  Filesystem::const_ref get_filesystem(void) const {return std::const_pointer_cast<const Filesystem>(filesystems.begin()->second);}
-  Filesystem::const_ref get_filesystem(std::string_view name) const;
-  Filesystem::const_ref get_filesystem(mds_gid_t gid) const {
+  bool filesystem_exists(fs_cluster_id_t fscid) const {
+    return filesystems.count(fscid) > 0;
+  }
+  const Filesystem& get_filesystem(fs_cluster_id_t fscid) const {
+    return filesystems.at(fscid);
+  }
+  const Filesystem& get_filesystem(void) const {
+    return filesystems.at(filesystems.begin()->second.fscid);
+  }
+  Filesystem const* get_filesystem(std::string_view name) const;
+  const Filesystem& get_filesystem(mds_gid_t gid) const {
     return filesystems.at(mds_roles.at(gid));
   }
 
-  std::vector<Filesystem::const_ref> get_filesystems(void) const;
-
-  int parse_filesystem(
-      std::string_view ns_str,
-      Filesystem::const_ref *result
-      ) const;
+  int parse_filesystem(std::string_view ns_str, Filesystem const** result) const;
 
   int parse_role(
       std::string_view role_str,
@@ -575,6 +617,18 @@ public:
 
   bool check_health(void);
 
+  const auto& get_mds_roles() const {
+    return mds_roles;
+  }
+
+  const auto& get_standby_daemons() const {
+    return standby_daemons;
+  }
+
+  const auto& get_standby_epochs() const {
+    return standby_epochs;
+  }
+
   /**
    * Assert that the FSMap, Filesystem, MDSMap, mds_info_t relations are
    * all self-consistent.
@@ -598,6 +652,13 @@ public:
   static void generate_test_instances(std::list<FSMap*>& ls);
 
 protected:
+  iterator begin() {
+    return filesystems.begin();
+  }
+  iterator end() {
+    return filesystems.end();
+  }
+
   epoch_t epoch = 0;
   uint64_t next_filesystem_id = FS_CLUSTER_ID_ANONYMOUS + 1;
   fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
@@ -605,7 +666,7 @@ protected:
   bool enable_multiple = true;
   bool ever_enabled_multiple = true; // < the cluster had multiple FS enabled once
 
-  std::map<fs_cluster_id_t, Filesystem::ref> filesystems;
+  fsmap filesystems;
 
   // Remember which Filesystem an MDS daemon's info is stored in
   // (or in standby_daemons for FS_CLUSTER_ID_NONE)

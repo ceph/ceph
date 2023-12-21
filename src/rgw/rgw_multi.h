@@ -6,10 +6,11 @@
 #include <map>
 #include "rgw_xml.h"
 #include "rgw_obj_types.h"
-#include "rgw_obj_manifest.h"
 #include "rgw_compression_types.h"
 #include "common/dout.h"
 #include "rgw_sal_fwd.h"
+
+#include "driver/rados/rgw_obj_manifest.h" // FIXME: subclass dependency
 
 #define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
 #define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()

@@ -185,10 +185,6 @@ public:
     return NULL;
   }
 
-  void lru_status() {
-    //generic_dout(10) << "lru: " << lru_get_size() << " items, " << top.size() << " top, " << bottom.size() << " bot, " << pintail.size() << " pintail" << dendl;
-  }
-
 protected:
   // adjust top/bot balance, as necessary
   void adjust() {

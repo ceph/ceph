@@ -1,5 +1,5 @@
 import { Component, EventEmitter, Output, ViewChild } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { UntypedFormControl, Validators } from '@angular/forms';
 
 import { NgbActiveModal, NgbTypeahead } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -66,7 +66,7 @@ export class SilenceMatcherModalComponent {
     this.form = this.formBuilder.group({
       name: [null, [Validators.required]],
       value: [{ value: '', disabled: true }, [Validators.required]],
-      isRegex: new FormControl(false)
+      isRegex: new UntypedFormControl(false)
     });
   }
 

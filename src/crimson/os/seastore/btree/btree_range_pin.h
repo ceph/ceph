@@ -153,10 +153,6 @@ public:
     return parent;
   }
 
-  void set_parent(CachedExtentRef ext) {
-    parent = ext;
-  }
-
   uint16_t get_pos() const final {
     return pos;
   }
@@ -199,6 +195,7 @@ public:
   }
 
   get_child_ret_t<LogicalCachedExtent> get_logical_extent(Transaction&) final;
+  bool is_stable() const final;
 };
 
 }

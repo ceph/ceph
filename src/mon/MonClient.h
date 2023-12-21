@@ -22,6 +22,10 @@
 #include <string>
 #include <vector>
 
+#include <boost/asio/io_context.hpp>
+#include <boost/asio/steady_timer.hpp>
+#include <boost/asio/strand.hpp>
+
 #include "msg/Messenger.h"
 
 #include "MonMap.h"
@@ -297,7 +301,8 @@ private:
   mutable ceph::mutex monc_lock = ceph::make_mutex("MonClient::monc_lock");
   SafeTimer timer;
   boost::asio::io_context& service;
-  boost::asio::io_context::strand finish_strand{service};
+  boost::asio::strand<boost::asio::io_context::executor_type>
+      finish_strand{service.get_executor()};
 
   bool initialized;
   bool stopping = false;

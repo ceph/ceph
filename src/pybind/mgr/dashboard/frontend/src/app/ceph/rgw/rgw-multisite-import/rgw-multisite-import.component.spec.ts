@@ -7,23 +7,22 @@ import { ToastrModule } from 'ngx-toastr';
 import { SharedModule } from '~/app/shared/shared.module';
 
 import { RgwMultisiteImportComponent } from './rgw-multisite-import.component';
+import { configureTestBed } from '~/testing/unit-test-helper';
 
 describe('RgwMultisiteImportComponent', () => {
   let component: RgwMultisiteImportComponent;
   let fixture: ComponentFixture<RgwMultisiteImportComponent>;
 
-  beforeEach(async () => {
-    await TestBed.configureTestingModule({
-      imports: [
-        SharedModule,
-        ReactiveFormsModule,
-        RouterTestingModule,
-        HttpClientTestingModule,
-        ToastrModule.forRoot()
-      ],
-      declarations: [RgwMultisiteImportComponent],
-      providers: [NgbActiveModal]
-    }).compileComponents();
+  configureTestBed({
+    imports: [
+      SharedModule,
+      ReactiveFormsModule,
+      RouterTestingModule,
+      HttpClientTestingModule,
+      ToastrModule.forRoot()
+    ],
+    declarations: [RgwMultisiteImportComponent],
+    providers: [NgbActiveModal]
   });
 
   beforeEach(() => {

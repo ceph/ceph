@@ -4,6 +4,7 @@
 #ifndef CEPH_CLS_LOG_OPS_H
 #define CEPH_CLS_LOG_OPS_H
 
+#include "common/ceph_json.h"
 #include "cls_log_types.h"
 
 struct cls_log_add_op {
@@ -26,6 +27,23 @@ struct cls_log_add_op {
       decode(monotonic_inc, bl);
     }
     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const {
+    encode_json("entries", entries, f);
+    encode_json("monotonic_inc", monotonic_inc, f);
+  }
+
+  static void generate_test_instances(std::list<cls_log_add_op *>& l) {
+    l.push_back(new cls_log_add_op);
+    l.push_back(new cls_log_add_op);
+    l.back()->entries.push_back(cls_log_entry());
+    l.back()->entries.push_back(cls_log_entry());
+    l.back()->entries.back().section = "section";
+    l.back()->entries.back().name = "name";
+    l.back()->entries.back().timestamp = utime_t(1, 2);
+    l.back()->entries.back().data.append("data");
+    l.back()->entries.back().id = "id";
   }
 };
 WRITE_CLASS_ENCODER(cls_log_add_op)
@@ -56,6 +74,21 @@ struct cls_log_list_op {
     decode(max_entries, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(ceph::Formatter* f) const {
+    f->dump_stream("from_time") << from_time;
+    f->dump_string("marker", marker);
+    f->dump_stream("to_time") << to_time;
+    f->dump_int("max_entries", max_entries);
+  }
+  static void generate_test_instances(std::list<cls_log_list_op*>& ls) {
+    ls.push_back(new cls_log_list_op);
+    ls.push_back(new cls_log_list_op);
+    ls.back()->from_time = utime_t(1, 2);
+    ls.back()->marker = "marker";
+    ls.back()->to_time = utime_t(3, 4);
+    ls.back()->max_entries = 5;
+  }
 };
 WRITE_CLASS_ENCODER(cls_log_list_op)
 
@@ -80,6 +113,25 @@ struct cls_log_list_ret {
     decode(marker, bl);
     decode(truncated, bl);
     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const {
+    encode_json("entries", entries, f);
+    f->dump_string("marker", marker);
+    f->dump_bool("truncated", truncated);
+  }
+  static void generate_test_instances(std::list<cls_log_list_ret*>& ls) {
+    ls.push_back(new cls_log_list_ret);
+    ls.push_back(new cls_log_list_ret);
+    ls.back()->entries.push_back(cls_log_entry());
+    ls.back()->entries.push_back(cls_log_entry());
+    ls.back()->entries.back().section = "section";
+    ls.back()->entries.back().name = "name";
+    ls.back()->entries.back().timestamp = utime_t(1, 2);
+    ls.back()->entries.back().data.append("data");
+    ls.back()->entries.back().id = "id";
+    ls.back()->marker = "marker";
+    ls.back()->truncated = true;
   }
 };
 WRITE_CLASS_ENCODER(cls_log_list_ret)
@@ -116,6 +168,20 @@ struct cls_log_trim_op {
     }
     DECODE_FINISH(bl);
   }
+  void dump(ceph::Formatter* f) const {
+    f->dump_stream("from_time") << from_time;
+    f->dump_stream("to_time") << to_time;
+    f->dump_string("from_marker", from_marker);
+    f->dump_string("to_marker", to_marker);
+  }
+  static void generate_test_instances(std::list<cls_log_trim_op*>& ls) {
+    ls.push_back(new cls_log_trim_op);
+    ls.push_back(new cls_log_trim_op);
+    ls.back()->from_time = utime_t(1, 2);
+    ls.back()->to_time = utime_t(3, 4);
+    ls.back()->from_marker = "from_marker";
+    ls.back()->to_marker = "to_marker";
+  }
 };
 WRITE_CLASS_ENCODER(cls_log_trim_op)
 
@@ -132,6 +198,13 @@ struct cls_log_info_op {
     DECODE_START(1, bl);
     // currently empty request
     DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter* f) const {
+  }
+
+  static void generate_test_instances(std::list<cls_log_info_op*>& ls) {
+    ls.push_back(new cls_log_info_op);
   }
 };
 WRITE_CLASS_ENCODER(cls_log_info_op)

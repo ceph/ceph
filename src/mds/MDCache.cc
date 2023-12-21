@@ -6526,7 +6526,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
              << header.change_attr << " offset: " << header.file_offset << " blen: "
 	     << header.block_size << dendl;
     filer.write(in->ino(), &layout, *snapc, header.file_offset, header.block_size,
-                data, ceph::real_time::min(), 0,
+                data, ceph::real_clock::zero(), 0,
                 new C_OnFinisher(new C_IO_MDC_TruncateWriteFinish(this, in, ls,
                                                                   header.block_size),
                                  mds->finisher));
@@ -6547,7 +6547,7 @@ void MDCache::_truncate_inode(CInode *in, LogSegment *ls)
 
     dout(10) << "_truncate_inode truncate on inode " << *in << dendl;
     filer.truncate(in->ino(), &layout, *snapc, pi->truncate_size, length,
-                   pi->truncate_seq, ceph::real_time::min(), 0,
+                   pi->truncate_seq, ceph::real_clock::zero(), 0,
                    new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in, ls),
                                     mds->finisher));
   }
@@ -6603,7 +6603,7 @@ void MDCache::truncate_inode_write_finish(CInode *in, LogSegment *ls,
    */
   uint64_t length = pi->truncate_from - pi->truncate_size + block_size;
   filer.truncate(in->ino(), &layout, *snapc, pi->truncate_size, length,
-                 pi->truncate_seq, ceph::real_time::min(), 0,
+                 pi->truncate_seq, ceph::real_clock::zero(), 0,
                  new C_OnFinisher(new C_IO_MDC_TruncateFinish(this, in, ls),
                                   mds->finisher));
 }
@@ -6776,6 +6776,13 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
           << " pinned=" << lru.lru_get_num_pinned()
           << dendl;
 
+  dout(20) << "bottom_lru: " << bottom_lru.lru_get_size() << " items"
+              ", " << bottom_lru.lru_get_top() << " top"
+              ", " << bottom_lru.lru_get_bot() << " bot"
+              ", " << bottom_lru.lru_get_pintail() << " pintail"
+              ", " << bottom_lru.lru_get_num_pinned() << " pinned"
+              << dendl;
+
   const uint64_t trim_counter_start = trim_counter.get();
   bool throttled = false;
   while (1) {
@@ -6796,20 +6803,25 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   }
   unexpirables.clear();
 
+  dout(20) << "lru: " << lru.lru_get_size() << " items"
+              ", " << lru.lru_get_top() << " top"
+              ", " << lru.lru_get_bot() << " bot"
+              ", " << lru.lru_get_pintail() << " pintail"
+              ", " << lru.lru_get_num_pinned() << " pinned"
+              << dendl;
+
   // trim dentries from the LRU until count is reached
-  // if mds is in standby_replay and skip trimming the inodes
-  while (!throttled && (cache_toofull() || count > 0 || is_standby_replay)) {
+  while (!throttled && (cache_toofull() || count > 0)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) break;
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) {
       break;
     }
-    if (is_standby_replay && dn->get_linkage()->inode) {
-      // we move the inodes that need to be trimmed to the end of the lru queue.
-      // refer to MDCache::standby_trim_segment
-      lru.lru_insert_bot(dn);
-      break;
+    if ((is_standby_replay && dn->get_linkage()->inode &&
+        dn->get_linkage()->inode->item_open_file.is_on_list())) {
+      dout(20) << "unexpirable: " << *dn << dendl;
+      unexpirables.push_back(dn);
     } else if (trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
     } else {
@@ -7455,69 +7467,42 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
 
 void MDCache::standby_trim_segment(LogSegment *ls)
 {
-  auto try_trim_inode = [this](CInode *in) {
-    if (in->get_num_ref() == 0 &&
-	!in->item_open_file.is_on_list() &&
-	in->parent != NULL &&
-	in->parent->get_num_ref() == 0){
-      touch_dentry_bottom(in->parent);
-    }
-  };
-
-  auto try_trim_dentry = [this](CDentry *dn) {
-    if (dn->get_num_ref() > 0)
-      return;
-    auto in = dn->get_linkage()->inode;
-    if(in && in->item_open_file.is_on_list())
-      return;
-    touch_dentry_bottom(dn);
-  };
-  
   ls->new_dirfrags.clear_list();
   ls->open_files.clear_list();
 
   while (!ls->dirty_dirfrags.empty()) {
     CDir *dir = ls->dirty_dirfrags.front();
     dir->mark_clean();
-    if (dir->inode)
-      try_trim_inode(dir->inode);
   }
   while (!ls->dirty_inodes.empty()) {
     CInode *in = ls->dirty_inodes.front();
     in->mark_clean();
-    try_trim_inode(in);
   }
   while (!ls->dirty_dentries.empty()) {
     CDentry *dn = ls->dirty_dentries.front();
     dn->mark_clean();
-    try_trim_dentry(dn);
   }
   while (!ls->dirty_parent_inodes.empty()) {
     CInode *in = ls->dirty_parent_inodes.front();
     in->clear_dirty_parent();
-    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_dir.empty()) {
     CInode *in = ls->dirty_dirfrag_dir.front();
     in->filelock.remove_dirty();
-    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_nest.empty()) {
     CInode *in = ls->dirty_dirfrag_nest.front();
     in->nestlock.remove_dirty();
-    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_dirfragtree.empty()) {
     CInode *in = ls->dirty_dirfrag_dirfragtree.front();
     in->dirfragtreelock.remove_dirty();
-    try_trim_inode(in);
   }
   while (!ls->truncating_inodes.empty()) {
     auto it = ls->truncating_inodes.begin();
     CInode *in = *it;
     ls->truncating_inodes.erase(it);
     in->put(CInode::PIN_TRUNCATING);
-    try_trim_inode(in);
   }
 }
 
@@ -8223,10 +8208,6 @@ void MDCache::dispatch(const cref_t<Message> &m)
   case MSG_MDS_DENTRYUNLINK:
     handle_dentry_unlink(ref_cast<MDentryUnlink>(m));
     break;
-  case MSG_MDS_DENTRYUNLINK_ACK:
-    handle_dentry_unlink_ack(ref_cast<MDentryUnlinkAck>(m));
-    break;
-
 
   case MSG_MDS_FRAGMENTNOTIFY:
     handle_fragment_notify(ref_cast<MMDSFragmentNotify>(m));
@@ -9891,6 +9872,12 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
   // remove from map
   active_requests.erase(mdr->reqid);
 
+  // queue next replay op?
+  if (mdr->is_queued_for_replay() && !mdr->get_queued_next_replay_op()) {
+    mdr->set_queued_next_replay_op();
+    mds->queue_one_replay();
+  }
+
   if (mds->logger)
     log_stat();
 
@@ -11215,8 +11202,7 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
 
 // UNLINK
 
-void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn,
-                                 MDRequestRef& mdr, bool unlinking)
+void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr)
 {
   dout(10) << __func__ << " " << *dn << dendl;
   // share unlink news with replicas
@@ -11227,11 +11213,6 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn,
     straydn->list_replicas(replicas);
     CInode *strayin = straydn->get_linkage()->get_inode();
     strayin->encode_snap_blob(snapbl);
-  }
-
-  if (unlinking) {
-    ceph_assert(!straydn);
-    dn->replica_unlinking_ref = 0;
   }
   for (set<mds_rank_t>::iterator it = replicas.begin();
        it != replicas.end();
@@ -11245,21 +11226,12 @@ void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn,
 	 rejoin_gather.count(*it)))
       continue;
 
-    auto unlink = make_message<MDentryUnlink>(dn->get_dir()->dirfrag(),
-                                              dn->get_name(), unlinking);
+    auto unlink = make_message<MDentryUnlink>(dn->get_dir()->dirfrag(), dn->get_name());
     if (straydn) {
       encode_replica_stray(straydn, *it, unlink->straybl);
       unlink->snapbl = snapbl;
     }
     mds->send_message_mds(unlink, *it);
-    if (unlinking) {
-      dn->replica_unlinking_ref++;
-      dn->get(CDentry::PIN_WAITUNLINKSTATE);
-    }
-  }
-
-  if (unlinking && dn->replica_unlinking_ref) {
-    dn->add_waiter(CDentry::WAIT_UNLINK_STATE, new C_MDS_RetryRequest(this, mdr));
   }
 }
 
@@ -11268,40 +11240,23 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
   // straydn
   CDentry *straydn = nullptr;
   CInode *strayin = nullptr;
-
   if (m->straybl.length())
     decode_replica_stray(straydn, &strayin, m->straybl, mds_rank_t(m->get_source().num()));
-
-  boost::intrusive_ptr<MDentryUnlinkAck> ack;
-  CDentry::linkage_t *dnl;
-  CDentry *dn;
-  CInode *in;
-  bool hadrealm;
 
   CDir *dir = get_dirfrag(m->get_dirfrag());
   if (!dir) {
     dout(7) << __func__ << " don't have dirfrag " << m->get_dirfrag() << dendl;
-    if (m->is_unlinking())
-      goto ack;
   } else {
-    dn = dir->lookup(m->get_dn());
+    CDentry *dn = dir->lookup(m->get_dn());
     if (!dn) {
       dout(7) << __func__ << " don't have dentry " << *dir << " dn " << m->get_dn() << dendl;
-      if (m->is_unlinking())
-        goto ack;
     } else {
       dout(7) << __func__ << " on " << *dn << dendl;
-
-      if (m->is_unlinking()) {
-        dn->state_set(CDentry::STATE_UNLINKING);
-        goto ack;
-      }
-
-      dnl = dn->get_linkage();
+      CDentry::linkage_t *dnl = dn->get_linkage();
 
       // open inode?
       if (dnl->is_primary()) {
-	in = dnl->get_inode();
+	CInode *in = dnl->get_inode();
 	dn->dir->unlink_inode(dn);
 	ceph_assert(straydn);
 	straydn->dir->link_primary_inode(straydn, in);
@@ -11312,12 +11267,11 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	in->first = straydn->first;
 
 	// update subtree map?
-	if (in->is_dir()) {
+	if (in->is_dir()) 
 	  adjust_subtree_after_rename(in, dir, false);
-	}
 
 	if (m->snapbl.length()) {
-	  hadrealm = (in->snaprealm ? true : false);
+	  bool hadrealm = (in->snaprealm ? true : false);
 	  in->decode_snap_blob(m->snapbl);
 	  ceph_assert(in->snaprealm);
 	  if (!hadrealm)
@@ -11328,7 +11282,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	if (in->is_any_caps() &&
 	    !in->state_test(CInode::STATE_EXPORTINGCAPS))
 	  migrator->export_caps(in);
-
+	
 	straydn = NULL;
       } else {
 	ceph_assert(!straydn);
@@ -11336,12 +11290,6 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	dn->dir->unlink_inode(dn);
       }
       ceph_assert(dnl->is_null());
-      dn->state_clear(CDentry::STATE_UNLINKING);
-
-      MDSContext::vec finished;
-      dn->take_waiting(CDentry::WAIT_UNLINK_FINISH, finished);
-      mds->queue_waiters(finished);
-
     }
   }
 
@@ -11353,36 +11301,8 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
     trim_dentry(straydn, ex);
     send_expire_messages(ex);
   }
-  return;
-
-ack:
-  ack = make_message<MDentryUnlinkAck>(m->get_dirfrag(), m->get_dn());
-  mds->send_message(ack, m->get_connection());
 }
 
-void MDCache::handle_dentry_unlink_ack(const cref_t<MDentryUnlinkAck> &m)
-{
-  CDir *dir = get_dirfrag(m->get_dirfrag());
-  if (!dir) {
-    dout(7) << __func__ << " don't have dirfrag " << m->get_dirfrag() << dendl;
-  } else {
-    CDentry *dn = dir->lookup(m->get_dn());
-    if (!dn) {
-      dout(7) << __func__ << " don't have dentry " << *dir << " dn " << m->get_dn() << dendl;
-    } else {
-      dout(7) << __func__ << " on " << *dn << " ref "
-	      << dn->replica_unlinking_ref << " -> "
-	      << dn->replica_unlinking_ref - 1 << dendl;
-      dn->replica_unlinking_ref--;
-      if (!dn->replica_unlinking_ref) {
-        MDSContext::vec finished;
-        dn->take_waiting(CDentry::WAIT_UNLINK_STATE, finished);
-        mds->queue_waiters(finished);
-      }
-      dn->put(CDentry::PIN_WAITUNLINKSTATE);
-    }
-  }
-}
 
 
 
@@ -13570,7 +13490,7 @@ void MDCache::upkeep_main(void)
         if (active_with_clients) {
           trim_client_leases();
         }
-        if (is_open()) {
+        if (is_open() || mds->is_standby_replay()) {
           trim();
         }
         if (active_with_clients) {

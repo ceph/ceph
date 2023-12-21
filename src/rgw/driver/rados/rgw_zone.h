@@ -318,7 +318,7 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   // TODO: Maybe convert hostnames to a map<std::string,std::list<std::string>> for
   // endpoint_type->hostnames
 /*
-20:05 < _robbat21irssi> maybe I do someting like: if (hostname_map.empty()) { populate all map keys from hostnames; };
+20:05 < _robbat21irssi> maybe I do something like: if (hostname_map.empty()) { populate all map keys from hostnames; };
 20:05 < _robbat21irssi> but that's a later compatability migration planning bit
 20:06 < yehudasa> more like if (!hostnames.empty()) {
 20:06 < yehudasa> for (std::list<std::string>::iterator iter = hostnames.begin(); iter != hostnames.end(); ++iter) {
@@ -642,7 +642,6 @@ public:
   rgw_zone_id master_zone;
 
   std::string realm_id;
-  std::string realm_name;
   epoch_t realm_epoch{1}; //< realm epoch when period was made current
 
   CephContext *cct{nullptr};
@@ -678,7 +677,6 @@ public:
   const rgw_zone_id& get_master_zone() const { return master_zone; }
   const std::string& get_master_zonegroup() const { return master_zonegroup; }
   const std::string& get_realm() const { return realm_id; }
-  const std::string& get_realm_name() const { return realm_name; }
   const RGWPeriodMap& get_map() const { return period_map; }
   RGWPeriodConfig& get_config() { return period_config; }
   const RGWPeriodConfig& get_config() const { return period_config; }
@@ -750,7 +748,7 @@ public:
   int update_latest_epoch(const DoutPrefixProvider *dpp, epoch_t epoch, optional_yield y);
 
   int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, const std::string &period_realm_id, optional_yield y,
-	   const std::string &period_realm_name = "", bool setup_obj = true);
+	    bool setup_obj = true);
   int init(const DoutPrefixProvider *dpp, CephContext *_cct, RGWSI_SysObj *_sysobj_svc, optional_yield y, bool setup_obj = true);  
 
   int create(const DoutPrefixProvider *dpp, optional_yield y, bool exclusive = true);
@@ -780,6 +778,7 @@ public:
     encode(master_zonegroup, bl);
     encode(period_config, bl);
     encode(realm_id, bl);
+    std::string realm_name; // removed
     encode(realm_name, bl);
     ENCODE_FINISH(bl);
   }
@@ -796,6 +795,7 @@ public:
     decode(master_zonegroup, bl);
     decode(period_config, bl);
     decode(realm_id, bl);
+    std::string realm_name; // removed
     decode(realm_name, bl);
     DECODE_FINISH(bl);
   }
@@ -885,6 +885,9 @@ int set_default_zonegroup(const DoutPrefixProvider* dpp, optional_yield y,
                           sal::ConfigStore* cfgstore, const RGWZoneGroup& info,
                           bool exclusive = false);
 
+/// Return an endpoint from the zonegroup or its master zone.
+std::string get_zonegroup_endpoint(const RGWZoneGroup& info);
+
 /// Add a zone to the zonegroup, or update an existing zone entry.
 int add_zone_to_group(const DoutPrefixProvider* dpp,
                       RGWZoneGroup& zonegroup,
@@ -940,6 +943,12 @@ int delete_zone(const DoutPrefixProvider* dpp, optional_yield y,
                 sal::ConfigStore* cfgstore, const RGWZoneParams& info,
                 sal::ZoneWriter& writer);
 
+/// Return the zone placement corresponding to the given rule, or nullptr.
+auto find_zone_placement(const DoutPrefixProvider* dpp,
+                         const RGWZoneParams& info,
+                         const rgw_placement_rule& rule)
+    -> const RGWZonePlacementInfo*;
+
 
 /// Global state about the site configuration. Initialized once during
 /// startup and may be reinitialized by RGWRealmReloader, but is otherwise
@@ -956,6 +965,10 @@ class SiteConfig {
   const RGWZoneGroup& get_zonegroup() const { return *zonegroup; }
   /// Return the public zone configuration.
   const RGWZone& get_zone() const { return *zone; }
+  /// Return true if the local zone can write metadata.
+  bool is_meta_master() const {
+    return zonegroup->is_master && zonegroup->master_zone == zone->id;
+  }
 
   /// Load or reload the multisite configuration from storage. This is not
   /// thread-safe, so requires careful coordination with the RGWRealmReloader.

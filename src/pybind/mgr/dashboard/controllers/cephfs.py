@@ -14,7 +14,7 @@ from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.cephfs import CephFS as CephFS_
 from ..services.exception import handle_cephfs_error
-from ..tools import ViewCache
+from ..tools import ViewCache, str_to_bool
 from . import APIDoc, APIRouter, DeletePermission, Endpoint, EndpointDoc, \
     RESTController, UIRouter, UpdatePermission, allow_empty_body
 
@@ -335,13 +335,16 @@ class CephFS(RESTController):
 
         standby_table = self.get_standby_table(fsmap['standbys'], mds_versions)
 
+        flags = mdsmap['flags_state']
+
         return {
             "cephfs": {
                 "id": fs_id,
                 "name": mdsmap['fs_name'],
                 "client_count": client_count,
                 "ranks": rank_table,
-                "pools": pools_table
+                "pools": pools_table,
+                "flags": flags,
             },
             "standbys": standby_table,
             "versions": mds_versions
@@ -673,28 +676,37 @@ class CephFsUi(CephFS):
 @APIDoc('CephFS Subvolume Management API', 'CephFSSubvolume')
 class CephFSSubvolume(RESTController):
 
-    def get(self, vol_name: str):
+    def get(self, vol_name: str, group_name: str = "", info=True):
+        params = {'vol_name': vol_name}
+        if group_name:
+            params['group_name'] = group_name
         error_code, out, err = mgr.remote(
-            'volumes', '_cmd_fs_subvolume_ls', None, {'vol_name': vol_name})
+            'volumes', '_cmd_fs_subvolume_ls', None, params)
         if error_code != 0:
             raise DashboardException(
                 f'Failed to list subvolumes for volume {vol_name}: {err}'
             )
         subvolumes = json.loads(out)
-        for subvolume in subvolumes:
-            error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
-                                              'vol_name': vol_name, 'sub_name': subvolume['name']})
-            if error_code != 0:
-                raise DashboardException(
-                    f'Failed to get info for subvolume {subvolume["name"]}: {err}'
-                )
-            subvolume['info'] = json.loads(out)
+
+        if info:
+            for subvolume in subvolumes:
+                params['sub_name'] = subvolume['name']
+                error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None,
+                                                  params)
+                if error_code != 0:
+                    raise DashboardException(
+                        f'Failed to get info for subvolume {subvolume["name"]}: {err}'
+                    )
+                subvolume['info'] = json.loads(out)
         return subvolumes
 
     @RESTController.Resource('GET')
-    def info(self, vol_name: str, subvol_name: str):
-        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None, {
-            'vol_name': vol_name, 'sub_name': subvol_name})
+    def info(self, vol_name: str, subvol_name: str, group_name: str = ""):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name}
+        if group_name:
+            params['group_name'] = group_name
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_info', None,
+                                          params)
         if error_code != 0:
             raise DashboardException(
                 f'Failed to get info for subvolume {subvol_name}: {err}'
@@ -711,10 +723,14 @@ class CephFSSubvolume(RESTController):
 
         return f'Subvolume {subvol_name} created successfully'
 
-    def set(self, vol_name: str, subvol_name: str, size: str):
+    def set(self, vol_name: str, subvol_name: str, size: str, group_name: str = ""):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name}
         if size:
-            error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_resize', None, {
-                'vol_name': vol_name, 'sub_name': subvol_name, 'new_size': size})
+            params['new_size'] = size
+            if group_name:
+                params['group_name'] = group_name
+            error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_resize', None,
+                                            params)
             if error_code != 0:
                 raise DashboardException(
                     f'Failed to update subvolume {subvol_name}: {err}'
@@ -722,22 +738,43 @@ class CephFSSubvolume(RESTController):
 
         return f'Subvolume {subvol_name} updated successfully'
 
-    def delete(self, vol_name: str, subvol_name: str):
+    def delete(self, vol_name: str, subvol_name: str, group_name: str = "",
+               retain_snapshots: bool = False):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name}
+        if group_name:
+            params['group_name'] = group_name
+        retain_snapshots = str_to_bool(retain_snapshots)
+        if retain_snapshots:
+            params['retain_snapshots'] = 'True'
         error_code, _, err = mgr.remote(
-            'volumes', '_cmd_fs_subvolume_rm', None, {
-                'vol_name': vol_name, 'sub_name': subvol_name})
+            'volumes', '_cmd_fs_subvolume_rm', None, params)
         if error_code != 0:
-            raise RuntimeError(
-                f'Failed to delete subvolume {subvol_name}: {err}'
-            )
+            raise DashboardException(
+                msg=f'Failed to remove subvolume {subvol_name}: {err}',
+                component='cephfs')
         return f'Subvolume {subvol_name} removed successfully'
+
+    @RESTController.Resource('GET')
+    def exists(self, vol_name: str, group_name=''):
+        params = {'vol_name': vol_name}
+        if group_name:
+            params['group_name'] = group_name
+        error_code, out, err = mgr.remote(
+            'volumes', '_cmd_fs_subvolume_exist', None, params)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to check if subvolume exists: {err}'
+            )
+        if out == 'no subvolume exists':
+            return False
+        return True
 
 
 @APIRouter('/cephfs/subvolume/group', Scope.CEPHFS)
 @APIDoc("Cephfs Subvolume Group Management API", "CephfsSubvolumeGroup")
 class CephFSSubvolumeGroups(RESTController):
 
-    def get(self, vol_name):
+    def get(self, vol_name, info=True):
         if not vol_name:
             raise DashboardException(
                 f'Error listing subvolume groups for {vol_name}')
@@ -747,15 +784,17 @@ class CephFSSubvolumeGroups(RESTController):
             raise DashboardException(
                 f'Error listing subvolume groups for {vol_name}')
         subvolume_groups = json.loads(out)
-        for group in subvolume_groups:
-            error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info',
-                                              None, {'vol_name': vol_name,
-                                                     'group_name': group['name']})
-            if error_code != 0:
-                raise DashboardException(
-                    f'Failed to get info for subvolume group {group["name"]}: {err}'
-                )
-            group['info'] = json.loads(out)
+
+        if info:
+            for group in subvolume_groups:
+                error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolumegroup_info',
+                                                  None, {'vol_name': vol_name,
+                                                         'group_name': group['name']})
+                if error_code != 0:
+                    raise DashboardException(
+                        f'Failed to get info for subvolume group {group["name"]}: {err}'
+                    )
+                group['info'] = json.loads(out)
         return subvolume_groups
 
     @RESTController.Resource('GET')
@@ -796,3 +835,61 @@ class CephFSSubvolumeGroups(RESTController):
                 f'Failed to delete subvolume group {group_name}: {err}'
             )
         return f'Subvolume group {group_name} removed successfully'
+
+
+@APIRouter('/cephfs/subvolume/snapshot', Scope.CEPHFS)
+@APIDoc("Cephfs Subvolume Snapshot Management API", "CephfsSubvolumeSnapshot")
+class CephFSSubvolumeSnapshots(RESTController):
+    def get(self, vol_name: str, subvol_name, group_name: str = '', info=True):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name}
+        if group_name:
+            params['group_name'] = group_name
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_ls', None,
+                                          params)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to list subvolume snapshots for subvolume {subvol_name}: {err}'
+            )
+        snapshots = json.loads(out)
+
+        if info:
+            for snapshot in snapshots:
+                params['snap_name'] = snapshot['name']
+                error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_info',
+                                                  None, params)
+                if error_code != 0:
+                    raise DashboardException(
+                        f'Failed to get info for subvolume snapshot {snapshot["name"]}: {err}'
+                    )
+                snapshot['info'] = json.loads(out)
+        return snapshots
+
+
+@APIRouter('/cephfs/snaphost/schedule', Scope.CEPHFS)
+@APIDoc("Cephfs Snapshot Scheduling API", "CephFSSnapshotSchedule")
+class CephFSSnapshotSchedule(RESTController):
+
+    def list(self, fs: str, path: str = '/', recursive: bool = True):
+        error_code, out, err = mgr.remote('snap_schedule', 'snap_schedule_list',
+                                          path, recursive, fs, 'plain')
+
+        if len(out) == 0:
+            return []
+
+        snapshot_schedule_list = out.split('\n')
+        output = []
+
+        for snap in snapshot_schedule_list:
+            current_path = snap.strip().split(' ')[0]
+            error_code, status_out, err = mgr.remote('snap_schedule', 'snap_schedule_get',
+                                                     current_path, fs, 'plain')
+            output.append(json.loads(status_out))
+
+        output_json = json.dumps(output)
+
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get list of snapshot schedules for path {path}: {err}'
+            )
+
+        return json.loads(output_json)

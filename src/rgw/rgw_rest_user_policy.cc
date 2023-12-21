@@ -13,6 +13,7 @@
 
 #include "rgw_common.h"
 #include "rgw_op.h"
+#include "rgw_process_env.h"
 #include "rgw_rest.h"
 #include "rgw_rest_user_policy.h"
 #include "rgw_sal.h"
@@ -131,8 +132,8 @@ void RGWPutUserPolicy::execute(optional_yield y)
     return;
   }
 
-  ceph::bufferlist in_data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "ERROR: forward_request_to_master returned ret=" << op_ret << dendl;
     return;
@@ -362,8 +363,8 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
     return;
   }
 
-  ceph::bufferlist in_data;
-  op_ret = driver->forward_request_to_master(this, s->user.get(), nullptr, in_data, nullptr, s->info, y);
+  op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
+                                         nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
     // a policy might've been uploaded to this site when there was no sync
     // req. in earlier releases, proceed deletion

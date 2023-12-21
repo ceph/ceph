@@ -113,7 +113,7 @@ size_t RGWEnv::get_size(const char *name, size_t def_val) const
     sz = stoull(iter->second);
   } catch(...){
     /* it is very unlikely that we'll ever encounter out_of_range, but let's
-       return the default eitherway */
+       return the default either way */
     sz = def_val;
   }
 

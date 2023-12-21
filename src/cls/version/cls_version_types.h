@@ -53,7 +53,11 @@ struct obj_version {
             tag.compare(v.tag) == 0);
   }
 
-  void dump(ceph::Formatter *f) const;
+  void dump(ceph::Formatter *f) const {
+    f->dump_int("ver", ver);
+    f->dump_string("tag", tag);
+  }
+
   void decode_json(JSONObj *obj);
   static void generate_test_instances(std::list<obj_version*>& o);
 };
@@ -91,6 +95,18 @@ struct obj_version_cond {
     DECODE_FINISH(bl);
   }
 
+  void dump(ceph::Formatter *f) const {
+    f->dump_object("ver", ver);
+    f->dump_unsigned("cond", cond);
+  }
+
+  static void generate_test_instances(std::list<obj_version_cond*>& o) {
+    o.push_back(new obj_version_cond);
+    o.push_back(new obj_version_cond);
+    o.back()->ver.ver = 1;
+    o.back()->ver.tag = "foo";
+    o.back()->cond = VER_COND_EQ;
+  }
 };
 WRITE_CLASS_ENCODER(obj_version_cond)
 

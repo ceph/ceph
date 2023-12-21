@@ -306,6 +306,7 @@ void Server::dispatch(const cref_t<Message> &m)
 	return;
       }
       bool queue_replay = false;
+      dout(5) << "dispatch request in up:reconnect: " << *req << dendl;
       if (req->is_replay() || req->is_async()) {
 	dout(3) << "queuing replayed op" << dendl;
 	queue_replay = true;
@@ -324,10 +325,13 @@ void Server::dispatch(const cref_t<Message> &m)
 	// process completed request in clientreplay stage. The completed request
 	// might have created new file/directorie. This guarantees MDS sends a reply
 	// to client before other request modifies the new file/directorie.
-	if (session->have_completed_request(req->get_reqid().tid, NULL)) {
-	  dout(3) << "queuing completed op" << dendl;
+        bool r = session->have_completed_request(req->get_reqid().tid, NULL);
+	if (r) {
+	  dout(3) << __func__ << ": queuing completed op" << dendl;
 	  queue_replay = true;
-	}
+	} else {
+          dout(20) << __func__  << ": request not complete" << dendl;
+        }
 	// this request was created before the cap reconnect message, drop any embedded
 	// cap releases.
 	req->releases.clear();
@@ -619,6 +623,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
                                                     session->get_push_seq());
           if (session->info.has_feature(CEPHFS_FEATURE_MIMIC))
             reply->supported_features = supported_features;
+          session->auth_caps.get_cap_auths(&reply->cap_auths);
           mds->send_message_client(reply, session);
           if (mdcache->is_readonly()) {
             auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
@@ -712,6 +717,17 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	break;
       }
 
+      if (session->auth_caps.root_squash_in_caps() && !client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)) {
+	CachedStackStringStream css;
+	*css << "client lacks CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK needed to enforce 'root_squash' MDS auth caps";
+	send_reject_message(css->strv());
+	mds->clog->warn() << "client session (" << session->info.inst
+                          << ") lacks CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK "
+                          << " needed to enforce 'root_squash' MDS auth caps";
+	session->clear();
+	break;
+
+      }
       // Special case for the 'root' metadata path; validate that the claimed
       // root is actually within the caps of the session
       if (auto it = client_metadata.find("root"); it != client_metadata.end()) {
@@ -773,6 +789,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
 	mds->locker->resume_stale_caps(session);
 	mds->sessionmap.touch_session(session);
       }
+      trim_completed_request_list(m->oldest_client_tid, session);
       auto reply = make_message<MClientSession>(CEPH_SESSION_RENEWCAPS, m->get_seq());
       mds->send_message_client(reply, session);
     } else {
@@ -909,6 +926,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       reply->supported_features = supported_features;
       reply->metric_spec = supported_metric_spec;
     }
+    session->auth_caps.get_cap_auths(&reply->cap_auths);
     mds->send_message_client(reply, session);
     if (mdcache->is_readonly()) {
       auto m = make_message<MClientSession>(CEPH_SESSION_FORCE_RO);
@@ -1065,6 +1083,7 @@ void Server::finish_force_open_sessions(const map<client_t,pair<Session*,uint64_
 	  reply->supported_features = supported_features;
           reply->metric_spec = supported_metric_spec;
 	}
+	session->auth_caps.get_cap_auths(&reply->cap_auths);
 	mds->send_message_client(reply, session);
 
 	if (mdcache->is_readonly())
@@ -1263,6 +1282,8 @@ void Server::find_idle_sessions()
       kill_session(session, NULL);
     }
   }
+  // clear as there's no use to keep the evicted clients in laggy_clients
+  clear_laggy_clients();
 }
 
 void Server::evict_cap_revoke_non_responders() {
@@ -1552,6 +1573,12 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 	*css << "missing required features '" << missing_features << "'";
 	error_str = css->strv();
       }
+      if (session->auth_caps.root_squash_in_caps() &&
+          !session->info.client_metadata.features.test(CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK)) {
+	CachedStackStringStream css;
+	*css << "client lacks CEPHFS_FEATURE_MDS_AUTH_CAPS_CHECK needed to enforce 'root_squash' MDS auth caps";
+	error_str = css->strv();
+      }
     }
 
     if (!error_str.empty()) {
@@ -1579,6 +1606,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
       reply->supported_features = supported_features;
       reply->metric_spec = supported_metric_spec;
     }
+    session->auth_caps.get_cap_auths(&reply->cap_auths);
     mds->send_message_client(reply, session);
     mds->clog->debug() << "reconnect by " << session->info.inst << " after " << delay;
   }
@@ -2010,23 +2038,23 @@ void Server::journal_and_reply(MDRequestRef& mdr, CInode *in, CDentry *dn, LogEv
     mdr->pin(dn);
 
   early_reply(mdr, in, dn);
-
+  
   mdr->committing = true;
   submit_mdlog_entry(le, fin, mdr, __func__);
+  
+  if (mdr->is_queued_for_replay()) {
 
-  if (mdr->client_request && mdr->client_request->is_queued_for_replay()) {
-    if (mds->queue_one_replay()) {
-      dout(10) << " queued next replay op" << dendl;
-    } else {
-      dout(10) << " journaled last replay op" << dendl;
-    }
-  } else if (mdr->did_early_reply) {
+    /* We want to queue the next replay op while waiting for the journaling, so
+     * do it now when the early (unsafe) replay is dispatched. Don't wait until
+     * this request is cleaned up in MDCache.cc.
+     */
+
+    mdr->set_queued_next_replay_op();
+    mds->queue_one_replay();
+  } else if (mdr->did_early_reply)
     mds->locker->drop_rdlocks_for_early_reply(mdr.get());
-    if (dn && dn->is_waiter_for(CDentry::WAIT_UNLINK_FINISH))
-      mdlog->flush();
-  } else {
+  else
     mdlog->flush();
-  }
 }
 
 void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, MDRequestRef& mdr,
@@ -2330,15 +2358,12 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
     mds->send_message(reply, mdr->client_request->get_connection());
   }
 
-  if (req->is_queued_for_replay() &&
-      (mdr->has_completed || reply->get_result() < 0)) {
-    if (reply->get_result() < 0) {
-      int r = reply->get_result();
+  if (req->is_queued_for_replay()) {
+    if (int r = reply->get_result(); r < 0) {
       derr << "reply_client_request: failed to replay " << *req
-	   << " error " << r << " (" << cpp_strerror(r)  << ")" << dendl;
+           << " error " << r << " (" << cpp_strerror(r)  << ")" << dendl;
       mds->clog->warn() << "failed to replay " << req->get_reqid() << " error " << r;
     }
-    mds->queue_one_replay();
   }
 
   // clean up request
@@ -2428,6 +2453,35 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
   reply->set_trace(bl);
 }
 
+// trim completed_request list
+void Server::trim_completed_request_list(ceph_tid_t tid, Session *session)
+{
+  if (tid == UINT64_MAX || !session)
+    return;
+
+  dout(15) << " oldest_client_tid=" << tid << dendl;
+  if (session->trim_completed_requests(tid)) {
+    // Sessions 'completed_requests' was dirtied, mark it to be
+    // potentially flushed at segment expiry.
+    mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
+
+    if (session->get_num_trim_requests_warnings() > 0 &&
+        session->get_num_completed_requests() * 2 < g_conf()->mds_max_completed_requests)
+      session->reset_num_trim_requests_warnings();
+  } else {
+    if (session->get_num_completed_requests() >=
+        (g_conf()->mds_max_completed_requests << session->get_num_trim_requests_warnings())) {
+      session->inc_num_trim_requests_warnings();
+      CachedStackStringStream css;
+      *css << "client." << session->get_client() << " does not advance its oldest_client_tid ("
+         << tid << "), " << session->get_num_completed_requests()
+         << " completed requests recorded in session\n";
+      mds->clog->warn() << css->strv();
+      dout(20) << __func__ << " " << css->strv() << dendl;
+    }
+  }
+}
+
 void Server::handle_client_request(const cref_t<MClientRequest> &req)
 {
   dout(4) << "handle_client_request " << *req << dendl;
@@ -2509,36 +2563,16 @@ void Server::handle_client_request(const cref_t<MClientRequest> &req)
   }
 
   // trim completed_request list
-  if (req->get_oldest_client_tid() > 0) {
-    dout(15) << " oldest_client_tid=" << req->get_oldest_client_tid() << dendl;
-    ceph_assert(session);
-    if (session->trim_completed_requests(req->get_oldest_client_tid())) {
-      // Sessions 'completed_requests' was dirtied, mark it to be
-      // potentially flushed at segment expiry.
-      mdlog->get_current_segment()->touched_sessions.insert(session->info.inst.name);
-
-      if (session->get_num_trim_requests_warnings() > 0 &&
-	  session->get_num_completed_requests() * 2 < g_conf()->mds_max_completed_requests)
-	session->reset_num_trim_requests_warnings();
-    } else {
-      if (session->get_num_completed_requests() >=
-	  (g_conf()->mds_max_completed_requests << session->get_num_trim_requests_warnings())) {
-	session->inc_num_trim_requests_warnings();
-	CachedStackStringStream css;
-	*css << "client." << session->get_client() << " does not advance its oldest_client_tid ("
-	   << req->get_oldest_client_tid() << "), "
-	   << session->get_num_completed_requests()
-	   << " completed requests recorded in session\n";
-	mds->clog->warn() << css->strv();
-	dout(20) << __func__ << " " << css->strv() << dendl;
-      }
-    }
-  }
+  trim_completed_request_list(req->get_oldest_client_tid(), session);
 
   // register + dispatch
   MDRequestRef mdr = mdcache->request_start(req);
-  if (!mdr.get())
+  if (!mdr.get()) {
+    dout(5) << __func__ << ": possibly duplicate op " << *req << dendl;
+    if (req->is_queued_for_replay())
+      mds->queue_one_replay();
     return;
+  }
 
   if (session) {
     mdr->session = session;
@@ -2574,18 +2608,8 @@ void Server::handle_client_reply(const cref_t<MClientReply> &reply)
     return;
   }
 
-  auto &req = mds->internal_client_requests.at(tid);
-  CDentry *dn = req.get_dentry();
-
   switch (reply->get_op()) {
   case CEPH_MDS_OP_RENAME:
-    if (dn) {
-      dn->state_clear(CDentry::STATE_REINTEGRATING);
-
-      MDSContext::vec finished;
-      dn->take_waiting(CDentry::WAIT_REINTEGRATE_FINISH, finished);
-      mds->queue_waiters(finished);
-    }
     break;
   default:
     dout(5) << " unknown client op " << reply->get_op() << dendl;
@@ -4065,6 +4089,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
       } else {
 	dout(20) << __func__ << ": LOOKUP op, wait for previous same getattr ops to respond. " << *mdr << dendl;
 	em.first->second->add_request(mdr);
+        mdr->mark_event("joining batch lookup");
 	return;
       }
     } else {
@@ -4076,6 +4101,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
       } else {
 	dout(20) << __func__ << ": GETATTR op, wait for previous same getattr ops to respond. " << *mdr << dendl;
 	em.first->second->add_request(mdr);
+        mdr->mark_event("joining batch getattr");
 	return;
       }
     }
@@ -4119,6 +4145,24 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
     } else if (ref->filelock.is_stable() ||
 	       ref->filelock.get_num_wrlocks() > 0 ||
 	       !ref->filelock.can_read(mdr->get_client())) {
+      /* Since we're taking advantage of an optimization here:
+       *
+       * We cannot suddenly, due to a changing condition, add this filelock as
+       * it can cause lock-order deadlocks. In this case, that condition is the
+       * lock state changes between request retries. If that happens, we need
+       * to check if we've acquired the other locks in this vector. If we have,
+       * then we need to drop those locks and retry.
+       */
+      if (mdr->is_rdlocked(&ref->linklock) ||
+          mdr->is_rdlocked(&ref->authlock) ||
+          mdr->is_rdlocked(&ref->xattrlock)) {
+        /* start over */
+        dout(20) << " dropping locks and restarting request because filelock state change" << dendl;
+	mds->locker->drop_locks(mdr.get());
+	mdr->drop_local_auth_pins();
+	mds->queue_waiter(new C_MDS_RetryRequest(mdcache, mdr));
+        return;
+      }
       lov.add_rdlock(&ref->filelock);
       mdr->locking_state &= ~MutationImpl::ALL_LOCKED;
     }
@@ -4600,11 +4644,6 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, !excl, true, true);
   if (!dn)
     return;
-
-  if (is_unlink_pending(dn)) {
-    wait_for_pending_unlink(dn, mdr);
-    return;
-  }
 
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
   if (!excl && !dnl->is_null()) {
@@ -5907,17 +5946,11 @@ int Server::parse_quota_vxattr(string name, string value, quota_info_t *quota)
           return r;
       }
     } else if (name == "quota.max_bytes") {
-      /*
-       * The "quota.max_bytes" must be aligned to 4MB if greater than or
-       * equal to 4MB, otherwise must be aligned to 4KB.
-       */
       string cast_err;
       int64_t q = strict_iec_cast<int64_t>(value, &cast_err);
-      if(!cast_err.empty() ||
-         (!IS_ALIGNED(q, CEPH_4M_BLOCK_SIZE) &&
-          (q < CEPH_4M_BLOCK_SIZE && !IS_ALIGNED(q, CEPH_4K_BLOCK_SIZE)))) {
+      if(!cast_err.empty()) {
         dout(10) << __func__ << ":  failed to parse quota.max_bytes: "
-                 << cast_err << dendl;
+        << cast_err << dendl;
         return -CEPHFS_EINVAL;
       }
       quota->max_bytes = q;
@@ -5994,8 +6027,11 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
       // latest map. One day if COMPACT_VERSION of MClientRequest >=3,
       // we can remove those code.
       mdr->waited_for_osdmap = true;
-      mds->objecter->wait_for_latest_osdmap(std::ref(*new C_IO_Wrapper(
-        mds, new C_MDS_RetryRequest(mdcache, mdr))));
+      mds->objecter->wait_for_latest_osdmap(
+	[c = new C_IO_Wrapper(mds, new C_MDS_RetryRequest(mdcache, mdr))]
+	(boost::system::error_code ec) {
+	  c->complete(ceph::from_error_code(ec));
+	});
       return r;
     }
   }
@@ -6185,6 +6221,10 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
       inodeno_t subvol_ino = realm->get_subvolume_ino();
       // can't create subvolume inside another subvolume
       if (subvol_ino && subvol_ino != cur->ino()) {
+	dout(20) << "subvol ino changed between rdlock release and xlock "
+		 << "policylock; subvol_ino: " << subvol_ino << ", "
+		 << "cur->ino: " << cur->ino()
+		 << dendl;
 	respond_to_request(mdr, -CEPHFS_EINVAL);
 	return;
       }
@@ -6199,10 +6239,13 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur)
     auto pi = cur->project_inode(mdr, false, true);
     if (!srnode)
       pi.snapnode->created = pi.snapnode->seq = realm->get_newest_seq();
-    if (val)
+    if (val) {
+      dout(20) << "marking subvolume for ino: " << cur->ino() << dendl;
       pi.snapnode->mark_subvolume();
-    else
+    } else {
+      dout(20) << "clearing subvolume for ino: " << cur->ino() << dendl;
       pi.snapnode->clear_subvolume();
+    }
 
     mdr->no_early_reply = true;
     pip = pi.inode.get();
@@ -6868,84 +6911,6 @@ void Server::handle_client_getvxattr(MDRequestRef& mdr)
 
 // ------------------------------------------------
 
-struct C_WaitUnlinkToFinish : public MDSContext {
-protected:
-  MDCache *mdcache;
-  CDentry *dn;
-  MDSContext *fin;
-
-  MDSRank *get_mds() override
-  {
-    ceph_assert(mdcache != NULL);
-    return mdcache->mds;
-  }
-
-public:
-  C_WaitUnlinkToFinish(MDCache *m, CDentry *d, MDSContext *f) :
-    mdcache(m), dn(d), fin(f) {}
-  void finish(int r) override {
-    fin->complete(r);
-    dn->put(CDentry::PIN_PURGING);
-  }
-};
-
-bool Server::is_unlink_pending(CDentry *dn)
-{
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  if (!dnl->is_null() && dn->state_test(CDentry::STATE_UNLINKING)) {
-      return true;
-  }
-  return false;
-}
-
-void Server::wait_for_pending_unlink(CDentry *dn, MDRequestRef& mdr)
-{
-  dout(20) << __func__ << " dn " << *dn << dendl;
-  mds->locker->drop_locks(mdr.get());
-  auto fin = new C_MDS_RetryRequest(mdcache, mdr);
-  dn->get(CDentry::PIN_PURGING);
-  dn->add_waiter(CDentry::WAIT_UNLINK_FINISH, new C_WaitUnlinkToFinish(mdcache, dn, fin));
-}
-
-struct C_WaitReintegrateToFinish : public MDSContext {
-protected:
-  MDCache *mdcache;
-  CDentry *dn;
-  MDSContext *fin;
-
-  MDSRank *get_mds() override
-  {
-    ceph_assert(mdcache != NULL);
-    return mdcache->mds;
-  }
-
-public:
-  C_WaitReintegrateToFinish(MDCache *m, CDentry *d, MDSContext *f) :
-    mdcache(m), dn(d), fin(f) {}
-  void finish(int r) override {
-    fin->complete(r);
-    dn->put(CDentry::PIN_PURGING);
-  }
-};
-
-bool Server::is_reintegrate_pending(CDentry *dn)
-{
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-  if (!dnl->is_null() && dn->state_test(CDentry::STATE_REINTEGRATING)) {
-      return true;
-  }
-  return false;
-}
-
-void Server::wait_for_pending_reintegrate(CDentry *dn, MDRequestRef& mdr)
-{
-  dout(20) << __func__ << " dn " << *dn << dendl;
-  mds->locker->drop_locks(mdr.get());
-  auto fin = new C_MDS_RetryRequest(mdcache, mdr);
-  dn->get(CDentry::PIN_PURGING);
-  dn->add_waiter(CDentry::WAIT_REINTEGRATE_FINISH, new C_WaitReintegrateToFinish(mdcache, dn, fin));
-}
-
 // MKNOD
 
 class C_MDS_mknod_finish : public ServerLogContext {
@@ -7011,11 +6976,6 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true, false, false, S_ISREG(mode));
   if (!dn)
     return;
-
-  if (is_unlink_pending(dn)) {
-    wait_for_pending_unlink(dn, mdr);
-    return;
-  }
 
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
@@ -7114,11 +7074,6 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   if (!dn)
     return;
 
-  if (is_unlink_pending(dn)) {
-    wait_for_pending_unlink(dn, mdr);
-    return;
-  }
-
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
 
@@ -7212,11 +7167,6 @@ void Server::handle_client_symlink(MDRequestRef& mdr)
   CDentry *dn = rdlock_path_xlock_dentry(mdr, true);
   if (!dn)
     return;
-
-  if (is_unlink_pending(dn)) {
-    wait_for_pending_unlink(dn, mdr);
-    return;
-  }
 
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
@@ -7328,11 +7278,6 @@ void Server::handle_client_link(MDRequestRef& mdr)
     targeti = ret.second->get_projected_linkage()->get_inode();
   }
 
-  if (is_unlink_pending(destdn)) {
-    wait_for_pending_unlink(destdn, mdr);
-    return;
-  }
-
   ceph_assert(destdn->get_projected_linkage()->is_null());
   if (req->get_alternate_name().size() > alternate_name_max) {
     dout(10) << " alternate_name longer than " << alternate_name_max << dendl;
@@ -7386,14 +7331,9 @@ void Server::handle_client_link(MDRequestRef& mdr)
   SnapRealm *target_realm = target_pin->find_snaprealm();
   if (target_pin != dir->inode &&
       target_realm->get_subvolume_ino() !=
-      dir->inode->find_snaprealm()->get_subvolume_ino()) {
-    if (target_pin->is_stray()) {
-      mds->locker->drop_locks(mdr.get());
-      targeti->add_waiter(CInode::WAIT_UNLINK,
-                          new C_MDS_RetryRequest(mdcache, mdr));
-      mdlog->flush();
-      return;
-    }
+      dir->inode->find_snaprealm()->get_subvolume_ino() &&
+      /* The inode is temporarily located in the stray dir pending reintegration */
+      !target_pin->is_stray()) {
     dout(7) << "target is in different subvolume, failing..." << dendl;
     respond_to_request(mdr, -CEPHFS_EXDEV);
     return;
@@ -7622,17 +7562,11 @@ void Server::_link_remote_finish(MDRequestRef& mdr, bool inc,
   mdr->apply();
 
   MDRequestRef null_ref;
-  if (inc) {
+  if (inc)
     mdcache->send_dentry_link(dn, null_ref);
-  } else {
-    dn->state_clear(CDentry::STATE_UNLINKING);
+  else
     mdcache->send_dentry_unlink(dn, NULL, null_ref);
-
-    MDSContext::vec finished;
-    dn->take_waiting(CDentry::WAIT_UNLINK_FINISH, finished);
-    mdcache->mds->queue_waiters(finished);
-  }
-
+  
   // bump target popularity
   mds->balancer->hit_inode(targeti, META_POP_IWR);
   mds->balancer->hit_dir(dn->get_dir(), META_POP_IWR);
@@ -8002,24 +7936,9 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
 
   if (rmdir)
     mdr->disable_lock_cache();
-
   CDentry *dn = rdlock_path_xlock_dentry(mdr, false, true);
   if (!dn)
     return;
-
-  if (is_reintegrate_pending(dn)) {
-    wait_for_pending_reintegrate(dn, mdr);
-    return;
-  }
-
-  // notify replica MDSes the dentry is under unlink
-  if (!dn->state_test(CDentry::STATE_UNLINKING)) {
-    dn->state_set(CDentry::STATE_UNLINKING);
-    mdcache->send_dentry_unlink(dn, nullptr, mdr, true);
-    if (dn->replica_unlinking_ref) {
-      return;
-    }
-  }
 
   CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
   ceph_assert(!dnl->is_null());
@@ -8037,13 +7956,11 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (rmdir) {
       // do empty directory checks
       if (_dir_is_nonempty_unlocked(mdr, in)) {
-        dn->state_clear(CDentry::STATE_UNLINKING);
-        respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
+	respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
 	return;
       }
     } else {
       dout(7) << "handle_client_unlink on dir " << *in << ", returning error" << dendl;
-      dn->state_clear(CDentry::STATE_UNLINKING);
       respond_to_request(mdr, -CEPHFS_EISDIR);
       return;
     }
@@ -8051,7 +7968,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     if (rmdir) {
       // unlink
       dout(7) << "handle_client_rmdir on non-dir " << *in << ", returning error" << dendl;
-      dn->state_clear(CDentry::STATE_UNLINKING);
       respond_to_request(mdr, -CEPHFS_ENOTDIR);
       return;
     }
@@ -8059,10 +7975,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
 
   CInode *diri = dn->get_dir()->get_inode();
   if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
-    if (!check_access(mdr, diri, MAY_WRITE)) {
-      dn->state_clear(CDentry::STATE_UNLINKING);
+    if (!check_access(mdr, diri, MAY_WRITE))
       return;
-    }
   }
 
   // -- create stray dentry? --
@@ -8101,7 +8015,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   if (in->is_dir() &&
       _dir_is_nonempty(mdr, in)) {
     respond_to_request(mdr, -CEPHFS_ENOTEMPTY);
-    dn->state_clear(CDentry::STATE_UNLINKING);
     return;
   }
 
@@ -8300,14 +8213,9 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
   }
 
   mdr->apply();
-
-  dn->state_clear(CDentry::STATE_UNLINKING);
+  
   mdcache->send_dentry_unlink(dn, straydn, mdr);
-
-  MDSContext::vec finished;
-  dn->take_waiting(CDentry::WAIT_UNLINK_FINISH, finished);
-  mdcache->mds->queue_waiters(finished);
-
+  
   if (straydn) {
     // update subtree map?
     if (strayin->is_dir())
@@ -8322,7 +8230,7 @@ void Server::_unlink_local_finish(MDRequestRef& mdr,
 
   // reply
   respond_to_request(mdr, 0);
-
+  
   // removing a new dn?
   dn->get_dir()->try_remove_unlinked_dn(dn);
 
@@ -8778,16 +8686,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   if (!destdn)
     return;
 
-  if (is_unlink_pending(destdn)) {
-    wait_for_pending_unlink(destdn, mdr);
-    return;
-  }
-
-  if (is_unlink_pending(srcdn)) {
-    wait_for_pending_unlink(srcdn, mdr);
-    return;
-  }
-
   dout(10) << " destdn " << *destdn << dendl;
   CDir *destdir = destdn->get_dir();
   ceph_assert(destdir->is_auth());
@@ -9203,12 +9101,6 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(this, mdr, srcdn, destdn, straydn);
 
   journal_and_reply(mdr, srci, destdn, le, fin);
-
-  // trigger to flush mdlog in case reintegrating or migrating the stray dn,
-  // because the link requests maybe waiting.
-  if (srcdn->get_dir()->inode->is_stray()) {
-    mdlog->flush();
-  }
   mds->balancer->maybe_fragment(destdn->get_dir(), false);
 }
 
@@ -9818,14 +9710,6 @@ void Server::_rename_apply(MDRequestRef& mdr, CDentry *srcdn, CDentry *destdn, C
   }
 
   srcdn->get_dir()->unlink_inode(srcdn);
-
-  // After the stray dn being unlinked from the corresponding inode in case of
-  // reintegrate_stray/migrate_stray, just wake up the waitiers.
-  MDSContext::vec finished;
-  in->take_waiting(CInode::WAIT_UNLINK, finished);
-  if (!finished.empty()) {
-    mds->queue_waiters(finished);
-  }
 
   // dest
   if (srcdn_was_remote) {
