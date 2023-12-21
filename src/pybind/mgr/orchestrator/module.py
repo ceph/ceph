@@ -793,7 +793,8 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                       hostname: Optional[List[str]] = None,
                       format: Format = Format.plain,
                       refresh: bool = False,
-                      wide: bool = False) -> HandleCommandResult:
+                      wide: bool = False,
+                      summary: bool = False) -> HandleCommandResult:
         """
         List devices on a host
         """
@@ -840,8 +841,22 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
             table.left_padding_width = 0
             table.right_padding_width = 2
             now = datetime_now()
+            host_count = 0
+            available_count = 0
+            device_count = {
+                "hdd": 0,
+                "ssd": 0}
+
             for host_ in natsorted(inv_hosts, key=lambda h: h.name):  # type: InventoryHost
+                host_count += 1
                 for d in sorted(host_.devices.devices, key=lambda d: d.path):  # type: Device
+
+                    if d.available:
+                        available_count += 1
+                    try:
+                        device_count[d.human_readable_type] += 1
+                    except KeyError:
+                        device_count[d.human_readable_type] = 1
 
                     led_ident = 'N/A'
                     led_fail = 'N/A'
@@ -881,6 +896,11 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
                             )
                         )
             out.append(table.get_string())
+
+            if summary:
+                device_summary = [f"{device_count[devtype]} {devtype.upper()}" for devtype in sorted(device_count.keys())]
+                out.append(f"{host_count} host(s), {', '.join(device_summary)}, {available_count} available")
+
             return HandleCommandResult(stdout='\n'.join(out))
 
     @_cli_write_command('orch device zap')
