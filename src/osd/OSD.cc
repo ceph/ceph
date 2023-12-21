@@ -8245,13 +8245,18 @@ void OSD::handle_osd_map(MOSDMap *m)
     rerequest_full_maps();
   }
 
+  track_pools_and_pg_num_changes(added_maps, t);
+
   if (!superblock.maps.empty()) {
     trim_maps(m->cluster_osdmap_trim_lower_bound);
     pg_num_history.prune(superblock.get_oldest_map());
   }
   superblock.insert_osdmap_epochs(first, last);
   if (superblock.maps.num_intervals() > 1) {
-    dout(10) << __func__ << " osd map gap " << superblock.maps << dendl;
+    // we had a map gap and not yet trimmed all the way up to
+    // cluster_osdmap_trim_lower_bound
+    dout(10) << __func__ << " osd maps are not contiguous"
+             << superblock.maps << dendl;
   }
   superblock.current_epoch = last;
 
@@ -8261,8 +8266,6 @@ void OSD::handle_osd_map(MOSDMap *m)
     superblock.mounted = boot_epoch;
     superblock.clean_thru = last;
   }
-
-  track_pools_and_pg_num_changes(added_maps, t, last);
 
   {
     bufferlist bl;
@@ -8308,65 +8311,98 @@ void OSD::handle_osd_map(MOSDMap *m)
 }
 
 /*
- *  For each added map which was sent in this MOSDMap [first, last]:
- *
- *  1) Check if a pool was deleted
- *  2) For existing pools, check if pg_num was changed
- *  3) Check if a pool was created
- *
- *  Track all of the changes above in pg_num_history
+ *  Compare between the previous last_map we had to
+ *  each one of the added_maps.
+ *  Track all of the changes relevant in pg_num_history.
  */
-void OSD::track_pools_and_pg_num_changes(const map<epoch_t,OSDMapRef>& added_maps,
-                                         ObjectStore::Transaction& t,
-                                         epoch_t last)
+void OSD::track_pools_and_pg_num_changes(
+  const map<epoch_t,OSDMapRef>& added_maps,
+  ObjectStore::Transaction& t)
 {
+  epoch_t first = added_maps.begin()->first;
+  epoch_t last = added_maps.rbegin()->first;
+
+  // Unless this is the first start of this OSD,
+  // lastmap should be the newest_map we have.
   OSDMapRef lastmap;
-  for (auto& [added_map_epoch, added_map] : added_maps) {
-    if (!lastmap) {
-      if (!(lastmap = service.try_get_map(added_map_epoch - 1))) {
-        dout(10) << __func__ << " can't get previous map " << added_map_epoch - 1
-                 << " probably first start of this osd" << dendl;
-        continue;
-      }
+
+  if (superblock.maps.empty()) {
+    dout(10) << __func__ << " no maps stored, this is probably "
+             << "the first start of this osd" << dendl;
+    lastmap = added_maps.at(first);
+  } else {
+    if (first > superblock.get_newest_map() + 1) {
+      ceph_assert(first == superblock.cluster_osdmap_trim_lower_bound);
+      dout(20) << __func__ << " can't get previous map "
+               << superblock.get_newest_map()
+               << " first start of this osd after a map gap" << dendl;
     }
-    ceph_assert(lastmap->get_epoch() + 1 == added_map->get_epoch());
-    for (auto& [pool_id, pg_pool] : lastmap->get_pools()) {
-      if (!added_map->have_pg_pool(pool_id)) {
-	pg_num_history.log_pool_delete(added_map_epoch, pool_id);
-	dout(10) << __func__ << " recording final pg_pool_t for pool "
-		 << pool_id << dendl;
-	// this information is needed by _make_pg() if have to restart before
-	// the pool is deleted and need to instantiate a new (zombie) PG[Pool].
-	ghobject_t obj = make_final_pool_info_oid(pool_id);
-	bufferlist bl;
-	encode(pg_pool, bl, CEPH_FEATURES_ALL);
-	string name = lastmap->get_pool_name(pool_id);
-	encode(name, bl);
-	map<string,string> profile;
-	if (lastmap->get_pg_pool(pool_id)->is_erasure()) {
-	  profile = lastmap->get_erasure_code_profile(
-	    lastmap->get_pg_pool(pool_id)->erasure_code_profile);
-	}
-	encode(profile, bl);
-	t.write(coll_t::meta(), obj, 0, bl.length(), bl);
-      } else if (unsigned new_pg_num = added_map->get_pg_num(pool_id);
-		 new_pg_num != pg_pool.get_pg_num()) {
-	dout(10) << __func__ << " recording pool " << pool_id << " pg_num "
-		 << pg_pool.get_pg_num() << " -> " << new_pg_num << dendl;
-	pg_num_history.log_pg_num_change(added_map_epoch, pool_id, new_pg_num);
-      }
+    if (!(lastmap =
+          service.try_get_map(superblock.get_newest_map()))) {
+      // This is unexpected
+      ceph_abort();
     }
-    for (auto& [pool_id, pg_pool] : added_map->get_pools()) {
-      if (!lastmap->have_pg_pool(pool_id)) {
-	dout(10) << __func__ << " recording new pool " <<pool_id << " pg_num "
-		 << pg_pool.get_pg_num() << dendl;
-	pg_num_history.log_pg_num_change(added_map_epoch, pool_id,
-					 pg_pool.get_pg_num());
-      }
-    }
-    lastmap = added_map;
+  }
+
+  // For each added map, record any changes into pg_num_history
+  // and update lastmap afterwards.
+  for (auto& [current_added_map_epoch, current_added_map] : added_maps) {
+    _track_pools_and_pg_num_changes(t, lastmap,
+                                    current_added_map,
+                                    current_added_map_epoch);
+    lastmap = current_added_map;
   }
   pg_num_history.epoch = last;
+}
+
+void OSD::_track_pools_and_pg_num_changes(
+  ObjectStore::Transaction& t,
+  const OSDMapRef& lastmap,
+  const OSDMapRef& current_added_map,
+  epoch_t current_added_map_epoch)
+{
+  // 1) Check if a pool was deleted
+  for (auto& [pool_id, pg_pool] : lastmap->get_pools()) {
+    if (!current_added_map->have_pg_pool(pool_id)) {
+      pg_num_history.log_pool_delete(current_added_map_epoch, pool_id);
+      dout(10) << __func__ << " recording final pg_pool_t for pool "
+               << pool_id << dendl;
+      // this information is needed by _make_pg() if have to restart before
+      // the pool is deleted and need to instantiate a new (zombie) PG[Pool].
+      ghobject_t obj = make_final_pool_info_oid(pool_id);
+      bufferlist bl;
+      encode(pg_pool, bl, CEPH_FEATURES_ALL);
+      string name = lastmap->get_pool_name(pool_id);
+      encode(name, bl);
+      map<string,string> profile;
+      if (lastmap->get_pg_pool(pool_id)->is_erasure()) {
+        profile = lastmap->get_erasure_code_profile(
+        lastmap->get_pg_pool(pool_id)->erasure_code_profile);
+      }
+      encode(profile, bl);
+      t.write(coll_t::meta(), obj, 0, bl.length(), bl);
+
+    // 2) For existing pools, check if pg_num was changed
+    } else if (unsigned new_pg_num = current_added_map->get_pg_num(pool_id);
+               new_pg_num != pg_pool.get_pg_num()) {
+      dout(10) << __func__ << " recording pool " << pool_id << " pg_num "
+               << pg_pool.get_pg_num() << " -> " << new_pg_num << dendl;
+      pg_num_history.log_pg_num_change(current_added_map_epoch,
+                                       pool_id,
+                                       new_pg_num);
+    }
+  }
+
+  // 3) Check if a pool was created
+  for (auto& [pool_id, pg_pool] : current_added_map->get_pools()) {
+    if (!lastmap->have_pg_pool(pool_id)) {
+        dout(10) << __func__ << " recording new pool " <<pool_id << " pg_num "
+                 << pg_pool.get_pg_num() << dendl;
+    pg_num_history.log_pg_num_change(current_added_map_epoch,
+                                     pool_id,
+                                     pg_pool.get_pg_num());
+    }
+  }
 }
 
 void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
