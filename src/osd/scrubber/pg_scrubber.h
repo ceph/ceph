@@ -314,6 +314,8 @@ class PgScrubber : public ScrubPgIF,
 
   void on_new_interval() final;
 
+  void on_primary_active_clean() final;
+
   void on_replica_activate() final;
 
   void scrub_clear_state() final;

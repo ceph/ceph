@@ -152,7 +152,7 @@ bool PgScrubber::verify_against_abort(epoch_t epoch_to_verify)
 
   // if we were not aware of the abort before - kill the scrub.
   if (epoch_to_verify >= m_last_aborted) {
-    scrub_clear_state();
+    m_fsm->process_event(FullReset{});
     m_last_aborted = std::max(epoch_to_verify, m_epoch_start);
   }
   return false;
@@ -407,7 +407,7 @@ void PgScrubber::reset_epoch(epoch_t epoch_queued)
 {
   dout(10) << __func__ << " state deep? " << state_test(PG_STATE_DEEP_SCRUB)
 	   << dendl;
-  m_fsm->assert_not_active();
+  m_fsm->assert_not_in_session();
 
   m_epoch_start = epoch_queued;
   ceph_assert(m_is_deep == state_test(PG_STATE_DEEP_SCRUB));
@@ -462,6 +462,11 @@ void PgScrubber::on_new_interval()
 	   << dendl;
 
   m_fsm->process_event(IntervalChanged{});
+  // the following asserts were added due to a past bug, where PG flags were
+  // left set in some scenarios.
+  ceph_assert(!is_queued_or_active());
+  ceph_assert(!state_test(PG_STATE_SCRUBBING));
+  ceph_assert(!state_test(PG_STATE_DEEP_SCRUB));
   rm_from_osd_scrubbing();
 }
 
@@ -515,6 +520,14 @@ void PgScrubber::on_pg_activate(const requested_scrub_t& request_flags)
 		  (is_primary() ? "Primary" : "Replica/other"), pre_reg,
 		  pre_state, registration_state(), m_scrub_job->state_desc())
 	   << dendl;
+}
+
+void PgScrubber::on_primary_active_clean()
+{
+  dout(10) << fmt::format(
+		  "{}: reg state: {}", __func__, m_scrub_job->state_desc())
+	   << dendl;
+  m_fsm->process_event(PrimaryActivate{});
 }
 
 /*
