@@ -1861,6 +1861,16 @@ void PG::on_active_exit()
   agent_stop();
 }
 
+Context* PG::on_clean()
+{
+  if (is_active()) {
+    kick_snap_trim();
+  }
+  m_scrubber->on_primary_active_clean();
+  requeue_ops(waiting_for_clean_to_primary_repair);
+  return finish_recovery();
+}
+
 void PG::on_active_advmap(const OSDMapRef &osdmap)
 {
   const auto& new_removed_snaps = osdmap->get_new_removed_snaps();

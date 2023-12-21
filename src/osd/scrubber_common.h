@@ -319,6 +319,10 @@ struct ScrubPgIF {
   /// the OSD scrub queue
   virtual void on_new_interval() = 0;
 
+  /// we are peered as primary, and the PG is active and clean
+  /// Scrubber's internal FSM should be ActivePrimary
+  virtual void on_primary_active_clean() = 0;
+
   /// we are peered as a replica
   virtual void on_replica_activate() = 0;
 
