@@ -10,6 +10,7 @@
 
 static std::string topic_oid_prefix = "topic.";
 static constexpr char topic_tenant_delim[] = ":";
+static std::string bucket_topic_oid_prefix = "buckets.";
 
 std::string get_topic_key(const std::string& topic_name,
                           const std::string& tenant) {
@@ -32,6 +33,11 @@ void parse_topic_entry(const std::string& topic_entry,
     *topic_name = topic_entry;
   }
 }
+
+std::string get_bucket_topic_mapping_oid(const rgw_pubsub_topic& topic) {
+  return bucket_topic_oid_prefix + get_topic_key(topic.name, topic.user.tenant);
+}
+
 class RGWSI_Topic_Module : public RGWSI_MBSObj_Handler_Module {
   RGWSI_Topic_RADOS::Svc& svc;
   const std::string prefix;
@@ -131,7 +137,7 @@ int RGWTopicMetadataHandler::do_get(RGWSI_MetaBackend_Handler::Op* op,
   parse_topic_entry(entry, &tenant, &topic_name);
   RGWPubSub ps(driver, tenant,
                &topic_svc->svc.zone->get_current_period().get_map().zonegroups);
-  int ret = ps.get_topic(dpp, topic_name, result, y);
+  int ret = ps.get_topic(dpp, topic_name, result, y, nullptr);
   if (ret < 0) {
     return ret;
   }
