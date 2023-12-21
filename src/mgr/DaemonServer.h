@@ -33,6 +33,7 @@
 #include "MetricCollector.h"
 #include "OSDPerfMetricCollector.h"
 #include "MDSPerfMetricCollector.h"
+#include "MgrOpRequest.h"
 
 class MMgrReport;
 class MMgrOpen;
@@ -117,7 +118,6 @@ struct offline_pg_report {
   }
 };
 
-
 /**
  * Server used in ceph-mgr to communicate with Ceph daemons like
  * MDSs and OSDs.
@@ -164,6 +164,8 @@ protected:
     const std::string &prefix, const cmdmap_t& cmdmap,
     const std::map<std::string,std::string>& param_str_map,
     const MonCommand *this_cmd);
+
+  class DaemonServerHook *asok_hook;
 
 private:
   friend class ReplyOnFinish;
@@ -251,6 +253,9 @@ private:
 
   void update_task_status(DaemonKey key,
 			  const std::map<std::string,std::string>& task_status);
+private:
+  // -- op tracking --
+  OpTracker op_tracker;
 
 public:
   int init(uint64_t gid, entity_addrvec_t client_addrs);
@@ -309,6 +314,11 @@ public:
   void log_access_denied(std::shared_ptr<CommandContext>& cmdctx,
                          MgrSession* session, std::stringstream& ss);
   void dump_pg_ready(ceph::Formatter *f);
+
+  bool asok_command(std::string_view admin_command,
+                    const cmdmap_t& cmdmap,
+                    Formatter *f,
+                    std::ostream& ss);
 };
 
 #endif
