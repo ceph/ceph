@@ -1521,10 +1521,10 @@ function test_mon_osd()
 	expect_false ceph osd set $f
 	expect_false ceph osd unset $f
   done
-  ceph osd require-osd-release reef
+  ceph osd require-osd-release squid
   # can't lower
+  expect_false ceph osd require-osd-release reef
   expect_false ceph osd require-osd-release quincy
-  expect_false ceph osd require-osd-release pacific
   # these are no-ops but should succeed.
 
   ceph osd set noup
