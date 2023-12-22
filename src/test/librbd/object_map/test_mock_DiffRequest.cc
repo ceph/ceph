@@ -150,6 +150,14 @@ static constexpr uint8_t from_snap_intermediate_table[][5] = {
   { OBJECT_EXISTS_CLEAN,  OBJECT_EXISTS_CLEAN,  OBJECT_EXISTS_CLEAN,  DIFF_STATE_DATA,          DIFF_STATE_DATA }
 };
 
+static constexpr uint8_t shrink_table[][2] = {
+  //      shrunk             deep-copy expected
+  { OBJECT_NONEXISTENT,   DIFF_STATE_HOLE },
+  { OBJECT_EXISTS,        DIFF_STATE_HOLE_UPDATED },
+  { OBJECT_PENDING,       DIFF_STATE_HOLE_UPDATED },
+  { OBJECT_EXISTS_CLEAN,  DIFF_STATE_HOLE_UPDATED }
+};
+
 class TestMockObjectMapDiffRequest : public TestMockFixture,
                                      public ::testing::WithParamInterface<bool> {
 public:
@@ -434,6 +442,96 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnapGrowFrom
   }
 }
 
+TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnapShrink) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count_2 = std::size(from_beginning_intermediate_table);
+  uint32_t object_count_1 = object_count_2 + std::size(shrink_table);
+  m_image_ctx->size = object_count_2 * (1 << m_image_ctx->order);
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_1 * (1 << m_image_ctx->order), {}, {}, {}, {}}},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_2 * (1 << m_image_ctx->order), {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count_1);
+  BitVector<2> object_map_2;
+  object_map_2.resize(object_count_2);
+  BitVector<2> expected_diff_state;
+  if (is_diff_iterate()) {
+    expected_diff_state.resize(object_count_2);
+  } else {
+    expected_diff_state.resize(object_count_1);
+  }
+  for (uint32_t i = 0; i < object_count_2; i++) {
+    object_map_1[i] = from_beginning_intermediate_table[i][0];
+    object_map_2[i] = from_beginning_intermediate_table[i][1];
+    if (is_diff_iterate()) {
+      expected_diff_state[i] = from_beginning_intermediate_table[i][2];
+    } else {
+      expected_diff_state[i] = from_beginning_intermediate_table[i][3];
+    }
+  }
+  for (uint32_t i = object_count_2; i < object_count_1; i++) {
+    object_map_1[i] = shrink_table[i - object_count_2][0];
+    if (!is_diff_iterate()) {
+      expected_diff_state[i] = shrink_table[i - object_count_2][1];
+    }
+  }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, 2, 0, 0);
+    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, 2, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, 2, expected_diff_state);
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnapShrinkToZero) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count_1 = std::size(shrink_table);
+  m_image_ctx->size = 0;
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_1 * (1 << m_image_ctx->order), {}, {}, {}, {}}},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, {}, {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count_1);
+  BitVector<2> object_map_2;
+  BitVector<2> expected_diff_state;
+  if (!is_diff_iterate()) {
+    expected_diff_state.resize(object_count_1);
+  }
+  for (uint32_t i = 0; i < object_count_1; i++) {
+    object_map_1[i] = shrink_table[i][0];
+    if (!is_diff_iterate()) {
+      expected_diff_state[i] = shrink_table[i][1];
+    }
+  }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, 2, 0, 0);
+    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, 2, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, 2, expected_diff_state);
+  }
+}
+
 TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHead) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
@@ -575,6 +673,93 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnapGrowFrom
   }
 }
 
+TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnapShrink) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count_head = std::size(from_beginning_intermediate_table);
+  uint32_t object_count_1 = object_count_head + std::size(shrink_table);
+  m_image_ctx->size = object_count_head * (1 << m_image_ctx->order);
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_1 * (1 << m_image_ctx->order), {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count_1);
+  BitVector<2> object_map_head;
+  object_map_head.resize(object_count_head);
+  BitVector<2> expected_diff_state;
+  if (is_diff_iterate()) {
+    expected_diff_state.resize(object_count_head);
+  } else {
+    expected_diff_state.resize(object_count_1);
+  }
+  for (uint32_t i = 0; i < object_count_head; i++) {
+    object_map_1[i] = from_beginning_intermediate_table[i][0];
+    object_map_head[i] = from_beginning_intermediate_table[i][1];
+    if (is_diff_iterate()) {
+      expected_diff_state[i] = from_beginning_intermediate_table[i][2];
+    } else {
+      expected_diff_state[i] = from_beginning_intermediate_table[i][3];
+    }
+  }
+  for (uint32_t i = object_count_head; i < object_count_1; i++) {
+    object_map_1[i] = shrink_table[i - object_count_head][0];
+    if (!is_diff_iterate()) {
+      expected_diff_state[i] = shrink_table[i - object_count_head][1];
+    }
+  }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnapShrinkToZero) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count_1 = std::size(shrink_table);
+  m_image_ctx->size = 0;
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_1 * (1 << m_image_ctx->order), {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count_1);
+  BitVector<2> object_map_head;
+  BitVector<2> expected_diff_state;
+  if (!is_diff_iterate()) {
+    expected_diff_state.resize(object_count_1);
+  }
+  for (uint32_t i = 0; i < object_count_1; i++) {
+    object_map_1[i] = shrink_table[i][0];
+    if (!is_diff_iterate()) {
+      expected_diff_state[i] = shrink_table[i][1];
+    }
+  }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
+  }
+}
+
 TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnap) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
@@ -673,6 +858,92 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnapGrowFromZero) {
   for (uint32_t i = 0; i < object_count_2; i++) {
     object_map_2[i] = from_beginning_table[i][0];
     expected_diff_state[i] = from_beginning_table[i][1];
+  }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, 2, 0, 0);
+    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 1, 2, expected_diff_state);
+  } else {
+    test_deep_copy(load, 1, 2, expected_diff_state);
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnapShrink) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count_2 = std::size(from_snap_table);
+  uint32_t object_count_1 = object_count_2 + std::size(shrink_table);
+  m_image_ctx->size = object_count_2 * (1 << m_image_ctx->order);
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_1 * (1 << m_image_ctx->order), {}, {}, {}, {}}},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_2 * (1 << m_image_ctx->order), {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count_1);
+  BitVector<2> object_map_2;
+  object_map_2.resize(object_count_2);
+  BitVector<2> expected_diff_state;
+  if (is_diff_iterate()) {
+    expected_diff_state.resize(object_count_2);
+  } else {
+    expected_diff_state.resize(object_count_1);
+  }
+  for (uint32_t i = 0; i < object_count_2; i++) {
+    object_map_1[i] = from_snap_table[i][0];
+    object_map_2[i] = from_snap_table[i][1];
+    expected_diff_state[i] = from_snap_table[i][2];
+  }
+  for (uint32_t i = object_count_2; i < object_count_1; i++) {
+    object_map_1[i] = shrink_table[i - object_count_2][0];
+    if (!is_diff_iterate()) {
+      expected_diff_state[i] = shrink_table[i - object_count_2][1];
+    }
+  }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, 2, 0, 0);
+    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 1, 2, expected_diff_state);
+  } else {
+    test_deep_copy(load, 1, 2, expected_diff_state);
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, FromSnapToSnapShrinkToZero) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count_1 = std::size(shrink_table);
+  m_image_ctx->size = 0;
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_1 * (1 << m_image_ctx->order), {}, {}, {}, {}}},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, {}, {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count_1);
+  BitVector<2> object_map_2;
+  BitVector<2> expected_diff_state;
+  if (!is_diff_iterate()) {
+    expected_diff_state.resize(object_count_1);
+  }
+  for (uint32_t i = 0; i < object_count_1; i++) {
+    object_map_1[i] = shrink_table[i][0];
+    if (!is_diff_iterate()) {
+      expected_diff_state[i] = shrink_table[i][1];
+    }
   }
 
   auto load = [&](MockTestImageCtx& mock_image_ctx) {
@@ -828,6 +1099,89 @@ TEST_P(TestMockObjectMapDiffRequest, FromSnapToHeadGrowFromZero) {
   for (uint32_t i = 0; i < object_count_head; i++) {
     object_map_head[i] = from_beginning_table[i][0];
     expected_diff_state[i] = from_beginning_table[i][1];
+  }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 1, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 1, CEPH_NOSNAP, expected_diff_state);
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, FromSnapToHeadShrink) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count_head = std::size(from_snap_table);
+  uint32_t object_count_1 = object_count_head + std::size(shrink_table);
+  m_image_ctx->size = object_count_head * (1 << m_image_ctx->order);
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_1 * (1 << m_image_ctx->order), {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count_1);
+  BitVector<2> object_map_head;
+  object_map_head.resize(object_count_head);
+  BitVector<2> expected_diff_state;
+  if (is_diff_iterate()) {
+    expected_diff_state.resize(object_count_head);
+  } else {
+    expected_diff_state.resize(object_count_1);
+  }
+  for (uint32_t i = 0; i < object_count_head; i++) {
+    object_map_1[i] = from_snap_table[i][0];
+    object_map_head[i] = from_snap_table[i][1];
+    expected_diff_state[i] = from_snap_table[i][2];
+  }
+  for (uint32_t i = object_count_head; i < object_count_1; i++) {
+    object_map_1[i] = shrink_table[i - object_count_head][0];
+    if (!is_diff_iterate()) {
+      expected_diff_state[i] = shrink_table[i - object_count_head][1];
+    }
+  }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 1, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 1, CEPH_NOSNAP, expected_diff_state);
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, FromSnapToHeadShrinkToZero) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count_1 = std::size(shrink_table);
+  m_image_ctx->size = 0;
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}},
+          object_count_1 * (1 << m_image_ctx->order), {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count_1);
+  BitVector<2> object_map_head;
+  BitVector<2> expected_diff_state;
+  if (!is_diff_iterate()) {
+    expected_diff_state.resize(object_count_1);
+  }
+  for (uint32_t i = 0; i < object_count_1; i++) {
+    object_map_1[i] = shrink_table[i][0];
+    if (!is_diff_iterate()) {
+      expected_diff_state[i] = shrink_table[i][1];
+    }
   }
 
   auto load = [&](MockTestImageCtx& mock_image_ctx) {
