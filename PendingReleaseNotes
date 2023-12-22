@@ -127,6 +127,21 @@
   cannot repair the dates of existing object locks. Such objects can be identified
   with a HeadObject request based on the x-amz-object-lock-retain-until-date
   response header.
+* RADOS: `get_pool_is_selfmanaged_snaps_mode` C++ API has been deprecated
+  due to being prone to false negative results.  It's safer replacement is
+  `pool_is_in_selfmanaged_snaps_mode`.
+* RADOS: For bug 62338 (https://tracker.ceph.com/issues/62338), we did not choose
+  to condition the fix on a server flag in order to simplify backporting.  As
+  a result, in rare cases it may be possible for a PG to flip between two acting
+  sets while an upgrade to a version with the fix is in progress.  If you observe
+  this behavior, you should be able to work around it by completing the upgrade or
+  by disabling async recovery by setting osd_async_recovery_min_cost to a very
+  large value on all OSDs until the upgrade is complete:
+  ``ceph config set osd osd_async_recovery_min_cost 1099511627776``
+* RADOS: A detailed version of the `balancer status` CLI command in the balancer
+  module is now available. Users may run `ceph balancer status detail` to see more
+  details about which PGs were updated in the balancer's last optimization.
+  See https://docs.ceph.com/en/latest/rados/operations/balancer/ for more information.
 
 >=18.0.0
 
