@@ -10373,6 +10373,7 @@ void BlueStore::collect_metadata(map<string,string> *pm)
     }
   }
   (*pm)["bluestore_min_alloc_size"] = stringify(min_alloc_size);
+  (*pm)["bluestore_allocation_from_file"] = stringify(fm && fm->is_null_manager());
 }
 
 int BlueStore::get_numa_node(
