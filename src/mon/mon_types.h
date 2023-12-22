@@ -513,8 +513,9 @@ namespace ceph {
       constexpr mon_feature_t FEATURE_PACIFIC(    (1ULL << 6));
       // elector pinging and CONNECTIVITY mode:
       constexpr mon_feature_t FEATURE_PINGING(    (1ULL << 7));
-      constexpr mon_feature_t FEATURE_QUINCY(    (1ULL << 8));
-      constexpr mon_feature_t FEATURE_REEF(    (1ULL << 9));
+      constexpr mon_feature_t FEATURE_QUINCY(     (1ULL << 8));
+      constexpr mon_feature_t FEATURE_REEF(       (1ULL << 9));
+      constexpr mon_feature_t FEATURE_SQUID(      (1ULL << 10));
 
       constexpr mon_feature_t FEATURE_RESERVED(   (1ULL << 63));
       constexpr mon_feature_t FEATURE_NONE(       (0ULL));
@@ -536,6 +537,7 @@ namespace ceph {
 	  FEATURE_PINGING |
 	  FEATURE_QUINCY |
 	  FEATURE_REEF |
+	  FEATURE_SQUID |
 	  FEATURE_NONE
 	  );
       }
@@ -561,6 +563,7 @@ namespace ceph {
 	  FEATURE_PINGING |
 	  FEATURE_QUINCY |
 	  FEATURE_REEF |
+	  FEATURE_SQUID |
 	  FEATURE_NONE
 	  );
       }
@@ -579,6 +582,9 @@ namespace ceph {
 
 static inline ceph_release_t infer_ceph_release_from_mon_features(mon_feature_t f)
 {
+  if (f.contains_all(ceph::features::mon::FEATURE_SQUID)) {
+    return ceph_release_t::squid;
+  }
   if (f.contains_all(ceph::features::mon::FEATURE_REEF)) {
     return ceph_release_t::reef;
   }
@@ -629,6 +635,8 @@ static inline const char *ceph::features::mon::get_feature_name(uint64_t b) {
     return "quincy";
   } else if (f == FEATURE_REEF) {
     return "reef";
+  } else if (f == FEATURE_SQUID) {
+    return "squid";
   } else if (f == FEATURE_RESERVED) {
     return "reserved";
   }
@@ -657,6 +665,8 @@ inline mon_feature_t ceph::features::mon::get_feature_by_name(const std::string 
     return FEATURE_QUINCY;
   } else if (n == "reef") {
     return FEATURE_REEF;
+  } else if (n == "squid") {
+    return FEATURE_SQUID;
   } else if (n == "reserved") {
     return FEATURE_RESERVED;
   }
