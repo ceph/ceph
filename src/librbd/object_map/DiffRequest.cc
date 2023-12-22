@@ -176,15 +176,21 @@ void DiffRequest<I>::handle_load_object_map(int r) {
   }
 
   uint64_t prev_object_diff_state_size = m_object_diff_state->size();
-  if (prev_object_diff_state_size < num_objs) {
-    // the diff state should be the largest of all snapshots in the set
-    m_object_diff_state->resize(num_objs);
-  }
-  if (m_object_map.size() < m_object_diff_state->size()) {
-    // the image was shrunk so expanding the object map will flag end objects
-    // as non-existent and they will be compared against the previous object
-    // diff state
-    m_object_map.resize(m_object_diff_state->size());
+  if (m_diff_iterate_range) {
+    if (m_object_diff_state->size() != m_object_map.size()) {
+      m_object_diff_state->resize(m_object_map.size());
+    }
+  } else {
+    // for deep-copy, the object diff state should be the largest of
+    // all versions in the set, so it's only ever grown
+    if (m_object_diff_state->size() < m_object_map.size()) {
+      m_object_diff_state->resize(m_object_map.size());
+    } else if (m_object_diff_state->size() > m_object_map.size()) {
+      // the image was shrunk so expanding the object map will flag end objects
+      // as non-existent and they will be compared against the previous object
+      // diff state
+      m_object_map.resize(m_object_diff_state->size());
+    }
   }
 
   uint64_t overlap = std::min(m_object_map.size(), prev_object_diff_state_size);
