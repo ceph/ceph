@@ -205,6 +205,12 @@ command:
 
       ceph balancer status
 
+To see the status in greater detail, run the following command:
+
+   .. prompt:: bash $
+
+      ceph balancer status detail
+
 To evaluate the distribution that would result from executing a specific plan,
 run the following command:
 
