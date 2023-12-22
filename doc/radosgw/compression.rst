@@ -10,6 +10,12 @@ using any of the existing compression plugins.
 .. note:: The Reef release added a :ref:`feature_compress_encrypted` zonegroup
    feature to enable compression with `Server-Side Encryption`_.
 
+Supported compression plugins include the following:
+
+* lz4
+* snappy
+* zlib
+* zstd
 
 Configuration
 =============
