@@ -233,15 +233,12 @@ void DiffRequest<I>::handle_load_object_map(int r) {
   }
   ldout(cct, 20) << "computed overlap diffs" << dendl;
 
-  bool diff_from_start = (m_snap_id_start == 0);
   auto end_it = m_object_map.end();
   for (; it != end_it; ++it, ++diff_it, ++i) {
     uint8_t object_map_state = *it;
     if (object_map_state == OBJECT_NONEXISTENT) {
       *diff_it = DIFF_STATE_HOLE;
-    } else if (diff_from_start ||
-               (m_object_diff_state_valid &&
-                object_map_state != OBJECT_EXISTS_CLEAN)) {
+    } else if (m_current_snap_id != m_snap_id_start) {
       // diffing against the beginning of time or image was grown
       // (implicit) starting state is HOLE, this is the first object
       // map after
@@ -277,8 +274,6 @@ void DiffRequest<I>::handle_load_object_map(int r) {
                    << static_cast<uint32_t>(*it) << ")" << dendl;
   }
   ldout(cct, 20) << "computed resize diffs" << dendl;
-
-  m_object_diff_state_valid = true;
 
   std::shared_lock image_locker{m_image_ctx->image_lock};
   load_object_map(&image_locker);
