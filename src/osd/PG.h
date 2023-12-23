@@ -475,11 +475,6 @@ public:
     forward_scrub_event(&ScrubPgIF::digest_update_notification, queued, "DigestUpdate");
   }
 
-  void scrub_send_local_map_ready(epoch_t queued, ThreadPool::TPHandle& handle)
-  {
-    forward_scrub_event(&ScrubPgIF::send_local_map_done, queued, "IntLocalMapDone");
-  }
-
   void scrub_send_replmaps_ready(epoch_t queued, ThreadPool::TPHandle& handle)
   {
     forward_scrub_event(&ScrubPgIF::send_replica_maps_ready, queued, "GotReplicas");

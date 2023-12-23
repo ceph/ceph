@@ -423,14 +423,6 @@ class PGScrubDigestUpdate : public PGScrubItem {
   void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
 };
 
-class PGScrubGotLocalMap : public PGScrubItem {
- public:
-  PGScrubGotLocalMap(spg_t pg, epoch_t epoch_queued)
-    : PGScrubItem{pg, epoch_queued, "PGScrubGotLocalMap"}
-  {}
-  void run(OSD* osd, OSDShard* sdata, PGRef& pg, ThreadPool::TPHandle& handle) final;
-};
-
 class PGScrubGotReplMaps : public PGScrubItem {
  public:
   PGScrubGotReplMaps(spg_t pg, epoch_t epoch_queued)
