@@ -113,15 +113,6 @@ void PGScrubDigestUpdate::run(OSD* osd,
   pg->unlock();
 }
 
-void PGScrubGotLocalMap::run(OSD* osd,
-			     OSDShard* sdata,
-			     PGRef& pg,
-			     ThreadPool::TPHandle& handle)
-{
-  pg->scrub_send_local_map_ready(epoch_queued, handle);
-  pg->unlock();
-}
-
 void PGScrubGotReplMaps::run(OSD* osd,
 			     OSDShard* sdata,
 			     PGRef& pg,

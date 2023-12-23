@@ -526,9 +526,6 @@ public:
   /// Signals that all write OPs are done
   void queue_scrub_digest_update(PG* pg, Scrub::scrub_prio_t with_priority);
 
-  /// Signals that the the local (Primary's) scrub map is ready
-  void queue_scrub_got_local_map(PG* pg, Scrub::scrub_prio_t with_priority);
-
   /// Signals that we (the Primary) got all waited-for scrub-maps from our replicas
   void queue_scrub_got_repl_maps(PG* pg, Scrub::scrub_prio_t with_priority);
 
