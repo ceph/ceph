@@ -271,13 +271,15 @@ TEST_P(TestMockObjectMapDiffRequest, FastDiffDisabled) {
   }
 }
 
-TEST_P(TestMockObjectMapDiffRequest, FastDiffInvalid) {
+TEST_P(TestMockObjectMapDiffRequest, StartFastDiffInvalid) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
   m_image_ctx->snap_info = {
     {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
+          {}, {}, {}}},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -285,9 +287,9 @@ TEST_P(TestMockObjectMapDiffRequest, FastDiffInvalid) {
     expect_get_flags(mock_image_ctx, 1, RBD_FLAG_FAST_DIFF_INVALID, 0);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, CEPH_NOSNAP, true));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, 2, true));
   } else {
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, 2, false));
   }
 }
 
@@ -349,15 +351,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnap) {
     }
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, 2, 0, 0);
-    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_diff_iterate(load, 0, 2, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_deep_copy(load, 0, 2, expected_diff_state);
   }
 }
@@ -395,15 +401,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnapGrow) {
     expected_diff_state[i] = from_beginning_table[i - object_count_1][1];
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, 2, 0, 0);
-    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_diff_iterate(load, 0, 2, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_deep_copy(load, 0, 2, expected_diff_state);
   }
 }
@@ -429,15 +439,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnapGrowFrom
     expected_diff_state[i] = from_beginning_table[i][1];
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, 2, 0, 0);
-    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_diff_iterate(load, 0, 2, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_deep_copy(load, 0, 2, expected_diff_state);
   }
 }
@@ -481,15 +495,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnapShrink) 
     }
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, 2, 0, 0);
-    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_diff_iterate(load, 0, 2, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_deep_copy(load, 0, 2, expected_diff_state);
   }
 }
@@ -519,15 +537,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapIntermediateSnapShrinkTo
     }
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, 2, 0, 0);
-    expect_load_map(mock_image_ctx, 2, object_map_2, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_diff_iterate(load, 0, 2, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, 2, 0, 0);
+      expect_load_map(mock_image_ctx, 2, object_map_2, 0);
+    };
     test_deep_copy(load, 0, 2, expected_diff_state);
   }
 }
@@ -584,15 +606,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnap) {
     }
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
   }
 }
@@ -628,15 +654,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnapGrow) {
     expected_diff_state[i] = from_beginning_table[i - object_count_1][1];
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
   }
 }
@@ -660,15 +690,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnapGrowFrom
     expected_diff_state[i] = from_beginning_table[i][1];
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
   }
 }
@@ -710,15 +744,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnapShrink) 
     }
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
   }
 }
@@ -747,15 +785,19 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadIntermediateSnapShrinkTo
     }
   }
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
-    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
   }
 }
@@ -1305,16 +1347,20 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateSnapDNE) {
   expected_diff_state.resize(object_count);
   expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, 0,
-                    [&mock_image_ctx]() { mock_image_ctx.snap_info.erase(2); });
-    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0,
+                      [&mock_image_ctx]() { mock_image_ctx.snap_info.erase(2); });
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
   }
 }
@@ -1356,26 +1402,32 @@ TEST_P(TestMockObjectMapDiffRequest, LoadIntermediateObjectMapDNE) {
   expected_diff_state.resize(object_count);
   expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
 
-  auto load = [&](MockTestImageCtx& mock_image_ctx) {
-    expect_get_flags(mock_image_ctx, 1, 0, 0);
-    expect_load_map(mock_image_ctx, 1, object_map_1, -ENOENT);
-    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
-    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
-  };
   if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
   } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, -ENOENT);
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
     test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
   }
 }
 
-TEST_P(TestMockObjectMapDiffRequest, LoadObjectMapError) {
+TEST_P(TestMockObjectMapDiffRequest, StartObjectMapLoadError) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
   m_image_ctx->snap_info = {
     {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
+          {}, {}, {}}},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -1386,19 +1438,21 @@ TEST_P(TestMockObjectMapDiffRequest, LoadObjectMapError) {
     expect_load_map(mock_image_ctx, 1, object_map_1, -EPERM);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EPERM, do_diff(load, 0, CEPH_NOSNAP, true));
+    ASSERT_EQ(-EPERM, do_diff(load, 1, 2, true));
   } else {
-    ASSERT_EQ(-EPERM, do_diff(load, 0, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EPERM, do_diff(load, 1, 2, false));
   }
 }
 
-TEST_P(TestMockObjectMapDiffRequest, ObjectMapTooSmall) {
+TEST_P(TestMockObjectMapDiffRequest, StartObjectMapTooSmall) {
   REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
 
   uint32_t object_count = 5;
   m_image_ctx->size = object_count * (1 << m_image_ctx->order);
   m_image_ctx->snap_info = {
     {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
+          {}, {}, {}}},
+    {2U, {"snap2", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
           {}, {}, {}}}
   };
 
@@ -1410,9 +1464,9 @@ TEST_P(TestMockObjectMapDiffRequest, ObjectMapTooSmall) {
     expect_load_map(mock_image_ctx, 1, object_map_1, 0);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EINVAL, do_diff(load, 0, CEPH_NOSNAP, true));
+    ASSERT_EQ(-EINVAL, do_diff(load, 1, 2, true));
   } else {
-    ASSERT_EQ(-EINVAL, do_diff(load, 0, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EINVAL, do_diff(load, 1, 2, false));
   }
 }
 
