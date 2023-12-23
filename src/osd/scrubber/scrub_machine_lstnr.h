@@ -107,6 +107,15 @@ struct ScrubMachineListener {
 
   [[nodiscard]] virtual bool is_primary() const = 0;
 
+  /// dequeue this PG from the OSD's scrub-queue
+  virtual void rm_from_osd_scrubbing() = 0;
+
+  /**
+   * the FSM has entered the PrimaryActive state. That happens when
+   * peered as a Primary, and achieving the 'active' state.
+   */
+  virtual void schedule_scrub_with_osd() = 0;
+
   virtual void select_range_n_notify() = 0;
 
   /// walk the log to find the latest update that affects our chunk

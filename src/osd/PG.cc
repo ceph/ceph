@@ -1847,7 +1847,6 @@ void PG::on_activate(interval_set<snapid_t> snaps)
   snap_trimq = snaps;
   release_pg_backoffs();
   projected_last_update = info.last_update;
-  m_scrubber->on_pg_activate(m_planned_scrub);
 }
 
 void PG::on_replica_activate()

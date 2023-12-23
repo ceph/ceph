@@ -252,7 +252,7 @@ class PgScrubber : public ScrubPgIF,
 
   void rm_from_osd_scrubbing() final;
 
-  void on_pg_activate(const requested_scrub_t& request_flags) final;
+  void schedule_scrub_with_osd() final;
 
   scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
