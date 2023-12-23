@@ -460,14 +460,12 @@ void PgScrubber::on_new_interval()
 		  (is_primary() ? "Primary" : "Replica/other"),
 		  is_scrub_active(), is_queued_or_active())
 	   << dendl;
-
   m_fsm->process_event(IntervalChanged{});
   // the following asserts were added due to a past bug, where PG flags were
   // left set in some scenarios.
   ceph_assert(!is_queued_or_active());
   ceph_assert(!state_test(PG_STATE_SCRUBBING));
   ceph_assert(!state_test(PG_STATE_DEEP_SCRUB));
-  rm_from_osd_scrubbing();
 }
 
 bool PgScrubber::is_scrub_registered() const
@@ -493,34 +491,30 @@ void PgScrubber::rm_from_osd_scrubbing()
   }
 }
 
-void PgScrubber::on_pg_activate(const requested_scrub_t& request_flags)
+/*
+ * Note: referring to m_planned_scrub here is temporary, as this set of
+ * scheduling flags will be removed in a followup PR.
+ */
+void PgScrubber::schedule_scrub_with_osd()
 {
   ceph_assert(is_primary());
-  if (!m_scrub_job) {
-    // we won't have a chance to see more logs from this function, thus:
-    dout(2) << fmt::format(
-		   "{}: flags:<{}> {}.Reg-state:{:.7}. No scrub-job", __func__,
-		   request_flags, (is_primary() ? "Primary" : "Replica/other"),
-		   registration_state())
-	    << dendl;
-    return;
-  }
+  ceph_assert(m_scrub_job);
 
-  ceph_assert(!is_queued_or_active());
   auto pre_state = m_scrub_job->state_desc();
   auto pre_reg = registration_state();
 
   auto suggested = m_osds->get_scrub_services().determine_scrub_time(
-      request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
+      m_planned_scrub, m_pg->info, m_pg->get_pgpool().info.opts);
   m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
 
   dout(10) << fmt::format(
 		  "{}: <flags:{}> {} <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
-		  __func__, request_flags,
+		  __func__, m_planned_scrub,
 		  (is_primary() ? "Primary" : "Replica/other"), pre_reg,
 		  pre_state, registration_state(), m_scrub_job->state_desc())
 	   << dendl;
 }
+
 
 void PgScrubber::on_primary_active_clean()
 {
@@ -2177,11 +2171,7 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
 PgScrubber::~PgScrubber()
 {
   m_fsm->process_event(IntervalChanged{});
-  if (m_scrub_job) {
-    // make sure the OSD won't try to scrub this one just now
-    rm_from_osd_scrubbing();
-    m_scrub_job.reset();
-  }
+  m_scrub_job.reset();
 }
 
 PgScrubber::PgScrubber(PG* pg)

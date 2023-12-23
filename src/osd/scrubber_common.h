@@ -410,12 +410,6 @@ struct ScrubPgIF {
   virtual bool reserve_local() = 0;
 
   /**
-   * if activated as a Primary - register the scrub job with the OSD
-   * scrub queue
-   */
-  virtual void on_pg_activate(const requested_scrub_t& request_flags) = 0;
-
-  /**
    * Recalculate the required scrub time.
    *
    * This function assumes that the queue registration status is up-to-date,
@@ -430,8 +424,6 @@ struct ScrubPgIF {
    * send all relevant messages to the ScrubMachine.
    */
   virtual void handle_scrub_reserve_msgs(OpRequestRef op) = 0;
-
-  virtual void rm_from_osd_scrubbing() = 0;
 
   virtual scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
