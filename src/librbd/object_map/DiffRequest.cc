@@ -38,16 +38,19 @@ void DiffRequest<I>::send() {
 
   m_object_diff_state->clear();
 
-  // collect all the snap ids in the provided range (inclusive)
-  if (m_snap_id_start != 0) {
-    m_snap_ids.insert(m_snap_id_start);
-  }
-
+  // collect all the snap ids in the provided range (inclusive) unless
+  // this is diff-iterate against the beginning of time, in which case
+  // only the end version matters
   std::shared_lock image_locker{m_image_ctx->image_lock};
-  auto snap_info_it = m_image_ctx->snap_info.upper_bound(m_snap_id_start);
-  auto snap_info_it_end = m_image_ctx->snap_info.lower_bound(m_snap_id_end);
-  for (; snap_info_it != snap_info_it_end; ++snap_info_it) {
-    m_snap_ids.insert(snap_info_it->first);
+  if (!m_diff_iterate_range || m_snap_id_start != 0) {
+    if (m_snap_id_start != 0) {
+      m_snap_ids.insert(m_snap_id_start);
+    }
+    auto snap_info_it = m_image_ctx->snap_info.upper_bound(m_snap_id_start);
+    auto snap_info_it_end = m_image_ctx->snap_info.lower_bound(m_snap_id_end);
+    for (; snap_info_it != snap_info_it_end; ++snap_info_it) {
+      m_snap_ids.insert(snap_info_it->first);
+    }
   }
   m_snap_ids.insert(m_snap_id_end);
 
