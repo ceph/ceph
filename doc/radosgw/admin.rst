@@ -2,25 +2,23 @@
  Admin Guide
 =============
 
-Once you have your Ceph Object Storage service up and running, you may
-administer the service with user management, access controls, quotas 
-and usage tracking among other features.
-
+After the Ceph Object Storage service is up and running, it can be administered
+with user management, access controls, quotas, and usage tracking.
 
 User Management
 ===============
 
-Ceph Object Storage user management refers to users of the Ceph Object Storage
-service (i.e., not the Ceph Object Gateway as a user of the Ceph Storage
-Cluster). You must create a user, access key and secret to enable end users to
-interact with Ceph Object Gateway services.
+Ceph Object Storage user management refers only to users of the Ceph Object
+Storage service and not to the Ceph Object Gateway as a user of the Ceph
+Storage Cluster. Create a user, access key, and secret key to enable end users
+to interact with Ceph Object Gateway services.
 
-There are two user types: 
+There are two types of user: 
 
-- **User:** The term 'user' reflects a user of the S3 interface.
+- **User:** The term "user" refers to  user of the S3 interface.
 
-- **Subuser:** The term 'subuser' reflects a user of the Swift interface. A subuser
-  is associated to a user .
+- **Subuser:** The term "subuser" refers to a user of the Swift interface. A
+  subuser is associated with a user. 
   
 .. ditaa::
            +---------+
@@ -31,12 +29,14 @@ There are two user types:
                 +-----+  Subuser  |
                       +-----------+
 
-You can create, modify, view, suspend and remove users and subusers. In addition
-to user and subuser IDs, you may add a display name and an email address for a
-user.  You can specify a key and secret, or generate a key and secret
-automatically. When generating or specifying keys, note that user IDs correspond
-to an S3 key type and subuser IDs correspond to a swift key type. Swift keys
-also have access levels of ``read``, ``write``, ``readwrite`` and ``full``.
+Users and subusers can be created, modified, viewed, suspended and removed.
+you may add a Display names and an email addresses can be added to user
+profiles. Keys and secrets can either be specified or generated automatically.
+When generating or specifying keys, remember that user IDs correspond to S3 key
+types and subuser IDs correspond to Swift key types. 
+
+Swift keys have access levels of ``read``, ``write``, ``readwrite`` and
+``full``.
 
 
 Create a User
