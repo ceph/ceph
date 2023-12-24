@@ -4399,8 +4399,9 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
 
   last_osd_report[from].first = ceph_clock_now();
   last_osd_report[from].second = beacon->osd_beacon_report_interval;
-  osd_epochs[from] = beacon->version;
-
+  if (osdmap.is_in(from)) {
+    osd_epochs[from] = beacon->version;
+  }
   for (const auto& pg : beacon->pgs) {
     if (auto* pool = osdmap.get_pg_pool(pg.pool()); pool != nullptr) {
       unsigned pg_num = pool->get_pg_num();
