@@ -326,8 +326,6 @@ struct ScrubPgIF {
   /// we are peered as a replica
   virtual void on_replica_activate() = 0;
 
-  virtual void scrub_clear_state() = 0;
-
   virtual void handle_query_state(ceph::Formatter* f) = 0;
 
   virtual pg_scrubbing_status_t get_schedule() const = 0;
@@ -382,8 +380,13 @@ struct ScrubPgIF {
 					const hobject_t& soid) = 0;
 
   /**
-   * the version of 'scrub_clear_state()' that does not try to invoke FSM
-   * services (thus can be called from FSM reactions)
+   * clears both internal scrub state, and some PG-visible flags:
+   * - the two scrubbing PG state flags;
+   * - primary/replica scrub position (chunk boundaries);
+   * - primary/replica interaction state;
+   * - the backend state
+   * Also runs pending callbacks, and clears the active flags.
+   * Does not try to invoke FSM events.
    */
   virtual void clear_pgscrub_state() = 0;
 
