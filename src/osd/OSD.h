@@ -209,7 +209,6 @@ public:
 		       const OSDMapRef& osdmap,
 		       epoch_t peer_epoch_lb=0);
 
-  void send_map(class MOSDMap *m, Connection *con);
   void send_incremental_map(epoch_t since, Connection *con,
 			    const OSDMapRef& osdmap);
   MOSDMap *build_incremental_map_msg(epoch_t from, epoch_t to,

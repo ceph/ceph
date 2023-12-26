@@ -1377,6 +1377,19 @@ void OSDService::got_stop_ack()
 MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
                                                OSDSuperblock& sblock)
 {
+  auto get_map_and_adjust_counters = [] (
+    bufferlist& bl,
+    int& max,
+    ssize_t& max_bytes,
+    std::function<bool()> map_getter) {
+      if (!map_getter()) {
+        return false;
+      }
+      max--;
+      max_bytes -= bl.length();
+      return true;
+  };
+
   MOSDMap *m = new MOSDMap(monc->get_fsid(),
 			   osdmap->get_encoding_features());
   m->cluster_osdmap_trim_lower_bound = sblock.cluster_osdmap_trim_lower_bound;
@@ -1388,36 +1401,34 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   if (since < m->cluster_osdmap_trim_lower_bound) {
     // we don't have the next map the target wants, so start with a
     // full map.
-    bufferlist bl;
     dout(10) << __func__ << " cluster osdmap lower bound "
              << sblock.cluster_osdmap_trim_lower_bound
              << " > since " << since << ", starting with full map"
              << dendl;
     since = m->cluster_osdmap_trim_lower_bound;
-    if (!get_map_bl(since, bl)) {
-      derr << __func__ << " missing full map " << since << dendl;
+    if (bufferlist bl;
+        get_map_and_adjust_counters(bl, max, max_bytes, [&] { return get_map_bl(since, bl);})) {
+      m->maps[since] = std::move(bl);
+      ++since;
+    } else {
+      derr << __func__ << " missing full map after map gap " << since << dendl;
       goto panic;
     }
-    max--;
-    max_bytes -= bl.length();
-    m->maps[since] = std::move(bl);
   }
-  for (epoch_t e = since + 1; e <= to; ++e) {
-    bufferlist bl;
-    if (get_inc_map_bl(e, bl)) {
-      m->incremental_maps[e] = bl;
+
+  for (epoch_t e = since; e <= to && max > 0 && max_bytes > 0; ++e) {
+    if (bufferlist bl;
+        get_map_and_adjust_counters(bl, max, max_bytes, [&] { return get_inc_map_bl(e, bl);})) {
+        m->incremental_maps[e] = std::move(bl);
     } else {
       dout(10) << __func__ << " missing incremental map " << e << dendl;
-      if (!get_map_bl(e, bl)) {
-	derr << __func__ << " also missing full map " << e << dendl;
-	goto panic;
+      if (bufferlist bl;
+          get_map_and_adjust_counters(bl, max, max_bytes, [&] { return get_map_bl(e, bl);})) {
+        m->maps[e] = std::move(bl);
+      } else {
+        derr << __func__ << " also missing full map " << e << dendl;
+        goto panic;
       }
-      m->maps[e] = bl;
-    }
-    max--;
-    max_bytes -= bl.length();
-    if (max <= 0 || max_bytes <= 0) {
-      break;
     }
   }
   return m;
@@ -1444,41 +1455,23 @@ MOSDMap *OSDService::build_incremental_map_msg(epoch_t since, epoch_t to,
   return m;
 }
 
-void OSDService::send_map(MOSDMap *m, Connection *con)
-{
-  con->send_message(m);
-}
-
 void OSDService::send_incremental_map(epoch_t since, Connection *con,
                                       const OSDMapRef& osdmap)
 {
   epoch_t to = osdmap->get_epoch();
-  dout(10) << "send_incremental_map " << since << " -> " << to
-           << " to " << con << " " << con->get_peer_addr() << dendl;
+  dout(10) << fmt::format("{} epoch range: ({}, {}] to {} {}",
+                          __func__, since, to,
+                          con->get_peer_entity_name().to_str(),
+                          con->get_peer_addr()) << dendl;
 
-  MOSDMap *m = NULL;
-  while (!m) {
-    OSDSuperblock sblock(get_superblock());
-    if (since < sblock.get_oldest_map()) {
-      // just send latest full map
-      MOSDMap *m = new MOSDMap(monc->get_fsid(),
-			       osdmap->get_encoding_features());
-      m->cluster_osdmap_trim_lower_bound = sblock.cluster_osdmap_trim_lower_bound;
-      m->newest_map = sblock.get_newest_map();
-      get_map_bl(to, m->maps[to]);
-      send_map(m, con);
-      return;
-    }
-
-    if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
-      dout(10) << "  " << (to - since) << " > max " << cct->_conf->osd_map_share_max_epochs
-	       << ", only sending most recent" << dendl;
-      since = to - cct->_conf->osd_map_share_max_epochs;
-    }
-
-    m = build_incremental_map_msg(since, to, sblock);
+  OSDSuperblock sblock(get_superblock());
+  if (to > since && (int64_t)(to - since) > cct->_conf->osd_map_share_max_epochs) {
+    dout(10) << "  " << (to - since) << " > max "
+             << cct->_conf->osd_map_share_max_epochs
+             << ", only sending most recent" << dendl;
+    since = to - cct->_conf->osd_map_share_max_epochs;
   }
-  send_map(m, con);
+  con->send_message(build_incremental_map_msg(since, to, sblock));
 }
 
 bool OSDService::_get_map_bl(epoch_t e, bufferlist& bl)
@@ -7453,8 +7446,9 @@ void OSDService::maybe_share_map(
                << session->projected_epoch << dendl;
       return;
     }
-
-    send_from = session->projected_epoch;
+    // send incremental maps in the range of:
+    // (projected_epoch, osdmap]
+    send_from = session->projected_epoch + 1;
     dout(10) << __func__ << ": con " << con->get_peer_addr()
              << " map epoch " << session->projected_epoch
              << " -> " << osdmap->get_epoch()
