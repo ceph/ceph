@@ -11444,9 +11444,28 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	  migrator->export_caps(in);
 	
 	straydn = NULL;
+      } else if (dnl->is_referent()) {
+	CInode *ref_in = dnl->get_ref_inode();
+	dn->dir->unlink_inode(dn);
+	ceph_assert(straydn);
+	straydn->dir->link_primary_inode(straydn, ref_in);
+
+	// ref_in->first is lazily updated on replica; drag it forward so
+	// that we always keep it in sync with the dnq
+	ceph_assert(straydn->first >= ref_in->first);
+	ref_in->first = straydn->first;
+
+	//TODO: Snap realm invalidate on referent ??
+
+	// send caps to auth (if we're not already)
+	if (ref_in->is_any_caps() &&
+	    !ref_in->state_test(CInode::STATE_EXPORTINGCAPS))
+	  migrator->export_caps(ref_in);
+
+	straydn = NULL;
       } else {
 	ceph_assert(!straydn);
-	ceph_assert(dnl->is_remote() || dnl->is_referent());
+	ceph_assert(dnl->is_remote());
 	dn->dir->unlink_inode(dn);
       }
       ceph_assert(dnl->is_null());
