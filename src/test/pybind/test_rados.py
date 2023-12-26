@@ -312,6 +312,11 @@ class TestIoctx(object):
     def test_list_objects_empty(self):
         eq(list(self.ioctx.list_objects()), [])
 
+    def test_read_crc(self):
+        self.ioctx.write('a', b'')
+        self.ioctx.write('a', b'', 5)
+        self.ioctx.read('a')
+
     def test_list_objects(self):
         self.ioctx.write('a', b'')
         self.ioctx.write('b', b'foo')
