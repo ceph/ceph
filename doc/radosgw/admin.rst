@@ -42,13 +42,17 @@ Swift keys have access levels of ``read``, ``write``, ``readwrite`` and
 Create a User
 -------------
 
-To create a user (S3 interface), execute the following::
+To create a user (S3 interface), run a command of the following form:
 
-	radosgw-admin user create --uid={username} --display-name="{display-name}" [--email={email}]
+.. prompt:: bash
 
-For example:: 	
+   radosgw-admin user create --uid={username} --display-name="{display-name}" [--email={email}]
+
+For example:
+
+.. prompt:: bash
 	
-  radosgw-admin user create --uid=johndoe --display-name="John Doe" --email=john@example.com
+   radosgw-admin user create --uid=johndoe --display-name="John Doe" --email=john@example.com
   
 .. code-block:: javascript
   
@@ -75,16 +79,15 @@ For example::
         "max_objects": -1},
     "temp_url_keys": []}
 
-Creating a user also creates an ``access_key`` and ``secret_key`` entry for use
-with any S3 API-compatible client.  
+The creation of a user entails the creation of an ``access_key`` and a
+``secret_key`` entry, which can be used with any S3 API-compatible client.  
 
-.. important:: Check the key output. Sometimes ``radosgw-admin``
-   generates a JSON escape (``\``) character, and some clients
-   do not know how to handle JSON escape characters. Remedies include 
-   removing the JSON escape character (``\``), encapsulating the string
-   in quotes, regenerating the key and ensuring that it 
-   does not have a JSON escape character or specify the key and secret 
-   manually.
+.. important:: Check the key output. Sometimes ``radosgw-admin`` generates a
+   JSON escape (``\``) character, and some clients do not know how to handle
+   JSON escape characters. Remedies include removing the JSON escape character
+   (``\``), encapsulating the string in quotes, regenerating the key and
+   ensuring that it does not have a JSON escape character, or specifying the
+   key and secret manually.
 
 
 Create a Subuser
