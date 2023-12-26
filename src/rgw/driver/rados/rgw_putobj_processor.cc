@@ -198,16 +198,16 @@ RadosWriter::~RadosWriter()
    * we remove all the other raw objects. Note that we use different call to remove the head object,
    * as this one needs to go via the bucket index prepare/complete 2-phase commit scheme.
    */
-  for (const auto& obj : written) {
-    if (raw_head && obj == *raw_head) {
-      ldpp_dout(dpp, 5) << "NOTE: we should not process the head object (" << obj << ") here" << dendl;
+  for (auto obj = written.rbegin(); obj != written.rend(); obj++) {
+    if (raw_head && *obj == *raw_head) {
+      ldpp_dout(dpp, 5) << "NOTE: we should not process the head object (" << *obj << ") here" << dendl;
       need_to_remove_head = true;
       continue;
     }
 
-    int r = store->delete_raw_obj(dpp, obj, y);
+    int r = store->delete_raw_obj(dpp, *obj, y);
     if (r < 0 && r != -ENOENT) {
-      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << obj << "), leaked" << dendl;
+      ldpp_dout(dpp, 0) << "WARNING: failed to remove obj (" << *obj << "), leaked" << dendl;
     }
   }
 
