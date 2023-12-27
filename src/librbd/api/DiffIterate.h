@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "common/bit_vector.hpp"
 #include "cls/rbd/cls_rbd_types.h"
+#include <utility>
 
 namespace librbd {
 
@@ -50,6 +51,8 @@ private:
       m_callback_arg(callback_arg)
   {
   }
+
+  std::pair<uint64_t, uint64_t> calc_object_diff_range();
 
   int execute();
 

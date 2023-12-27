@@ -110,7 +110,7 @@ void ImageCopyRequest<I>::compute_diff() {
     ImageCopyRequest<I>, &ImageCopyRequest<I>::handle_compute_diff>(this);
   auto req = object_map::DiffRequest<I>::create(m_src_image_ctx,
                                                 m_src_snap_id_start,
-                                                m_src_snap_id_end, false,
+                                                m_src_snap_id_end, 0, UINT64_MAX,
                                                 &m_object_diff_state, ctx);
   req->send();
 }
