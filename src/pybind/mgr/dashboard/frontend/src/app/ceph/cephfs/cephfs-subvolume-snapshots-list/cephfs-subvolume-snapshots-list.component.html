@@ -26,7 +26,18 @@
               [columns]="columns"
               selectionType="single"
               [hasDetails]="false"
-              (fetchData)="fetchData()"></cd-table>
+              (fetchData)="fetchData()"
+              (updateSelection)="updateSelection($event)">
+
+      <div class="table-actions btn-toolbar">
+        <cd-table-actions [permission]="permissions.cephfs"
+                          [selection]="selection"
+                          class="btn-group"
+                          id="cephfs-snapshot-actions"
+                          [tableActions]="tableActions">
+        </cd-table-actions>
+      </div>
+    </cd-table>
   </div>
 </div>
 <ng-template #noGroupsTpl>

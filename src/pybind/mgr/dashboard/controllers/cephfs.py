@@ -810,3 +810,30 @@ class CephFSSubvolumeSnapshots(RESTController):
                     )
                 snapshot['info'] = json.loads(out)
         return snapshots
+
+    @RESTController.Resource('GET')
+    def info(self, vol_name: str, subvol_name: str, snap_name: str, group_name: str = ''):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name, 'snap_name': snap_name}
+        if group_name:
+            params['group_name'] = group_name
+        error_code, out, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_info', None,
+                                          params)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to get info for subvolume snapshot {snap_name}: {err}'
+            )
+        return json.loads(out)
+
+    def create(self, vol_name: str, subvol_name: str, snap_name: str, group_name=''):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name, 'snap_name': snap_name}
+        if group_name:
+            params['group_name'] = group_name
+
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_create', None,
+                                        params)
+
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to create subvolume snapshot {snap_name}: {err}'
+            )
+        return f'Subvolume snapshot {snap_name} created successfully'
