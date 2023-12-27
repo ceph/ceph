@@ -22,6 +22,7 @@ import { CephfsSubvolumegroupFormComponent } from './cephfs-subvolumegroup-form/
 import { CephfsSubvolumeSnapshotsListComponent } from './cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-list.component';
 import { CephfsSnapshotscheduleListComponent } from './cephfs-snapshotschedule-list/cephfs-snapshotschedule-list.component';
 import { DataTableModule } from '../../shared/datatable/datatable.module';
+import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapshots-list/cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component';
 
 @NgModule({
   imports: [
@@ -51,7 +52,8 @@ import { DataTableModule } from '../../shared/datatable/datatable.module';
     CephfsSubvolumeGroupComponent,
     CephfsSubvolumegroupFormComponent,
     CephfsSubvolumeSnapshotsListComponent,
-    CephfsSnapshotscheduleListComponent
+    CephfsSnapshotscheduleListComponent,
+    CephfsSubvolumeSnapshotsFormComponent
   ]
 })
 export class CephfsModule {}

@@ -48,4 +48,10 @@ describe('CephfsSubvolumeService', () => {
     );
     expect(req.request.method).toBe('GET');
   });
+
+  it('should call createSnapshot', () => {
+    service.createSnapshot('testFS', 'testSnap', 'testSubvol').subscribe();
+    const req = httpTesting.expectOne('api/cephfs/subvolume/snapshot/');
+    expect(req.request.method).toBe('POST');
+  });
 });

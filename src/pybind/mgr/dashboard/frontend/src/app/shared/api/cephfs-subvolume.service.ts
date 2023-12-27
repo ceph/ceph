@@ -117,4 +117,48 @@ export class CephfsSubvolumeService {
       }
     );
   }
+
+  getSnapshotInfo(snapshotName: string, fsName: string, subVolumeName: string, groupName = '') {
+    return this.http.get(`${this.baseURL}/snapshot/${fsName}/${subVolumeName}/info`, {
+      params: {
+        snap_name: snapshotName,
+        group_name: groupName
+      }
+    });
+  }
+
+  snapshotExists(
+    fsName: string,
+    snapshotName: string,
+    subVolumeName: string,
+    groupName: string = ''
+  ): Observable<boolean> {
+    return this.getSnapshotInfo(fsName, snapshotName, subVolumeName, groupName).pipe(
+      mapTo(true),
+      catchError((error: Event) => {
+        if (_.isFunction(error.preventDefault)) {
+          error.preventDefault();
+        }
+        return of(false);
+      })
+    );
+  }
+
+  createSnapshot(
+    fsName: string,
+    snapshotName: string,
+    subVolumeName: string,
+    groupName: string = ''
+  ) {
+    return this.http.post(
+      `${this.baseURL}/snapshot/`,
+      {
+        vol_name: fsName,
+        subvol_name: subVolumeName,
+        snap_name: snapshotName,
+        group_name: groupName
+      },
+      { observe: 'response' }
+    );
+  }
 }
