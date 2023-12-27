@@ -209,7 +209,7 @@ public:
 
   template <typename F>
   int do_diff(F&& f, uint64_t start_snap_id, uint64_t end_snap_id,
-              bool diff_iterate_range) {
+              uint64_t start_object_no, uint64_t end_object_no) {
     InSequence seq;
 
     MockTestImageCtx mock_image_ctx(*m_image_ctx);
@@ -217,7 +217,7 @@ public:
 
     C_SaferCond ctx;
     auto req = new MockDiffRequest(&mock_image_ctx, start_snap_id,
-                                   end_snap_id, diff_iterate_range,
+                                   end_snap_id, start_object_no, end_object_no,
                                    &m_diff_state, &ctx);
     req->send();
     return ctx.wait();
@@ -226,14 +226,29 @@ public:
   template <typename F>
   void test_diff_iterate(F&& f, uint64_t start_snap_id, uint64_t end_snap_id,
                          const BitVector<2>& expected_diff_state) {
-    ASSERT_EQ(0, do_diff(std::forward<F>(f), start_snap_id, end_snap_id, true));
+    // ranged -- run through all ranges (substrings) in expected_diff_state
+    for (uint64_t i = 0; i < expected_diff_state.size(); i++) {
+      for (uint64_t j = i + 1; j <= expected_diff_state.size(); j++) {
+        ASSERT_EQ(0, do_diff(std::forward<F>(f), start_snap_id, end_snap_id,
+                             i, j));
+        ASSERT_EQ(j - i, m_diff_state.size());
+        for (uint64_t k = 0; k < m_diff_state.size(); k++) {
+          ASSERT_EQ(expected_diff_state[i + k], m_diff_state[k]);
+        }
+      }
+    }
+
+    // unranged -- equivalent to i=0, j=expected_diff_state.size() range
+    ASSERT_EQ(0, do_diff(std::forward<F>(f), start_snap_id, end_snap_id,
+                         0, UINT64_MAX - 1));
     ASSERT_EQ(expected_diff_state, m_diff_state);
   }
 
   template <typename F>
   void test_deep_copy(F&& f, uint64_t start_snap_id, uint64_t end_snap_id,
                       const BitVector<2>& expected_diff_state) {
-    ASSERT_EQ(0, do_diff(std::forward<F>(f), start_snap_id, end_snap_id, false));
+    ASSERT_EQ(0, do_diff(std::forward<F>(f), start_snap_id, end_snap_id,
+                         0, UINT64_MAX));
     ASSERT_EQ(expected_diff_state, m_diff_state);
   }
 
@@ -243,9 +258,17 @@ public:
 
 TEST_P(TestMockObjectMapDiffRequest, InvalidStartSnap) {
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EINVAL, do_diff(noop, CEPH_NOSNAP, CEPH_NOSNAP, true));
+    ASSERT_EQ(-EINVAL, do_diff(noop, CEPH_NOSNAP, CEPH_NOSNAP, 123, 456));
   } else {
-    ASSERT_EQ(-EINVAL, do_diff(noop, CEPH_NOSNAP, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EINVAL, do_diff(noop, CEPH_NOSNAP, CEPH_NOSNAP, 0, UINT64_MAX));
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, InvalidEndSnap) {
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-EINVAL, do_diff(noop, 2, 1, 123, 456));
+  } else {
+    ASSERT_EQ(-EINVAL, do_diff(noop, 2, 1, 0, UINT64_MAX));
   }
 }
 
@@ -253,11 +276,38 @@ TEST_P(TestMockObjectMapDiffRequest, StartEndSnapEqual) {
   BitVector<2> expected_diff_state;
 
   if (is_diff_iterate()) {
-    ASSERT_EQ(0, do_diff(noop, 1, 1, true));
+    ASSERT_EQ(0, do_diff(noop, 1, 1, 123, 456));
   } else {
-    ASSERT_EQ(0, do_diff(noop, 1, 1, false));
+    ASSERT_EQ(0, do_diff(noop, 1, 1, 0, UINT64_MAX));
   }
   ASSERT_EQ(expected_diff_state, m_diff_state);
+}
+
+TEST_P(TestMockObjectMapDiffRequest, InvalidStartObject) {
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-EINVAL, do_diff(noop, 0, 1, UINT64_MAX, UINT64_MAX));
+  } else {
+    ASSERT_EQ(-EINVAL, do_diff(noop, 0, 1, 123, UINT64_MAX));
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, InvalidEndObject) {
+  if (is_diff_iterate()) {
+    ASSERT_EQ(-EINVAL, do_diff(noop, 0, 1, 456, 123));
+  } else {
+    SUCCEED();
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, StartEndObjectEqual) {
+  BitVector<2> expected_diff_state;
+
+  if (is_diff_iterate()) {
+    ASSERT_EQ(0, do_diff(noop, 0, 1, 123, 123));
+    ASSERT_EQ(expected_diff_state, m_diff_state);
+  } else {
+    SUCCEED();
+  }
 }
 
 TEST_P(TestMockObjectMapDiffRequest, FastDiffDisabled) {
@@ -265,9 +315,9 @@ TEST_P(TestMockObjectMapDiffRequest, FastDiffDisabled) {
   REQUIRE(!is_feature_enabled(RBD_FEATURE_OBJECT_MAP));
 
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EINVAL, do_diff(noop, 0, CEPH_NOSNAP, true));
+    ASSERT_EQ(-EINVAL, do_diff(noop, 0, CEPH_NOSNAP, 123, 456));
   } else {
-    ASSERT_EQ(-EINVAL, do_diff(noop, 0, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EINVAL, do_diff(noop, 0, CEPH_NOSNAP, 0, UINT64_MAX));
   }
 }
 
@@ -289,6 +339,28 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnap) {
     object_map_1[i] = from_beginning_table[i][0];
     expected_diff_state[i] = from_beginning_table[i][1];
   }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, 1, 0, 0);
+    expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, 1, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, 1, expected_diff_state);
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, FromBeginningToSnapEmpty) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  m_image_ctx->size = 0;
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, {}, {}, {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  BitVector<2> expected_diff_state;
 
   auto load = [&](MockTestImageCtx& mock_image_ctx) {
     expect_get_flags(mock_image_ctx, 1, 0, 0);
@@ -546,6 +618,25 @@ TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHead) {
     object_map_head[i] = from_beginning_table[i][0];
     expected_diff_state[i] = from_beginning_table[i][1];
   }
+
+  auto load = [&](MockTestImageCtx& mock_image_ctx) {
+    expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+    expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+  };
+  if (is_diff_iterate()) {
+    test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
+  }
+}
+
+TEST_P(TestMockObjectMapDiffRequest, FromBeginningToHeadEmpty) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  m_image_ctx->size = 0;
+
+  BitVector<2> object_map_head;
+  BitVector<2> expected_diff_state;
 
   auto load = [&](MockTestImageCtx& mock_image_ctx) {
     expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
@@ -1274,9 +1365,9 @@ TEST_P(TestMockObjectMapDiffRequest, StartSnapDNE) {
   };
 
   if (is_diff_iterate()) {
-    ASSERT_EQ(-ENOENT, do_diff(noop, 1, 2, true));
+    ASSERT_EQ(-ENOENT, do_diff(noop, 1, 2, 0, object_count));
   } else {
-    ASSERT_EQ(-ENOENT, do_diff(noop, 1, 2, false));
+    ASSERT_EQ(-ENOENT, do_diff(noop, 1, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1294,13 +1385,13 @@ TEST_P(TestMockObjectMapDiffRequest, EndSnapDNE) {
   object_map_1.resize(object_count);
 
   if (is_diff_iterate()) {
-    ASSERT_EQ(-ENOENT, do_diff(noop, 0, 2, true));
+    ASSERT_EQ(-ENOENT, do_diff(noop, 0, 2, 0, object_count));
   } else {
     auto load = [&](MockTestImageCtx& mock_image_ctx) {
       expect_get_flags(mock_image_ctx, 1, 0, 0);
       expect_load_map(mock_image_ctx, 1, object_map_1, 0);
     };
-    ASSERT_EQ(-ENOENT, do_diff(load, 0, 2, false));
+    ASSERT_EQ(-ENOENT, do_diff(load, 0, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1397,9 +1488,9 @@ TEST_P(TestMockObjectMapDiffRequest, StartObjectMapDNE) {
     expect_load_map(mock_image_ctx, 1, object_map_1, -ENOENT);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-ENOENT, do_diff(load, 1, 2, true));
+    ASSERT_EQ(-ENOENT, do_diff(load, 1, 2, 0, object_count));
   } else {
-    ASSERT_EQ(-ENOENT, do_diff(load, 1, 2, false));
+    ASSERT_EQ(-ENOENT, do_diff(load, 1, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1429,7 +1520,7 @@ TEST_P(TestMockObjectMapDiffRequest, EndObjectMapDNE) {
       expect_get_flags(mock_image_ctx, 2, 0, 0);
       expect_load_map(mock_image_ctx, 2, object_map_2, -ENOENT);
     };
-    ASSERT_EQ(-ENOENT, do_diff(load, 0, 2, true));
+    ASSERT_EQ(-ENOENT, do_diff(load, 0, 2, 0, object_count));
   } else {
     auto load = [&](MockTestImageCtx& mock_image_ctx) {
       expect_get_flags(mock_image_ctx, 1, 0, 0);
@@ -1437,7 +1528,7 @@ TEST_P(TestMockObjectMapDiffRequest, EndObjectMapDNE) {
       expect_get_flags(mock_image_ctx, 2, 0, 0);
       expect_load_map(mock_image_ctx, 2, object_map_2, -ENOENT);
     };
-    ASSERT_EQ(-ENOENT, do_diff(load, 0, 2, false));
+    ASSERT_EQ(-ENOENT, do_diff(load, 0, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1529,9 +1620,9 @@ TEST_P(TestMockObjectMapDiffRequest, StartFastDiffInvalid) {
     expect_get_flags(mock_image_ctx, 1, RBD_FLAG_FAST_DIFF_INVALID, 0);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, 2, true));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, 2, 0, object_count));
   } else {
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, 2, false));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1554,14 +1645,14 @@ TEST_P(TestMockObjectMapDiffRequest, EndFastDiffInvalid) {
     auto get_flags = [&](MockTestImageCtx& mock_image_ctx) {
       expect_get_flags(mock_image_ctx, 2, RBD_FLAG_FAST_DIFF_INVALID, 0);
     };
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, 2, true));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, 2, 0, object_count));
   } else {
     auto get_flags = [&](MockTestImageCtx& mock_image_ctx) {
       expect_get_flags(mock_image_ctx, 1, 0, 0);
       expect_load_map(mock_image_ctx, 1, object_map_1, 0);
       expect_get_flags(mock_image_ctx, 2, RBD_FLAG_FAST_DIFF_INVALID, 0);
     };
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, 2, false));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1592,7 +1683,7 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateFastDiffInvalidFromBeginning) {
     auto get_flags = [&](MockTestImageCtx& mock_image_ctx) {
       expect_get_flags(mock_image_ctx, 1, RBD_FLAG_FAST_DIFF_INVALID, 0);
     };
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 0, CEPH_NOSNAP, 0, UINT64_MAX));
   }
 }
 
@@ -1617,9 +1708,9 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateFastDiffInvalidFromSnap) {
     expect_get_flags(mock_image_ctx, 2, RBD_FLAG_FAST_DIFF_INVALID, 0);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, CEPH_NOSNAP, true));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, CEPH_NOSNAP, 0, object_count));
   } else {
-    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EINVAL, do_diff(get_flags, 1, CEPH_NOSNAP, 0, UINT64_MAX));
   }
 }
 
@@ -1642,9 +1733,9 @@ TEST_P(TestMockObjectMapDiffRequest, StartObjectMapLoadError) {
     expect_load_map(mock_image_ctx, 1, object_map_1, -EPERM);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EPERM, do_diff(load, 1, 2, true));
+    ASSERT_EQ(-EPERM, do_diff(load, 1, 2, 0, object_count));
   } else {
-    ASSERT_EQ(-EPERM, do_diff(load, 1, 2, false));
+    ASSERT_EQ(-EPERM, do_diff(load, 1, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1674,7 +1765,7 @@ TEST_P(TestMockObjectMapDiffRequest, EndObjectMapLoadError) {
       expect_get_flags(mock_image_ctx, 2, 0, 0);
       expect_load_map(mock_image_ctx, 2, object_map_2, -EPERM);
     };
-    ASSERT_EQ(-EPERM, do_diff(load, 0, 2, true));
+    ASSERT_EQ(-EPERM, do_diff(load, 0, 2, 0, object_count));
   } else {
     auto load = [&](MockTestImageCtx& mock_image_ctx) {
       expect_get_flags(mock_image_ctx, 1, 0, 0);
@@ -1682,7 +1773,7 @@ TEST_P(TestMockObjectMapDiffRequest, EndObjectMapLoadError) {
       expect_get_flags(mock_image_ctx, 2, 0, 0);
       expect_load_map(mock_image_ctx, 2, object_map_2, -EPERM);
     };
-    ASSERT_EQ(-EPERM, do_diff(load, 0, 2, false));
+    ASSERT_EQ(-EPERM, do_diff(load, 0, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1715,7 +1806,7 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateObjectMapLoadErrorFromBeginning
       expect_get_flags(mock_image_ctx, 1, 0, 0);
       expect_load_map(mock_image_ctx, 1, object_map_1, -EPERM);
     };
-    ASSERT_EQ(-EPERM, do_diff(load, 0, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EPERM, do_diff(load, 0, CEPH_NOSNAP, 0, UINT64_MAX));
   }
 }
 
@@ -1742,9 +1833,9 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateObjectMapLoadErrorFromSnap) {
     expect_load_map(mock_image_ctx, 2, object_map_2, -EPERM);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EPERM, do_diff(load, 1, CEPH_NOSNAP, true));
+    ASSERT_EQ(-EPERM, do_diff(load, 1, CEPH_NOSNAP, 0, object_count));
   } else {
-    ASSERT_EQ(-EPERM, do_diff(load, 1, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EPERM, do_diff(load, 1, CEPH_NOSNAP, 0, UINT64_MAX));
   }
 }
 
@@ -1768,9 +1859,9 @@ TEST_P(TestMockObjectMapDiffRequest, StartObjectMapTooSmall) {
     expect_load_map(mock_image_ctx, 1, object_map_1, 0);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EINVAL, do_diff(load, 1, 2, true));
+    ASSERT_EQ(-EINVAL, do_diff(load, 1, 2, 0, object_count));
   } else {
-    ASSERT_EQ(-EINVAL, do_diff(load, 1, 2, false));
+    ASSERT_EQ(-EINVAL, do_diff(load, 1, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1796,7 +1887,7 @@ TEST_P(TestMockObjectMapDiffRequest, EndObjectMapTooSmall) {
       expect_get_flags(mock_image_ctx, 2, 0, 0);
       expect_load_map(mock_image_ctx, 2, object_map_2, 0);
     };
-    ASSERT_EQ(-EINVAL, do_diff(load, 0, 2, true));
+    ASSERT_EQ(-EINVAL, do_diff(load, 0, 2, 0, object_count));
   } else {
     auto load = [&](MockTestImageCtx& mock_image_ctx) {
       expect_get_flags(mock_image_ctx, 1, 0, 0);
@@ -1804,7 +1895,7 @@ TEST_P(TestMockObjectMapDiffRequest, EndObjectMapTooSmall) {
       expect_get_flags(mock_image_ctx, 2, 0, 0);
       expect_load_map(mock_image_ctx, 2, object_map_2, 0);
     };
-    ASSERT_EQ(-EINVAL, do_diff(load, 0, 2, false));
+    ASSERT_EQ(-EINVAL, do_diff(load, 0, 2, 0, UINT64_MAX));
   }
 }
 
@@ -1838,7 +1929,7 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateObjectMapTooSmallFromBeginning)
       expect_get_flags(mock_image_ctx, 1, 0, 0);
       expect_load_map(mock_image_ctx, 1, object_map_1, 0);
     };
-    ASSERT_EQ(-EINVAL, do_diff(load, 0, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EINVAL, do_diff(load, 0, CEPH_NOSNAP, 0, UINT64_MAX));
   }
 }
 
@@ -1866,9 +1957,9 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateObjectMapTooSmallFromSnap) {
     expect_load_map(mock_image_ctx, 2, object_map_2, 0);
   };
   if (is_diff_iterate()) {
-    ASSERT_EQ(-EINVAL, do_diff(load, 1, CEPH_NOSNAP, true));
+    ASSERT_EQ(-EINVAL, do_diff(load, 1, CEPH_NOSNAP, 0, object_count));
   } else {
-    ASSERT_EQ(-EINVAL, do_diff(load, 1, CEPH_NOSNAP, false));
+    ASSERT_EQ(-EINVAL, do_diff(load, 1, CEPH_NOSNAP, 0, UINT64_MAX));
   }
 }
 
