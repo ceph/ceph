@@ -40,19 +40,6 @@ template <typename I>
 void OpenSourceImageRequest<I>::open_source() {
   ldout(m_cct, 10) << dendl;
 
-  // note that all source image ctx properties are placeholders
-  *m_src_image_ctx = I::create("", "", CEPH_NOSNAP, m_io_ctx, true);
-  auto src_image_ctx = *m_src_image_ctx;
-  src_image_ctx->child = m_dst_image_ctx;
-
-  // use default layout values (can be overridden by source layers later)
-  src_image_ctx->order = 22;
-  src_image_ctx->layout = file_layout_t();
-  src_image_ctx->layout.stripe_count = 1;
-  src_image_ctx->layout.stripe_unit = 1ULL << src_image_ctx->order;
-  src_image_ctx->layout.object_size = 1Ull << src_image_ctx->order;
-  src_image_ctx->layout.pool_id = -1;
-
   bool import_only = true;
   auto source_spec = m_migration_info.source_spec;
   if (source_spec.empty()) {
@@ -67,14 +54,13 @@ void OpenSourceImageRequest<I>::open_source() {
                    << "source_snap_id=" << m_src_snap_id << ", "
                    << "import_only=" << import_only << dendl;
 
-  SourceSpecBuilder<I> source_spec_builder{src_image_ctx};
+  SourceSpecBuilder<I> source_spec_builder{m_cct};
   json_spirit::mObject source_spec_object;
   int r = source_spec_builder.parse_source_spec(source_spec,
                                                 &source_spec_object);
   if (r < 0) {
     lderr(m_cct) << "failed to parse migration source-spec:" << cpp_strerror(r)
                  << dendl;
-    (*m_src_image_ctx)->state->close();
     finish(r);
     return;
   }
@@ -84,7 +70,6 @@ void OpenSourceImageRequest<I>::open_source() {
   if (r < 0) {
     lderr(m_cct) << "failed to build migration format handler: "
                  << cpp_strerror(r) << dendl;
-    (*m_src_image_ctx)->state->close();
     finish(r);
     return;
   }
@@ -92,7 +77,7 @@ void OpenSourceImageRequest<I>::open_source() {
   auto ctx = util::create_context_callback<
     OpenSourceImageRequest<I>,
     &OpenSourceImageRequest<I>::handle_open_source>(this);
-  m_format->open(ctx);
+  m_format->open(m_io_ctx, m_dst_image_ctx, m_src_image_ctx, ctx);
 }
 
 template <typename I>

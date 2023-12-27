@@ -17,6 +17,7 @@ struct ImageCtx;
 
 namespace migration {
 
+template <typename ImageCtxT>
 struct FormatInterface;
 
 template <typename ImageCtxT>
@@ -63,8 +64,6 @@ private:
    * @endverbatim
    */
 
-  typedef std::map<uint64_t, SnapInfo> SnapInfos;
-
   CephContext* m_cct;
   librados::IoCtx& m_io_ctx;
   ImageCtxT* m_dst_image_ctx;
@@ -73,7 +72,7 @@ private:
   ImageCtxT** m_src_image_ctx;
   Context* m_on_finish;
 
-  std::unique_ptr<FormatInterface> m_format;
+  std::unique_ptr<FormatInterface<ImageCtxT>> m_format;
 
   uint64_t m_image_size = 0;
   SnapInfos m_snap_infos;

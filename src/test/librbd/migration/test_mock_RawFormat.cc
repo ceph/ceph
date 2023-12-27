@@ -18,7 +18,25 @@ namespace {
 struct MockTestImageCtx : public MockImageCtx {
   MockTestImageCtx(ImageCtx &image_ctx) : MockImageCtx(image_ctx) {
   }
+
+  static MockTestImageCtx *create(const std::string &image_name,
+                                  const std::string &image_id,
+                                  librados::snap_t snap_id, librados::IoCtx& p,
+                                  bool read_only) {
+    auto ictx = ImageCtx::create(
+            image_name, image_id, snap_id, p, read_only);
+    auto mock_image_ctx = new MockTestImageCtx(*ictx);
+    mock_image_ctx->m_image_ctx = ictx;
+    m_ictxs.insert(mock_image_ctx);
+    return mock_image_ctx;
+  }
+
+  ImageCtx* m_image_ctx = nullptr;
+
+  static std::set<MockTestImageCtx *> m_ictxs;
 };
+
+std::set<librbd::MockTestImageCtx *> MockTestImageCtx::m_ictxs;
 
 } // anonymous namespace
 
@@ -27,7 +45,8 @@ namespace migration {
 template<>
 struct SourceSpecBuilder<librbd::MockTestImageCtx> {
 
-  MOCK_CONST_METHOD3(build_snapshot, int(const json_spirit::mObject&, uint64_t,
+  MOCK_CONST_METHOD4(build_snapshot, int(librbd::MockTestImageCtx*,
+                                         const json_spirit::mObject&, uint64_t,
                                          std::shared_ptr<SnapshotInterface>*));
 
 };
@@ -64,14 +83,28 @@ public:
     json_spirit::mObject stream_obj;
     stream_obj["type"] = "file";
     json_object["stream"] = stream_obj;
+
+    MockTestImageCtx::m_ictxs.clear();
+  }
+
+  void TearDown() {
+    for (auto iter = MockTestImageCtx::m_ictxs.begin();
+         iter != MockTestImageCtx::m_ictxs.end(); ++iter) {
+      auto mock_image_ctx = *iter;
+      auto ictx = mock_image_ctx->m_image_ctx;
+      delete mock_image_ctx;
+      ictx->state->close();
+    }
+
+    TestMockFixture::TearDown();
   }
 
   void expect_build_snapshot(MockSourceSpecBuilder& mock_source_spec_builder,
                              uint64_t index,
                              MockSnapshotInterface* mock_snapshot_interface,
                              int r) {
-    EXPECT_CALL(mock_source_spec_builder, build_snapshot(_, index, _))
-      .WillOnce(WithArgs<2>(Invoke([mock_snapshot_interface, r]
+    EXPECT_CALL(mock_source_spec_builder, build_snapshot(_, _, index, _))
+      .WillOnce(WithArgs<3>(Invoke([mock_snapshot_interface, r]
         (std::shared_ptr<SnapshotInterface>* ptr) {
           ptr->reset(mock_snapshot_interface);
           return r;
@@ -82,6 +115,13 @@ public:
                             int r) {
     EXPECT_CALL(mock_snapshot_interface, open(_, _))
       .WillOnce(WithArg<1>(Invoke([r](Context* ctx) { ctx->complete(r); })));
+  }
+
+  void expect_snapshot_open(MockSnapshotInterface& mock_snapshot_interface,
+                            Context** ctx) {
+    EXPECT_CALL(mock_snapshot_interface, open(_, _))
+            .WillOnce(WithArg<1>(Invoke(
+                    [ctx](Context* ctx2) { *ctx = ctx2; })));
   }
 
   void expect_snapshot_close(MockSnapshotInterface& mock_snapshot_interface,
@@ -136,7 +176,8 @@ public:
 };
 
 TEST_F(TestMockMigrationRawFormat, OpenClose) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -149,11 +190,11 @@ TEST_F(TestMockMigrationRawFormat, OpenClose) {
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_raw_format.open(&ctx1);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -162,7 +203,8 @@ TEST_F(TestMockMigrationRawFormat, OpenClose) {
 }
 
 TEST_F(TestMockMigrationRawFormat, OpenError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx = nullptr;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -171,21 +213,25 @@ TEST_F(TestMockMigrationRawFormat, OpenError) {
   expect_build_snapshot(mock_source_spec_builder, CEPH_NOSNAP,
                         mock_snapshot_interface, 0);
 
-  expect_snapshot_open(*mock_snapshot_interface, -ENOENT);
+  Context* open_ctx;
+  expect_snapshot_open(*mock_snapshot_interface, &open_ctx);
 
-  expect_snapshot_close(*mock_snapshot_interface, 0);
-  expect_close(mock_image_ctx, 0);
-
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx;
-  mock_raw_format.open(&ctx);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx);
+
+  expect_snapshot_close(*mock_snapshot_interface, 0);
+  expect_close(*mock_src_image_ctx, 0);
+
+  open_ctx->complete(-ENOENT);
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
 TEST_F(TestMockMigrationRawFormat, OpenSnapshotError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx = nullptr;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -198,27 +244,31 @@ TEST_F(TestMockMigrationRawFormat, OpenSnapshotError) {
   expect_build_snapshot(mock_source_spec_builder, 1,
                         mock_snapshot_interface_1, 0);
 
-  expect_snapshot_open(*mock_snapshot_interface_1, -ENOENT);
+  Context* open_ctx;
+  expect_snapshot_open(*mock_snapshot_interface_1, &open_ctx);
   expect_snapshot_open(*mock_snapshot_interface_head, 0);
-
-  expect_snapshot_close(*mock_snapshot_interface_1, 0);
-  expect_snapshot_close(*mock_snapshot_interface_head, 0);
-  expect_close(mock_image_ctx, 0);
 
   json_spirit::mArray snapshots;
   snapshots.push_back(json_spirit::mObject{});
   json_object["snapshots"] = snapshots;
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx;
-  mock_raw_format.open(&ctx);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx);
+
+  expect_snapshot_close(*mock_snapshot_interface_1, 0);
+  expect_snapshot_close(*mock_snapshot_interface_head, 0);
+  expect_close(*mock_src_image_ctx, 0);
+  open_ctx->complete(-ENOENT);
+
   ASSERT_EQ(-ENOENT, ctx.wait());
 }
 
 TEST_F(TestMockMigrationRawFormat, GetSnapshots) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -231,15 +281,15 @@ TEST_F(TestMockMigrationRawFormat, GetSnapshots) {
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_raw_format.open(&ctx1);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
-  FormatInterface::SnapInfos snap_infos;
+  SnapInfos snap_infos;
   mock_raw_format.get_snapshots(&snap_infos, &ctx2);
   ASSERT_EQ(0, ctx2.wait());
   ASSERT_TRUE(snap_infos.empty());
@@ -250,7 +300,8 @@ TEST_F(TestMockMigrationRawFormat, GetSnapshots) {
 }
 
 TEST_F(TestMockMigrationRawFormat, GetImageSize) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -266,11 +317,11 @@ TEST_F(TestMockMigrationRawFormat, GetImageSize) {
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_raw_format.open(&ctx1);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -285,7 +336,8 @@ TEST_F(TestMockMigrationRawFormat, GetImageSize) {
 }
 
 TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshotDNE) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -298,11 +350,11 @@ TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshotDNE) {
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_raw_format.open(&ctx1);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -316,7 +368,8 @@ TEST_F(TestMockMigrationRawFormat, GetImageSizeSnapshotDNE) {
 }
 
 TEST_F(TestMockMigrationRawFormat, Read) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -333,11 +386,11 @@ TEST_F(TestMockMigrationRawFormat, Read) {
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_raw_format.open(&ctx1);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -356,7 +409,8 @@ TEST_F(TestMockMigrationRawFormat, Read) {
 }
 
 TEST_F(TestMockMigrationRawFormat, ListSnaps) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -376,11 +430,11 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_raw_format.open(&ctx1);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -399,7 +453,8 @@ TEST_F(TestMockMigrationRawFormat, ListSnaps) {
 }
 
 TEST_F(TestMockMigrationRawFormat, ListSnapsError) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -420,11 +475,11 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsError) {
 
   expect_snapshot_close(*mock_snapshot_interface, 0);
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_raw_format.open(&ctx1);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;
@@ -439,7 +494,8 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsError) {
 }
 
 TEST_F(TestMockMigrationRawFormat, ListSnapsMerge) {
-  MockTestImageCtx mock_image_ctx(*m_image_ctx);
+  MockTestImageCtx mock_dst_image_ctx(*m_image_ctx);
+  MockTestImageCtx* mock_src_image_ctx;
 
   InSequence seq;
   MockSourceSpecBuilder mock_source_spec_builder;
@@ -493,11 +549,11 @@ TEST_F(TestMockMigrationRawFormat, ListSnapsMerge) {
   snapshots.push_back(json_spirit::mObject{});
   json_object["snapshots"] = snapshots;
 
-  MockRawFormat mock_raw_format(&mock_image_ctx, json_object,
-                                &mock_source_spec_builder);
+  MockRawFormat mock_raw_format(json_object, &mock_source_spec_builder);
 
   C_SaferCond ctx1;
-  mock_raw_format.open(&ctx1);
+  mock_raw_format.open(mock_dst_image_ctx.md_ctx, &mock_dst_image_ctx,
+                       &mock_src_image_ctx, &ctx1);
   ASSERT_EQ(0, ctx1.wait());
 
   C_SaferCond ctx2;

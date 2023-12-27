@@ -47,20 +47,21 @@ struct LookupTable {
 } // namespace qcow_format
 
 template <typename ImageCtxT>
-class QCOWFormat : public FormatInterface {
+class QCOWFormat : public FormatInterface<ImageCtxT> {
 public:
   static QCOWFormat* create(
-      ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
+      const json_spirit::mObject& json_object,
       const SourceSpecBuilder<ImageCtxT>* source_spec_builder) {
-    return new QCOWFormat(image_ctx, json_object, source_spec_builder);
+    return new QCOWFormat(json_object, source_spec_builder);
   }
 
-  QCOWFormat(ImageCtxT* image_ctx, const json_spirit::mObject& json_object,
+  QCOWFormat(const json_spirit::mObject& json_object,
              const SourceSpecBuilder<ImageCtxT>* source_spec_builder);
   QCOWFormat(const QCOWFormat&) = delete;
   QCOWFormat& operator=(const QCOWFormat&) = delete;
 
-  void open(Context* on_finish) override;
+  void open(librados::IoCtx& dst_io_ctx, ImageCtxT* dst_image_ctx,
+            ImageCtxT** src_image_ctx, Context* on_finish) override;
   void close(Context* on_finish) override;
 
   void get_snapshots(SnapInfos* snap_infos, Context* on_finish) override;
@@ -143,7 +144,6 @@ private:
   json_spirit::mObject m_json_object;
   const SourceSpecBuilder<ImageCtxT>* m_source_spec_builder;
 
-  boost::asio::strand<boost::asio::io_context::executor_type> m_strand;
   std::shared_ptr<StreamInterface> m_stream;
 
   bufferlist m_bl;
