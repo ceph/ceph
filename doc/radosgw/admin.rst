@@ -136,41 +136,56 @@ For example::
 Get User Info
 -------------
 
-To get information about a user, you must specify ``user info`` and the user ID
-(``--uid={username}``) . :: 
+To get information about a user, specify ``user info`` and the user ID
+(``--uid={username}``). Use a command of the following form: 
 
-	radosgw-admin user info --uid=johndoe
+.. prompt:: bash
 
+   radosgw-admin user info --uid=johndoe
 
 
 Modify User Info
 ----------------
 
-To modify information about a user, you must specify the user ID (``--uid={username}``)
-and the attributes you want to modify. Typical modifications are to keys and secrets,
-email addresses, display names and access levels. For example:: 
+To modify information about a user, specify the user ID (``--uid={username}``)
+and the attributes that you want to modify. Typical modifications are made to
+keys and secrets, email addresses, display names, and access levels. Use a
+command of the following form: 
 
-	radosgw-admin user modify --uid=johndoe --display-name="John E. Doe"
+.. prompt:: bash
 
-To modify subuser values, specify ``subuser modify``, user ID and the subuser ID. For example::
+   radosgw-admin user modify --uid=johndoe --display-name="John E. Doe"
 
-	radosgw-admin subuser modify --uid=johndoe --subuser=johndoe:swift --access=full
+To modify subuser values, specify ``subuser modify``, user ID and the subuser
+ID. Use a command of the following form:
+
+.. prompt:: bash
+
+   radosgw-admin subuser modify --uid=johndoe --subuser=johndoe:swift --access=full
 
 
-User Enable/Suspend
--------------------
+User Suspend
+------------
 
-When you create a user, the user is enabled by default. However, you may suspend
-user  privileges and re-enable them at a later time. To suspend a user, specify
-``user suspend`` and the user ID. ::
+When a user is created, the user is enabled by default. However, it is possible
+to suspend user privileges and to re-enable them at a later time. To suspend a
+user, specify ``user suspend`` and the user ID in a command of the following
+form:
 
-	radosgw-admin user suspend --uid=johndoe
+.. prompt:: bash
 
-To re-enable a suspended user, specify ``user enable`` and the user ID. :: 
+   radosgw-admin user suspend --uid=johndoe
 
-	radosgw-admin user enable --uid=johndoe
+User Enable
+-----------
+To re-enable a suspended user, provide ``user enable`` and specify the user ID
+in a command of the following form:
+
+.. prompt:: bash
+
+   radosgw-admin user enable --uid=johndoe
 	
-.. note:: Disabling the user disables the subuser.
+.. note:: Disabling the user also disables any subusers.
 
 
 Remove a User
