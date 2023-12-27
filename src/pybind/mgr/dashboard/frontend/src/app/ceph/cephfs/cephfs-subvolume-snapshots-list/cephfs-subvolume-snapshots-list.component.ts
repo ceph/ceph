@@ -3,10 +3,19 @@ import { BehaviorSubject, Observable, forkJoin, of } from 'rxjs';
 import { catchError, shareReplay, switchMap, tap } from 'rxjs/operators';
 import { CephfsSubvolumeGroupService } from '~/app/shared/api/cephfs-subvolume-group.service';
 import { CephfsSubvolumeService } from '~/app/shared/api/cephfs-subvolume.service';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
+import { Icons } from '~/app/shared/enum/icons.enum';
+import { CdTableAction } from '~/app/shared/models/cd-table-action';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '~/app/shared/models/cd-table-fetch-data-context';
 import { CephfsSubvolume, SubvolumeSnapshot } from '~/app/shared/models/cephfs-subvolume.model';
+import { CephfsSubvolumeSnapshotsFormComponent } from './cephfs-subvolume-snapshots-form/cephfs-subvolume-snapshots-form.component';
+import { ModalService } from '~/app/shared/services/modal.service';
+import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
+import { Permissions } from '~/app/shared/models/permissions';
+import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
+import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
 
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
@@ -18,6 +27,9 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
 
   context: CdTableFetchDataContext;
   columns: CdTableColumn[] = [];
+  tableActions: CdTableAction[];
+  selection = new CdTableSelection();
+  permissions: Permissions;
 
   subVolumes$: Observable<CephfsSubvolume[]>;
   snapshots$: Observable<any[]>;
@@ -37,8 +49,14 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
 
   constructor(
     private cephfsSubvolumeGroupService: CephfsSubvolumeGroupService,
-    private cephfsSubvolumeService: CephfsSubvolumeService
-  ) {}
+    private cephfsSubvolumeService: CephfsSubvolumeService,
+    private actionLabels: ActionLabelsI18n,
+    private modalService: ModalService,
+    private authStorageService: AuthStorageService,
+    private cdDatePipe: CdDatePipe
+  ) {
+    this.permissions = this.authStorageService.getPermissions();
+  }
 
   ngOnInit(): void {
     this.columns = [
@@ -51,7 +69,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         name: $localize`Created`,
         prop: 'info.created_at',
         flexGrow: 1,
-        cellTransformation: CellTemplate.timeAgo
+        pipe: this.cdDatePipe
       },
       {
         name: $localize`Pending Clones`,
@@ -64,6 +82,15 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
             yes: { class: 'badge-info' }
           }
         }
+      }
+    ];
+
+    this.tableActions = [
+      {
+        name: this.actionLabels.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.openModal()
       }
     ];
 
@@ -144,5 +171,23 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
 
   fetchData() {
     this.snapshotSubject.next([]);
+  }
+
+  openModal(edit = false) {
+    this.modalService.show(
+      CephfsSubvolumeSnapshotsFormComponent,
+      {
+        fsName: this.fsName,
+        subVolumeName: this.activeSubVolumeName,
+        subVolumeGroupName: this.activeGroupName,
+        subVolumeGroups: this.subvolumeGroupList,
+        isEdit: edit
+      },
+      { size: 'lg' }
+    );
+  }
+
+  updateSelection(selection: CdTableSelection) {
+    this.selection = selection;
   }
 }

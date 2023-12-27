@@ -1,15 +1,12 @@
-import { DatePipe } from '@angular/common';
-
 import moment from 'moment';
 
 import { CdDatePipe } from './cd-date.pipe';
 
 describe('CdDatePipe', () => {
-  const datePipe = new DatePipe('en-US');
-  let pipe = new CdDatePipe(datePipe);
+  let pipe = new CdDatePipe();
 
   it('create an instance', () => {
-    pipe = new CdDatePipe(datePipe);
+    pipe = new CdDatePipe();
     expect(pipe).toBeTruthy();
   });
 
@@ -18,7 +15,12 @@ describe('CdDatePipe', () => {
   });
 
   it('transforms with some date', () => {
-    const result = moment(1527085564486).format('M/D/YY LTS');
+    const result = moment
+      .parseZone(moment.unix(1527085564486))
+      .utc()
+      .utcOffset(moment().utcOffset())
+      .local()
+      .format('D/M/YY hh:mm A');
     expect(pipe.transform(1527085564486)).toBe(result);
   });
 });
