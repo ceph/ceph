@@ -291,7 +291,7 @@ int DiffIterate<I>::execute() {
   uint64_t left = m_length;
 
   while (left > 0) {
-    uint64_t period_off = off - (off % period);
+    uint64_t period_off = round_down_to(off, period);
     uint64_t read_len = min(period_off + period - off, left);
 
     if (fast_diff_enabled) {
