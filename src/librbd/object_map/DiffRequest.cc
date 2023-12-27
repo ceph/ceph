@@ -21,6 +21,29 @@ namespace object_map {
 using util::create_rados_callback;
 
 template <typename I>
+DiffRequest<I>::DiffRequest(I* image_ctx,
+                            uint64_t snap_id_start, uint64_t snap_id_end,
+                            uint64_t start_object_no, uint64_t end_object_no,
+                            BitVector<2>* object_diff_state,
+                            Context* on_finish)
+    : m_image_ctx(image_ctx), m_snap_id_start(snap_id_start),
+      m_snap_id_end(snap_id_end), m_start_object_no(start_object_no),
+      m_end_object_no(end_object_no), m_object_diff_state(object_diff_state),
+      m_on_finish(on_finish) {
+  auto cct = m_image_ctx->cct;
+  ldout(cct, 10) << "snap_id_start=" << m_snap_id_start
+                 << ", snap_id_end=" << m_snap_id_end
+                 << ", start_object_no=" << m_start_object_no
+                 << ", end_object_no=" << m_end_object_no
+                 << dendl;
+}
+
+template <typename I>
+bool DiffRequest<I>::is_diff_iterate() const {
+  return m_start_object_no != 0 || m_end_object_no != UINT64_MAX;
+}
+
+template <typename I>
 void DiffRequest<I>::send() {
   auto cct = m_image_ctx->cct;
 
@@ -30,19 +53,34 @@ void DiffRequest<I>::send() {
                << "snap_id_end=" << m_snap_id_end << dendl;
     finish(-EINVAL);
     return;
-  } else if (m_snap_id_start == m_snap_id_end) {
-    // no delta between the same snapshot
-    finish(0);
+  }
+  if (m_start_object_no == UINT64_MAX || m_start_object_no > m_end_object_no ||
+      (m_start_object_no != 0 && m_end_object_no == UINT64_MAX)) {
+    lderr(cct) << "invalid start/end object numbers: "
+               << "start_object_no=" << m_start_object_no << ", "
+               << "end_object_no=" << m_end_object_no << dendl;
+    finish(-EINVAL);
     return;
   }
 
   m_object_diff_state->clear();
 
+  if (m_snap_id_start == m_snap_id_end) {
+    // no delta between the same snapshot
+    finish(0);
+    return;
+  }
+  if (m_start_object_no == m_end_object_no) {
+    // no objects in the provided range (half-open)
+    finish(0);
+    return;
+  }
+
   // collect all the snap ids in the provided range (inclusive) unless
   // this is diff-iterate against the beginning of time, in which case
   // only the end version matters
   std::shared_lock image_locker{m_image_ctx->image_lock};
-  if (!m_diff_iterate_range || m_snap_id_start != 0) {
+  if (!is_diff_iterate() || m_snap_id_start != 0) {
     if (m_snap_id_start != 0) {
       m_snap_ids.insert(m_snap_id_start);
     }
@@ -178,10 +216,14 @@ void DiffRequest<I>::handle_load_object_map(int r) {
     m_object_map.resize(num_objs);
   }
 
+  uint64_t start_object_no, end_object_no;
   uint64_t prev_object_diff_state_size = m_object_diff_state->size();
-  if (m_diff_iterate_range) {
-    if (m_object_diff_state->size() != m_object_map.size()) {
-      m_object_diff_state->resize(m_object_map.size());
+  if (is_diff_iterate()) {
+    start_object_no = std::min(m_start_object_no, m_object_map.size());
+    end_object_no = std::min(m_end_object_no, m_object_map.size());
+    uint64_t num_objs_in_range = end_object_no - start_object_no;
+    if (m_object_diff_state->size() != num_objs_in_range) {
+      m_object_diff_state->resize(num_objs_in_range);
     }
   } else {
     // for deep-copy, the object diff state should be the largest of
@@ -194,21 +236,23 @@ void DiffRequest<I>::handle_load_object_map(int r) {
       // diff state
       m_object_map.resize(m_object_diff_state->size());
     }
+    start_object_no = 0;
+    end_object_no = m_object_diff_state->size();
   }
 
-  uint64_t overlap = std::min(m_object_map.size(), prev_object_diff_state_size);
-  auto it = m_object_map.begin();
-  auto overlap_end_it = it + overlap;
+  uint64_t overlap = std::min(m_object_diff_state->size(),
+                              prev_object_diff_state_size);
+  auto it = m_object_map.begin() + start_object_no;
   auto diff_it = m_object_diff_state->begin();
-  uint64_t i = 0;
-  for (; it != overlap_end_it; ++it, ++diff_it, ++i) {
+  uint64_t ono = start_object_no;
+  for (; ono < start_object_no + overlap; ++it, ++diff_it, ++ono) {
     uint8_t object_map_state = *it;
     uint8_t prev_object_diff_state = *diff_it;
     switch (prev_object_diff_state) {
     case DIFF_STATE_HOLE:
       if (object_map_state != OBJECT_NONEXISTENT) {
         // stay in HOLE on intermediate snapshots for diff-iterate
-        if (!m_diff_iterate_range || m_current_snap_id == m_snap_id_end) {
+        if (!is_diff_iterate() || m_current_snap_id == m_snap_id_end) {
           *diff_it = DIFF_STATE_DATA_UPDATED;
         }
       }
@@ -234,7 +278,7 @@ void DiffRequest<I>::handle_load_object_map(int r) {
       ceph_abort();
     }
 
-    ldout(cct, 20) << "object state: " << i << " "
+    ldout(cct, 20) << "object state: " << ono << " "
                    << static_cast<uint32_t>(prev_object_diff_state)
                    << "->" << static_cast<uint32_t>(*diff_it) << " ("
                    << static_cast<uint32_t>(object_map_state) << ")"
@@ -242,8 +286,9 @@ void DiffRequest<I>::handle_load_object_map(int r) {
   }
   ldout(cct, 20) << "computed overlap diffs" << dendl;
 
-  auto end_it = m_object_map.end();
-  for (; it != end_it; ++it, ++diff_it, ++i) {
+  ceph_assert(diff_it == m_object_diff_state->end() ||
+              end_object_no <= m_object_map.size());
+  for (; ono < end_object_no; ++it, ++diff_it, ++ono) {
     uint8_t object_map_state = *it;
     if (object_map_state == OBJECT_NONEXISTENT) {
       *diff_it = DIFF_STATE_HOLE;
@@ -251,7 +296,7 @@ void DiffRequest<I>::handle_load_object_map(int r) {
       // diffing against the beginning of time or image was grown
       // (implicit) starting state is HOLE, this is the first object
       // map after
-      if (m_diff_iterate_range) {
+      if (is_diff_iterate()) {
         // for diff-iterate, if the object is discarded prior to or
         // in the end version, result should be HOLE
         // since DATA_UPDATED can transition only to HOLE_UPDATED,
@@ -278,12 +323,13 @@ void DiffRequest<I>::handle_load_object_map(int r) {
       }
     }
 
-    ldout(cct, 20) << "object state: " << i << " "
+    ldout(cct, 20) << "object state: " << ono << " "
                    << "->" << static_cast<uint32_t>(*diff_it) << " ("
                    << static_cast<uint32_t>(*it) << ")" << dendl;
   }
   ldout(cct, 20) << "computed resize diffs" << dendl;
 
+  ceph_assert(diff_it == m_object_diff_state->end());
   std::shared_lock image_locker{m_image_ctx->image_lock};
   load_object_map(&image_locker);
 }

@@ -92,7 +92,7 @@ struct DiffRequest<MockTestImageCtx> {
   static DiffRequest* s_instance;
   static DiffRequest* create(MockTestImageCtx *image_ctx,
                              uint64_t snap_id_start, uint64_t snap_id_end,
-                             bool diff_iterate_range,
+                             uint64_t start_object_no, uint64_t end_object_no,
                              BitVector<2>* object_diff_state,
                              Context* on_finish) {
     ceph_assert(s_instance != nullptr);

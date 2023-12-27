@@ -212,6 +212,29 @@ int DiffIterate<I>::diff_iterate(I *ictx,
 }
 
 template <typename I>
+std::pair<uint64_t, uint64_t> DiffIterate<I>::calc_object_diff_range() {
+  uint64_t period = m_image_ctx.get_stripe_period();
+  uint64_t first_period_off = round_down_to(m_offset, period);
+  uint64_t last_period_off = round_down_to(m_offset + m_length - 1, period);
+
+  striper::LightweightObjectExtents object_extents;
+  if (first_period_off != last_period_off) {
+    // map only the tail of the first period and the front of the last
+    // period instead of the entire range for efficiency
+    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout,
+                             m_offset, first_period_off + period - m_offset,
+                             0, 0, &object_extents);
+    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout,
+                        last_period_off, m_offset + m_length - last_period_off,
+                        0, 0, &object_extents);
+  } else {
+    Striper::file_to_extents(m_image_ctx.cct, &m_image_ctx.layout, m_offset,
+                             m_length, 0, 0, &object_extents);
+  }
+  return {object_extents.front().object_no, object_extents.back().object_no + 1};
+}
+
+template <typename I>
 int DiffIterate<I>::execute() {
   CephContext* cct = m_image_ctx.cct;
 
@@ -245,20 +268,24 @@ int DiffIterate<I>::execute() {
 
   int r;
   bool fast_diff_enabled = false;
+  uint64_t start_object_no, end_object_no;
   BitVector<2> object_diff_state;
   interval_set<uint64_t> parent_diff;
   if (m_whole_object) {
+    std::tie(start_object_no, end_object_no) = calc_object_diff_range();
+
     C_SaferCond ctx;
     auto req = object_map::DiffRequest<I>::create(&m_image_ctx, from_snap_id,
-                                                  end_snap_id, true,
+                                                  end_snap_id, start_object_no,
+                                                  end_object_no,
                                                   &object_diff_state, &ctx);
     req->send();
-
     r = ctx.wait();
     if (r < 0) {
       ldout(cct, 5) << "fast diff disabled" << dendl;
     } else {
       ldout(cct, 5) << "fast diff enabled" << dendl;
+      ceph_assert(object_diff_state.size() == end_object_no - start_object_no);
       fast_diff_enabled = true;
 
       // check parent overlap only if we are comparing to the beginning of time
@@ -308,7 +335,8 @@ int DiffIterate<I>::execute() {
       io::SparseExtents aggregate_sparse_extents;
       for (auto& [object, extents] : object_extents) {
         const uint64_t object_no = extents.front().objectno;
-        uint8_t diff_state = object_diff_state[object_no];
+        ceph_assert(object_no >= start_object_no && object_no < end_object_no);
+        uint8_t diff_state = object_diff_state[object_no - start_object_no];
         ldout(cct, 20) << "object " << object << ": diff_state="
                        << (int)diff_state << dendl;
 
