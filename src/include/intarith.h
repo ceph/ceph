@@ -25,6 +25,10 @@ constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> div_round_up(T n
   return (n + d - 1) / d;
 }
 
+template<typename T, typename U>
+constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> round_down_to(T n, U d) {
+  return n - n % d;
+}
 
 template<typename T, typename U>
 constexpr inline std::make_unsigned_t<std::common_type_t<T, U>> round_up_to(T n, U d) {
