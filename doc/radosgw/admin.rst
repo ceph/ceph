@@ -93,17 +93,23 @@ The creation of a user entails the creation of an ``access_key`` and a
 Create a Subuser
 ----------------
 
-To create a subuser (Swift interface) for the user, you must specify the user ID
-(``--uid={username}``), a subuser ID and the access level for the subuser. ::
+To create a subuser (a user of the Swift interface) for the user, specify the
+user ID (``--uid={username}``), a subuser ID, and the subuser's access level:
 
-  radosgw-admin subuser create --uid={uid} --subuser={uid} --access=[ read | write | readwrite | full ]
+.. prompt:: bash
 
-For example::
+   radosgw-admin subuser create --uid={uid} --subuser={uid} --access=[ read | write | readwrite | full ]
 
-  radosgw-admin subuser create --uid=johndoe --subuser=johndoe:swift --access=full
+For example:
+
+.. prompt:: bash
+
+   radosgw-admin subuser create --uid=johndoe --subuser=johndoe:swift --access=full
 
 
-.. note:: ``full`` is not ``readwrite``, as it also includes the access control policy.
+.. note:: ``full`` is not the same as ``readwrite``. The ``full`` access level
+   includes ``read`` and ``write``, but it also includes the access control
+   policy.
 
 .. code-block:: javascript
 
