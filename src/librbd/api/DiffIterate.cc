@@ -293,10 +293,14 @@ int DiffIterate<I>::execute() {
         std::shared_lock image_locker{m_image_ctx.image_lock};
         uint64_t overlap = 0;
         m_image_ctx.get_parent_overlap(m_image_ctx.snap_id, &overlap);
-        if (m_image_ctx.parent && overlap > 0) {
+        io::Extents parent_extents = {{m_offset, m_length}};
+        if (m_image_ctx.parent &&
+            m_image_ctx.prune_parent_extents(parent_extents, overlap) > 0) {
           ldout(cct, 10) << " first getting parent diff" << dendl;
-          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr, 0, overlap,
-                                  true, true, &simple_diff_cb, &parent_diff);
+          DiffIterate diff_parent(*m_image_ctx.parent, {}, nullptr,
+                                  parent_extents[0].first,
+                                  parent_extents[0].second, true, true,
+                                  &simple_diff_cb, &parent_diff);
           r = diff_parent.execute();
           if (r < 0) {
             return r;
