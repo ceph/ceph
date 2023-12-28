@@ -57,6 +57,11 @@ bool ScrubMachine::is_reserving() const
   return state_cast<const ReservingReplicas*>();
 }
 
+bool ScrubMachine::is_primary_idle() const
+{
+  return state_cast<const PrimaryIdle*>();
+}
+
 bool ScrubMachine::is_accepting_updates() const
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
@@ -150,6 +155,7 @@ sc::result PrimaryIdle::react(const StartScrub&)
 {
   dout(10) << "PrimaryIdle::react(const StartScrub&)" << dendl;
   DECLARE_LOCALS;
+  scrbr->reset_epoch();
   return transit<ReservingReplicas>();
 }
 
@@ -157,6 +163,7 @@ sc::result PrimaryIdle::react(const AfterRepairScrub&)
 {
   dout(10) << "PrimaryIdle::react(const AfterRepairScrub&)" << dendl;
   DECLARE_LOCALS;
+  scrbr->reset_epoch();
   return transit<ReservingReplicas>();
 }
 

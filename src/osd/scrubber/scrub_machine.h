@@ -244,6 +244,7 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   void assert_not_in_session() const;
   [[nodiscard]] bool is_reserving() const;
   [[nodiscard]] bool is_accepting_updates() const;
+  [[nodiscard]] bool is_primary_idle() const;
 
   // elapsed time for the currently active scrub.session
   ceph::timespan get_time_scrubbing() const;

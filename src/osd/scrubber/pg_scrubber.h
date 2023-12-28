@@ -556,7 +556,7 @@ class PgScrubber : public ScrubPgIF,
    *  - the epoch when started;
    *  - the depth of the scrub requested (from the PG_STATE variable)
    */
-  void reset_epoch(epoch_t epoch_queued);
+  void reset_epoch() final;
 
   void run_callbacks();
 
