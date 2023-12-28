@@ -299,7 +299,8 @@ def task(ctx,config):
                     'port':endpoint.port,
                     'host':endpoint.dns_name,
                     'zonegroup':'default',
-                    'cluster':'noname'
+                    'cluster':'noname',
+                    'version':'v2'
                     },
                 's3 main':{}
             }
