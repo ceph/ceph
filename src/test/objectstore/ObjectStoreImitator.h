@@ -354,4 +354,5 @@ public:
   }
   objectstore_perf_stat_t get_cur_stats() override { return {}; }
   const PerfCounters *get_perf_counters() const override { return nullptr; };
+  void refresh_perf_counters() override {}
 };
