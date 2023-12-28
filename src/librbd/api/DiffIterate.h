@@ -55,10 +55,6 @@ private:
   std::pair<uint64_t, uint64_t> calc_object_diff_range();
 
   int execute();
-
-  int diff_object_map(uint64_t from_snap_id, uint64_t to_snap_id,
-                      BitVector<2>* object_diff_state);
-
 };
 
 } // namespace api
