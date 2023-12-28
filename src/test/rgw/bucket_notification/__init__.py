@@ -1,5 +1,6 @@
 import configparser
 import os
+from .api import admin
 
 def setup():
     cfg = configparser.RawConfigParser()
@@ -30,6 +31,17 @@ def setup():
 
     global default_cluster
     default_cluster = defaults.get("cluster")
+    
+    version = defaults.get("version")
+    if version == "v1":
+        _, result = admin(['zonegroup', 'modify', '--disable-feature=notification_v2'], default_cluster)
+        if result != 0:
+            raise RuntimeError('Failed to disable v2 notifications feature. error: '+str(result))
+        _, result = admin(['period', 'update', '--commit'], default_cluster)
+        if result != 0:
+            raise RuntimeError('Failed to commit changes to period. error: '+str(result))
+    elif version != "v2":
+        raise RuntimeError('Invalid notification version: '+version)
 
     global main_access_key
     main_access_key = cfg.get('s3 main',"access_key")
