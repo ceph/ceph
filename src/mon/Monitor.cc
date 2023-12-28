@@ -6618,6 +6618,7 @@ void Monitor::notify_new_monmap(bool can_change_external_state, bool remove_rank
 
   if (is_stretch_mode()) {
     if (!monmap->stretch_marked_down_mons.empty()) {
+      dout(20) << __func__ << " stretch_marked_down_mons: " << monmap->stretch_marked_down_mons << dendl;
       set_degraded_stretch_mode();
     }
   }
@@ -6655,7 +6656,9 @@ void Monitor::try_engage_stretch_mode()
   dout(20) << __func__ << dendl;
   if (stretch_mode_engaged) return;
   if (!osdmon()->is_readable()) {
+    dout(20) << "osdmon is not readable" << dendl;
     osdmon()->wait_for_readable_ctx(new CMonEnableStretchMode(this));
+    return;
   }
   if (osdmon()->osdmap.stretch_mode_enabled &&
       monmap->stretch_mode_enabled) {
@@ -6723,10 +6726,14 @@ struct CMonGoRecovery : public Context {
 void Monitor::go_recovery_stretch_mode()
 {
   dout(20) << __func__ << dendl;
+  dout(20) << "is_leader(): " << is_leader() << dendl;
   if (!is_leader()) return;
+  dout(20) << "is_degraded_stretch_mode(): " << is_degraded_stretch_mode() << dendl;
   if (!is_degraded_stretch_mode()) return;
+  dout(20) << "is_recovering_stretch_mode(): " << is_recovering_stretch_mode() << dendl;
   if (is_recovering_stretch_mode()) return;
-
+  dout(20) << "dead_mon_buckets.size(): " << dead_mon_buckets.size() << dendl;
+  dout(20) << "dead_mon_buckets: " << dead_mon_buckets << dendl;
   if (dead_mon_buckets.size()) {
     ceph_assert( 0 == "how did we try and do stretch recovery while we have dead monitor buckets?");
     // we can't recover if we are missing monitors in a zone!
@@ -6734,12 +6741,15 @@ void Monitor::go_recovery_stretch_mode()
   }
   
   if (!osdmon()->is_readable()) {
+    dout(20) << "osdmon is not readable" << dendl;
     osdmon()->wait_for_readable_ctx(new CMonGoRecovery(this));
     return;
   }
 
   if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
     osdmon()->wait_for_writeable_ctx(new CMonGoRecovery(this));
+    return;
   }
   osdmon()->trigger_recovery_stretch_mode();
 }
@@ -6775,10 +6785,14 @@ void Monitor::maybe_go_degraded_stretch_mode()
 						   &matched_down_mons);
   if (dead) {
     if (!osdmon()->is_writeable()) {
+      dout(20) << "osdmon is not writeable" << dendl;
       osdmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+      return;
     }
     if (!monmon()->is_writeable()) {
+      dout(20) << "monmon is not writeable" << dendl;
       monmon()->wait_for_writeable_ctx(new CMonGoDegraded(this));
+      return;
     }
     trigger_degraded_stretch_mode(matched_down_mons, matched_down_buckets);
   }
@@ -6807,6 +6821,7 @@ void Monitor::trigger_degraded_stretch_mode(const set<string>& dead_mons,
 
 void Monitor::set_degraded_stretch_mode()
 {
+  dout(20) << __func__ << dendl;
   degraded_stretch_mode = true;
   recovering_stretch_mode = false;
   osdmon()->set_degraded_stretch_mode();
@@ -6827,10 +6842,14 @@ void Monitor::trigger_healthy_stretch_mode()
   if (!is_degraded_stretch_mode()) return;
   if (!is_leader()) return;
   if (!osdmon()->is_writeable()) {
+    dout(20) << "osdmon is not writeable" << dendl;
     osdmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+    return;
   }
   if (!monmon()->is_writeable()) {
+    dout(20) << "monmon is not writeable" << dendl;
     monmon()->wait_for_writeable_ctx(new CMonGoHealthy(this));
+    return;
   }
 
   ceph_assert(osdmon()->osdmap.recovering_stretch_mode);
