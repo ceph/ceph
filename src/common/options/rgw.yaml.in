@@ -3965,3 +3965,27 @@ options:
   see_also:
   - rgw_bucket_counters_cache
   with_legacy: true
+- name: rgw_kafka_connection_idle
+  type: uint 
+  level: advanced
+  desc: Time in seconds to delete idle kafka connections
+  long_desc: A conection will be considered "idle" if no messages
+    are sent to it for more than the time defined.
+    Note that the connection will not be considered idle, even if it is down,
+    as long as there are attempts to send messages to it.
+  default: 30
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_kafka_sleep_timeout
+  type: uint 
+  level: advanced
+  desc: Time in milliseconds to sleep while polling for kafka replies
+  long_desc: This will be used to prevent busy waiting for the kafka replies
+    As well as for the cases where the broker is down and we try to reconnect.
+    The same values times 3 will be used to sleep if there were no messages
+    sent or received across all kafka connections
+  default: 10
+  services:
+  - rgw
+  with_legacy: true
