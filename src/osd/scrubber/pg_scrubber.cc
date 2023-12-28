@@ -208,17 +208,18 @@ bool PgScrubber::should_abort() const
 
 void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
 {
-  dout(15) << __func__ << " epoch: " << epoch_queued << dendl;
+  dout(10) << fmt::format(
+		  "{}: epoch:{} is PrimaryIdle:{}", __func__, epoch_queued,
+		  m_fsm->is_primary_idle())
+	   << dendl;
+
   // we may have lost our Primary status while the message languished in the
   // queue
   if (check_interval(epoch_queued)) {
     dout(10) << "scrubber event -->> StartScrub epoch: " << epoch_queued
 	     << dendl;
-    reset_epoch(epoch_queued);
     m_fsm->process_event(StartScrub{});
     dout(10) << "scrubber event --<< StartScrub" << dendl;
-  } else {
-    clear_queued_or_active();  // also restarts snap trimming
   }
 }
 
@@ -229,17 +230,17 @@ void PgScrubber::advance_token()
 
 void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
 {
-  dout(15) << __func__ << " epoch: " << epoch_queued << dendl;
+  dout(10) << fmt::format(
+		  "{}: epoch:{} is PrimaryIdle:{}", __func__, epoch_queued,
+		  m_fsm->is_primary_idle())
+	   << dendl;
   // we may have lost our Primary status while the message languished in the
   // queue
   if (check_interval(epoch_queued)) {
     dout(10) << "scrubber event -->> AfterRepairScrub epoch: " << epoch_queued
 	     << dendl;
-    reset_epoch(epoch_queued);
     m_fsm->process_event(AfterRepairScrub{});
     dout(10) << "scrubber event --<< AfterRepairScrub" << dendl;
-  } else {
-    clear_queued_or_active();  // also restarts snap trimming
   }
 }
 
@@ -403,13 +404,13 @@ bool PgScrubber::is_reserving() const
   return m_fsm->is_reserving();
 }
 
-void PgScrubber::reset_epoch(epoch_t epoch_queued)
+void PgScrubber::reset_epoch()
 {
   dout(10) << __func__ << " state deep? " << state_test(PG_STATE_DEEP_SCRUB)
 	   << dendl;
   m_fsm->assert_not_in_session();
 
-  m_epoch_start = epoch_queued;
+  m_epoch_start = m_pg->get_same_interval_since();
   ceph_assert(m_is_deep == state_test(PG_STATE_DEEP_SCRUB));
   update_op_mode_text();
 }

@@ -212,6 +212,9 @@ struct ScrubMachineListener {
   virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
 
+  /// note the epoch when the scrub session started
+  virtual void reset_epoch() = 0;
+
   /**
    * Our scrubbing is blocked, waiting for an excessive length of time for
    * our target chunk to be unlocked. We will set the corresponding flags,
