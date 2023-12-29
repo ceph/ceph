@@ -1324,14 +1324,16 @@ struct __attribute((packed)) laddr_le_t {
 constexpr uint64_t PL_ADDR_NULL = std::numeric_limits<uint64_t>::max();
 
 struct pladdr_t {
-  std::variant<laddr_t, paddr_t> pladdr;
+  std::variant<uint32_t, paddr_t> pladdr;
 
   pladdr_t() = default;
   pladdr_t(const pladdr_t &) = default;
-  pladdr_t(laddr_t laddr)
-    : pladdr(laddr) {}
-  pladdr_t(paddr_t paddr)
+  explicit pladdr_t(laddr_t laddr)
+    : pladdr(laddr.get_local_snap_id()) {}
+  explicit pladdr_t(paddr_t paddr)
     : pladdr(paddr) {}
+  explicit pladdr_t(uint32_t local_snap_id)
+    : pladdr(local_snap_id) {}
 
   bool is_laddr() const {
     return pladdr.index() == 0;
@@ -1347,7 +1349,7 @@ struct pladdr_t {
   }
 
   pladdr_t& operator=(laddr_t laddr) {
-    pladdr = laddr;
+    pladdr = laddr.get_local_snap_id();
     return *this;
   }
 
@@ -1358,11 +1360,15 @@ struct pladdr_t {
     return paddr_t(std::get<1>(pladdr));
   }
 
-  laddr_t get_laddr() const {
+  laddr_t get_non_snap_laddr(laddr_t original_laddr) const {
     assert(pladdr.index() == 0);
-    return laddr_t(std::get<0>(pladdr));
+    return original_laddr.with_local_snap_id(std::get<0>(pladdr));
   }
 
+  uint32_t get_local_snap_id() const {
+    assert(pladdr.index() == 0);
+    return std::get<0>(pladdr);
+  }
 };
 
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr);
@@ -1393,7 +1399,7 @@ struct __attribute((packed)) pladdr_le_t {
 
   operator pladdr_t() const {
     if (addr_type == addr_type_t::LADDR) {
-      return pladdr_t(laddr_t(pladdr));
+      return pladdr_t(uint32_t(pladdr));
     } else {
       assert(addr_type == addr_type_t::PADDR);
       return pladdr_t(paddr_t(pladdr));

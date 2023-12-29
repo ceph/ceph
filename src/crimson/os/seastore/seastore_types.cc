@@ -145,11 +145,13 @@ std::ostream &operator<<(std::ostream &out, const loffset_t &loffset)
 
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
+  out << "pladdr(";
   if (pladdr.is_laddr()) {
-    return out << pladdr.get_laddr();
+    out << "local_snap_id=" << pladdr.get_local_snap_id();
   } else {
-    return out << pladdr.get_paddr();
+    out << "paddr=" << pladdr.get_paddr();
   }
+  return out << ")";
 }
 
 std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)

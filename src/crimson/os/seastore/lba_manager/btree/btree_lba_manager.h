@@ -75,7 +75,7 @@ public:
 	meta),
       key(meta.begin),
       indirect(val.pladdr.is_laddr()),
-      intermediate_key(indirect ? val.pladdr.get_laddr() : L_ADDR_NULL),
+      intermediate_key(indirect ? val.pladdr.get_non_snap_laddr(key) : L_ADDR_NULL),
       intermediate_length(indirect ? val.len : 0),
       raw_val(val.pladdr),
       map_val(val)
@@ -95,7 +95,7 @@ public:
     laddr_t interkey = L_ADDR_NULL)
   {
     assert(!indirect);
-    assert(value.is_paddr());
+    assert(value.index() == 1);
     intermediate_base = key;
     intermediate_key = (interkey == L_ADDR_NULL ? key : interkey);
     indirect = true;
@@ -128,7 +128,11 @@ public:
     assert(intermediate_key >= intermediate_base);
     assert((intermediate_key == L_ADDR_NULL)
       == (intermediate_base == L_ADDR_NULL));
-    return intermediate_key - intermediate_base;
+    if (intermediate_key == L_ADDR_NULL) {
+      return 0;
+    } else {
+      return intermediate_key - intermediate_base;
+    }
   }
 
   extent_len_t get_intermediate_length() const final {
@@ -219,7 +223,7 @@ public:
       t,
       hint,
       len,
-      P_ADDR_ZERO,
+      pladdr_t{P_ADDR_ZERO},
       P_ADDR_NULL,
       nullptr);
   }
@@ -238,7 +242,7 @@ public:
       t,
       hint,
       len,
-      intermediate_key,
+      pladdr_t{intermediate_key},
       actual_addr,
       nullptr
     ).si_then([&t, this, intermediate_base](auto indirect_mapping) {
@@ -271,7 +275,7 @@ public:
       t,
       hint,
       len,
-      addr,
+      pladdr_t{addr},
       P_ADDR_NULL,
       &ext);
   }
