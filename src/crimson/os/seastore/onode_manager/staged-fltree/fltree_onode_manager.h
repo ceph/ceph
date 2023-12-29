@@ -67,7 +67,8 @@ struct FLTreeOnode final : Onode, Value {
     void apply_value_delta(
       ceph::bufferlist::const_iterator &bliter,
       NodeExtentMutable &value,
-      laddr_t value_addr) final;
+      laddr_t value_addr,
+      node_offset_t offset) final;
 
     void encode_update(NodeExtentMutable &payload_mut, delta_op_t op);
   };
