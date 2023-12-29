@@ -44,10 +44,10 @@ inline std::ostream& operator<<(std::ostream &os, const node_type_t& type) {
 }
 
 struct laddr_packed_t {
-  laddr_t value;
+  laddr_le_t value;
 } __attribute__((packed));
 inline std::ostream& operator<<(std::ostream& os, const laddr_packed_t& laddr) {
-  return os << "laddr_packed(" << laddr.value << ")";
+  return os << "laddr_packed(" << laddr_t(laddr.value) << ")";
 }
 
 using match_stat_t = int8_t;

@@ -376,7 +376,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         auto value_ptr = node_stage.get_end_p_laddr();
         int offset = reinterpret_cast<const char*>(value_ptr) - p_start;
         os << "\n  tail value: "
-           << value_ptr->value
+           << laddr_t(value_ptr->value)
            << " " << size << "B"
            << "  @" << offset << "B";
       }
