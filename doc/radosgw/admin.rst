@@ -197,41 +197,45 @@ in a command of the following form:
 Remove a User
 -------------
 
-When you remove a user, the user and subuser are removed from the system.
-However, you may remove just the subuser if you wish. To remove a user (and
-subuser), specify ``user rm`` and the user ID. ::
+The act of removing a user removes both the user and any subusers associated
+with the user from the system. Remember that it is possible to remove a subuser
+without removing the user with which it is associated.   
 
-	radosgw-admin user rm --uid=johndoe
+To remove a user and any subusers associated with it, use the ``user rm``
+command and provide the user ID of the user to be removed. Use a command of the
+following form: 
 
-To remove the subuser only, specify ``subuser rm`` and the subuser ID. ::
+.. prompt:: bash
 
-	radosgw-admin subuser rm --subuser=johndoe:swift
-
+   radosgw-admin user rm --uid=johndoe
 
 Options include:
 
 - **Purge Data:** The ``--purge-data`` option purges all data associated 
-  to the UID.
+  with the UID.
   
 - **Purge Keys:** The ``--purge-keys`` option purges all keys associated 
-  to the UID.
+  with the UID.
 
 
 Remove a Subuser
 ----------------
 
-When you remove a sub user, you are removing access to the Swift interface. 
-The user will remain in the system. To remove the subuser, specify 
-``subuser rm`` and the subuser ID. ::
+Removing a subuser removes access to the Swift interface or to S3. The user
+associated with the removed subuser remains in the system after the subuser's
+removal. 
 
-	radosgw-admin subuser rm --subuser=johndoe:swift
+To remove the subuser, use the command ``subuser rm`` and provide the subuser
+ID of the subuser to be removed. Use a command of the following form: 
 
+.. prompt:: bash
 
+   radosgw-admin subuser rm --subuser=johndoe:swift
 
 Options include:
   
 - **Purge Keys:** The ``--purge-keys`` option purges all keys associated 
-  to the UID.
+  with the UID.
 
 
 Add / Remove a Key
