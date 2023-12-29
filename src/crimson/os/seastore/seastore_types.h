@@ -1301,22 +1301,22 @@ inline uint64_t operator-(const loffset_t &lhs, const loffset_t &rhs) {
 }
 
 struct __attribute((packed)) laddr_le_t {
-  ceph_le64 laddr = ceph_le64(L_ADDR_NULL);
+  ceph_le64 low = ceph_le64(laddr_t::U64MAX);
+  ceph_le64 high = ceph_le64(laddr_t::U64MAX);
 
   using orig_type = laddr_t;
 
   laddr_le_t() = default;
   laddr_le_t(const laddr_le_t &) = default;
   explicit laddr_le_t(const laddr_t &addr)
-    : laddr(ceph_le64(addr)) {}
+    : low(addr.low), high(addr.high) {}
 
   operator laddr_t() const {
-    return laddr_t(laddr);
+    return laddr_t(low, high);
   }
   laddr_le_t& operator=(laddr_t addr) {
-    ceph_le64 val;
-    val = addr;
-    laddr = val;
+    low = addr.low;
+    high = addr.high;
     return *this;
   }
 };
@@ -1630,9 +1630,9 @@ get_average_time(const sea_time_point& t1, std::size_t n1,
 
 /* description of a new physical extent */
 struct extent_t {
-  extent_types_t type;  ///< type of extent
-  laddr_t addr;         ///< laddr of extent (L_ADDR_NULL for non-logical)
-  ceph::bufferlist bl;  ///< payload, bl.length() == length, aligned
+  extent_types_t type;         ///< type of extent
+  laddr_t addr = L_ADDR_NULL;  ///< laddr of extent (L_ADDR_NULL for non-logical)
+  ceph::bufferlist bl;         ///< payload, bl.length() == length, aligned
 };
 
 using extent_version_t = uint32_t;
