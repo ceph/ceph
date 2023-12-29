@@ -26,7 +26,7 @@ class TestOnode final : public Onode {
   bool dirty = false;
 
 public:
-  TestOnode(uint32_t ddr, uint32_t dmr) : Onode(ddr, dmr) {}
+  TestOnode(uint32_t dmr) : Onode(dmr) {}
   const onode_layout_t &get_layout() const final {
     return layout;
   }
@@ -229,7 +229,6 @@ struct object_data_handler_test_t:
 
   seastar::future<> set_up_fut() final {
     onode = new TestOnode(
-      DEFAULT_OBJECT_DATA_RESERVATION,
       DEFAULT_OBJECT_METADATA_RESERVATION);
     known_contents = buffer::create(4<<20 /* 4MB */);
     memset(known_contents.c_str(), 0, known_contents.length());

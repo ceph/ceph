@@ -159,7 +159,6 @@ FLTreeOnodeManager::get_onode_ret FLTreeOnodeManager::get_onode(
       return crimson::ct_error::enoent::make();
     }
     auto val = OnodeRef(new FLTreeOnode(
-	default_data_reservation,
 	default_metadata_range,
 	cursor.value()));
     return get_onode_iertr::make_ready_future<OnodeRef>(
@@ -181,7 +180,6 @@ FLTreeOnodeManager::get_or_create_onode(
               -> get_or_create_onode_ret {
     auto [cursor, created] = std::move(p);
     auto onode = new FLTreeOnode(
-	default_data_reservation,
 	default_metadata_range,
 	cursor.value());
     if (created) {

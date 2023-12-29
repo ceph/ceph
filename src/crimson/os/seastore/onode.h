@@ -55,12 +55,10 @@ class Onode : public boost::intrusive_ref_counter<
 {
 protected:
   virtual laddr_t get_hint() const = 0;
-  const uint32_t default_metadata_offset = 0;
   const uint32_t default_metadata_range = 0;
 public:
-  Onode(uint32_t ddr, uint32_t dmr)
-    : default_metadata_offset(ddr),
-      default_metadata_range(dmr)
+  Onode(uint32_t dmr)
+    : default_metadata_range(dmr)
   {}
 
   virtual bool is_alive() const = 0;
