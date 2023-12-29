@@ -4,6 +4,13 @@
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/common/log.h"
 
+#if defined (__GNUC__) || defined (__clang__)
+using uint128_t = unsigned __int128;
+#else
+#include <boost/multiprecision/cpp_int.hpp>
+using uint128_t = boost::multiprecision::uint128_t;
+#endif
+
 namespace {
 
 seastar::logger& journal_logger() {
@@ -13,6 +20,41 @@ seastar::logger& journal_logger() {
 }
 
 namespace crimson::os::seastore {
+
+constexpr bool validate_mask(auto... values) {
+  return (values | ...) == std::numeric_limits<uint64_t>::max() &&
+    (std::popcount(values) + ...) == 64;
+}
+
+struct laddr_helper_t {
+  static_assert(validate_mask(
+		laddr_t::HIGH_POOL_MASK,
+		laddr_t::HIGH_SHARD_MASK,
+		laddr_t::HIGH_CRUSH_MASK,
+		laddr_t::HIGH_RANDOM_MASK),
+		"the mask of laddr_t::high is not valid");
+  static_assert(validate_mask(
+		laddr_t::LOW_RANDOM_MASK,
+		laddr_t::LOW_METADATA_MASK,
+		laddr_t::LOW_SNAP_MASK,
+		laddr_t::LOW_LOCAL_SNAP_ID_MASK,
+		laddr_t::LOW_OFFSET_MASK),
+		"the mask of laddr_t::low is not valid");
+
+  static uint128_t to_u128(const laddr_t &l) {
+    uint128_t ret = 0;
+    ret = l.high;
+    ret <<= 64;
+    ret |= l.low;
+    return ret;
+  }
+
+  static laddr_t from_u128(uint128_t value) {
+    uint64_t low = value;
+    uint64_t high = value >> 64;
+    return laddr_t(low, high);
+  }
+};
 
 bool is_aligned(uint64_t offset, uint64_t alignment)
 {
@@ -89,6 +131,18 @@ std::ostream& operator<<(std::ostream& out, segment_seq_printer_t seq)
   }
 }
 
+std::ostream &operator<<(std::ostream &out, const laddr_t &l)
+{
+  auto str = fmt::format("{}", l);
+  return out << str;
+}
+
+std::ostream &operator<<(std::ostream &out, const loffset_t &loffset)
+{
+  return out << "loffset(base=" << loffset.get_base()
+	     << ", offset=" << loffset.get_offset() << ")";
+}
+
 std::ostream &operator<<(std::ostream &out, const pladdr_t &pladdr)
 {
   if (pladdr.is_laddr()) {
@@ -127,6 +181,141 @@ std::ostream &operator<<(std::ostream &out, const paddr_t &rhs)
     out << "INVALID!";
   }
   return out << ">";
+}
+
+laddr_t laddr_t::get_data_hint(uint8_t pool, uint8_t shard, uint32_t crush)
+{
+  static thread_local random_generator_t gen;
+  uint64_t low = 0;
+  uint64_t high = 0;
+
+  high |= ((uint64_t) pool) << 56;
+  high |= ((uint64_t) shard) << 48;
+  high |= ((uint64_t) crush) << 16;
+
+  auto ret = L_ADDR_MIN;
+  do {
+    auto v = gen();
+    high &= ~HIGH_RANDOM_MASK;
+    high |= v & HIGH_RANDOM_MASK;
+    low &= ~LOW_RANDOM_MASK;
+    low |= (v << /* 64 - 34(random field bits) = */ 30) & LOW_RANDOM_MASK;
+    ret = laddr_t(low, high);
+  } while (!ret.has_valid_prefix());
+
+  ceph_assert(ret.get_pool() == pool);
+  ceph_assert(ret.get_shard() == shard);
+  ceph_assert(ret.get_crush() == crush);
+  ceph_assert(ret.get_local_snap_id() == 0);
+  ceph_assert(!ret.is_snap());
+  ceph_assert(!ret.is_metadata());
+  return ret;
+}
+
+laddr_t laddr_t::get_metadata_hint(uint8_t pool, uint8_t shard, uint32_t crush)
+{
+  auto ret = get_data_hint(pool, shard, crush);
+  ret.low |= LOW_METADATA_MASK;
+  return ret;
+}
+
+laddr_t laddr_t::get_metadata_hint(laddr_t laddr)
+{
+  laddr.low |= LOW_METADATA_MASK;
+  laddr.low &= ~LOW_LOCAL_SNAP_ID_MASK;
+  laddr.low &= ~LOW_SNAP_MASK;
+  return laddr;
+}
+
+laddr_t laddr_t::get_next_hint(laddr_t laddr)
+{
+  ceph_assert(!laddr.is_snap());
+  ceph_assert(laddr.get_local_snap_id() == 0);
+  auto l = laddr;
+  if (laddr.has_valid_prefix() ||
+      ((l.low & LOW_OFFSET_MASK) == (U64MAX & LOW_OFFSET_MASK))) {
+    l.low |= ~LOW_RANDOM_MASK;
+  }
+  auto v = laddr_helper_t::to_u128(l);
+  l = laddr_helper_t::from_u128(v + 1);
+  if (laddr.is_metadata()) {
+    l.low |= LOW_METADATA_MASK;
+  }
+  return l;
+}
+
+std::pair<laddr_t, laddr_t> laddr_t::clone(
+  laddr_t laddr,
+  uint32_t local_snap_id)
+{
+  auto head = laddr.with_local_snap_id(local_snap_id);
+  head.low &= ~LOW_SNAP_MASK;
+  auto snap = head;
+  snap.low |= LOW_SNAP_MASK;
+  return std::make_pair(head, snap);
+}
+
+std::pair<laddr_t, extent_len_t> laddr_t::get_aligned_range(
+  laddr_t base, extent_len_t offset, extent_len_t length)
+{
+  auto begin = (base + offset).get_base();
+  auto end = base + offset + length;
+  return std::make_pair(begin, end.get_roundup_laddr() - begin);
+}
+
+laddr_t laddr_t::get_hint_from_offset(uint64_t offset) {
+  ceph_assert(p2align(offset, UNIT_SIZE) == offset);
+  offset >>= UNIT_SHIFT;
+
+  uint64_t low = 0;
+  uint64_t high = 0;
+
+  low |= offset & LOW_OFFSET_MASK;
+  low |= (offset << 34) & LOW_RANDOM_MASK;
+  high |= offset >> 30;
+
+  return laddr_t(low, high);
+}
+
+uint64_t laddr_t::get_original_offset() const {
+  uint64_t offset = low & LOW_OFFSET_MASK;
+  offset |= (low & LOW_RANDOM_MASK) >> 34;
+  offset |= (high & HIGH_RANDOM_MASK) << 30;
+  offset *= UNIT_SIZE;
+  return offset;
+}
+
+uint64_t operator-(const laddr_t &l, const laddr_t &r) {
+  auto ll = laddr_helper_t::to_u128(l);
+  auto rr = laddr_helper_t::to_u128(r);
+  ceph_assert(ll >= rr);
+  auto ret = ll - rr;
+  ceph_assert(ret <= (std::numeric_limits<uint64_t>::max() >> laddr_t::UNIT_SHIFT));
+  return ret << laddr_t::UNIT_SHIFT;
+}
+
+laddr_t loffset_t::get_roundup_laddr() const {
+  if (offset == 0) {
+    return base;
+  } else {
+    auto l = laddr_helper_t::to_u128(base);
+    return laddr_helper_t::from_u128(l + 1);
+  }
+}
+
+loffset_t loffset_t::plus(const laddr_t &laddr, extent_len_t offset) {
+  auto l = laddr_helper_t::to_u128(laddr);
+  l += offset >> laddr_t::UNIT_SHIFT;
+  offset &= (1 << laddr_t::UNIT_SHIFT) - 1;
+  return loffset_t(laddr_helper_t::from_u128(l), offset);
+}
+
+loffset_t loffset_t::minus(const laddr_t &laddr, extent_len_t offset) {
+  auto l = laddr_helper_t::to_u128(laddr);
+  auto u = (offset + laddr_t::UNIT_SIZE - 1) / laddr_t::UNIT_SIZE;
+  l -= u;
+  offset = u * laddr_t::UNIT_SIZE - offset;
+  return loffset_t(laddr_helper_t::from_u128(l), offset);
 }
 
 journal_seq_t journal_seq_t::add_offset(
