@@ -1515,10 +1515,10 @@ eagain_ifuture<Ref<InternalNode>> InternalNode::insert_or_split(
   {
     key_view_t left_key;
     impl->get_slot(search_position_t::begin(), &left_key, nullptr);
-    left_hint = left_key.get_hint();
+    left_hint = left_key.get_metadata_hint();
     key_view_t right_key;
     impl->get_largest_slot(nullptr, &right_key, nullptr);
-    right_hint = right_key.get_hint();
+    right_hint = right_key.get_metadata_hint();
   }
   return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
   ).si_then([this, c, right_hint] {
@@ -2099,10 +2099,10 @@ eagain_ifuture<Ref<tree_cursor_t>> LeafNode::insert_value(
   {
     key_view_t left_key;
     impl->get_slot(search_position_t::begin(), &left_key, nullptr);
-    left_hint = left_key.get_hint();
+    left_hint = left_key.get_metadata_hint();
     key_view_t right_key;
     impl->get_largest_slot(nullptr, &right_key, nullptr);
-    right_hint = right_key.get_hint();
+    right_hint = right_key.get_metadata_hint();
   }
   return (is_root() ? upgrade_root(c, left_hint) : eagain_iertr::now()
   ).si_then([this, c, right_hint] {

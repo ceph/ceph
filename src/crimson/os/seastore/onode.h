@@ -54,7 +54,7 @@ class Onode : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
 protected:
-  virtual laddr_t get_hint() const = 0;
+  virtual laddr_t get_data_hint_impl() const = 0;
   const uint32_t default_metadata_range = 0;
 public:
   Onode(uint32_t dmr)
@@ -76,14 +76,19 @@ public:
   virtual void clear_snapset(Transaction&) = 0;
 
   laddr_t get_metadata_hint(uint64_t block_size) const {
-    assert(default_metadata_offset);
     assert(default_metadata_range);
+    auto md_hint = laddr_t::get_metadata_hint(get_data_hint());
     uint64_t range_blocks = default_metadata_range / block_size;
-    return get_hint() + default_metadata_offset +
-      (((uint32_t)std::rand() % range_blocks) * block_size);
+    md_hint.set_offset(((uint32_t)std::rand() % range_blocks) * block_size);
+    return md_hint;
   }
   laddr_t get_data_hint() const {
-    return get_hint();
+    auto object_data = get_layout().object_data.get();
+    if (object_data.is_null()) {
+      return get_data_hint_impl();
+    } else {
+      return object_data.get_reserved_data_base();
+    }
   }
 };
 

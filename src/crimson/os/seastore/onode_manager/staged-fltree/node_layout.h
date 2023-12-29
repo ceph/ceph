@@ -313,7 +313,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     key_view_t first_index;
     stage_t::template get_slot<true, false>(
         extent.read(), position_t::begin(), &first_index, nullptr);
-    auto hint = first_index.get_hint();
+    auto hint = first_index.get_metadata_hint();
     return extent.rebuild(c, hint).si_then([this] (auto mut) {
       // addr may change
       build_name();

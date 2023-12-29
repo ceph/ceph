@@ -150,7 +150,7 @@ class DummyNodeExtentManager final: public NodeExtentManager {
       Transaction& t, extent_len_t len) {
     assert(len % ALIGNMENT == 0);
     auto r = ceph::buffer::create_aligned(len, ALIGNMENT);
-    auto addr = reinterpret_cast<laddr_t>(r->get_data());
+    laddr_t addr = laddr_t::get_data_hint(std::rand(), std::rand(), std::rand());
     auto bp = ceph::bufferptr(std::move(r));
     auto extent = Ref<DummyNodeExtent>(new DummyNodeExtent(std::move(bp)));
     extent->set_laddr(addr);

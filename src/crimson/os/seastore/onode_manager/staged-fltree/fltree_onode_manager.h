@@ -247,8 +247,8 @@ struct FLTreeOnode final : Onode, Value {
     status = status_t::DELETED;
   }
 
-  laddr_t get_hint() const final {
-    return Value::get_hint();
+  laddr_t get_data_hint_impl() const final {
+    return Value::get_data_hint();
   }
   ~FLTreeOnode() final {}
 };

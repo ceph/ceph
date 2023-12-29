@@ -201,7 +201,7 @@ class Value {
     return read_value_header()->payload_size;
   }
 
-  laddr_t get_hint() const;
+  laddr_t get_data_hint() const;
 
   bool operator==(const Value& v) const { return p_cursor == v.p_cursor; }
   bool operator!=(const Value& v) const { return !(*this == v); }

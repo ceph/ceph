@@ -38,7 +38,7 @@ public:
     return true;
   }
   bool is_dirty() const { return dirty; }
-  laddr_t get_hint() const final {return L_ADDR_MIN; }
+  laddr_t get_data_hint_impl() const final {return L_ADDR_MIN; }
   ~TestOnode() final = default;
 
   void update_onode_size(Transaction &t, uint32_t size) final {
