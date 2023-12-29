@@ -47,6 +47,12 @@ public:
     });
   }
 
+  void update_local_snap_id(Transaction &t, uint32_t id) final {
+    with_mutable_layout(t, [id](onode_layout_t &mlayout) {
+      mlayout.local_snap_id = id;
+    });
+  }
+
   void update_omap_root(Transaction &t, omap_root_t &oroot) final {
     with_mutable_layout(t, [&oroot](onode_layout_t &mlayout) {
       mlayout.omap_root.update(oroot);

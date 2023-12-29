@@ -48,6 +48,7 @@ struct FLTreeOnode final : Onode, Value {
   struct Recorder : public ValueDeltaRecorder {
     enum class delta_op_t : uint8_t {
       UPDATE_ONODE_SIZE,
+      UPDATE_LOCAL_SNAP_ID,
       UPDATE_OMAP_ROOT,
       UPDATE_XATTR_ROOT,
       UPDATE_OBJECT_DATA,
@@ -115,6 +116,20 @@ struct FLTreeOnode final : Onode, Value {
 	  recorder->encode_update(
 	    payload_mut, Recorder::delta_op_t::UPDATE_ONODE_SIZE);
 	}
+    });
+  }
+
+  void update_local_snap_id(Transaction &t, uint32_t id) final {
+    with_mutable_layout(
+      t,
+      [id](NodeExtentMutable &payload_mut, Recorder *recorder) {
+        auto &mlayout = *reinterpret_cast<onode_layout_t*>(
+          payload_mut.get_write());
+        mlayout.local_snap_id = id;
+        if (recorder) {
+          recorder->encode_update(
+            payload_mut, Recorder::delta_op_t::UPDATE_LOCAL_SNAP_ID);
+        }
     });
   }
 

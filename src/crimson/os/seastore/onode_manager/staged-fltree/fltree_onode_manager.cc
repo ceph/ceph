@@ -24,6 +24,10 @@ void FLTreeOnode::Recorder::apply_value_delta(
       DEBUG("update onode size");
       bliter.copy(sizeof(mlayout.size), (char *)&mlayout.size);
       break;
+    case delta_op_t::UPDATE_LOCAL_SNAP_ID:
+      DEBUG("update local snap id");
+      bliter.copy(sizeof(mlayout.local_snap_id), (char *)&mlayout.local_snap_id);
+      break;
     case delta_op_t::UPDATE_OMAP_ROOT:
       DEBUG("update omap root");
       bliter.copy(sizeof(mlayout.omap_root), (char *)&mlayout.omap_root);
@@ -81,6 +85,12 @@ void FLTreeOnode::Recorder::encode_update(
     encoded.append(
       (const char *)&layout.size,
       sizeof(layout.size));
+    break;
+  case delta_op_t::UPDATE_LOCAL_SNAP_ID:
+    DEBUG("update onode local snap id");
+    encoded.append(
+      (const char *)&layout.local_snap_id,
+      sizeof(layout.local_snap_id));
     break;
   case delta_op_t::UPDATE_OMAP_ROOT:
     DEBUG("update omap root");
