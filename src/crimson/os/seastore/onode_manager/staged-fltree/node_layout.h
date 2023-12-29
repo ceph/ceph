@@ -375,8 +375,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
         size += sizeof(laddr_t);
         auto value_ptr = node_stage.get_end_p_laddr();
         int offset = reinterpret_cast<const char*>(value_ptr) - p_start;
-        os << "\n  tail value: 0x"
-           << std::hex << value_ptr->value << std::dec
+        os << "\n  tail value: "
+           << value_ptr->value
            << " " << size << "B"
            << "  @" << offset << "B";
       }
@@ -846,7 +846,7 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
       const search_position_t& pos, laddr_t dst, laddr_t src) override {
     if constexpr (NODE_TYPE == node_type_t::INTERNAL) {
       LOG_PREFIX(OTree::Layout::replace_child_addr);
-      SUBDEBUG(seastore_onode, "update from {:#x} to {:#x} at pos({}) ...", src, dst, pos);
+      SUBDEBUG(seastore_onode, "update from {} to {} at pos({}) ...", src, dst, pos);
       const laddr_packed_t* p_value;
       if (pos.is_end()) {
         assert(is_level_tail());
@@ -925,8 +925,8 @@ class NodeLayoutT final : public InternalNodeImpl, public LeafNodeImpl {
     // XXX: maybe also include the extent state
     std::ostringstream sos;
     sos << "Node" << NODE_TYPE << FIELD_TYPE
-        << "@0x" << std::hex << extent.get_laddr()
-        << "+" << extent.get_length() << std::dec
+        << "@" << extent.get_laddr()
+        << "+" << std::hex << extent.get_length() << std::dec
         << "Lv" << (unsigned)level()
         << (is_level_tail() ? "$" : "");
     name = sos.str();

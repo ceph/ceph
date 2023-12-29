@@ -159,13 +159,13 @@ class TestValue final : public Value {
           break;
         }
         default:
-          logger().error("OTree::TestValue::Replay: got unknown op {} when replay {:#x}+{:#x}",
-                         op, value_addr, payload_mut.get_length());
+          logger().error("OTree::TestValue::Replay: got unknown op {} when replay ({}+{:#x})~{:#x}",
+                         op, value_addr, offset, payload_mut.get_length());
           ceph_abort();
         }
       } catch (buffer::error& e) {
-        logger().error("OTree::TestValue::Replay: got decode error {} when replay {:#x}+{:#x}",
-                       e.what(), value_addr, payload_mut.get_length());
+        logger().error("OTree::TestValue::Replay: got decode error {} when replay ({}+{:#x})~{:#x}",
+                       e.what(), value_addr, offset, payload_mut.get_length());
         ceph_abort();
       }
     }
