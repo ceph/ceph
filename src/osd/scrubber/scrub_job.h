@@ -77,8 +77,6 @@ class ScrubJob final : public RefCountedObject {
    * 'updated' is a temporary flag, used to create a barrier after
    * 'sched_time' and 'deadline' (or any other job entry) were modified by
    * different task.
-   * 'updated' also signals the need to move a job back from the penalized
-   * queue to the regular one.
    */
   std::atomic_bool updated{false};
 
@@ -88,8 +86,6 @@ class ScrubJob final : public RefCountedObject {
     */
   bool blocked{false};
   utime_t blocked_since{};
-
-  utime_t penalty_timeout{0, 0};
 
   CephContext* cct;
 
@@ -231,12 +227,11 @@ struct formatter<Scrub::ScrubJob> {
   {
     return fmt::format_to(
 	ctx.out(),
-	"pg[{}] @ {:s} (dl:{:s}) - <{}> / failure: {} / pen. t.o.: {:s} / "
-	"queue "
-	"state: {:.7}",
-	sjob.pgid, sjob.schedule.scheduled_at, sjob.schedule.deadline,
-	sjob.registration_state(), sjob.resources_failure, sjob.penalty_timeout,
-	sjob.state.load(std::memory_order_relaxed));
+	"pg[{}] @ {:s} (dl:{:s}) - <{}> / failure: {} / queue state: "
+	"{:.7}",
+	sjob.pgid, sjob.schedule.scheduled_at,
+	sjob.schedule.deadline, sjob.registration_state(),
+	sjob.resources_failure, sjob.state.load(std::memory_order_relaxed));
   }
 };
 

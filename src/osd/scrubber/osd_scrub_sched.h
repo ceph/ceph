@@ -30,7 +30,6 @@
 │                                        │
 │                                        │
 │  ScrubQContainer    to_scrub <>────────┼────────┐
-│  ScrubQContainer    penalized          │        │
 │                                        │        │
 │                                        │        │
 │  OSD_wide resource counters            │        │
@@ -146,11 +145,6 @@ class ScrubSchedListener {
  * the queue of PGs waiting to be scrubbed.
  * Main operations are scheduling/unscheduling a PG to be scrubbed at a certain
  * time.
- *
- * A "penalty" queue maintains those PGs that have failed to reserve the
- * resources of their replicas. The PGs in this list will be reinstated into the
- * scrub queue when all eligible PGs were already handled, or after a timeout
- * (or if their deadline has passed [[disabled at this time]]).
  */
 class ScrubQueue {
  public:
@@ -282,8 +276,6 @@ class ScrubQueue {
   mutable ceph::mutex jobs_lock = ceph::make_mutex("ScrubQueue::jobs_lock");
 
   Scrub::ScrubQContainer to_scrub;   ///< scrub jobs (i.e. PGs) to scrub
-  Scrub::ScrubQContainer penalized;  ///< those that failed to reserve remote resources
-  bool restore_penalized{false};
 
   static inline constexpr auto registered_job = [](const auto& jobref) -> bool {
     return jobref->state == Scrub::qu_state_t::registered;
@@ -292,11 +284,6 @@ class ScrubQueue {
   static inline constexpr auto invalid_state = [](const auto& jobref) -> bool {
     return jobref->state == Scrub::qu_state_t::not_registered;
   };
-
-  /**
-   * Are there scrub jobs that should be reinstated?
-   */
-  void scan_penalized(bool forgive_all, utime_t time_now);
 
   /**
    * clear dead entries (unregistered, or belonging to removed PGs) from a
@@ -352,16 +339,6 @@ class ScrubQueue {
    */
   Scrub::scrub_schedule_t adjust_target_time(
     const Scrub::sched_params_t& recomputed_params) const;
-
-  /**
-   * Look for scrub jobs that have their 'resources_failure' set. These jobs
-   * have failed to acquire remote resources last time we've initiated a scrub
-   * session on them. They are now moved from the 'to_scrub' queue to the
-   * 'penalized' set.
-   *
-   * locking: called with job_lock held
-   */
-  void move_failed_pgs(utime_t now_is);
 
 protected: // used by the unit-tests
   /**
