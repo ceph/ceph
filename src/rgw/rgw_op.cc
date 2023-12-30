@@ -34,6 +34,7 @@
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_log.h"
+#include "rgw_md5.h"
 #include "rgw_multi.h"
 #include "rgw_multi_del.h"
 #include "rgw_cors.h"
@@ -4135,14 +4136,9 @@ void RGWPutObj::execute(optional_yield y)
 {
   char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
-  unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
-  MD5 hash;
-  // Allow use of MD5 digest in FIPS mode for non-cryptographic purposes
-  hash.SetFlags(EVP_MD_CTX_FLAG_NON_FIPS_ALLOW);
   bufferlist bl, aclbl, bs;
   int len;
-  
+
   off_t fst;
   off_t lst;
 
@@ -4334,6 +4330,7 @@ void RGWPutObj::execute(optional_yield y)
 
   std::unique_ptr<rgw::sal::DataProcessor> encrypt;
   std::unique_ptr<rgw::sal::DataProcessor> run_lua;
+  std::unique_ptr<rgw::sal::DataProcessor> md5_filter;
 
   if (!append) { // compression and encryption only apply to full object uploads
     op_ret = get_encrypt_filter(&encrypt, filter);
@@ -4370,6 +4367,10 @@ void RGWPutObj::execute(optional_yield y)
     if (run_lua) {
       filter = &*run_lua;
     }
+    if (need_calc_md5) {
+      md5_filter = rgw::create_md5_putobj_pipe(filter, etag);
+      filter = md5_filter.get();
+    }
   }
   tracepoint(rgw_op, before_data_transfer, s->req_id.c_str());
   do {
@@ -4393,10 +4394,6 @@ void RGWPutObj::execute(optional_yield y)
       return;
     } else if (len == 0) {
       break;
-    }
-
-    if (need_calc_md5) {
-      hash.Update((const unsigned char *)data.c_str(), data.length());
     }
 
     op_ret = filter->process(std::move(data), ofs);
@@ -4436,8 +4433,6 @@ void RGWPutObj::execute(optional_yield y)
     return;
   }
 
-  hash.Final(m);
-
   if (compressor && compressor->is_compressed()) {
     bufferlist tmp;
     RGWCompressionInfo cs_info;      
@@ -4464,11 +4459,9 @@ void RGWPutObj::execute(optional_yield y)
     }
   }
 
-  buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
-
-  etag = calc_md5;
-
-  if (supplied_md5_b64 && strcmp(calc_md5, supplied_md5)) {
+  if (supplied_md5_b64 && etag != supplied_md5) {
+    ldpp_dout(this, 4) << "content-md5 mismatch: calculated "
+        << etag << " != expected " << supplied_md5 << dendl;
     op_ret = -ERR_BAD_DIGEST;
     return;
   }
@@ -4490,11 +4483,14 @@ void RGWPutObj::execute(optional_yield y)
     emplace_attr(RGW_ATTR_SLO_MANIFEST, std::move(manifest_bl));
   }
 
-  if (supplied_etag && etag.compare(supplied_etag) != 0) {
+  if (supplied_etag && etag != supplied_etag) {
+    // compare against swift ETag request header
+    ldpp_dout(this, 4) << "etag mismatch: calculated "
+        << etag << " != expected " << supplied_etag << dendl;
     op_ret = -ERR_UNPROCESSABLE_ENTITY;
     return;
   }
-  bl.append(etag.c_str(), etag.size());
+  bl.append(etag);
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   populate_with_generic_attrs(s, attrs);
