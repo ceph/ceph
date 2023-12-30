@@ -4374,7 +4374,9 @@ void RGWPutObj::execute(optional_yield y)
       filter = &*run_lua;
     }
     if (need_calc_md5) {
-      md5_filter = rgw::create_md5_putobj_pipe(filter, etag);
+      auto ex = s->penv.io_context.get_executor();
+      const size_t window_size = s->cct->_conf->rgw_put_obj_min_window_size;
+      md5_filter = rgw::create_md5_putobj_pipe(filter, y, ex, window_size, etag);
       filter = md5_filter.get();
     }
   }

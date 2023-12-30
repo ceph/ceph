@@ -30,11 +30,20 @@ class MD5WithFIPS : public ceph::crypto::ssl::MD5 {
 };
 
 auto create_md5_putobj_pipe(sal::DataProcessor* next,
+                            optional_yield y,
+                            boost::asio::any_io_executor hash_executor,
+                            size_t window_size,
                             std::string& output)
     -> std::unique_ptr<sal::DataProcessor>
 {
-  using Pipe = putobj::HashPipe<MD5WithFIPS>;
-  return std::make_unique<Pipe>(next, output);
+  if (y) {
+    using Pipe = putobj::AsyncHashPipe<MD5WithFIPS>;
+    return std::make_unique<Pipe>(next, y.get_yield_context(),
+                                  hash_executor, window_size, output);
+  } else {
+    using Pipe = putobj::HashPipe<MD5WithFIPS>;
+    return std::make_unique<Pipe>(next, output);
+  }
 }
 
 } // namespace rgw
