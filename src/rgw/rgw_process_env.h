@@ -4,6 +4,7 @@
 #pragma once
 
 #include <memory>
+#include <boost/asio/io_context.hpp>
 
 class ActiveRateLimiter;
 class OpsLogSink;
@@ -37,6 +38,9 @@ struct RGWLuaProcessEnv {
 };
 
 struct RGWProcessEnv {
+  // reference to the global thread pool context
+  boost::asio::io_context& io_context;
+
   RGWLuaProcessEnv lua;
   rgw::sal::ConfigStore* cfgstore = nullptr;
   rgw::sal::Driver* driver = nullptr;
