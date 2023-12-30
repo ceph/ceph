@@ -93,9 +93,13 @@ namespace {
 
 OpsLogFile* rgw::AppMain::ops_log_file;
 
-rgw::AppMain::AppMain(const DoutPrefixProvider* dpp) : dpp(dpp)
+rgw::AppMain::AppMain(const DoutPrefixProvider* dpp)
+  : dpp(dpp),
+    context_pool(),
+    env{context_pool.get_io_context()}
 {
 }
+
 rgw::AppMain::~AppMain() = default;
 
 void rgw::AppMain::init_frontends1(bool nfs) 
@@ -204,14 +208,12 @@ void rgw::AppMain::init_numa()
 } /* init_numa */
 
 void rgw::AppMain::need_context_pool() {
-  if (!context_pool) {
-    context_pool.emplace(
-      dpp->get_cct()->_conf->rgw_thread_pool_size,
-      [] {
-	// request warnings on synchronous librados calls in this thread
-	is_asio_thread = true;
-      });
-  }
+  context_pool.start(
+    dpp->get_cct()->_conf->rgw_thread_pool_size,
+    [] {
+      // request warnings on synchronous librados calls in this thread
+      is_asio_thread = true;
+    });
 }
 
 int rgw::AppMain::init_storage()
@@ -471,7 +473,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     }
     else if (framework == "beast") {
       need_context_pool();
-      fe = new RGWAsioFrontend(env, config, *sched_ctx, *context_pool);
+      fe = new RGWAsioFrontend(env, config, *sched_ctx, context_pool);
     }
     else if (framework == "rgw-nfs") {
       fe = new RGWLibFrontend(env, config);
@@ -614,7 +616,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
 
   // Do this before closing storage so requests don't try to call into
   // closed storage.
-  context_pool->finish();
+  context_pool.finish();
 
   cfgstore.reset(); // deletes
   DriverManager::close_storage(env.driver);

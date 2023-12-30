@@ -83,9 +83,9 @@ class AppMain {
   std::unique_ptr<sal::ConfigStore> cfgstore;
   SiteConfig site;
   const DoutPrefixProvider* dpp;
-  RGWProcessEnv env;
   void need_context_pool();
-  std::optional<ceph::async::io_context_pool> context_pool;
+  ceph::async::io_context_pool context_pool;
+  RGWProcessEnv env;
 public:
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
