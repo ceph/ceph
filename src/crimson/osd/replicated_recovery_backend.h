@@ -57,7 +57,8 @@ protected:
     const hobject_t& soid,
     eversion_t need,
     pg_shard_t pg_shard,
-    const crimson::osd::subsets_t& subsets);
+    const crimson::osd::subsets_t& subsets,
+    const SnapSet push_info_ss);
   void prepare_pull(
     const crimson::osd::ObjectContextRef &head_obc,
     PullOp& pull_op,
