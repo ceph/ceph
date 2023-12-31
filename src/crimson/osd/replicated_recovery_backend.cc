@@ -61,7 +61,7 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     return interruptor::parallel_for_each(
       shards,
       [this, need, soid, head_obc](auto shard) {
-      return prep_push(head_obc, soid, need, shard
+      return prep_push_to_replica(soid, need, shard
       ).then_interruptible([this, soid, shard](auto push) {
         auto msg = crimson::make_message<MOSDPGPush>();
         msg->from = pg.get_pg_whoami();
@@ -310,8 +310,7 @@ ReplicatedRecoveryBackend::recover_delete(
 }
 
 RecoveryBackend::interruptible_future<PushOp>
-ReplicatedRecoveryBackend::prep_push(
-  const crimson::osd::ObjectContextRef &head_obc,
+ReplicatedRecoveryBackend::prep_push_to_replica(
   const hobject_t& soid,
   eversion_t need,
   pg_shard_t pg_shard)
@@ -342,8 +341,6 @@ ReplicatedRecoveryBackend::prep_push(
   push_info.recovery_info.copy_subset = data_subset;
   push_info.recovery_info.soid = soid;
   push_info.recovery_info.oi = obc->obs.oi;
-  assert(head_obc->ssc);
-  push_info.recovery_info.ss = head_obc->ssc->snapset;
   push_info.recovery_info.version = obc->obs.oi.version;
   push_info.recovery_info.object_exist =
     missing_iter->second.clean_regions.object_is_exist();

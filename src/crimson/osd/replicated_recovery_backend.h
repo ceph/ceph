@@ -49,8 +49,7 @@ protected:
     Ref<MOSDPGRecoveryDelete> m);
   interruptible_future<> handle_recovery_delete_reply(
     Ref<MOSDPGRecoveryDeleteReply> m);
-  interruptible_future<PushOp> prep_push(
-    const crimson::osd::ObjectContextRef &head_obc,
+  interruptible_future<PushOp> prep_push_to_replica(
     const hobject_t& soid,
     eversion_t need,
     pg_shard_t pg_shard);
