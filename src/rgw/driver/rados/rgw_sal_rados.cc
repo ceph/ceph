@@ -70,6 +70,7 @@
 
 #include "account.h"
 #include "buckets.h"
+#include "roles.h"
 #include "users.h"
 #include "rgw_pubsub.h"
 #include "topic.h"
@@ -1196,6 +1197,80 @@ int RadosStore::load_owner_by_email(const DoutPrefixProvider* dpp,
     return r;
   }
   owner = parse_owner(uid.id);
+  return 0;
+}
+
+int RadosStore::load_account_role_by_name(const DoutPrefixProvider* dpp,
+                                          optional_yield y,
+                                          std::string_view account_id,
+                                          std::string_view rolename,
+                                          std::unique_ptr<RGWRole>* role)
+{
+  std::string id;
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_roles_obj(zone, account_id);
+  int r = rgwrados::roles::get(dpp, y, rados, obj, rolename, id);
+  if (r < 0) {
+    ldpp_dout(dpp, 20) << "failed to find account rolename " << rolename
+        << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  std::unique_ptr<RGWRole> p = get_role(id);
+  r = p->read_info(dpp, y);
+  if (r < 0) {
+    ldpp_dout(dpp, 20) << "failed to load account role " << id
+        << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  *role = std::move(p);
+  return 0;
+}
+
+int RadosStore::count_account_roles(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_roles_obj(zone, account_id);
+  return rgwrados::account::resource_count(dpp, y, rados, obj, count);
+}
+
+int RadosStore::list_account_roles(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view path_prefix,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   RoleList& listing)
+{
+  // fetch the list of role ids from cls_role
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const rgw_raw_obj& obj = rgwrados::account::get_roles_obj(zone, account_id);
+  std::vector<std::string> ids;
+  int r = rgwrados::roles::list(dpp, y, rados, obj, marker, path_prefix,
+                                max_items, ids, listing.next_marker);
+  if (r < 0) {
+    return r;
+  }
+
+  // load the role metadata for each
+  for (const auto& id : ids) {
+    std::unique_ptr<rgw::sal::RGWRole> role = get_role(id);
+    r = role->read_info(dpp, y);
+    if (r == -ENOENT) {
+      continue;
+    }
+    if (r < 0) {
+      return r;
+    }
+    listing.roles.push_back(std::move(role->get_info()));
+  }
+
   return 0;
 }
 

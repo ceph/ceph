@@ -243,6 +243,14 @@ struct BucketList {
   std::string next_marker;
 };
 
+/// A list of roles
+struct RoleList {
+  /// The list of results, sorted by name
+  std::vector<RGWRoleInfo> roles;
+  /// The next marker to resume listing, or empty
+  std::string next_marker;
+};
+
 /// A list of users
 struct UserList {
   /// The list of results, sorted by name
@@ -349,6 +357,26 @@ class Driver {
                                     optional_yield y,
                                     std::string_view email,
                                     rgw_owner& owner) = 0;
+
+    /** Load an account's role by name. */
+    virtual int load_account_role_by_name(const DoutPrefixProvider* dpp,
+                                          optional_yield y,
+                                          std::string_view account_id,
+                                          std::string_view name,
+                                          std::unique_ptr<RGWRole>* role) = 0;
+    /** Count the number of roles belonging to the given account. */
+    virtual int count_account_roles(const DoutPrefixProvider* dpp,
+                                    optional_yield y,
+                                    std::string_view account_id,
+                                    uint32_t& count) = 0;
+    /** Return a paginated listing of the account's roles. */
+    virtual int list_account_roles(const DoutPrefixProvider* dpp,
+                                   optional_yield y,
+                                   std::string_view account_id,
+                                   std::string_view path_prefix,
+                                   std::string_view marker,
+                                   uint32_t max_items,
+                                   RoleList& listing) = 0;
 
     /** Load an account's user by username. */
     virtual int load_account_user_by_name(const DoutPrefixProvider* dpp,
