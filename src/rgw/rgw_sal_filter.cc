@@ -243,6 +243,35 @@ int FilterDriver::load_owner_by_email(const DoutPrefixProvider* dpp,
   return next->load_owner_by_email(dpp, y, email, owner);
 }
 
+int FilterDriver::load_account_role_by_name(const DoutPrefixProvider* dpp,
+                                            optional_yield y,
+                                            std::string_view account_id,
+                                            std::string_view name,
+                                            std::unique_ptr<RGWRole>* role)
+{
+  return next->load_account_role_by_name(dpp, y, account_id, name, role);
+}
+
+int FilterDriver::count_account_roles(const DoutPrefixProvider* dpp,
+                                      optional_yield y,
+                                      std::string_view account_id,
+                                      uint32_t& count)
+{
+  return next->count_account_roles(dpp, y, account_id, count);
+}
+
+int FilterDriver::list_account_roles(const DoutPrefixProvider* dpp,
+                                     optional_yield y,
+                                     std::string_view account_id,
+                                     std::string_view path_prefix,
+                                     std::string_view marker,
+                                     uint32_t max_items,
+                                     RoleList& listing)
+{
+  return next->list_account_roles(dpp, y, account_id, path_prefix,
+                                  marker, max_items, listing);
+}
+
 int FilterDriver::load_account_user_by_name(const DoutPrefixProvider* dpp,
                                             optional_yield y,
                                             std::string_view account_id,
