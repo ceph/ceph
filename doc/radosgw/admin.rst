@@ -197,9 +197,10 @@ in a command of the following form:
 Remove a User
 -------------
 
-The act of removing a user removes both the user and any subusers associated
-with the user from the system. Remember that it is possible to remove a subuser
-without removing the user with which it is associated.   
+When you remove a user, you also remove any subusers associated with the user.
+
+It is possible to remove a subuser without removing its associated user. This
+is covered in the section called :ref:`Remove a Subuser <radosgw-admin-remove-a-subuser>`.
 
 To remove a user and any subusers associated with it, use the ``user rm``
 command and provide the user ID of the user to be removed. Use a command of the
@@ -217,6 +218,7 @@ Options include:
 - **Purge Keys:** The ``--purge-keys`` option purges all keys associated 
   with the UID.
 
+.. _radosgw-admin-remove-a-subuser:
 
 Remove a Subuser
 ----------------
