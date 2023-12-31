@@ -202,19 +202,23 @@ class ScrubQueue {
    *   the registration will be with "beginning of time" target, making the
    *   scrub-job eligible to immediate scrub (given that external conditions
    *   do not prevent scrubbing)
-   *
    * - 'must' is asserted, and the suggested time is 'now':
    *   This happens if our stats are unknown. The results are similar to the
    *   previous scenario.
-   *
    * - not a 'must': we take the suggested time as a basis, and add to it some
    *   configuration / random delays.
-   *
    *  ('must' is sched_params_t.is_must)
+   *
+   *  'reset_notbefore' is used to reset the 'not_before' time to the updated
+   *  'scheduled_at' time. This is used whenever the scrub-job schedule is
+   *  updated not as a result of a scrub attempt failure.
    *
    *  locking: not using the jobs_lock
    */
-  void update_job(Scrub::ScrubJobRef sjob, const sched_params_t& suggested);
+  void update_job(
+      Scrub::ScrubJobRef sjob,
+      const sched_params_t& suggested,
+      bool reset_notbefore);
 
   sched_params_t determine_scrub_time(const requested_scrub_t& request_flags,
 				      const pg_info_t& pg_info,

@@ -43,18 +43,30 @@ ostream& operator<<(ostream& out, const ScrubJob& sjob)
 }
 }  // namespace std
 
-void ScrubJob::update_schedule(const Scrub::scrub_schedule_t& adjusted)
+void ScrubJob::update_schedule(
+    const Scrub::scrub_schedule_t& adjusted,
+    bool reset_nb)
 {
-  schedule = adjusted;
-  penalty_timeout = utime_t(0, 0);  // helps with debugging
+  dout(15)
+      << fmt::format(
+	     "was: nb:{:s}({:s}). Called with: rest?{} nb:{:s} ({:s}) ({})",
+	     schedule.not_before, schedule.scheduled_at, reset_nb,
+	     adjusted.not_before, adjusted.scheduled_at, registration_state())
+      << dendl;
+  schedule.scheduled_at = adjusted.scheduled_at;
+  schedule.deadline = adjusted.deadline;
+
+  if (reset_nb || schedule.not_before < schedule.scheduled_at) {
+    schedule.not_before = schedule.scheduled_at;
+  }
 
   // 'updated' is changed here while not holding jobs_lock. That's OK, as
   // the (atomic) flag will only be cleared by select_pg_and_scrub() after
   // scan_penalized() is called and the job was moved to the to_scrub queue.
   updated = true;
   dout(10) << fmt::format(
-		  "adjusted: {:s} ({})", schedule.scheduled_at,
-		  registration_state())
+		  "adjusted: nb:{:s} ({:s}) ({})", schedule.not_before,
+		  schedule.scheduled_at, registration_state())
 	   << dendl;
 }
 
@@ -67,15 +79,14 @@ std::string ScrubJob::scheduling_state(utime_t now_is, bool is_deep_expected)
   }
 
   // if the time has passed, we are surely in the queue
-  // (note that for now we do not tell client if 'penalized')
-  if (now_is > schedule.scheduled_at) {
+  if (now_is > schedule.not_before) {
     // we are never sure that the next scrub will indeed be shallow:
     return fmt::format("queued for {}scrub", (is_deep_expected ? "deep " : ""));
   }
 
   return fmt::format(
-      "{}scrub scheduled @ {:s}", (is_deep_expected ? "deep " : ""),
-      schedule.scheduled_at);
+      "{}scrub scheduled @ {:s} ({:s})", (is_deep_expected ? "deep " : ""),
+      schedule.not_before, schedule.scheduled_at);
 }
 
 std::ostream& ScrubJob::gen_prefix(std::ostream& out, std::string_view fn) const
@@ -100,7 +111,8 @@ void ScrubJob::dump(ceph::Formatter* f) const
 {
   f->open_object_section("scrub");
   f->dump_stream("pgid") << pgid;
-  f->dump_stream("sched_time") << schedule.scheduled_at;
+  f->dump_stream("sched_time") << schedule.not_before;
+  f->dump_stream("orig_sched_time") << schedule.scheduled_at;
   f->dump_stream("deadline") << schedule.deadline;
   f->dump_bool("forced",
 	       schedule.scheduled_at == PgScrubber::scrub_must_stamp());

@@ -94,7 +94,7 @@ void ScrubQueue::register_with_osd(
   switch (state_at_entry) {
     case qu_state_t::registered:
       // just updating the schedule?
-      update_job(scrub_job, suggested);
+      update_job(scrub_job, suggested, false /* keep n.b. delay */);
       break;
 
     case qu_state_t::not_registered:
@@ -110,7 +110,7 @@ void ScrubQueue::register_with_osd(
 	  break;
 	}
 
-	update_job(scrub_job, suggested);
+	update_job(scrub_job, suggested, true /* resets not_before */);
 	to_scrub.push_back(scrub_job);
 	scrub_job->in_queues = true;
 	scrub_job->state = qu_state_t::registered;
@@ -124,7 +124,7 @@ void ScrubQueue::register_with_osd(
 	// at any minute
 	std::lock_guard lck{jobs_lock};
 
-	update_job(scrub_job, suggested);
+	update_job(scrub_job, suggested, true /* resets not_before */);
 	if (scrub_job->state == qu_state_t::not_registered) {
 	  dout(5) << " scrub job state changed to 'not registered'" << dendl;
 	  to_scrub.push_back(scrub_job);
@@ -138,18 +138,19 @@ void ScrubQueue::register_with_osd(
   dout(10) << fmt::format(
 		"pg[{}] sched-state changed from <{:.14}> to <{:.14}> (@{:s})",
 		scrub_job->pgid, state_at_entry, scrub_job->state.load(),
-		scrub_job->schedule.scheduled_at)
+		scrub_job->schedule.not_before)
 	   << dendl;
 }
 
-// look mommy - no locks!
+
 void ScrubQueue::update_job(Scrub::ScrubJobRef scrub_job,
-			    const sched_params_t& suggested)
+			    const sched_params_t& suggested,
+                            bool reset_nb)
 {
   // adjust the suggested scrub time according to OSD-wide status
   auto adjusted = adjust_target_time(suggested);
-  scrub_job->update_schedule(adjusted);
   scrub_job->high_priority = suggested.is_must == must_scrub_t::mandatory;
+  scrub_job->update_schedule(adjusted, reset_nb);
 }
 
 sched_params_t ScrubQueue::determine_scrub_time(
@@ -262,7 +263,7 @@ ScrubQContainer ScrubQueue::collect_ripe_jobs(
     utime_t time_now)
 {
   auto filtr = [time_now, rst = restrictions](const auto& jobref) -> bool {
-    return jobref->schedule.scheduled_at <= time_now &&
+    return jobref->schedule.not_before <= time_now &&
 	   (!rst.high_priority_only || jobref->high_priority) &&
 	   (!rst.only_deadlined || (!jobref->schedule.deadline.is_zero() &&
 				    jobref->schedule.deadline <= time_now));
@@ -280,7 +281,8 @@ ScrubQContainer ScrubQueue::collect_ripe_jobs(
     for (const auto& jobref : group) {
       if (!filtr(jobref)) {
 	dout(20) << fmt::format(
-			" not ripe: {} @ {:s}", jobref->pgid,
+			" not ripe: {} @ {:s} ({:s})", jobref->pgid,
+                        jobref->schedule.not_before,
 			jobref->schedule.scheduled_at)
 		 << dendl;
       }
@@ -295,7 +297,7 @@ Scrub::scrub_schedule_t ScrubQueue::adjust_target_time(
   const sched_params_t& times) const
 {
   Scrub::scrub_schedule_t sched_n_dead{
-    times.proposed_time, times.proposed_time};
+    times.proposed_time, times.proposed_time, times.proposed_time};
 
   if (times.is_must == Scrub::must_scrub_t::not_mandatory) {
     // unless explicitly requested, postpone the scrub with a random delay

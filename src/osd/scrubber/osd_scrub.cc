@@ -429,9 +429,10 @@ Scrub::sched_params_t OsdScrub::determine_scrub_time(
 
 void OsdScrub::update_job(
     Scrub::ScrubJobRef sjob,
-    const Scrub::sched_params_t& suggested)
+    const Scrub::sched_params_t& suggested,
+    bool reset_notbefore)
 {
-  m_queue.update_job(sjob, suggested);
+  m_queue.update_job(sjob, suggested, reset_notbefore);
 }
 
 void OsdScrub::register_with_osd(
