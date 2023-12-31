@@ -319,16 +319,26 @@ ReplicatedRecoveryBackend::prep_push_to_replica(
 
   auto& recovery_waiter = get_recovering(soid);
   auto& obc = recovery_waiter.obc;
-  interval_set<uint64_t> data_subset;
-  if (obc->obs.oi.size) {
-    data_subset.insert(0, obc->obs.oi.size);
-  }
-  const auto& missing = pg.get_shard_missing().find(pg_shard)->second;
-  const auto it = missing.get_items().find(soid);
-  assert(it != missing.get_items().end());
-  data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
-  logger().debug("prep_push: {} data_subset {} to {}",
-                 soid, data_subset, pg_shard);
+  // TODO: use calc_clone_subsets
+  crimson::osd::subsets_t subsets;
+
+  return prep_push(soid,
+                   need,
+                   pg_shard,
+                   subsets);
+
+}
+
+RecoveryBackend::interruptible_future<PushOp>
+ReplicatedRecoveryBackend::prep_push(
+  const hobject_t& soid,
+  eversion_t need,
+  pg_shard_t pg_shard,
+  const crimson::osd::subsets_t& subsets)
+{
+  logger().debug("{}: {}, {}", __func__, soid, need);
+  auto& recovery_waiter = get_recovering(soid);
+  auto& obc = recovery_waiter.obc;
 
   auto& push_info = recovery_waiter.pushing[pg_shard];
   pg.begin_peer_recover(pg_shard, soid);
@@ -338,7 +348,8 @@ ReplicatedRecoveryBackend::prep_push_to_replica(
 
   push_info.obc = obc;
   push_info.recovery_info.size = obc->obs.oi.size;
-  push_info.recovery_info.copy_subset = data_subset;
+  push_info.recovery_info.copy_subset = subsets.data_subset;
+  push_info.recovery_info.clone_subset = subsets.clone_subsets;
   push_info.recovery_info.soid = soid;
   push_info.recovery_info.oi = obc->obs.oi;
   push_info.recovery_info.version = obc->obs.oi.version;
@@ -356,6 +367,7 @@ ReplicatedRecoveryBackend::prep_push_to_replica(
     push_info.recovery_progress = push_op.after_progress;
     return push_op;
   });
+
 }
 
 void ReplicatedRecoveryBackend::prepare_pull(

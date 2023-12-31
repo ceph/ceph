@@ -53,6 +53,11 @@ protected:
     const hobject_t& soid,
     eversion_t need,
     pg_shard_t pg_shard);
+  interruptible_future<PushOp> prep_push(
+    const hobject_t& soid,
+    eversion_t need,
+    pg_shard_t pg_shard,
+    const crimson::osd::subsets_t& subsets);
   void prepare_pull(
     const crimson::osd::ObjectContextRef &head_obc,
     PullOp& pull_op,
