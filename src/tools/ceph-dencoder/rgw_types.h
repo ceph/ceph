@@ -246,6 +246,9 @@ TYPE(RGWUID)
 #include "rgw_user_types.h"
 TYPE(rgw_user)
 
+#include "driver/rados/roles.h"
+TYPE(rgwrados::roles::resource_metadata)
+
 #include "driver/rados/users.h"
 TYPE(rgwrados::users::resource_metadata)
 
