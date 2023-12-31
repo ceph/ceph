@@ -196,6 +196,23 @@ class RadosStore : public StoreDriver {
                             std::string_view email,
                             rgw_owner& owner) override;
 
+    int load_account_role_by_name(const DoutPrefixProvider* dpp,
+                                  optional_yield y,
+                                  std::string_view account_id,
+                                  std::string_view name,
+                                  std::unique_ptr<RGWRole>* role) override;
+    int count_account_roles(const DoutPrefixProvider* dpp,
+                            optional_yield y,
+                            std::string_view account_id,
+                            uint32_t& count) override;
+    int list_account_roles(const DoutPrefixProvider* dpp,
+                           optional_yield y,
+                           std::string_view account_id,
+                           std::string_view path_prefix,
+                           std::string_view marker,
+                           uint32_t max_items,
+                           RoleList& listing) override;
+
     int load_account_user_by_name(const DoutPrefixProvider* dpp,
                                   optional_yield y,
                                   std::string_view account_id,
