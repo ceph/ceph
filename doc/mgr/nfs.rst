@@ -568,6 +568,9 @@ If the NFS service is running on a non-standard port number:
 
 .. note:: Only NFS v4.0+ is supported.
 
+.. note:: As of this writing (01 Jan 2024), no version of Microsoft Windows
+   supports mouting an NFS v4.x export natively.
+
 Troubleshooting
 ===============
 
