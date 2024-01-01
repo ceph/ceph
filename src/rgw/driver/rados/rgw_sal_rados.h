@@ -713,10 +713,6 @@ class RadosNotification : public StoreNotification {
 
     ~RadosNotification() = default;
 
-    rgw::notify::reservation_t& get_reservation(void) {
-      return res;
-    }
-
     virtual int publish_reserve(const DoutPrefixProvider *dpp, RGWObjTags* obj_tags = nullptr) override;
     virtual int publish_commit(const DoutPrefixProvider* dpp, uint64_t size,
 			       const ceph::real_time& mtime, const std::string& etag, const std::string& version) override;

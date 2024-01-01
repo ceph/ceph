@@ -218,7 +218,6 @@ private:
   std::vector<std::string> entryProcessingResultString = {"Failure", "Successful", "Sleeping", "Expired", "Migrating"};
 
   // processing of a specific entry
-  // return whether processing was successful (true) or not (false)
   EntryProcessingResult process_entry(const ConfigProxy& conf, persistency_tracker& entry_persistency_tracker,
                                       const cls_queue_entry& entry, spawn::yield_context yield) {
     event_entry_t event_entry;
@@ -244,7 +243,7 @@ private:
     if ( (topic_persistency_ttl != 0 && event_entry.creation_time != ceph::coarse_real_clock::zero() &&
          time_now - event_entry.creation_time > std::chrono::seconds(topic_persistency_ttl))
          || ( topic_persistency_max_retries != 0 && entry_persistency_tracker.retires_num >  topic_persistency_max_retries) ) {
-      ldpp_dout(this, 1) << "Expiring entry for topic= "
+      ldpp_dout(this, 1) << "WARNING: Expiring entry for topic= "
                          << event_entry.arn_topic << " bucket_owner= "
                          << event_entry.event.bucket_ownerIdentity
                          << " bucket= " << event_entry.event.bucket_name
@@ -261,15 +260,14 @@ private:
 
     ++entry_persistency_tracker.retires_num;
     entry_persistency_tracker.last_retry_time = time_now;
-    ldpp_dout(this, 20) << "Processing entry retry_number=" << entry_persistency_tracker.retires_num << " time=" << dendl;
+    ldpp_dout(this, 20) << "INFO: Processing entry retry_number=" << entry_persistency_tracker.retires_num << " time=" << dendl;
     try {
       // TODO move endpoint creation to queue level
-      const auto push_endpoint = RGWPubSubEndpoint::create(event_entry.push_endpoint, event_entry.arn_topic,
-          RGWHTTPArgs(event_entry.push_endpoint_args, this), 
-          cct);
+      std::unique_ptr<RGWPubSubEndpoint> endpoint{RGWPubSubEndpoint::create(event_entry.push_endpoint, event_entry.arn_topic,
+          RGWHTTPArgs(event_entry.push_endpoint_args, this), cct)};
       ldpp_dout(this, 20) << "INFO: push endpoint created: " << event_entry.push_endpoint <<
         " for entry: " << entry.marker << dendl;
-      const auto ret = push_endpoint->send_to_completion_async(cct, event_entry.event, optional_yield(io_context, yield));
+      const auto ret = endpoint->send(cct, event_entry.event, optional_yield(io_context, yield));
       if (ret < 0) {
         ldpp_dout(this, 5) << "WARNING: push entry: " << entry.marker << " to endpoint: " << event_entry.push_endpoint 
           << " failed. error: " << ret << " (will retry)" << dendl;
@@ -691,7 +689,7 @@ public:
           try {
             io_context.run(); 
           } catch (const std::exception& err) {
-            ldpp_dout(this, 10) << "Notification worker failed with error: " << err.what() << dendl;
+            ldpp_dout(this, 1) << "ERROR: Notification worker failed with error: " << err.what() << dendl;
             throw(err);
           }
         });
@@ -699,7 +697,7 @@ public:
           (WORKER_THREAD_NAME+std::to_string(worker_id)).c_str());
         ceph_assert(rc == 0);
       }
-      ldpp_dout(this, 10) << "Started notification manager with: " << worker_count << " workers" << dendl;
+      ldpp_dout(this, 10) << "INFO: Started notification manager with: " << worker_count << " workers" << dendl;
     }
 
   int add_persistent_topic(const std::string& topic_name, optional_yield y) {
@@ -1025,6 +1023,32 @@ static inline bool notification_match(reservation_t& res,
         ldpp_dout(res.dpp, 1) << "ERROR: failed to parse reservation id. error: " << ret << dendl;
         return ret;
       }
+    } else {
+      // no reservation - try to connect to endpoint instead
+      try {
+        std::unique_ptr<RGWPubSubEndpoint> endpoint(RGWPubSubEndpoint::create(
+	  topic_cfg.dest.push_endpoint,
+	  topic_cfg.dest.arn_topic,
+	  RGWHTTPArgs(topic_cfg.dest.push_endpoint_args, dpp),
+	  dpp->get_cct()));
+        ldpp_dout(res.dpp, 20) << "INFO: push endpoint created: "
+			       << topic_cfg.dest.push_endpoint << dendl;
+        const auto ret = endpoint->is_alive(dpp->get_cct(), res.yield);
+        if (ret < 0) {
+          ldpp_dout(dpp, 1)
+              << "ERROR: endpoint " << topic_cfg.dest.push_endpoint
+              << " is_alive failed. error: " << ret << dendl;
+          if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
+          return ret;
+        }
+        res.endpoint.swap(endpoint);
+      } catch (const RGWPubSubEndpoint::configuration_error& e) {
+        ldpp_dout(dpp, 1) << "ERROR: failed to create push endpoint: "
+                          << topic_cfg.dest.push_endpoint
+                          << ". error: " << e.what() << dendl;
+        if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
+        return -EINVAL;
+      }
     }
     res.topics.emplace_back(topic_filter.s3_id, topic_cfg, res_id);
   }
@@ -1120,39 +1144,21 @@ int publish_commit(rgw::sal::Object* obj,
       pcc_arg.release();
       completion.release();
     } else {
-      try {
-        // TODO add endpoint LRU cache
-        const auto push_endpoint = RGWPubSubEndpoint::create(
-	  topic.cfg.dest.push_endpoint,
-	  topic.cfg.dest.arn_topic,
-	  RGWHTTPArgs(topic.cfg.dest.push_endpoint_args, dpp),
-	  dpp->get_cct());
-        ldpp_dout(res.dpp, 20) << "INFO: push endpoint created: "
-			       << topic.cfg.dest.push_endpoint << dendl;
-        const auto ret = push_endpoint->send_to_completion_async(
-	  dpp->get_cct(), event_entry.event, res.yield);
-        if (ret < 0) {
-          ldpp_dout(dpp, 1)
-              << "ERROR: push to endpoint " << topic.cfg.dest.push_endpoint
-              << " bucket: " << event_entry.event.bucket_name
-              << " bucket_owner: " << event_entry.event.bucket_ownerIdentity
-              << " object_name: " << event_entry.event.object_key
-              << " failed. error: " << ret << dendl;
-          if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
-          return ret;
-        }
-        if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
-      } catch (const RGWPubSubEndpoint::configuration_error& e) {
-        ldpp_dout(dpp, 1) << "ERROR: failed to create push endpoint: "
-                          << topic.cfg.dest.push_endpoint
-                          << " bucket: " << event_entry.event.bucket_name
-                          << " bucket_owner: "
-                          << event_entry.event.bucket_ownerIdentity
-                          << " object_name: " << event_entry.event.object_key
-                          << ". error: " << e.what() << dendl;
+      // "reservation" stage just check that endpoint is ok
+      // if not, we should not reach the commit stage
+      ceph_assert(res.endpoint);
+      const auto ret = res.endpoint->send(dpp->get_cct(), event_entry.event, res.yield);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1)
+            << "ERROR: push to endpoint " << topic.cfg.dest.push_endpoint
+            << " bucket: " << event_entry.event.bucket_name
+            << " bucket_owner: " << event_entry.event.bucket_ownerIdentity
+            << " object_name: " << event_entry.event.object_key
+            << " failed. error: " << ret << dendl;
         if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_failed);
-        return -EINVAL;
+        return ret;
       }
+      if (perfcounter) perfcounter->inc(l_rgw_pubsub_push_ok);
     }
   }
   return 0;

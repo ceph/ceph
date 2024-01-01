@@ -802,13 +802,7 @@ int RGWAsyncFetchRemoteObj::_send_request(const DoutPrefixProvider *dpp)
         // NOTE: we create a mutable copy of bucket.get_tenant as the get_notification function expects a std::string&, not const
         std::string tenant(dest_bucket.get_tenant());
 
-        std::unique_ptr<rgw::sal::Notification> notify 
-                 = store->get_notification(dpp, &dest_obj, nullptr, rgw::notify::ObjectSyncedCreate,
-                  &dest_bucket, user_id,
-                  tenant,
-                  req_id, null_yield);
-
-        auto notify_res = static_cast<rgw::sal::RadosNotification*>(notify.get())->get_reservation();
+        rgw::notify::reservation_t notify_res(dpp, store, &dest_obj, nullptr, &dest_bucket, user_id,  tenant, req_id, null_yield);
         int ret = rgw::notify::publish_reserve(dpp, rgw::notify::ObjectSyncedCreate, notify_res, &obj_tags);
         if (ret < 0) {
           ldpp_dout(dpp, 1) << "ERROR: reserving notification failed, with error: " << ret << dendl;

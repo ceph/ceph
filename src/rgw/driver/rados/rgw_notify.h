@@ -19,6 +19,7 @@ namespace rgw::sal {
 
 class RGWRados;
 struct rgw_obj_key;
+class RGWPubSubEndpoint;
 
 namespace rgw::notify {
 
@@ -72,6 +73,7 @@ struct reservation_t {
   const std::string user_tenant;
   const std::string req_id;
   optional_yield yield;
+  std::unique_ptr<RGWPubSubEndpoint> endpoint;
 
   /* ctor for rgw_op callers */
   reservation_t(const DoutPrefixProvider* _dpp,

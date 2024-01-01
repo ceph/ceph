@@ -22,7 +22,12 @@ bool init(CephContext* cct);
 void shutdown();
 
 // connect to a kafka endpoint
-bool connect(std::string& broker, const std::string& url, bool use_ssl, bool verify_ssl, boost::optional<const std::string&> ca_location, boost::optional<const std::string&> mechanism);
+bool connect(std::string& broker, 
+    const std::string& url, 
+    bool use_ssl, 
+    bool verify_ssl, 
+    boost::optional<const std::string&> ca_location, 
+    boost::optional<const std::string&> mechanism);
 
 // publish a message over a connection that was already created
 int publish(const std::string& conn_name,
@@ -37,7 +42,12 @@ int publish_with_confirm(const std::string& conn_name,
     const std::string& message,
     reply_callback_t cb);
 
+// verify that broker is up and that topic exists
+int check_broker(const std::string& conn_name,
+    const std::string& topic);
+
 // convert the integer status returned from the "publish" function to a string
+//
 std::string status_to_string(int s);
 
 // number of connections

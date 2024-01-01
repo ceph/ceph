@@ -3983,7 +3983,8 @@ options:
     are sent to it for more than the time defined.
     Note that the connection will not be considered idle, even if it is down,
     as long as there are attempts to send messages to it.
-  default: 30
+    If set to zero, connections are never considered idle.
+  default: 300
   services:
   - rgw
   with_legacy: true
@@ -3991,11 +3992,41 @@ options:
   type: uint 
   level: advanced
   desc: Time in milliseconds to sleep while polling for kafka replies
-  long_desc: This will be used to prevent busy waiting for the kafka replies
+  long_desc: This will be used to prevent busy waiting for the kafka replies.
     As well as for the cases where the broker is down and we try to reconnect.
-    The same values times 3 will be used to sleep if there were no messages
-    sent or received across all kafka connections
+    The same values times 3, will be used to sleep if there were no messages
+    sent or received across all kafka connections.
+    If set to zero, poll will return immediatly, as well as the other sleeeps.
+    This may raise the CPU consumption of the kafka thread.
   default: 10
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_kafka_message_timeout
+  type: uint 
+  level: advanced
+  desc: This is the maximum time in milliseconds to deliver a message (including retries)
+  long_desc: Delivery error occurs when either the retry count or the message timeout are exceeded.
+    If set to zero, message will time out only based on retries.
+  default: 5000
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_kafka_check_broker
+  type: bool 
+  level: advanced
+  desc: Checking the state of the broker before sending the notification
+  long_desc: If set to "true" we will check the state of the broker before sending the
+    actual notification. If the broker is down we will reply with an error to the operation
+    that triggered the notification (S3, lifecycle, multisiet syncing). 
+    Note that the actual sending may still fail even if the state of the broker was ok.
+    If set to "true", (the current behavior, and the default) the state of the broker is not checked.
+    In both cases, failure to actually send the notification will not trigger failure 
+    of the operation that triggered the notification, and will only be logged.
+    Note that this is applicable only for non-persistent (synchronous) notifications.
+    Persistent notifications will reply with an error to the operation that triggered them 
+    only if their persistent queue is full, and ignore the state of the broker.
+  default: false
   services:
   - rgw
   with_legacy: true
