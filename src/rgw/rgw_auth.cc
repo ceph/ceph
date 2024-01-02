@@ -25,21 +25,33 @@ using namespace std;
 namespace rgw {
 namespace auth {
 
-// match a tenant user principal by userid[:subuser]
-static bool match_user_principal(std::string_view userid,
-                                 std::string_view subuser,
-                                 std::string_view expected)
+// match a principal by path/name[:subuser]
+static bool match_principal(std::string_view path,
+                            std::string_view name,
+                            std::string_view subuser,
+                            std::string_view expected)
 {
-  // match user by id
-  if (!expected.starts_with(userid)) {
+  // leading / was already matched by ":user/" in parse_principal()
+  if (!path.empty()) {
+    path.remove_prefix(1);
+  }
+
+  // match user path
+  if (!expected.starts_with(path)) {
     return false;
   }
-  expected.remove_prefix(userid.size());
+  expected.remove_prefix(path.size());
+
+  // match user by id
+  if (!expected.starts_with(name)) {
+    return false;
+  }
+  expected.remove_prefix(name.size());
   if (expected.empty()) { // exact match
     return true;
   }
 
-  // try to match userid:subuser
+  // try to match name:subuser
   if (!expected.starts_with(":")) {
     return false;
   }
@@ -63,6 +75,7 @@ std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
                        const std::string& display_name,
+                       const std::string& path,
                        const rgw_account_id& account_id,
                        const int perm_mask,
                        const bool is_admin,
@@ -79,6 +92,7 @@ transform_old_authinfo(CephContext* const cct,
      * new auth. */
     const rgw_user id;
     const std::string display_name;
+    const std::string path;
     const rgw_account_id account_id;
     const int perm_mask;
     const bool is_admin;
@@ -87,6 +101,7 @@ transform_old_authinfo(CephContext* const cct,
     DummyIdentityApplier(CephContext* const cct,
                          const rgw_user& auth_id,
                          const std::string display_name,
+                         const std::string path,
                          const rgw_account_id& account_id,
                          const int perm_mask,
                          const bool is_admin,
@@ -94,6 +109,7 @@ transform_old_authinfo(CephContext* const cct,
       : cct(cct),
         id(auth_id),
         display_name(display_name),
+        path(path),
         account_id(account_id),
         perm_mask(perm_mask),
         is_admin(is_admin),
@@ -129,8 +145,9 @@ transform_old_authinfo(CephContext* const cct,
       } else if (p.is_account()) {
         return p.get_account() == id.tenant;
       } else if (p.is_user()) {
+        std::string_view no_subuser;
         return p.get_account() == id.tenant
-            && p.get_id() == id.id;
+            && match_principal(path, id.id, no_subuser, p.get_id());
       }
       return false;
     }
@@ -162,7 +179,7 @@ transform_old_authinfo(CephContext* const cct,
   };
 
   return std::make_unique<DummyIdentityApplier>(
-      cct, auth_id, display_name, account_id,
+      cct, auth_id, display_name, path, account_id,
       perm_mask, is_admin, type);
 }
 
@@ -173,6 +190,7 @@ transform_old_authinfo(const req_state* const s)
   return transform_old_authinfo(s->cct,
                                 info.user_id,
                                 info.display_name,
+                                info.path,
                                 info.account_id,
                                 s->perm_mask,
   /* System user has admin permissions by default - it's supposed to pass
@@ -850,7 +868,8 @@ bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
     return p.get_account() == user_info.user_id.tenant;
   } else if (p.is_user()) {
     return p.get_account() == user_info.user_id.tenant
-        && match_user_principal(user_info.user_id.id, subuser, p.get_id());
+        && match_principal(user_info.path, user_info.user_id.id,
+                           subuser, p.get_id());
   }
   return false;
 }
@@ -915,7 +934,7 @@ bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
   if (p.is_wildcard()) {
     return true;
   } else if (p.is_role()) {
-    return p.get_id() == role.name
+    return p.get_id() == role.name // TODO: match path/name
         && p.get_account() == role.tenant;
   } else if (p.is_assumed_role()) {
     string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
