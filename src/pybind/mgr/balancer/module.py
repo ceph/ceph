@@ -340,8 +340,11 @@ class Module(MgrModule):
     success_string = 'Optimization plan created successfully'
     in_progress_string = 'in progress'
     last_pg_upmap: List[Dict[str, Any]] = []
-    added_pg_upmap_items: List[Dict[str, Any]] = []
-    removed_pg_upmap_items: List[Dict[str, Any]] = []
+    pg_upmap_items_added: List[Dict[str, Any]] = []
+    pg_upmap_items_removed: List[Dict[str, Any]] = []
+    last_pg_upmap_primaries: List[Dict[str, Any]] = []
+    pg_upmap_primaries_added: List[Dict[str, Any]] = []
+    pg_upmap_activity_initalized = False
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         super(Module, self).__init__(*args, **kwargs)
@@ -376,10 +379,12 @@ class Module(MgrModule):
             'optimize_result': self.optimize_result,
             'no_optimization_needed': self.no_optimization_needed,
             'mode': self.get_module_option('mode'),
-            'added_pg_upmap_items': self.added_pg_upmap_items,
-            'removed_pg_upmap_items': self.removed_pg_upmap_items,
+            'pg_upmap_items_added': self.pg_upmap_items_added,
+            'pg_upmap_items_removed': self.pg_upmap_items_removed,
+            'pg_upmap_primaries_added': self.pg_upmap_primaries_added,
+            'pg_upmap_primaries_removed': self.pg_upmap_primaries_removed
         }
-        return (0, json.dumps(s, indent=4), '')
+        return (0, json.dumps(s, indent=4, sort_keys=True), '')
 
     @CLICommand('balancer mode')
     def set_mode(self, mode: Mode) -> Tuple[int, str, str]:
@@ -660,6 +665,7 @@ class Module(MgrModule):
         if not plan_:
             return (-errno.ENOENT, '', f'plan {plan} not found')
         r, detail = self.execute(plan_)
+        self.update_pg_upmap_activity()  # update pg activity in `balancer status detail`
         self.plan_rm(plan)
         return (r, '', detail)
 
@@ -745,15 +751,13 @@ class Module(MgrModule):
                 start = time.time()
                 r, detail = self.optimize(plan)
                 end = time.time()
-                self.added_pg_upmap_items = [pg for pg in osdmap.dump().get('pg_upmap_items', '') if pg not in self.last_pg_upmap]
-                self.removed_pg_upmap_items = [pg for pg in self.last_pg_upmap if pg not in osdmap.dump().get('pg_upmap_items', '')]
-                self.last_pg_upmap = osdmap.dump().get('pg_upmap_items', '')
                 self.last_optimize_duration = str(datetime.timedelta(seconds=(end - start)))
                 if r == 0:
                     self.optimize_result = self.success_string
                     self.execute(plan)
                 else:
                     self.optimize_result = detail
+                self.update_pg_upmap_activity()  # update pg activity in `balancer status detail`
                 self.optimizing = False
             self.log.debug('Sleeping for %d', sleep_interval)
             self.event.wait(sleep_interval)
@@ -1577,6 +1581,23 @@ class Module(MgrModule):
             'active': self.active,
             'mode': self.mode,
         }
+
+    def update_pg_upmap_activity(self) -> None:
+        osdmap = self.get_osdmap()
+        if not self.pg_upmap_activity_initalized:
+            self.last_pg_upmap = osdmap.dump().get('pg_upmap_items', '')
+            self.last_pg_upmap_primaries = osdmap.dump().get('pg_upmap_primaries', '')
+            self.pg_upmap_activity_initalized = True
+
+        # update pg_upmap_items
+        self.pg_upmap_items_added = [pg for pg in osdmap.dump().get('pg_upmap_items', '') if pg not in self.last_pg_upmap]
+        self.pg_upmap_items_removed = [pg for pg in self.last_pg_upmap if pg not in osdmap.dump().get('pg_upmap_items', '')]
+        self.last_pg_upmap = osdmap.dump().get('pg_upmap_items', '')
+
+        # update pg_upmap_primaries
+        self.pg_upmap_primaries_added = [pg for pg in osdmap.dump().get('pg_upmap_primaries', '') if pg not in self.last_pg_upmap_primaries]
+        self.pg_upmap_primaries_removed = [pg for pg in self.last_pg_upmap_primaries if pg not in osdmap.dump().get('pg_upmap_primaries', '')]
+        self.last_pg_upmap_primaries = osdmap.dump().get('pg_upmap_primaries', '')
 
     def self_test(self) -> None:
         # turn balancer on
