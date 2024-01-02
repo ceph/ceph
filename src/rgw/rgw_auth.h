@@ -101,6 +101,7 @@ std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
                        const std::string& display_name,
+                       const std::string& path,
                        const rgw_account_id& account_id,
                        const int perm_mask,
                        const bool is_admin,
