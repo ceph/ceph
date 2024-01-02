@@ -63,7 +63,9 @@ class label_iterator {
   reference operator*() const { return state->label; }
   pointer operator->() const { return &state->label; }
 
-  auto operator<=>(const label_iterator& rhs) const = default;
+  // can't request a default spaceship operator (<=>)
+  // because of the optional member `state`
+  bool operator==(const label_iterator& rhs) const = default;
 
  private:
   struct iterator_state {
