@@ -146,8 +146,13 @@ transform_old_authinfo(CephContext* const cct,
         return p.get_account() == id.tenant;
       } else if (p.is_user()) {
         std::string_view no_subuser;
-        return p.get_account() == id.tenant
-            && match_principal(path, id.id, no_subuser, p.get_id());
+        // account users can match both account- and tenant-based arns
+        if (!account_id.empty() && p.get_account() == account_id) {
+          return match_principal(path, display_name, no_subuser, p.get_id());
+        } else {
+          return p.get_account() == id.tenant
+              && match_principal(path, id.id, no_subuser, p.get_id());
+        }
       }
       return false;
     }
@@ -867,9 +872,16 @@ bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
   } else if (p.is_account()) {
     return p.get_account() == user_info.user_id.tenant;
   } else if (p.is_user()) {
-    return p.get_account() == user_info.user_id.tenant
-        && match_principal(user_info.path, user_info.user_id.id,
-                           subuser, p.get_id());
+    // account users can match both account- and tenant-based arns
+    if (!user_info.account_id.empty() &&
+        p.get_account() == user_info.account_id) {
+      return match_principal(user_info.path, user_info.display_name,
+                             subuser, p.get_id());
+    } else {
+      return p.get_account() == user_info.user_id.tenant
+          && match_principal(user_info.path, user_info.user_id.id,
+                             subuser, p.get_id());
+    }
   }
   return false;
 }
