@@ -472,8 +472,6 @@ public:
     void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
-      Buffer b(this, Buffer::STATE_WRITING, seq, offset, bl,
-			     flags);
       uint16_t cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, this,
                   Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
@@ -485,7 +483,6 @@ public:
     void _finish_write(BufferCacheShard* cache, uint64_t seq);
     void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
       std::lock_guard l(cache->lock);
-      Buffer b(this, Buffer::STATE_CLEAN, 0, offset, bl);
       uint16_t cache_private = _discard(cache, offset, bl.length());
       _add_buffer(
           cache, this,
