@@ -209,6 +209,7 @@ TEST_F(TestClient, LlreadvLlwritevNullContext) {
   ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
 }
 
+#if defined(O_PATH)
 TEST_F(TestClient, LlreadvLlwritevOPathFileHandle) {
   /* Test that async I/O fails if the file has been created with O_PATH flag;
   EBADF is returned and the callback is finished*/
@@ -272,6 +273,7 @@ TEST_F(TestClient, LlreadvLlwritevOPathFileHandle) {
   client->ll_release(fh);
   ASSERT_EQ(0, client->ll_unlink(root, filename, myperm));
 }
+#endif
 
 TEST_F(TestClient, LlreadvLlwritevReadOnlyFile) {
   /* Test async I/O with read only file*/

@@ -126,6 +126,30 @@ WRITE_INTTYPE_ENCODER(int32_t, le32)
 WRITE_INTTYPE_ENCODER(uint16_t, le16)
 WRITE_INTTYPE_ENCODER(int16_t, le16)
 
+// Some implementations, e.g. clang on Darwin, define a custom
+// size_t type which is not equivalent to uint64_t or uint32_t.
+// The templates below will be active for such cases.
+constexpr bool strong_size_t = 
+  !std::is_same_v<uint64_t, size_t> 
+  && !std::is_same_v<uint32_t, size_t>;
+
+template <size_t = 0>
+    requires (strong_size_t)
+inline void encode(const size_t& v, bufferlist& bl)
+{
+  uint64_t vv = (uint64_t)v;
+  encode(vv, bl);
+}
+
+template <size_t = 0>
+    requires(strong_size_t)
+inline void decode(size_t& v, bufferlist::const_iterator& p)
+{
+  uint64_t vv;
+  decode(vv, p);
+  v = (size_t)vv;
+}
+
 // -----------------------------------
 // float types
 //

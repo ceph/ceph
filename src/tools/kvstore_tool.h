@@ -10,10 +10,18 @@
 #include "acconfig.h"
 #include "include/buffer_fwd.h"
 #ifdef WITH_BLUESTORE
+// kv/KeyValueDB.h is included via os/ObjectMap.h -> os/ObjectStore.h
 #include "os/bluestore/BlueStore.h"
+#else
+#include "kv/KeyValueDB.h"
 #endif
 
-class KeyValueDB;
+#include "global/global_context.h"
+#include "global/global_init.h"
+
+// forward declaration won't work because the unique_ptr below
+// requires a complete type for the destructor
+//class KeyValueDB;
 
 class StoreTool
 {

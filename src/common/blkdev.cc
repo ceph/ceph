@@ -807,8 +807,8 @@ int BlkDev::partition(char *partition, size_t max) const
 
 int BlkDev::wholedisk(char *device, size_t max) const
 {
+  return -EOPNOTSUPP;
 }
-
 
 void get_dm_parents(const std::string& dev, std::set<std::string> *ls)
 {
@@ -837,6 +837,13 @@ std::string get_device_path(const std::string& devname,
     *err = "not implemented";
   }
   return std::string();
+}
+
+int block_device_get_metrics(const string &devname, int timeout,
+                             json_spirit::mValue *result)
+{
+  // FIXME: implement me for apple
+  return -EOPNOTSUPP;
 }
 
 #elif defined(__FreeBSD__)

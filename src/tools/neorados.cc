@@ -210,7 +210,7 @@ ba::awaitable<void> read(R::RADOS& r, const std::vector<std::string>& p)
 
   std::size_t off = 0;
   ceph::buffer::list bl;
-  while (auto toread = std::min(len - off, io_size)) {
+  while (auto toread = std::min(len - off, (uint64_t)io_size)) {
     R::ReadOp op;
     op.read(off, toread, &bl);
     co_await r.execute(obj, pool, std::move(op), nullptr,

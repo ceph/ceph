@@ -21,9 +21,6 @@
 #include "common/strtol.h"
 #include "common/url_escape.h"
 
-#include "global/global_context.h"
-#include "global/global_init.h"
-
 #include "kvstore_tool.h"
 
 using namespace std;

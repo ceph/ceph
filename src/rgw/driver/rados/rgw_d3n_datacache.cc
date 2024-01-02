@@ -40,9 +40,14 @@ int D3nCacheAioWriteRequest::d3n_libaio_prepare_write_op(bufferlist& bl, unsigne
     return r;
   }
   r = 0;
-
+  
+  // Apple stdlib doesn't implement the function posix_fadvise
+  // testing for the capability with the feature_test_macros
+  // as per https://man7.org/linux/man-pages/man2/posix_fadvise.2.html
+#if _POSIX_C_SOURCE >= 200112L
   if (g_conf()->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL)
     posix_fadvise(fd, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
+#endif
   cb->aio_fildes = fd;
 
   data = malloc(len);

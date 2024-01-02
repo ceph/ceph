@@ -45,6 +45,12 @@
  */
 #include "include/ceph_assert.h"
 
+#if defined(__APPLE__) && !defined(_POSIX_C_SOURCE)
+#define st_atim	st_atimespec
+#define st_mtim st_mtimespec
+#define st_ctim st_ctimespec
+#endif
+
 
 #define RGW_RWXMODE  (S_IRWXU | S_IRWXG | S_IRWXO)
 

@@ -59,7 +59,7 @@ public:
   int stat(uint64_t* size);
   ssize_t write(const void* data, size_t len, uint64_t off);
   ssize_t read(void* data, size_t len, uint64_t off);
-  int truncate(size_t size);
+  int truncate(uint64_t size);
   int flush();
   int lock(uint64_t timeoutms);
   int unlock();
