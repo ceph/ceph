@@ -220,6 +220,12 @@ class ScrubQueue {
       const sched_params_t& suggested,
       bool reset_notbefore);
 
+  void delay_on_failure(
+      Scrub::ScrubJobRef sjob,
+      std::chrono::seconds delay,
+      Scrub::delay_cause_t delay_cause,
+      utime_t now_is);
+
   sched_params_t determine_scrub_time(const requested_scrub_t& request_flags,
 				      const pg_info_t& pg_info,
 				      const pool_opts_t& pool_conf) const;

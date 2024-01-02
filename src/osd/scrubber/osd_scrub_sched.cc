@@ -153,6 +153,21 @@ void ScrubQueue::update_job(Scrub::ScrubJobRef scrub_job,
   scrub_job->update_schedule(adjusted, reset_nb);
 }
 
+
+void ScrubQueue::delay_on_failure(
+    Scrub::ScrubJobRef sjob,
+    std::chrono::seconds delay,
+    Scrub::delay_cause_t delay_cause,
+    utime_t now_is)
+{
+  dout(10) << fmt::format(
+		  "pg[{}] delay_on_failure: delay:{} now:{:s}",
+		  sjob->pgid, delay, now_is)
+	   << dendl;
+  sjob->delay_on_failure(delay, delay_cause, now_is);
+}
+
+
 sched_params_t ScrubQueue::determine_scrub_time(
   const requested_scrub_t& request_flags,
   const pg_info_t& pg_info,
@@ -281,9 +296,9 @@ ScrubQContainer ScrubQueue::collect_ripe_jobs(
     for (const auto& jobref : group) {
       if (!filtr(jobref)) {
 	dout(20) << fmt::format(
-			" not ripe: {} @ {:s} ({:s})", jobref->pgid,
-                        jobref->schedule.not_before,
-			jobref->schedule.scheduled_at)
+			" not eligible: {} @ {:s} ({:s},{:s})", jobref->pgid,
+			jobref->schedule.not_before,
+			jobref->schedule.scheduled_at, jobref->last_issue)
 		 << dendl;
       }
     }

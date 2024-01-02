@@ -150,6 +150,17 @@ class OsdScrub {
   void clear_reserving_now(spg_t reserving_id);
 
   /**
+   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
+   * would not be retried before 'delay' seconds have passed.
+   */
+  void delay_on_failure(
+      Scrub::ScrubJobRef sjob,
+      std::chrono::seconds delay,
+      Scrub::delay_cause_t delay_cause,
+      utime_t now_is);
+
+
+  /**
    * \returns true if the current time is within the scrub time window
    */
   [[nodiscard]] bool scrub_time_permit(utime_t t) const;

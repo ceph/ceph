@@ -71,8 +71,8 @@ class ScrubJob final : public RefCountedObject {
    */
   std::atomic_bool in_queues{false};
 
-  /// last scrub attempt failed to secure replica resources
-  bool resources_failure{false};
+  /// how the last attempt to scrub this PG ended
+  delay_cause_t last_issue{delay_cause_t::none};
 
   /**
    * 'updated' is a temporary flag, used to create a barrier after
@@ -117,6 +117,15 @@ class ScrubJob final : public RefCountedObject {
   void update_schedule(
       const scrub_schedule_t& adjusted,
       bool reset_failure_penalty);
+
+  /**
+   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
+   * would not be retried before 'delay' seconds have passed.
+   */
+  void delay_on_failure(
+      std::chrono::seconds delay,
+      delay_cause_t delay_cause,
+      utime_t scrub_clock_now);
 
   void dump(ceph::Formatter* f) const;
 
@@ -228,6 +237,20 @@ struct formatter<Scrub::qu_state_t> : formatter<std::string_view> {
 };
 
 template <>
+struct formatter<Scrub::sched_params_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const Scrub::sched_params_t& pm, FormatContext& ctx)
+  {
+    return fmt::format_to(
+	ctx.out(), "(proposed:{:s} min/max:{:.3f}/{:.3f} must:{:2s})",
+        utime_t{pm.proposed_time}, pm.min_interval, pm.max_interval,
+        pm.is_must == Scrub::must_scrub_t::mandatory ? "true" : "false");
+  }
+};
+
+
+template <>
 struct formatter<Scrub::ScrubJob> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
@@ -235,12 +258,10 @@ struct formatter<Scrub::ScrubJob> {
   auto format(const Scrub::ScrubJob& sjob, FormatContext& ctx)
   {
     return fmt::format_to(
-	ctx.out(),
-	"pg[{}] @ {:s} ({:s}) (dl:{:s}) - <{}> / failure: {} / queue state: "
-	"{:.7}",
+	ctx.out(), "pg[{}] @ nb:{:s} ({:s}) (dl:{:s}) - <{}> queue state:{:.7}",
 	sjob.pgid, sjob.schedule.not_before, sjob.schedule.scheduled_at,
 	sjob.schedule.deadline, sjob.registration_state(),
-	sjob.resources_failure, sjob.state.load(std::memory_order_relaxed));
+	sjob.state.load(std::memory_order_relaxed));
   }
 };
 

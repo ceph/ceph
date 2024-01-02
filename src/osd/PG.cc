@@ -1342,9 +1342,12 @@ Scrub::schedule_result_t PG::start_scrubbing(
 	   << dendl;
   ceph_assert(ceph_mutex_is_locked(_lock));
 
+  // recheck PG status (as the PG was unlocked for a time after being selected
+  // for scrubbing)
   if (!is_primary() || !is_active() || !is_clean()) {
     dout(10) << __func__ << ": cannot scrub (not a clean and active primary)"
 	     << dendl;
+    m_scrubber->penalize_next_scrub(Scrub::delay_cause_t::pg_state);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -1361,6 +1364,7 @@ Scrub::schedule_result_t PG::start_scrubbing(
 	     << ": skipping this PG as repairing was not explicitly "
 		"requested for it"
 	     << dendl;
+    m_scrubber->penalize_next_scrub(Scrub::delay_cause_t::scrub_params);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -1369,6 +1373,7 @@ Scrub::schedule_result_t PG::start_scrubbing(
     // (on the transition from NotTrimming to Trimming/WaitReservation),
     // i.e. some time before setting 'snaptrim'.
     dout(10) << __func__ << ": cannot scrub while snap-trimming" << dendl;
+    m_scrubber->penalize_next_scrub(Scrub::delay_cause_t::pg_state);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -1381,6 +1386,7 @@ Scrub::schedule_result_t PG::start_scrubbing(
     // (due to configuration or priority issues)
     // The reason was already reported by the callee.
     dout(10) << __func__ << ": failed to initiate a scrub" << dendl;
+    m_scrubber->penalize_next_scrub(Scrub::delay_cause_t::scrub_params);
     return schedule_result_t::target_specific_failure;
   }
 
@@ -1388,6 +1394,7 @@ Scrub::schedule_result_t PG::start_scrubbing(
   // be retried by the OSD later on.
   if (!m_scrubber->reserve_local()) {
     dout(10) << __func__ << ": failed to reserve locally" << dendl;
+    m_scrubber->penalize_next_scrub(Scrub::delay_cause_t::local_resources);
     return schedule_result_t::osd_wide_failure;
   }
 
