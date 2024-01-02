@@ -491,7 +491,7 @@ boost::optional<Principal> ParseState::parse_principal(string&& s,
     // AWS and Federated ARNs
     if (auto a = ARN::parse(s)) {
       if (a->resource == "root") {
-	return Principal::tenant(std::move(a->account));
+	return Principal::account(std::move(a->account));
       }
 
       static const char rx_str[] = "([^/]*)/(.*)";
@@ -524,7 +524,7 @@ boost::optional<Principal> ParseState::parse_principal(string&& s,
       // Since tenants are simply prefixes, there's no really good
       // way to see if one exists or not. So we return the thing and
       // let them try to match against it.
-      return Principal::tenant(std::move(s));
+      return Principal::account(std::move(s));
     }
     if (errmsg)
       *errmsg =
