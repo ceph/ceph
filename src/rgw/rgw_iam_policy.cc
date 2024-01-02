@@ -1164,6 +1164,15 @@ Effect Statement::eval(const Environment& e,
   return Effect::Pass;
 }
 
+static bool is_identity(const auth::Identity& ida,
+                        const flat_set<auth::Principal>& princ)
+{
+  return std::any_of(princ.begin(), princ.end(),
+      [&ida] (const auth::Principal& p) {
+        return ida.is_identity(p);
+      });
+}
+
 Effect Statement::eval_principal(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida, boost::optional<PolicyPrincipal&> princ_type) const {
   if (princ_type) {
@@ -1173,15 +1182,13 @@ Effect Statement::eval_principal(const Environment& e,
     if (princ.empty() && noprinc.empty()) {
       return Effect::Deny;
     }
-    if (ida->get_identity_type() != TYPE_ROLE && !princ.empty() && !ida->is_identity(princ)) {
+    if (ida->get_identity_type() != TYPE_ROLE && !princ.empty() && !is_identity(*ida, princ)) {
       return Effect::Deny;
     }
     if (ida->get_identity_type() == TYPE_ROLE && !princ.empty()) {
       bool princ_matched = false;
       for (auto p : princ) { // Check each principal to determine the type of the one that has matched
-        boost::container::flat_set<Principal> id;
-        id.insert(p);
-        if (ida->is_identity(id)) {
+        if (ida->is_identity(p)) {
           if (p.is_assumed_role() || p.is_user()) {
             if (princ_type) *princ_type = PolicyPrincipal::Session;
           } else {
@@ -1193,7 +1200,7 @@ Effect Statement::eval_principal(const Environment& e,
       if (!princ_matched) {
         return Effect::Deny;
       }
-    } else if (!noprinc.empty() && ida->is_identity(noprinc)) {
+    } else if (!noprinc.empty() && is_identity(*ida, noprinc)) {
       return Effect::Deny;
     }
   }

@@ -101,9 +101,8 @@ public:
     return get_decoratee().get_subuser();
   }
 
-  bool is_identity(
-    const boost::container::flat_set<Principal>& ids) const override {
-    return get_decoratee().is_identity(ids);
+  bool is_identity(const Principal& p) const override {
+    return get_decoratee().is_identity(p);
   }
 
   void to_str(std::ostream& out) const override {
