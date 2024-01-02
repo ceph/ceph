@@ -263,7 +263,9 @@ public:
 
   struct BufferSpace;
   struct Collection;
+  struct Onode;
   typedef boost::intrusive_ptr<Collection> CollectionRef;
+  typedef boost::intrusive_ptr<Onode> OnodeRef;
 
   struct AioContext {
     virtual void aio_finish(BlueStore *store) = 0;
@@ -314,6 +316,10 @@ public:
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o), length(l) {}
     Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, ceph::buffer::list& b,
+	   unsigned f = 0)
+      : space(space), state(s), flags(f), seq(q), offset(o),
+	length(b.length()), data(b) {}
+    Buffer(BufferSpace *space, unsigned s, uint64_t q, uint32_t o, ceph::buffer::list&& b,
 	   unsigned f = 0)
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
@@ -474,6 +480,16 @@ public:
     }
     int _discard(BufferCacheShard* cache, uint32_t offset, uint32_t length);
 
+    void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, ceph::buffer::list&& bl,
+	       unsigned flags) {
+      std::lock_guard l(cache->lock);
+      Buffer b(this, Buffer::STATE_WRITING, seq, offset, std::move(bl),
+			     flags);
+      uint16_t cache_private = _discard(cache, offset, bl.length());
+      _add_buffer(cache, this, Buffer(this, Buffer::STATE_WRITING, seq, offset, std::move(bl),
+			     flags), cache_private, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      cache->_trim();
+    }
     void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, ceph::buffer::list& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
@@ -485,8 +501,8 @@ public:
                   nullptr);
       cache->_trim();
     }
-    void _finish_write(BufferCacheShard* cache, uint64_t seq);
-    void did_read(BufferCacheShard* cache, uint32_t offset, ceph::buffer::list& bl) {
+    void _finish_write(BufferCacheShard* cache, uint32_t offset, uint64_t seq);
+    void did_read(BufferCacheShard* cache, uint32_t offset, uint32_t length, ceph::buffer::list&& bl) {
       std::lock_guard l(cache->lock);
       uint16_t cache_private = _discard(cache, offset, bl.length());
       _add_buffer(
@@ -505,7 +521,7 @@ public:
       discard(cache, offset, (uint32_t)-1 - offset);
     }
 
-    bool _dup_writing(BufferCacheShard* cache, BufferSpace* to);
+    bool _dup_writing(TransContext* txc, BufferCacheShard* cache, OnodeRef onode);
     void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
     void dump(BufferCacheShard* cache, ceph::Formatter *f) const {
@@ -647,7 +663,6 @@ public:
       ceph_assert(get_cache());
     }
     Blob(CollectionRef collection) : collection(collection) {}
-    BufferSpace bc;
   private:
     SharedBlobRef shared_blob;      ///< shared blob state (if any)
     mutable bluestore_blob_t blob;  ///< decoded blob metadata
@@ -694,8 +709,7 @@ public:
     bool can_split() {
       std::lock_guard l(get_cache()->lock);
       // splitting a BufferSpace writing list is too hard; don't try.
-      return get_bc().writing.empty() &&
-             used_in_blob.can_split() &&
+      return used_in_blob.can_split() &&
              get_blob().can_split();
     }
 
@@ -735,26 +749,15 @@ public:
 #endif
       return blob;
     }
-    /// clear buffers from unused sections
-    void discard_unused_buffers(CephContext* cct, BufferCacheShard* cache);
-
-    inline const BufferSpace& get_bc() const {
-      return bc;
-    }
-    inline BufferSpace& dirty_bc() {
-      return bc;
-    }
 
     /// discard buffers for unallocated regions
-    void discard_unallocated(Collection *coll);
+    void discard_unallocated(Collection *coll, BlueStore::Onode *onode, uint32_t logical_offset);
 
     /// get logical references
     void get_ref(Collection *coll, uint32_t offset, uint32_t length);
     /// put logical references, and get back any released extents
     bool put_ref(Collection *coll, uint32_t offset, uint32_t length,
 		 PExtentVector *r);
-    // update caches to reflect content up to seq
-    void finish_write(uint64_t seq);
     /// split the blob
     void split(Collection *coll, uint32_t blob_offset, Blob *o);
 
@@ -948,14 +951,12 @@ public:
     boost::intrusive::list_member_hook<>,
     &OldExtent::old_extent_item> > old_extent_map_t;
 
-  struct Onode;
 
   /// a sharded extent map, mapping offsets to lextents to blobs
   struct ExtentMap {
     Onode *onode;
     extent_map_t extent_map;        ///< map of Extents to Blobs
     blob_map_t spanning_blob_map;   ///< blobs that span shards
-    typedef boost::intrusive_ptr<Onode> OnodeRef;
 
     struct Shard {
       bluestore_onode_t::shard_info *shard_info = nullptr;
@@ -1328,6 +1329,7 @@ public:
                               /// (it can be pinned and hence physically out
                               /// of it at the moment though)
     ExtentMap extent_map;
+    BufferSpace bc;             ///< buffer cache
 
     // track txc's that have not been committed to kv store (and whose
     // effects cannot be read via the kvdb read methods)
@@ -1436,7 +1438,6 @@ public:
 private:
     void _decode(const ceph::buffer::list& v);
   };
-  typedef boost::intrusive_ptr<Onode> OnodeRef;
 
   /// A generic Cache Shard
   struct CacheShard {
@@ -1894,7 +1895,8 @@ private:
     std::set<OnodeRef> modified_objects;  ///< objects we modified (and need a ref)
 
     std::set<SharedBlobRef> shared_blobs;  ///< these need to be updated/written
-    std::set<BlobRef> blobs_written; ///< update these on io completion
+    std::set<std::tuple<Onode*, uint32_t, uint64_t>> buffers_written; ///< update these on io completion (buffer -> offset, seq pair)
+
     KeyValueDB::Transaction t; ///< then we will commit this
     std::list<Context*> oncommits;  ///< more commit completions
     std::list<CollectionRef> removed_collections; ///< colls we removed
@@ -2884,13 +2886,26 @@ private:
 
   void _buffer_cache_write(
     TransContext *txc,
-    BlobRef b,
-    uint64_t offset,
+    BlobRef blob,
+    OnodeRef onode,
+    uint32_t offset,
+    ceph::buffer::list&& bl,
+    unsigned flags) {
+    onode->bc.write(onode->c->cache, txc->seq, offset, std::move(bl),
+			     flags);
+    txc->buffers_written.insert({onode.get(), offset, txc->seq});
+  }
+
+  void _buffer_cache_write(
+    TransContext *txc,
+    BlobRef blob,
+    OnodeRef onode,
+    uint32_t offset,
     ceph::buffer::list& bl,
     unsigned flags) {
-    b->dirty_bc().write(b->get_cache(), txc->seq, offset, bl,
+    onode->bc.write(onode->c->cache, txc->seq, offset, bl,
 			     flags);
-    txc->blobs_written.insert(b);
+    txc->buffers_written.insert({onode.get(), offset, txc->seq});
   }
 
   int _collection_list(
