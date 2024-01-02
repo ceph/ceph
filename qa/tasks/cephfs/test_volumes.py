@@ -17,6 +17,13 @@ from teuthology.exceptions import CommandFailedError
 
 log = logging.getLogger(__name__)
 
+
+class WrongCloneStatus(Exception):
+
+    def __init__(self, msg):
+        self.msg = msg
+
+
 class TestVolumesHelper(CephFSTestCase):
     """Helper class for testing FS volume, subvolume group and subvolume operations."""
     TEST_FILE_NAME_PREFIX="subvolume_file"
@@ -35,23 +42,30 @@ class TestVolumesHelper(CephFSTestCase):
     def _raw_cmd(self, *args):
         return self.get_ceph_cmd_stdout(args)
 
-    def __check_clone_state(self, states, clone, clone_group=None, timo=120,
-                            sleep=1):
+    def __check_clone_state(self, states, clone, clone_group=None,
+                            max_count=120, sleep=1):
         if isinstance(states, str):
             states = (states, )
+        log.info(f'expected clone state = {states}')
 
-        check = 0
         args = ["clone", "status", self.volname, clone]
         if clone_group:
             args.append(clone_group)
         args = tuple(args)
-        while check < timo:
+
+        count = 0
+        while count < max_count:
             result = json.loads(self._fs_cmd(*args))
-            if result["status"]["state"] in states:
-                break
-            check += 1
+            current_state = result["status"]["state"]
+            if current_state in states:
+                return
+
+            log.info(f'current clone state = {current_state}')
+            count += 1
             time.sleep(sleep)
-        self.assertTrue(check < timo)
+
+        raise WrongCloneStatus(f'Executed cmd "{args}" {max_count} times. '
+                               f'Clone was never in "{states}" state(s).')
 
     def _get_clone_status(self, clone, clone_group=None):
         args = ["clone", "status", self.volname, clone]
@@ -61,33 +75,36 @@ class TestVolumesHelper(CephFSTestCase):
         result = json.loads(self._fs_cmd(*args))
         return result
 
-    def _wait_for_clone_to_complete(self, clone, clone_group=None, timo=120,
-                                    sleep=1):
-        self.__check_clone_state("complete", clone, clone_group, timo, sleep)
+    def _wait_for_clone_to_complete(self, clone, clone_group=None,
+                                    max_count=120, sleep=1):
+        self.__check_clone_state("complete", clone, clone_group, max_count,
+                                 sleep)
 
-    def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120,
+    def _wait_for_clone_to_fail(self, clone, clone_group=None, max_count=120,
                                 sleep=1):
-        self.__check_clone_state("failed", clone, clone_group, timo, sleep)
+        self.__check_clone_state("failed", clone, clone_group, max_count,
+                                 sleep)
 
     def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None,
-                                          timo=120, sleep=1):
-        self.__check_clone_state("in-progress", clone, clone_group, timo,
+                                          max_count=120, sleep=1):
+        self.__check_clone_state("in-progress", clone, clone_group, max_count,
                                  sleep)
 
     def _wait_for_clone_to_be_in_pending_state(self, clone, clone_group=None,
-                                               timo=120, sleep=1):
+                                               max_count=120, sleep=1):
         # check for both in-progress too along with pending, because if former
         # has occurred it means latter has occured beore (for a small time,
         # perhaps) and it won't occure again.
-        self.__check_clone_state(('pending', 'in-progress'), clone,
-                                 clone_group, timo, sleep)
+        states = ('pending', 'in-progress')
+        self.__check_clone_state(states, clone, clone_group, max_count, sleep)
 
     def _wait_for_clone_to_be_canceled(self, clone, clone_group=None,
-                                          timo=120, sleep=1):
-        self.__check_clone_state('canceled', clone, clone_group, timo, sleep)
+                                          max_count=120, sleep=1):
+        states = ('canceled', 'complete')
+        self.__check_clone_state(states, clone, clone_group, max_count, sleep)
 
     def _check_clone_canceled(self, clone, clone_group=None):
-        self.__check_clone_state("canceled", clone, clone_group, timo=1)
+        self.__check_clone_state("canceled", clone, clone_group, max_count=1)
 
     def _get_subvolume_snapshot_path(self, subvolume, snapshot, source_group, subvol_path, source_version):
         if source_version == 2:
