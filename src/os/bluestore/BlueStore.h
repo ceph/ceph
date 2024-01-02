@@ -313,6 +313,20 @@ public:
       : space(space), state(s), flags(f), seq(q), offset(o),
 	length(b.length()), data(b) {}
 
+    Buffer(Buffer &&other) {
+      std::swap(space, other.space);
+      std::swap(state, other.state);
+      std::swap(cache_private, other.cache_private);
+      std::swap(flags, other.flags);
+      std::swap(seq, other.seq);
+      std::swap(offset, other.offset);
+      std::swap(length, other.length);
+      std::swap(data, other.data);
+      std::swap(cache_age_bin, other.cache_age_bin);
+      lru_item.swap_nodes(other.lru_item);
+      state_item.swap_nodes(other.state_item);
+    }
+
     bool is_empty() const {
       return state == STATE_EMPTY;
     }
