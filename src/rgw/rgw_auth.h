@@ -32,7 +32,6 @@ using Exception = std::system_error;
 class Identity {
 public:
   typedef std::map<std::string, int> aclspec_t;
-  using idset_t = boost::container::flat_set<Principal>;
 
   virtual ~Identity() = default;
 
@@ -73,7 +72,7 @@ public:
 
   /* Verify whether a given identity corresponds to an identity in the
      provided set */
-  virtual bool is_identity(const idset_t& ids) const = 0;
+  virtual bool is_identity(const Principal& p) const = 0;
 
   /* Identity Type: RGW/ LDAP/ Keystone */
   virtual uint32_t get_identity_type() const = 0;
@@ -473,7 +472,7 @@ public:
 
   void to_str(std::ostream& out) const override;
 
-  bool is_identity(const idset_t& ids) const override;
+  bool is_identity(const Principal& p) const override;
 
   void load_acct_info(const DoutPrefixProvider* dpp, RGWUserInfo& user_info) const override;
 
@@ -630,7 +629,7 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_owner& o) const override;
   bool is_owner_of(const rgw_owner& o) const override;
-  bool is_identity(const idset_t& ids) const override;
+  bool is_identity(const Principal& p) const override;
 
   uint32_t get_perm_mask() const override { return info.perm_mask; }
   void to_str(std::ostream& out) const override;
@@ -691,7 +690,7 @@ public:
   uint32_t get_perms_from_aclspec(const DoutPrefixProvider* dpp, const aclspec_t& aclspec) const override;
   bool is_admin_of(const rgw_owner& o) const override;
   bool is_owner_of(const rgw_owner& o) const override;
-  bool is_identity(const idset_t& ids) const override;
+  bool is_identity(const Principal& p) const override;
   uint32_t get_perm_mask() const override {
     if (this->perm_mask == RGW_PERM_INVALID) {
       return get_perm_mask(subuser, user_info);
@@ -761,7 +760,7 @@ public:
     // TODO: handle account roles
     return uid && *uid == token_attrs.user_id;
   }
-  bool is_identity(const idset_t& ids) const override;
+  bool is_identity(const Principal& p) const override;
   uint32_t get_perm_mask() const override {
     return RGW_PERM_NONE; 
   }
