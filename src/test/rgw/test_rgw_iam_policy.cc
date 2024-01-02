@@ -148,11 +148,8 @@ public:
     out << id;
   }
 
-  bool is_identity(const flat_set<Principal>& ids) const override {
-    if (id.is_wildcard() && (!ids.empty())) {
-      return true;
-    }
-    return ids.find(id) != ids.end() || ids.find(Principal::wildcard()) != ids.end();
+  bool is_identity(const Principal& p) const override {
+    return id.is_wildcard() || p.is_wildcard() || p == id;
   }
 
   uint32_t get_identity_type() const override {

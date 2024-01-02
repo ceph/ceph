@@ -25,6 +25,31 @@ using namespace std;
 namespace rgw {
 namespace auth {
 
+// match a tenant user principal by userid[:subuser]
+static bool match_user_principal(std::string_view userid,
+                                 std::string_view subuser,
+                                 std::string_view expected)
+{
+  // match user by id
+  if (!expected.starts_with(userid)) {
+    return false;
+  }
+  expected.remove_prefix(userid.size());
+  if (expected.empty()) { // exact match
+    return true;
+  }
+
+  // try to match userid:subuser
+  if (!expected.starts_with(":")) {
+    return false;
+  }
+  expected.remove_prefix(1);
+  if (expected.empty()) {
+    return false;
+  }
+  return (expected == "*" || expected == subuser);
+}
+
 static bool match_owner(const rgw_owner& owner, const rgw_user& uid,
                         std::string_view account_id)
 {
@@ -98,17 +123,14 @@ transform_old_authinfo(CephContext* const cct,
       return match_owner(o, id, account_id);
     }
 
-    bool is_identity(const idset_t& ids) const override {
-      for (auto& p : ids) {
-	if (p.is_wildcard()) {
-	  return true;
-	} else if (p.is_account() && p.get_account() == id.tenant) {
-	  return true;
-	} else if (p.is_user() &&
-		   (p.get_account() == id.tenant) &&
-		   (p.get_id() == id.id)) {
-	  return true;
-	}
+    bool is_identity(const Principal& p) const override {
+      if (p.is_wildcard()) {
+        return true;
+      } else if (p.is_account()) {
+        return p.get_account() == id.tenant;
+      } else if (p.is_user()) {
+        return p.get_account() == id.tenant
+            && p.get_id() == id.id;
       }
       return false;
     }
@@ -548,19 +570,10 @@ void rgw::auth::WebIdentityApplier::modify_request_state(const DoutPrefixProvide
   }
 }
 
-bool rgw::auth::WebIdentityApplier::is_identity(const idset_t& ids) const
+bool rgw::auth::WebIdentityApplier::is_identity(const Principal& p) const
 {
-  if (ids.size() > 1) {
-    return false;
-  }
-
-  for (auto id : ids) {
-    string idp_url = get_idp_url();
-    if (id.is_oidc_provider() && id.get_idp_url() == idp_url) {
-      return true;
-    }
-  }
-    return false;
+  return p.is_oidc_provider()
+      && p.get_idp_url() == get_idp_url();
 }
 
 const std::string rgw::auth::RemoteApplier::AuthInfo::NO_SUBUSER;
@@ -625,25 +638,19 @@ bool rgw::auth::RemoteApplier::is_owner_of(const rgw_owner& o) const
   return info.acct_user == *uid;
 }
 
-bool rgw::auth::RemoteApplier::is_identity(const idset_t& ids) const {
-  for (auto& id : ids) {
-    if (id.is_wildcard()) {
-      return true;
-
-      // We also need to cover cases where rgw_keystone_implicit_tenants
-      // was enabled. */
-    } else if (id.is_account() &&
-	       (info.acct_user.tenant.empty() ?
-		info.acct_user.id :
-		info.acct_user.tenant) == id.get_account()) {
-      return true;
-    } else if (id.is_user() &&
-	       info.acct_user.id == id.get_id() &&
-	       (info.acct_user.tenant.empty() ?
-		info.acct_user.id :
-		info.acct_user.tenant) == id.get_account()) {
-      return true;
-    }
+bool rgw::auth::RemoteApplier::is_identity(const Principal& p) const {
+  // We also need to cover cases where rgw_keystone_implicit_tenants
+  // was enabled.
+  std::string_view tenant = info.acct_user.tenant.empty() ?
+                            info.acct_user.id :
+                            info.acct_user.tenant;
+  if (p.is_wildcard()) {
+    return true;
+  } else if (p.is_account()) {
+    return p.get_account() == tenant;
+  } else if (p.is_user()) {
+    return p.get_id() == info.acct_user.id
+        && p.get_account() == tenant;
   }
   return false;
 }
@@ -836,31 +843,14 @@ bool rgw::auth::LocalApplier::is_owner_of(const rgw_owner& o) const
   return match_owner(o, user_info.user_id, user_info.account_id);
 }
 
-bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
-  for (auto& id : ids) {
-    if (id.is_wildcard()) {
-      return true;
-    } else if (id.is_account() &&
-	       id.get_account() == user_info.user_id.tenant) {
-      return true;
-    } else if (id.is_user() &&
-	       (id.get_account() == user_info.user_id.tenant)) {
-      if (id.get_id() == user_info.user_id.id) {
-        return true;
-      }
-      std::string wildcard_subuser = user_info.user_id.id;
-      wildcard_subuser.append(":*");
-      if (wildcard_subuser == id.get_id()) {
-        return true;
-      } else if (subuser != NO_SUBUSER) {
-        std::string user = user_info.user_id.id;
-        user.append(":");
-        user.append(subuser);
-        if (user == id.get_id()) {
-          return true;
-        }
-      }
-    }
+bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
+  if (p.is_wildcard()) {
+    return true;
+  } else if (p.is_account()) {
+    return p.get_account() == user_info.user_id.tenant;
+  } else if (p.is_user()) {
+    return p.get_account() == user_info.user_id.tenant
+        && match_user_principal(user_info.user_id.id, subuser, p.get_id());
   }
   return false;
 }
@@ -921,35 +911,25 @@ void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
   out << ")";
 }
 
-bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
-  for (auto& p : ids) {
-    if (p.is_wildcard()) {
-      return true;
-    } else if (p.is_role()) {
-      string name = p.get_id();
-      string tenant = p.get_account();
-      if (name == role.name && tenant == role.tenant) {
-        return true;
-      }
-    } else if (p.is_assumed_role()) {
-      string tenant = p.get_account();
-      string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
-      if (role.tenant == tenant && role_session == p.get_role_session()) {
-        return true;
-      }
+bool rgw::auth::RoleApplier::is_identity(const Principal& p) const {
+  if (p.is_wildcard()) {
+    return true;
+  } else if (p.is_role()) {
+    return p.get_id() == role.name
+        && p.get_account() == role.tenant;
+  } else if (p.is_assumed_role()) {
+    string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
+    return p.get_account() == role.tenant
+        && p.get_role_session() == role_session;
+  } else {
+    string oidc_id;
+    if (token_attrs.user_id.ns.empty()) {
+      oidc_id = token_attrs.user_id.id;
     } else {
-      string id = p.get_id();
-      string tenant = p.get_account();
-      string oidc_id;
-      if (token_attrs.user_id.ns.empty()) {
-        oidc_id = token_attrs.user_id.id;
-      } else {
-        oidc_id = token_attrs.user_id.ns + "$" + token_attrs.user_id.id;
-      }
-      if (oidc_id == id && token_attrs.user_id.tenant == tenant) {
-        return true;
-      }
+      oidc_id = token_attrs.user_id.ns + "$" + token_attrs.user_id.id;
     }
+    return p.get_id() == oidc_id
+        && p.get_account() == token_attrs.user_id.tenant;
   }
   return false;
 }
