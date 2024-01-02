@@ -102,10 +102,10 @@ transform_old_authinfo(CephContext* const cct,
       for (auto& p : ids) {
 	if (p.is_wildcard()) {
 	  return true;
-	} else if (p.is_tenant() && p.get_tenant() == id.tenant) {
+	} else if (p.is_account() && p.get_account() == id.tenant) {
 	  return true;
 	} else if (p.is_user() &&
-		   (p.get_tenant() == id.tenant) &&
+		   (p.get_account() == id.tenant) &&
 		   (p.get_id() == id.id)) {
 	  return true;
 	}
@@ -632,16 +632,16 @@ bool rgw::auth::RemoteApplier::is_identity(const idset_t& ids) const {
 
       // We also need to cover cases where rgw_keystone_implicit_tenants
       // was enabled. */
-    } else if (id.is_tenant() &&
+    } else if (id.is_account() &&
 	       (info.acct_user.tenant.empty() ?
 		info.acct_user.id :
-		info.acct_user.tenant) == id.get_tenant()) {
+		info.acct_user.tenant) == id.get_account()) {
       return true;
     } else if (id.is_user() &&
 	       info.acct_user.id == id.get_id() &&
 	       (info.acct_user.tenant.empty() ?
 		info.acct_user.id :
-		info.acct_user.tenant) == id.get_tenant()) {
+		info.acct_user.tenant) == id.get_account()) {
       return true;
     }
   }
@@ -840,11 +840,11 @@ bool rgw::auth::LocalApplier::is_identity(const idset_t& ids) const {
   for (auto& id : ids) {
     if (id.is_wildcard()) {
       return true;
-    } else if (id.is_tenant() &&
-	       id.get_tenant() == user_info.user_id.tenant) {
+    } else if (id.is_account() &&
+	       id.get_account() == user_info.user_id.tenant) {
       return true;
     } else if (id.is_user() &&
-	       (id.get_tenant() == user_info.user_id.tenant)) {
+	       (id.get_account() == user_info.user_id.tenant)) {
       if (id.get_id() == user_info.user_id.id) {
         return true;
       }
@@ -927,19 +927,19 @@ bool rgw::auth::RoleApplier::is_identity(const idset_t& ids) const {
       return true;
     } else if (p.is_role()) {
       string name = p.get_id();
-      string tenant = p.get_tenant();
+      string tenant = p.get_account();
       if (name == role.name && tenant == role.tenant) {
         return true;
       }
     } else if (p.is_assumed_role()) {
-      string tenant = p.get_tenant();
+      string tenant = p.get_account();
       string role_session = role.name + "/" + token_attrs.role_session_name; //role/role-session
       if (role.tenant == tenant && role_session == p.get_role_session()) {
         return true;
       }
     } else {
       string id = p.get_id();
-      string tenant = p.get_tenant();
+      string tenant = p.get_account();
       string oidc_id;
       if (token_attrs.user_id.ns.empty()) {
         oidc_id = token_attrs.user_id.id;
