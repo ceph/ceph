@@ -171,8 +171,8 @@ ostream& operator <<(ostream& m, const Principal& p) {
     return m << "*";
   }
 
-  m << "arn:aws:iam:" << p.get_tenant() << ":";
-  if (p.is_tenant()) {
+  m << "arn:aws:iam:" << p.get_account() << ":";
+  if (p.is_account()) {
     return m << "root";
   }
   return m << (p.is_user() ? "user/" : "role/") << p.get_id();

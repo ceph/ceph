@@ -248,7 +248,7 @@ TEST_F(PolicyTest, Parse2) {
   EXPECT_FALSE(p->statements[0].princ.empty());
   EXPECT_EQ(p->statements[0].princ.size(), 1U);
   EXPECT_EQ(*p->statements[0].princ.begin(),
-	    Principal::tenant("ACCOUNT-ID-WITHOUT-HYPHENS"));
+	    Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
   Action_t act;
@@ -282,10 +282,10 @@ TEST_F(PolicyTest, Eval2) {
   Environment e;
 
   auto trueacct = FakeIdentity(
-    Principal::tenant("ACCOUNT-ID-WITHOUT-HYPHENS"));
+    Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
 
   auto notacct = FakeIdentity(
-    Principal::tenant("some-other-account"));
+    Principal::account("some-other-account"));
   for (auto i = 0ULL; i < s3All; ++i) {
     ARN arn1(Partition::aws, Service::s3,
 			 "", arbitrary_tenant, "mybucket");
@@ -714,7 +714,7 @@ TEST_F(PolicyTest, Parse7) {
   EXPECT_EQ(p->statements[0].resource.begin()->resource, "mybucket/*");
   EXPECT_TRUE(p->statements[0].princ.begin()->is_user());
   EXPECT_FALSE(p->statements[0].princ.begin()->is_wildcard());
-  EXPECT_EQ(p->statements[0].princ.begin()->get_tenant(), "");
+  EXPECT_EQ(p->statements[0].princ.begin()->get_account(), "");
   EXPECT_EQ(p->statements[0].princ.begin()->get_id(), "A:subA");
   EXPECT_TRUE(p->statements[0].notresource.empty());
   EXPECT_TRUE(p->statements[0].conditions.empty());
@@ -1044,7 +1044,7 @@ TEST_F(IPPolicyTest, EvalIPAddress) {
   blocklistedIPv6.emplace("aws:SourceIp", "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
 
   auto trueacct = FakeIdentity(
-    Principal::tenant("ACCOUNT-ID-WITHOUT-HYPHENS"));
+    Principal::account("ACCOUNT-ID-WITHOUT-HYPHENS"));
   // Without an IP address in the environment then evaluation will always pass
   ARN arn1(Partition::aws, Service::s3,
 			    "", arbitrary_tenant, "example_bucket");
