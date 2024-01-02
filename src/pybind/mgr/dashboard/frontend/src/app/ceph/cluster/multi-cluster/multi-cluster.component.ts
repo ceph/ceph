@@ -109,12 +109,17 @@ export class MultiClusterComponent implements OnInit {
       click: () => this.openRemoteClusterInfoModal()
     };
     this.addRemoteClusterAction = [addRemoteAction];
-    this.getPrometheusData(this.prometheusService.lastHourDateObject);
     this.subs.add(
       this.multiClusterService.subscribe((resp: string) => {
         resp['config']?.forEach((config: any) => {
           this.dashboardClustersMap.set(config['url'], config['name']);
         });
+        if (this.dashboardClustersMap.size > 1) {
+          this.getPrometheusData(this.prometheusService.lastHourDateObject);
+        }
+        else {
+          this.loading = false;
+        }
       })
     );
     this.columns = [

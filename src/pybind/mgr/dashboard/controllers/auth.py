@@ -52,9 +52,9 @@ class Auth(RESTController, ControllerAuthMixin):
             else:
                 copy_config = Settings.MULTICLUSTER_CONFIG.copy()
             try:
-                copy_config['config'].append({'name': mgr.get('config')['fsid'], 'url': 'https://127.0.0.1:4200', 'helper_text': 'local-cluster'})
+                copy_config['config'].append({'name': mgr.get('config')['fsid'], 'url': 'https://192.168.100.100:8443', 'helper_text': 'local-cluster'})
             except KeyError:
-                copy_config = {'current_url': 'https://127.0.0.1:4200', 'config': [{'name': mgr.get('config')['fsid'], 'url': 'https://127.0.0.1:4200', 'helper_text': 'local-cluster'}]}
+                copy_config = {'current_url': 'https://192.168.100.100:8443', 'config': [{'name': mgr.get('config')['fsid'], 'url': 'https://192.168.100.100:8443', 'helper_text': 'local-cluster'}]}
             Settings.MULTICLUSTER_CONFIG = copy_config
 
             if user_perms is not None:

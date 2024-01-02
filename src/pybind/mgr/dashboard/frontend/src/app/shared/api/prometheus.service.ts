@@ -43,11 +43,11 @@ export class PrometheusService {
   }
 
   getMultiClusterData(params: any): any {
-    return this.http.get<any>(`${this.baseURL}/multi_cluster_data`, { params });
+    return this.http.get<any>(`${this.baseURL}/prometheus_query_data`, { params });
   }
 
   getMultiClusterQueryRangeData(params: any): any {
-    return this.http.get<any>(`${this.baseURL}/multi_cluster_query_range_data`, { params });
+    return this.http.get<any>(`${this.baseURL}/data`, { params });
   }
 
   ifAlertmanagerConfigured(fn: (value?: string) => void, elseFn?: () => void): void {
