@@ -365,8 +365,7 @@ class PgScrubber : public ScrubPgIF,
   PG* get_pg() const final { return m_pg; }
   PerfCounters& get_counters_set() const final;
 
-  // temporary interface (to be discarded in a follow-up PR)
-  /// set the 'resources_failure' flag in the scrub-job object
+  /// delay next retry of this PG after a replica reservation failure
   void flag_reservations_failure();
 
   scrubber_callback_cancel_token_t schedule_callback_after(
@@ -429,6 +428,8 @@ class PgScrubber : public ScrubPgIF,
   void on_digest_updates() final;
 
   void scrub_finish() final;
+
+  void penalize_next_scrub(Scrub::delay_cause_t cause) final;
 
   ScrubMachineListener::MsgAndEpoch prep_replica_map_msg(
     Scrub::PreemptionNoted was_preempted) final;

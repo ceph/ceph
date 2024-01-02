@@ -87,6 +87,53 @@ struct formatter<Scrub::OSDRestrictions> {
 
 namespace Scrub {
 
+/**
+ * the result of the last attempt to schedule a scrub for a specific PG.
+ * The enum value itself is mostly used for logging purposes.
+ */
+enum class delay_cause_t {
+  none,		    ///< scrub attempt was successful
+  replicas,	    ///< failed to reserve replicas
+  flags,	    ///< noscrub or nodeep-scrub
+  pg_state,	    ///< e.g. snap-trimming
+  restricted_time,  ///< time restrictions or busy CPU
+  local_resources,  ///< too many scrubbing PGs
+  aborted,	    ///< scrub was aborted w/ unspecified reason
+  interval,	    ///< the interval had ended mid-scrub
+  scrub_params,     ///< the specific scrub type is not allowed
+};
+}  // namespace Scrub
+
+namespace fmt {
+// clang-format off
+template <>
+struct formatter<Scrub::delay_cause_t> : ::fmt::formatter<std::string_view> {
+  template <typename FormatContext>
+  auto format(Scrub::delay_cause_t cause, FormatContext& ctx)
+  {
+    using enum Scrub::delay_cause_t;
+    std::string_view desc;
+    switch (cause) {
+      case none:                desc = "ok"; break;
+      case replicas:            desc = "replicas"; break;
+      case flags:               desc = "noscrub"; break;
+      case pg_state:            desc = "pg-state"; break;
+      case restricted_time:     desc = "time/load"; break;
+      case local_resources:     desc = "local-cnt"; break;
+      case aborted:             desc = "aborted"; break;
+      case interval:            desc = "interval"; break;
+      case scrub_params:        desc = "scrub-mode"; break;
+      // better to not have a default case, so that the compiler will warn
+    }
+    return ::fmt::formatter<string_view>::format(desc, ctx);
+  }
+};
+// clang-format on
+}  // namespace fmt
+
+
+namespace Scrub {
+
 /// PG services used by the scrubber backend
 struct PgScrubBeListener {
   virtual ~PgScrubBeListener() = default;
@@ -330,6 +377,8 @@ struct ScrubPgIF {
 
   virtual pg_scrubbing_status_t get_schedule() const = 0;
 
+  /// notify the scrubber about a scrub failure
+  virtual void penalize_next_scrub(Scrub::delay_cause_t cause) = 0;
 
   // // perform 'scrub'/'deep_scrub' asok commands
 

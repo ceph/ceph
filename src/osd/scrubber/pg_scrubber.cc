@@ -1756,7 +1756,9 @@ void PgScrubber::clear_scrub_blocked()
 
 void PgScrubber::flag_reservations_failure()
 {
-  m_scrub_job->resources_failure = true;
+  dout(10) << __func__ << dendl;
+  // delay the next invocation of the scrubber on this target
+  penalize_next_scrub(Scrub::delay_cause_t::replicas);
 }
 
 /*
@@ -1966,6 +1968,16 @@ void PgScrubber::scrub_finish()
   if (m_pg->is_active() && m_pg->is_primary()) {
     m_pg->recovery_state.share_pg_info();
   }
+}
+
+/*
+ * note: arbitrary delay used in this early version of the
+ * scheduler refactoring.
+ */
+void PgScrubber::penalize_next_scrub(Scrub::delay_cause_t cause)
+{
+  m_osds->get_scrub_services().delay_on_failure(
+      m_scrub_job, 5s, cause, ceph_clock_now());
 }
 
 void PgScrubber::on_digest_updates()
