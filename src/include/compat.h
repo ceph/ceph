@@ -67,7 +67,7 @@ int sched_setaffinity(pid_t pid, size_t cpusetsize,
 #endif /* __FreeBSD__ */
 
 #if defined(__APPLE__)
-struct cpu_set_t;
+struct cpu_set_t { int _; };
 #endif
 
 #if defined(__APPLE__) || defined(__FreeBSD__)
@@ -438,6 +438,12 @@ static inline int ceph_sock_errno() {
 // EOF.
 #ifndef O_BINARY
 #define O_BINARY 0
+#endif
+
+#if defined(_GNU_SOURCE)
+#  define GET_PROGNAME() program_invocation_short_name
+#else
+#  define GET_PROGNAME() getprogname()
 #endif
 
 #endif /* !CEPH_COMPAT_H */

@@ -130,24 +130,12 @@ public:
   using sss = StackStringStream<4096>;
   using osptr = std::unique_ptr<sss>;
 
-  CachedStackStringStream() {
-    if (cache.destructed || cache.c.empty()) {
-      osp = std::make_unique<sss>();
-    } else {
-      osp = std::move(cache.c.back());
-      cache.c.pop_back();
-      osp->reset();
-    }
-  }
+  CachedStackStringStream();
   CachedStackStringStream(const CachedStackStringStream&) = delete;
   CachedStackStringStream& operator=(const CachedStackStringStream&) = delete;
   CachedStackStringStream(CachedStackStringStream&&) = delete;
   CachedStackStringStream& operator=(CachedStackStringStream&&) = delete;
-  ~CachedStackStringStream() {
-    if (!cache.destructed && cache.c.size() < max_elems) {
-      cache.c.emplace_back(std::move(osp));
-    }
-  }
+  ~CachedStackStringStream();
 
   sss& operator*() {
     return *osp;
@@ -187,6 +175,20 @@ private:
     bool destructed = false;
   };
 
+#if __clang__
+  // clang will generate conflicting symbols
+  // when the same inline static thread_local variable
+  // is accessed from multiple CUs (access in this header
+  // is effectively access from every CU including it)
+  // while having visibility = hidden
+  // IDK if it's a bug or a feature, but definitely
+  // different from how GCC handles it.
+  // Some targets in ceph (namely, cephsqlite)
+  // are compiled with the default visibility 'hidden',
+  // so this declaration will counter that setting
+  // and prevent a "duplicate symbol" error during linking
+  __attribute__((visibility("default")))
+#endif
   inline static thread_local Cache cache;
   osptr osp;
 };

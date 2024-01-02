@@ -376,7 +376,7 @@ void FSMirror::handle_acquire_directory(string_view dir_path) {
     std::scoped_lock locker(m_lock);
     m_directories.emplace(dir_path);
     m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,
-                                                 m_directories.size());
+                                                 (uint64_t)m_directories.size());
 
     for (auto &[peer, peer_replayer] : m_peer_replayers) {
       dout(10) << ": peer=" << peer << dendl;
@@ -397,7 +397,7 @@ void FSMirror::handle_release_directory(string_view dir_path) {
     if (it != m_directories.end()) {
       m_directories.erase(it);
       m_service_daemon->add_or_update_fs_attribute(m_filesystem.fscid, SERVICE_DAEMON_DIR_COUNT_KEY,
-                                                   m_directories.size());
+                                                   (uint64_t)m_directories.size());
       for (auto &[peer, peer_replayer] : m_peer_replayers) {
         dout(10) << ": peer=" << peer << dendl;
         peer_replayer->remove_directory(dir_path);

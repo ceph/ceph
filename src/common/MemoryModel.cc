@@ -18,6 +18,7 @@ MemoryModel::MemoryModel(CephContext *cct_)
 
 void MemoryModel::_sample(snap *psnap)
 {
+#if defined(PROCPREFIX)
   ifstream f;
 
   f.open(PROCPREFIX "/proc/self/status");
@@ -92,5 +93,7 @@ void MemoryModel::_sample(snap *psnap)
   }
 
   psnap->heap = heap >> 10;
-
+#else
+  ldout(cct, 0) << "procfs is unavailable" << dendl;
+#endif
 }

@@ -318,7 +318,11 @@ void MgrStandby::respawn()
    * unlinked.
    */
   char exe_path[PATH_MAX] = "";
-  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
+
+#if defined(PROCPREFIX)
+  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1)
+#endif
+  {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
@@ -327,10 +331,13 @@ void MgrStandby::respawn()
 
     /* Fall back to a best-effort: just running in our CWD */
     strncpy(exe_path, orig_argv[0], PATH_MAX-1);
-  } else {
+  }
+#if defined(PROCPREFIX)
+  else {
     dout(1) << "respawning with exe " << exe_path << dendl;
     strcpy(exe_path, PROCPREFIX "/proc/self/exe");
   }
+#endif
 
   dout(1) << " exe_path " << exe_path << dendl;
 

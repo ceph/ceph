@@ -383,11 +383,12 @@ double div32()
   uint64_t stop = Cycles::rdtsc();
   return Cycles::to_seconds(stop - start)/count;
 #elif defined(__aarch64__)
+  // technically, this is a 64bit division.
   int count = 1000000;
   uint64_t start = Cycles::rdtsc();
   uint64_t numerator = 0xa5a5a5a555aa55aaUL;
-  uint32_t divisor = 0xaa55aa55U;
-  uint32_t result;
+  uint64_t divisor = 0xaa55aa55U;
+  uint64_t result;
   for (int i = 0; i < count; i++) {
     asm volatile("udiv %0, %1, %2" : "=r"(result) :
                   "r"(numerator), "r"(divisor));

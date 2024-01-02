@@ -60,8 +60,14 @@ struct D3nL1CacheRequest {
         ldpp_dout(dpp, 1) << "ERROR: D3nDataCache: " << __func__ << "(): can't open " << location << " : " << cpp_strerror(err) << dendl;
         return -err;
       }
+
+      // Apple stdlib doesn't implement the function posix_fadvise
+      // testing for the capability with the feature_test_macros
+      // as per https://man7.org/linux/man-pages/man2/posix_fadvise.2.html
+#if _POSIX_C_SOURCE >= 200112L
       if (g_conf()->rgw_d3n_l1_fadvise != POSIX_FADV_NORMAL)
         posix_fadvise(aio_cb->aio_fildes, 0, 0, g_conf()->rgw_d3n_l1_fadvise);
+#endif
 
       bufferptr bp(read_len);
       aio_cb->aio_buf = bp.c_str();

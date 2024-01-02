@@ -16,6 +16,10 @@
 
 #include <netinet/in.h>
 #ifndef _WIN32
+#ifdef __APPLE__
+#define BIND_8_COMPAT
+#endif
+#include <arpa/nameser.h>
 #include <resolv.h>
 #endif
 

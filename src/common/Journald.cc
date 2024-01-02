@@ -3,7 +3,8 @@
 
 #include "Journald.h"
 
-#include <endian.h>
+#include "include/endian_compat.h"
+
 #include <fcntl.h>
 #include <iterator>
 #include <memory>
@@ -28,6 +29,9 @@ namespace ceph::logging {
 
 namespace {
 const struct sockaddr_un sockaddr = {
+#if defined(__APPLE__)
+  0, // sa_len
+#endif
   AF_UNIX,
   "/run/systemd/journal/socket",
 };
@@ -77,7 +81,7 @@ class EntryEncoderBase {
      {}, {}, {}, { (char *)"\n", 1 },
     }
   {
-    std::string id = program_invocation_short_name;
+    std::string id = GET_PROGNAME();
     for (auto& c : id) {
       if (c == '\n')
         c = '_';
@@ -122,8 +126,8 @@ MESSAGE
       map_prio(e.m_prio),
       s->get_name(e.m_subsys),
       e.m_stamp.time_since_epoch().count().count,
-      e.m_prio,
-      e.m_thread);
+      (int)e.m_prio, // an alternative is to add `short` to the FMT_TYPE_CONSTANT list in fmt/core.h
+      (uint64_t)e.m_thread);
 
     uint64_t msg_len = htole64(e.size());
     meta_buf.resize(meta_buf.size() + sizeof(msg_len));
@@ -176,11 +180,15 @@ enum class JournaldClient::MemFileMode {
   OPEN_UNLINK,  
 };
 
+#if !defined(__APPLE__)
 constexpr const char *mem_file_dir = "/dev/shm";
+#endif
 
 void JournaldClient::detect_mem_file_mode()
 {
-  int memfd = memfd_create("ceph-journald", MFD_ALLOW_SEALING | MFD_CLOEXEC);
+#if !defined(__APPLE__)
+  int memfd = -1;
+  memfd = memfd_create("ceph-journald", MFD_ALLOW_SEALING | MFD_CLOEXEC);
   if (memfd >= 0) {
     mem_file_mode = MemFileMode::MEMFD_CREATE;
     close(memfd);
@@ -192,21 +200,32 @@ void JournaldClient::detect_mem_file_mode()
     close(memfd);
     return;
   }
+#endif
   mem_file_mode = MemFileMode::OPEN_UNLINK;
 }
 
 int JournaldClient::open_mem_file()
 {
+  int fd = -1;
+#if defined(__APPLE__)
+  char mem_file_template[] = "/tmp/ceph-journald-XXXXXX";
+#else
+  char mem_file_template[] = "/dev/shm/ceph-journald-XXXXXX";
+#endif
+
   switch (mem_file_mode) {
+#if !defined(__APPLE__)
   case MemFileMode::MEMFD_CREATE:
     return memfd_create("ceph-journald", MFD_ALLOW_SEALING | MFD_CLOEXEC);
   case MemFileMode::OPEN_TMPFILE:
     return open(mem_file_dir, O_TMPFILE | O_EXCL | O_CLOEXEC, S_IRUSR | S_IWUSR);
+#endif
   case MemFileMode::OPEN_UNLINK:
-    char mem_file_template[] = "/dev/shm/ceph-journald-XXXXXX";
-    int fd = mkostemp(mem_file_template, O_CLOEXEC);
+    fd = mkostemp(mem_file_template, O_CLOEXEC);
     unlink(mem_file_template);
     return fd;
+  default:
+    break;
   }
   ceph_abort("Unexpected mem_file_mode");
 }
@@ -217,7 +236,19 @@ JournaldClient::JournaldClient() :
     sizeof(sockaddr),            // msg_namelen
   })
 {
-  fd = socket(AF_UNIX, SOCK_DGRAM | SOCK_CLOEXEC, 0);
+  int sock_type = SOCK_DGRAM;
+#if !defined(__APPLE__)
+  sock_type |= SOCK_CLOEXEC;
+#endif
+
+  fd = socket(AF_UNIX, sock_type, 0);
+
+#if defined(__APPLE__)
+  // warning: potential race, though leaking a socket fd
+  // is not as bad as leaking a temp file fd
+  ::fcntl(fd, F_SETFD, FD_CLOEXEC);
+#endif
+
   ceph_assertf(fd > 0, "socket creation failed: %s", strerror(errno));
 
   int sendbuf = 2 * 1024 * 1024;
@@ -261,13 +292,18 @@ int JournaldClient::send()
   }
 
   if (mem_file_mode == MemFileMode::MEMFD_CREATE) {
+#if defined(__APPLE__)
+    std::cerr << "Unsupported MemFileMode::MEMFD_CREATE" << std::endl;
+    goto err_close_buffer_fd;
+#else
     ret = fcntl(buffer_fd, F_ADD_SEALS, F_SEAL_SHRINK | F_SEAL_GROW | F_SEAL_WRITE | F_SEAL_SEAL);
     if (ret) {
       std::cerr << "Failed to seal buffer_fd while sending log to journald: " << strerror(errno) << std::endl;
       goto err_close_buffer_fd;
     }
+#endif
   }
-  
+
   ret = sendmsg_fd(fd, buffer_fd);
   if (ret < 0) {
     /* Fail silently if the journal is not available */

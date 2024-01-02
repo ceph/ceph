@@ -7090,6 +7090,7 @@ public:
   std::vector<uint32_t> lengths = {1, 1000, 4096, 12000, 32768, 30000, 80000, 128 * 1024};
 };
 
+#if defined(WITH_BLUESTORE)
 TEST_P(DeferredWriteTest, NewData) {
   const bool print = false;
   deferred_test_t t = GetParam();
@@ -7162,7 +7163,6 @@ TEST_P(DeferredWriteTest, NewData) {
   }
 }
 
-#if defined(WITH_BLUESTORE)
 INSTANTIATE_TEST_SUITE_P(
   BlueStore,
   DeferredWriteTest,

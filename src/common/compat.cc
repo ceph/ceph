@@ -213,7 +213,7 @@ fail:
 #endif
 }
 
-#if defined(__FreeBSD__)
+#if defined(__FreeBSD__) || defined(__APPLE__)
 int sched_setaffinity(pid_t pid, size_t cpusetsize,
                       cpu_set_t *mask)
 {

@@ -44,6 +44,10 @@ static pid_t do_gettid(void)
   return static_cast < pid_t >(syscall(SYS_gettid));
 #elif defined(_WIN32)
   return static_cast < pid_t >(GetCurrentThreadId());
+#elif defined(__APPLE__)
+  uint64_t tid = 0;
+  (void)pthread_threadid_np(NULL, &tid);
+  return static_cast<pid_t>(tid);
 #else
   return static_cast < pid_t >(pthread_getthreadid_np());
 #endif

@@ -36,6 +36,7 @@ set(common_srcs
   Readahead.cc
   RefCountedObj.cc
   SloppyCRCMap.cc
+  StackStringStream.cc
   Thread.cc
   Throttle.cc
   Timer.cc

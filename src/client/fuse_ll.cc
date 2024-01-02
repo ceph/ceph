@@ -1283,7 +1283,6 @@ static int remount_cb(void *handle)
 static void do_init(void *data, fuse_conn_info *conn)
 {
   CephFuse::Handle *cfuse = (CephFuse::Handle *)data;
-  Client *client = cfuse->client;
 
 #if FUSE_VERSION >= FUSE_MAKE_VERSION(3, 0)
   fuse_apply_conn_info_opts(cfuse->conn_opts, conn);
@@ -1293,6 +1292,7 @@ static void do_init(void *data, fuse_conn_info *conn)
     conn->want |= FUSE_CAP_SPLICE_MOVE;
 
 #if !defined(__APPLE__)
+  Client *client = cfuse->client;
   if (!client->fuse_default_permissions && client->ll_handle_umask()) {
     // apply umask in userspace if posix acl is enabled
     if(conn->capable & FUSE_CAP_DONT_MASK)
@@ -1440,6 +1440,8 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     "fuse_allow_other");
   auto fuse_default_permissions = client->cct->_conf.get_val<bool>(
     "fuse_default_permissions");
+
+#if defined(__linux__)
 #if FUSE_VERSION < FUSE_MAKE_VERSION(3, 0)
   auto fuse_big_writes = client->cct->_conf.get_val<bool>(
     "fuse_big_writes");
@@ -1454,6 +1456,8 @@ int CephFuse::Handle::init(int argc, const char *argv[])
     "fuse_splice_write");
   auto fuse_splice_move = client->cct->_conf.get_val<bool>(
     "fuse_splice_move");
+#endif
+
   auto fuse_debug = client->cct->_conf.get_val<bool>(
     "fuse_debug");
 

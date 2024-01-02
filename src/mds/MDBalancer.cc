@@ -354,6 +354,7 @@ mds_load_t MDBalancer::get_load()
   uint64_t num_traverse_hit = mds->logger->get(l_mds_traverse_hit);
 
   uint64_t cpu_time = 1;
+#if defined(PROCPREFIX)
   {
     string stat_path = PROCPREFIX "/proc/self/stat";
     ifstream stat_file(stat_path);
@@ -371,6 +372,7 @@ mds_load_t MDBalancer::get_load()
       derr << "input file '" << stat_path << "' not found" << dendl_impl;
     }
   }
+#endif
 
   load.queue_len = messenger->get_dispatch_queue_len();
 
