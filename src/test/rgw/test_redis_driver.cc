@@ -8,6 +8,8 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_redis_driver.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 namespace net = boost::asio;
 using boost::redis::config;
 using boost::redis::connection;

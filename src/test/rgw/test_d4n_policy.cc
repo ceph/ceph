@@ -8,6 +8,8 @@
 #include "rgw_auth_registry.h"
 #include "driver/d4n/d4n_policy.h"
 
+#define dout_subsys ceph_subsys_rgw
+
 namespace net = boost::asio;
 using boost::redis::config;
 using boost::redis::connection;

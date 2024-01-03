@@ -1,5 +1,6 @@
 #include <boost/asio/consign.hpp>
 #include "common/async/blocked_completion.h"
+#include "common/dout.h" 
 #include "d4n_directory.h"
 
 namespace rgw { namespace d4n {
@@ -43,11 +44,13 @@ void redis_exec(std::shared_ptr<connection> conn,
   }
 }
 
-std::string ObjectDirectory::build_index(CacheObj* object) {
+std::string ObjectDirectory::build_index(CacheObj* object) 
+{
   return object->bucketName + "_" + object->objName;
 }
 
-int ObjectDirectory::exist_key(CacheObj* object, optional_yield y) {
+int ObjectDirectory::exist_key(CacheObj* object, optional_yield y) 
+{
   std::string key = build_index(object);
   response<int> resp;
 
@@ -60,7 +63,7 @@ int ObjectDirectory::exist_key(CacheObj* object, optional_yield y) {
 
     if ((bool)ec)
       return false;
-  } catch(std::exception &e) {}
+  } catch (std::exception &e) {}
 
   return std::get<0>(resp).value();
 }
@@ -71,7 +74,8 @@ void ObjectDirectory::shutdown()
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 }
 
-int ObjectDirectory::set(CacheObj* object, optional_yield y) {
+int ObjectDirectory::set(CacheObj* object, optional_yield y) 
+{
   std::string key = build_index(object);
     
   /* Every set will be treated as new */
@@ -109,17 +113,18 @@ int ObjectDirectory::set(CacheObj* object, optional_yield y) {
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (std::get<0>(resp).value() != "OK" || (bool)ec) {
-      return -1;
+    if (ec) {
+      return -ec.value();
     }
-  } catch(std::exception &e) {
-    return -1;
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 
   return 0;
 }
 
-int ObjectDirectory::get(CacheObj* object, optional_yield y) {
+int ObjectDirectory::get(CacheObj* object, optional_yield y) 
+{
   std::string key = build_index(object);
 
   if (exist_key(object, y)) {
@@ -139,8 +144,10 @@ int ObjectDirectory::get(CacheObj* object, optional_yield y) {
 
       redis_exec(conn, ec, req, resp, y);
 
-      if (!std::get<0>(resp).value().size() || (bool)ec) {
-	return -1;
+      if (std::get<0>(resp).value().empty()) {
+	return -ENOENT;
+      } else if (ec) {
+	return -ec.value();
       }
 
       object->objName = std::get<0>(resp).value()[0];
@@ -157,17 +164,18 @@ int ObjectDirectory::get(CacheObj* object, optional_yield y) {
 	  object->hostsList.push_back(host);
 	}
       }
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
-    return -2;
+    return -ENOENT;
   }
 
   return 0;
 }
 
-int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y) {
+int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string copyBucketName, optional_yield y) 
+{
   std::string key = build_index(object);
   auto copyObj = CacheObj{ .objName = copyName, .bucketName = copyBucketName };
   std::string copyKey = build_index(&copyObj);
@@ -183,8 +191,8 @@ int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string co
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if ((bool)ec) {
-	  return -1;
+	if (ec) {
+	  return -ec.value();
 	}
       }
 
@@ -196,21 +204,22 @@ int ObjectDirectory::copy(CacheObj* object, std::string copyName, std::string co
 
 	redis_exec(conn, ec, req, res, y);
 
-        if (std::get<0>(res).value() != "OK" || (bool)ec) {
-          return -1;
-        }
+	if (ec) {
+	  return -ec.value();
+	}
       }
 
       return std::get<0>(resp).value() - 1; 
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
-    return -2;
+    return -ENOENT;
   }
 }
 
-int ObjectDirectory::del(CacheObj* object, optional_yield y) {
+int ObjectDirectory::del(CacheObj* object, optional_yield y) 
+{
   std::string key = build_index(object);
 
   if (exist_key(object, y)) {
@@ -222,19 +231,21 @@ int ObjectDirectory::del(CacheObj* object, optional_yield y) {
 
       redis_exec(conn, ec, req, resp, y);
 
-      if ((bool)ec)
-        return -1;
+      if (ec) {
+	return -ec.value();
+      }
 
       return std::get<0>(resp).value() - 1; 
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
     return 0; /* No delete was necessary */
   }
 }
 
-int ObjectDirectory::update_field(CacheObj* object, std::string field, std::string value, optional_yield y) {
+int ObjectDirectory::update_field(CacheObj* object, std::string field, std::string value, optional_yield y) 
+{
   std::string key = build_index(object);
 
   if (exist_key(object, y)) {
@@ -248,8 +259,11 @@ int ObjectDirectory::update_field(CacheObj* object, std::string field, std::stri
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if (!std::get<0>(resp).value() || (bool)ec)
-	  return -1;
+	if (!std::get<0>(resp).value()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
       }
 
       if (field == "objHosts") {
@@ -261,8 +275,11 @@ int ObjectDirectory::update_field(CacheObj* object, std::string field, std::stri
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if (!std::get<0>(resp).value().size() || (bool)ec)
-	  return -1;
+	if (std::get<0>(resp).value().empty()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
 
 	std::get<0>(resp).value() += "_";
 	std::get<0>(resp).value() += value;
@@ -277,25 +294,27 @@ int ObjectDirectory::update_field(CacheObj* object, std::string field, std::stri
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if ((bool)ec) {
-	  return -1;
+	if (ec) {
+	  return -ec.value();
 	}
 
 	return std::get<0>(resp).value(); 
       }
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
-    return -2;
+    return -ENOENT;
   }
 }
 
-std::string BlockDirectory::build_index(CacheBlock* block) {
+std::string BlockDirectory::build_index(CacheBlock* block) 
+{
   return block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
 }
 
-int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) {
+int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) 
+{
   std::string key = build_index(block);
   response<int> resp;
 
@@ -308,7 +327,7 @@ int BlockDirectory::exist_key(CacheBlock* block, optional_yield y) {
 
     if ((bool)ec)
       return false;
-  } catch(std::exception &e) {}
+  } catch (std::exception &e) {}
 
   return std::get<0>(resp).value();
 }
@@ -319,7 +338,8 @@ void BlockDirectory::shutdown()
   boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 }
 
-int BlockDirectory::set(CacheBlock* block, optional_yield y) {
+int BlockDirectory::set(CacheBlock* block, optional_yield y) 
+{
   std::string key = build_index(block);
     
   /* Every set will be treated as new */
@@ -380,17 +400,18 @@ int BlockDirectory::set(CacheBlock* block, optional_yield y) {
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (std::get<0>(resp).value() != "OK" || (bool)ec) {
-      return -1;
+    if (ec) {
+      return -ec.value();
     }
-  } catch(std::exception &e) {
-    return -1;
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 
   return 0;
 }
 
-int BlockDirectory::get(CacheBlock* block, optional_yield y) {
+int BlockDirectory::get(CacheBlock* block, optional_yield y) 
+{
   std::string key = build_index(block);
 
   if (exist_key(block, y)) {
@@ -416,8 +437,10 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y) {
 
       redis_exec(conn, ec, req, resp, y);
 
-      if (!std::get<0>(resp).value().size() || (bool)ec) {
-	return -1;
+      if (std::get<0>(resp).value().empty()) {
+	return -ENOENT;
+      } else if (ec) {
+	return -ec.value();
       }
 
       block->blockID = boost::lexical_cast<uint64_t>(std::get<0>(resp).value()[0]);
@@ -451,17 +474,18 @@ int BlockDirectory::get(CacheBlock* block, optional_yield y) {
 	  block->cacheObj.hostsList.push_back(host);
 	}
       }
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
-    return -2;
+    return -ENOENT;
   }
 
   return 0;
 }
 
-int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y) {
+int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string copyBucketName, optional_yield y) 
+{
   std::string key = build_index(block);
   auto copyBlock = CacheBlock{ .cacheObj = { .objName = copyName, .bucketName = copyBucketName }, .blockID = 0 };
   std::string copyKey = build_index(&copyBlock);
@@ -477,8 +501,8 @@ int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string co
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if ((bool)ec) {
-	  return -1;
+	if (ec) {
+	  return -ec.value();
 	}
       }
 
@@ -490,21 +514,22 @@ int BlockDirectory::copy(CacheBlock* block, std::string copyName, std::string co
 
 	redis_exec(conn, ec, req, res, y);
 
-        if (std::get<0>(res).value() != "OK" || (bool)ec) {
-          return -1;
-        }
+	if (ec) {
+	  return -ec.value();
+	}
       }
 
       return std::get<0>(resp).value() - 1; 
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
-    return -2;
+    return -ENOENT;
   }
 }
 
-int BlockDirectory::del(CacheBlock* block, optional_yield y) {
+int BlockDirectory::del(CacheBlock* block, optional_yield y) 
+{
   std::string key = build_index(block);
 
   if (exist_key(block, y)) {
@@ -516,19 +541,21 @@ int BlockDirectory::del(CacheBlock* block, optional_yield y) {
 
       redis_exec(conn, ec, req, resp, y);
 
-      if ((bool)ec)
-        return -1;
+      if (ec) {
+	return -ec.value();
+      }
 
       return std::get<0>(resp).value() - 1; 
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
     return 0; /* No delete was necessary */
   }
 }
 
-int BlockDirectory::update_field(CacheBlock* block, std::string field, std::string value, optional_yield y) {
+int BlockDirectory::update_field(CacheBlock* block, std::string field, std::string value, optional_yield y) 
+{
   std::string key = build_index(block);
 
   if (exist_key(block, y)) {
@@ -542,8 +569,11 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if (!std::get<0>(resp).value() || (bool)ec)
-	  return -1;
+	if (!std::get<0>(resp).value()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
       }
 
       if (field == "blockHosts") { 
@@ -555,8 +585,11 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if (!std::get<0>(resp).value().size() || (bool)ec)
-	  return -1;
+	if (std::get<0>(resp).value().empty()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
 
 	std::get<0>(resp).value() += "_";
 	std::get<0>(resp).value() += value;
@@ -571,21 +604,22 @@ int BlockDirectory::update_field(CacheBlock* block, std::string field, std::stri
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if ((bool)ec) {
-	  return -1;
+	if (ec) {
+	  return -ec.value();
 	}
 
 	return std::get<0>(resp).value(); 
       }
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
-    return -2;
+    return -ENOENT;
   }
 }
 
-int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optional_yield y) {
+int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optional_yield y) 
+{
   std::string key = build_index(block);
 
   if (exist_key(block, y)) {
@@ -599,8 +633,11 @@ int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optiona
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if (!std::get<0>(resp).value() || (bool)ec)
-	  return -1;
+	if (!std::get<0>(resp).value()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
       }
 
       {
@@ -611,8 +648,11 @@ int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optiona
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if (!std::get<0>(resp).value().size() || (bool)ec)
-	  return -1;
+	if (std::get<0>(resp).value().empty()) {
+	  return -ENOENT;
+	} else if (ec) {
+	  return -ec.value();
+	}
 
 	if (std::get<0>(resp).value().find("_") == std::string::npos) /* Last host, delete entirely */
           return del(block, y);
@@ -622,7 +662,7 @@ int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optiona
         if (it != std::string::npos) 
           result.erase(result.begin() + it, result.begin() + it + delValue.size());
         else
-          return -1;
+          return -ENOENT;
 
         if (result[0] == '_')
           result.erase(0, 1);
@@ -638,17 +678,17 @@ int BlockDirectory::remove_host(CacheBlock* block, std::string delValue, optiona
 
 	redis_exec(conn, ec, req, resp, y);
 
-	if ((bool)ec) {
-	  return -1;
+	if (ec) {
+	  return -ec.value();
 	}
 
 	return std::get<0>(resp).value();
       }
-    } catch(std::exception &e) {
-      return -1;
+    } catch (std::exception &e) {
+      return -EINVAL;
     }
   } else {
-    return -2;
+    return -ENOENT;
   }
 }
 
