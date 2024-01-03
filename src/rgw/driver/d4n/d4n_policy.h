@@ -5,8 +5,6 @@
 #include "rgw_sal_d4n.h"
 #include "rgw_cache_driver.h"
 
-#define dout_subsys ceph_subsys_rgw
-
 namespace rgw::sal {
   class D4NFilterObject;
 }

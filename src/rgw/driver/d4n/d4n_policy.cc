@@ -3,6 +3,7 @@
 #include <boost/lexical_cast.hpp>
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
+#include "common/dout.h" 
 
 namespace rgw { namespace d4n {
 
@@ -51,12 +52,13 @@ int LFUDAPolicy::set_age(int age, optional_yield y) {
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (ec)
-      return {};
+    if (ec) {
+      return -ec.value();
+    }
 
     return std::get<0>(resp).value(); /* Returns number of fields set */
-  } catch(std::exception &e) {
-    return -1;
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 }
 
@@ -70,17 +72,18 @@ int LFUDAPolicy::get_age(optional_yield y) {
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (ec)
-      return -1;
-  } catch(std::exception &e) {
-    return -1;
+    if (ec) {
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 
   if (!std::get<0>(resp).value()) {
     if (set_age(1, y)) /* Initialize age */
       return 1;
     else
-      return -1;
+      return -ENOENT;
   }
 
   try { 
@@ -91,12 +94,13 @@ int LFUDAPolicy::get_age(optional_yield y) {
       
     redis_exec(conn, ec, req, value, y);
 
-    if (ec)
-      return -1;
+    if (ec) {
+      return -ec.value();
+    }
 
     return std::stoi(std::get<0>(value).value());
-  } catch(std::exception &e) {
-    return -1;
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 }
 
@@ -109,12 +113,13 @@ int LFUDAPolicy::set_local_weight_sum(size_t weight, optional_yield y) {
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (ec)
-      return -1;
+    if (ec) {
+      return -ec.value();
+    }
 
     return std::get<0>(resp).value(); /* Returns number of fields set */
-  } catch(std::exception &e) {
-    return -1;
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 }
 
@@ -128,10 +133,11 @@ int LFUDAPolicy::get_local_weight_sum(optional_yield y) {
 
     redis_exec(conn, ec, req, resp, y);
 
-    if (ec)
-      return -1;
-  } catch(std::exception &e) {
-    return -1;
+    if (ec) {
+      return -ec.value();
+    }
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 
   if (!std::get<0>(resp).value()) {
@@ -139,8 +145,8 @@ int LFUDAPolicy::get_local_weight_sum(optional_yield y) {
     for (auto& entry : entries_map)
       sum += entry.second->localWeight; 
  
-    if (set_local_weight_sum(sum, y) < 0) { /* Initialize */ 
-      return -1;
+    if (int ret = set_local_weight_sum(sum, y) < 0) { /* Initialize */ 
+      return ret;
     } else {
       return sum;
     }
@@ -154,12 +160,13 @@ int LFUDAPolicy::get_local_weight_sum(optional_yield y) {
       
     redis_exec(conn, ec, req, value, y);
 
-    if (ec)
-      return -1;
+    if (ec) {
+      return -ec.value();
+    }
 
     return std::stoi(std::get<0>(value).value());
-  } catch(std::exception &e) {
-    return -1;
+  } catch (std::exception &e) {
+    return -EINVAL;
   }
 }
 
@@ -251,7 +258,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     if (victim == nullptr) {
       ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Could not retrieve victim block." << dendl;
       delete victim;
-      return -1;
+      return -ENOENT;
     }
 
     const std::lock_guard l(lfuda_lock);
@@ -259,14 +266,16 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     auto it = entries_map.find(key);
     if (it == entries_map.end()) {
       delete victim;
-      return -1;
+      return -ENOENT;
     }
 
-    int avgWeight = (get_local_weight_sum(y) / entries_map.size());
+    int avgWeight = get_local_weight_sum(y);
     if (avgWeight < 0) {
       delete victim;
-      return -1;
+      return avgWeight;
     }
+
+    avgWeight /= entries_map.size();
 
     if (victim->hostsList.size() == 1 && victim->hostsList[0] == dir->cct->_conf->rgw_local_cache_address) { /* Last copy */
       if (victim->globalWeight) {
@@ -274,13 +283,15 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
         (*it->second->handle)->localWeight = it->second->localWeight;
 	entries_heap.increase(it->second->handle);
 
-	if (cacheDriver->set_attr(dpp, key, "user.rgw.localWeight", std::to_string(it->second->localWeight), y) < 0) 
-	  return -1;
+	if (int ret = cacheDriver->set_attr(dpp, key, "user.rgw.localWeight", std::to_string(it->second->localWeight), y) < 0) { 
+	  delete victim;
+	  return ret;
+        }
 
 	victim->globalWeight = 0;
-	if (dir->update_field(victim, "globalWeight", std::to_string(victim->globalWeight), y) < 0) {
+	if (int ret = dir->update_field(victim, "globalWeight", std::to_string(victim->globalWeight), y) < 0) {
 	  delete victim;
-	  return -1;
+	  return ret;
         }
       }
 
@@ -291,31 +302,31 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     }
 
     victim->globalWeight += it->second->localWeight;
-    if (dir->update_field(victim, "globalWeight", std::to_string(victim->globalWeight), y) < 0) {
+    if (int ret = dir->update_field(victim, "globalWeight", std::to_string(victim->globalWeight), y) < 0) {
       delete victim;
-      return -1;
+      return ret;
     }
 
-    if (dir->remove_host(victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) {
+    if (int ret = dir->remove_host(victim, dir->cct->_conf->rgw_local_cache_address, y) < 0) {
       delete victim;
-      return -1;
+      return ret;
     }
 
     delete victim;
 
-    if (cacheDriver->del(dpp, key, y) < 0) 
-      return -1;
+    if (int ret = cacheDriver->del(dpp, key, y) < 0) 
+      return ret;
 
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Block " << key << " has been evicted." << dendl;
 
     int weight = (avgWeight * entries_map.size()) - it->second->localWeight;
-    if (set_local_weight_sum((weight > 0) ? weight : 0, y) < 0)
-      return -1;
+    if (int ret = set_local_weight_sum((weight > 0) ? weight : 0, y) < 0)
+      return ret;
 
     int age = get_age(y);
     age = std::max(it->second->localWeight, age);
-    if (set_age(age, y) < 0)
-      return -1;
+    if (int ret = set_age(age, y) < 0)
+      return ret;
 
     erase(dpp, key, y);
     freeSpace = cacheDriver->get_free_space(dpp);
