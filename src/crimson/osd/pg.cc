@@ -64,17 +64,6 @@ std::ostream& operator<<(std::ostream& out, const signedspan& d)
 }
 }
 
-template <typename T>
-struct fmt::formatter<std::optional<T>> : fmt::formatter<T> {
-  template <typename FormatContext>
-  auto format(const std::optional<T>& v, FormatContext& ctx) const {
-    if (v.has_value()) {
-      return fmt::formatter<T>::format(*v, ctx);
-    }
-    return fmt::format_to(ctx.out(), "<null>");
-  }
-};
-
 namespace crimson::osd {
 
 using crimson::common::local_conf;
@@ -136,6 +125,7 @@ PG::PG(
       osdmap,
       this,
       this),
+    scrubber(*this),
     obc_registry{
       local_conf()},
     obc_loader{
@@ -155,6 +145,7 @@ PG::PG(
       pgid.shard),
     wait_for_active_blocker(this)
 {
+  scrubber.initiate();
   peering_state.set_backend_predicates(
     new ReadablePredicate(pg_whoami),
     new RecoverablePredicate());
@@ -342,6 +333,12 @@ void PG::on_activate(interval_set<snapid_t> snaps)
   projected_last_update = peering_state.get_info().last_update;
 }
 
+void PG::on_replica_activate()
+{
+  logger().debug("{}: {}", *this, __func__);
+  scrubber.on_replica_activate();
+}
+
 void PG::on_activate_complete()
 {
   wait_for_active_blocker.unblock();
@@ -469,7 +466,7 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
 
 Context *PG::on_clean()
 {
-  // Not needed yet (will be needed for IO unblocking)
+  scrubber.on_primary_active_clean();
   return nullptr;
 }
 
@@ -550,19 +547,10 @@ void PG::on_active_advmap(const OSDMapRef &osdmap)
 
 void PG::scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type)
 {
-  // TODO: should update the stats upon finishing the scrub
-  peering_state.update_stats([scrub_level, this](auto& history, auto& stats) {
-    const utime_t now = ceph_clock_now();
-    history.last_scrub = peering_state.get_info().last_update;
-    history.last_scrub_stamp = now;
-    history.last_clean_scrub_stamp = now;
-    if (scrub_level == scrub_level_t::deep) {
-      history.last_deep_scrub = history.last_scrub;
-      history.last_deep_scrub_stamp = now;
-    }
-    // yes, please publish the stats
-    return true;
-  });
+  /* We don't actually route the scrub request message into the state machine.
+   * Instead, we handle it directly in PGScrubber::handle_scrub_requested).
+   */
+  ceph_assert(0 == "impossible in crimson");
 }
 
 void PG::log_state_enter(const char *state) {
@@ -810,6 +798,12 @@ PG::interruptible_future<> PG::repair_object(
   auto [op, fut] = get_shard_services().start_operation<UrgentRecovery>(
     oid, v, this, get_shard_services(), get_osdmap_epoch());
   return std::move(fut);
+}
+
+PG::interruptible_future<>
+PG::BackgroundProcessLock::lock() noexcept
+{
+  return interruptor::make_interruptible(mutex.lock());
 }
 
 template <class Ret, class SuccessFunc, class FailureFunc>
@@ -1346,6 +1340,9 @@ void PG::log_operation(
   if (!is_primary()) { // && !is_ec_pg()
     replica_clear_repop_obc(logv);
   }
+  if (!logv.empty()) {
+    scrubber.on_log_update(logv.rbegin()->version);
+  }
   peering_state.append_log(std::move(logv),
                            trim_to,
                            roll_forward_to,
@@ -1524,8 +1521,9 @@ void PG::on_change(ceph::os::Transaction &t) {
     client_request_orderer.requeue(shard_services, this);
   } else {
     logger().debug("{} {}: dropping requests", *this, __func__);
-    client_request_orderer.clear_and_cancel();
+    client_request_orderer.clear_and_cancel(*this);
   }
+  scrubber.on_interval_change();
 }
 
 void PG::context_registry_on_change() {

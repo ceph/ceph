@@ -39,6 +39,7 @@
 #include "crimson/osd/pg_recovery_listener.h"
 #include "crimson/osd/recovery_backend.h"
 #include "crimson/osd/object_context_loader.h"
+#include "crimson/osd/scrub/pg_scrubber.h"
 
 class MQuery;
 class OSDMap;
@@ -159,8 +160,6 @@ public:
     bool dirty_big_info,
     bool need_write_epoch,
     ceph::os::Transaction &t) final;
-
-  void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final;
 
   uint64_t get_snap_trimq_size() const final {
     return std::size(snap_trimq);
@@ -318,6 +317,7 @@ public:
   }
   void on_change(ceph::os::Transaction &t) final;
   void on_activate(interval_set<snapid_t> to_trim) final;
+  void on_replica_activate() final;
   void on_activate_complete() final;
   void on_new_interval() final {
     // Not needed yet
@@ -542,18 +542,19 @@ public:
 
 private:
 
-  struct SnapTrimMutex {
-    struct WaitPG : OrderedConcurrentPhaseT<WaitPG> {
-      static constexpr auto type_name = "SnapTrimEvent::wait_pg";
-    } wait_pg;
+  struct BackgroundProcessLock {
+    struct Wait : OrderedConcurrentPhaseT<Wait> {
+      static constexpr auto type_name = "PG::BackgroundProcessLock::wait";
+    } wait;
     seastar::shared_mutex mutex;
 
-    interruptible_future<> lock(SnapTrimEvent &st_event) noexcept;
+    interruptible_future<> lock_with_op(SnapTrimEvent &st_event) noexcept;
+    interruptible_future<> lock() noexcept;
 
     void unlock() noexcept {
       mutex.unlock();
     }
-  } snaptrim_mutex;
+  } background_process_lock;
 
   using do_osd_ops_ertr = crimson::errorator<
    crimson::ct_error::eagain>;
@@ -626,6 +627,18 @@ private:
   eversion_t projected_last_update;
 
 public:
+  // scrub state
+
+  friend class ScrubScan;
+  friend class ScrubFindRange;
+  friend class ScrubReserveRange;
+  friend class scrub::PGScrubber;
+  template <typename T> friend class RemoteScrubEventBaseT;
+
+  scrub::PGScrubber scrubber;
+
+  void scrub_requested(scrub_level_t scrub_level, scrub_type_t scrub_type) final;
+
   ObjectContextRegistry obc_registry;
   ObjectContextLoader obc_loader;
 
