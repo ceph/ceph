@@ -265,16 +265,18 @@ class AsyncJobs(threading.Thread):
         self._finish_onpen_job_reporting(subvolname)
 
     def abort_job_reporting(self, subvolname):
-        assert self.clone_ongoing_ev_id is not None
+        if self.clone_ongoing_ev_id is not None and len(self.job_stats) == 1:
+            msg = f'Cloning aborted for {subvolname}'
+            self.vc.mgr.remote('progress', 'fail', self.clone_ongoing_ev_id,
+                                msg)
+            msg = 'All clones aborted'
+            self.vc.mgr.remote('progress', 'fail', self.clone_onpen_ev_id, msg)
 
-        if self.job_stats[subvolname] not in ('pending', 'finished'):
-            log.critical('A job is being aborted. Progress made so far is '
-                         f'{self.job_stats[subvolname].progress_fraction}.')
-
-        msg = f'Cloning failed for {subvolname}'
-        self.vc.mgr.remote('progress', 'fail', self.clone_ongoing_ev_id, msg)
-
-        self.job_stats.pop(subvolname)
+        if self.job_stats.get(subvolname, False):
+            if self.job_stats[subvolname] not in ('pending', 'finished'):
+                log.critical('A job is being aborted. Progress made so far is '
+                             f'{self.job_stats[subvolname].progress_fraction}.')
+            self.job_stats.pop(subvolname)
 
     def abort_all_job_progress_reporting(self):
         msg = 'All clones have been cancelled'

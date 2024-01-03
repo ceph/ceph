@@ -497,6 +497,7 @@ class Cloner(AsyncJobs):
                                                     track_idx)
 
                         if cancelled:
+                            self.abort_job_reporting(clone_subvolume.subvolname)
                             return
 
 
@@ -510,6 +511,8 @@ class Cloner(AsyncJobs):
                         with open_subvol(self.fs_client.mgr, fs_handle, self.vc.volspec, group, clonename, SubvolumeOpType.CLONE_CANCEL) as clone_subvolume:
                             if not self._cancel_job(volname, (track_idx, clone_subvolume.base_path)):
                                 raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
+                            else:
+                                self.abort_job_reporting(clone_subvolume.subvolname)
         except (IndexException, MetadataMgrException) as e:
             log.error("error cancelling clone {0}: ({1})".format(job, e))
             raise VolumeException(-errno.EINVAL, "error canceling clone")
