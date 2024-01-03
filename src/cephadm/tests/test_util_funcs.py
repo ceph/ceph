@@ -872,3 +872,37 @@ def test_daemon_sub_identity_from_service_invalid():
     service_name = 'random-task@elsewise.service'
     with pytest.raises(ValueError):
         DaemonSubIdentity.from_service_name(service_name)
+
+
+def test_daemon_id_systemd_names():
+    from cephadmlib.daemon_identity import DaemonIdentity
+
+    di = DaemonIdentity(
+        '244c9842-866b-11ee-80ad-3497f6318048', 'test', 'foo.bar'
+    )
+    assert (
+        di.unit_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048@test.foo.bar'
+    )
+    assert (
+        di.service_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048@test.foo.bar.service'
+    )
+    assert (
+        di.init_service_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048-init@test.foo.bar.service'
+    )
+
+
+def test_daemon_sub_id_systemd_names():
+    from cephadmlib.daemon_identity import DaemonSubIdentity
+
+    dsi = DaemonSubIdentity(
+        '244c9842-866b-11ee-80ad-3497f6318048', 'test', 'foo.bar', 'quux',
+    )
+    assert (
+        dsi.sidecar_service_name
+        == 'ceph-244c9842-866b-11ee-80ad-3497f6318048-sidecar@test.foo.bar:quux.service'
+    )
+    with pytest.raises(ValueError):
+        dsi.service_name
