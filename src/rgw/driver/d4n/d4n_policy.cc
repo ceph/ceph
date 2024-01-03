@@ -3,6 +3,7 @@
 #include <boost/lexical_cast.hpp>
 #include "../../../common/async/yield_context.h"
 #include "common/async/blocked_completion.h"
+#include "common/dout.h" 
 
 namespace rgw { namespace d4n {
 

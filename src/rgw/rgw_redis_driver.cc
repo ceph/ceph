@@ -2,8 +2,9 @@
 #include <boost/redis/src.hpp>
 #include <boost/asio/detached.hpp>
 
-#include "rgw_redis_driver.h"
+#include "common/dout.h" 
 #include "common/async/blocked_completion.h"
+#include "rgw_redis_driver.h"
 
 namespace rgw { namespace cache {
 

@@ -1,5 +1,6 @@
 #include <boost/asio/consign.hpp>
 #include "common/async/blocked_completion.h"
+#include "common/dout.h" 
 #include "d4n_directory.h"
 
 namespace rgw { namespace d4n {
