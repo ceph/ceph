@@ -65,13 +65,12 @@ Notable Changes
 * mgr/snap-schedule: For clusters with multiple CephFS file systems, all the
   snap-schedule commands now expect the '--fs' argument.
 
-* RADOS: A POOL_APP_NOT_ENABLED health warning will now be reported if
-  the application is not enabled for the pool irrespective of whether
-  the pool is in use or not. Always tag a pool with an application
-  using ``ceph osd pool application enable`` command to avoid reporting
-  of POOL_APP_NOT_ENABLED health warning for that pool.
-  The user might temporarily mute this warning using
-  ``ceph health mute POOL_APP_NOT_ENABLED``.
+* RADOS: A ``POOL_APP_NOT_ENABLED`` health warning will now be reported if the
+  application is not enabled for the pool whether the pool is in use or not.
+  Always tag a pool with an application using ``ceph osd pool application
+  enable`` command to avoid reporting ``POOL_APP_NOT_ENABLED`` for that pool.
+  The user might temporarily mute this warning using ``ceph health mute
+  POOL_APP_NOT_ENABLED``.
 
 * Dashboard: An overview page for RGW to show the overall status of RGW components.
 
