@@ -4897,7 +4897,6 @@ options:
   - stupid
   - avl
   - hybrid
-  - zoned
   with_legacy: true
 - name: bluestore_freelist_blocks_per_key
   type: size
@@ -6326,7 +6325,6 @@ options:
   - aio
   - spdk
   - pmem
-  - hm_smr
 - name: bluestore_cleaner_sleep_interval
   type: float
   level: advanced

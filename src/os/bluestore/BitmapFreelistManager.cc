@@ -67,7 +67,6 @@ BitmapFreelistManager::BitmapFreelistManager(CephContext* cct,
 }
 
 int BitmapFreelistManager::create(uint64_t new_size, uint64_t granularity,
-				  uint64_t zone_size, uint64_t first_sequential_zone,
 				  KeyValueDB::Transaction txn)
 {
   bytes_per_block = granularity;
