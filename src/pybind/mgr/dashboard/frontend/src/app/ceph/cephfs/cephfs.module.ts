@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
 import { TreeModule } from '@circlon/angular-tree-component';
 import { NgbNavModule, NgbTooltipModule, NgbTypeaheadModule } from '@ng-bootstrap/ng-bootstrap';
-import { ChartsModule } from 'ng2-charts';
+import { NgChartsModule } from 'ng2-charts';
 
 import { AppRoutingModule } from '~/app/app-routing.module';
 import { SharedModule } from '~/app/shared/shared.module';
@@ -28,7 +28,7 @@ import { DataTableModule } from '../../shared/datatable/datatable.module';
     CommonModule,
     SharedModule,
     AppRoutingModule,
-    ChartsModule,
+    NgChartsModule,
     TreeModule,
     NgbNavModule,
     FormsModule,

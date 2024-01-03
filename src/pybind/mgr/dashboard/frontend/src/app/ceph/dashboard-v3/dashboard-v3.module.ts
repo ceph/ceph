@@ -4,7 +4,7 @@ import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule } from '@angular/router';
 
 import { NgbNavModule, NgbPopoverModule, NgbTooltipModule } from '@ng-bootstrap/ng-bootstrap';
-import { ChartsModule } from 'ng2-charts';
+import { NgChartsModule } from 'ng2-charts';
 import { SimplebarAngularModule } from 'simplebar-angular';
 
 import { SharedModule } from '~/app/shared/shared.module';
@@ -21,7 +21,7 @@ import { PgSummaryPipe } from './pg-summary.pipe';
     CommonModule,
     NgbNavModule,
     SharedModule,
-    ChartsModule,
+    NgChartsModule,
     RouterModule,
     NgbPopoverModule,
     NgbTooltipModule,

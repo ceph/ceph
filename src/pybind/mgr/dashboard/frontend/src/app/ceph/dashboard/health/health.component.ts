@@ -60,7 +60,7 @@ export class HealthComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.clientStatsConfig = {
-      colors: [
+      dataset: [
         {
           backgroundColor: [
             this.cssHelper.propertyValue('chart-color-cyan'),
@@ -71,7 +71,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     };
 
     this.rawCapacityChartConfig = {
-      colors: [
+      dataset: [
         {
           backgroundColor: [
             this.cssHelper.propertyValue('chart-color-blue'),
@@ -171,7 +171,7 @@ export class HealthComponent implements OnInit, OnDestroy {
     } else {
       this.color = 'chart-color-blue';
     }
-    this.rawCapacityChartConfig.colors[0].backgroundColor[0] = this.cssHelper.propertyValue(
+    this.rawCapacityChartConfig.dataset[0].backgroundColor[0] = this.cssHelper.propertyValue(
       this.color
     );
 
