@@ -442,9 +442,41 @@ class Cloner(AsyncJobs):
             clone_subvolume.add_clone_failure(errno.EINTR, "user interrupted clone operation")
             s_subvolume.detach_snapshot(s_snapname, track_idx.decode('utf-8'))
 
+    def _cancel_if_pending(self, volname, job, fs_handle, group,
+                           clone_subvolume, clonename, groupname, track_idx):
+        status = clone_subvolume.status
+        clone_state = SubvolumeStates.from_value(status['state'])
+
+        if not self.is_clone_cancelable(clone_state):
+            raise VolumeException(
+                    -errno.EINVAL,
+                    "cannot cancel -- clone finished (check clone status)")
+
+        track_idx = self.get_clone_tracking_index(fs_handle, clone_subvolume)
+        if not track_idx:
+            log.warning("cannot lookup clone tracking index for "
+                        f"{clone_subvolume.base_path}")
+            raise VolumeException(-errno.EINVAL, "error canceling clone")
+
+        clone_job = (track_idx, clone_subvolume.base_path)
+        jobs = [j[0] for j in self.jobs[volname]]
+        with lock_timeout_log(self.lock):
+            if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE,
+                                           clone_state) \
+                and not clone_job in jobs:
+                logging.debug("Cancelling pending job {0}".format(clone_job))
+                # clone has not started yet -- cancel right away.
+                self._cancel_pending_clone(fs_handle, clone_subvolume,
+                                           clonename, groupname, status,
+                                           track_idx)
+                return True, track_idx
+
+        return False, track_idx
+
     def cancel_job(self, volname, job):
         """
-        override base class `cancel_job`. interpret @job as (clone, group) tuple.
+        override base class `cancel_job`. interpret @job as (clone, group)
+        tuple.
         """
         clonename = job[0]
         groupname = job[1]
@@ -452,24 +484,22 @@ class Cloner(AsyncJobs):
 
         try:
             with open_volume(self.fs_client, volname) as fs_handle:
-                with open_group(fs_handle, self.vc.volspec, groupname) as group:
-                    with open_subvol(self.fs_client.mgr, fs_handle, self.vc.volspec, group, clonename, SubvolumeOpType.CLONE_CANCEL) as clone_subvolume:
-                        status = clone_subvolume.status
-                        clone_state = SubvolumeStates.from_value(status['state'])
-                        if not self.is_clone_cancelable(clone_state):
-                            raise VolumeException(-errno.EINVAL, "cannot cancel -- clone finished (check clone status)")
-                        track_idx = self.get_clone_tracking_index(fs_handle, clone_subvolume)
-                        if not track_idx:
-                            log.warning("cannot lookup clone tracking index for {0}".format(clone_subvolume.base_path))
-                            raise VolumeException(-errno.EINVAL, "error canceling clone")
-                        clone_job = (track_idx, clone_subvolume.base_path)
-                        jobs = [j[0] for j in self.jobs[volname]]
-                        with lock_timeout_log(self.lock):
-                            if SubvolumeOpSm.is_init_state(SubvolumeTypes.TYPE_CLONE, clone_state) and not clone_job in jobs:
-                                logging.debug("Cancelling pending job {0}".format(clone_job))
-                                # clone has not started yet -- cancel right away.
-                                self._cancel_pending_clone(fs_handle, clone_subvolume, clonename, groupname, status, track_idx)
-                                return
+                with open_group(fs_handle, self.vc.volspec,
+                                groupname) as group:
+                    with open_subvol(self.fs_client.mgr, fs_handle,
+                                     self.vc.volspec, group, clonename,
+                                     SubvolumeOpType.CLONE_CANCEL) \
+                            as clone_subvolume:
+                        cancelled, track_idx = \
+                            self._cancel_if_pending(volname, job, fs_handle,
+                                                    group, clone_subvolume,
+                                                    clonename, groupname,
+                                                    track_idx)
+
+                        if cancelled:
+                            return
+
+
             # cancelling an on-going clone would persist "canceled" state in subvolume metadata.
             # to persist the new state, async cloner accesses the volume in exclusive mode.
             # accessing the volume in exclusive mode here would lead to deadlock.
