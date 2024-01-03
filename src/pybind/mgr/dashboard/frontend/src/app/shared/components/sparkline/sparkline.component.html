@@ -2,11 +2,9 @@
      [ngStyle]="style">
   <canvas baseChart
           #sparkCanvas
-          [labels]="labels"
-          [datasets]="datasets"
+          [data]="chartData"
           [options]="options"
-          [colors]="colors"
-          [chartType]="'line'">
+          [type]="'line'">
   </canvas>
   <div class="chartjs-tooltip"
        #sparkTooltip>

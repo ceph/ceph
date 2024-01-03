@@ -33,6 +33,7 @@ import {
 } from '~/testing/unit-test-helper';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdListComponent } from './osd-list.component';
+import { ResizeObserver as ResizeObserverPolyfill } from '@juggle/resize-observer';
 
 describe('OsdListComponent', () => {
   let component: OsdListComponent;
@@ -121,6 +122,9 @@ describe('OsdListComponent', () => {
       close: jest.fn()
     });
     orchService = TestBed.inject(OrchestratorService);
+    if (typeof window !== 'undefined') {
+      window.ResizeObserver = window.ResizeObserver || ResizeObserverPolyfill;
+    }
   });
 
   it('should create', () => {
