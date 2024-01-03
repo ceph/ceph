@@ -74,6 +74,18 @@ class TestVolumesHelper(CephFSTestCase):
         self.__check_clone_state("in-progress", clone, clone_group, timo,
                                  sleep)
 
+    def _wait_for_clone_to_be_in_pending_state(self, clone, clone_group=None,
+                                               timo=120, sleep=1):
+        # check for both in-progress too along with pending, because if former
+        # has occurred it means latter has occured beore (for a small time,
+        # perhaps) and it won't occure again.
+        self.__check_clone_state(('pending', 'in-progress'), clone,
+                                 clone_group, timo, sleep)
+
+    def _wait_for_clone_to_be_canceled(self, clone, clone_group=None,
+                                          timo=120, sleep=1):
+        self.__check_clone_state('canceled', clone, clone_group, timo, sleep)
+
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
 
