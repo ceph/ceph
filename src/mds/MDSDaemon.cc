@@ -157,6 +157,7 @@ void MDSDaemon::asok_command(
 		    // our response before seeing us disappear from mdsmap
 		    sleep(1);
 		    std::lock_guard l(mds_lock);
+                    derr << "Exiting due to admin socket command" << dendl;
 		    suicide();
 		  });
     t.detach();
