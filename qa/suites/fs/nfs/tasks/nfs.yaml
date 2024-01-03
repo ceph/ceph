@@ -1,0 +1,4 @@
+tasks:
+  - cephfs_test_runner:
+      modules:
+        - tasks.cephfs.test_nfs
