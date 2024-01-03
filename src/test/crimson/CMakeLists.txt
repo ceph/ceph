@@ -103,3 +103,13 @@ target_link_libraries(
   crimson::gtest)
 add_ceph_unittest(unittest-seastar-errorator
   --memory 256M --smp 1)
+
+add_executable(unittest-crimson-scrub
+  test_crimson_scrub.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_machine.cc
+  ${PROJECT_SOURCE_DIR}/src/crimson/osd/scrub/scrub_validator.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ECUtil.cc)
+target_link_libraries(
+  unittest-crimson-scrub
+  crimson-common
+  crimson::gtest)

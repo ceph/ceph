@@ -54,6 +54,7 @@
 #include "crimson/osd/osd_operations/pg_advance_map.h"
 #include "crimson/osd/osd_operations/recovery_subrequest.h"
 #include "crimson/osd/osd_operations/replicated_request.h"
+#include "crimson/osd/osd_operations/scrub_events.h"
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/crush/CrushLocation.h"
 
@@ -644,6 +645,8 @@ seastar::future<> OSD::start_asok_admin()
     // PG commands
     asok->register_command(make_asok_hook<pg::QueryCommand>(*this));
     asok->register_command(make_asok_hook<pg::MarkUnfoundLostCommand>(*this));
+    asok->register_command(make_asok_hook<pg::ScrubCommand<true>>(*this));
+    asok->register_command(make_asok_hook<pg::ScrubCommand<false>>(*this));
     // ops commands
     asok->register_command(
       make_asok_hook<DumpInFlightOpsHook>(
@@ -819,7 +822,13 @@ OSD::do_ms_dispatch(
   case MSG_OSD_REPOPREPLY:
     return handle_rep_op_reply(conn, boost::static_pointer_cast<MOSDRepOpReply>(m));
   case MSG_OSD_SCRUB2:
-    return handle_scrub(conn, boost::static_pointer_cast<MOSDScrub2>(m));
+    return handle_scrub_command(
+      conn, boost::static_pointer_cast<MOSDScrub2>(m));
+  case MSG_OSD_REP_SCRUB:
+  case MSG_OSD_REP_SCRUBMAP:
+    return handle_scrub_message(
+      conn,
+      boost::static_pointer_cast<MOSDFastDispatchOp>(m));
   case MSG_OSD_PG_UPDATE_LOG_MISSING:
     return handle_update_log_missing(conn, boost::static_pointer_cast<
       MOSDPGUpdateLogMissing>(m));
@@ -1220,7 +1229,7 @@ seastar::future<> OSD::handle_rep_op_reply(
     });
 }
 
-seastar::future<> OSD::handle_scrub(
+seastar::future<> OSD::handle_scrub_command(
   crimson::net::ConnectionRef conn,
   Ref<MOSDScrub2> m)
 {
@@ -1230,15 +1239,20 @@ seastar::future<> OSD::handle_scrub(
   }
   return seastar::parallel_for_each(std::move(m->scrub_pgs),
     [m, conn, this](spg_t pgid) {
-    pg_shard_t from_shard{static_cast<int>(m->get_source().num()),
-                          pgid.shard};
-    PeeringState::RequestScrub scrub_request{m->deep, m->repair};
-    return pg_shard_manager.start_pg_operation<RemotePeeringEvent>(
-      conn,
-      from_shard,
-      pgid,
-      PGPeeringEvent{m->epoch, m->epoch, scrub_request}).second;
+    return pg_shard_manager.start_pg_operation<
+      crimson::osd::ScrubRequested
+      >(m->deep, conn, m->epoch, pgid).second;
   });
+}
+
+seastar::future<> OSD::handle_scrub_message(
+  crimson::net::ConnectionRef conn,
+  Ref<MOSDFastDispatchOp> m)
+{
+  ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
+  return pg_shard_manager.start_pg_operation<
+    crimson::osd::ScrubMessage
+    >(m, conn, m->get_min_epoch(), m->get_spg()).second;
 }
 
 seastar::future<> OSD::handle_mark_me_down(

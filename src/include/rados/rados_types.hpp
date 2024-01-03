@@ -137,6 +137,9 @@ struct err_t {
   bool has_snapset_corrupted() const {
     return errors & SNAPSET_CORRUPTED;
   }
+  bool has_errors() const {
+    return errors;
+  }
   bool has_shallow_errors() const {
     return errors & SHALLOW_ERRORS;
   }

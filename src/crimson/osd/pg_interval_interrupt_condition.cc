@@ -8,6 +8,11 @@
 
 SET_SUBSYS(osd);
 
+namespace crimson::interruptible {
+template thread_local interrupt_cond_t<crimson::osd::IOInterruptCondition>
+interrupt_cond<crimson::osd::IOInterruptCondition>;
+}
+
 namespace crimson::osd {
 
 IOInterruptCondition::IOInterruptCondition(Ref<PG>& pg)

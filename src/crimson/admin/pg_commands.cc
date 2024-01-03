@@ -11,9 +11,11 @@
 #include <seastar/core/future.hh>
 
 #include "crimson/admin/admin_socket.h"
+#include "crimson/common/log.h"
 #include "crimson/osd/osd.h"
 #include "crimson/osd/pg.h"
 
+SET_SUBSYS(osd);
 
 using crimson::osd::OSD;
 using crimson::osd::PG;
@@ -148,6 +150,43 @@ public:
   }
 };
 
+template <bool deep>
+class ScrubCommand : public PGCommand {
+public:
+  explicit ScrubCommand(crimson::osd::OSD& osd) :
+    PGCommand{
+      osd,
+      deep ? "deep_scrub" : "scrub",
+      "",
+      deep ? "deep scrub pg" : "scrub pg"}
+  {}
+
+  seastar::future<tell_result_t>
+  do_command(Ref<PG> pg,
+	     const cmdmap_t& cmdmap,
+	     std::string_view format,
+	     ceph::bufferlist&&) const final
+  {
+    LOG_PREFIX(ScrubCommand::do_command);
+    DEBUGDPP("deep: {}", *pg, deep);
+    return PG::interruptor::with_interruption([pg] {
+      pg->scrubber.handle_scrub_requested(deep);
+      return PG::interruptor::now();
+    }, [FNAME, pg](std::exception_ptr ep) {
+      DEBUGDPP("interrupted with {}", *pg, ep);
+    }, pg).then([format] {
+      std::unique_ptr<Formatter> f{
+	Formatter::create(format, "json-pretty", "json-pretty")
+      };
+      f->open_object_section("scrub");
+      f->dump_bool("deep", deep);
+      f->dump_stream("stamp") << ceph_clock_now();
+      f->close_section();
+      return seastar::make_ready_future<tell_result_t>(std::move(f));
+    });
+  }
+};
+
 } // namespace crimson::admin::pg
 
 namespace crimson::admin {
@@ -163,5 +202,10 @@ make_asok_hook<crimson::admin::pg::QueryCommand>(crimson::osd::OSD& osd);
 
 template std::unique_ptr<AdminSocketHook>
 make_asok_hook<crimson::admin::pg::MarkUnfoundLostCommand>(crimson::osd::OSD& osd);
+
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<crimson::admin::pg::ScrubCommand<true>>(crimson::osd::OSD& osd);
+template std::unique_ptr<AdminSocketHook>
+make_asok_hook<crimson::admin::pg::ScrubCommand<false>>(crimson::osd::OSD& osd);
 
 } // namespace crimson::admin

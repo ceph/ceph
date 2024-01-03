@@ -53,6 +53,10 @@ namespace crimson::os::seastore {
   class TransactionConflictCondition;
 }
 
+namespace crimson::osd {
+  class IOInterruptCondition;
+}
+
 // GCC tries to instantiate
 // seastar::lw_shared_ptr<crimson::os::seastore::TransactionConflictCondition>.
 // but we *may* not have the definition of TransactionConflictCondition at this moment,
@@ -135,6 +139,9 @@ struct interrupt_cond_t {
 
 template <typename InterruptCond>
 thread_local interrupt_cond_t<InterruptCond> interrupt_cond;
+
+extern template thread_local interrupt_cond_t<crimson::osd::IOInterruptCondition>
+interrupt_cond<crimson::osd::IOInterruptCondition>;
 
 extern template thread_local interrupt_cond_t<crimson::os::seastore::TransactionConflictCondition>
 interrupt_cond<crimson::os::seastore::TransactionConflictCondition>;
@@ -1205,7 +1212,7 @@ public:
 	    (typename Iterator::reference x) mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
-		      std::move(action),
+		      action,
 		      std::forward<decltype(*begin)>(x)).to_future();
 	  })
       );
@@ -1217,7 +1224,7 @@ public:
 	    (typename Iterator::reference x) mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
-		      std::move(action),
+		      action,
 		      std::forward<decltype(*begin)>(x)).to_future();
 	  })
       );
@@ -1236,7 +1243,7 @@ public:
 	    (typename Iterator::reference x) mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
-		      std::move(action),
+		      action,
 		      std::forward<decltype(*begin)>(x));
 	  })
       );
@@ -1248,7 +1255,7 @@ public:
 	    (typename Iterator::reference x) mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
-		      std::move(action),
+		      action,
 		      std::forward<decltype(*begin)>(x));
 	  })
       );
@@ -1263,10 +1270,10 @@ public:
       return make_interruptible(
 	  ::seastar::repeat(
 	    [action=std::move(action),
-	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond] {
+	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
-		      std::move(action)).to_future();
+		      action).to_future();
 	  })
       );
     } else {
@@ -1276,7 +1283,7 @@ public:
 	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
-		      std::move(action)).to_future();
+		      action).to_future();
 	  })
       );
     }
@@ -1289,20 +1296,20 @@ public:
       return make_interruptible(
 	  ::seastar::repeat(
 	    [action=std::move(action),
-	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond] {
+	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
-		      std::move(action));
+		      action);
 	  })
       );
     } else {
       return make_interruptible(
 	  ::crimson::repeat(
 	    [action=std::move(action),
-	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond] {
+	    interrupt_condition=interrupt_cond<InterruptCond>.interrupt_cond]() mutable {
 	    return call_with_interruption(
 		      interrupt_condition,
-		      std::move(action));
+		      action);
 	  })
       );
     }
