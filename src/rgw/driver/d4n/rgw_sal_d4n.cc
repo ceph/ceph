@@ -409,7 +409,6 @@ int D4NFilterObject::D4NFilterReadOp::prepare(optional_yield y, const DoutPrefix
 	  attrs.erase(attr.first);
 	} else {
 	  ldpp_dout(dpp, 20) << "D4NFilterObject::D4NFilterReadOp::" << __func__ << "(): Unexpected attribute; not locally set." << dendl;
-	  attrs.erase(attr.first);
 	}
       }
     user->set_info(quota_info);
