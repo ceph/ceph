@@ -77,10 +77,27 @@ std::string script_oid(context ctx, const std::string& tenant) {
   return SCRIPT_OID_PREFIX + to_string(ctx) + "." + tenant;
 }
 
+std::string script_meta_key(context ctx, const std::string& tenant) {
+  static const std::string SCRIPT_META_PREFIX("lua_script_meta.");
+  return SCRIPT_META_PREFIX + to_string(ctx) + "." + tenant;
+} 
 
-int read_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::string& script)
-{
-  return manager ? manager->get_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
+std::time_t curr_time() {
+  auto now = std::chrono::system_clock::now();
+  return std::chrono::system_clock::to_time_t(now);
+}
+
+// TODO REMOVE script name from read script caller
+int read_script(
+  const DoutPrefixProvider *dpp, 
+  sal::LuaManager* manager, 
+  const std::string& tenant, 
+  optional_yield y, 
+  context ctx,
+  rgw::lua::LuaRuntimeMeta& scripts_meta,
+) {
+  return manager ? manager->get_script(
+    dpp, y, script_meta_key(tenant), script_oid(ctx, tenant), scripts_meta, ctx) : -ENOENT;
 }
 
 int write_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script)

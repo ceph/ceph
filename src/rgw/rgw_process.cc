@@ -328,16 +328,18 @@ int process_request(const RGWProcessEnv& penv,
   }
   {
     s->trace_enabled = tracing::rgw::tracer.is_enabled();
-    std::string script;
-    auto rc = rgw::lua::read_script(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, script);
+    rgw::lua::LuaRuntimeMeta scripts_meta;
+    auto rc = rgw::lua::read_script(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::preRequest, scripts_meta);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read pre request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script);
-      if (rc < 0) {
-        ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
+      for (auto script_meta : scripts_meta.scripts) {
+        rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script_meta.script);
+        if (rc < 0) {
+          ldpp_dout(op, 5) << "WARNING: failed to execute pre request script. error: " << rc << dendl;
+        }
       }
     }
   }
@@ -412,16 +414,18 @@ done:
         s->trace->SetAttribute(tracing::rgw::OBJECT_NAME, s->object->get_name());
       }
     }
-    std::string script;
-    auto rc = rgw::lua::read_script(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, script);
+    rgw::lua::LuaRuntimeMeta scripts_meta;
+    auto rc = rgw::lua::read_script(s, penv.lua.manager.get(), s->bucket_tenant, s->yield, rgw::lua::context::postRequest, scripts_meta);
     if (rc == -ENOENT) {
       // no script, nothing to do
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script);
-      if (rc < 0) {
-        ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
+      for (auto script_meta : scripts_meta) {
+        rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script_meta.script);
+        if (rc < 0) {
+          ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;
+        }
       }
     }
   }

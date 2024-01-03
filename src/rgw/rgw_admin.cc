@@ -3494,6 +3494,8 @@ int main(int argc, const char **argv)
 
   std::optional<uint64_t> gen;
   std::optional<std::string> str_script_ctx;
+  std::optional<std::string> str_script_name;
+  std::optional<std::uint8_t> int_script_priority;
   std::optional<std::string> script_package;
   int allow_compilation = false;
 
@@ -4051,6 +4053,10 @@ int main(int argc, const char **argv)
       str_script_ctx = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--package", (char*)NULL)) {
       script_package = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--name", (char*)NULL)) {
+      str_script_name = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--priority", (char*)NULL)) {
+      int_script_priority = val;
     } else if (ceph_argparse_binary_flag(args, i, &allow_compilation, NULL, "--allow-compilation", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--rgw-obj-fs", (char*)NULL)) {
@@ -10669,6 +10675,17 @@ next:
       cerr << "ERROR: infile was not provided (via --infile)" << std::endl;
       return EINVAL;
     }
+    if (str_script_name && 
+        str_script_name.value().size() > MAX_LUA_SCRIPT_NAME_LENGTH) {
+      cerr << "ERROR: provided script name is too long (via --name), max length is " << MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
+      return EINVAL;
+    }
+    if (int_script_priority && 
+        (int_script_priority.value() > MAX_LUA_PRIORITY || int_script_priority.value() < MIN_LUA_PRIORITY)) {
+      cerr << "ERROR: provided script priority is invalid (via --priority)" << std::endl;
+      cerr << "Please provide a value between " << MIN_LUA_PRIORITY " and " << MAX_LUA_PRIORITY << std::endl;
+      return EINVAL;
+    }
     bufferlist bl;
     auto rc = read_input(infile, bl);
     if (rc < 0) {
@@ -10691,7 +10708,7 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, str_script_name, int_script_priority);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
@@ -10708,17 +10725,43 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
+    if (str_script_name && 
+        str_script_name.value().size() > MAX_LUA_SCRIPT_NAME_LENGTH) {
+      cerr << "ERROR: provided script name is too long (via --name), max length is " << MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
+      return EINVAL;
+  }
     auto lua_manager = driver->get_lua_manager("");
-    std::string script;
-    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script);
+    rgw::lua::LuaRuntimeMeta scripts_meta;
+    const auto rc = rgw::lua::read_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, scripts_meta);
     if (rc == -ENOENT) {
       std::cout << "no script exists for context: " << *str_script_ctx << 
         (tenant.empty() ? "" : (" in tenant: " + tenant)) << std::endl;
     } else if (rc < 0) {
       cerr << "ERROR: failed to read script. error: " << rc << std::endl;
       return -rc;
+    }
+
+    bool found = false;
+    if (str_script_name) {
+      for (auto script_meta : scripts_meta) {
+        if (script_meta.name == str_script_name.value()) {
+          found = true;
+          script_meta.print();
+          break;
+        }
+      }
+
+      if (!found) {
+        std::cout << "Could not find a script for the name " << str_script_name.value() << " and tenant " << tenant << std:endl;
+        std::cout << "Printing all scripts for tenant " << tenant << std::endl;
+        for (auto script_meta : scripts_meta) {
+          script_meta.print();
+        }
+      }
     } else {
-      std::cout << script << std::endl;
+      for (auto script_meta : scripts_meta) {
+        script_meta.print();
+      }
     }
   }
   
@@ -10732,8 +10775,13 @@ next:
       cerr << "ERROR: invalid script context: " << *str_script_ctx << ". must be one of: " << LUA_CONTEXT_LIST << std::endl;
       return EINVAL;
     }
+    if (str_script_name && 
+        str_script_name.value().size() > MAX_LUA_SCRIPT_NAME_LENGTH) {
+      cerr << "ERROR: provided script name is too long (via --name), max length is " << MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
+      return EINVAL;
+    }
     auto lua_manager = driver->get_lua_manager("");
-    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx);
+    const auto rc = rgw::lua::delete_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, str_script_name);
     if (rc < 0) {
       cerr << "ERROR: failed to remove script. error: " << rc << std::endl;
       return -rc;

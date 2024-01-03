@@ -79,6 +79,10 @@ int dostring(lua_State* L, const char* str);
 
 constexpr const int MAX_LUA_VALUE_SIZE = 1000;
 constexpr const int MAX_LUA_KEY_ENTRIES = 100000;
+constexpr const int MAX_LUA_PRIORITY = 20;
+constexpr const int MIN_LUA_PRIORITY = 0;
+constexpr const int MAX_LUA_SCRIPT_NAME_LENGTH = 20;
+constexpr const int DEFAULT_LUA_PRIORITY = 0;
 
 constexpr auto ONE_UPVAL    = 1;
 constexpr auto TWO_UPVALS   = 2;
@@ -514,5 +518,101 @@ struct StringMapMetaTable : public EmptyMetaTable {
   }
 };
 
-} // namespace rgw::lua
+// Metadata maintained about each lua script
+struct LuaScriptMeta {
+  
+  // The priority of the script. Scripts are executed from lowest priority to highest 
+  int priority;
 
+  // If the priority of two scripts is the same, the one modified last is executed first
+  std::time_t lastModified;
+
+  // The context for which the script is run
+  context ctx;
+
+  // script name provided by the user
+  std::string name;
+
+  // Actual script contents
+  std::string script;
+
+  LuaScriptMeta(
+    int priority, 
+    std::time_t lastModified, 
+    context ctx, 
+    std::string name,
+    std::string script
+  ): priority(priority), lastModified(lastModified), ctx(ctx), name(name), script(script) {}
+
+  LuaScriptMeta(std::string script, context ctx): priority(MAX_LUA_PRIORITY), lastModified(0), ctx(ctx), name(""), script(script) {}
+
+  void print() {
+    std::cout << "Script Name: " << name << std::endl;
+    std::cout << "Priority: " << priority << std::endl;
+    std::cout << "Last Modified: " << lastModified << std::endl;
+    std::cout << "Context: " << to_string(ctx) << std::endl;
+    std::cout << "Script Contents:" << std::endl;
+    std::cout << "==========================================" << std::endl;
+    std::cout << script << std::endl;
+    std::cout << "==========================================" << std::endl << std::endl;
+  }
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(priority, bl);
+    encode(lastModified, bl);
+    encode(to_string(ctx), bl);
+    encode(name, bl);
+    encode(script, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    string stored_ctx;
+    
+    DECODE_START(1, bl);
+    decode(priority, bl);
+    decode(lastModified, bl);
+    decode(stored_ctx, bl);
+    ctx = to_context(stored_ctx);
+    decode(name, bl);
+    decode(script, bl);
+    DECODE_FINISH(bl);
+  }
+
+}
+
+// Array of LuaScriptMeta for all scripts
+struct LuaRuntimeMeta {
+  std::vector<LuaScriptMeta> scripts;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(scripts.size(), bl);
+    for (auto script : scripts) {
+      encode(script);
+    }
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    int num_scripts;
+    std::string script;
+
+    DECODE_START(1, bl);
+    decode(num_scripts, bl);
+    scripts = std::vector<LuaScriptMeta>(num_scripts);
+
+    for (int idx = 0; idx < num_scripts; idx++) {
+      decode(script, bl);
+      scripts[idx] = script;
+    }
+    DECODE_FINISH(bl);
+  }
+
+  LuaRuntimeMeta() {
+    scripts = std::vector<LuaScriptMeta>;
+  }
+}
+
+} // namespace rgw::lua

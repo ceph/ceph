@@ -876,7 +876,7 @@ public:
   RadosLuaManager(RadosStore* _s, const std::string& _luarocks_path);
   ~RadosLuaManager() override = default;
 
-  int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script) override;
+  int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& meta_key, const std::string& old_script_key, rgw::lua::LuaRuntimeMeta& scripts_meta, rgw::lua::context ctx) override;
   int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const std::string& script) override;
   int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key) override;
   int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;

@@ -154,7 +154,7 @@ private:
   void run();
 
 protected:
-  std::string rgw_script;
+  rgw::lua::LuaRuntimeMeta scripts_meta;
   virtual int read_script();
 
 public:

@@ -107,7 +107,7 @@ int Background::read_script() {
     return -EAGAIN;
   }
   std::string tenant;
-  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, rgw_script);
+  return rgw::lua::read_script(&dp, lua_manager, tenant, null_yield, rgw::lua::context::background, scripts_meta);
 }
 
 const BackgroundMapValue Background::empty_table_value;
@@ -164,10 +164,13 @@ void Background::run() {
       auto failed = false;
       try {
         //execute the background lua script
-        if (luaL_dostring(L, rgw_script.c_str()) != LUA_OK) {
-          const std::string err(lua_tostring(L, -1));
-          ldpp_dout(dpp, 1) << "Lua ERROR: " << err << dendl;
-          failed = true;
+        for (auto script_meta : scripts_meta) {
+          if (luaL_dostring(L, script_meta.script.c_str()) != LUA_OK) {
+            std::string script_name = script_meta.name ? script_meta.name : "";
+            const std::string err(lua_tostring(L, -1));
+            ldpp_dout(dpp, 1) << "Lua ERROR: " << err << " in script " << script_meta.name << dendl;
+            failed = true;
+          }
         }
       } catch (const std::runtime_error& e) {
         ldpp_dout(dpp, 1) << "Lua ERROR: " << e.what() << dendl;

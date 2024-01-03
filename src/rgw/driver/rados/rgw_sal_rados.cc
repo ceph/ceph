@@ -3062,12 +3062,43 @@ RadosLuaManager::RadosLuaManager(RadosStore* _s, const std::string& _luarocks_pa
   packages_watcher(this)
 { }
 
-int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
-{
+int RadosLuaManager::get_script(
+  const DoutPrefixProvider* dpp, 
+  optional_yield y, 
+  const std::string& meta_key, 
+  const std::string& old_script_key, 
+  rgw::lua::LuaRuntimeMeta& scripts_meta,
+  rgw::lua::context ctx
+) {
   if (pool.empty()) {
     ldpp_dout(dpp, 10) << "WARNING: missing pool when reading Lua script " << dendl;
     return 0;
   }
+
+  int r = get_object_internal(dpp, y, meta_key, scripts_meta);
+  if (r < 0) {
+    scripts_meta = new rgw::lua::LuaRuntimeMeta();
+  }
+
+  std::string script;
+  int r = get_object_internal(dpp, y, old_script_key, script);
+  if (r >= 0) {
+    scripts_meta.scripts.push_back(new rgw::lua::LuaScriptMeta(script, ctx));
+  }
+
+  if (!scripts_meta || !scripts_meta.scripts || scripts_meta.scripts.empty()) {
+    return -ENOENT;
+  }
+  return 0;
+}
+
+template <typename T>
+int RadosLuaManager::get_object_internal(
+  const DoutPrefixProvider* dpp,
+  optional_yield y,
+  const std::string& key,
+  T& obj
+) {
   bufferlist bl;
 
   int r = rgw_get_system_obj(store->svc()->sysobj, pool, key, bl, nullptr, nullptr, y, dpp);
@@ -3077,7 +3108,7 @@ int RadosLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
 
   auto iter = bl.cbegin();
   try {
-    ceph::decode(script, iter);
+    ceph::decode(obj, iter);
   } catch (buffer::error& err) {
     return -EIO;
   }

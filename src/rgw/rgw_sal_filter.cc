@@ -1208,10 +1208,14 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
 			canceled, rctx);
 }
 
-int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
-				const std::string& key, std::string& script)
-{
-  return next->get_script(dpp, y, key, script);
+int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, 
+                                  optional_yield y,
+                                  const std::string& meta_key, 
+                                  const std::string& old_script_key,
+                                  rgw::lua::LuaRuntimeMeta& scripts_meta,
+                                  rgw::lua::context ctx
+) {
+  return next->get_script(dpp, y, meta_key, old_script_key, scripts_meta, ctx);
 }
 
 int FilterLuaManager::put_script(const DoutPrefixProvider* dpp, optional_yield y,

@@ -1820,7 +1820,7 @@ namespace rgw::sal {
     return ret;
   }
 
-  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, std::string& script)
+  int DBLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& meta_key, const std::string& old_script_key, rgw::lua::LuaRuntimeMeta& scripts_meta, rgw::lua::context ctx)
   {
     return -ENOENT;
   }
