@@ -6,8 +6,6 @@
 #include <boost/asio/detached.hpp>
 #include <boost/redis/connection.hpp>
 
-#define dout_subsys ceph_subsys_rgw
-
 namespace rgw { namespace d4n {
 
 namespace net = boost::asio;
