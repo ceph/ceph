@@ -35,7 +35,11 @@ class TestVolumesHelper(CephFSTestCase):
     def _raw_cmd(self, *args):
         return self.get_ceph_cmd_stdout(args)
 
-    def __check_clone_state(self, state, clone, clone_group=None, timo=120):
+    def __check_clone_state(self, states, clone, clone_group=None, timo=120,
+                            sleep=1):
+        if isinstance(states, str):
+            states = (states, )
+
         check = 0
         args = ["clone", "status", self.volname, clone]
         if clone_group:
@@ -43,10 +47,10 @@ class TestVolumesHelper(CephFSTestCase):
         args = tuple(args)
         while check < timo:
             result = json.loads(self._fs_cmd(*args))
-            if result["status"]["state"] == state:
+            if result["status"]["state"] in states:
                 break
             check += 1
-            time.sleep(1)
+            time.sleep(sleep)
         self.assertTrue(check < timo)
 
     def _get_clone_status(self, clone, clone_group=None):
@@ -57,14 +61,18 @@ class TestVolumesHelper(CephFSTestCase):
         result = json.loads(self._fs_cmd(*args))
         return result
 
-    def _wait_for_clone_to_complete(self, clone, clone_group=None, timo=120):
-        self.__check_clone_state("complete", clone, clone_group, timo)
+    def _wait_for_clone_to_complete(self, clone, clone_group=None, timo=120,
+                                    sleep=1):
+        self.__check_clone_state("complete", clone, clone_group, timo, sleep)
 
-    def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120):
-        self.__check_clone_state("failed", clone, clone_group, timo)
+    def _wait_for_clone_to_fail(self, clone, clone_group=None, timo=120,
+                                sleep=1):
+        self.__check_clone_state("failed", clone, clone_group, timo, sleep)
 
-    def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None, timo=120):
-        self.__check_clone_state("in-progress", clone, clone_group, timo)
+    def _wait_for_clone_to_be_in_progress(self, clone, clone_group=None,
+                                          timo=120, sleep=1):
+        self.__check_clone_state("in-progress", clone, clone_group, timo,
+                                 sleep)
 
     def _check_clone_canceled(self, clone, clone_group=None):
         self.__check_clone_state("canceled", clone, clone_group, timo=1)
