@@ -17,6 +17,7 @@ struct osd_op_params_t {
   version_t user_at_version = 0;
   bool user_modify = false;
   ObjectCleanRegions clean_regions;
-
+  interval_set<uint64_t> modified_ranges;
+  //TODO: Move delta_stats to osd_op_params_t
   osd_op_params_t() = default;
 };

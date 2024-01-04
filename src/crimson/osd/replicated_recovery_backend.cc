@@ -61,7 +61,7 @@ ReplicatedRecoveryBackend::maybe_push_shards(
     return interruptor::parallel_for_each(
       shards,
       [this, need, soid, head_obc](auto shard) {
-      return prep_push(head_obc, soid, need, shard
+      return prep_push_to_replica(soid, need, shard
       ).then_interruptible([this, soid, shard](auto push) {
         auto msg = crimson::make_message<MOSDPGPush>();
         msg->from = pg.get_pg_whoami();
@@ -111,8 +111,10 @@ ReplicatedRecoveryBackend::maybe_pull_missing_obj(
   const hobject_t& soid,
   eversion_t need)
 {
+  logger().debug("{}: {}, {}", __func__, soid, need);
   pg_missing_tracker_t local_missing = pg.get_local_missing();
   if (!local_missing.is_missing(soid)) {
+    // object is not missing, don't pull
     return seastar::make_ready_future<>();
   }
   return pg.obc_loader.with_obc<RWState::RWREAD>(soid.get_head(),
@@ -308,8 +310,7 @@ ReplicatedRecoveryBackend::recover_delete(
 }
 
 RecoveryBackend::interruptible_future<PushOp>
-ReplicatedRecoveryBackend::prep_push(
-  const crimson::osd::ObjectContextRef &head_obc,
+ReplicatedRecoveryBackend::prep_push_to_replica(
   const hobject_t& soid,
   eversion_t need,
   pg_shard_t pg_shard)
@@ -318,16 +319,74 @@ ReplicatedRecoveryBackend::prep_push(
 
   auto& recovery_waiter = get_recovering(soid);
   auto& obc = recovery_waiter.obc;
-  interval_set<uint64_t> data_subset;
-  if (obc->obs.oi.size) {
-    data_subset.insert(0, obc->obs.oi.size);
+  SnapSet push_info_ss; // only populated if soid is_snap()
+  crimson::osd::subsets_t subsets;
+  const auto& missing =
+    pg.get_shard_missing().find(pg_shard)->second;
+
+  // are we doing a clone on the replica?
+  if (soid.snap && soid.snap < CEPH_NOSNAP) {
+    hobject_t head = soid;
+    head.snap = CEPH_NOSNAP;
+
+    // try to base push off of clones that succeed/preceed poid
+    // we need the head (and current SnapSet) locally to do that.
+    if (pg.get_local_missing().is_missing(head)) {
+      logger().debug("{} missing head {}, pushing raw clone",
+                     __func__, head);
+      if (obc->obs.oi.size) {
+        subsets.data_subset.insert(0, obc->obs.oi.size);
+      }
+      return prep_push(soid,
+                       need,
+                       pg_shard,
+                       subsets,
+                       push_info_ss);
+    }
+    auto ssc = obc->ssc;
+    ceph_assert(ssc);
+    push_info_ss = ssc->snapset;
+    logger().debug("push_to_replica snapset is {}",
+                   ssc->snapset);
+
+    subsets = crimson::osd::calc_clone_subsets(
+      ssc->snapset, soid,
+      missing,
+      // get_peer_info() asserts `peer_info` existence.
+      pg.get_peering_state().get_peer_info(
+        pg_shard).last_backfill);
+  } else if (soid.snap == CEPH_NOSNAP) {
+    // pushing head or unversioned object.
+    // base this on partially on replica's clones?
+    auto ssc = obc->ssc;
+    ceph_assert(ssc);
+    logger().debug("push_to_replica snapset is {}",
+                   ssc->snapset);
+    subsets = crimson::osd::calc_head_subsets(
+      obc->obs.oi.size,
+      ssc->snapset, soid,
+      missing,
+      pg.get_peering_state().get_peer_info(
+        pg_shard).last_backfill);
   }
-  const auto& missing = pg.get_shard_missing().find(pg_shard)->second;
-  const auto it = missing.get_items().find(soid);
-  assert(it != missing.get_items().end());
-  data_subset.intersection_of(it->second.clean_regions.get_dirty_regions());
-  logger().debug("prep_push: {} data_subset {} to {}",
-                 soid, data_subset, pg_shard);
+  return prep_push(soid,
+                   need,
+                   pg_shard,
+                   subsets,
+                   push_info_ss);
+}
+
+RecoveryBackend::interruptible_future<PushOp>
+ReplicatedRecoveryBackend::prep_push(
+  const hobject_t& soid,
+  eversion_t need,
+  pg_shard_t pg_shard,
+  const crimson::osd::subsets_t& subsets,
+  const SnapSet push_info_ss)
+{
+  logger().debug("{}: {}, {}", __func__, soid, need);
+  auto& recovery_waiter = get_recovering(soid);
+  auto& obc = recovery_waiter.obc;
 
   auto& push_info = recovery_waiter.pushing[pg_shard];
   pg.begin_peer_recover(pg_shard, soid);
@@ -337,11 +396,11 @@ ReplicatedRecoveryBackend::prep_push(
 
   push_info.obc = obc;
   push_info.recovery_info.size = obc->obs.oi.size;
-  push_info.recovery_info.copy_subset = data_subset;
+  push_info.recovery_info.copy_subset = subsets.data_subset;
+  push_info.recovery_info.clone_subset = subsets.clone_subsets;
+  push_info.recovery_info.ss = push_info_ss;
   push_info.recovery_info.soid = soid;
   push_info.recovery_info.oi = obc->obs.oi;
-  assert(head_obc->ssc);
-  push_info.recovery_info.ss = head_obc->ssc->snapset;
   push_info.recovery_info.version = obc->obs.oi.version;
   push_info.recovery_info.object_exist =
     missing_iter->second.clean_regions.object_is_exist();
@@ -357,6 +416,7 @@ ReplicatedRecoveryBackend::prep_push(
     push_info.recovery_progress = push_op.after_progress;
     return push_op;
   });
+
 }
 
 void ReplicatedRecoveryBackend::prepare_pull(
@@ -371,19 +431,11 @@ void ReplicatedRecoveryBackend::prepare_pull(
   const auto missing_iter = local_missing.get_items().find(soid);
   auto m = pg.get_missing_loc_shards();
   pg_shard_t fromshard = *(m[soid].begin());
+  const auto& last_backfill =
+    pg.get_peering_state().get_peer_info(fromshard).last_backfill;
 
-  //TODO: skipped snap objects case for now
-  pull_op.recovery_info.copy_subset.insert(0, (uint64_t) -1);
-  pull_op.recovery_info.copy_subset.intersection_of(
-    missing_iter->second.clean_regions.get_dirty_regions());
-  if (soid.is_snap()) {
-    assert(head_obc->ssc);
-    pull_op.recovery_info.ss = head_obc->ssc->snapset;
-  }
-  pull_op.recovery_info.size = ((uint64_t) -1);
-  pull_op.recovery_info.object_exist =
-    missing_iter->second.clean_regions.object_is_exist();
-  pull_op.recovery_info.soid = soid;
+  pull_op.recovery_info =
+    set_recovery_info(soid, head_obc->ssc, last_backfill);
   pull_op.soid = soid;
   pull_op.recovery_progress.data_complete = false;
   pull_op.recovery_progress.omap_complete =
@@ -393,8 +445,41 @@ void ReplicatedRecoveryBackend::prepare_pull(
 
   pull_info.from = fromshard;
   pull_info.soid = soid;
+  pull_info.head_ctx = head_obc;
   pull_info.recovery_info = pull_op.recovery_info;
   pull_info.recovery_progress = pull_op.recovery_progress;
+}
+
+ObjectRecoveryInfo ReplicatedRecoveryBackend::set_recovery_info(
+  const hobject_t& soid,
+  const crimson::osd::SnapSetContextRef ssc,
+  const hobject_t& last_backfill)
+{
+  pg_missing_tracker_t local_missing = pg.get_local_missing();
+  const auto missing_iter = local_missing.get_items().find(soid);
+  ObjectRecoveryInfo recovery_info;
+  if (soid.is_snap()) {
+    assert(!local_missing.is_missing(soid.get_head()));
+    assert(ssc);
+    recovery_info.ss = ssc->snapset;
+    auto subsets = crimson::osd::calc_clone_subsets(
+      ssc->snapset, soid, local_missing, last_backfill);
+    crimson::osd::set_subsets(subsets, recovery_info);
+    logger().debug("{}: pulling {}", __func__, recovery_info);
+    ceph_assert(ssc->snapset.clone_size.count(soid.snap));
+    recovery_info.size = ssc->snapset.clone_size[soid.snap];
+  } else {
+    // pulling head or unversioned object.
+    // always pull the whole thing.
+    recovery_info.copy_subset.insert(0, (uint64_t) -1);
+    recovery_info.copy_subset.intersection_of(
+      missing_iter->second.clean_regions.get_dirty_regions());
+    recovery_info.size = ((uint64_t) -1);
+  }
+  recovery_info.object_exist =
+    missing_iter->second.clean_regions.object_is_exist();
+  recovery_info.soid = soid;
+  return recovery_info;
 }
 
 RecoveryBackend::interruptible_future<PushOp>
@@ -714,11 +799,23 @@ ReplicatedRecoveryBackend::_handle_pull_response(
   if (pull_info.recovery_progress.first) {
     prepare_waiter = pg.obc_loader.with_obc<RWState::RWNONE>(
       pull_info.recovery_info.soid,
-      [&pull_info, &recovery_waiter, &push_op](auto, auto obc) {
+      [this, &pull_info, &recovery_waiter, &push_op](auto, auto obc) {
         pull_info.obc = obc;
         recovery_waiter.obc = obc;
-        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR), push_op.soid);
+        obc->obs.oi.decode_no_oid(push_op.attrset.at(OI_ATTR),
+                                  push_op.soid);
+        if (push_op.attrset.contains(SS_ATTR)) {
+          bufferlist ssbl = push_op.attrset.at(SS_ATTR);
+          SnapSet ss(ssbl);
+          assert(!pull_info.obc->ssc->exists ||
+                 ss.seq == pull_info.obc->ssc->snapset.seq);
+        }
         pull_info.recovery_info.oi = obc->obs.oi;
+        if (pull_info.recovery_info.soid.snap &&
+            pull_info.recovery_info.soid.snap < CEPH_NOSNAP) {
+            recalc_subsets(pull_info.recovery_info,
+                           pull_info.obc->ssc);
+        }
         return crimson::osd::PG::load_obc_ertr::now();
       }).handle_error_interruptible(crimson::ct_error::assert_all{});
   };
@@ -770,6 +867,17 @@ ReplicatedRecoveryBackend::_handle_pull_response(
       }
     });
   });
+}
+
+void ReplicatedRecoveryBackend::recalc_subsets(
+    ObjectRecoveryInfo& recovery_info,
+    crimson::osd::SnapSetContextRef ssc)
+{
+  assert(ssc);
+  auto subsets = crimson::osd::calc_clone_subsets(
+    ssc->snapset, recovery_info.soid, pg.get_local_missing(),
+    pg.get_info().last_backfill);
+  crimson::osd::set_subsets(subsets, recovery_info);
 }
 
 RecoveryBackend::interruptible_future<>
