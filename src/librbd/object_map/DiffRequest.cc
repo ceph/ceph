@@ -185,13 +185,14 @@ void DiffRequest<I>::handle_load_object_map(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 10) << "r=" << r << dendl;
 
-  if (r == 0) {
-    auto bl_it = m_out_bl.cbegin();
-    r = cls_client::object_map_load_finish(&bl_it, &m_object_map);
-  }
-
+  BitVector<2> object_map;
   std::string oid(ObjectMap<>::object_map_name(m_image_ctx->id,
                                                m_current_snap_id));
+
+  if (r == 0) {
+    auto bl_it = m_out_bl.cbegin();
+    r = cls_client::object_map_load_finish(&bl_it, &object_map);
+  }
   if (r == -ENOENT && m_ignore_enoent) {
     ldout(cct, 10) << "object map " << oid << " does not exist" << dendl;
 
@@ -207,9 +208,9 @@ void DiffRequest<I>::handle_load_object_map(int r) {
 
   uint64_t num_objs = Striper::get_num_objects(m_image_ctx->layout,
                                                m_current_size);
-  if (m_object_map.size() < num_objs) {
+  if (object_map.size() < num_objs) {
     ldout(cct, 1) << "object map too small: "
-                  << m_object_map.size() << " < " << num_objs << dendl;
+                  << object_map.size() << " < " << num_objs << dendl;
     finish(-EINVAL);
     return;
   }
@@ -237,7 +238,7 @@ void DiffRequest<I>::handle_load_object_map(int r) {
 
   uint64_t overlap = std::min(m_object_diff_state->size(),
                               prev_object_diff_state_size);
-  auto it = m_object_map.begin() + start_object_no;
+  auto it = object_map.begin() + start_object_no;
   auto diff_it = m_object_diff_state->begin();
   uint64_t ono = start_object_no;
   for (; ono < start_object_no + overlap; ++diff_it, ++ono) {
