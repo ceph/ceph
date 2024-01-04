@@ -112,6 +112,7 @@
 # this is tracked in https://bugzilla.redhat.com/2152265
 %bcond_with system_arrow
 %endif
+%bcond_without quiche
 %if 0%{?fedora} || 0%{?suse_version} || 0%{?rhel} >= 8 || 0%{?openEuler}
 %global weak_deps 1
 %endif
@@ -334,6 +335,9 @@ BuildRequires:  libpmemobj-devel >= 1.8
 BuildRequires:  libarrow-devel
 BuildRequires:  parquet-libs-devel
 BuildRequires:  utf8proc-devel
+%endif
+%if 0%{with quiche}
+BuildRequires:  cargo
 %endif
 %if 0%{with seastar}
 BuildRequires:  c-ares-devel

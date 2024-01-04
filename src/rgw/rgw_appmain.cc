@@ -68,6 +68,9 @@
 #include "rgw_flight_frontend.h"
 #endif
 #include "rgw_asio_frontend.h"
+#ifdef HAVE_QUICHE
+#include "rgw_quiche_frontend.h"
+#endif
 #include "rgw_dmclock_scheduler_ctx.h"
 #include "rgw_lua.h"
 #ifdef WITH_RADOSGW_DBSTORE
@@ -133,11 +136,11 @@ void rgw::AppMain::init_frontends1(bool nfs)
                << dendl;
         }
       }
-    } else {
-      if (f.find("civetweb") != string::npos) {
-        have_http_frontend = true;
-      }
-    } /* fe !beast */
+    } else if (f.find("quiche") != string::npos) {
+      have_http_frontend = true;
+    } else if (f.find("civetweb") != string::npos) {
+      have_http_frontend = true;
+    }
 
     RGWFrontendConfig *config = new RGWFrontendConfig(f);
     int r = config->init();
@@ -450,19 +453,30 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       config->set_default_config(*def_iter->second);
     }
 
-    RGWFrontend* fe = nullptr;
+    std::unique_ptr<RGWFrontend> fe;
 
     if (framework == "loadgen") {
-      fe = new RGWLoadGenFrontend(env, config);
+      fe = ::make_unique<RGWLoadGenFrontend>(env, config);
     }
     else if (framework == "beast") {
-      fe = new RGWAsioFrontend(env, config, *sched_ctx);
+      fe = ::make_unique<RGWAsioFrontend>(env, config, *sched_ctx);
     }
     else if (framework == "rgw-nfs") {
-      fe = new RGWLibFrontend(env, config);
+      fe = ::make_unique<RGWLibFrontend>(env, config);
       if (rgwlib) {
-        rgwlib->set_fe(static_cast<RGWLibFrontend*>(fe));
+        rgwlib->set_fe(static_cast<RGWLibFrontend*>(fe.get()));
       }
+#ifdef HAVE_QUICHE
+    }
+    else if (framework == "quiche") {
+      try {
+        fe = rgw::h3::create_frontend(dpp->get_cct(), env, config);
+      } catch (const std::exception& e) {
+        ldpp_dout(dpp, -1) << "failed to initialize quiche frontend: "
+            << e.what() << dendl;
+        return -EIO;
+      }
+#endif
     }
     else if (framework == "arrow_flight") {
 #ifdef WITH_ARROW_FLIGHT
@@ -495,7 +509,7 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       return -r;
     }
 
-    fes.push_back(fe);
+    fes.push_back(fe.release());
   }
 
   std::string daemon_type = (nfs) ? "rgw-nfs" : "rgw";

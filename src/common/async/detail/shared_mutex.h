@@ -157,7 +157,7 @@ inline void SharedMutexImpl::lock()
   }
 }
 
-void SharedMutexImpl::lock(boost::system::error_code& ec)
+inline void SharedMutexImpl::lock(boost::system::error_code& ec)
 {
   std::unique_lock lock{mutex};
 
@@ -182,7 +182,7 @@ inline bool SharedMutexImpl::try_lock()
   return false;
 }
 
-void SharedMutexImpl::unlock()
+inline void SharedMutexImpl::unlock()
 {
   RequestList granted;
   {
@@ -247,7 +247,7 @@ inline void SharedMutexImpl::lock_shared()
   }
 }
 
-void SharedMutexImpl::lock_shared(boost::system::error_code& ec)
+inline void SharedMutexImpl::lock_shared(boost::system::error_code& ec)
 {
   std::unique_lock lock{mutex};
 
@@ -305,8 +305,8 @@ inline void SharedMutexImpl::cancel()
   complete(std::move(canceled), boost::asio::error::operation_aborted);
 }
 
-void SharedMutexImpl::complete(RequestList&& requests,
-                               boost::system::error_code ec)
+inline void SharedMutexImpl::complete(RequestList&& requests,
+                                      boost::system::error_code ec)
 {
   while (!requests.empty()) {
     auto& request = requests.front();
