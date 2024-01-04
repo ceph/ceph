@@ -8,9 +8,6 @@
 #include "AvlAllocator.h"
 #include "BtreeAllocator.h"
 #include "HybridAllocator.h"
-#ifdef HAVE_LIBZBD
-#include "ZonedAllocator.h"
-#endif
 #include "common/debug.h"
 #include "common/admin_socket.h"
 #define dout_subsys ceph_subsys_bluestore

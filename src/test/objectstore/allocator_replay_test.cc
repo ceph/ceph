@@ -391,7 +391,7 @@ int replay_free_dump_and_apply(char* fname,
                        std::string_view alloc_name) {
     alloc.reset(
       Allocator::create(
-        g_ceph_context, alloc_type, capacity, alloc_unit, 0, 0, alloc_name));
+        g_ceph_context, alloc_type, capacity, alloc_unit, alloc_name));
   };
   auto add_fn = [&](uint64_t offset,
                    uint64_t len) {

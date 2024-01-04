@@ -87,9 +87,6 @@
 /* Defined if you have libdml */
 #cmakedefine HAVE_LIBDML
 
-/* Defined if you have libzbd */
-#cmakedefine HAVE_LIBZBD
-
 /* Defined if you have liburing */
 #cmakedefine HAVE_LIBURING
 
