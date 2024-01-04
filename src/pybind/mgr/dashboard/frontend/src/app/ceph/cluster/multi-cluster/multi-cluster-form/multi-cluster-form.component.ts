@@ -15,6 +15,7 @@ import { NotificationService } from '~/app/shared/services/notification.service'
 export class MultiClusterFormComponent {
   remoteClusterForm: CdFormGroup;
   showToken = false;
+  interval: NodeJS.Timer;
 
   constructor(
     public activeModal: NgbActiveModal,
@@ -53,6 +54,11 @@ export class MultiClusterFormComponent {
       })
     });
   }
+
+  ngOnDestroy() {
+    clearInterval(this.interval);
+  }
+
 
   onSubmit() {
     const url = this.remoteClusterForm.getValue('remoteClusterUrl');

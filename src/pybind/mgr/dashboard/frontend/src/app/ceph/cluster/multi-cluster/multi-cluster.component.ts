@@ -59,6 +59,7 @@ export class MultiClusterComponent implements OnInit {
   capacity: any = {};
   clusters: any;
   dashboardClustersMap: Map<string, string> = new Map<string, string>();
+  clustersTokenMap: Map<string, string> = new Map<string, string>();
   columns: Array<CdTableColumn> = [];
   alertColumns: Array<CdTableColumn> = [];
   tableData: any;
@@ -89,6 +90,10 @@ export class MultiClusterComponent implements OnInit {
   poolIopsData2 = '';
   poolThroughputData1 = '';
   poolThroughputData2 = '';
+  interval: NodeJS.Timer;
+  clusterTokenStatus: object = {};
+  currentUrl: any;
+  localClusterName: string;
 
   constructor(
     public actionLabels: ActionLabelsI18n,
@@ -111,9 +116,13 @@ export class MultiClusterComponent implements OnInit {
     this.addRemoteClusterAction = [addRemoteAction];
     this.subs.add(
       this.multiClusterService.subscribe((resp: string) => {
+        this.currentUrl = resp['current_url'];
         resp['config']?.forEach((config: any) => {
           this.dashboardClustersMap.set(config['url'], config['name']);
-        });
+          config['token'] ? this.clustersTokenMap.set(config['name'], config['token']) : '';
+          this.localClusterName = this.dashboardClustersMap.get(this.currentUrl);
+          this.getClusterTokenStatus(this.clustersTokenMap);
+        });        
         if (this.dashboardClustersMap.size > 1) {
           this.getPrometheusData(this.prometheusService.lastHourDateObject);
         }
@@ -122,12 +131,26 @@ export class MultiClusterComponent implements OnInit {
         }
       })
     );
+    
     this.columns = [
       {
         prop: 'cluster',
         name: $localize`Cluster Name`,
         flexGrow: 2,
         cellTemplate: this.nameTpl
+      },
+      {
+        prop: 'cluster_connection_status',
+        name: $localize`Connection`,
+        flexGrow: 1,
+        cellTransformation: CellTemplate.badge,
+        customTemplateConfig: {
+          map: {
+            1: { value: 'ERROR', class: 'badge-danger' },
+            0: { value: 'OK', class: 'badge-success' },
+            2: { value: 'CHECKING..', class: 'badge-info' }
+          }
+        }
       },
       {
         prop: 'status',
@@ -138,7 +161,7 @@ export class MultiClusterComponent implements OnInit {
           map: {
             1: { value: 'WARN', class: 'badge-warning' },
             0: { value: 'OK', class: 'badge-success' },
-            2: { value: 'ERROR', class: 'badge-error' }
+            2: { value: 'ERROR', class: 'badge-danger' }
           }
         }
       },
@@ -172,6 +195,13 @@ export class MultiClusterComponent implements OnInit {
       { prop: 'alertState', name: $localize`State`, flexGrow: 1 },
       { prop: 'severity', name: $localize`Severity`, flexGrow: 1 }
     ];
+
+
+    setInterval(() => {
+      if (this.clustersTokenMap.size > 0) {
+        this.getClusterTokenStatus(this.clustersTokenMap);
+      }
+    }, 10000)
   }
 
   getPrometheusData(selectedTime: any) {
@@ -184,6 +214,14 @@ export class MultiClusterComponent implements OnInit {
         this.getAlertsInfo();
         this.getClustersInfo();
       });
+  }
+
+  getClusterTokenStatus(clusterTokensMap: any) {
+    this.subs.add(
+    this.multiClusterService.checkTokenStatus(clusterTokensMap).subscribe((resp:object) => {
+      this.clusterTokenStatus = resp;
+    }));
+    return this.clusterTokenStatus;
   }
 
   getAlertsInfo() {
@@ -222,6 +260,7 @@ export class MultiClusterComponent implements OnInit {
       osds: number;
       hosts: number;
       version: string;
+      cluster_connection_status: number;
     }
 
     const clusters: ClusterInfo[] = [];
@@ -250,11 +289,24 @@ export class MultiClusterComponent implements OnInit {
         pools,
         osds,
         hosts,
-        version
+        version,
+        cluster_connection_status: 2
       });
     });
 
+    const clusterTokenStatus = this.getClusterTokenStatus(this.clustersTokenMap);
+    if (clusterTokenStatus) {
+      clusters.forEach((cluster: any) => {
+        cluster.cluster_connection_status = clusterTokenStatus[cluster.cluster];
+        if (cluster.cluster === this.localClusterName) {
+          cluster.cluster_connection_status = 0;
+        }
+      });
+    }
+
     this.clusters = clusters;
+    console.log(this.clusters);
+    
     this.clusterCapacityLabel1 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0]
       ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0].metric.cluster
       : '';

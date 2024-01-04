@@ -8,9 +8,13 @@ from ..security import Scope
 from ..tools import configure_cors 
 
 import logging
+import threading
+import time
+import jwt
 
 import json
-logger = logging.getLogger('routes')
+
+logger = logging.getLogger("controllers.rgw")
 
 
 @APIRouter('/multicluster', Scope.CONFIG_OPT)
@@ -45,6 +49,7 @@ class MultiClusterRoute(RESTController):
             requests.request('PUT', base_url + 'api/multicluster/update_cors', json={'url': origin}, verify=verify, headers=headers)
             response = requests.request('GET', base_url + 'api/health/get_cluster_fsid',
                                         headers=headers, verify=verify)
+            logger.info('hellojii %s', response)
                             
         except Exception as e:
             raise DashboardException(
@@ -54,6 +59,7 @@ class MultiClusterRoute(RESTController):
 
         try:
             fsid = json.loads(response.content, strict=False)
+            logger.info('hellojii2 %s', fsid)
         except json.JSONDecodeError as e:
             raise DashboardException(
                 "Error parsing Dashboard API response: {}".format(e.msg),
@@ -75,17 +81,41 @@ class MultiClusterRoute(RESTController):
             copy_config = Settings.MULTICLUSTER_CONFIG.copy()
         if token:
             try:
-                copy_config['config'].append({'name': name, 'url': url, 'token': token, 'helper_text': helper_text})
+                headers = {
+                    'Accept': 'application/vnd.ceph.api.v1.0+json',
+                    'Authorization': 'Bearer ' + token,
+                }
+                requests.request('PUT', url + 'api/multicluster/update_cors', json={'url': origin}, verify=False, headers=headers)
+                response = requests.request('GET', url + 'api/health/get_cluster_fsid',
+                                            headers=headers, verify=False)
+                logger.info('hellojii %s', response)
+            except Exception as e:
+                raise DashboardException(
+                    "Could not reach {}".format(url+'api/auth'),
+                    http_status_code=404,
+                    component='dashboard')
+
+            try:
+                fsid = json.loads(response.content, strict=False)
+                logger.info('hellojii2 %s', fsid)
+            except json.JSONDecodeError as e:
+                raise DashboardException(
+                    "Error parsing Dashboard API response: {}".format(e.msg),
+                    component='dashboard')
+            try:
+                copy_config['config'].append({'name': fsid, 'url': url, 'token': token, 'helper_text': helper_text})
             except KeyError:
-                copy_config = {'current_url': url, 'config': [{'name': name, 'url': url, 'token': token, 'helper_text': helper_text}]}
+                copy_config = {'current_url': url, 'config': [{'name': fsid, 'url': url, 'token': token, 'helper_text': helper_text}]}
             Settings.MULTICLUSTER_CONFIG = copy_config
             return
         params = { "username": username, "password": password }
         response = self._proxy('POST', url, path='api/auth', payload=json.dumps(params), origin=origin)
+        logger.info('hellojii3 %s', response)
         try:
             copy_config['config'].append({'name': response['fsid'], 'url': url, 'token': response['token'], 'helper_text': helper_text})
         except KeyError:
             copy_config = {'current_url': url, 'config': [{'name': response['fsid'], 'url': url, 'token': response['token'], 'helper_text': helper_text}]}
+        logger.info('hellojii4 %s', copy_config)
         Settings.MULTICLUSTER_CONFIG = copy_config
 
     @Endpoint('PUT')
@@ -114,3 +144,40 @@ class MultiClusterRoute(RESTController):
     @UpdatePermission
     def update_cors(self, url: str):
         configure_cors(url)
+
+    def is_token_expired(self, jwt_token):
+        try:
+            decoded_token = jwt.decode(jwt_token, verify=False)
+            expiration_time = decoded_token['exp']
+            current_time = time.time()
+            logger.info('current_time %s', current_time)
+            logger.info('expiration_time %s', expiration_time)
+            return expiration_time < current_time
+        except jwt.ExpiredSignatureError:
+            return True
+        except jwt.InvalidTokenError:
+            return True
+
+    def check_token_status_expiration(self, token):
+        if self.is_token_expired(token):
+            return 1
+        else:
+            return 0
+        
+    def check_token_status_array(self, clusters_token_array):
+        token_status_map = {}
+
+        for item in clusters_token_array:
+            logger.info('asdf %s', item)
+            logger.info('asdfqq %s', item['key'])
+            cluster_name = item['key']
+            token = item['value']
+            status = self.check_token_status_expiration(token)
+            token_status_map[cluster_name] = status
+
+        return token_status_map
+
+    @Endpoint('PUT')
+    @UpdatePermission
+    def check_token_status(self, clustersTokenMap):
+        return self.check_token_status_array(clustersTokenMap)
