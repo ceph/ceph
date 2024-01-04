@@ -889,6 +889,28 @@ class RgwClient(RestClient):
                     return None
             raise e
 
+    @RestClient.api_put('/{bucket_name}?policy')
+    def set_bucket_policy(self, bucket_name: str, policy: str, request=None):
+        """
+        Sets the bucket policy for a bucket.
+        :param bucket_name: The name of the bucket.
+        :type bucket_name: str
+        :param policy: The bucket policy.
+        :type policy: JSON Structured Document
+        :return: The bucket policy.
+        :rtype: Dict
+        """
+        # pylint: disable=unused-argument
+        try:
+            request = request(data=policy)
+        except RequestException as e:
+            if e.content:
+                content = json_str_to_object(e.content)
+                if content.get("Code") == "InvalidArgument":
+                    msg = "Invalid JSON document"
+                    raise DashboardException(msg=msg, component='rgw')
+            raise DashboardException(e)
+
     def perform_validations(self, retention_period_days, retention_period_years, mode):
         try:
             retention_period_days = int(retention_period_days) if retention_period_days else 0

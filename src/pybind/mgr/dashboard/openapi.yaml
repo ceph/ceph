@@ -9355,6 +9355,8 @@ paths:
               properties:
                 bucket:
                   type: string
+                bucket_policy:
+                  type: string
                 daemon_name:
                   type: string
                 encryption_state:
@@ -9667,6 +9669,8 @@ paths:
             schema:
               properties:
                 bucket_id:
+                  type: string
+                bucket_policy:
                   type: string
                 daemon_name:
                   type: string

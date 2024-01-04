@@ -410,6 +410,50 @@
           </div>
         </div>
 
+        <!-- Policies -->
+        <legend class="cd-header"
+                i18n>Policies
+        </legend>
+        <div class="row">
+          <div class="col-12">
+            <div class="form-group row">
+              <label i18n
+                     class="cd-col-form-label"
+                     for="id">Bucket policy</label>
+              <div class="cd-col-form-input">
+                <textarea #bucketPolicyTextArea
+                          class="form-control resize-vertical"
+                          id="bucket_policy"
+                          formControlName="bucket_policy"
+                          (change)="bucketPolicyOnChange()">
+                </textarea>
+                <span class="invalid-feedback"
+                      *ngIf="bucketForm.showError('bucket_policy', frm, 'invalidJson')"
+                      i18n>Invalid json text</span>
+                <div class="btn-group float-end"
+                     role="group"
+                     aria-label="bucket-policy-helpers">
+                  <button type="button"
+                          id="example-generator-button"
+                          class="btn btn-light my-3"
+                          (click)="openUrl('https://docs.aws.amazon.com/AmazonS3/latest/userguide/example-bucket-policies.html?icmpid=docs_amazons3_console')"
+                          i18n>
+                    <i [ngClass]="[icons.externalUrl]"></i>
+                    Policy examples
+                  </button>
+                  <button type="button"
+                          id="example-generator-button"
+                          class="btn btn-light my-3"
+                          (click)="openUrl('https://awspolicygen.s3.amazonaws.com/policygen.html')"
+                          i18n>
+                    <i [ngClass]="[icons.externalUrl]"></i>
+                    Policy generator
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
 
       </div>
       <div class="card-footer">
