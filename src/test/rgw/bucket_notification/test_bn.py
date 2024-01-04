@@ -71,6 +71,10 @@ class HTTPPostHandler(http_server.BaseHTTPRequestHandler):
     def do_POST(self):
         """implementation of POST handler"""
         content_length = int(self.headers['Content-Length'])
+        if content_length == 0:
+            self.send_response(200)
+            self.end_headers()
+            return
         body = self.rfile.read(content_length)
         if self.server.cloudevents:
             event = from_http(self.headers, body) 
@@ -1474,8 +1478,7 @@ def test_ps_s3_notification_push_amqp_idleness_check():
     conn.delete_bucket(bucket_name)
 
 
-@attr('kafka_test')
-def test_ps_s3_notification_push_kafka_on_master():
+def push_kafka(ack_level):
     """ test pushing kafka s3 notification on master """
     conn = connection()
     zonegroup = 'default'
@@ -1489,27 +1492,20 @@ def test_ps_s3_notification_push_kafka_on_master():
 
     try:
         s3_notification_conf = None
-        topic_conf1 = None
-        topic_conf2 = None
+        topic_conf = None
         receiver = None
-        task, receiver = create_kafka_receiver_thread(topic_name+'_1')
+        task, receiver = create_kafka_receiver_thread(topic_name)
         task.start()
 
         # create s3 topic
         endpoint_address = 'kafka://' + kafka_server
         # without acks from broker
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'
-        topic_conf1 = PSTopicS3(conn, topic_name+'_1', zonegroup, endpoint_args=endpoint_args)
-        topic_arn1 = topic_conf1.set_config()
-        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=none'
-        topic_conf2 = PSTopicS3(conn, topic_name+'_2', zonegroup, endpoint_args=endpoint_args)
-        topic_arn2 = topic_conf2.set_config()
+        endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level='+ack_level
+        topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
         # create s3 notification
         notification_name = bucket_name + NOTIFICATION_SUFFIX
-        topic_conf_list = [{'Id': notification_name + '_1', 'TopicArn': topic_arn1,
-                         'Events': []
-                       },
-                       {'Id': notification_name + '_2', 'TopicArn': topic_arn2,
+        topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
                          'Events': []
                        }]
 
@@ -1561,16 +1557,26 @@ def test_ps_s3_notification_push_kafka_on_master():
         # cleanup
         if s3_notification_conf is not None:
             s3_notification_conf.del_config()
-        if topic_conf1 is not None:
-            topic_conf1.del_config()
-        if topic_conf2 is not None:
-            topic_conf2.del_config()
+        if topic_conf is not None:
+            topic_conf.del_config()
         # delete the bucket
         for key in bucket.list():
             key.delete()
         conn.delete_bucket(bucket_name)
         if receiver is not None:
             stop_kafka_receiver(receiver, task)
+
+
+@attr('kafka_test')
+def test_ps_push_kafka_broker_ack():
+    """ test pushing kafka notifications with broker acks """
+    push_kafka('broker')
+
+
+@attr('kafka_test')
+def test_ps_push_kafka_no_ack():
+    """ test pushing kafka notification with no acks """
+    push_kafka('none')
 
 
 @attr('http_test')
