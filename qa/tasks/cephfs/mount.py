@@ -775,6 +775,10 @@ class CephFSMountBase(object):
 
         return self.client_remote.run(args=args, **kwargs)
 
+    def get_shell_stdout(self, args, timeout=300, **kwargs):
+        return self.run_shell(args=args, timeout=timeout, **kwargs).stdout.\
+            getvalue().strip()
+
     def run_shell_payload(self, payload, wait=True, timeout=900, **kwargs):
         kwargs.setdefault('cwd', self.mountpoint)
         kwargs.setdefault('omit_sudo', False)
