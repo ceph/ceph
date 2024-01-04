@@ -68,8 +68,6 @@ private:
 
   uint64_t m_current_size = 0;
 
-  BitVector<2> m_object_map;
-
   bufferlist m_out_bl;
 
   bool is_diff_iterate() const;
