@@ -74,6 +74,7 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
     NodeExporterService, SNMPGatewayService, LokiService, PromtailService
 from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
 from .services.node_proxy import NodeProxy
+from .services.smb import SMBService
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
     ClientKeyringStore, ClientKeyringSpec, TunedProfileStore, NodeProxyCache
@@ -677,6 +678,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             PromtailService,
             RbdMirrorService,
             RgwService,
+            SMBService,
             SNMPGatewayService,
         ]
 
@@ -3222,7 +3224,8 @@ Then run the following:
                 'elasticsearch': PlacementSpec(count=1),
                 'jaeger-agent': PlacementSpec(host_pattern='*'),
                 'jaeger-collector': PlacementSpec(count=1),
-                'jaeger-query': PlacementSpec(count=1)
+                'jaeger-query': PlacementSpec(count=1),
+                'smb': PlacementSpec(count=1),
             }
             spec.placement = defaults[spec.service_type]
         elif spec.service_type in ['mon', 'mgr'] and \
@@ -3350,6 +3353,10 @@ Then run the following:
 
     @handle_orch_error
     def apply_snmp_gateway(self, spec: ServiceSpec) -> str:
+        return self._apply(spec)
+
+    @handle_orch_error
+    def apply_smb(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
     @handle_orch_error
