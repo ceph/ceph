@@ -3,7 +3,9 @@ import errno
 import logging
 import os
 import mgr_util
-from typing import TYPE_CHECKING
+import inspect
+import functools
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
 import cephfs
 
@@ -85,11 +87,28 @@ class VolumeClient(CephfsClient["Module"]):
             lvl = self.mgr.ClusterLogPrio.WARN
         self.mgr.cluster_log("cluster", lvl, msg)
 
-    def volume_exception_to_retval(self, ve):
+    def volume_exception_to_retval(self_or_method: Any, ve: Optional[VolumeException] = None):
         """
         return a tuple representation from a volume exception
+        OR wrap the decorated method into a try:catch:
+        that will convert VolumeException to the tuple
         """
-        return ve.to_tuple()
+        if ve is None and callable(self_or_method):
+            # used as a decorator
+            method: Callable = self_or_method
+            @functools.wraps(method)
+            def wrapper(self, *args, **kwargs):
+                try:
+                    return method(self, *args, **kwargs)
+                except VolumeException as ve:
+                    return self.volume_exception_to_retval(ve)
+            return wrapper
+        elif ve is not None:
+            # used as a method on self with a VolumeException argument
+            return ve.to_tuple()
+        else:
+            # shouldn't get here, bad call
+            assert(ve is not None)
 
     ### volume operations -- create, rm, ls
 
