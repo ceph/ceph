@@ -1,5 +1,5 @@
 """
-Run ceph-dedup-tool
+Run ceph-dedup-daemon
 """
 import contextlib
 import logging
@@ -14,11 +14,10 @@ log = logging.getLogger(__name__)
 @contextlib.contextmanager
 def task(ctx, config):
     """
-    Run ceph-dedup-tool.
+    Run ceph-dedup-daemon.
     The config should be as follows::
-        ceph-dedup-tool:
+        ceph-dedup-daemon:
           clients: [client list]
-          op: <operation name>
           pool: <pool name>
           chunk_pool: <chunk pool name>
           chunk_size: <chunk size>
@@ -27,6 +26,13 @@ def task(ctx, config):
           chunk_dedup_threashold: <the number of duplicate chunks to trigger chunk dedup>
           max_thread: <the number of threads>
           wakeup_period: <duration>
+          wait_before_validation: <seconds> # Validation will start after wait_before_validation.
+                                            # Note that foreground I/Os must be done before the 
+                                            # validation starts because the validation procedure 
+                                            # is not able to check the reference is correct under
+                                            # overwrite workload. Apart from validation, 
+                                            # ceph-dedup-daemon runs as soon as the task is started 
+                                            # regardless of wait_before_validation.
     For example::
         tasks:
         - exec:
@@ -43,16 +49,14 @@ def task(ctx, config):
             chunk_dedup_threshold: 5
             max_thread: 2
             wakeup_period: 20
-            sampling_ratio: 100
+            wait_before_validation: 460
     """
     log.info('Beginning deduplication...')
     assert isinstance(config, dict), \
         "please list clients to run on"
 
     args = [
-        'ceph-dedup-tool']
-    if config.get('op', None):
-        args.extend(['--op', config.get('op', None)])
+        'ceph-dedup-daemon']
     if config.get('chunk_pool', None):
         args.extend(['--chunk-pool', config.get('chunk_pool', None)])
     if config.get('chunk_size', False):
@@ -71,16 +75,12 @@ def task(ctx, config):
         args.extend(['--wakeup-period', str(config.get('wakeup_period', 20))])
     if config.get('pool', False):
         args.extend(['--pool', config.get('pool', None)])
-
-    args.extend([
-        '--debug',
-        '--daemon',
-        '--loop'])
+    wait_before_validation = config.get('wait_before_validation', 0)
 
     def thread():
         run_remote(args, False, 0)
 
-    def run_remote(args, need_wait, client_num):
+    def run_remote(args, need_wait, client_num, return_without_retry = False):
         clients = ['client.{id}'.format(id=id_) for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
         log.info('clients are %s' % clients)
         role = 'client.{id}'.format(id=client_num)
@@ -108,8 +108,10 @@ def task(ctx, config):
             if proc.exitstatus == 0 or need_wait == False:
                 log.info('proc stdout ', proc.stdout.getvalue())
                 return proc.stdout.getvalue().strip()
+            if return_without_retry == True:
+                return None
             tries += 1
-            if tries > 30:
+            if tries > 60:
                 raise Exception('timed out getting correct exitstatus')
             time.sleep(30)
 
@@ -125,10 +127,10 @@ def task(ctx, config):
         dump_str = run_remote(
             ('ceph-dedup-tool --op dump-chunk-refs --chunk-pool '
             + chunk_pool + ' --object ' + chunk_obj).split(),
-            True, 1
+            True, 1, True
         )
-        # fail in case that reference object is not written
-        assert len(dump_str) > 0
+        if dump_str is None:
+            return None
         log.info('{0} obj has {1} refs'
             .format(chunk_obj, json.loads(dump_str)['count']))
 
@@ -140,7 +142,7 @@ def task(ctx, config):
     #   1. sample-dedup has been started and
     #   2. reference of chunk objects' exists in correct base pool
     def validate():
-        log.info('start validating sample-dedup')
+        log.info('start validating ceph-dedup')
         base_pool = config.get('pool', None)
         chunk_pool = config.get('chunk_pool', None)
         max_validation_cnt = 15
@@ -158,7 +160,7 @@ def task(ctx, config):
             log.info('chunk pool empty. retry ', retry_cnt)
         assert retry_cnt < max_validation_cnt
 
-        log.info('sample-dedup started successfully')
+        log.info('ceph-dedup started successfully')
 
         retry_cnt = 0
         max_validation_cnt = 5
@@ -166,6 +168,11 @@ def task(ctx, config):
         while retry_cnt < max_validation_cnt:
             for chunk_obj in chunk_obj_list:
                 ref_list = get_ref_list(chunk_pool, chunk_obj)
+                if ref_list is None:
+                    retry_cnt -= 2
+                    assert retry_cnt > -(max_validation_cnt * 2)
+                    time.sleep(15)
+                    break
                 for ref in ref_list:
                     ret = run_remote(
                         ('rados -p ' + base_pool + ' stat ' + ref['oid'])
@@ -190,6 +197,7 @@ def task(ctx, config):
             # retry validation for repaired objects
             for chunk_obj in retry_chunk_objs:
                 ref_list = get_ref_list(chunk_pool, chunk_obj)
+                assert ref_list is not None
                 for ref in ref_list:
                     ret = run_remote(
                         ('rados -p ' + base_pool + ' stat ' + ref['oid'])
@@ -210,11 +218,13 @@ def task(ctx, config):
 
 
     running = gevent.spawn(thread)
+    if wait_before_validation != 0:
+        time.sleep(wait_before_validation)
     checker = gevent.spawn(validate)
 
     try:
         yield
     finally:
-        log.info('joining ceph-dedup-tool')
+        log.info('joining ceph-dedup-daemon')
         running.get()
         checker.get()

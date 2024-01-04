@@ -1,0 +1,31 @@
+tasks:
+- install:
+    extra_packages: [ceph-dedup]
+- exec:
+    client.0:
+      - sudo ceph osd pool create base_tier 4
+      - sudo ceph osd pool create low_tier 4
+      - sudo ceph-dedup-tool --op enable --pool base_tier --chunk-pool low_tier
+- rados:
+    clients: [client.0]
+    pools: [base_tier]
+    low_tier_pool: 'low_tier'
+    ops: 3000
+    objects: 150
+    max_seconds: 360
+    op_weights:
+      read: 100
+      write: 20
+- deduplication:
+    clients: [client.0]
+    pool: 'base_tier'
+    chunk_pool: 'low_tier'
+    chunk_size: 131072
+    chunk_algorithm: 'fastcdc'
+    fingerprint_algorithm: 'sha1'
+    chunk_dedup_threshold: 2
+    max_thread: 2
+    wakeup_period: 30
+    wait_before_validation: 660
+
+
