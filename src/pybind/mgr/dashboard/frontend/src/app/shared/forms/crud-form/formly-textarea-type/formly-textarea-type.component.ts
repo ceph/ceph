@@ -1,5 +1,6 @@
 import { Component, ViewChild, ElementRef } from '@angular/core';
 import { FieldType, FieldTypeConfig } from '@ngx-formly/core';
+import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
 
 @Component({
   selector: 'cd-formly-textarea-type',
@@ -10,16 +11,11 @@ export class FormlyTextareaTypeComponent extends FieldType<FieldTypeConfig> {
   @ViewChild('textArea')
   public textArea: ElementRef<any>;
 
+  constructor(private textAreaJsonFormatterService: TextAreaJsonFormatterService) {
+    super();
+  }
+
   onChange() {
-    const value = this.textArea.nativeElement.value;
-    try {
-      const formatted = JSON.stringify(JSON.parse(value), null, 2);
-      this.textArea.nativeElement.value = formatted;
-      this.textArea.nativeElement.style.height = 'auto';
-      const lineNumber = formatted.split('\n').length;
-      const pixelPerLine = 25;
-      const pixels = lineNumber * pixelPerLine;
-      this.textArea.nativeElement.style.height = pixels + 'px';
-    } catch (e) {}
+    this.textAreaJsonFormatterService.format(this.textArea);
   }
 }

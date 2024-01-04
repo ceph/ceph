@@ -610,4 +610,16 @@ export class CdValidators {
         );
     };
   }
+
+  static json(): ValidatorFn {
+    return (control: AbstractControl): Record<string, any> | null => {
+      if (!control.value) return null;
+      try {
+        JSON.parse(control.value);
+        return null;
+      } catch (e) {
+        return { invalidJson: true };
+      }
+    };
+  }
 }
