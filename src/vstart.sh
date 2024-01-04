@@ -172,7 +172,6 @@ rgw_store="rados"
 lockdep=${LOCKDEP:-1}
 spdk_enabled=0 # disable SPDK by default
 pmem_enabled=0
-zoned_enabled=0
 io_uring_enabled=0
 with_jaeger=0
 
@@ -841,13 +840,6 @@ EOF
                 # when use physical disk, not create file for db/wal
                 BLUESTORE_OPTS=""
             fi
-        fi
-        if [ "$zoned_enabled" -eq 1 ]; then
-            BLUESTORE_OPTS+="
-        bluestore min alloc size = 65536
-        bluestore prefer deferred size = 0
-        bluestore prefer deferred size hdd = 0
-        bluestore prefer deferred size ssd = 0
         fi
         if [ "$io_uring_enabled" -eq 1 ]; then
             BLUESTORE_OPTS+="
