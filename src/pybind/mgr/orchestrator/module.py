@@ -44,6 +44,7 @@ from ._interface import (
     OrchestratorError,
     OrchestratorValidationError,
     RGWSpec,
+    SMBSpec,
     SNMPGatewaySpec,
     ServiceDescription,
     TunedProfileSpec,
@@ -1819,6 +1820,46 @@ Usage:
                            unmanaged=unmanaged)
         specs: List[ServiceSpec] = spec.get_tracing_specs()
         return self._apply_misc(specs, dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply smb')
+    def _apply_smb(
+        self,
+        cluster_id: str,
+        config_uri: str,
+        features: str = '',
+        join_sources: Optional[List[str]] = None,
+        custom_dns: Optional[List[str]] = None,
+        placement: Optional[str] = None,
+        unmanaged: bool = False,
+        dry_run: bool = False,
+        format: Format = Format.plain,
+        no_overwrite: bool = False,
+        inbuf: Optional[str] = None,
+    ) -> HandleCommandResult:
+        """Apply an SMB network file system gateway service configuration."""
+
+        if not inbuf:
+            raise OrchestratorValidationError(
+                'unrecognized option -i; -h or --help for usage'
+            )
+
+        _features = features.replace(',', ' ').split()
+        spec = SMBSpec(
+            service_id=cluster_id,
+            placement=PlacementSpec.from_string(placement),
+            unmanaged=unmanaged,
+            preview_only=dry_run,
+            cluster_id=cluster_id,
+            features=_features,
+            config_uri=config_uri,
+            join_sources=join_sources,
+            custom_dns=custom_dns,
+        )
+
+        spec.validate()  # force any validation exceptions to be caught correctly
+        # The previous comment makes no sense to JJM. But when in rome.
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
 
     @_cli_write_command('orch set-unmanaged')
     def _set_unmanaged(self, service_name: str) -> HandleCommandResult:
