@@ -1,7 +1,7 @@
 overrides:
   ceph:
     conf:
-      client:
+      client.0:
         rgw d3n l1 local datacache enabled: true
         rgw enable ops log: true
         rgw d3n l1 datacache persistent path: /tmp/rgw_datacache/
