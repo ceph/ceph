@@ -5,6 +5,7 @@ import mgr_util
 import inspect
 import functools
 from typing import TYPE_CHECKING, Any, Callable, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import cephfs
 
@@ -446,6 +447,50 @@ class VolumeClient(CephfsClient["Module"]):
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
+
+    @volume_exception_to_retval
+    def quiesce(self, cmd):
+        volname    = cmd['vol_name']
+        default_group_name  = cmd.get('group_name', None)
+        roots = []
+        fscid = None
+
+        with open_volume(self, volname) as fs_handle:
+            fscid = fs_handle.get_fscid()
+
+            if cmd.get('leader', False):
+                leader_info = self.mgr.get_quiesce_leader_info(fscid)
+                if leader_info is None:
+                    return -errno.ENOENT, "", "Couldn't resolve the quiesce leader for volume %s (%s)" % (volname, fscid)
+                return (
+                    0,
+                    "mds.%d" % leader_info['gid'],
+                    "Resolved the quiesce leader for volume '{volname}' as daemon '{name}' ({gid}) {state} rank {rank}".format(volname=volname, **leader_info)
+                )
+
+
+            for member in cmd.get('members', []):
+                try:
+                    member_parts = urlsplit(member)
+                except ValueError as ve:
+                    return -errno.EINVAL, "", str(ve)
+                group_name = default_group_name
+
+                *maybe_group_name, subvol_name = member_parts.path.strip('/').split('/')
+                if len(maybe_group_name) > 1:
+                    return -errno.EINVAL, "", "The `<group>/<subvol>` member syntax is accepted with no more than one group"
+                elif len(maybe_group_name) == 1:
+                    group_name = maybe_group_name[0]
+
+                with open_group(fs_handle, self.volspec, group_name) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvol_name, SubvolumeOpType.GETPATH) as subvol:
+                        member_parts = member_parts._replace(path=subvol.path.decode('utf-8'))
+                        roots.append(urlunsplit(member_parts))
+        
+        cmd['roots'] = roots
+        cmd['prefix'] = 'quiesce db'
+
+        return self.mgr.tell_quiesce_leader(fscid, cmd)
 
     def set_user_metadata(self, **kwargs):
         ret        = 0, "", ""
