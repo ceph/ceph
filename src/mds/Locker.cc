@@ -149,8 +149,7 @@ bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
   bool found_locked = false;
   bool found_layout = false;
 
-  if (want_layout)
-    ceph_assert(n == 0);
+  ceph_assert(!want_layout || n == 0);
 
   client_t client = mdr->get_client();
 
