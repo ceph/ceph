@@ -16,7 +16,6 @@ import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
-import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
 import { MultiClusterService } from '../api/multi-cluster.service';
 // import { SummaryService } from './summary.service';
@@ -35,7 +34,6 @@ export class ApiInterceptorService implements HttpInterceptor {
   private token: string;
   constructor(
     private router: Router,
-    private authStorageService: AuthStorageService,
     public notificationService: NotificationService,
     private multiClusterService: MultiClusterService // private summaryservice: SummaryService
   ) {
@@ -131,8 +129,7 @@ export class ApiInterceptorService implements HttpInterceptor {
               this.multiClusterService.setCluster('https://192.168.100.100:8443').subscribe(() => {
                 localStorage.setItem('cluster_api_url', 'https://192.168.100.100:8443');
               });
-              this.authStorageService.remove();
-              this.router.navigate(['/login']);
+              this.router.navigate(['/dashboard']);
               break;
             case 403:
               this.router.navigate(['error'], {

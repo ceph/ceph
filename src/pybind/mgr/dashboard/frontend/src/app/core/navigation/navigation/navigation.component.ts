@@ -26,6 +26,9 @@ import { TelemetryNotificationService } from '~/app/shared/services/telemetry-no
 })
 export class NavigationComponent implements OnInit, OnDestroy {
   notifications: string[] = [];
+  clusterUrlTokenMap: Map<string, string> = new Map<string, string>();
+  clusterTokenStatus: object;
+  localClusterUrl: any;
   @HostBinding('class') get class(): string {
     return 'top-notification-' + this.notifications.length;
   }
@@ -65,11 +68,13 @@ export class NavigationComponent implements OnInit, OnDestroy {
   ngOnInit() {
     this.subs.add(
       this.multiClusterService.subscribe((resp: string) => {
+        this.localClusterUrl = resp['current_url'];
         resp['config']?.forEach((config: any) => {
           this.clustersMap.set(config['url'], {
             name: config['name'],
             helperText: config['helper_text']
           });
+          config['token'] ? this.clusterUrlTokenMap.set(config['name'], config['token']): '';
         });
 
         this.selectedCluster =
@@ -82,6 +87,8 @@ export class NavigationComponent implements OnInit, OnDestroy {
         });
       })
     );
+    console.log();
+    
     this.subs.add(
       this.summaryService.subscribe((summary) => {
         this.summaryData = summary;
@@ -146,38 +153,50 @@ export class NavigationComponent implements OnInit, OnDestroy {
     }
   }
 
+  onDropDownSelection() {
+    this.clusterTokenStatus = this.multiClusterService.checkTokenStatus(this.clusterUrlTokenMap).subscribe((data: any) => {
+      this.clusterTokenStatus = data;
+      console.log(this.clusterTokenStatus);
+    });
+  }
+
   onClusterSelection(url: string) {
-    this.multiClusterService.setCluster(url).subscribe(
-      (resp: any) => {
-        // let token: string;
-        localStorage.setItem('cluster_api_url', url);
-        this.selectedCluster = this.clustersMap.get(url);
-        resp['config'].forEach((config: any) => {
-          if (config['name'] === this.selectedCluster.name) {
-            localStorage.setItem('token_of_selected_cluster', config['token']);
-          }
+    
+    if (url !== this.localClusterUrl) {
+      const clusterName = this.clustersMap.get(url).name;
+      if (this.clusterTokenStatus[clusterName] === 1) {
+        this.clustersMap.set(url, {
+          is_token_expired : true
         });
-        // this.multiClusterService.setCluster(url).subscribe(() => this.summaryService.refresh());
-        // this.authService.check(token).subscribe((resp: any) => {
-        //   this.authStorageService.set(resp.permissions);
-        // });
-        //get the current route without the cluster_api_url
-      },
-      () => {},
-      () => {
-        this.multiClusterService.refresh();
-        this.summaryService.refresh();
-        const currentRoute = this.router.url.split('?')[0];
-        if (currentRoute.includes('dashboard')) {
-          this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
-            this.router.navigate([currentRoute]);
-          });
-        } else {
-          this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-            this.router.navigate([currentRoute]);
-          });
-        }
       }
-    );
+      else {
+        this.multiClusterService.setCluster(url).subscribe(
+          (resp: any) => {
+            localStorage.setItem('cluster_api_url', url);
+            this.selectedCluster = this.clustersMap.get(url);
+            resp['config'].forEach((config: any) => {
+              if (config['name'] === this.selectedCluster.name) {
+                localStorage.setItem('token_of_selected_cluster', config['token']);
+              }
+            });        
+          },
+          () => {},
+          () => {
+            this.multiClusterService.refresh();
+            this.summaryService.refresh();
+            const currentRoute = this.router.url.split('?')[0];
+            if (currentRoute.includes('dashboard')) {
+              this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
+                this.router.navigate([currentRoute]);
+              });
+            } else {
+              this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+                this.router.navigate([currentRoute]);
+              });
+            }
+          }
+        );
+      }
+    }
   }
 }

@@ -1,6 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
-import { BehaviorSubject, Subscription } from 'rxjs';
+import { BehaviorSubject, Observable, Subscription } from 'rxjs';
 import { TimerService } from '../services/timer.service';
 import { filter } from 'rxjs/operators';
 
@@ -58,5 +58,10 @@ export class MultiClusterService {
     return (data: any) => {
       this.msSource.next(data);
     };
+  }
+
+  checkTokenStatus(clustersTokenMap: Map<string, string>): Observable<object> {
+    let data = [...clustersTokenMap].map(([key, value]) => ({ key, value }));
+    return this.http.put<object>('api/multicluster/check_token_status', { clustersTokenMap: data });
   }
 }

@@ -38,6 +38,7 @@
                  placement="bottom-left"
                  class="d-inline-block ms-5">
               <button ngbDropdownToggle
+                      (click)="onDropDownSelection()"
                       class="btn btn-outline-light cd-context-bar"
                       i18n-title
                       title="Selected Cluster:">
@@ -51,6 +52,7 @@
                     <div class="dropdown-text">{{ cluster.value.name }}</div>
                     <div *ngIf="cluster.value.helperText"
                          class="text-secondary">{{ cluster.value.helperText }}</div>
+                    <div *ngIf="cluster.is_token_expired">Expired</div>
                   </button>
                 </ng-container>
               </div>
