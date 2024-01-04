@@ -1963,6 +1963,42 @@ TEST_P(TestMockObjectMapDiffRequest, IntermediateObjectMapTooSmallFromSnap) {
   }
 }
 
+TEST_P(TestMockObjectMapDiffRequest, ObjectMapTooLarge) {
+  REQUIRE_FEATURE(RBD_FEATURE_FAST_DIFF);
+
+  uint32_t object_count = 5;
+  m_image_ctx->size = object_count * (1 << m_image_ctx->order);
+  m_image_ctx->snap_info = {
+    {1U, {"snap1", {cls::rbd::UserSnapshotNamespace{}}, m_image_ctx->size, {},
+          {}, {}, {}}}
+  };
+
+  BitVector<2> object_map_1;
+  object_map_1.resize(object_count + 12);
+  BitVector<2> object_map_head;
+  object_map_head.resize(object_count + 34);
+  object_map_head[1] = OBJECT_EXISTS_CLEAN;
+  BitVector<2> expected_diff_state;
+  expected_diff_state.resize(object_count);
+  expected_diff_state[1] = DIFF_STATE_DATA_UPDATED;
+
+  if (is_diff_iterate()) {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
+    test_diff_iterate(load, 0, CEPH_NOSNAP, expected_diff_state);
+  } else {
+    auto load = [&](MockTestImageCtx& mock_image_ctx) {
+      expect_get_flags(mock_image_ctx, 1, 0, 0);
+      expect_load_map(mock_image_ctx, 1, object_map_1, 0);
+      expect_get_flags(mock_image_ctx, CEPH_NOSNAP, 0, 0);
+      expect_load_map(mock_image_ctx, CEPH_NOSNAP, object_map_head, 0);
+    };
+    test_deep_copy(load, 0, CEPH_NOSNAP, expected_diff_state);
+  }
+}
+
 INSTANTIATE_TEST_SUITE_P(MockObjectMapDiffRequestTests,
                          TestMockObjectMapDiffRequest, ::testing::Bool());
 

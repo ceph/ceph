@@ -212,15 +212,13 @@ void DiffRequest<I>::handle_load_object_map(int r) {
                   << m_object_map.size() << " < " << num_objs << dendl;
     finish(-EINVAL);
     return;
-  } else {
-    m_object_map.resize(num_objs);
   }
 
   uint64_t start_object_no, end_object_no;
   uint64_t prev_object_diff_state_size = m_object_diff_state->size();
   if (is_diff_iterate()) {
-    start_object_no = std::min(m_start_object_no, m_object_map.size());
-    end_object_no = std::min(m_end_object_no, m_object_map.size());
+    start_object_no = std::min(m_start_object_no, num_objs);
+    end_object_no = std::min(m_end_object_no, num_objs);
     uint64_t num_objs_in_range = end_object_no - start_object_no;
     if (m_object_diff_state->size() != num_objs_in_range) {
       m_object_diff_state->resize(num_objs_in_range);
@@ -228,13 +226,10 @@ void DiffRequest<I>::handle_load_object_map(int r) {
   } else {
     // for deep-copy, the object diff state should be the largest of
     // all versions in the set, so it's only ever grown
-    if (m_object_diff_state->size() < m_object_map.size()) {
-      m_object_diff_state->resize(m_object_map.size());
-    } else if (m_object_diff_state->size() > m_object_map.size()) {
-      // the image was shrunk so expanding the object map will flag end objects
-      // as non-existent and they will be compared against the previous object
-      // diff state
-      m_object_map.resize(m_object_diff_state->size());
+    // shrink is handled by flagging trimmed objects as non-existent
+    // and comparing against the previous object diff state as usual
+    if (m_object_diff_state->size() < num_objs) {
+      m_object_diff_state->resize(num_objs);
     }
     start_object_no = 0;
     end_object_no = m_object_diff_state->size();
@@ -245,8 +240,8 @@ void DiffRequest<I>::handle_load_object_map(int r) {
   auto it = m_object_map.begin() + start_object_no;
   auto diff_it = m_object_diff_state->begin();
   uint64_t ono = start_object_no;
-  for (; ono < start_object_no + overlap; ++it, ++diff_it, ++ono) {
-    uint8_t object_map_state = *it;
+  for (; ono < start_object_no + overlap; ++diff_it, ++ono) {
+    uint8_t object_map_state = (ono < num_objs ? *it++ : OBJECT_NONEXISTENT);
     uint8_t prev_object_diff_state = *diff_it;
     switch (prev_object_diff_state) {
     case DIFF_STATE_HOLE:
@@ -287,7 +282,7 @@ void DiffRequest<I>::handle_load_object_map(int r) {
   ldout(cct, 20) << "computed overlap diffs" << dendl;
 
   ceph_assert(diff_it == m_object_diff_state->end() ||
-              end_object_no <= m_object_map.size());
+              end_object_no <= num_objs);
   for (; ono < end_object_no; ++it, ++diff_it, ++ono) {
     uint8_t object_map_state = *it;
     if (object_map_state == OBJECT_NONEXISTENT) {
