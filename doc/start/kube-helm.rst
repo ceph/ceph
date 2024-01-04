@@ -353,5 +353,5 @@ For instance, to access the cluster-tail-log, one can run::
     $ kubectl -n ceph logs ceph-mon-cppdk -c cluster-log-tailer
 
 .. _ceph-helm: https://github.com/ceph/ceph-helm/
-.. _instructions: https://github.com/kubernetes/helm/blob/master/docs/install.md
+.. _instructions: https://helm.sh/docs/intro/install/
 .. _init: https://github.com/kubernetes/helm/blob/master/docs/helm/helm_init.md
