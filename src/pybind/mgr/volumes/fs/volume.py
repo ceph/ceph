@@ -5,6 +5,7 @@ import mgr_util
 import inspect
 import functools
 from typing import TYPE_CHECKING, Any, Callable, Optional
+from urllib.parse import urlsplit, urlunsplit
 
 import cephfs
 
@@ -446,6 +447,39 @@ class VolumeClient(CephfsClient["Module"]):
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
+
+    @volume_exception_to_retval
+    def subvolume_quiesce(self, cmd):
+        volname    = cmd['vol_name']
+        common_group_name  = cmd.get('group_name', None)
+        roots = []
+        fscid = None
+
+        with open_volume(self, volname) as fs_handle:
+            fscid = fs_handle.get_fscid()
+            for member in cmd.get('members', []):
+                try:
+                    member_parts = urlsplit(member)
+                except ValueError as ve:
+                    return -errno.EINVAL, "", str(ve)
+                group_name = common_group_name
+                if group_name is None:
+                    *maybe_group_name, subvol_name = member_parts.path.strip('/').split('/')
+                    if len(maybe_group_name) > 1:
+                        return -errno.EINVAL, "", "The `<group>/<subvol>` member syntax is accepted with no more than one group"
+                    elif len(maybe_group_name) == 1:
+                        group_name = maybe_group_name[0]
+                else:
+                    subvol_name = member_parts.path
+                with open_group(fs_handle, self.volspec, group_name) as group:
+                    with open_subvol(self.mgr, fs_handle, self.volspec, group, subvol_name, SubvolumeOpType.GETPATH) as subvol:
+                        member_parts = member_parts._replace(path=subvol.path.decode('utf-8'))
+                        roots.append(urlunsplit(member_parts))
+        
+        cmd['roots'] = roots
+        cmd['prefix'] = 'quiesce db'
+
+        return self.mgr.tell_command('mds', '%d:0' % fscid, cmd, one_shot=True)
 
     def set_user_metadata(self, **kwargs):
         ret        = 0, "", ""
