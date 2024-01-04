@@ -6332,6 +6332,22 @@ boost::statechart::result PeeringState::Active::react(const CheckReadable &evt)
   return discard_event();
 }
 
+boost::statechart::result PeeringState::Active::react(const PgCreateEvt &evt)
+{
+  DECLARE_LOCALS;
+  pg_t pgid = context< PeeringMachine >().spgid.pgid;
+
+  psdout(10) << __func__ << " receive PgCreateEvt"
+             << " is_peered=" << ps->is_peered() << dendl;
+
+  if (ps->is_peered()) {
+    psdout(10) << __func__ << " pg is peered, reply pg_created" << dendl;
+    pl->send_pg_created(pgid);
+  }
+
+  return discard_event();
+}
+
 /*
  * update info.history.last_epoch_started ONLY after we and all
  * replicas have activated AND committed the activate transaction
