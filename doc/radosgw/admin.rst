@@ -240,25 +240,30 @@ Options include:
   with the UID.
 
 
-Add / Remove a Key
-------------------------
+Add or  Remove a Key
+--------------------
 
-Both users and subusers require the key to access the S3 or Swift interface. To
-use S3, the user needs a key pair which is composed of an access key and a 
-secret key. On the other hand, to use Swift, the user typically needs a secret 
-key (password), and use it together with the associated user ID. You may create
-a key and either specify or generate the access key and/or secret key. You may 
-also remove a key. Options include:
+Both users and subusers require a key to access the S3 or Swift interface. To
+use S3, the user needs a key pair which is composed of an access key and a
+secret key. To use Swift, the user needs a secret key (password), which is used
+together with its associated user ID. You can create a key and either specify
+or generate the access key or secret key. You can also remove a key. Options
+include:
 
-- ``--key-type=<type>`` specifies the key type. The options are: s3, swift
+- ``--key-type=<type>`` specifies the key type. The options are: ``s3``, ``swift``
 - ``--access-key=<key>`` manually specifies an S3 access key.
 - ``--secret-key=<key>`` manually specifies a S3 secret key or a Swift secret key.
 - ``--gen-access-key`` automatically generates a random S3 access key.
 - ``--gen-secret`` automatically generates a random S3 secret key or a random Swift secret key.
 
-An example how to add a specified S3 key pair for a user. ::
+Adding S3 keys
+~~~~~~~~~~~~~~
 
-	radosgw-admin key create --uid=foo --key-type=s3 --access-key fooAccessKey --secret-key fooSecretKey
+To add a specific S3 key pair for a user, run a command of the following form:
+
+.. prompt:: bash
+
+   radosgw-admin key create --uid=foo --key-type=s3 --access-key fooAccessKey --secret-key fooSecretKey
 
 .. code-block:: javascript
 
@@ -273,11 +278,17 @@ An example how to add a specified S3 key pair for a user. ::
         "secret_key": "fooSecretKey"}],
   }
 
-Note that you may create multiple S3 key pairs for a user.
+.. note:: You can create multiple S3 key pairs for a user.
 
-To attach a specified swift secret key for a subuser. ::
+Adding Swift secret keys
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-	radosgw-admin key create --subuser=foo:bar --key-type=swift --secret-key barSecret
+To attach a specific Swift secret key for a subuser, run a command of the
+following form:
+
+.. prompt:: bash
+
+   radosgw-admin key create --subuser=foo:bar --key-type=swift --secret-key barSecret
 
 .. code-block:: javascript
 
@@ -293,11 +304,18 @@ To attach a specified swift secret key for a subuser. ::
       { "user": "foo:bar",
         "secret_key": "asfghjghghmgm"}]}
 
-Note that a subuser can have only one swift secret key.
+.. note:: A subuser can have only one Swift secret key.
 
-Subusers can also be used with S3 APIs if the subuser is associated with a S3 key pair. ::	
+Associating subusers with S3 key pairs
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-	radosgw-admin key create --subuser=foo:bar --key-type=s3 --access-key barAccessKey --secret-key barSecretKey
+Subusers can also be used with S3 APIs if the subuser is associated with a S3
+key pair. To associate a subuser with an S3 key pair, run a command of the
+following form:
+
+.. prompt:: bash
+
+   radosgw-admin key create --subuser=foo:bar --key-type=s3 --access-key barAccessKey --secret-key barSecretKey
 	
 .. code-block:: javascript
 
@@ -316,13 +334,23 @@ Subusers can also be used with S3 APIs if the subuser is associated with a S3 ke
   }
 
 
-To remove a S3 key pair, specify the access key. :: 
+Removing S3 key pairs
+~~~~~~~~~~~~~~~~~~~~~
 
-	radosgw-admin key rm --uid=foo --key-type=s3 --access-key=fooAccessKey 
+To remove a S3 key pair, specify the access key to be removed. Run a command of the following form: 
 
-To remove the swift secret key. ::
+.. prompt:: bash
 
-	radosgw-admin key rm --subuser=foo:bar --key-type=swift
+   radosgw-admin key rm --uid=foo --key-type=s3 --access-key=fooAccessKey 
+
+Removing Swift secret keys
+~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+To remove a Swift secret key, run a command of the following form: 
+
+.. prompt:: bash
+
+   radosgw-admin key rm --subuser=foo:bar --key-type=swift
 
 
 Add / Remove Admin Capabilities
