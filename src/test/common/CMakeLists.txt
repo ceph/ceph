@@ -283,6 +283,13 @@ add_executable(unittest_perf_histogram
 add_ceph_unittest(unittest_perf_histogram)
 target_link_libraries(unittest_perf_histogram ceph-common)
 
+# unittest_memory
+add_executable(unittest_memory
+  test_memory.cc
+  )
+add_ceph_unittest(unittest_memory)
+target_link_libraries(unittest_memory ceph-common)
+
 # unittest_perf_cache_key
 add_executable(unittest_perf_counters_key test_perf_counters_key.cc)
 add_ceph_unittest(unittest_perf_counters_key)
