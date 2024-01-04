@@ -15,6 +15,7 @@ add_executable(crimson-osd
   pg_shard_manager.cc
   object_context.cc
   object_context_loader.cc
+  object_metadata_helper.cc
   ops_executer.cc
   osd_operation.cc
   osd_operations/client_request.cc
