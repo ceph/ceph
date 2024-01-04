@@ -163,23 +163,82 @@ class RadosZoneWriter : public sal::ZoneWriter {
     return 0;
   }
 }; // RadosZoneWriter
+ 
 
+int RadosConfigStore::get_zones_pool_set(const DoutPrefixProvider *dpp,
+                       optional_yield y,
+                       std::string_view my_zone_id,
+                       std::set<rgw_pool>& pools)
+{
+  std::array<std::string, 128> zone_names;
+  rgw::sal::ListResult<std::string> listing;
+  do {
+    int r = list_zone_names(dpp, y, listing.next,
+                                      zone_names, listing);
+    if (r < 0) {
+      ldpp_dout(dpp, 0) << "failed to list zones with " << cpp_strerror(r) << dendl;
+      return r;
+    }
+
+    for (const auto& name : listing.entries) {
+      RGWZoneParams info;
+      r = read_zone_by_name(dpp, y, name, info, nullptr);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "failed to load zone " << name
+            << " with " << cpp_strerror(r) << dendl;
+        return r;
+      }
+      if (info.get_id() != my_zone_id) {
+        rgw::add_zone_pools(info, pools);
+      }
+    }
+  } while (!listing.next.empty());
+
+  return 0;
+}
+
+// TODO: remove this and add it to namespace rgw
+static std::string gen_random_uuid()
+{
+  uuid_d uuid;
+  uuid.generate_random();
+  return uuid.to_string();
+}
 
 int RadosConfigStore::create_zone(const DoutPrefixProvider* dpp,
                                   optional_yield y, bool exclusive,
-                                  const RGWZoneParams& info,
+                                  RGWZoneParams& info,
                                   std::unique_ptr<sal::ZoneWriter>* writer)
 {
-  if (info.get_id().empty()) {
-    ldpp_dout(dpp, 0) << "zone cannot have an empty id" << dendl;
+  if (info.name.empty()) {
+    ldpp_dout(dpp, -1) << __func__ << " requires a zone name" << dendl;
     return -EINVAL;
   }
-  if (info.get_name().empty()) {
-    ldpp_dout(dpp, 0) << "zone cannot have an empty name" << dendl;
-    return -EINVAL;
+  if (info.id.empty()) {
+    info.id = gen_random_uuid();
   }
 
-  const auto& pool = impl->zone_pool;
+  // add default placement with empty pool name
+  rgw_pool pool;
+  auto& placement = info.placement_pools["default-placement"];
+  placement.storage_classes.set_storage_class(
+      RGW_STORAGE_CLASS_STANDARD, &pool, nullptr);
+
+  // build a set of all pool names used by other zones
+  std::set<rgw_pool> pools;
+  int r = get_zones_pool_set(dpp, y, info.id, pools);
+  if (r < 0) {
+    return r;
+  }
+
+  // initialize pool names with the zone name prefix
+  r = rgw::init_zone_pool_names(dpp, y, pools, info);
+  if (r < 0) {
+    return r;
+  }
+
+  // old stuff
+  const auto& zone_pool = impl->zone_pool;
   const auto create = exclusive ? Create::MustNotExist : Create::MayExist;
 
   // write the zone info
@@ -187,7 +246,7 @@ int RadosConfigStore::create_zone(const DoutPrefixProvider* dpp,
   RGWObjVersionTracker objv;
   objv.generate_new_write_ver(dpp->get_cct());
 
-  int r = impl->write(dpp, y, pool, info_oid, create, info, &objv);
+  r = impl->write(dpp, y, zone_pool, info_oid, create, info, &objv);
   if (r < 0) {
     return r;
   }
@@ -198,9 +257,9 @@ int RadosConfigStore::create_zone(const DoutPrefixProvider* dpp,
   RGWObjVersionTracker name_objv;
   name_objv.generate_new_write_ver(dpp->get_cct());
 
-  r = impl->write(dpp, y, pool, name_oid, create, name, &name_objv);
+  r = impl->write(dpp, y, zone_pool, name_oid, create, name, &name_objv);
   if (r < 0) {
-    (void) impl->remove(dpp, y, pool, info_oid, &objv);
+    (void) impl->remove(dpp, y, zone_pool, info_oid, &objv);
     return r;
   }
 
@@ -208,6 +267,16 @@ int RadosConfigStore::create_zone(const DoutPrefixProvider* dpp,
     *writer = std::make_unique<RadosZoneWriter>(
         impl.get(), std::move(objv), info.get_id(), info.get_name());
   }
+
+  // try to set as default. may race with another create, so pass exclusive=true
+  // so we don't override an existing default
+  r = write_default_zone_id(
+      dpp, y, exclusive, info.realm_id, info.id);
+  if (r < 0 && r != -EEXIST) {
+    ldpp_dout(dpp, 0) << "WARNING: failed to set zone as default: "
+        << cpp_strerror(r) << dendl;
+  }
+
   return 0;
 }
 

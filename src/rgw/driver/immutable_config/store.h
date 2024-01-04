@@ -131,7 +131,7 @@ class ImmutableConfigStore : public ConfigStore {
 
   virtual int create_zone(const DoutPrefixProvider* dpp,
                           optional_yield y, bool exclusive,
-                          const RGWZoneParams& info,
+                          RGWZoneParams& info,
                           std::unique_ptr<ZoneWriter>* writer) override;
   virtual int read_zone_by_id(const DoutPrefixProvider* dpp,
                               optional_yield y,
