@@ -68,3 +68,21 @@ def check_units(ctx, units, enabler=None):
                 logger.info('Enabling unit %s' % u)
                 enabler.enable_service(u)
     return False
+
+
+def terminate_service(ctx: CephadmContext, service_name: str) -> None:
+    call(
+        ctx,
+        ['systemctl', 'stop', service_name],
+        verbosity=CallVerbosity.DEBUG,
+    )
+    call(
+        ctx,
+        ['systemctl', 'reset-failed', service_name],
+        verbosity=CallVerbosity.DEBUG,
+    )
+    call(
+        ctx,
+        ['systemctl', 'disable', service_name],
+        verbosity=CallVerbosity.DEBUG,
+    )
