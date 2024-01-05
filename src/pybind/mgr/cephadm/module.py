@@ -1572,43 +1572,32 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
                 utils.name_to_config_section(daemon_name),
                 'container_image'
             )).strip()
-        elif daemon_type == 'prometheus':
-            image = self.container_image_prometheus
-        elif daemon_type == 'nvmeof':
-            image = self.container_image_nvmeof
-        elif daemon_type == 'grafana':
-            image = self.container_image_grafana
-        elif daemon_type == 'alertmanager':
-            image = self.container_image_alertmanager
-        elif daemon_type == 'node-exporter':
-            image = self.container_image_node_exporter
-        elif daemon_type == 'loki':
-            image = self.container_image_loki
-        elif daemon_type == 'promtail':
-            image = self.container_image_promtail
-        elif daemon_type == 'haproxy':
-            image = self.container_image_haproxy
-        elif daemon_type == 'keepalived':
-            image = self.container_image_keepalived
-        elif daemon_type == 'elasticsearch':
-            image = self.container_image_elasticsearch
-        elif daemon_type == 'jaeger-agent':
-            image = self.container_image_jaeger_agent
-        elif daemon_type == 'jaeger-collector':
-            image = self.container_image_jaeger_collector
-        elif daemon_type == 'jaeger-query':
-            image = self.container_image_jaeger_query
-        elif daemon_type == CustomContainerService.TYPE:
-            # The image can't be resolved, the necessary information
-            # is only available when a container is deployed (given
-            # via spec).
-            image = None
-        elif daemon_type == 'snmp-gateway':
-            image = self.container_image_snmp_gateway
-        elif daemon_type == SMBService.TYPE:
-            image = self.container_image_samba
         else:
-            assert False, daemon_type
+            images = {
+                'alertmanager': self.container_image_alertmanager,
+                'elasticsearch': self.container_image_elasticsearch,
+                'grafana': self.container_image_grafana,
+                'haproxy': self.container_image_haproxy,
+                'jaeger-agent': self.container_image_jaeger_agent,
+                'jaeger-collector': self.container_image_jaeger_collector,
+                'jaeger-query': self.container_image_jaeger_query,
+                'keepalived': self.container_image_keepalived,
+                'loki': self.container_image_loki,
+                'node-exporter': self.container_image_node_exporter,
+                'nvmeof': self.container_image_nvmeof,
+                'prometheus': self.container_image_prometheus,
+                'promtail': self.container_image_promtail,
+                'snmp-gateway': self.container_image_snmp_gateway,
+                # The image can't be resolved here, the necessary information
+                # is only available when a container is deployed (given
+                # via spec).
+                CustomContainerService.TYPE: None,
+                SMBService.TYPE: self.container_image_samba,
+            }
+            try:
+                image = images[daemon_type]
+            except KeyError:
+                raise ValueError(f'no image for {daemon_type}')
 
         self.log.debug('%s container image %s' % (daemon_name, image))
 
