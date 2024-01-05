@@ -16,6 +16,7 @@
 #define CEPH_OSD_BLUESTORE_BLUESTORE_TYPES_H
 
 #include <bit>
+#include <limits>
 #include <ostream>
 #include <type_traits>
 #include <vector>

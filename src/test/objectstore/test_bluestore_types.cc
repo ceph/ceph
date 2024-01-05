@@ -1,18 +1,20 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "common/ceph_argparse.h"
-#include "common/ceph_time.h"
-#include "global/global_context.h"
-#include "global/global_init.h"
-#include "include/stringify.h"
 #include "include/types.h"
-#include "os/bluestore/AvlAllocator.h"
-#include "os/bluestore/BlueStore.h"
 #include "os/bluestore/bluestore_types.h"
-#include "os/bluestore/simple_bitmap.h"
-#include "perfglue/heap_profiler.h"
 #include "gtest/gtest.h"
+#include "include/stringify.h"
+#include "common/ceph_time.h"
+#include "os/bluestore/BlueStore.h"
+#include "os/bluestore/simple_bitmap.h"
+#include "os/bluestore/AvlAllocator.h"
+#include "common/ceph_argparse.h"
+#include "global/global_init.h"
+#include "global/global_context.h"
+#include "perfglue/heap_profiler.h"
+#include "os/bluestore/Writer.h"
+#include "common/pretty_binary.h"
 
 #include <sstream>
 
@@ -1264,6 +1266,10 @@ public:
     coll.reset(nullptr);
     delete bc;
     delete oc;
+    if (store->debug_get_alloc()) {
+      delete store->debug_get_alloc();
+      store->debug_get_alloc() = nullptr;
+    }
     delete store;
   }
 };
@@ -2090,6 +2096,379 @@ INSTANTIATE_TEST_SUITE_P(
     std::vector<int>({4096, 11, 13, 30000, 300000, 65536, 65536, 2, 3, 20, 70, 1, 5}),
     std::vector<int>({8192, 3, 4, 20000, 150000, 10000, 25000, 2, 3 ,10, 50, 5, 7}),
     std::vector<int>({32768, 3, 4, 40000, 400000, 65536, 65536, 1, 2, 20, 70, 1, 3})
+    )
+);
+
+
+
+class BlueStoreWriteFixture : public BlueStoreFixture
+{
+public:
+  uint32_t block_size;
+  uint32_t blob_size;
+  uint32_t checksum_type;
+  uint32_t checksum_order;
+  uint32_t size_range;
+
+  void SetUp() override {
+    std::vector param = GetParam();
+    BlueStoreFixture::SetUp(); //uses param[0]
+    block_size = param[1];
+    blob_size = param[2];
+    checksum_type = param[3];
+    checksum_order = param[4];
+    size_range = param[5];
+  }
+  // 0 = au_size, 1 = block_size, 2 = blob size
+  // 3 = checksum type, 4 = checksum order
+  // 5 = size range
+  uint32_t get_offset(uint32_t value) {
+    switch (rand() % 3) {
+    case 0:
+      value = p2align<uint32_t>(value, au_size);
+      break;
+    case 1:
+      value = p2align<uint32_t>(value, block_size);
+      break;
+    case 2:
+      ;
+    }
+    return value;
+  }
+  uint32_t get_length(uint32_t value) {
+    switch (rand() % 3) {
+    case 0:
+      value = p2roundup<uint32_t>(value, au_size);
+      break;
+    case 1:
+      value = p2roundup<uint32_t>(value, block_size);
+      break;
+    case 2:
+      ;
+    }
+    return value;
+  }
+};
+
+TEST_P(BlueStoreWriteFixture, expand_lr)
+{
+  struct print_writer : BlueStore::Writer::write_divertor {
+    ~print_writer() {};
+    void write(
+      uint64_t disk_offset,
+      const bufferlist& data,
+      bool deferred) override {
+    }
+  };
+  struct zero_reader: BlueStore::Writer::read_divertor {
+    ~zero_reader() {};
+    uint32_t read_cnt = 0;
+    bufferlist read(uint32_t offset, uint32_t length) override {
+      ++read_cnt;
+      bufferlist tmp;
+      tmp.append_zero(length);
+      return tmp;
+    }
+  };
+  store->debug_set_block_size(block_size);
+  uint64_t disk_size = (uint64_t)1024 * 1024 * 1024 * 1024;
+  store->debug_get_alloc() = Allocator::create(g_ceph_context, "avl", disk_size, au_size);
+  store->debug_get_alloc()->init_add_free(0, disk_size);
+
+  for (int i = 0; i < 1000; i++) {
+    BlueStore::TransContext txc(g_ceph_context, coll.get(), nullptr, nullptr);
+    BlueStore::WriteContext wctx;
+    wctx.csum_type = checksum_type;
+    wctx.csum_order = checksum_order;
+    BlueStore::Onode* o = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+    BlueStore::Writer w(store, &txc, &wctx, o);
+    print_writer pw;
+    zero_reader zr;
+    w.test_write_divertor = &pw;
+    w.test_read_divertor = &zr;
+    wctx.target_blob_size = blob_size;
+
+    // step 1: select chsum, order
+    // step 2: write object
+    // step 3:
+    uint32_t primary_offset = get_offset(rand() % size_range);
+    uint32_t primary_length = get_length((rand() % size_range) + 1);
+    bufferlist primary_data;
+    primary_data.append(std::string(primary_length, 'a'));
+    uint32_t primary_end = primary_offset + primary_length;
+    w.do_write(primary_offset, primary_data);
+
+    uint32_t secondary_offset = get_offset(rand() % size_range);
+    uint32_t secondary_length = get_length((rand() % size_range) + 1);
+    bufferlist secondary_data;
+    secondary_data.append(std::string(secondary_length, 'a'));
+    uint32_t secondary_end = secondary_offset + secondary_length;
+
+    uint32_t min_read = 0;
+    if (primary_offset <= secondary_offset && secondary_offset < primary_end &&
+        p2phase(secondary_offset, block_size) != 0) {
+      min_read++;
+    }
+    if (primary_offset <= secondary_end && secondary_end < primary_end &&
+        p2phase(secondary_end, block_size) != 0) {
+      min_read++;
+    }
+    w.do_write(secondary_offset, secondary_data);
+    o->extent_map.clear();
+    ASSERT_LE(min_read, zr.read_cnt);
+  }
+}
+
+TEST_P(BlueStoreWriteFixture, buffer_check)
+{
+  char* ref_data = nullptr;
+  struct print_writer : BlueStore::Writer::write_divertor {
+    ~print_writer() {};
+    void write(
+      uint64_t disk_offset,
+      const bufferlist& data,
+      bool deferred) override {
+    }
+  };
+  struct ref_reader: BlueStore::Writer::read_divertor {
+    ~ref_reader() {};
+    uint32_t read_cnt = 0;
+    char* ref_data = nullptr;
+    bufferlist read(uint32_t offset, uint32_t length) override {
+      ++read_cnt;
+      bufferlist tmp;
+      tmp.append(std::string(ref_data + offset, length));
+      return tmp;
+    }
+  };
+  store->debug_set_block_size(block_size);
+  uint64_t disk_size = (uint64_t)1024 * 1024 * 1024 * 1024;
+  store->debug_get_alloc() = Allocator::create(g_ceph_context, "avl", disk_size, au_size);
+  store->debug_get_alloc()->init_add_free(0, disk_size);
+
+  for (int i = 0; i < 1000; i++) {
+    BlueStore::TransContext txc(g_ceph_context, coll.get(), nullptr, nullptr);
+    BlueStore::WriteContext wctx;
+    wctx.csum_type = checksum_type;
+    wctx.csum_order = checksum_order;
+    BlueStore::Onode* o = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+    BlueStore::Writer w(store, &txc, &wctx, o);
+    print_writer pw;
+    ref_reader zr;
+    w.test_write_divertor = &pw;
+    w.test_read_divertor = &zr;
+    wctx.target_blob_size = blob_size;
+
+    ref_data = (char *)malloc(size_range * 3);
+    zr.ref_data = ref_data;
+    uint8_t ref_none = 0;
+    memset(ref_data, ref_none, size_range * 3);
+
+    int write_cnt = (rand() % 5) + 1;
+    for (int j = 0; j < write_cnt; j++) {
+      uint32_t offset = get_offset(rand() % size_range);
+      uint32_t length = get_length((rand() % size_range) + 1);
+      bufferlist data;
+      uint8_t data_val = rand() % 256;
+      data.append(std::string(length, data_val));
+      memcpy(ref_data + offset, data.c_str(), length);
+      w.do_write(offset, data);
+    }
+
+    bool equal = true;
+    auto check_buffer = [&](uint32_t offset, const bufferlist data) {
+      lsubdout(g_ceph_context, bluestore, 20)
+          << std::hex << "CHECK AT 0x" << offset << "~" << data.length() << dendl;
+      bufferlist ref;
+      ref.append(std::string(ref_data + offset, data.length()));
+      if (ref.to_str() != data.to_str()) {
+        equal = false;
+      }
+    };
+    w.debug_iterate_buffers(check_buffer);
+    ASSERT_TRUE(equal);
+
+    free(ref_data);
+    o->extent_map.clear();
+  }
+}
+
+TEST_P(BlueStoreWriteFixture, deferred_check)
+{
+  struct check_writer : BlueStore::Writer::write_divertor {
+    ~check_writer() {};
+    interval_set<uint64_t> already_written;
+    uint64_t bad_direct = 0;
+    uint64_t needless_deferred = 0;
+    void write(
+      uint64_t disk_offset,
+      const bufferlist& data,
+      bool deferred) override {
+        lsubdout(g_ceph_context, bluestore, 20)
+              << std::hex << "write: 0x"
+              << disk_offset << "~" << data.length() << std::dec
+              << (deferred ? " deferred" : " direct") << dendl;
+      if (!deferred) {
+        interval_set<uint64_t> res;
+        res.insert(disk_offset, data.length());
+        res.intersection_of(already_written);
+        if (!res.empty()) {
+          for (auto& r : res) {
+            lsubdout(g_ceph_context, bluestore, 10)
+              << std::hex << "direct on used: 0x"
+              << r.first << "~" << r.second << std::dec << dendl;
+            bad_direct += r.second;
+          }
+        }
+        already_written.union_insert(disk_offset, data.length());
+      } else {
+        interval_set<uint64_t> res, a;
+        a.insert(disk_offset, data.length());
+        res = a;
+        a.intersection_of(already_written);
+        res.subtract(a);
+        if (!res.empty()) {
+          //it is warning, not error to write deferred to unused space
+          for (auto& r : res) {
+            lsubdout(g_ceph_context, bluestore, 10)
+              << std::hex << "deferred on not used: 0x"
+              << r.first << "~" << r.second << std::dec << dendl;
+            needless_deferred = r.second;
+          }
+        }
+        already_written.union_insert(disk_offset, data.length());
+      }
+    }
+  };
+  struct ref_reader: BlueStore::Writer::read_divertor {
+    ~ref_reader() {};
+    bufferlist read(uint32_t offset, uint32_t length) override {
+      bufferlist tmp;
+      tmp.append_zero(length);
+      return tmp;
+    }
+  };
+  store->debug_set_block_size(block_size);
+  uint64_t disk_size = (uint64_t)1024 * 1024 * 1024 * 1024;
+  store->debug_get_alloc() = Allocator::create(g_ceph_context, "avl", disk_size, au_size);
+  store->debug_get_alloc()->init_add_free(0, disk_size);
+  store->debug_set_prefer_deferred_size(65536);
+  uint64_t needless_deferred = 0;
+  uint64_t needless_deferred_cnt = 0;
+  for (int i = 0; i < 1000; i++) {
+    BlueStore::TransContext txc(g_ceph_context, coll.get(), nullptr, nullptr);
+    BlueStore::WriteContext wctx;
+    wctx.csum_type = checksum_type;
+    wctx.csum_order = checksum_order;
+    BlueStore::Onode* o = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+    BlueStore::Writer w(store, &txc, &wctx, o);
+    check_writer pw;
+    ref_reader zr;
+    w.test_write_divertor = &pw;
+    w.test_read_divertor = &zr;
+    wctx.target_blob_size = blob_size;
+
+    int write_cnt = (rand() % 5) + 1;
+    for (int j = 0; j < write_cnt; j++) {
+      uint32_t offset = get_offset(rand() % size_range);
+      uint32_t length = get_length((rand() % size_range) + 1);
+      bufferlist data;
+      data.append(std::string(length, 0));
+      w.do_write(offset, data);
+      ASSERT_EQ(pw.bad_direct, 0);
+    }
+    o->extent_map.clear();
+    if (pw.needless_deferred != 0) {
+      needless_deferred += pw.needless_deferred;
+      needless_deferred_cnt++;
+    }
+  }
+  if (needless_deferred != 0) {
+    std::cout << "note! " << needless_deferred_cnt
+      << " deferred events over never-used regions for total 0x"
+      << std::hex << needless_deferred << std::dec << " bytes" << std::endl;
+  }
+}
+
+TEST_P(BlueStoreWriteFixture, statfs_zero)
+{
+  struct check_writer : BlueStore::Writer::write_divertor {
+    ~check_writer() {};
+    void write(
+      uint64_t disk_offset,
+      const bufferlist& data,
+      bool deferred) override {
+    }
+  };
+  struct ref_reader: BlueStore::Writer::read_divertor {
+    ~ref_reader() {};
+    bufferlist read(uint32_t offset, uint32_t length) override {
+      bufferlist tmp;
+      tmp.append_zero(length);
+      return tmp;
+    }
+  };
+  store->debug_set_block_size(block_size);
+  uint64_t disk_size = (uint64_t)1024 * 1024 * 1024 * 1024;
+  store->debug_get_alloc() = Allocator::create(g_ceph_context, "avl", disk_size, au_size);
+  store->debug_get_alloc()->init_add_free(0, disk_size);
+  for (int i = 0; i < 1000; i++) {
+    BlueStore::TransContext txc(g_ceph_context, coll.get(), nullptr, nullptr);
+    BlueStore::WriteContext wctx;
+    wctx.csum_type = checksum_type;
+    wctx.csum_order = checksum_order;
+    BlueStore::OnodeRef o = new BlueStore::Onode(coll.get(), ghobject_t(), "");
+    BlueStore::Writer w(store, &txc, &wctx, o);
+    check_writer pw;
+    ref_reader zr;
+    w.test_write_divertor = &pw;
+    w.test_read_divertor = &zr;
+    wctx.target_blob_size = blob_size;
+
+    BlueStore::volatile_statfs statfs_delta;
+    int write_cnt = (rand() % 10) + 1;
+    for (int j = 0; j < write_cnt; j++) {
+      uint32_t offset = get_offset(rand() % size_range);
+      uint32_t length = get_length((rand() % size_range) + 1);
+      bufferlist data;
+      data.append(std::string(length, 0));
+      w.do_write(offset, data);
+    }
+    PExtentVector released;
+    std::vector<BlueStore::BlobRef> pruned_blobs;
+    std::set<BlueStore::SharedBlobRef> shared_changed;
+
+    store->debug_punch_hole_2(coll, o, 0, size_range * 3,
+      released, pruned_blobs, shared_changed,
+      w.statfs_delta);
+    ASSERT_EQ(w.statfs_delta.allocated(), 0);
+    ASSERT_EQ(w.statfs_delta.stored(), 0);
+    o->extent_map.clear();
+  }
+}
+
+
+// 0 = au_size, 1 = block_size, 2 = blob size
+// 3 = checksum type, 4 = checksum order
+// 5 = size range
+INSTANTIATE_TEST_SUITE_P(
+  BlueStore,
+  BlueStoreWriteFixture,
+  ::testing::Values(
+    std::vector<int>({4096, 4096, 64 * 1024, Checksummer::CSUM_CRC32C, 12, 100000}),
+    std::vector<int>({4096, 4096, 64 * 1024, Checksummer::CSUM_CRC32C, 12, 200000}),
+    std::vector<int>({4096, 4096, 64 * 1024, Checksummer::CSUM_NONE, 12, 100000}),
+    std::vector<int>({4096, 4096, 64 * 1024, Checksummer::CSUM_CRC32C, 10, 100000}),
+    std::vector<int>({4 * 4096, 4096, 64 * 1024, Checksummer::CSUM_CRC32C, 12, 100000}),
+    std::vector<int>({16 * 4096, 4096, 128 * 1024, Checksummer::CSUM_CRC32C, 12, 100000}),
+    std::vector<int>({16 * 4096, 4096, 128 * 1024, Checksummer::CSUM_CRC32C, 14, 100000}),
+    std::vector<int>({4096, 4096, 64 * 1024, Checksummer::CSUM_CRC32C, 14, 100000}),
+    std::vector<int>({4 * 4096, 4096, 64 * 1024, Checksummer::CSUM_CRC32C, 12, 200000}),
+    std::vector<int>({16 * 4096, 4096, 128 * 1024, Checksummer::CSUM_CRC32C, 12, 300000}),
+    std::vector<int>({16 * 4096, 4096, 128 * 1024, Checksummer::CSUM_CRC32C, 14, 200000}),
+    std::vector<int>({16 * 4096, 4096, 128 * 1024, Checksummer::CSUM_NONE, 12, 200000}),
+    std::vector<int>({4096, 4096, 64 * 1024, Checksummer::CSUM_CRC32C, 14, 250000}),
+    std::vector<int>({4096, 4096, 64 * 1024, Checksummer::CSUM_NONE, 12, 250000})
     )
 );
 

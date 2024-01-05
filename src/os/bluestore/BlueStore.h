@@ -3505,6 +3505,17 @@ public:
       _punch_hole_2(c.get(), o, offset, length, released,
         pruned_blobs, shared_changed, statfs_delta);
     }
+  Allocator*& debug_get_alloc() {
+    return alloc;
+  }
+  void debug_set_block_size(uint64_t _block_size) {
+    block_size = _block_size;
+    block_mask = ~(block_size - 1);
+    block_size_order = std::countr_zero(block_size);
+  }
+  void debug_set_prefer_deferred_size(uint64_t s) {
+    prefer_deferred_size = s;
+  }
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
@@ -3594,7 +3605,7 @@ private:
 
   // --------------------------------------------------------
   // write ops
-
+  public:
   struct WriteContext {
     bool buffered = false;          ///< buffered write
     bool compress = false;          ///< compressed write
@@ -3679,6 +3690,7 @@ private:
       uint64_t loffs_end,
       uint64_t min_alloc_size);
   };
+  private:
   BlueStore::extent_map_t::iterator _punch_hole_2(
     Collection* c,
     OnodeRef& o,
