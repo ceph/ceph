@@ -85,7 +85,7 @@ class RedisDriverFixture: public ::testing::Test {
 
 TEST_F(RedisDriverFixture, PutYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
     cacheDriver->shutdown();
 
@@ -108,7 +108,7 @@ TEST_F(RedisDriverFixture, PutYield)
 
 TEST_F(RedisDriverFixture, GetYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
 
     {
@@ -150,7 +150,7 @@ TEST_F(RedisDriverFixture, GetYield)
 
 TEST_F(RedisDriverFixture, DelYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
 
     {
@@ -189,7 +189,7 @@ TEST_F(RedisDriverFixture, DelYield)
 
 TEST_F(RedisDriverFixture, AppendDataYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
 
     {
@@ -231,7 +231,7 @@ TEST_F(RedisDriverFixture, AppendDataYield)
 
 TEST_F(RedisDriverFixture, DeleteDataYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
 
     {
@@ -270,7 +270,7 @@ TEST_F(RedisDriverFixture, DeleteDataYield)
 
 TEST_F(RedisDriverFixture, SetAttrsYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
 
     rgw::sal::Attrs newAttrs;
@@ -306,7 +306,7 @@ TEST_F(RedisDriverFixture, SetAttrsYield)
 
 TEST_F(RedisDriverFixture, GetAttrsYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     rgw::sal::Attrs nextAttrs = attrs;
     bufferlist nextVal;
     nextVal.append("nextVal");
@@ -355,7 +355,7 @@ TEST_F(RedisDriverFixture, GetAttrsYield)
 
 TEST_F(RedisDriverFixture, UpdateAttrsYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
 
     rgw::sal::Attrs newAttrs;
@@ -385,7 +385,7 @@ TEST_F(RedisDriverFixture, UpdateAttrsYield)
 
 TEST_F(RedisDriverFixture, DeleteAttrsYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
 
     {
@@ -428,7 +428,7 @@ TEST_F(RedisDriverFixture, DeleteAttrsYield)
 
 TEST_F(RedisDriverFixture, SetAttrYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
     ASSERT_GE(cacheDriver->set_attr(env->dpp, "testName", "newAttr", "newVal", optional_yield{io, yield}), 0);
     cacheDriver->shutdown();
@@ -452,7 +452,7 @@ TEST_F(RedisDriverFixture, SetAttrYield)
 
 TEST_F(RedisDriverFixture, GetAttrYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, cacheDriver->put(env->dpp, "testName", bl, bl.length(), attrs, optional_yield{io, yield}));
 
     {

@@ -74,7 +74,7 @@ class SSDDriverFixture: public ::testing::Test {
 
 TEST_F(SSDDriverFixture, PutAndGet)
 {
-    spawn::spawn(io, [this] (yield_context yield) {
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
         rgw::sal::Attrs attrs = {};
         ASSERT_EQ(0, cacheDriver->put(env->dpp, "testPutGet", bl, bl.length(), attrs, optional_yield{io, yield}));
         bufferlist ret;
@@ -89,7 +89,7 @@ TEST_F(SSDDriverFixture, PutAndGet)
 
 TEST_F(SSDDriverFixture, AppendData)
 {
-    spawn::spawn(io, [this] (yield_context yield) {
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
         rgw::sal::Attrs attrs = {};
         ASSERT_EQ(0, cacheDriver->put(env->dpp, "testAppend", bl, bl.length(), attrs, optional_yield{io, yield}));
     
@@ -110,7 +110,7 @@ TEST_F(SSDDriverFixture, AppendData)
 
 TEST_F(SSDDriverFixture, SetGetAttrs)
 {
-    spawn::spawn(io, [this] (yield_context yield) {
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
         ASSERT_EQ(0, cacheDriver->put(env->dpp, "testSetGetAttrs", bl, bl.length(), attrs, optional_yield{io, yield}));
         bufferlist ret;
         rgw::sal::Attrs ret_attrs;
@@ -128,7 +128,7 @@ TEST_F(SSDDriverFixture, SetGetAttrs)
 
 TEST_F(SSDDriverFixture, UpdateAttrs)
 {
-    spawn::spawn(io, [this] (yield_context yield) {
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
         ASSERT_EQ(0, cacheDriver->put(env->dpp, "testUpdateAttrs", bl, bl.length(), attrs, optional_yield{io, yield}));
         ASSERT_EQ(0, cacheDriver->update_attrs(env->dpp, "testUpdateAttrs", update_attrs, optional_yield{io, yield}));
         rgw::sal::Attrs get_attrs;
@@ -143,7 +143,7 @@ TEST_F(SSDDriverFixture, UpdateAttrs)
 
 TEST_F(SSDDriverFixture, SetGetAttr)
 {
-    spawn::spawn(io, [this] (yield_context yield) {
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
       rgw::sal::Attrs attrs = {};
       ASSERT_EQ(0, cacheDriver->put(env->dpp, "testSetGetAttr", bl, bl.length(), attrs, optional_yield{io, yield}));
       std::string attr_name = "user.ssd.testattr";
@@ -159,7 +159,7 @@ TEST_F(SSDDriverFixture, SetGetAttr)
 
 TEST_F(SSDDriverFixture, DeleteAttr)
 {
-    spawn::spawn(io, [this] (yield_context yield) {
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
       rgw::sal::Attrs attrs = {};
       ASSERT_EQ(0, cacheDriver->put(env->dpp, "testDeleteAttr", bl, bl.length(), attrs, optional_yield{io, yield}));
       std::string attr_name = "user.ssd.testattr";
@@ -180,7 +180,7 @@ TEST_F(SSDDriverFixture, DeleteAttr)
 
 TEST_F(SSDDriverFixture, DeleteAttrs)
 {
-    spawn::spawn(io, [this] (yield_context yield) {
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
       ASSERT_EQ(0, cacheDriver->put(env->dpp, "testDeleteAttr", bl, bl.length(), attrs, optional_yield{io, yield}));
       rgw::sal::Attrs ret_attrs;
       ASSERT_EQ(0, cacheDriver->get_attrs(env->dpp, "testDeleteAttr", ret_attrs, optional_yield{io, yield}));
@@ -201,7 +201,7 @@ TEST_F(SSDDriverFixture, DeleteAttrs)
 
 TEST_F(SSDDriverFixture, DeleteData)
 {
-    spawn::spawn(io, [this] (yield_context yield) {
+    spawn::spawn(io, [this] (spawn::yield_context yield) {
         rgw::sal::Attrs attrs = {};
         ASSERT_EQ(0, cacheDriver->put(env->dpp, "testDeleteData", bl, bl.length(), attrs, optional_yield{io, yield}));
         bufferlist ret;

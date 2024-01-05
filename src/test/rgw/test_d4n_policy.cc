@@ -156,7 +156,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 
 TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
     ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, bl.length(), attrs, optional_yield{io, yield}));
     policyDriver->get_cache_policy()->update(env->dpp, key, 0, bl.length(), "", optional_yield{io, yield});
@@ -186,7 +186,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 
 TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     /* Set victim block for eviction */
     rgw::d4n::CacheBlock victim = rgw::d4n::CacheBlock{
       .cacheObj = {
@@ -255,7 +255,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 
 TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
 
     dir->shutdown();

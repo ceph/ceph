@@ -142,7 +142,7 @@ class BlockDirectoryFixture: public ::testing::Test {
 
 TEST_F(ObjectDirectoryFixture, SetYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
     dir->shutdown();
 
@@ -166,7 +166,7 @@ TEST_F(ObjectDirectoryFixture, SetYield)
 
 TEST_F(ObjectDirectoryFixture, GetYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
 
     {
@@ -202,7 +202,7 @@ TEST_F(ObjectDirectoryFixture, GetYield)
 
 TEST_F(ObjectDirectoryFixture, CopyYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->copy(obj, "copyTestName", "copyBucketName", optional_yield{io, yield}));
     dir->shutdown();
@@ -234,7 +234,7 @@ TEST_F(ObjectDirectoryFixture, CopyYield)
 
 TEST_F(ObjectDirectoryFixture, DelYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
 
     {
@@ -273,7 +273,7 @@ TEST_F(ObjectDirectoryFixture, DelYield)
 
 TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(obj, "objName", "newTestName", optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(obj, "objHosts", "127.0.0.1:5000", optional_yield{io, yield}));
@@ -301,7 +301,7 @@ TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
 
 TEST_F(BlockDirectoryFixture, SetYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
     dir->shutdown();
 
@@ -325,7 +325,7 @@ TEST_F(BlockDirectoryFixture, SetYield)
 
 TEST_F(BlockDirectoryFixture, GetYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
 
     {
@@ -361,7 +361,7 @@ TEST_F(BlockDirectoryFixture, GetYield)
 
 TEST_F(BlockDirectoryFixture, CopyYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->copy(block, "copyTestName", "copyBucketName", optional_yield{io, yield}));
     dir->shutdown();
@@ -393,7 +393,7 @@ TEST_F(BlockDirectoryFixture, CopyYield)
 
 TEST_F(BlockDirectoryFixture, DelYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
 
     {
@@ -432,7 +432,7 @@ TEST_F(BlockDirectoryFixture, DelYield)
 
 TEST_F(BlockDirectoryFixture, UpdateFieldYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(block, "objName", "newTestName", optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(block, "blockHosts", "127.0.0.1:5000", optional_yield{io, yield}));
@@ -459,7 +459,7 @@ TEST_F(BlockDirectoryFixture, UpdateFieldYield)
 
 TEST_F(BlockDirectoryFixture, RemoveHostYield)
 {
-  spawn::spawn(io, [this] (yield_context yield) {
+  spawn::spawn(io, [this] (spawn::yield_context yield) {
     block->hostsList.push_back("127.0.0.1:6000");
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->remove_host(block, "127.0.0.1:6379", optional_yield{io, yield}));
