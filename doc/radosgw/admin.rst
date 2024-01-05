@@ -353,32 +353,43 @@ To remove a Swift secret key, run a command of the following form:
    radosgw-admin key rm --subuser=foo:bar --key-type=swift
 
 
-Add / Remove Admin Capabilities
--------------------------------
+Add or Remove Admin Capabilities
+--------------------------------
 
-The Ceph Storage Cluster provides an administrative API that enables  users to
-execute administrative functions via the REST API. By default, users do NOT have
-access to this API. To enable a user to exercise  administrative functionality,
-provide the user with administrative capabilities.
+The Ceph Storage Cluster provides an administrative API that enables users to
+execute administrative functions via the REST API. By default, users do NOT
+have access to this API. To enable a user to exercise administrative
+functionality, provide the user with administrative capabilities.
 
-To add administrative capabilities to a user, execute the following:: 
+To add administrative capabilities to a user, run a command of the following
+form: 
 
-	radosgw-admin caps add --uid={uid} --caps={caps}
+.. prompt:: bash
+
+   radosgw-admin caps add --uid={uid} --caps={caps}
 
 
-You can add read, write or all capabilities to users, buckets, metadata and 
-usage (utilization). For example::
+You can add read, write or all capabilities to users, buckets, metadata and
+usage (utilization). To do this, use a command-line option of the following
+form:
 
-	--caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit]=[*|read|write|read, write]"
+.. prompt:: bash
 
-For example::
+   --caps="[users|buckets|metadata|usage|zone|amz-cache|info|bilog|mdlog|datalog|user-policy|oidc-provider|roles|ratelimit]=[\*|read|write|read, write]"
+
+For example:
+
+.. prompt:: bash
 
 	radosgw-admin caps add --uid=johndoe --caps="users=*;buckets=*"
 
+To remove administrative capabilities from a user, run a command of the
+following form: 
 
-To remove administrative capabilities from a user, execute the following:: 
+.. prompt:: bash
 
-	radosgw-admin caps rm --uid=johndoe --caps={caps}
+   radosgw-admin caps rm --uid=johndoe --caps={caps}
+  
 
 
 Quota Management
