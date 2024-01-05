@@ -104,7 +104,9 @@ int LFUDAPolicy::get_age(optional_yield y) {
   }
 }
 
-int LFUDAPolicy::set_local_weight_sum(size_t weight, optional_yield y) {
+int LFUDAPolicy::set_local_weight_sum(int weight, optional_yield y) {
+  weight = weight > 0 ? weight : 0;
+
   try {
     boost::system::error_code ec;
     response<int> resp;
@@ -320,7 +322,7 @@ int LFUDAPolicy::eviction(const DoutPrefixProvider* dpp, uint64_t size, optional
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Block " << key << " has been evicted." << dendl;
 
     int weight = (avgWeight * entries_map.size()) - it->second->localWeight;
-    if (int ret = set_local_weight_sum((weight > 0) ? weight : 0, y) < 0)
+    if (int ret = set_local_weight_sum(weight, y) < 0)
       return ret;
 
     int age = get_age(y);
