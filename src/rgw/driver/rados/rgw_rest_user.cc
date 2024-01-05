@@ -73,6 +73,10 @@ public:
   RGWOp_User_Info() {}
 
   int check_caps(const RGWUserCaps& caps) override {
+    int r = caps.check_cap("user-info-without-keys", RGW_CAP_READ);
+    if (r == 0) {
+      return r;
+    }
     return caps.check_cap("users", RGW_CAP_READ);
   }
 
@@ -84,10 +88,12 @@ public:
 void RGWOp_User_Info::execute(optional_yield y)
 {
   RGWUserAdminOpState op_state(driver);
+  op_state.set_system(s->system_request);
 
   std::string uid_str, access_key_str;
   bool fetch_stats;
   bool sync_stats;
+  bool dump_keys = false;
 
   RESTArgs::get_string(s, "uid", uid_str, &uid_str);
   RESTArgs::get_string(s, "access-key", access_key_str, &access_key_str);
@@ -111,7 +117,15 @@ void RGWOp_User_Info::execute(optional_yield y)
   op_state.set_fetch_stats(fetch_stats);
   op_state.set_sync_stats(sync_stats);
 
-  op_ret = RGWUserAdminOp_User::info(s, driver, op_state, flusher, y);
+  // dump_keys is false if user-info-without-keys is 'read' and
+  // the user is not the system user or an admin user
+  int keys_perm = s->user->get_info().caps.check_cap("users", RGW_CAP_READ);
+  if (keys_perm == 0 || op_state.system || s->auth.identity->is_admin_of(uid)) {
+    dump_keys = true;
+    ldpp_dout(s, 20) << "dump_keys is set to true" << dendl;
+  }
+
+  op_ret = RGWUserAdminOp_User::info(s, driver, op_state, flusher, dump_keys, y);
 }
 
 class RGWOp_User_Create : public RGWRESTOp {
