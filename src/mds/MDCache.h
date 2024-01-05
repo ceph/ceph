@@ -984,6 +984,9 @@ private:
   void _open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSContext *fin,
 				  bool want_xlocked, int r);
 
+  void open_remote_referent(inodeno_t ino, MDSContext *fin, bool want_xlocked=false);
+  void _open_remote_referent_finish(inodeno_t ino, MDSContext *fin,
+				    bool want_xlocked, int r);
   void make_trace(std::vector<CDentry*>& trace, CInode *in);
 
   void open_ino(inodeno_t ino, int64_t pool, MDSContext *fin,

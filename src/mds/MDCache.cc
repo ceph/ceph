@@ -8582,6 +8582,18 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
         }
       }
 
+      dout(12) << "traverse: loading referent inodes inode " << *in << dendl;
+      for (const auto& ri : in->get_inode()->referent_inodes) {
+        dout(12) << "traverse: loading referent inode " << std::hex << ri << dendl;
+        CInode *cur_ref_in = get_inode(ri);
+        if (!cur_ref_in) {
+          dout(7) << "traverse: referent inode is not loaded, open referent inode " << std::hex << ri << dendl;
+          open_remote_referent(ri, cf.build());
+          return 1;
+        }
+        dout(12) << "traverse: referent inode found in memory " << std::hex << ri << dendl;
+      }
+
       cur = in;
 
       if (rdlock_snap && !(want_dentry && !want_inode && depth == path.depth() - 1)) {
@@ -8859,6 +8871,35 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool pro
     open_remote_dentry(dn, projected, new C_MDS_RetryRequest(this, mdr));
     return 0;
   }
+}
+
+struct C_MDC_OpenRefInode : public MDCacheContext {
+  inodeno_t ino;
+  MDSContext *onfinish;
+  bool want_xlocked;
+  C_MDC_OpenRefInode(MDCache *m, inodeno_t i, MDSContext *f, bool wx) :
+    MDCacheContext(m), ino(i), onfinish(f), want_xlocked(wx) {
+  }
+  void finish(int r) override {
+    mdcache->_open_remote_referent_finish(ino, onfinish, want_xlocked, r);
+  }
+};
+
+void MDCache::_open_remote_referent_finish(inodeno_t ino, MDSContext *fin,
+					   bool want_xlocked, int r)
+{
+  if (r < 0) {
+    dout(0) << "open_remote_referent_finish referent inode coudn't be opened  " << ino << dendl;
+    ceph_abort();
+  }
+  fin->complete(r < 0 ? r : 0);
+}
+
+void MDCache::open_remote_referent(inodeno_t ino, MDSContext *fin, bool want_xlocked)
+{
+  dout(10) << "open_remote_referent " << ino << dendl;
+  open_ino(ino, -1,
+      new C_MDC_OpenRefInode(this, ino, fin, want_xlocked), true, want_xlocked); // backtrace
 }
 
 struct C_MDC_OpenRemoteDentry : public MDCacheContext {

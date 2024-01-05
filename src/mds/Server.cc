@@ -2450,9 +2450,13 @@ void Server::set_trace_dist(const ref_t<MClientReply> &reply,
     vector<SnapRealm*> related_realms;
     if (in) {
       for (const auto& ri : in->get_inode()->referent_inodes) {
-         CInode *cur = try_get_auth_inode(mdr, ri); //TODO auth is required ?
-         SnapRealm *cur_realm = cur->find_snaprealm();
-         related_realms.push_back(cur_realm);
+        CInode *cur = mdcache->get_inode(ri);
+        if (!cur) {
+          dout(3) << "set_trace_dist error: referent inode not loaded " << std::hex << ri << dendl;
+          ceph_abort("set_trace_dist: referent inode not loaded");
+        }
+        SnapRealm *cur_realm = cur->find_snaprealm();
+        related_realms.push_back(cur_realm);
       }
     }
     reply->snapbl = get_snap_trace(session, realm, related_realms);
