@@ -8,6 +8,7 @@
 import argparse
 import compileall
 import enum
+import functools
 import json
 import logging
 import os
@@ -30,13 +31,59 @@ except ImportError:
 log = logging.getLogger(__name__)
 
 
+# Fill in the package requirements for the zipapp build below. The PY36_REQUIREMENTS
+# list applies *only* to python 3.6. The PY_REQUIREMENTS list applies to all other
+# python versions. Python lower than 3.6 is not supported by this script.
+#
+# Each item must be a dict with the following fields:
+# - package_spec (REQUIRED, str): A python package requirement in the same style as
+#   requirements.txt and pip.
+# - from_source (bool): Try to force a clean no-binaries build using source packages.
+# - unique (bool): If true, this requirement should not be combined with any other
+#   on the pip command line.
+# - ignore_suffixes (list of str): A list of file and directory suffixes to EXCLUDE
+#   from the final zipapp.
+# - ignore_exact (list of str): A list of exact file and directory names to EXCLUDE
+#   from the final zipapp.
+# - custom_pip_args (list of str): A list of additional custom arguments to pass
+#   to pip when installing this dependency.
+#
 PY36_REQUIREMENTS = [
-    'MarkupSafe >= 2.0.1, <2.2',
-    'Jinja2 >= 3.0.2, <3.2',
+    {
+        'package_spec': 'MarkupSafe >= 2.0.1, <2.2',
+        'from_source': True,
+        'unique': True,
+    },
+    {
+        'package_spec': 'Jinja2 >= 3.0.2, <3.2',
+        'from_source': True,
+        'unique': True,
+    },
+    {
+        'package_spec': 'PyYAML >= 6.0, <6.1',
+        # do not include the stub package for compatibility with
+        # old versions of the extension module. We are going out of our
+        # way to avoid the binary extension module for our zipapp, no
+        # point in pulling this unnecessary module for wrapping it.
+        'ignore_exact': ['_yaml'],
+    },
 ]
 PY_REQUIREMENTS = [
-    'MarkupSafe >= 2.1.3, <2.2',
-    'Jinja2 >= 3.1.2, <3.2',
+    {'package_spec': 'MarkupSafe >= 2.1.3, <2.2', 'from_source': True},
+    {'package_spec': 'Jinja2 >= 3.1.2, <3.2', 'from_source': True},
+    # We can not install PyYAML using sources. Unlike MarkupSafe it requires
+    # Cython to build and Cython must be compiled and there's not clear way past
+    # the requirement in pyyaml's pyproject.toml. Instead, rely on fetching
+    # a platform specific pyyaml wheel and then stripping of the binary shared
+    # object.
+    {
+        'package_spec': 'PyYAML >= 6.0, <6.1',
+        # do not include the stub package for compatibility with
+        # old versions of the extension module. We are going out of our
+        # way to avoid the binary extension module for our zipapp, no
+        # point in pulling this unnecessary module for wrapping it.
+        'ignore_exact': ['_yaml'],
+    },
 ]
 # IMPORTANT to be fully compatible with all the distros ceph is built for we
 # need to work around various old versions of python/pip. As such it's easier
@@ -51,6 +98,47 @@ _VALID_VERS_VARS = [
     "CEPH_RELEASE_NAME",
     "CEPH_RELEASE_TYPE",
 ]
+
+
+class InstallSpec:
+    def __init__(
+        self,
+        package_spec,
+        custom_pip_args=None,
+        unique=False,
+        from_source=False,
+        ignore_suffixes=None,
+        ignore_exact=None,
+        **kwargs,
+    ):
+        self.package_spec = package_spec
+        self.name = package_spec.split()[0]
+        self.custom_pip_args = custom_pip_args or []
+        self.unique = unique
+        self.from_source = from_source
+        self.ignore_suffixes = ignore_suffixes or []
+        self.ignore_exact = ignore_exact or []
+        self.extra = kwargs
+
+    @property
+    def pip_args(self):
+        args = []
+        if self.from_source:
+            args.append("--no-binary")
+            args.append(":all:")
+        return args + self.custom_pip_args
+
+    @property
+    def pip_args_and_package(self):
+        return self.pip_args + [self.package_spec]
+
+    def compatible(self, other):
+        return (
+            other
+            and not self.unique
+            and not other.unique
+            and self.pip_args == other.pip_args
+        )
 
 
 class PipEnv(enum.Enum):
@@ -84,15 +172,13 @@ class Config:
 
     def _setup_pip(self):
         if self._maj_min == (3, 6):
-            self.pip_split = True
-            self.requirements = PY36_REQUIREMENTS
+            self.requirements = [InstallSpec(**v) for v in PY36_REQUIREMENTS]
         else:
-            self.pip_split = False
-            self.requirements = PY_REQUIREMENTS
+            self.requirements = [InstallSpec(**v) for v in PY_REQUIREMENTS]
         self.pip_venv = PipEnv[self.cli_args.pip_use_venv]
 
     def _setup_rpm(self):
-        self.requirements = [s.split()[0] for s in PY_REQUIREMENTS]
+        self.requirements = [InstallSpec(**v) for v in PY_REQUIREMENTS]
 
 
 class DependencyInfo:
@@ -101,7 +187,9 @@ class DependencyInfo:
     def __init__(self, config):
         self._config = config
         self._deps = []
-        self._reqs = {s.split()[0]: s for s in self._config.requirements}
+        self._reqs = {
+            s.name: s.package_spec for s in self._config.requirements
+        }
 
     @property
     def requirements(self):
@@ -120,7 +208,6 @@ class DependencyInfo:
         """Record bundled dependency meta-data to the supplied file."""
         with open(path, 'w') as fh:
             json.dump(self._deps, fh)
-
 
 
 def _run(command, *args, **kwargs):
@@ -154,18 +241,31 @@ def _build(dest, src, config):
     tempdir = pathlib.Path(tempfile.mkdtemp(suffix=".cephadm.build"))
     log.debug("working in %s", tempdir)
     dinfo = None
+    appdir = tempdir / "app"
     try:
         if config.install_dependencies:
-            dinfo = _install_deps(tempdir, config)
+            depsdir = tempdir / "deps"
+            dinfo = _install_deps(depsdir, config)
+            ignore_suffixes = []
+            ignore_exact = []
+            for ispec in config.requirements:
+                ignore_suffixes.extend(ispec.ignore_suffixes)
+                ignore_exact.extend(ispec.ignore_exact)
+            ignorefn = functools.partial(
+                _ignore_cephadmlib,
+                ignore_suffixes=ignore_suffixes,
+                ignore_exact=ignore_exact,
+            )
+            shutil.copytree(depsdir, appdir, ignore=ignorefn)
         log.info("Copying contents")
         # cephadmlib is cephadm's private library of modules
         shutil.copytree(
-            "cephadmlib", tempdir / "cephadmlib", ignore=_ignore_cephadmlib
+            "cephadmlib", appdir / "cephadmlib", ignore=_ignore_cephadmlib
         )
         # cephadm.py is cephadm's main script for the "binary"
         # this must be renamed to __main__.py for the zipapp
-        shutil.copy("cephadm.py", tempdir / "__main__.py")
-        mdir = tempdir / "_cephadmmeta"
+        shutil.copy("cephadm.py", appdir / "__main__.py")
+        mdir = appdir / "_cephadmmeta"
         mdir.mkdir(parents=True, exist_ok=True)
         (mdir / "__init__.py").touch(exist_ok=True)
         versioning_vars = config.cli_args.version_vars
@@ -173,19 +273,25 @@ def _build(dest, src, config):
             generate_version_file(versioning_vars, mdir / "version.py")
         if dinfo:
             dinfo.save(mdir / "deps.json")
-        _compile(dest, tempdir)
+        _compile(dest, appdir)
     finally:
         shutil.rmtree(tempdir)
 
 
-def _ignore_cephadmlib(source_dir, names):
+def _ignore_cephadmlib(
+    source_dir, names, ignore_suffixes=None, ignore_exact=None
+):
     # shutil.copytree callback: return the list of names *to ignore*
+    suffixes = ["~", ".old", ".swp", ".pyc", ".pyo", ".so", "__pycache__"]
+    exact = []
+    if ignore_suffixes:
+        suffixes += ignore_suffixes
+    if ignore_exact:
+        exact += ignore_exact
     return [
         name
         for name in names
-        if name.endswith(
-            ("~", ".old", ".swp", ".pyc", ".pyo", ".so", "__pycache__")
-        )
+        if name.endswith(tuple(suffixes)) or name in exact
     ]
 
 
@@ -259,23 +365,22 @@ def _install_pip_deps(tempdir, config):
         env['PYTHONPATH'] = env['PYTHONPATH'] + f':{tempdir}'
     else:
         env['PYTHONPATH'] = f'{tempdir}'
-    if config.pip_split:
-        # a list of single item lists; so that pip run once for each
-        # requirement
-        req_batches = [[r] for r in config.requirements]
-    else:
-        # a list containing another list of the requirements, so we only
-        # need to run pip once
-        req_batches = [list(config.requirements)]
-    for batch in req_batches:
+
+    pip_args = []
+    prev = None
+    for ispec in config.requirements:
+        if ispec.compatible(prev) and pip_args:
+            pip_args[0].append(ispec.package_spec)
+        else:
+            pip_args.append(ispec.pip_args_and_package)
+        prev = ispec
+    for batch in pip_args:
         _run(
             [
                 executable,
                 "-m",
                 "pip",
                 "install",
-                "--no-binary",
-                ":all:",
                 "--target",
                 tempdir,
             ]
@@ -321,8 +426,8 @@ def _install_rpm_deps(tempdir, config):
     log.info("Installing dependencies using RPMs")
     dinfo = DependencyInfo(config)
     for pkg in config.requirements:
-        log.info(f"Looking for rpm package for: {pkg!r}")
-        _deps_from_rpm(tempdir, config, dinfo, pkg)
+        log.info(f"Looking for rpm package for: {pkg.name!r}")
+        _deps_from_rpm(tempdir, config, dinfo, pkg.name)
     return dinfo
 
 
