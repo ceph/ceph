@@ -55,6 +55,24 @@ def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEnt
         raise OrchestratorError(f"unknown daemon type {daemon_type}")
 
 
+def simplified_keyring(entity: str, contents: str) -> str:
+    # strip down keyring
+    #  - don't include caps (auth get includes them; get-or-create does not)
+    #  - use pending key if present
+    key = None
+    for line in contents.splitlines():
+        if ' = ' not in line:
+            continue
+        line = line.strip()
+        (ls, rs) = line.split(' = ', 1)
+        if ls == 'key' and not key:
+            key = rs
+        if ls == 'pending key':
+            key = rs
+    keyring = f'[{entity}]\nkey = {key}\n'
+    return keyring
+
+
 class CephadmDaemonDeploySpec:
     # typing.NamedTuple + Generic is broken in py36
     def __init__(self, host: str, daemon_id: str,
@@ -307,22 +325,7 @@ class CephadmService(metaclass=ABCMeta):
             })
             if err:
                 raise OrchestratorError(f"Unable to fetch keyring for {entity}: {err}")
-
-        # strip down keyring
-        #  - don't include caps (auth get includes them; get-or-create does not)
-        #  - use pending key if present
-        key = None
-        for line in keyring.splitlines():
-            if ' = ' not in line:
-                continue
-            line = line.strip()
-            (ls, rs) = line.split(' = ', 1)
-            if ls == 'key' and not key:
-                key = rs
-            if ls == 'pending key':
-                key = rs
-        keyring = f'[{entity}]\nkey = {key}\n'
-        return keyring
+        return simplified_keyring(entity, keyring)
 
     def _inventory_get_fqdn(self, hostname: str) -> str:
         """Get a host's FQDN with its hostname.
