@@ -551,8 +551,8 @@ Aio::OpFunc RedisDriver::redis_read_op(optional_yield y, std::shared_ptr<connect
 {
   return [y, conn, read_ofs, read_len, key] (Aio* aio, AioResult& r) mutable {
     using namespace boost::asio;
-    yield_context yield = y.get_yield_context();
-    async_completion<yield_context, void()> init(yield);
+    spawn::yield_context yield = y.get_yield_context();
+    async_completion<spawn::yield_context, void()> init(yield);
     auto ex = get_associated_executor(init.completion_handler);
 
     boost::redis::request req;
