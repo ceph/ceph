@@ -291,6 +291,67 @@ def task(ctx, config):
     assert out['type'] == 'rgw'
     assert out['mfa_ids'] == []
 
+    # TESTCASE 'info-existing','user','info','existing user','returns no keys with users-without-keys cap set to read'
+    (err, out) = rgwadmin(ctx, client, [
+            'caps', 'add',
+            '--uid', admin_user,
+            '--caps', 'users-without-keys=read'
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    assert 'keys' in out
+    assert 'swift_keys' in out
+
+    # TESTCASE 'info-existing','user','info','existing user','returns no keys with users-without-keys cap set to read'
+    (err, out) = rgwadmin(ctx, client, [
+            'caps', 'add',
+            '--uid', admin_user,
+            '--caps', 'users-without-keys=*'
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    assert 'keys' in out
+    assert 'swift_keys' in out
+
+    # TESTCASE 'info-existing','user','info','existing user','returns keys with users-without-keys cap set to write'
+    (err, out) = rgwadmin(ctx, client, [
+            'caps', 'rm',
+            '--uid', admin_user,
+            '--caps', 'users-without-keys=*'
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    (err, out) = rgwadmin(ctx, client, [
+            'caps', 'add',
+            '--uid', admin_user,
+            '--caps', 'users-without-keys=write'
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
+    (ret, out) = rgwadmin_rest(admin_conn, ['user', 'info'], {'uid' : user1})
+    assert len(out['keys']) == 1
+    assert out['swift_keys'] == []
+
+    # remove cap users-without-keys permenantly for future testing
+    (err, out) = rgwadmin(ctx, client, [
+            'caps', 'rm',
+            '--uid', admin_user,
+            '--caps', 'users-without-keys=write'
+            ])
+    logging.error(out)
+    logging.error(err)
+    assert not err
+
     # TESTCASE 'suspend-ok','user','suspend','active user','succeeds'
     (ret, out) = rgwadmin_rest(admin_conn, ['user', 'modify'], {'uid' : user1, 'suspended' : True})
     assert ret == 200

@@ -273,10 +273,12 @@ TBD.
 Get User Info
 =============
 
-Get user information.
+Get user information. Cap ``users`` must be set to ``read`` to run this operation. 
+If additional cap ``users-without-keys`` is set to ``read`` or ``*``, S3 Key and Swift keys will not be
+included in the response unless the user running this operation is the system user.
 
 :caps: users=read
-
+:optional cap: users-without-keys=read
 
 Syntax
 ~~~~~~
@@ -341,12 +343,14 @@ If successful, the response contains the user information.
 ``keys``
 
 :Description: S3 keys associated with this user account.
+              If the optional cap ``users-without-keys`` is set to ``read``, S3 keys are not in the response.
 :Type: Container
 :Parent: ``user``
 
 ``swift_keys``
 
 :Description: Swift keys associated with this user account.
+              If the optional cap ``users-without-keys`` is set to ``read``, Swift keys are not in the response.
 :Type: Container
 :Parent: ``user``
 
