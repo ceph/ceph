@@ -5,11 +5,12 @@ import shlex
 
 from typing import Any, Dict, Union, List, IO, TextIO, Optional, cast
 
+from . import templating
 from .container_engines import Podman
-from .container_types import CephContainer, InitContainer
+from .container_types import CephContainer, InitContainer, SidecarContainer
 from .context import CephadmContext
 from .context_getters import fetch_meta
-from .daemon_identity import DaemonIdentity
+from .daemon_identity import DaemonIdentity, DaemonSubIdentity
 from .file_utils import write_new
 from .net_utils import EndPoint
 
@@ -39,6 +40,7 @@ def write_service_scripts(
     *,
     container: CephContainer,
     init_containers: Optional[List[InitContainer]] = None,
+    sidecars: Optional[List[SidecarContainer]] = None,
     endpoints: Optional[List[EndPoint]] = None,
     pre_start_commands: Optional[List[Command]] = None,
     post_stop_commands: Optional[List[Command]] = None,
@@ -54,6 +56,7 @@ def write_service_scripts(
     post_stop_file_path = data_dir / 'unit.poststop'
     stop_file_path = data_dir / 'unit.stop'
     image_file_path = data_dir / 'unit.image'
+    initctr_file_path = data_dir / 'init_containers.run'
     # use an ExitStack to make writing the files an all-or-nothing affair. If
     # any file fails to write then the write_new'd file will not get renamed
     # into place
@@ -63,11 +66,6 @@ def write_service_scripts(
         runf.write('set -e\n')
         for command in pre_start_commands or []:
             _write_command(ctx, runf, command)
-        init_containers = init_containers or []
-        if init_containers:
-            _write_init_container_cmds_clean(ctx, runf, init_containers[0])
-        for idx, ic in enumerate(init_containers):
-            _write_init_container_cmds(ctx, runf, idx, ic)
         _write_container_cmd_to_bash(ctx, runf, container, ident.daemon_name)
 
         # some metadata about the deploy
@@ -89,6 +87,23 @@ def write_service_scripts(
             else:
                 meta['ports'] = []
         metaf.write(json.dumps(meta, indent=4) + '\n')
+
+        # init-container commands
+        if init_containers:
+            initf = estack.enter_context(write_new(initctr_file_path))
+            _write_init_containers_script(ctx, initf, init_containers)
+
+        # sidecar container scripts
+        for sidecar in sidecars or []:
+            assert isinstance(sidecar.identity, DaemonSubIdentity)
+            script_path = sidecar.identity.sidecar_script(ctx.data_dir)
+            scsf = estack.enter_context(write_new(script_path))
+            _write_sidecar_script(
+                ctx,
+                scsf,
+                sidecar,
+                f'sidecar: {sidecar.identity.subcomponent}',
+            )
 
         # post-stop command(s)
         pstopf = estack.enter_context(write_new(post_stop_file_path))
@@ -146,44 +161,6 @@ def _write_container_cmd_to_bash(
     _bash_cmd(file_obj, container.run_cmd(), background=bool(background))
 
 
-def _write_init_container_cmds(
-    ctx: CephadmContext,
-    file_obj: IO[str],
-    index: int,
-    init_container: 'InitContainer',
-) -> None:
-    file_obj.write(f'# init container {index}: {init_container.cname}\n')
-    _bash_cmd(file_obj, init_container.run_cmd())
-    _write_init_container_cmds_clean(
-        ctx, file_obj, init_container, comment=''
-    )
-
-
-def _write_init_container_cmds_clean(
-    ctx: CephadmContext,
-    file_obj: IO[str],
-    init_container: 'InitContainer',
-    comment: str = 'init container cleanup',
-) -> None:
-    if comment:
-        assert '\n' not in comment
-        file_obj.write(f'# {comment}\n')
-    _bash_cmd(
-        file_obj,
-        init_container.rm_cmd(),
-        check=False,
-        stderr=False,
-    )
-    # Sometimes, `podman rm` doesn't find the container. Then you'll have to add `--storage`
-    if isinstance(ctx.container_engine, Podman):
-        _bash_cmd(
-            file_obj,
-            init_container.rm_cmd(storage=True),
-            check=False,
-            stderr=False,
-        )
-
-
 def _write_stop_actions(
     ctx: CephadmContext,
     f: TextIO,
@@ -199,6 +176,40 @@ def _write_stop_actions(
     )
     f.write(
         f'! {container_exists % container.cname} || {" ".join(container.stop_cmd(timeout=timeout))} \n'
+    )
+
+
+def _write_init_containers_script(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    init_containers: List[InitContainer],
+    comment: str = 'start and stop init containers',
+) -> None:
+    has_podman_engine = isinstance(ctx.container_engine, Podman)
+    templating.render_to_file(
+        file_obj,
+        ctx,
+        templating.Templates.init_ctr_run,
+        init_containers=init_containers,
+        comment=comment,
+        has_podman_engine=has_podman_engine,
+    )
+
+
+def _write_sidecar_script(
+    ctx: CephadmContext,
+    file_obj: IO[str],
+    sidecar: SidecarContainer,
+    comment: str = '',
+) -> None:
+    has_podman_engine = isinstance(ctx.container_engine, Podman)
+    templating.render_to_file(
+        file_obj,
+        ctx,
+        templating.Templates.sidecar_run,
+        sidecar=sidecar,
+        comment=comment,
+        has_podman_engine=has_podman_engine,
     )
 
 

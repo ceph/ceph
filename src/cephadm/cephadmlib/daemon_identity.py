@@ -1,12 +1,21 @@
 # deamon_identity.py - classes for identifying daemons & services
 
+import enum
 import os
 import pathlib
 import re
 
-from typing import Union
+from typing import Union, Optional, Tuple
 
 from .context import CephadmContext
+
+
+class Categories(str, enum.Enum):
+    SIDECAR = 'sidecar'
+    INIT = 'init'
+
+    def __str__(self) -> str:
+        return self.value
 
 
 class DaemonIdentity:
@@ -48,12 +57,45 @@ class DaemonIdentity:
         name = f'ceph-{self.fsid}-{self.daemon_type}-{self.daemon_id}'
         return name.replace('.', '-')
 
+    def _systemd_name(
+        self,
+        *,
+        framework: str = 'ceph',
+        category: str = '',
+        suffix: str = '',
+        extension: str = '',
+    ) -> str:
+        if category:
+            # validate the category value
+            category = Categories(category)
+        template_terms = [framework, self.fsid, category]
+        instance_terms = [self.daemon_type]
+        instance_terms.append(
+            f'{self.daemon_id}:{suffix}' if suffix else self.daemon_id
+        )
+        instance_terms.append(extension)
+        # use a comprehension to filter out terms that are blank
+        base = '-'.join(v for v in template_terms if v)
+        svc = '.'.join(v for v in instance_terms if v)
+        return f'{base}@{svc}'
+
     @property
     def unit_name(self) -> str:
-        return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}'
+        return self._systemd_name()
+
+    @property
+    def service_name(self) -> str:
+        return self._systemd_name(extension='service')
+
+    @property
+    def init_service_name(self) -> str:
+        # all init contaienrs are run as a single systemd service
+        return self._systemd_name(category='init', extension='service')
 
     def data_dir(self, base_data_dir: Union[str, os.PathLike]) -> str:
-        return str(pathlib.Path(base_data_dir) / self.fsid / self.daemon_name)
+        # do not use self.daemon_name as that may be overridden in subclasses
+        dn = f'{self.daemon_type}.{self.daemon_id}'
+        return str(pathlib.Path(base_data_dir) / self.fsid / dn)
 
     @classmethod
     def from_name(cls, fsid: str, name: str) -> 'DaemonIdentity':
@@ -99,7 +141,24 @@ class DaemonSubIdentity(DaemonIdentity):
         # of the same unit as the primary. However, to fix a bug with iscsi
         # this is a quick and dirty workaround for distinguishing the two types
         # when generating --cidfile and --conmon-pidfile values.
-        return f'ceph-{self.fsid}@{self.daemon_type}.{self.daemon_id}.{self.subcomponent}'
+        return self._systemd_name(suffix=self.subcomponent)
+
+    @property
+    def service_name(self) -> str:
+        # use the parent's service_name to get the service. sub-identities
+        # must use other specific methods (like sidecar_service_name) for
+        # sub-identity based services
+        raise ValueError('called service_name on DaemonSubIdentity')
+
+    @property
+    def sidecar_service_name(self) -> str:
+        return self._systemd_name(
+            category='sidecar', suffix=self.subcomponent, extension='service'
+        )
+
+    def sidecar_script(self, base_data_dir: Union[str, os.PathLike]) -> str:
+        sname = f'sidecar-{ self.subcomponent }.run'
+        return str(pathlib.Path(self.data_dir(base_data_dir)) / sname)
 
     @property
     def legacy_container_name(self) -> str:
@@ -117,3 +176,56 @@ class DaemonSubIdentity(DaemonIdentity):
             parent.daemon_id,
             subcomponent,
         )
+
+    @classmethod
+    def from_service_name(
+        cls, service_name: str
+    ) -> Tuple['DaemonSubIdentity', str]:
+        """Return a DaemonSubIdentity and category value by parsing the
+        contents of a systemd service name for a sidecar container.
+        """
+        # ceph services always have the template@instance form
+        tpart, ipart = service_name.split('@', 1)
+        # drop the .service if it exists
+        if ipart.endswith('.service'):
+            ipart = ipart[:-8]
+        # verify the service name starts with 'ceph' -- our framework
+        framework, tpart = tpart.split('-', 1)
+        if framework != 'ceph':
+            raise ValueError(f'Invalid framework value: {service_name}')
+        # we're parsing only services for subcomponents. it must take the
+        # form <FSID>-<CATEGORY>. Where categories are sidecar or init.
+        fsid, category = tpart.rsplit('-', 1)
+        try:
+            Categories(category)
+        except ValueError:
+            raise ValueError(f'Invalid service category: {service_name}')
+        # if it is a sidecar it will have a subcomponent name following a colon
+        svcparts = ipart.split(':')
+        if len(svcparts) == 1:
+            subc = ''
+        elif len(svcparts) == 2:
+            subc = svcparts[1]
+        else:
+            raise ValueError(f'Unexpected instance value: {ipart}')
+        # only services based on sidecars currently have named subcomponents
+        # init subcomponents are all "hidden" within a single init service
+        if subc and not category == Categories.SIDECAR:
+            raise ValueError(
+                f'Unexpected subcomponent {subc!r} for category {category}'
+            )
+        elif not subc:
+            # because we return a DaemonSubIdentity we need some value for
+            # the subcomponent on init services. Just repeat the category
+            subc = str(category)
+        daemon_type, daemon_id = svcparts[0].split('.', 1)
+        return cls(fsid, daemon_type, daemon_id, subc), category
+
+    @classmethod
+    def must(cls, value: Optional[DaemonIdentity]) -> 'DaemonSubIdentity':
+        """Helper to assert value is of the correct type.  Mostly to make mypy
+        happy.
+        """
+        if not isinstance(value, cls):
+            raise TypeError(f'{value!r} is not a {cls}')
+        return value

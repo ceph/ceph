@@ -1,8 +1,9 @@
 # container_types.py - container instance wrapper types
 
+import copy
 import os
 
-from typing import Dict, List, Optional, Any, Union, Tuple
+from typing import Dict, List, Optional, Any, Union, Tuple, cast
 
 from .call_wrappers import call, call_throws, CallVerbosity
 from .constants import DEFAULT_TIMEOUT
@@ -70,9 +71,8 @@ class BasicContainer:
         assert self.identity
         return self.identity.container_name
 
-    def build_run_cmd(self) -> List[str]:
-        cmd_args: List[str] = [self._container_engine]
-        cmd_args.append('run')
+    def build_engine_run_args(self) -> List[str]:
+        cmd_args: List[str] = []
         if self.remove:
             cmd_args.append('--rm')
         if self.ipc:
@@ -153,8 +153,14 @@ class BasicContainer:
             + envs
             + vols
             + binds
+        )
+
+    def build_run_cmd(self) -> List[str]:
+        return (
+            [self._container_engine, 'run']
+            + self.build_engine_run_args()
             + [self.image]
-            + self.args
+            + list(self.args)
         )
 
     def build_rm_cmd(
@@ -178,6 +184,33 @@ class BasicContainer:
             cmd.extend(('-t', str(timeout)))
         cmd.append(cname or self.cname)
         return cmd
+
+    @classmethod
+    def from_container(
+        cls,
+        other: 'BasicContainer',
+        *,
+        ident: Optional[DaemonIdentity] = None
+    ) -> 'BasicContainer':
+        return cls(
+            other.ctx,
+            image=other.image,
+            entrypoint=other.entrypoint,
+            identity=(ident or other.identity),
+            args=other.args,
+            container_args=copy.copy(other.container_args),
+            envs=copy.copy(other.envs),
+            volume_mounts=copy.copy(other.volume_mounts),
+            bind_mounts=copy.copy(other.bind_mounts),
+            network=other.network,
+            ipc=other.ipc,
+            init=other.init,
+            ptrace=other.ptrace,
+            privileged=other.privileged,
+            remove=other.remove,
+            memory_request=other.memory_request,
+            memory_limit=other.memory_limit,
+        )
 
 
 class CephContainer(BasicContainer):
@@ -458,6 +491,63 @@ class InitContainer(BasicContainer):
 
     def rm_cmd(self, storage: bool = False) -> List[str]:
         return self.build_rm_cmd(storage=storage)
+
+    def stop_cmd(self, timeout: Optional[int] = None) -> List[str]:
+        return self.build_stop_cmd(timeout=timeout)
+
+
+class SidecarContainer(BasicContainer):
+    @classmethod
+    def from_primary_and_values(
+        cls,
+        ctx: CephadmContext,
+        primary: BasicContainer,
+        sidecar_name: str,
+        *,
+        image: str = '',
+        entrypoint: str = '',
+        args: Optional[List[str]] = None,
+        init: Optional[bool] = None,
+    ) -> 'SidecarContainer':
+        assert primary.identity
+        identity = DaemonSubIdentity.from_parent(
+            primary.identity, sidecar_name
+        )
+        ctr = cast(
+            SidecarContainer, cls.from_container(primary, ident=identity)
+        )
+        ctr.remove = True
+        if image:
+            ctr.image = image
+        if entrypoint:
+            ctr.entrypoint = entrypoint
+        if args:
+            ctr.args = args
+        if init is not None:
+            ctr.init = init
+        return ctr
+
+    def build_engine_run_args(self) -> List[str]:
+        assert isinstance(self.identity, DaemonSubIdentity)
+        cmd_args = super().build_engine_run_args()
+        if self._using_podman:
+            # sidecar containers are always services, otherwise they
+            # would not be sidecars
+            cmd_args += self.ctx.container_engine.service_args(
+                self.ctx, self.identity.sidecar_service_name
+            )
+        return cmd_args
+
+    def run_cmd(self) -> List[str]:
+        if not (self.envs and self.envs[0].startswith('NODE_NAME=')):
+            self.envs.insert(0, 'NODE_NAME=%s' % get_hostname())
+        return self.build_run_cmd()
+
+    def rm_cmd(self, storage: bool = False) -> List[str]:
+        return self.build_rm_cmd(storage=storage)
+
+    def stop_cmd(self, timeout: Optional[int] = None) -> List[str]:
+        return self.build_stop_cmd(timeout=timeout)
 
 
 def is_container_running(ctx: CephadmContext, c: 'CephContainer') -> bool:

@@ -105,6 +105,7 @@ from cephadmlib.file_utils import (
     read_file,
     recursive_chown,
     touch,
+    unlink_file,
     write_new,
     write_tmp,
 )
@@ -125,21 +126,22 @@ from cephadmlib.net_utils import (
     wrap_ipv6,
 )
 from cephadmlib.locking import FileLock
-from cephadmlib.daemon_identity import DaemonIdentity
+from cephadmlib.daemon_identity import DaemonIdentity, DaemonSubIdentity
 from cephadmlib.packagers import create_packager, Packager
 from cephadmlib.logging import (
     cephadm_init_logging,
     Highlight,
     LogDestination,
 )
-from cephadmlib.systemd import check_unit, check_units
+from cephadmlib.systemd import check_unit, check_units, terminate_service
 from cephadmlib import systemd_unit
 from cephadmlib import runscripts
 from cephadmlib.container_types import (
     CephContainer,
     InitContainer,
-    is_container_running,
+    SidecarContainer,
     extract_uid_gid,
+    is_container_running,
 )
 from cephadmlib.decorators import (
     deprecated_command,
@@ -658,7 +660,7 @@ def get_unit_name(
     return DaemonIdentity(fsid, daemon_type, daemon_id).unit_name
 
 
-def get_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
+def lookup_unit_name_by_daemon_name(ctx: CephadmContext, fsid: str, name: str) -> str:
     daemon = get_daemon_description(ctx, fsid, name)
     try:
         return daemon['systemd_unit']
@@ -930,9 +932,8 @@ def _update_container_args_for_podman(
 ) -> None:
     if not isinstance(ctx.container_engine, Podman):
         return
-    service_name = f'{ident.unit_name}.service'
     container_args.extend(
-        ctx.container_engine.service_args(ctx, service_name)
+        ctx.container_engine.service_args(ctx, ident.service_name)
     )
 
 
@@ -948,6 +949,7 @@ def deploy_daemon(
     deployment_type: DeploymentType = DeploymentType.DEFAULT,
     endpoints: Optional[List[EndPoint]] = None,
     init_containers: Optional[List['InitContainer']] = None,
+    sidecars: Optional[List[SidecarContainer]] = None,
 ) -> None:
     endpoints = endpoints or []
     daemon_type = ident.daemon_type
@@ -1027,6 +1029,7 @@ def deploy_daemon(
                     osd_fsid=osd_fsid,
                     endpoints=endpoints,
                     init_containers=init_containers,
+                    sidecars=sidecars,
                 )
             else:
                 raise RuntimeError('attempting to deploy a daemon without a container image')
@@ -1091,7 +1094,8 @@ def deploy_daemon_units(
     start: bool = True,
     osd_fsid: Optional[str] = None,
     endpoints: Optional[List[EndPoint]] = None,
-    init_containers: Optional[List['InitContainer']] = None,
+    init_containers: Optional[List[InitContainer]] = None,
+    sidecars: Optional[List[SidecarContainer]] = None,
 ) -> None:
     data_dir = ident.data_dir(ctx.data_dir)
     pre_start_commands: List[runscripts.Command] = []
@@ -1109,14 +1113,19 @@ def deploy_daemon_units(
             _osd_unit_poststop_commands(ctx, ident, osd_fsid)
         )
     if ident.daemon_type == CephIscsi.daemon_type:
-        pre_start_commands.extend(_iscsi_unit_run_commands(ctx, ident, data_dir))
-        post_stop_commands.extend(_iscsi_unit_poststop_commands(ctx, ident, data_dir))
+        pre_start_commands.append(
+            CephIscsi.configfs_mount_umount(data_dir, mount=True)
+        )
+        post_stop_commands.append(
+            CephIscsi.configfs_mount_umount(data_dir, mount=False)
+        )
 
     runscripts.write_service_scripts(
         ctx,
         ident,
         container=container,
         init_containers=init_containers,
+        sidecars=sidecars,
         endpoints=endpoints,
         pre_start_commands=pre_start_commands,
         post_stop_commands=post_stop_commands,
@@ -1127,7 +1136,15 @@ def deploy_daemon_units(
     install_sysctl(ctx, ident.fsid, daemon_form_create(ctx, ident))
 
     # systemd
-    systemd_unit.update_files(ctx, ident)
+    ic_ids = [
+        DaemonSubIdentity.must(ic.identity) for ic in init_containers or []
+    ]
+    sc_ids = [
+        DaemonSubIdentity.must(sc.identity) for sc in sidecars or []
+    ]
+    systemd_unit.update_files(
+        ctx, ident, init_container_ids=ic_ids, sidecar_ids=sc_ids
+    )
     call_throws(ctx, ['systemctl', 'daemon-reload'])
 
     unit_name = get_unit_name(ident.fsid, ident.daemon_type, ident.daemon_id)
@@ -1202,17 +1219,6 @@ def _osd_unit_run_commands(
     return cmds
 
 
-def _iscsi_unit_run_commands(
-    ctx: CephadmContext, ident: 'DaemonIdentity', data_dir: str
-) -> List[runscripts.Command]:
-    cmds: List[runscripts.Command] = []
-    cmds.append(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=True)) + '\n')
-    ceph_iscsi = CephIscsi.init(ctx, ident.fsid, ident.daemon_id)
-    tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-    cmds.append(runscripts.ContainerCommand(tcmu_container, comment='iscsi tcmu-runner container', background=True))
-    return cmds
-
-
 def _osd_unit_poststop_commands(
     ctx: CephadmContext, ident: 'DaemonIdentity', osd_fsid: str
 ) -> List[runscripts.Command]:
@@ -1228,20 +1234,6 @@ def _osd_unit_poststop_commands(
     )
     return [runscripts.ContainerCommand(poststop, comment='deactivate osd')]
 
-
-def _iscsi_unit_poststop_commands(
-    ctx: CephadmContext, ident: 'DaemonIdentity', data_dir: str
-) -> List[runscripts.Command]:
-    # make sure we also stop the tcmu container
-    cmds: List[runscripts.Command] = []
-    runtime_dir = '/run'
-    ceph_iscsi = CephIscsi.init(ctx, ident.fsid, ident.daemon_id)
-    tcmu_container = ceph_iscsi.get_tcmu_runner_container()
-    cmds.append('! ' + ' '.join(tcmu_container.stop_cmd()) + '\n')
-    cmds.append('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-pid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
-    cmds.append('! ' + 'rm ' + runtime_dir + '/ceph-%s@%s.%s.service-cid' % (ident.fsid, ident.daemon_type, ident.daemon_id + '.tcmu') + '\n')
-    cmds.append(' '.join(CephIscsi.configfs_mount_umount(data_dir, mount=False)) + '\n')
-    return cmds
 
 ##################################
 
@@ -1394,19 +1386,19 @@ class CephadmAgent(DaemonForm):
         with write_new(meta_file_path) as f:
             f.write(json.dumps(meta, indent=4) + '\n')
 
-        unit_file_path = os.path.join(self.ctx.unit_dir, self.unit_name())
+        unit_file_path = os.path.join(self.ctx.unit_dir, self._service_name())
         with write_new(unit_file_path) as f:
             f.write(self.unit_file())
 
         call_throws(self.ctx, ['systemctl', 'daemon-reload'])
-        call(self.ctx, ['systemctl', 'stop', self.unit_name()],
+        call(self.ctx, ['systemctl', 'stop', self._service_name()],
              verbosity=CallVerbosity.DEBUG)
-        call(self.ctx, ['systemctl', 'reset-failed', self.unit_name()],
+        call(self.ctx, ['systemctl', 'reset-failed', self._service_name()],
              verbosity=CallVerbosity.DEBUG)
-        call_throws(self.ctx, ['systemctl', 'enable', '--now', self.unit_name()])
+        call_throws(self.ctx, ['systemctl', 'enable', '--now', self._service_name()])
 
-    def unit_name(self) -> str:
-        return '{}.service'.format(get_unit_name(self.fsid, self.daemon_type, self.daemon_id))
+    def _service_name(self) -> str:
+        return self.identity.service_name
 
     def unit_run(self) -> str:
         py3 = shutil.which('python3')
@@ -3078,6 +3070,7 @@ def _deploy_daemon_container(
     daemon.customize_container_endpoints(daemon_endpoints, deployment_type)
     ctr = daemon.container(ctx)
     ics = daemon.init_containers(ctx)
+    sccs = daemon.sidecar_containers(ctx)
     config, keyring = daemon.config_and_keyring(ctx)
     uid, gid = daemon.uid_gid(ctx)
     deploy_daemon(
@@ -3092,6 +3085,7 @@ def _deploy_daemon_container(
         endpoints=daemon_endpoints,
         osd_fsid=daemon.osd_fsid,
         init_containers=ics,
+        sidecars=sccs,
     )
 
 ##################################
@@ -3313,7 +3307,7 @@ def command_unit(ctx):
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
+    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
     _, _, code = call(
         ctx,
@@ -3332,7 +3326,7 @@ def command_logs(ctx):
     if not ctx.fsid:
         raise Error('must pass --fsid to specify cluster')
 
-    unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
+    unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
     cmd = [find_program('journalctl')]
     cmd.extend(['-u', unit_name])
@@ -4143,40 +4137,59 @@ def command_rm_daemon(ctx):
     lock = FileLock(ctx, ctx.fsid)
     lock.acquire()
 
-    (daemon_type, daemon_id) = ctx.name.split('.', 1)
-    unit_name = get_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
+    ident = DaemonIdentity.from_context(ctx)
+    try:
+        # attempt a fast-path conversion that maps the fsid+name to
+        # the systemd service name, verifying that there is such a service
+        call_throws(ctx, ['systemctl', 'status', ident.service_name])
+        unit_name = ident.service_name
+    except RuntimeError:
+        # fall back to looking up all possible services that might match
+        # (JJM) Preserved this operation in case theres some backwards compat
+        # issues where the DaemonIdentity derived name is not correct.
+        unit_name = lookup_unit_name_by_daemon_name(ctx, ctx.fsid, ctx.name)
 
-    if daemon_type in ['mon', 'osd'] and not ctx.force:
+    if ident.daemon_type in ['mon', 'osd'] and not ctx.force:
         raise Error('must pass --force to proceed: '
                     'this command may destroy precious data!')
 
-    call(ctx, ['systemctl', 'stop', unit_name],
-         verbosity=CallVerbosity.DEBUG)
-    call(ctx, ['systemctl', 'reset-failed', unit_name],
-         verbosity=CallVerbosity.DEBUG)
-    call(ctx, ['systemctl', 'disable', unit_name],
-         verbosity=CallVerbosity.DEBUG)
+    terminate_service(ctx, unit_name)
+
+    # clean up any extra systemd unit files
+    sd_path_info = systemd_unit.sidecars_from_dropin(
+        systemd_unit.PathInfo(ctx.unit_dir, ident), missing_ok=True
+    )
+    for sc_unit in sd_path_info.sidecar_unit_files.values():
+        terminate_service(ctx, sc_unit.name)
+        unlink_file(sc_unit, missing_ok=True)
+    terminate_service(ctx, sd_path_info.init_ctr_unit_file.name)
+    unlink_file(sd_path_info.init_ctr_unit_file, missing_ok=True)
+    unlink_file(sd_path_info.drop_in_file, missing_ok=True)
+    try:
+        sd_path_info.drop_in_file.parent.rmdir()
+    except OSError:
+        pass
 
     # force remove rgw admin socket file if leftover
-    if daemon_type in ['rgw']:
+    if ident.daemon_type in ['rgw']:
         rgw_asok_path = f'/var/run/ceph/{ctx.fsid}/ceph-client.{ctx.name}.*.asok'
         call(ctx, ['rm', '-rf', rgw_asok_path],
              verbosity=CallVerbosity.DEBUG)
 
-    ident = DaemonIdentity(ctx.fsid, daemon_type, daemon_id)
     data_dir = ident.data_dir(ctx.data_dir)
-    if daemon_type in ['mon', 'osd', 'prometheus'] and \
+    if ident.daemon_type in ['mon', 'osd', 'prometheus'] and \
        not ctx.force_delete_data:
         # rename it out of the way -- do not delete
         backup_dir = os.path.join(ctx.data_dir, ctx.fsid, 'removed')
         if not os.path.exists(backup_dir):
             makedirs(backup_dir, 0, 0, DATA_DIR_MODE)
-        dirname = '%s.%s_%s' % (daemon_type, daemon_id,
-                                datetime.datetime.utcnow().strftime(DATEFMT))
+        dirname = '%s_%s' % (
+            ident.daemon_name, datetime.datetime.utcnow().strftime(DATEFMT)
+        )
         os.rename(data_dir,
                   os.path.join(backup_dir, dirname))
     else:
-        call_throws(ctx, ['rm', '-rf', data_dir])
+        shutil.rmtree(data_dir, ignore_errors=True)
 
     endpoints = fetch_endpoints(ctx)
     ports: List[int] = [e.port for e in endpoints]
@@ -4269,27 +4282,29 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
     if not ctx.fsid:
         raise Error('must select the cluster to delete by passing --fsid to proceed')
 
-    def disable_systemd_service(unit_name: str) -> None:
-        call(ctx, ['systemctl', 'stop', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(ctx, ['systemctl', 'reset-failed', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-        call(ctx, ['systemctl', 'disable', unit_name],
-             verbosity=CallVerbosity.DEBUG)
-
     logger.info(f'Deleting cluster with fsid: {ctx.fsid}')
 
     # stop + disable individual daemon units
+    sd_paths = []
     for d in list_daemons(ctx, detail=False):
         if d['fsid'] != ctx.fsid:
             continue
         if d['style'] != 'cephadm:v1':
             continue
-        disable_systemd_service('ceph-%s@%s' % (ctx.fsid, d['name']))
+        terminate_service(ctx, 'ceph-%s@%s' % (ctx.fsid, d['name']))
+        # terminate sidecar & other supplemental services
+        ident = DaemonIdentity.from_name(ctx.fsid, d['name'])
+        sd_path_info = systemd_unit.sidecars_from_dropin(
+            systemd_unit.PathInfo(ctx.unit_dir, ident), missing_ok=True
+        )
+        for sc_unit in sd_path_info.sidecar_unit_files.values():
+            terminate_service(ctx, sc_unit.name)
+        terminate_service(ctx, sd_path_info.init_ctr_unit_file.name)
+        sd_paths.append(sd_path_info)
 
     # cluster units
     for unit_name in ['ceph-%s.target' % ctx.fsid]:
-        disable_systemd_service(unit_name)
+        terminate_service(ctx, unit_name)
 
     slice_name = 'system-ceph\\x2d{}.slice'.format(ctx.fsid.replace('-', '\\x2d'))
     call(ctx, ['systemctl', 'stop', slice_name],
@@ -4300,34 +4315,41 @@ def _rm_cluster(ctx: CephadmContext, keep_logs: bool, zap_osds: bool) -> None:
         _zap_osds(ctx)
 
     # rm units
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir
-                      + '/ceph-%s@.service' % ctx.fsid])
-    call_throws(ctx, ['rm', '-f', ctx.unit_dir
-                      + '/ceph-%s.target' % ctx.fsid])
-    call_throws(ctx, ['rm', '-rf',
-                      ctx.unit_dir + '/ceph-%s.target.wants' % ctx.fsid])
+    for sd_path_info in sd_paths:
+        for sc_unit in sd_path_info.sidecar_unit_files.values():
+            unlink_file(sc_unit, missing_ok=True)
+        unlink_file(sd_path_info.init_ctr_unit_file, missing_ok=True)
+        shutil.rmtree(sd_path_info.drop_in_file.parent, ignore_errors=True)
+    unit_dir = Path(ctx.unit_dir)
+    unlink_file(unit_dir / f'ceph-{ctx.fsid}@.service', missing_ok=True)
+    unlink_file(unit_dir / f'ceph-{ctx.fsid}.target', missing_ok=True)
+    shutil.rmtree(unit_dir / f'ceph-{ctx.fsid}.target.wants', ignore_errors=True)
+
     # rm data
-    call_throws(ctx, ['rm', '-rf', ctx.data_dir + '/' + ctx.fsid])
+    shutil.rmtree(Path(ctx.data_dir) / ctx.fsid, ignore_errors=True)
 
     if not keep_logs:
         # rm logs
-        call_throws(ctx, ['rm', '-rf', ctx.log_dir + '/' + ctx.fsid])
-        call_throws(ctx, ['rm', '-rf', ctx.log_dir
-                          + '/*.wants/ceph-%s@*' % ctx.fsid])
+        shutil.rmtree(Path(ctx.log_dir) / ctx.fsid, ignore_errors=True)
 
     # rm logrotate config
-    call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/ceph-%s' % ctx.fsid])
+    unlink_file(
+        Path(ctx.logrotate_dir) / ('ceph-%s' % ctx.fsid), ignore_errors=True
+    )
 
     # if last cluster on host remove shared files
     if get_ceph_cluster_count(ctx) == 0:
-        disable_systemd_service('ceph.target')
+        terminate_service(ctx, 'ceph.target')
 
         # rm shared ceph target files
-        call_throws(ctx, ['rm', '-f', ctx.unit_dir + '/multi-user.target.wants/ceph.target'])
-        call_throws(ctx, ['rm', '-f', ctx.unit_dir + '/ceph.target'])
+        unlink_file(
+            Path(ctx.unit_dir) / 'multi-user.target.wants/ceph.target',
+            ignore_errors=True
+        )
+        unlink_file(Path(ctx.unit_dir) / 'ceph.target', ignore_errors=True)
 
         # rm cephadm logrotate config
-        call_throws(ctx, ['rm', '-f', ctx.logrotate_dir + '/cephadm'])
+        unlink_file(Path(ctx.logrotate_dir) / 'cephadm', ignore_errors=True)
 
         if not keep_logs:
             # remove all cephadm logs
