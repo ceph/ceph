@@ -2354,6 +2354,9 @@ private:
     bool apply_defer();
   };
 
+  class Writer;
+  friend class Writer;
+
   // --------------------------------------------------------
   // members
 private:
