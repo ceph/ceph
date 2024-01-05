@@ -684,7 +684,7 @@ inline std::ostream& operator<<(std::ostream& out, const mon_feature_t& f) {
 struct ProgressEvent {
   std::string message;                  ///< event description
   float progress = 0.0f;                  ///< [0..1]
-  bool add_to_ceph_s;
+  bool add_to_ceph_s = false;
   void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
     encode(message, bl);
