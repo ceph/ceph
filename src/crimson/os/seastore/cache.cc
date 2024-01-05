@@ -1839,7 +1839,7 @@ Cache::replay_delta(
 	      journal_seq, record_base, delta);
 	assert(delta.pversion > 0);
 	return replay_delta_ertr::make_ready_future<std::pair<bool, CachedExtentRef>>(
-	  std::make_pair(true, nullptr));
+	  std::make_pair(false, nullptr));
       }
 
       DEBUG("replay extent delta at {} {} ... -- {}, prv_extent={}",
