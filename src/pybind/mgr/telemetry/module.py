@@ -71,6 +71,7 @@ class Collection(str, enum.Enum):
     basic_rook_v01 = 'basic_rook_v01'
     perf_memory_metrics = 'perf_memory_metrics'
     basic_pool_options_bluestore = 'basic_pool_options_bluestore'
+    basic_pool_flags = 'basic_pool_flags'
 
 MODULE_COLLECTION : List[Dict] = [
     {
@@ -136,6 +137,12 @@ MODULE_COLLECTION : List[Dict] = [
     {
         "name": Collection.basic_pool_options_bluestore,
         "description": "Per-pool bluestore config options",
+        "channel": "basic",
+        "nag": False
+    },
+    {
+        "name": Collection.basic_pool_flags,
+        "description": "Per-pool flags",
         "channel": "basic",
         "nag": False
     },
@@ -1109,7 +1116,37 @@ class Module(MgrModule):
                         for option in bluestore_options:
                             if option in pool['options']:
                                 pool_data['options'][option] = pool['options'][option]
+
+                # basic_pool_flags collection
+                if self.is_enabled_collection(Collection.basic_pool_flags):
+                    if 'flags_names' in pool and pool['flags_names'] is not None:
+                        # flags are defined in pg_pool_t (src/osd/osd_types.h)
+                        flags_to_report = [
+                            'hashpspool',
+                            'full',
+                            'ec_overwrites',
+                            'incomplete_clones',
+                            'nodelete',
+                            'nopgchange',
+                            'nosizechange',
+                            'write_fadvise_dontneed',
+                            'noscrub',
+                            'nodeep-scrub',
+                            'full_quota',
+                            'nearfull',
+                            'backfillfull',
+                            'selfmanaged_snaps',
+                            'pool_snaps',
+                            'creating',
+                            'eio',
+                            'bulk',
+                            'crimson',
+                            ]
+
+                        pool_data['flags_names'] = [flag for flag in pool['flags_names'].split(',') if flag in flags_to_report]
+
                 cast(List[Dict[str, Any]], report['pools']).append(pool_data)
+
                 if 'rbd' in pool['application_metadata']:
                     rbd_num_pools += 1
                     ioctx = self.rados.open_ioctx(pool['pool_name'])
