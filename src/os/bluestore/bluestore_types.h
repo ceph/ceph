@@ -388,6 +388,10 @@ struct bluestore_blob_use_tracker_t {
     uint32_t full_length,
     uint32_t _au_size);
 
+  inline void init_and_ref(
+    uint32_t full_length,
+    uint32_t tracked_chunk);
+
   void get(
     uint32_t offset,
     uint32_t len);
@@ -741,7 +745,14 @@ public:
       }
     }
   }
-
+  /// todo implement me!
+  unused_t get_unused_mask(uint32_t offset, uint32_t length, uint32_t chunk_size) {
+    if (has_unused()) {
+      return 0;
+    } else {
+      return 0;
+    }
+  }
   // map_f_invoke templates intended to mask parameters which are not expected
   // by the provided callback
   template<class F, typename std::enable_if<std::is_invocable_r_v<
@@ -970,7 +981,24 @@ public:
 
   void split(uint32_t blob_offset, bluestore_blob_t& rb);
   void allocated(uint32_t b_off, uint32_t length, const PExtentVector& allocs);
+  void allocated_full(uint32_t length, PExtentVector&& allocs);
   void allocated_test(const bluestore_pextent_t& alloc); // intended for UT only
+  static constexpr uint64_t NO_ALLOCATION = std::numeric_limits<uint64_t>::max();
+  uint64_t get_allocation_at(uint32_t in_blob_offset) {
+    uint32_t loc = in_blob_offset;
+    for (auto e : extents) {
+      if (loc < e.length) {
+        //ceph_assert(e.is_valid());
+        if (e.is_valid()) {
+          return e.offset + loc;
+        } else {
+          return NO_ALLOCATION;
+        }
+      }
+      loc -= e.length;
+    }
+    ceph_assert(false);
+  };
 
   /// updates blob's pextents container and return unused pextents eligible
   /// for release.
