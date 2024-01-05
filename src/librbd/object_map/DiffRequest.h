@@ -72,6 +72,9 @@ private:
 
   bool is_diff_iterate() const;
 
+  int prepare_for_object_map();
+  int process_object_map(const BitVector<2>& object_map);
+
   void load_object_map(std::shared_lock<ceph::shared_mutex>* image_locker);
   void handle_load_object_map(int r);
 
