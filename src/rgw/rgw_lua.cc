@@ -15,45 +15,6 @@
 
 namespace rgw::lua {
 
-context to_context(const std::string& s) 
-{
-  if (strcasecmp(s.c_str(), "prerequest") == 0) {
-    return context::preRequest;
-  }
-  if (strcasecmp(s.c_str(), "postrequest") == 0) {
-    return context::postRequest;
-  }
-  if (strcasecmp(s.c_str(), "background") == 0) {
-    return context::background;
-  }
-  if (strcasecmp(s.c_str(), "getdata") == 0) {
-    return context::getData;
-  }
-  if (strcasecmp(s.c_str(), "putdata") == 0) {
-    return context::putData;
-  }
-  return context::none;
-}
-
-std::string to_string(context ctx) 
-{
-  switch (ctx) {
-    case context::preRequest:
-      return "prerequest";
-    case context::postRequest:
-      return "postrequest";
-    case context::background:
-      return "background";
-    case context::getData:
-      return "getdata";
-    case context::putData:
-      return "putdata";
-    case context::none:
-      break;
-  }
-  return "none";
-}
-
 bool verify(const std::string& script, std::string& err_msg) 
 {
   lua_state_guard lguard(0, nullptr); // no memory limit, sice we don't execute the script

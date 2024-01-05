@@ -1,5 +1,6 @@
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua_utils.h"
+#include "rgw_lua.h"
 #include "rgw_lua_request.h"
 #include "rgw_lua_background.h"
 #include "rgw_process_env.h"
