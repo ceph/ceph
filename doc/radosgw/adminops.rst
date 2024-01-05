@@ -275,6 +275,9 @@ Get User Info
 
 Get user information.
 
+Either a ``uid`` or ``access-key`` must be supplied as a request parameter. We recommend supplying uid.
+If both are provided but correspond to different users, the info for the user specified with ``uid`` will be returned.
+
 :caps: users=read
 
 
@@ -296,6 +299,13 @@ Request Parameters
 :Type: String
 :Example: ``foo_user``
 :Required: Yes
+
+``access-key``
+
+:Description: The S3 access key of the user for which the information is requested.
+:Type: String
+:Example: ``ABCD0EF12GHIJ2K34LMN``
+:Required: No
 
 
 Response Entities
