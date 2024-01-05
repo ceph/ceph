@@ -8250,6 +8250,24 @@ void MDCache::dispatch(const cref_t<Message> &m)
   }
 }
 
+/**
+ * In 246f647566095c173e5e0e54661696cea230f96e, an updated rule for locking order
+ * was established (differing from past strategies):
+ *
+ *  [The helper function is for requests that operate on two paths. It
+ *  ensures that the two paths get locks in proper order.] The rule is:
+ *
+ *   1. Lock directory inodes or dentries according to which trees they
+ *      are under. Lock objects under fs root before objects under mdsdir.
+ *   2. Lock directory inodes or dentries according to their depth, in
+ *      ascending order.
+ *   3. Lock directory inodes or dentries according to inode numbers or
+ *      dentries' parent inode numbers, in ascending order.
+ *   4. Lock dentries in the same directory in order of their keys.
+ *   5. Lock non-directory inodes according to inode numbers, in ascending
+ *      order.
+ */
+
 int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
                            const filepath& path, int flags,
                            vector<CDentry*> *pdnvec, CInode **pin)
