@@ -524,9 +524,6 @@ struct LuaScriptMeta {
   // The priority of the script. Scripts are executed from lowest priority to highest 
   int priority;
 
-  // If the priority of two scripts is the same, the one modified last is executed first
-  std::time_t lastModified;
-
   // The context for which the script is run
   context ctx;
 
@@ -538,18 +535,16 @@ struct LuaScriptMeta {
 
   LuaScriptMeta(
     int priority, 
-    std::time_t lastModified, 
     context ctx, 
     std::string name,
     std::string script
-  ): priority(priority), lastModified(lastModified), ctx(ctx), name(name), script(script) {}
+  ): priority(priority), ctx(ctx), name(name), script(script) {}
 
-  LuaScriptMeta(std::string script, context ctx): priority(MAX_LUA_PRIORITY), lastModified(0), ctx(ctx), name(""), script(script) {}
+  LuaScriptMeta(std::string script, context ctx): priority(MAX_LUA_PRIORITY), ctx(ctx), name(""), script(script) {}
 
   void print() {
     std::cout << "Script Name: " << name << std::endl;
     std::cout << "Priority: " << priority << std::endl;
-    std::cout << "Last Modified: " << lastModified << std::endl;
     std::cout << "Context: " << to_string(ctx) << std::endl;
     std::cout << "Script Contents:" << std::endl;
     std::cout << "==========================================" << std::endl;
@@ -560,7 +555,6 @@ struct LuaScriptMeta {
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(priority, bl);
-    encode(lastModified, bl);
     encode(to_string(ctx), bl);
     encode(name, bl);
     encode(script, bl);
@@ -572,7 +566,6 @@ struct LuaScriptMeta {
     
     DECODE_START(1, bl);
     decode(priority, bl);
-    decode(lastModified, bl);
     decode(stored_ctx, bl);
     ctx = to_context(stored_ctx);
     decode(name, bl);
@@ -585,6 +578,14 @@ struct LuaScriptMeta {
 // Array of LuaScriptMeta for all scripts
 struct LuaRuntimeMeta {
   std::vector<LuaScriptMeta> scripts;
+
+  LuaRuntimeMeta() {
+    scripts = std::vector<LuaScriptMeta>;
+  }
+
+  LuaRuntimeMeta(LuaScriptMeta script) {
+    scripts = std::vector<LuaScriptMeta>(script);
+  }
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
@@ -608,10 +609,6 @@ struct LuaRuntimeMeta {
       scripts[idx] = script;
     }
     DECODE_FINISH(bl);
-  }
-
-  LuaRuntimeMeta() {
-    scripts = std::vector<LuaScriptMeta>;
   }
 }
 

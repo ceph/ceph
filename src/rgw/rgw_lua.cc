@@ -82,12 +82,11 @@ std::string script_meta_key(context ctx, const std::string& tenant) {
   return SCRIPT_META_PREFIX + to_string(ctx) + "." + tenant;
 } 
 
-std::time_t curr_time() {
-  auto now = std::chrono::system_clock::now();
-  return std::chrono::system_clock::to_time_t(now);
-}
+// std::time_t curr_time() {
+//   auto now = std::chrono::system_clock::now();
+//   return std::chrono::system_clock::to_time_t(now);
+// }
 
-// TODO REMOVE script name from read script caller
 int read_script(
   const DoutPrefixProvider *dpp, 
   sal::LuaManager* manager, 
@@ -97,17 +96,58 @@ int read_script(
   rgw::lua::LuaRuntimeMeta& scripts_meta,
 ) {
   return manager ? manager->get_script(
-    dpp, y, script_meta_key(tenant), script_oid(ctx, tenant), scripts_meta, ctx) : -ENOENT;
+    dpp, y, script_meta_key(ctx, tenant), script_oid(ctx, tenant), scripts_meta, ctx) : -ENOENT;
 }
 
-int write_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script)
-{
-  return manager ? manager->put_script(dpp, y, script_oid(ctx, tenant), script) : -ENOENT;
+int write_script(
+  const DoutPrefixProvider *dpp, 
+  sal::LuaManager* manager, 
+  const std::string& tenant, 
+  optional_yield y, 
+  context ctx, 
+  const std::string& script,
+  std::optional<std::uint8_t> optional_priority,
+  std::optional<std::string> optional_name
+) {
+  if (!manager) {
+    return -ENOENT;
+  }
+
+  if (!optional_name) {
+    return manager->put_script(dpp, y, script_oid(ctx, tenant), new LuaScriptMeta(0, ctx, "", script), null);
+  }
+  
+  int priority = optional_priority ? optional_priority.value() : MAX_LUA_PRIORITY;
+  auto new_script = new LuaScriptMeta(priority, ctx, optional_name.value(), script);
+  LuaRuntimeMeta scripts_meta;
+  if (manager->get_script(dpp, y, script_meta_key(ctx, tenant), "", scripts_meta, ctx) < 0) {
+    scripts_meta = LuaRuntimeMeta();
+  }
+  return manager->put_script(dpp, y, script_meta_key(ctx, tenant), new_script, scripts_meta);
 }
 
-int delete_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx)
-{
-  return manager ? manager->del_script(dpp, y, script_oid(ctx, tenant)) : -ENOENT;
+int delete_script(
+  const DoutPrefixProvider *dpp, 
+  sal::LuaManager* manager, 
+  const std::string& tenant, 
+  optional_yield y, 
+  context ctx, 
+  std::optional<std::string> optional_name
+) {
+  if (!manager) {
+    return -ENOENT;
+  }
+
+  if (!optional_name) {
+    return manager->del_script(dpp, y, script_oid(ctx, tenant), "", null, null);
+  }
+
+  LuaRuntimeMeta scripts_meta;
+  if (manager->get_script(dpp, y, script_meta_key(ctx, tenant), "", scripts_meta, ctx) < 0) {
+    return -ENOENT;
+  }
+
+  return manager->del_script(dpp, y, script_oid(ctx, tenant), script_meta_key(ctx, tenant), optional_name, scripts_meta);
 }
 
 #ifdef WITH_RADOSGW_LUA_PACKAGES

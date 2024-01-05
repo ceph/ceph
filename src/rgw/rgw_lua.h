@@ -36,13 +36,13 @@ context to_context(const std::string& s);
 bool verify(const std::string& script, std::string& err_msg);
 
 // driver a lua script in a context
-int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script, std::optional<std::string> str_script_name, std::optional<std::uint8_t> priority);
+int write_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, const std::string& script, std::optional<std::uint8_t> optional_priority, std::optional<std::string> optional_name);
 
 // read the stored lua script from a context
 int read_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, rgw::lua::LuaRuntimeMeta& scripts_meta);
 
 // delete the stored lua script from a context
-int delete_script(const DoutPrefixProvider *dpp, rgw::sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::optional<std::string> str_script_name);
+int delete_script(const DoutPrefixProvider *dpp, sal::LuaManager* manager, const std::string& tenant, optional_yield y, context ctx, std::optional<std::string> optional_name)
 
 using packages_t = std::set<std::string>;
 

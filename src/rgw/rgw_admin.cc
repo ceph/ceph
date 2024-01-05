@@ -10708,7 +10708,7 @@ next:
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");
-    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, str_script_name, int_script_priority);
+    rc = rgw::lua::write_script(dpp(), lua_manager.get(), tenant, null_yield, script_ctx, script, int_script_priority, str_script_name);
     if (rc < 0) {
       cerr << "ERROR: failed to put script. error: " << rc << std::endl;
       return -rc;
