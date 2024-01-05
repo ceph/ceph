@@ -13,3 +13,4 @@ tasks:
         - rgw/test_rgw_gc_log.sh
         - rgw/test_rgw_obj.sh
         - rgw/test_librgw_file.sh
+	- rgw/test_awssdkv4_sig.sh
