@@ -12,30 +12,10 @@
  *
  */
 
+#include "Writer.h"
+#include "include/intarith.h"
 #include "os/bluestore/bluestore_types.h"
-#include "BlueStore.h"
-#include "Allocator.h"
 
-/// Signals that a range [offset~length] is no longer used.
-/// Collects allocation units that became unused into *released_disk.
-/// Returns:
-///   disk space size to release
-uint32_t BlueStore::Blob::put_ref_accumulate(
-  Collection *coll,
-  uint32_t offset,
-  uint32_t length,
-  PExtentVector *released_disk)
-{
-  ceph_assert(length > 0);
-  uint32_t res = 0;
-  auto [in_blob_offset, in_blob_length] = used_in_blob.put_simple(offset, length);
-  if (in_blob_length != 0) {
-    bluestore_blob_t& b = dirty_blob();
-    res = b.release_extents(in_blob_offset, in_blob_length, released_disk);
-    return res;
-  }
-  return res;
-}
 
 /// Empties range [offset~length] of object o that is in collection c.
 /// Collects unused elements:
@@ -111,3 +91,61 @@ BlueStore::extent_map_t::iterator BlueStore::_punch_hole_2(
   }
   return p;
 }
+
+
+/// Signals that a range [offset~length] is no longer used.
+/// Collects allocation units that became unused into *released_disk.
+/// Returns:
+///   disk space size to release
+uint32_t BlueStore::Blob::put_ref_accumulate(
+  Collection *coll,
+  uint32_t offset,
+  uint32_t length,
+  PExtentVector *released_disk)
+{
+  ceph_assert(length > 0);
+  uint32_t res = 0;
+  auto [in_blob_offset, in_blob_length] = used_in_blob.put_simple(offset, length);
+  if (in_blob_length != 0) {
+    bluestore_blob_t& b = dirty_blob();
+    res = b.release_extents(in_blob_offset, in_blob_length, released_disk);
+    return res;
+  }
+  return res;
+}
+
+inline void BlueStore::Blob::add_tail(
+  uint32_t new_blob_size,
+  uint32_t min_release_size)
+{
+  ceph_assert(p2phase(new_blob_size, min_release_size) == 0);
+  dirty_blob().add_tail(new_blob_size);
+  used_in_blob.add_tail(new_blob_size, min_release_size);
+}
+
+inline void bluestore_blob_use_tracker_t::init_and_ref(
+  uint32_t full_length,
+  uint32_t tracked_chunk)
+{
+  ceph_assert(p2phase(full_length, tracked_chunk) == 0);
+  uint32_t _num_au = full_length / tracked_chunk;
+  au_size = tracked_chunk;
+  if ( _num_au > 1) {
+    allocate(_num_au);
+    for (uint32_t i = 0; i < num_au; i++) {
+      bytes_per_au[i] = tracked_chunk;
+    }
+  } else {
+    total_bytes = full_length;
+  }
+}
+
+inline void bluestore_blob_t::allocated_full(
+  uint32_t length,
+  PExtentVector&& allocs)
+{
+  ceph_assert(extents.size() == 0);
+  extents.swap(allocs);
+  logical_length = length;
+}
+

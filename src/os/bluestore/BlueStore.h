@@ -725,6 +725,7 @@ public:
       o.blob_bl = blob_bl;
 #endif
     }
+    void add_tail(uint32_t new_blob_size, uint32_t min_release_size);
     void dup(const Blob& from, bool copy_used_in_blob);
     void copy_from(CephContext* cct, const Blob& from,
 		   uint32_t min_release_size, uint32_t start, uint32_t len);
