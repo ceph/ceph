@@ -111,6 +111,13 @@ do
 done
 ceph config rm osd.0 osd_scrub_cost
 
+#RGW daemons test config set
+ceph config set client.rgw debug_rgw 22
+while ! ceph config show client.rgw | grep debug_rgw | grep 22 | grep mon
+do
+    sleep 1
+done
+
 # show-with-defaults
 ceph config show-with-defaults osd.0 | grep debug_asok
 
