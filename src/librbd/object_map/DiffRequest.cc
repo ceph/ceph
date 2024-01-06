@@ -240,10 +240,30 @@ void DiffRequest<I>::send() {
     return;
   }
 
+  std::shared_lock image_locker{m_image_ctx->image_lock};
+  if (is_diff_iterate() &&
+      m_snap_id_start == 0 &&
+      m_snap_id_end == m_image_ctx->snap_id &&
+      m_image_ctx->object_map != nullptr) {
+    ldout(cct, 10) << "using in-memory object map" << dendl;
+    m_current_snap_id = m_snap_id_end;
+
+    int r = prepare_for_object_map();
+    if (r == 0) {
+      r = m_image_ctx->object_map->with_object_map(
+        [this](const BitVector<2>& object_map) {
+          return process_object_map(object_map);
+        });
+    }
+    image_locker.unlock();
+
+    finish(r);
+    return;
+  }
+
   // collect all the snap ids in the provided range (inclusive) unless
   // this is diff-iterate against the beginning of time, in which case
   // only the end version matters
-  std::shared_lock image_locker{m_image_ctx->image_lock};
   if (!is_diff_iterate() || m_snap_id_start != 0) {
     if (m_snap_id_start != 0) {
       m_snap_ids.insert(m_snap_id_start);

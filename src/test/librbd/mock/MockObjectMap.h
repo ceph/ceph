@@ -4,6 +4,7 @@
 #ifndef CEPH_TEST_LIBRBD_MOCK_OBJECT_MAP_H
 #define CEPH_TEST_LIBRBD_MOCK_OBJECT_MAP_H
 
+#include "common/bit_vector.hpp"
 #include "common/RWLock.h"
 #include "librbd/Utils.h"
 #include "gmock/gmock.h"
@@ -11,14 +12,21 @@
 namespace librbd {
 
 struct MockObjectMap {
-  MOCK_METHOD1(at, uint8_t(uint64_t));
-  uint8_t operator[](uint64_t object_no) {
+  MOCK_CONST_METHOD1(at, uint8_t(uint64_t));
+  uint8_t operator[](uint64_t object_no) const {
     return at(object_no);
   }
 
   MOCK_CONST_METHOD1(enabled, bool(const RWLock &object_map_lock));
 
   MOCK_CONST_METHOD0(size, uint64_t());
+
+  MOCK_CONST_METHOD0(with, ceph::BitVector<2>());
+  template <typename F, typename... Args>
+  auto with_object_map(F&& f, Args&&... args) const {
+    const ceph::BitVector<2> object_map = with();
+    return std::forward<F>(f)(object_map, std::forward<Args>(args)...);
+  }
 
   MOCK_METHOD1(open, void(Context *on_finish));
   MOCK_METHOD1(close, void(Context *on_finish));
