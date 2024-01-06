@@ -276,7 +276,8 @@ class TestVolumesHelper(CephFSTestCase):
             self.mount_a.run_shell_payload(f"mkdir -p {io_path}")
 
         log.debug("filling subvolume {0} with {1} files each {2}MB size under directory {3}".format(subvolume, number_of_files, file_size, io_path))
-        for i in range(number_of_files):
+
+        for i in range(1, number_of_files+1):
             filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
             self.mount_a.write_n_mb(os.path.join(io_path, filename), file_size)
 
@@ -4215,6 +4216,179 @@ class TestSubVolumeRm(TestVolumesHelper):
 
         # verify trash dir is clean
         self._wait_for_trash_empty()
+
+class TestConfigOptDisablePurgeTrash(TestVolumesHelper):
+    '''
+    Tests related to mgr/vol config "disable_purge_trash".
+    '''
+
+    conf_opt = 'mgr/volumes/disable_purge_trash'
+
+    def _get_sv_path(self, v, sv):
+        sv_path = self.get_ceph_cmd_stdout(f'fs subvolume getpath {v} {sv}')
+        # delete slash at the beginning of path
+        sv_path = sv_path[1:]
+
+        sv_path = os.path.join(self.mount_a.mountpoint, sv_path)
+        return sv_path
+
+    def _note_files_in_sv(self, sv_path):
+        p = self.mount_a.run_shell(f'sudo ls {sv_path}')
+        return p.stdout.getvalue().strip().split('\n')
+
+    def _assert_sv_is_absent_in_trash(self, sv, sv_path, sv_files):
+        uuid = self.mount_a.run_shell('sudo ls volumes/_deleting').\
+                    stdout.getvalue().strip()
+
+        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
+        trash_sv_path = trash_sv_path.replace(sv, '')
+
+        try:
+            sv_files_new = self.mount_a.get_shell_stdout(
+                f'sudo ls {trash_sv_path}')
+        except CommandFailedError as cfe:
+            # in case dir for subvol including files in it are deleted
+            self.assertEqual(cfe.exitstatus, 2)
+            return
+
+        # in case dir for subvol is undeleted yet (but files inside it are).
+        for filename in sv_files:
+            self.assertNotIn(filename, sv_files_new)
+
+    def test_when_false(self):
+        '''
+        Test that when MGR config option mgr/volumes/disable_purge_trash is
+        set to false, running "ceph fs subvolume rm" will move the subvolume
+        to trash and also asynchronously purge/delete the subvolume from trash.
+        '''
+        v = self.volname
+        sv = 'sv1'
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self.run_ceph_cmd(f'config set mgr {self.conf_opt} false')
+        o = self.get_ceph_cmd_stdout(f'config get mgr {self.conf_opt}')
+        self.assertEqual(o, 'false')
+
+        sv_path = self._get_sv_path(v, sv)
+        self._do_subvolume_io(sv, number_of_files=10, file_size=10)
+        sv_files = self._note_files_in_sv(sv_path)
+
+        self.run_ceph_cmd(f'fs subvolume rm {v} {sv}')
+        time.sleep(5)
+        self._assert_sv_is_absent_in_trash(sv, sv_path, sv_files)
+
+    def _assert_sv_is_present_in_trash(self, sv, sv_path, sv_files):
+        uuid = self.mount_a.run_shell('sudo ls volumes/_deleting').\
+                    stdout.getvalue().strip()
+
+        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
+        trash_sv_path = trash_sv_path.replace(sv, '')
+        sv_files_new = self.mount_a.run_shell(f'sudo ls {trash_sv_path}').\
+            stdout.getvalue().strip()
+
+        for filename in sv_files:
+            self.assertIn(filename, sv_files_new)
+
+    def test_when_true(self):
+        '''
+        Test that when MGR config option mgr/volumes/disable_purge_trash is
+        set to true, running "ceph fs subvolume rm" will move the subvolume
+        to trash but not purge/delete the subvolume from trash.
+        '''
+        v = self.volname
+        sv = 'sv1'
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self.run_ceph_cmd(f'config set mgr {self.conf_opt} true')
+        o = self.get_ceph_cmd_stdout(f'config get mgr {self.conf_opt}')
+        self.assertEqual(o, 'true')
+
+        sv_path = self._get_sv_path(v, sv)
+        self._do_subvolume_io(sv, number_of_files=10, file_size=10)
+        sv_files = self._note_files_in_sv(sv_path)
+
+        self.run_ceph_cmd(f'fs subvolume rm {v} {sv}')
+        self._assert_sv_is_present_in_trash(sv, sv_path, sv_files)
+        time.sleep(20)
+        self._assert_sv_is_present_in_trash(sv, sv_path, sv_files)
+
+        self.run_ceph_cmd(f'config set mgr {self.conf_opt} true')
+
+    def _test_when_true_and_then_false(self):
+        '''
+        Test that when MGR config option mgr/volumes/disable_purge_trash is
+        set to true, running "ceph fs subvolume rm" will move the subvolume
+        to trash but will not purge/delete the subvolume from trash.
+
+        And then when this config option is set to false, subvolme is purged/
+        deleted from the trash.
+        '''
+        v = self.volname
+        sv = 'sv1'
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self.run_ceph_cmd(f'config set mgr {self.conf_opt} true')
+        o = self.get_ceph_cmd_stdout(f'config get mgr {self.conf_opt}')
+        self.assertEqual(o, 'true')
+
+        sv_path = self._get_sv_path(v, sv)
+        self._do_subvolume_io(sv, number_of_files=10, file_size=10)
+        sv_files = self._note_files_in_sv(sv_path)
+
+        # now test that the subvolume is not purged/deleted since the value
+        # of this config option value is set to true.
+        self.run_ceph_cmd(f'fs subvolume rm {v} {sv}')
+        self._assert_sv_is_present_in_trash(sv, sv_path, sv_files)
+        time.sleep(20)
+        self._assert_sv_is_present_in_trash(sv, sv_path, sv_files)
+
+        # now test that the subvolume is purged/deleted when value of this
+        # config option value is changed to false.
+        self.run_ceph_cmd(f'config set mgr {self.conf_opt} false')
+        time.sleep(5)
+        self._assert_sv_is_absent_in_trash(sv, sv_path, sv_files)
+
+    def _assert_sv_is_part_present_in_trash(self, sv, sv_path, sv_files):
+        uuid = self.mount_a.run_shell('sudo ls volumes/_deleting').\
+                    stdout.getvalue().strip()
+
+        trash_sv_path = sv_path.replace('_nogroup', f'_deleting/{uuid}')
+        trash_sv_path = trash_sv_path.replace(sv, '')
+        sv_files_new = self.mount_a.run_shell(f'sudo ls {trash_sv_path}').\
+            stdout.getvalue().strip()
+
+        for filename in sv_files:
+            self.assertIn(filename, sv_files_new)
+
+    def _test_when_false_and_then_changed_midway_to_true(self):
+        '''
+        Test that when MGR config option mgr/volumes/disable_purge_trash is
+        set to true, running "ceph fs subvolume rm" will move the subvolume
+        to trash and also asynchronously purge the subvolume from trash.
+        '''
+        v = self.volname
+        sv = 'sv1'
+
+        self.run_ceph_cmd(f'fs subvolume create {v} {sv} --mode=777')
+
+        self.run_ceph_cmd(f'config set mgr {self.conf_opt} false')
+        o = self.get_ceph_cmd_stdout(f'config get mgr {self.conf_opt}')
+        self.assertEqual(o, 'false')
+
+        sv_path = self._get_sv_path(v, sv)
+        self._do_subvolume_io(sv, number_of_files=10, file_size=10)
+        sv_files = self._note_files_in_sv(sv_path)
+
+        self.run_ceph_cmd(f'fs subvolume rm {v} {sv}')
+        self.run_ceph_cmd(f'config set mgr {self.conf_opt} true')
+        self._assert_sv_is_part_present_in_trash(sv, sv_path, sv_files)
+        time.sleep(20)
+        self._assert_sv_is_part_present_in_trash(sv, sv_path, sv_files)
+
+        self.run_ceph_cmd(f'config set mgr {self.conf_opt} false')
 
 
 class TestSubvolumeGroupSnapshots(TestVolumesHelper):
