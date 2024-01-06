@@ -129,7 +129,7 @@ public:
 
     inline IteratorImpl operator++(int) {
       IteratorImpl iterator_impl(*this);
-      ++iterator_impl;
+      ++*this;
       return iterator_impl;
     }
     inline IteratorImpl operator+(uint64_t offset) {
