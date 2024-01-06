@@ -608,13 +608,7 @@ public:
 
   void on_active_exit() override;
 
-  Context *on_clean() override {
-    if (is_active()) {
-      kick_snap_trim();
-    }
-    requeue_ops(waiting_for_clean_to_primary_repair);
-    return finish_recovery();
-  }
+  Context *on_clean() override;
 
   void on_activate(interval_set<snapid_t> snaps) override;
 

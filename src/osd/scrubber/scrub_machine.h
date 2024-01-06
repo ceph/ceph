@@ -162,6 +162,9 @@ MEV(IntLocalMapDone)
 /// scrub_snapshot_metadata()
 MEV(DigestUpdate)
 
+/// peered as Primary - and clean
+MEV(PrimaryActivate)
+
 /// we are a replica for this PG
 MEV(ReplicaActivate)
 
@@ -176,7 +179,9 @@ MEV(ReplicaPushesUpd)
 
 /**
  * IntervalChanged
+ * The only path from PrimaryActive or ReplicaActive down to NotActive.
  *
+ * Note re reserved replicas:
  * This event notifies the ScrubMachine that it is no longer responsible for
  * releasing replica state.  It will generally be submitted upon a PG interval
  * change.
@@ -189,7 +194,12 @@ MEV(ReplicaPushesUpd)
  */
 MEV(IntervalChanged)
 
-/// guarantee that the FSM is in the quiescent state (i.e. NotActive)
+/**
+ * stops the scrubbing session, and resets the scrubber.
+ * For a replica - aborts the handling of the current request.
+ * In both cases - a transition to the peering mode quiescent state (i.e.
+ * PrimaryIdle or ReplicaIdle).
+ */
 MEV(FullReset)
 
 /// finished handling this chunk. Go get the next one
@@ -203,9 +213,15 @@ MEV(ScrubFinished)
 //
 
 struct NotActive;	    ///< the quiescent state. No active scrubbing.
-struct Session;            ///< either reserving or actively scrubbing
 struct ReservingReplicas;   ///< securing scrub resources from replicas' OSDs
 struct ActiveScrubbing;	    ///< the active state for a Primary. A sub-machine.
+
+// the states for a Primary:
+// note: PrimaryActive <==> in the OSD scrub queue
+struct PrimaryActive;	   ///< base state for a Primary
+struct PrimaryIdle;	   ///< ready for a new scrub request
+struct Session;            ///< either reserving or actively scrubbing
+
 // the active states for a replica:
 struct ReplicaActive;    ///< the quiescent state for a replica
 struct ReplicaActiveOp;
@@ -225,9 +241,10 @@ class ScrubMachine : public sc::state_machine<ScrubMachine, NotActive> {
   ScrubMachineListener* m_scrbr;
   std::ostream& gen_prefix(std::ostream& out) const;
 
-  void assert_not_active() const;
+  void assert_not_in_session() const;
   [[nodiscard]] bool is_reserving() const;
   [[nodiscard]] bool is_accepting_updates() const;
+  [[nodiscard]] bool is_primary_idle() const;
 
   // elapsed time for the currently active scrub.session
   ceph::timespan get_time_scrubbing() const;
@@ -359,39 +376,93 @@ public:
 
 // ///////////////// the states //////////////////////// //
 
-
-/**
- *  The Scrubber's base (quiescent) state.
- *  Scrubbing is triggered by one of the following events:
+/*
+ * When not scrubbing, the FSM is in one of three states:
  *
- *  - (standard scenario for a Primary): 'StartScrub'. Initiates the OSDs
- *    resources reservation process. Will be issued by PG::scrub(), following a
- *    queued "PGScrub" op.
+ * <> PrimaryActive - we are a Primary and active. The PG
+ * is queued for some future scrubs in the OSD's scrub queue.
  *
- *  - a special end-of-recovery Primary scrub event ('AfterRepairScrub').
+ * <> ReplicaActive - we are a replica. In this state, we are
+ * expecting either a replica reservation request from the Primary, or a
+ * scrubbing request for a specific chunk.
  *
- *  - (if already in ReplicaActive): an incoming MOSDRepScrub triggers
- *    'StartReplica'.
- *
- *  note (20.8.21): originally, AfterRepairScrub was triggering a scrub without
- *  waiting for replica resources to be acquired. But once replicas started
- *  using the resource-request to identify and tag the scrub session, this
- *  bypass cannot be supported anymore.
+ * <> NotActive - the quiescent state. No active scrubbing.
+ * We are neither an active Primary nor a replica.
  */
 struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
   explicit NotActive(my_context ctx);
 
   using reactions = mpl::list<
+      // peering done, and we are a replica
+      sc::transition<ReplicaActivate, ReplicaActive>,
+      // peering done, and we are a Primary
+      sc::transition<PrimaryActivate, PrimaryActive>>;
+};
+
+// ----------------------- when Primary --------------------------------------
+// ---------------------------------------------------------------------------
+
+
+/*
+ *  The primary states:
+ *
+ *  PrimaryActive - starts when peering ends with us as a primary,
+ *     and we are active and clean.
+ *   - when in this state - we (our scrub targets) are queued in the
+ *     OSD's scrub queue.
+ *
+ *  Sub-states:
+ *     - PrimaryIdle - ready for a new scrub request
+ *          * initial state of PrimaryActive
+ *
+ *     - Session - handling a single scrub session
+ */
+
+struct PrimaryIdle;
+
+/**
+ *  PrimaryActive
+ *
+ *  The basic state for an active Primary. Ready to accept a new scrub request.
+ *  State managed here: being in the OSD's scrub queue (unless when scrubbing).
+ *
+ *  Scrubbing is triggered by one of the following events:
+ *  - (standard scenario for a Primary): 'StartScrub'. Initiates the OSDs
+ *    resources reservation process. Will be issued by PG::scrub(), following a
+ *    queued "PGScrub" op.
+ *  - a special end-of-recovery Primary scrub event ('AfterRepairScrub').
+ */
+struct PrimaryActive : sc::state<PrimaryActive, ScrubMachine, PrimaryIdle>,
+			 NamedSimply {
+  explicit PrimaryActive(my_context ctx);
+  ~PrimaryActive();
+
+  using reactions = mpl::list<
+      // when the interval ends - we may not be a primary anymore
+      sc::transition<IntervalChanged, NotActive>>;
+};
+
+/**
+ * \ATTN: set_op_parameters() is called while we are still in this state (waiting
+ * for a queued OSD message to trigger the transition into Session). Thus,
+ * even in this 'idle' state - there is some state we must take care to reset.
+ * Specifically - the PG state flags we were playing with in set_op_parameters().
+ */
+struct PrimaryIdle : sc::state<PrimaryIdle, PrimaryActive>, NamedSimply {
+  explicit PrimaryIdle(my_context ctx);
+  ~PrimaryIdle() = default;
+  void clear_state(const FullReset&);
+
+  using reactions = mpl::list<
       sc::custom_reaction<StartScrub>,
       // a scrubbing that was initiated at recovery completion:
       sc::custom_reaction<AfterRepairScrub>,
-      // peering done, and we are a replica
-      sc::transition<ReplicaActivate, ReplicaActive>>;
+      // undoing set_op_params(), if aborted before starting the scrub:
+      sc::in_state_reaction<FullReset, PrimaryIdle, &PrimaryIdle::clear_state>>;
 
   sc::result react(const StartScrub&);
   sc::result react(const AfterRepairScrub&);
 };
-
 
 /**
  *  Session
@@ -407,12 +478,12 @@ struct NotActive : sc::state<NotActive, ScrubMachine>, NamedSimply {
  *  reservations are released. This is because we know that the replicas are
  *  also resetting their reservations.
  */
-struct Session : sc::state<Session, ScrubMachine, ReservingReplicas>,
+struct Session : sc::state<Session, PrimaryActive, ReservingReplicas>,
                  NamedSimply {
   explicit Session(my_context ctx);
   ~Session();
 
-  using reactions = mpl::list<sc::transition<FullReset, NotActive>,
+  using reactions = mpl::list<sc::transition<FullReset, PrimaryIdle>,
                               sc::custom_reaction<IntervalChanged>>;
 
   sc::result react(const IntervalChanged&);
@@ -612,7 +683,9 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
   sc::result react(const ScrubFinished&);
 };
 
-// ----------------------------- the "replica active" states
+
+// ---------------------------------------------------------------------------
+// ----------------------------- the "replica active" states -----------------
 
 /*
  *  The replica states:
@@ -683,15 +756,21 @@ struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
 struct ReplicaIdle : sc::state<ReplicaIdle, ReplicaActive>, NamedSimply {
   explicit ReplicaIdle(my_context ctx);
   ~ReplicaIdle() = default;
+  void reset_ignored(const FullReset&);
 
   // note the execution of check_for_updates() when transitioning to
   // ReplicaActiveOp/ReplicaWaitUpdates. That would trigger a ReplicaPushesUpd
   // event, which will be handled by ReplicaWaitUpdates.
-  using reactions = mpl::list<sc::transition<
-      StartReplica,
-      ReplicaWaitUpdates,
-      ReplicaActive,
-      &ReplicaActive::check_for_updates>>;
+  using reactions = mpl::list<
+      sc::transition<
+	  StartReplica,
+	  ReplicaWaitUpdates,
+	  ReplicaActive,
+	  &ReplicaActive::check_for_updates>,
+      sc::in_state_reaction<
+	  FullReset,
+	  ReplicaIdle,
+	  &ReplicaIdle::reset_ignored>>;
 };
 
 
@@ -706,7 +785,9 @@ struct ReplicaActiveOp
   explicit ReplicaActiveOp(my_context ctx);
   ~ReplicaActiveOp();
 
-  using reactions = mpl::list<sc::custom_reaction<StartReplica>>;
+  using reactions = mpl::list<
+      sc::custom_reaction<StartReplica>,
+      sc::transition<FullReset, ReplicaIdle>>;
 
   /**
    * Handling the unexpected (read - caused by a bug) case of receiving a

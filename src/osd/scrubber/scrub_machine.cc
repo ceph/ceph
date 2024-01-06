@@ -47,14 +47,19 @@ void on_event_discard(std::string_view nm)
   dout(20) << " event: --^^^^---- " << nm << dendl;
 }
 
-void ScrubMachine::assert_not_active() const
+void ScrubMachine::assert_not_in_session() const
 {
-  ceph_assert(state_cast<const NotActive*>());
+  ceph_assert(!state_cast<const Session*>());
 }
 
 bool ScrubMachine::is_reserving() const
 {
   return state_cast<const ReservingReplicas*>();
+}
+
+bool ScrubMachine::is_primary_idle() const
+{
+  return state_cast<const PrimaryIdle*>();
 }
 
 bool ScrubMachine::is_accepting_updates() const
@@ -114,27 +119,68 @@ NotActive::NotActive(my_context ctx)
   scrbr->clear_queued_or_active();
 }
 
-sc::result NotActive::react(const StartScrub&)
+
+// ----------------------- PrimaryActive --------------------------------
+
+PrimaryActive::PrimaryActive(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "PrimaryActive")
 {
-  dout(10) << "NotActive::react(const StartScrub&)" << dendl;
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  dout(10) << "-- state -->> PrimaryActive" << dendl;
+  // insert this PG into the OSD scrub queue. Calculate initial schedule
+  scrbr->schedule_scrub_with_osd();
+}
+
+PrimaryActive::~PrimaryActive()
+{
+  DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
+  // we may have set some PG state flags without reaching Session.
+  // And we may be holding a 'local resource'.
+  scrbr->clear_pgscrub_state();
+  scrbr->rm_from_osd_scrubbing();
+}
+
+
+// ---------------- PrimaryActive/PrimaryIdle ---------------------------
+
+PrimaryIdle::PrimaryIdle(my_context ctx)
+    : my_base(ctx)
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "PrimaryActive/PrimaryIdle")
+{
+  dout(10) << "-- state -->> PrimaryActive/PrimaryIdle" << dendl;
+}
+
+sc::result PrimaryIdle::react(const StartScrub&)
+{
+  dout(10) << "PrimaryIdle::react(const StartScrub&)" << dendl;
   DECLARE_LOCALS;
+  scrbr->reset_epoch();
   return transit<ReservingReplicas>();
 }
 
-sc::result NotActive::react(const AfterRepairScrub&)
+sc::result PrimaryIdle::react(const AfterRepairScrub&)
 {
-  dout(10) << "NotActive::react(const AfterRepairScrub&)" << dendl;
+  dout(10) << "PrimaryIdle::react(const AfterRepairScrub&)" << dendl;
   DECLARE_LOCALS;
+  scrbr->reset_epoch();
   return transit<ReservingReplicas>();
+}
+
+void PrimaryIdle::clear_state(const FullReset&) {
+  dout(10) << "PrimaryIdle::react(const FullReset&): clearing state flags"
+           << dendl;
+  DECLARE_LOCALS;
+  scrbr->clear_pgscrub_state();
 }
 
 // ----------------------- Session -----------------------------------------
 
 Session::Session(my_context ctx)
     : my_base(ctx)
-    , NamedSimply(context<ScrubMachine>().m_scrbr, "Session")
+    , NamedSimply(context<ScrubMachine>().m_scrbr, "PrimaryActive/Session")
 {
-  dout(10) << "-- state -->> Session" << dendl;
+  dout(10) << "-- state -->> PrimaryActive/Session" << dendl;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   // while we've checked the 'someone is reserving' flag before queueing
@@ -242,7 +288,7 @@ sc::result ReservingReplicas::react(const ReplicaReject& ev)
   scrbr->flag_reservations_failure();
 
   // 'Session' state dtor stops the scrubber
-  return transit<NotActive>();
+  return transit<PrimaryIdle>();
 }
 
 sc::result ReservingReplicas::react(const ReservationTimeout&)
@@ -261,7 +307,7 @@ sc::result ReservingReplicas::react(const ReservationTimeout&)
   // cause the scrubber to stop the scrub session, marking 'reservation
   // failure' as the cause (affecting future scheduling)
   scrbr->flag_reservations_failure();
-  return transit<NotActive>();
+  return transit<PrimaryIdle>();
 }
 
 // ----------------------- ActiveScrubbing -----------------------------------
@@ -678,7 +724,7 @@ sc::result WaitDigestUpdate::react(const ScrubFinished&)
   session.m_session_started_at = ScrubTimePoint{};
 
   scrbr->scrub_finish();
-  return transit<NotActive>();
+  return transit<PrimaryIdle>();
 }
 
 ScrubMachine::ScrubMachine(PG* pg, ScrubMachineListener* pg_scrub)
@@ -813,6 +859,11 @@ ReplicaIdle::ReplicaIdle(my_context ctx)
   dout(10) << "-- state -->> ReplicaActive/ReplicaIdle" << dendl;
 }
 
+void ReplicaIdle::reset_ignored(const FullReset&)
+{
+  dout(10) << "ReplicaIdle::react(const FullReset&): FullReset ignored"
+	   << dendl;
+}
 
 // ------------- ReplicaActive/ReplicaActiveOp --------------------------
 
