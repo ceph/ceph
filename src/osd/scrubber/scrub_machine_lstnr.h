@@ -107,6 +107,15 @@ struct ScrubMachineListener {
 
   [[nodiscard]] virtual bool is_primary() const = 0;
 
+  /// dequeue this PG from the OSD's scrub-queue
+  virtual void rm_from_osd_scrubbing() = 0;
+
+  /**
+   * the FSM has entered the PrimaryActive state. That happens when
+   * peered as a Primary, and achieving the 'active' state.
+   */
+  virtual void schedule_scrub_with_osd() = 0;
+
   virtual void select_range_n_notify() = 0;
 
   /// walk the log to find the latest update that affects our chunk
@@ -202,6 +211,9 @@ struct ScrubMachineListener {
    */
   virtual void set_queued_or_active() = 0;
   virtual void clear_queued_or_active() = 0;
+
+  /// note the epoch when the scrub session started
+  virtual void reset_epoch() = 0;
 
   /**
    * Our scrubbing is blocked, waiting for an excessive length of time for

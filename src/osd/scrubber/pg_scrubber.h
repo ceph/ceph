@@ -252,7 +252,7 @@ class PgScrubber : public ScrubPgIF,
 
   void rm_from_osd_scrubbing() final;
 
-  void on_pg_activate(const requested_scrub_t& request_flags) final;
+  void schedule_scrub_with_osd() final;
 
   scrub_level_t scrub_requested(
       scrub_level_t scrub_level,
@@ -313,6 +313,8 @@ class PgScrubber : public ScrubPgIF,
   void map_from_replica(OpRequestRef op) final;
 
   void on_new_interval() final;
+
+  void on_primary_active_clean() final;
 
   void on_replica_activate() final;
 
@@ -554,7 +556,7 @@ class PgScrubber : public ScrubPgIF,
    *  - the epoch when started;
    *  - the depth of the scrub requested (from the PG_STATE variable)
    */
-  void reset_epoch(epoch_t epoch_queued);
+  void reset_epoch() final;
 
   void run_callbacks();
 

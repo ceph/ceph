@@ -1847,7 +1847,6 @@ void PG::on_activate(interval_set<snapid_t> snaps)
   snap_trimq = snaps;
   release_pg_backoffs();
   projected_last_update = info.last_update;
-  m_scrubber->on_pg_activate(m_planned_scrub);
 }
 
 void PG::on_replica_activate()
@@ -1859,6 +1858,16 @@ void PG::on_active_exit()
 {
   backfill_reserving = false;
   agent_stop();
+}
+
+Context* PG::on_clean()
+{
+  if (is_active()) {
+    kick_snap_trim();
+  }
+  m_scrubber->on_primary_active_clean();
+  requeue_ops(waiting_for_clean_to_primary_repair);
+  return finish_recovery();
 }
 
 void PG::on_active_advmap(const OSDMapRef &osdmap)

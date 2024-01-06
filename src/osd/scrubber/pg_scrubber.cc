@@ -152,7 +152,7 @@ bool PgScrubber::verify_against_abort(epoch_t epoch_to_verify)
 
   // if we were not aware of the abort before - kill the scrub.
   if (epoch_to_verify >= m_last_aborted) {
-    scrub_clear_state();
+    m_fsm->process_event(FullReset{});
     m_last_aborted = std::max(epoch_to_verify, m_epoch_start);
   }
   return false;
@@ -208,17 +208,18 @@ bool PgScrubber::should_abort() const
 
 void PgScrubber::initiate_regular_scrub(epoch_t epoch_queued)
 {
-  dout(15) << __func__ << " epoch: " << epoch_queued << dendl;
+  dout(10) << fmt::format(
+		  "{}: epoch:{} is PrimaryIdle:{}", __func__, epoch_queued,
+		  m_fsm->is_primary_idle())
+	   << dendl;
+
   // we may have lost our Primary status while the message languished in the
   // queue
   if (check_interval(epoch_queued)) {
     dout(10) << "scrubber event -->> StartScrub epoch: " << epoch_queued
 	     << dendl;
-    reset_epoch(epoch_queued);
     m_fsm->process_event(StartScrub{});
     dout(10) << "scrubber event --<< StartScrub" << dendl;
-  } else {
-    clear_queued_or_active();  // also restarts snap trimming
   }
 }
 
@@ -229,17 +230,17 @@ void PgScrubber::advance_token()
 
 void PgScrubber::initiate_scrub_after_repair(epoch_t epoch_queued)
 {
-  dout(15) << __func__ << " epoch: " << epoch_queued << dendl;
+  dout(10) << fmt::format(
+		  "{}: epoch:{} is PrimaryIdle:{}", __func__, epoch_queued,
+		  m_fsm->is_primary_idle())
+	   << dendl;
   // we may have lost our Primary status while the message languished in the
   // queue
   if (check_interval(epoch_queued)) {
     dout(10) << "scrubber event -->> AfterRepairScrub epoch: " << epoch_queued
 	     << dendl;
-    reset_epoch(epoch_queued);
     m_fsm->process_event(AfterRepairScrub{});
     dout(10) << "scrubber event --<< AfterRepairScrub" << dendl;
-  } else {
-    clear_queued_or_active();  // also restarts snap trimming
   }
 }
 
@@ -403,13 +404,13 @@ bool PgScrubber::is_reserving() const
   return m_fsm->is_reserving();
 }
 
-void PgScrubber::reset_epoch(epoch_t epoch_queued)
+void PgScrubber::reset_epoch()
 {
   dout(10) << __func__ << " state deep? " << state_test(PG_STATE_DEEP_SCRUB)
 	   << dendl;
-  m_fsm->assert_not_active();
+  m_fsm->assert_not_in_session();
 
-  m_epoch_start = epoch_queued;
+  m_epoch_start = m_pg->get_same_interval_since();
   ceph_assert(m_is_deep == state_test(PG_STATE_DEEP_SCRUB));
   update_op_mode_text();
 }
@@ -460,9 +461,12 @@ void PgScrubber::on_new_interval()
 		  (is_primary() ? "Primary" : "Replica/other"),
 		  is_scrub_active(), is_queued_or_active())
 	   << dendl;
-
   m_fsm->process_event(IntervalChanged{});
-  rm_from_osd_scrubbing();
+  // the following asserts were added due to a past bug, where PG flags were
+  // left set in some scenarios.
+  ceph_assert(!is_queued_or_active());
+  ceph_assert(!state_test(PG_STATE_SCRUBBING));
+  ceph_assert(!state_test(PG_STATE_DEEP_SCRUB));
 }
 
 bool PgScrubber::is_scrub_registered() const
@@ -488,33 +492,37 @@ void PgScrubber::rm_from_osd_scrubbing()
   }
 }
 
-void PgScrubber::on_pg_activate(const requested_scrub_t& request_flags)
+/*
+ * Note: referring to m_planned_scrub here is temporary, as this set of
+ * scheduling flags will be removed in a followup PR.
+ */
+void PgScrubber::schedule_scrub_with_osd()
 {
   ceph_assert(is_primary());
-  if (!m_scrub_job) {
-    // we won't have a chance to see more logs from this function, thus:
-    dout(2) << fmt::format(
-		   "{}: flags:<{}> {}.Reg-state:{:.7}. No scrub-job", __func__,
-		   request_flags, (is_primary() ? "Primary" : "Replica/other"),
-		   registration_state())
-	    << dendl;
-    return;
-  }
+  ceph_assert(m_scrub_job);
 
-  ceph_assert(!is_queued_or_active());
   auto pre_state = m_scrub_job->state_desc();
   auto pre_reg = registration_state();
 
   auto suggested = m_osds->get_scrub_services().determine_scrub_time(
-      request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
+      m_planned_scrub, m_pg->info, m_pg->get_pgpool().info.opts);
   m_osds->get_scrub_services().register_with_osd(m_scrub_job, suggested);
 
   dout(10) << fmt::format(
 		  "{}: <flags:{}> {} <{:.5}>&<{:.10}> --> <{:.5}>&<{:.14}>",
-		  __func__, request_flags,
+		  __func__, m_planned_scrub,
 		  (is_primary() ? "Primary" : "Replica/other"), pre_reg,
 		  pre_state, registration_state(), m_scrub_job->state_desc())
 	   << dendl;
+}
+
+
+void PgScrubber::on_primary_active_clean()
+{
+  dout(10) << fmt::format(
+		  "{}: reg state: {}", __func__, m_scrub_job->state_desc())
+	   << dendl;
+  m_fsm->process_event(PrimaryActivate{});
 }
 
 /*
@@ -2164,11 +2172,7 @@ void PgScrubber::handle_query_state(ceph::Formatter* f)
 PgScrubber::~PgScrubber()
 {
   m_fsm->process_event(IntervalChanged{});
-  if (m_scrub_job) {
-    // make sure the OSD won't try to scrub this one just now
-    rm_from_osd_scrubbing();
-    m_scrub_job.reset();
-  }
+  m_scrub_job.reset();
 }
 
 PgScrubber::PgScrubber(PG* pg)
@@ -2416,7 +2420,7 @@ void PgScrubber::update_scrub_stats(ceph::coarse_real_clock::time_point now_is)
   /// \todo use the date library (either the one included in Arrow or directly)
   /// to get the formatting of the time_points.
 
-  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 20>()) {
+  if (g_conf()->subsys.should_gather<ceph_subsys_osd, 25>()) {
     // will only create the debug strings if required
     char buf[50];
     auto printable_last = fmt::localtime(clock::to_time_t(m_last_stat_upd));
