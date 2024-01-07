@@ -70,6 +70,7 @@ class OsdScrub {
       bool is_high_priority);
   void dec_scrubs_local();
   bool inc_scrubs_remote(pg_t pgid);
+  void enqueue_remote_reservation(pg_t pgid);
   void dec_scrubs_remote(pg_t pgid);
 
   // counting the number of PGs stuck while scrubbing, waiting for objects

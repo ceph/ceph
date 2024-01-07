@@ -10,6 +10,33 @@
 #include "common/Formatter.h"
 #include "osd/osd_types.h"
 
+/*
+ * AsyncReserver for scrub 'remote' reservations
+ * -----------------------------------------------
+ *
+ * On the replica side, all reservations are treated as having the same priority.
+ * Note that 'high priority' scrubs, e.g. user-initiated scrubs, are not required
+ * to perform any reservations, and are never handled by the replicas' OSD.
+ *
+ * A queued scrub reservation request is cancelled by any of the following events:
+ *
+ * - a new interval: in this case, we do not expect to see a cancellation request
+ *   from the primary, and we can simply remove the request from the queue;
+ *
+ * - a cancellation request from the primary: probably a result of timing out on
+ *   the reservation process. Here, we can simply remove the request from the queue.
+ *
+ * - a new reservation request for the same PG: which means we had missed the
+ *   previous cancellation request. We cancel the previous request, and replace
+ *   it with the new one. We would also issue an error log message.
+ *
+ * Primary/Replica with differing versions:
+ *
+ * The updated version of MOSDScrubReserve contains a new 'OK to queue' field.
+ * For legacy Primary OSDs, this field is decoded as 'false', and the replica
+ * responds immediately, with grant/rejection.
+*/
+
 namespace Scrub {
 
 /**
@@ -72,6 +99,9 @@ class ScrubResources {
 
   /// increments the number of scrubs acting as a Replica
   bool inc_scrubs_remote(pg_t pgid);
+
+  /// queue a request with the scrub reserver
+  void enqueue_remote_reservation(pg_t pgid) {}
 
   /// decrements the number of scrubs acting as a Replica
   void dec_scrubs_remote(pg_t pgid);
