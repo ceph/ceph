@@ -3,10 +3,18 @@
 
 #pragma once
 
-#include "rgw_tools.h"
+#include <string>
+#include <optional>
+#include <cstdint>
+#include "rgw_sal_fwd.h"
+#include "include/buffer.h"
+#include "include/encoding.h"
+#include "common/async/yield_context.h"
 
 class XMLObj;
-
+namespace ceph { class Formatter; }
+class DoutPrefixProvider;
+struct req_state;
 
 /* S3 bucket logging configuration
  * based on: https://docs.aws.amazon.com/AmazonS3/latest/API/API_PutBucketLogging.html
@@ -39,15 +47,16 @@ class XMLObj;
 
 enum class BucketLoggingKeyFormat {Partitioned, RGWPartitioned, Simple};
 enum class BucketLoggingRecordType {Standard, Short};
+enum class BucketLoggingEventType {Read, Write, ReadWrite};
 
 struct rgw_bucket_logging {
   bool enabled = false;
   std::string target_bucket;
-  BucketLoggingKeyFormat obj_key_format = BucketLoggingKeyFormat::Simple;
+  BucketLoggingKeyFormat obj_key_format = BucketLoggingKeyFormat::RGWPartitioned;
   // target object key formats:
   // Partitioned: [DestinationPrefix][SourceAccountId]/[SourceRegion]/[SourceBucket]/[YYYY]/[MM]/[DD]/[YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
   // Simple: [DestinationPrefix][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
-  // RGWPartitioned: [DestinationPrefix][RGWID][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]
+  // RGWPartitioned: [DestinationPrefix][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]/[RGWId]
   std::string target_prefix; // a prefix for all log object keys. 
                              // useful when multiple bucket log to the same target 
                              // or when the target bucket is used for other things than logs
@@ -57,12 +66,17 @@ struct rgw_bucket_logging {
                                    // if set to zero, records are written syncronously to the object.
                                    // if obj_roll_time is reached, the batch of records will be written to the object
                                    // regardless of the number of records
+  BucketLoggingEventType event_type = BucketLoggingEventType::Write;
+  // which events to log:
+  // Write: PUT, COPY, DELETE, lifecycle, Complete MPU
+  // Read: GET
+  // ReadWrite: all the above
   bool decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
   void dump(Formatter *f) const; // json
   std::string to_json_str() const;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(target_bucket, bl);
     encode(static_cast<int>(obj_key_format), bl);
@@ -70,6 +84,7 @@ struct rgw_bucket_logging {
     encode(obj_roll_time, bl);
     encode(static_cast<int>(record_type), bl);
     encode(records_batch_size, bl);
+    encode(static_cast<int>(event_type), bl);
     ENCODE_FINISH(bl);
   }
 
@@ -84,85 +99,16 @@ struct rgw_bucket_logging {
     decode(type, bl);
     record_type = static_cast<BucketLoggingRecordType>(type);
     decode(records_batch_size, bl);
+    decode(type, bl);
+    event_type = static_cast<BucketLoggingEventType>(type);
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(rgw_bucket_logging)
 
-/* S3 bucket log structure
- * based on: https://docs.aws.amazon.com/AmazonS3/latest/userguide/LogFormat.html
-*/
-struct bucket_logging_record {
-  std::string bucket_owner;
-  std::string bucket;
-  std::string time;             // The time at which the request was received
-                                // at UTC time. The format, as follows: [%d/%b/%Y:%H:%M:%S %z]
-  std::string remote_ip;        // The apparent IP address of the requester
-  std::string requester;        // The canonical user ID of the requester, or a - for unauthenticated requests 
-  std::string request_id;
-  std::string operation;        // REST.HTTP_method.resource_type or 
-                                // S3.action.resource_type for Lifecycle and logging
-  std::string key;              // The key (object name) part of the request
-  std::string request_uri;      // The Request-URI part of the HTTP request message
-  int http_status;              // The numeric HTTP status code of the response
-  std::string error_code;       // The S3 Error code, or - if no error occurred
-  std::string bytes_sent;       // The number of response bytes sent, excluding HTTP protocol overhead, or - if zero
-  uint64_t object_size;
-  uint32_t total_time;          // milliseconds including network transmission time.
-                                // from first byte received to last byte transmitted
-  uint32_t turn_around_time;    // milliseconds exluding networks transmission time.
-                                // from last byte received to first byte transmitted
-  std::string referer;          // The value of the HTTP Referer header, if present, or - if not
-  std::string user_agent;
-  std::string version_id;       // The version ID in the request, or - if the operation doesn't take a versionId parameter
-  std::string host_id;          // x-amz-id-2
-  std::string sig_version;      // SigV2 or SigV4, that was used to authenticate the request or a - for unauthenticated requests
-  std::string cipher_suite;     // SSL cipher that was negotiated for an HTTPS request or a - for HTTP
-  std::string auth_type;        // The type of request authentication used: 
-                                // AuthHeader, QueryString or a - for unauthenticated requests
-  std::string host_header;      // The RGW endpoint
-  std::string tls_version;      // TLS version negotiated by the client
-                                // TLSv1.1, TLSv1.2, TLSv1.3, or - if TLS wasn't used
-  std::string access_point_arn; // ARN of the access point of the request. 
-                                // If the access point ARN is malformed or not used, the field will contain a -
-  std::string acl_required;     // A string that indicates whether the request required an (ACL) for authorization. 
-                                // If ACL is required, the string is Yes. If no ACLs were required, the string is -
-  std::string etag;
-};
-
-inline std::string to_string(const bucket_logging_record& record) {
-  std::string str_record = record.bucket;
-  str_record.append(" ").append(record.time)
-    .append(" ").append(record.operation)
-    .append(" ").append(record.key)
-    .append(" ").append(record.etag);
-  // TODO: add all fields
-  return str_record;
-}
-
-struct bucket_logging_short_record {
-  std::string bucket; // TODO: use rgw_bucket
-  std::string time; // TODO: use ceph time
-  std::string operation;
-  std::string key; // TODO: use: rgw_key
-  std::optional<int> http_status; // TODO: we should have an option where we only log successsfull actions
-  std::string etag;
-};
-
-inline std::string to_string(const bucket_logging_short_record& record) {
-  std::string str_record = record.bucket;
-  str_record.append(" ").append(record.time)
-    .append(" ").append(record.operation)
-    .append(" ").append(record.key)
-    .append(" ").append(record.http_status ? std::to_string(*record.http_status) : "-")
-    .append(" ").append(record.etag);
-  return str_record;
-}
-
 constexpr unsigned MAX_BUCKET_LOGGING_BUFFER = 1000;
 
-using bucket_logging_records = std::array<bucket_logging_record, MAX_BUCKET_LOGGING_BUFFER>;
-using bucket_logging_short_records = std::array<bucket_logging_short_record, MAX_BUCKET_LOGGING_BUFFER>;
+using bucket_logging_records = std::array<std::string, MAX_BUCKET_LOGGING_BUFFER>;
 
 template <typename Records>
 inline std::string to_string(const Records& records) {
@@ -172,4 +118,21 @@ inline std::string to_string(const Records& records) {
   }
   return str_records;
 }
+
+// log a bucket logging record according to the configuration
+int log_record(rgw::sal::Driver* driver, const req_state* s, const std::string& op_name, const std::string& etag, const rgw_bucket_logging& configuration,
+    const DoutPrefixProvider *dpp, optional_yield y);
+
+// return the oid of the object holding the name of the temporary logging object
+// bucket - log bucket
+// prefix - logging prefix from configuration. should be used when multiple buckets log into the same log bucket
+std::string logging_object_name_oid(const rgw::sal::Bucket* bucket, const std::string& prefix);
+
+// return the temporary object name from the log bucket object name
+// temp name format is:
+// <pool>.rgw.buckets.data:<bucket id>_<log bucket object name>
+std::string to_temp_object_name(const rgw::sal::Bucket* bucket, const std::string& obj_name);
+
+// return the log bucket object name from the temporary object name
+std::string from_temp_object_name(const std::string& temp_obj_name);
 

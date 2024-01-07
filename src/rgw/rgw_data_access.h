@@ -53,7 +53,6 @@ public:
 
   };
 
-
   class Object {
     RGWDataAccess *sd{nullptr};
     BucketRef bucket;
