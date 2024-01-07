@@ -333,9 +333,8 @@ seastar::future<> Heartbeat::maybe_share_osdmap(
     return seastar::now();
   }
 
-  const epoch_t send_from = peer.get_projected_epoch();
-  logger().debug("{} sending peer {} peer maps from projected epoch {} through "
-		 "local osdmap epoch {}",
+  const epoch_t send_from = peer.get_projected_epoch() + 1;
+  logger().debug("{} sending peer {} peer maps ({}, {}]",
 		 __func__,
 		 from,
 		 send_from,
