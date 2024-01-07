@@ -473,6 +473,11 @@ bool OsdScrub::inc_scrubs_remote(pg_t pgid)
   return m_resource_bookkeeper.inc_scrubs_remote(pgid);
 }
 
+void OsdScrub::enqueue_remote_reservation(pg_t pgid)
+{
+  m_resource_bookkeeper.enqueue_remote_reservation(pgid);
+}
+
 void OsdScrub::dec_scrubs_remote(pg_t pgid)
 {
   m_resource_bookkeeper.dec_scrubs_remote(pgid);
