@@ -164,9 +164,9 @@ void Background::run() {
       auto failed = false;
       try {
         //execute the background lua script
-        for (auto script_meta : scripts_meta) {
+        for (auto script_meta : scripts_meta.scripts) {
           if (luaL_dostring(L, script_meta.script.c_str()) != LUA_OK) {
-            std::string script_name = script_meta.name ? script_meta.name : "";
+            std::string script_name = script_meta.name.empty() ? "" : script_meta.name;
             const std::string err(lua_tostring(L, -1));
             ldpp_dout(dpp, 1) << "Lua ERROR: " << err << " in script " << script_meta.name << dendl;
             failed = true;

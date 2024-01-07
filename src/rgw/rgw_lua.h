@@ -93,7 +93,7 @@ struct LuaScriptMeta {
     std::string script
   ): priority(priority), ctx(ctx), name(name), script(script) {}
 
-  LuaScriptMeta(std::string script, context ctx): priority(MAX_LUA_PRIORITY), ctx(ctx), name(""), script(script) {}
+  LuaScriptMeta(std::string script, context ctx): priority(rgw::lua::MAX_LUA_PRIORITY), ctx(ctx), name(""), script(script) {}
   LuaScriptMeta() {}
 
   void print() {

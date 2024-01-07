@@ -82,7 +82,6 @@ constexpr const int MAX_LUA_KEY_ENTRIES = 100000;
 constexpr const int MAX_LUA_PRIORITY = 20;
 constexpr const int MIN_LUA_PRIORITY = 0;
 constexpr const int MAX_LUA_SCRIPT_NAME_LENGTH = 20;
-constexpr const int DEFAULT_LUA_PRIORITY = 0;
 
 constexpr auto ONE_UPVAL    = 1;
 constexpr auto TWO_UPVALS   = 2;

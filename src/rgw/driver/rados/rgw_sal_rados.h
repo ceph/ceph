@@ -868,17 +868,20 @@ class RadosLuaManager : public StoreLuaManager {
   rgw_pool pool;
   librados::IoCtx& ioctx;
   PackagesWatcher packages_watcher;
+  uint64_t watch_handle = 0;
+
   void ack_reload(const DoutPrefixProvider* dpp, uint64_t notify_id, uint64_t cookie, int reload_status);
   void handle_reload_notify(const DoutPrefixProvider* dpp, optional_yield y, uint64_t notify_id, uint64_t cookie);
-  uint64_t watch_handle = 0;
+  template <typename T> int get_object_internal(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, T& obj, const std::string& error_msg);
+  template <typename T> int put_object_internal(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const T& obj, const std::string& error_msg);
 
 public:
   RadosLuaManager(RadosStore* _s, const std::string& _luarocks_path);
   ~RadosLuaManager() override = default;
 
   int get_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& meta_key, const std::string& old_script_key, rgw::lua::LuaRuntimeMeta& scripts_meta, rgw::lua::context ctx) override;
-  int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, const rgw::lua::LuaScriptMeta& new_script, const std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override;
-  int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& old_script_key, const std::string& meta_key, const std::optional<std::string> optional_script_name, const std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override;
+  int put_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, rgw::lua::LuaScriptMeta& new_script, std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override;
+  int del_script(const DoutPrefixProvider* dpp, optional_yield y, const std::string& old_script_key, const std::string& meta_key, const std::optional<std::string> optional_script_name, std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override;
   int add_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
   int remove_package(const DoutPrefixProvider* dpp, optional_yield y, const std::string& package_name) override;
   int list_packages(const DoutPrefixProvider* dpp, optional_yield y, rgw::lua::packages_t& packages) override;

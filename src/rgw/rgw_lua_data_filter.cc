@@ -105,9 +105,9 @@ int RGWObjFilter::execute(bufferlist& bl, off_t offset, const char* op_name) con
     }
 
     // execute the lua scripts
-    for (auto script_meta : scripts_meta) {
+    for (auto script_meta : scripts_meta.scripts) {
       if (luaL_dostring(L, script_meta.script.c_str()) != LUA_OK) {
-        std::string script_name = script_meta.name ? script_meta.name : "";
+        std::string script_name = script_meta.name.empty() ? "" : script_meta.name;
         const std::string err(lua_tostring(L, -1));
         ldpp_dout(s, 1) << "Lua ERROR: " << err << " in script " << script_name << dendl;
         return -EINVAL;

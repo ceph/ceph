@@ -421,7 +421,7 @@ done:
     } else if (rc < 0) {
       ldpp_dout(op, 5) << "WARNING: failed to read post request script. error: " << rc << dendl;
     } else {
-      for (auto script_meta : scripts_meta) {
+      for (auto script_meta : scripts_meta.scripts) {
         rc = rgw::lua::request::execute(driver, rest, penv.olog, s, op, script_meta.script);
         if (rc < 0) {
           ldpp_dout(op, 5) << "WARNING: failed to execute post request script. error: " << rc << dendl;

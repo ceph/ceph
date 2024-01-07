@@ -54,7 +54,7 @@ int read_script(
   const std::string& tenant, 
   optional_yield y, 
   context ctx,
-  rgw::lua::LuaRuntimeMeta& scripts_meta,
+  rgw::lua::LuaRuntimeMeta& scripts_meta
 ) {
   return manager ? manager->get_script(
     dpp, y, script_meta_key(ctx, tenant), script_oid(ctx, tenant), scripts_meta, ctx) : -ENOENT;
@@ -75,16 +75,16 @@ int write_script(
   }
 
   if (!optional_name) {
-    return manager->put_script(dpp, y, script_oid(ctx, tenant), new LuaScriptMeta(0, ctx, "", script), null);
+    return manager->put_script(dpp, y, script_oid(ctx, tenant), LuaScriptMeta(0, ctx, "", script), std::nullopt);
   }
   
-  int priority = optional_priority ? optional_priority.value() : MAX_LUA_PRIORITY;
-  auto new_script = new LuaScriptMeta(priority, ctx, optional_name.value(), script);
+  int priority = optional_priority ? optional_priority.value() : rgw::lua::MAX_LUA_PRIORITY;
+  auto new_script = LuaScriptMeta(priority, ctx, optional_name.value(), script);
   LuaRuntimeMeta scripts_meta;
   if (manager->get_script(dpp, y, script_meta_key(ctx, tenant), "", scripts_meta, ctx) < 0) {
     scripts_meta = LuaRuntimeMeta();
   }
-  return manager->put_script(dpp, y, script_meta_key(ctx, tenant), new_script, scripts_meta);
+  return manager->put_script(dpp, y, script_meta_key(ctx, tenant), new_script, std::optional<rgw::lua::LuaScriptMeta>(scripts_meta));
 }
 
 int delete_script(
@@ -100,7 +100,7 @@ int delete_script(
   }
 
   if (!optional_name) {
-    return manager->del_script(dpp, y, script_oid(ctx, tenant), "", null, null);
+    return manager->del_script(dpp, y, script_oid(ctx, tenant), "", std::nullopt, std::nullopt);
   }
 
   LuaRuntimeMeta scripts_meta;

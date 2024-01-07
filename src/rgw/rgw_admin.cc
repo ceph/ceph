@@ -4056,7 +4056,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--name", (char*)NULL)) {
       str_script_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--priority", (char*)NULL)) {
-      int_script_priority = val;
+      int_script_priority = atoi(val.c_str());
     } else if (ceph_argparse_binary_flag(args, i, &allow_compilation, NULL, "--allow-compilation", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_witharg(args, i, &val, "--rgw-obj-fs", (char*)NULL)) {
@@ -10676,14 +10676,14 @@ next:
       return EINVAL;
     }
     if (str_script_name && 
-        str_script_name.value().size() > MAX_LUA_SCRIPT_NAME_LENGTH) {
-      cerr << "ERROR: provided script name is too long (via --name), max length is " << MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
+        str_script_name.value().size() > rgw::lua::MAX_LUA_SCRIPT_NAME_LENGTH) {
+      cerr << "ERROR: provided script name is too long (via --name), max length is " << rgw::lua::MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
       return EINVAL;
     }
     if (int_script_priority && 
-        (int_script_priority.value() > MAX_LUA_PRIORITY || int_script_priority.value() < MIN_LUA_PRIORITY)) {
+        (int_script_priority.value() > rgw::lua::MAX_LUA_PRIORITY || int_script_priority.value() < rgw::lua::MIN_LUA_PRIORITY)) {
       cerr << "ERROR: provided script priority is invalid (via --priority)" << std::endl;
-      cerr << "Please provide a value between " << MIN_LUA_PRIORITY " and " << MAX_LUA_PRIORITY << std::endl;
+      cerr << "Please provide a value between " << rgw::lua::MIN_LUA_PRIORITY << " and " << rgw::lua::MAX_LUA_PRIORITY << std::endl;
       return EINVAL;
     }
     bufferlist bl;
@@ -10726,8 +10726,8 @@ next:
       return EINVAL;
     }
     if (str_script_name && 
-        str_script_name.value().size() > MAX_LUA_SCRIPT_NAME_LENGTH) {
-      cerr << "ERROR: provided script name is too long (via --name), max length is " << MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
+        str_script_name.value().size() > rgw::lua::MAX_LUA_SCRIPT_NAME_LENGTH) {
+      cerr << "ERROR: provided script name is too long (via --name), max length is " << rgw::lua::MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
       return EINVAL;
   }
     auto lua_manager = driver->get_lua_manager("");
@@ -10743,7 +10743,7 @@ next:
 
     bool found = false;
     if (str_script_name) {
-      for (auto script_meta : scripts_meta) {
+      for (auto script_meta : scripts_meta.scripts) {
         if (script_meta.name == str_script_name.value()) {
           found = true;
           script_meta.print();
@@ -10752,14 +10752,14 @@ next:
       }
 
       if (!found) {
-        std::cout << "Could not find a script for the name " << str_script_name.value() << " and tenant " << tenant << std:endl;
+        std::cout << "Could not find a script for the name " << str_script_name.value() << " and tenant " << tenant << std::endl;
         std::cout << "Printing all scripts for tenant " << tenant << std::endl;
-        for (auto script_meta : scripts_meta) {
+        for (auto script_meta : scripts_meta.scripts) {
           script_meta.print();
         }
       }
     } else {
-      for (auto script_meta : scripts_meta) {
+      for (auto script_meta : scripts_meta.scripts) {
         script_meta.print();
       }
     }
@@ -10776,8 +10776,8 @@ next:
       return EINVAL;
     }
     if (str_script_name && 
-        str_script_name.value().size() > MAX_LUA_SCRIPT_NAME_LENGTH) {
-      cerr << "ERROR: provided script name is too long (via --name), max length is " << MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
+        str_script_name.value().size() > rgw::lua::MAX_LUA_SCRIPT_NAME_LENGTH) {
+      cerr << "ERROR: provided script name is too long (via --name), max length is " << rgw::lua::MAX_LUA_SCRIPT_NAME_LENGTH << std::endl;
       return EINVAL;
     }
     auto lua_manager = driver->get_lua_manager("");

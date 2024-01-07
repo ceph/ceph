@@ -517,8 +517,8 @@ class DaosLuaManager : public StoreLuaManager {
   };
 
   virtual int put_script(const DoutPrefixProvider* dpp, optional_yield y,
-                         const std::string& key, const rgw::lua::LuaScriptMeta& new_script, 
-                         const std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override {
+                         const std::string& key, rgw::lua::LuaScriptMeta& new_script, 
+                         std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override {
     DAOS_NOT_IMPLEMENTED_LOG(dpp);
     return -ENOENT;
   };
@@ -526,7 +526,7 @@ class DaosLuaManager : public StoreLuaManager {
   virtual int del_script(const DoutPrefixProvider* dpp, optional_yield y, 
                          const std::string& old_script_key, const std::string& meta_key, 
                          const std::optional<std::string> optional_script_name, 
-                         const std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override {
+                         std::optional<rgw::lua::LuaRuntimeMeta>& scripts_meta) override {
     DAOS_NOT_IMPLEMENTED_LOG(dpp);
     return -ENOENT;
   };
