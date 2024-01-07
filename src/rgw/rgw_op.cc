@@ -56,6 +56,7 @@
 #include "rgw_torrent.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
+#include "rgw_bucket_logging.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -4515,6 +4516,35 @@ void RGWPutObj::execute(optional_yield y)
     obj_retention->encode(obj_retention_bl);
     emplace_attr(RGW_ATTR_OBJECT_RETENTION, std::move(obj_retention_bl));
   }
+  
+  // check if bucket logging is needed
+  const auto& bucket_attrs = s->bucket->get_attrs();
+  if (auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != bucket_attrs.end()) {
+    rgw_bucket_logging configuration;
+    try {
+      configuration.enabled = true;
+      decode(configuration, iter->second);  
+      ldpp_dout(this, 20) << "INFO: found logging configuration of bucket '" << s->bucket->get_name() << 
+        "' configuration: " << configuration.to_json_str() << dendl;
+      if (configuration.event_type == BucketLoggingEventType::Write || 
+          configuration.event_type == BucketLoggingEventType::ReadWrite) {
+        if (auto ret = log_record(driver, s, name(),  etag, configuration, this, y); ret < 0) { 
+          ldpp_dout(this, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
+            "'. ret=" << ret << dendl;
+          if (configuration.records_batch_size == 0) {
+            // don't reply with error if logging is async
+            op_ret = ret;
+            return;
+          }
+        }
+      }
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
+        << "'. error: " << err.what() << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+  }
 
   tracepoint(rgw_op, processor_complete_enter, s->req_id.c_str());
   const req_context rctx{this, s->yield, s->trace.get()};
@@ -4523,6 +4553,7 @@ void RGWPutObj::execute(optional_yield y)
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
                                rctx);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
+
 
   // send request to notification manager
   int ret = res->publish_commit(this, s->obj_size, mtime, etag, s->object->get_instance());
@@ -5362,6 +5393,32 @@ void RGWDeleteObj::execute(optional_yield y)
       }
     }
 
+    if (op_ret == 0) {
+      // check if bucket logging is needed
+      const auto& bucket_attrs = s->bucket->get_attrs();
+      if (auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != bucket_attrs.end()) {
+        rgw_bucket_logging configuration;
+        try {
+          configuration.enabled = true;
+          decode(configuration, iter->second);  
+          ldpp_dout(this, 20) << "INFO: found logging configuration of bucket '" << s->bucket->get_name() << 
+            "' configuration: " << configuration.to_json_str() << dendl;
+          if (configuration.event_type == BucketLoggingEventType::Write || 
+              configuration.event_type == BucketLoggingEventType::ReadWrite) {
+            if (auto ret = log_record(driver, s, name(),  etag, configuration, this, y); ret < 0) { 
+              ldpp_dout(this, 1) << "ERROR: failed to perform logging for deletion from bucket '" << s->bucket->get_name() << 
+                "'. ret=" << ret << dendl;
+              // don't reply with an error in case of failed delete logging
+            }
+          }
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
+            << "' when deleting from bucket. error: " << err.what() << dendl;
+          // don't reply with an error in case of failed delete logging
+        }
+      }
+    }
+
     if (op_ret == -ECANCELED) {
       op_ret = 0;
     }
@@ -5797,6 +5854,36 @@ void RGWCopyObj::execute(optional_yield y)
   op_ret = s->object->swift_versioning_copy(this, s->yield);
   if (op_ret < 0) {
     return;
+  }
+
+  // check if bucket logging is needed
+  const auto& bucket_attrs = s->bucket->get_attrs();
+  if (auto iter = bucket_attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != bucket_attrs.end()) {
+    rgw_bucket_logging configuration;
+    try {
+      configuration.enabled = true;
+      decode(configuration, iter->second);  
+      ldpp_dout(this, 20) << "INFO: found logging configuration of bucket '" << s->bucket->get_name() << 
+        "' configuration: " << configuration.to_json_str() << dendl;
+      if (configuration.event_type == BucketLoggingEventType::Write || 
+          configuration.event_type == BucketLoggingEventType::ReadWrite) {
+        if (auto ret = log_record(driver, s, name(),  etag, configuration, this, y); ret < 0) { 
+          ldpp_dout(this, 1) << "ERROR: failed to perform logging for bucket '" << s->bucket->get_name() << 
+            "'. ret=" << ret << dendl;
+          if (configuration.records_batch_size == 0) {
+            // don't reply with error if logging is async
+            op_ret = ret;
+            return;
+          }
+        }
+      }
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 1) << "ERROR: failed to decode logging attribute '" << RGW_ATTR_BUCKET_LOGGING 
+        << "'. error: " << err.what() << dendl;
+      op_ret = -EINVAL;
+      // if parsing failed we don't know if logging is async or not
+      return;
+    }
   }
 
   op_ret = s->src_object->copy_object(s->user.get(),
