@@ -395,9 +395,9 @@ following form:
 Quota Management
 ================
 
-The Ceph Object Gateway enables you to set quotas on users and buckets owned by
-users. Quotas include the maximum number of objects in a bucket and the maximum
-storage size a bucket can hold.
+The Ceph Object Gateway makes it possible for you to set quotas on users and
+buckets owned by users. Quotas include the maximum number of objects in a
+bucket and the maximum storage size a bucket can hold.
 
 - **Bucket:** The ``--bucket`` option allows you to specify a quota for
   buckets the user owns.
@@ -406,149 +406,188 @@ storage size a bucket can hold.
   the maximum number of objects. A negative value disables this setting.
   
 - **Maximum Size:** The ``--max-size`` option allows you to specify a quota
-  size in B/K/M/G/T, where B is the default. A negative value disables this setting.
+  size in B/K/M/G/T, where B is the default. A negative value disables this
+  setting.
   
 - **Quota Scope:** The ``--quota-scope`` option sets the scope for the quota.
-  The options are ``bucket`` and ``user``. Bucket quotas apply to buckets a 
-  user owns. User quotas apply to a user.
+  The options are ``bucket`` and ``user``. Bucket quotas apply to each bucket
+  owned by the user. User Quotas are summed across all buckets owned by the
+  user. 
 
 
 Set User Quota
 --------------
 
 Before you enable a quota, you must first set the quota parameters.
-For example:: 
+To set quota parameters, run a command of the following form: 
 
-	radosgw-admin quota set --quota-scope=user --uid=<uid> [--max-objects=<num objects>] [--max-size=<max size>]
+.. prompt:: bash
 
-For example:: 
+   radosgw-admin quota set --quota-scope=user --uid=<uid> [--max-objects=<num objects>] [--max-size=<max size>]
 
-	radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024B
+For example:
+
+.. prompt:: bash
+
+   radosgw-admin quota set --quota-scope=user --uid=johndoe --max-objects=1024 --max-size=1024B
+
+Passing a negative value as an argument of ``--max-objects`` or ``--max-size``
+disables the given quota attribute.  
 
 
-A negative value for num objects and / or max size means that the
-specific quota attribute check is disabled.
+Enabling and Disabling User Quota
+---------------------------------
 
+After a user quota is set, it must be enabled in order to take effect. To enable a user quota, run a command of the following form: 
 
-Enable/Disable User Quota
--------------------------
+.. prompt:: bash
 
-Once you set a user quota, you may enable it. For example:: 
+   radosgw-admin quota enable --quota-scope=user --uid=<uid>
 
-	radosgw-admin quota enable --quota-scope=user --uid=<uid>
+To disable an enabled user quota, run a command of the following form: 
 
-You may disable an enabled user quota. For example:: 
+.. prompt:: bash
 
-	radosgw-admin quota disable --quota-scope=user --uid=<uid>
+   radosgw-admin quota disable --quota-scope=user --uid=<uid>
 
 
 Set Bucket Quota
 ----------------
 
 Bucket quotas apply to the buckets owned by the specified ``uid``. They are
-independent of the user. ::
+independent of the user. To set a bucket quota, run a command of the following
+form:
 
-	radosgw-admin quota set --uid=<uid> --quota-scope=bucket [--max-objects=<num objects>] [--max-size=<max size]
+.. prompt:: bash
 
-A negative value for num objects and / or max size means that the
-specific quota attribute check is disabled.
+   radosgw-admin quota set --uid=<uid> --quota-scope=bucket [--max-objects=<num objects>] [--max-size=<max size]
+
+A negative value for ``--max-objects`` or ``--max-size`` means that the
+specific quota attribute is disabled.
 
 
-Enable/Disable Bucket Quota
----------------------------
+Enable and Disabling Bucket Quota
+---------------------------------
 
-Once you set a bucket quota, you may enable it. For example:: 
+After a bucket quota has been set, it must be enabled in order to take effect.
+To enable a bucket quota, run a command of the following form:
 
-	radosgw-admin quota enable --quota-scope=bucket --uid=<uid>
+.. prompt:: bash
 
-You may disable an enabled bucket quota. For example:: 
+   radosgw-admin quota enable --quota-scope=bucket --uid=<uid>
 
-	radosgw-admin quota disable --quota-scope=bucket --uid=<uid>
+To disable an enabled bucket quota, run a command of the following form: 
+
+.. prompt:: bash
+
+   radosgw-admin quota disable --quota-scope=bucket --uid=<uid>
 
 
 Get Quota Settings
 ------------------
 
-You may access each user's quota settings via the user information
+You can access each user's quota settings via the user information
 API. To read user quota setting information with the CLI interface, 
-execute the following::
+run a command of the following form:
 
-	radosgw-admin user info --uid=<uid>
+.. prompt:: bash
+
+   radosgw-admin user info --uid=<uid>
 
 
 Update Quota Stats
 ------------------
 
-Quota stats get updated asynchronously. You can update quota
-statistics for all users and all buckets manually to retrieve
-the latest quota stats. ::
+Quota stats are updated asynchronously. You can update quota statistics for all
+users and all buckets manually to force an update of the latest quota stats. To
+update quota statistics for all users and all buckets in order to retrieve the
+latest quota statistics, run a command of the following form:
 
-	radosgw-admin user stats --uid=<uid> --sync-stats
+.. prompt:: bash
+
+   radosgw-admin user stats --uid=<uid> --sync-stats
 
 .. _rgw_user_usage_stats:
 
 Get User Usage Stats
 --------------------
 
-To see how much of the quota a user has consumed, execute the following::
+To see how much of a quota a user has consumed, run a command of the following
+form: 
 
-	radosgw-admin user stats --uid=<uid>
+.. prompt:: bash
 
-.. note:: You should execute ``radosgw-admin user stats`` with the 
-   ``--sync-stats`` option to receive the latest data.
+   radosgw-admin user stats --uid=<uid>
+
+.. note:: Run ``radosgw-admin user stats`` with the ``--sync-stats`` option to
+   receive the latest data.
 
 Default Quotas
 --------------
 
-You can set default quotas in the config.  These defaults are used when
-creating a new user and have no effect on existing users. If the
-relevant default quota is set in config, then that quota is set on the
-new user, and that quota is enabled.  See ``rgw_bucket_default_quota_max_objects``,
-``rgw_bucket_default_quota_max_size``, ``rgw_user_default_quota_max_objects``, and
-``rgw_user_default_quota_max_size`` in `Ceph Object Gateway Config Reference`_
+You can set default quotas in the Ceph Object Gateway config. **These defaults
+will be used only when creating new users and will have no effect on existing
+users.** If a default quota is set in the Ceph Object Gateway Config, then that
+quota is set for all subsequently-created users, and that quota is enabled. See
+``rgw_bucket_default_quota_max_objects``,
+``rgw_bucket_default_quota_max_size``, ``rgw_user_default_quota_max_objects``,
+and ``rgw_user_default_quota_max_size`` in `Ceph Object Gateway Config
+Reference`_
 
 Quota Cache
 -----------
 
-Quota statistics are cached on each RGW instance.  If there are multiple
-instances, then the cache can keep quotas from being perfectly enforced, as
-each instance will have a different view of quotas.  The options that control
-this are ``rgw_bucket_quota_ttl``, ``rgw_user_quota_bucket_sync_interval`` and
-``rgw_user_quota_sync_interval``.  The higher these values are, the more
-efficient quota operations are, but the more out-of-sync multiple instances
-will be.  The lower these values are, the closer to perfect enforcement
-multiple instances will achieve.  If all three are 0, then quota caching is
-effectively disabled, and multiple instances will have perfect quota
-enforcement.  See `Ceph Object Gateway Config Reference`_
+Quota statistics are cached by each RGW instance. If multiple RGW instances are
+deployed, then this cache may prevent quotas from being perfectly enforced,
+because each instance may have a different set of quota settings.  
+
+The options that control this behavior are 
+
+#. ``rgw_bucket_quota_ttl``
+#. ``rgw_user_quota_bucket_sync_interval`` and 
+#. ``rgw_user_quota_sync_interval``.
+
+Increasing these values will make quota operations more efficient at the cost
+of increasing the likelihood that the multiple RGW instances may not
+consistently have the latest quota settings. Decreasing these values brings
+the multiple RGW instances closer to perfect quota synchronization. 
+
+If all three values are set to ``0`` , then quota caching is effectively
+disabled, and multiple instances will have perfect quota enforcement.  See
+`Ceph Object Gateway Config Reference`_.
 
 Reading / Writing Global Quotas
 -------------------------------
 
 You can read and write global quota settings in the period configuration. To
-view the global quota settings::
+view the global quota settings, run the following command:
 
-	radosgw-admin global quota get
+.. prompt:: bash
 
-The global quota settings can be manipulated with the ``global quota``
+   radosgw-admin global quota get
+
+Global quota settings can be manipulated with the ``global quota``
 counterparts of the ``quota set``, ``quota enable``, and ``quota disable``
-commands. ::
+commands, as in the following examples:  
+
+.. prompt:: bash
 
 	radosgw-admin global quota set --quota-scope bucket --max-objects 1024
 	radosgw-admin global quota enable --quota-scope bucket
 
-.. note:: In a multisite configuration, where there is a realm and period
+.. note:: In a multisite configuration where there is a realm and period
    present, changes to the global quotas must be committed using ``period
-   update --commit``. If there is no period present, the rados gateway(s) must
+   update --commit``. If no period is present, the RGW instances must
    be restarted for the changes to take effect.
 
 
 Rate Limit Management
 =====================
 
-The Ceph Object Gateway makes it possible to set rate limits on users and
-buckets.  "Rate limit" includes the maximum number of read operations (read
-ops) and write operations (write ops) per minute and the number of bytes per
-minute that can be written or read per user or per bucket.
+Quotas may be set for The Ceph Object Gateway on users and buckets.  "Rate
+limit" includes the maximum number of read operations (read ops) and write
+operations (write ops) per minute and the number of bytes per minute that can
+be written or read per user or per bucket.
 
 Operations that use the ``GET`` method or the ``HEAD`` method in their REST
 requests are "read requests". All other requests are "write requests".  
