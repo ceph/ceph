@@ -19,15 +19,15 @@ namespace {
     bool exists;
     const auto no_value = s->info.args.get("logging", &exists);
     if (!exists) {
-      ldpp_dout(dpp, 1) << "missing required param 'logging'" << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: missing required param 'logging'" << dendl;
       return -EINVAL;
     } 
     if (no_value.length() > 0) {
-      ldpp_dout(dpp, 1) << "param 'logging' should not have any value" << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: param 'logging' should not have any value" << dendl;
       return -EINVAL;
     }
     if (s->bucket_name.empty()) {
-      ldpp_dout(dpp, 1) << "request must be on a bucket" << dendl;
+      ldpp_dout(dpp, 1) << "ERROR: logging request must be on a bucket" << dendl;
       return -EINVAL;
     }
     return 0;
@@ -37,7 +37,7 @@ namespace {
 // GET /<bucket name>/?logging
 // reply is XML encoded
 class RGWGetBucketLoggingOp : public RGWOp {
-  rgw_bucket_logging configurations;
+  rgw_bucket_logging configuration;
 
 public:
   int verify_permission(optional_yield y) override {
@@ -62,26 +62,26 @@ public:
     op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                  &bucket, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get bucket '" << 
+      ldpp_dout(this, 1) << "ERROR: failed to get bucket '" << 
         (s->bucket_tenant.empty() ? s->bucket_name : s->bucket_tenant + ":" + s->bucket_name) << 
         "' info, ret = " << op_ret << dendl;
       return;
     }
     if (auto iter = bucket->get_attrs().find(RGW_ATTR_BUCKET_LOGGING); iter != bucket->get_attrs().end()) {
       try {
-        configurations.enabled = true;
-        decode(configurations, iter->second);
+        configuration.enabled = true;
+        decode(configuration, iter->second);
       } catch (buffer::error& err) {
-        ldpp_dout(this, 1) << "failed to decode attribute '" << RGW_ATTR_BUCKET_LOGGING 
+        ldpp_dout(this, 1) << "ERROR: failed to decode attribute '" << RGW_ATTR_BUCKET_LOGGING 
           << "'. error: " << err.what() << dendl;
         op_ret = -EIO;
         return;
       }
     } else {
-      ldpp_dout(this, 10) << "no logging configuration to bucket '" << bucket->get_name() << "'" << dendl;
+      ldpp_dout(this, 5) << "WARNING: no logging configuration on bucket '" << bucket->get_name() << "'" << dendl;
       return;
     }
-    ldpp_dout(this, 10) << "found logging configuration to bucket '" << bucket->get_name() << "'" << dendl;
+    ldpp_dout(this, 20) << "INFO: found logging configuration on bucket '" << bucket->get_name() << "'" << dendl;
   }
 
   void send_response() override {
@@ -90,7 +90,7 @@ public:
     dump_start(s);
 
     s->formatter->open_object_section_in_ns("BucketLoggingStatus", XMLNS_AWS_S3);
-    configurations.dump_xml(s->formatter);
+    configuration.dump_xml(s->formatter);
     s->formatter->close_section();
     rgw_flush_formatter_and_reset(s, s->formatter);
   }
@@ -128,31 +128,31 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     bufferlist data;
     std::tie(op_ret, data) = read_all_input(s, max_size, false);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to read XML payload, ret = " << op_ret << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to read XML logging payload, ret = " << op_ret << dendl;
       return;
     }
     if (data.length() == 0) {
-      ldpp_dout(this, 1) << "XML payload missing" << dendl;
+      ldpp_dout(this, 1) << "ERROR: XML logging payload missing" << dendl;
       op_ret = -EINVAL;
       return;
     }
 
     RGWXMLDecoder::XMLParser parser;
     if (!parser.init()){
-      ldpp_dout(this, 1) << "failed to initialize XML parser" << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to initialize XML parser" << dendl;
       op_ret = -EINVAL;
       return;
     }
     if (!parser.parse(data.c_str(), data.length(), 1)) {
-      ldpp_dout(this, 1) << "failed to parse XML payload" << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to parse XML logging payload" << dendl;
       op_ret = -ERR_MALFORMED_XML;
       return;
     }
-    rgw_bucket_logging configurations;
+    rgw_bucket_logging configuration;
     try {
-      RGWXMLDecoder::decode_xml("BucketLoggingStatus", configurations, &parser, true);
+      RGWXMLDecoder::decode_xml("BucketLoggingStatus", configuration, &parser, true);
     } catch (RGWXMLDecoder::err& err) {
-      ldpp_dout(this, 1) << "failed to parse XML payload. error: " << err << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to parse XML logging payload. error: " << err << dendl;
       op_ret = -ERR_MALFORMED_XML;
       return;
     }
@@ -161,42 +161,52 @@ class RGWPutBucketLoggingOp : public RGWDefaultResponseOp {
     op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, s->bucket_name),
                                  &bucket, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get bucket '" << s->bucket_name << "', ret = " << op_ret << dendl;
+      ldpp_dout(this, 1) << "ERROR: failed to get bucket '" << s->bucket_name << "', ret = " << op_ret << dendl;
       return;
     }
 
     // TODO: should we delay this check to the actual writing of the logs?
     std::unique_ptr<rgw::sal::Bucket> target_bucket;
-    op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, configurations.target_bucket),
+    op_ret = driver->load_bucket(this, rgw_bucket(s->bucket_tenant, configuration.target_bucket),
                                  &target_bucket, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to get target bucket '" << configurations.target_bucket << "', ret = " << op_ret << dendl;
+      ldpp_dout(this, 1) << "failed to get target bucket '" << configuration.target_bucket << "', ret = " << op_ret << dendl;
       return;
     }
 
     auto& attrs = bucket->get_attrs();
-    if (!configurations.enabled) {
+    if (!configuration.enabled) {
       if (auto iter = attrs.find(RGW_ATTR_BUCKET_LOGGING); iter != attrs.end()) {
         attrs.erase(iter);
       }
     } else {
+      const auto& target_attrs = target_bucket->get_attrs();
+      if (target_attrs.find(RGW_ATTR_BUCKET_LOGGING) != target_attrs.end()) {
+        // target bucket must not have logging set on it
+        ldpp_dout(this, 1) << "ERROR: logging target bucket '" << configuration.target_bucket << "', is configured with bucket logging" << dendl;
+        op_ret = -EINVAL;
+        return;
+      }
+      // TODO: verify target bucket does not have encryption
       bufferlist conf_bl;
-      encode(configurations, conf_bl);
+      encode(configuration, conf_bl);
       attrs[RGW_ATTR_BUCKET_LOGGING] = conf_bl;
+      // TODO: should we add attribute to target bucket indicating it is target to bucket logging?
+      // if we do, how do we maintain it when bucket logging changes?
     }
     // TODO: use retry_raced_bucket_write from rgw_op.cc
     op_ret = bucket->merge_and_store_attrs(this, attrs, y);
     if (op_ret < 0) {
-      ldpp_dout(this, 1) << "failed to set attribute '" << RGW_ATTR_BUCKET_LOGGING << "' to bucket '" << 
+      ldpp_dout(this, 1) << "ERROR: failed to set logging attribute '" << RGW_ATTR_BUCKET_LOGGING << "' to bucket '" << 
         bucket->get_name() << "', ret = " << op_ret << dendl;
       return;
     }
 
-    if (configurations.enabled) {
-      ldpp_dout(this, 20) << "wrote logging configuration to bucket '" << bucket->get_name() << "' configuration: " <<
-        configurations.to_json_str() << dendl;
+    if (configuration.enabled) {
+      ldpp_dout(this, 20) << "INFO: wrote logging configuration to bucket '" << bucket->get_name() << "' configuration: " <<
+        configuration.to_json_str() << dendl;
     } else {
-      ldpp_dout(this, 20) << "removed logging configuration from bucket '" << bucket->get_name() << "'" << dendl;
+      ldpp_dout(this, 20) << "INFO: removed logging configuration from bucket '" << bucket->get_name() << "'" << dendl;
     }
   }
 };

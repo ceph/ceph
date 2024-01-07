@@ -31,7 +31,7 @@ bucket_logging_conf = {'LoggingEnabled': {
     'TargetBucket': target_bucket,
     'TargetPrefix': 'log/',
     'TargetObjectKeyFormat': {
-      'RGWPartitioned': {}
+      'RGW': {}
     },
     'ObjectRollTime': 60,
     'RecordType': 'Short',

@@ -284,6 +284,10 @@
                     "shape":"RecordType",
                     "documentation":"<p>use Standard (log) format of record or Short format containing only minimal information on the object needed for fetching the object.</p>"
                 },
+                "EventType":{
+                    "shape":"EventType",
+                    "documentation":"<p>use Write type to log PUT, COPY, Complete MPU and DELETE operations, Read to log GET operations, and ReadWrite to log both.</p>"
+                },
                 "RecordsBatchSize":{
                     "shape":"RecordsBatchSize",
                     "documentation":"indicates how many records to batch in memory before writing to the object. if set to zero, records are written syncronously to the object. if <code>ObjectRollTime</code>e is reached, the batch of records will be written to the object regardless of the number of records. </p>"
@@ -304,19 +308,20 @@
                     "documentation":"<p>Partitioned S3 key for log objects.</p>",
                     "locationName":"PartitionedPrefix"
                 },
-                "RGWPartitioned":{
-                    "shape":"RGWPartitioned",
-                    "documentation":"<p>Partitioned by RADOS Gateway S3 key for log objects.</p>",
-                    "locationName":"RGWPartitioned"
+                "RGWPrefix":{
+                    "shape":"RGWPrefix",
+                    "documentation":"<p>Prefixed by RGW for s3 key for log objects.</p>",
+                    "locationName":"RGW"
                 }
-            }
+            },
+            "documentation":"<p>Key format for log objects. Only one format, PartitionedPrefix, RGWPrefix or SimplePrefix, is allowed.</p>"
         },
-        "RGWPartitioned":{
+        "RGWPrefix":{
             "type":"structure",
             "members":{
             },
-            "documentation":"<p>To use RGW partitioned format for S3 keys for log objects, set RGWPartitioned to an empty object.</p> <p> <code>[DestinationPrefix][RGW ID][YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]</code> </p>",
-            "locationName":"RGWPartitioned"
+            "documentation":"<p>To use RGW prefix format for S3 keys for log objects, set RGW to an empty object.</p> <p> <code>[DestinationPrefix][RGW ID]/[YYYY]-[MM]-[DD]-[hh]-[mm]-[ss]-[UniqueString]</code> </p>",
+            "locationName":"RGWPrefix"
          },
         "ObjectRollTime":{"type":"integer"},
         "RecordsBatchSize":{"type":"integer"},
@@ -327,7 +332,14 @@
                 "Short"
             ]
         },
-        "documentation":"<p>Key format for log objects. Only one format, PartitionedPrefix, RGWPartitioned or SimplePrefix, is allowed.</p>"
+        "EventType":{
+            "type":"string",
+            "enum": [
+                "Read",
+                "Write",
+                "ReadWrite"
+            ]
+        }
     },
     "documentation":"<p/>"
 }
