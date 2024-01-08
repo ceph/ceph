@@ -27,6 +27,7 @@
 #include "common/perf_counters_key.h"
 #include "rgw_cksum_digest.h"
 #include "rgw_common.h"
+#include "common/split.h"
 #include "rgw_tracer.h"
 
 #include "rgw_rados.h"
@@ -2373,7 +2374,8 @@ void RGWGetObj::execute(optional_yield y)
     goto done_err;
 
   /* STAT ops don't need data, and do no i/o */
-  if (get_type() == RGW_OP_STAT_OBJ) {
+  if ((get_type() == RGW_OP_STAT_OBJ) ||
+      (get_type() == RGW_OP_GET_OBJ_ATTRS)) {
     return;
   }
   if (s->info.env->exists("HTTP_X_RGW_AUTH")) {
@@ -5969,8 +5971,6 @@ void RGWGetACLs::execute(optional_yield y)
   acls = ss.str();
 }
 
-
-
 int RGWPutACLs::verify_permission(optional_yield y)
 {
   bool perm;
@@ -5991,6 +5991,74 @@ int RGWPutACLs::verify_permission(optional_yield y)
 
   return 0;
 }
+
+uint16_t RGWGetObjAttrs::recognize_attrs(const std::string& hdr, uint16_t deflt)
+{
+  auto attrs{deflt};
+  auto sa = ceph::split(hdr, ",");
+  for (auto& k : sa) {
+    if (boost::iequals(k, "etag")) {
+      attrs |= as_flag(ReqAttributes::Etag);
+    }
+    if (boost::iequals(k, "checksum")) {
+      attrs |= as_flag(ReqAttributes::Checksum);
+    }
+    if (boost::iequals(k, "objectparts")) {
+      attrs |= as_flag(ReqAttributes::ObjectParts);
+    }
+    if (boost::iequals(k, "objectsize")) {
+      attrs |= as_flag(ReqAttributes::ObjectSize);
+    }
+    if (boost::iequals(k, "storageclass")) {
+      attrs |= as_flag(ReqAttributes::StorageClass);
+    }
+  }
+  return attrs;
+} /* RGWGetObjAttrs::recognize_attrs */
+
+int RGWGetObjAttrs::verify_permission(optional_yield y)
+{
+  bool perm = false;
+  auto [has_s3_existing_tag, has_s3_resource_tag] =
+    rgw_check_policy_condition(this, s);
+
+  if (! rgw::sal::Object::empty(s->object.get())) {
+
+    auto iam_action1 = s->object->get_instance().empty() ?
+      rgw::IAM::s3GetObject :
+      rgw::IAM::s3GetObjectVersion;
+
+    auto iam_action2 = s->object->get_instance().empty() ?
+      rgw::IAM::s3GetObjectAttributes :
+      rgw::IAM::s3GetObjectVersionAttributes;
+
+    if (has_s3_existing_tag || has_s3_resource_tag) {
+      rgw_iam_add_objtags(this, s, has_s3_existing_tag, has_s3_resource_tag);
+    }
+
+    /* XXXX the following conjunction should be &&--but iam_action2 is currently not
+     * hooked up and always fails (but should succeed if the requestor has READ
+     * acess to the object) */
+    perm = (verify_object_permission(this, s, iam_action1) || /* && */
+	    verify_object_permission(this, s, iam_action2));
+  }
+
+  if (! perm) {
+    return -EACCES;
+  }
+
+  return 0;
+}
+
+void RGWGetObjAttrs::pre_exec()
+{
+  rgw_bucket_object_pre_exec(s);
+}
+
+void RGWGetObjAttrs::execute(optional_yield y)
+{
+  RGWGetObj::execute(y);
+} /* RGWGetObjAttrs::execute */
 
 int RGWGetLC::verify_permission(optional_yield y)
 {

@@ -115,6 +115,8 @@ enum {
   s3GetBucketEncryption,
   s3PutBucketEncryption,
   s3DescribeJob,
+  s3GetObjectAttributes,
+  s3GetObjectVersionAttributes,
   s3All,
 
   s3objectlambdaGetObject,
