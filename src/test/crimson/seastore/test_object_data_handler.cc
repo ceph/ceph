@@ -110,12 +110,17 @@ struct object_data_handler_test_t:
 
   bufferptr known_contents;
   extent_len_t size = 0;
+  std::random_device rd;
+  std::mt19937 gen;
 
-  object_data_handler_test_t() {}
+  object_data_handler_test_t() : gen(rd()) {}
 
   void write(Transaction &t, objaddr_t offset, extent_len_t len, char fill) {
     ceph_assert(offset + len <= known_contents.length());
     size = std::max<extent_len_t>(size, offset + len);
+    Option::size_t olen = crimson::common::local_conf().get_val<Option::size_t>(
+      "seastore_data_delta_based_overwrite");
+    ceph_assert(olen == 0 || len <= olen);
     memset(
       known_contents.c_str() + offset,
       fill,
@@ -233,10 +238,16 @@ struct object_data_handler_test_t:
   }
 
   void set_overwrite_threshold() {
-    crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite", "131072").get();
+    crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite",
+      "16777216").get();
   }
   void unset_overwrite_threshold() {
     crimson::common::local_conf().set_val("seastore_data_delta_based_overwrite", "0").get();
+  }
+
+  laddr_t get_random_laddr(size_t block_size, laddr_t limit) {
+    return block_size *
+      std::uniform_int_distribution<>(0, (limit / block_size) - 1)(gen);
   }
 
   void test_multi_write() {
@@ -667,6 +678,38 @@ TEST_P(object_data_handler_test_t, multiple_overwrite) {
     auto pins = get_mappings(0, 128<<10);
     EXPECT_EQ(pins.size(), 1);
     read(0, 128<<10);
+    unset_overwrite_threshold();
+  });
+}
+
+TEST_P(object_data_handler_test_t, random_overwrite) {
+  constexpr size_t TOTAL = 4<<20;
+  constexpr size_t BSIZE = 4<<10;
+  constexpr size_t BLOCKS = TOTAL / BSIZE;
+  run_async([this] {
+    set_overwrite_threshold();
+    size_t wsize = std::uniform_int_distribution<>(10, BSIZE - 1)(gen);
+    uint8_t div[3] = {1, 2, 4};
+    uint8_t block_num = div[std::uniform_int_distribution<>(0, 2)(gen)];
+    for (unsigned i = 0; i < BLOCKS / block_num; ++i) {
+      auto t = create_mutate_transaction();
+      write(i * (BSIZE * block_num), BSIZE * block_num, 'a');
+    }
+
+    for (unsigned i = 0; i < 4; ++i) {
+      for (unsigned j = 0; j < 100; ++j) {
+	auto t = create_mutate_transaction();
+	for (unsigned k = 0; k < 2; ++k) {
+	  write(*t, get_random_laddr(BSIZE, TOTAL), wsize,
+	    (char)((j*k) % std::numeric_limits<char>::max()));
+	}
+	submit_transaction(std::move(t));
+      }
+      restart();
+      epm->check_usage();
+      logger().info("random_writes: {} done replaying/checking", i);
+    }
+    read(0, 4<<20);
     unset_overwrite_threshold();
   });
 }

@@ -217,6 +217,20 @@ public:
     written_ool_block_list.push_back(ref);
   }
 
+  void mark_inplace_rewrite_extent_ool(LogicalCachedExtentRef& ref) {
+    assert(ref->get_paddr().is_absolute());
+    assert(!ref->is_inline());
+    written_inplace_ool_block_list.push_back(ref);
+  }
+
+  void add_inplace_rewrite_extent(CachedExtentRef ref) {
+   ceph_assert(!is_weak());
+   ceph_assert(ref);
+   ceph_assert(ref->get_paddr().is_absolute());
+   assert(ref->state == CachedExtent::extent_state_t::DIRTY);
+   pre_inplace_rewrite_list.emplace_back(ref->cast<LogicalCachedExtent>());
+  }
+
   void add_mutated_extent(CachedExtentRef ref) {
     ceph_assert(!is_weak());
     assert(ref->is_exist_mutation_pending() ||
@@ -277,6 +291,11 @@ public:
       } else {
 	++num_allocated_invalid_extents;
       }
+    }
+    for (auto& extent : pre_inplace_rewrite_list) {
+      if (extent->is_valid()) {
+	ret.push_back(extent);
+      } 
     }
     return ret;
   }
@@ -387,7 +406,9 @@ public:
     delayed_alloc_list.clear();
     inline_block_list.clear();
     written_ool_block_list.clear();
+    written_inplace_ool_block_list.clear();
     pre_alloc_list.clear();
+    pre_inplace_rewrite_list.clear();
     retired_set.clear();
     existing_block_list.clear();
     existing_block_stats = {};
@@ -529,16 +550,20 @@ private:
   io_stat_t fresh_block_stats;
   uint64_t num_delayed_invalid_extents = 0;
   uint64_t num_allocated_invalid_extents = 0;
-  /// blocks that will be committed with journal record inline
-  std::list<CachedExtentRef> inline_block_list;
-  /// blocks that will be committed with out-of-line record
-  std::list<CachedExtentRef> written_ool_block_list;
-  /// blocks with delayed allocation, may become inline or ool above
+  /// fresh blocks with delayed allocation, may become inline or ool below
   std::list<LogicalCachedExtentRef> delayed_alloc_list;
-
-  /// Extents with pre-allocated addresses,
-  /// will be added to written_ool_block_list after write
+  /// fresh blocks with pre-allocated addresses with RBM,
+  /// should be released upon conflicts, will be added to ool below
   std::list<LogicalCachedExtentRef> pre_alloc_list;
+  /// dirty blocks for inplace rewrite with RBM, will be added to inplace ool below
+  std::list<LogicalCachedExtentRef> pre_inplace_rewrite_list;
+
+  /// fresh blocks that will be committed with inline journal record
+  std::list<CachedExtentRef> inline_block_list;
+  /// fresh blocks that will be committed with out-of-line record
+  std::list<CachedExtentRef> written_ool_block_list;
+  /// dirty blocks that will be committed out-of-line with inplace rewrite
+  std::list<LogicalCachedExtentRef> written_inplace_ool_block_list;
 
   /// list of mutated blocks, holds refcounts, subset of write_set
   std::list<CachedExtentRef> mutated_block_list;

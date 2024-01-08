@@ -8,6 +8,7 @@
 #include "crimson/os/seastore/ordering_handle.h"
 #include "crimson/os/seastore/seastore_types.h"
 #include "crimson/os/seastore/segment_seq_allocator.h"
+#include "crimson/os/seastore/cached_extent.h"
 
 namespace crimson::os::seastore {
 
@@ -88,7 +89,7 @@ public:
     crimson::ct_error::erange>;
   using replay_ret = replay_ertr::future<>;
   using delta_handler_t = std::function<
-    replay_ertr::future<bool>(
+    replay_ertr::future<std::pair<bool, CachedExtentRef>>(
       const record_locator_t&,
       const delta_info_t&,
       const journal_seq_t&, // dirty_tail
