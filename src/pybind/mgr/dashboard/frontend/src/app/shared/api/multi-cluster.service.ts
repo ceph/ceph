@@ -10,6 +10,8 @@ import { filter } from 'rxjs/operators';
 export class MultiClusterService {
   private msSource = new BehaviorSubject<any>(null);
   msData$ = this.msSource.asObservable();
+  private tokenStatusSource = new BehaviorSubject<any>(null);
+  tokenStatusSource$ = this.tokenStatusSource.asObservable();
   constructor(private http: HttpClient, private timerService: TimerService) {}
 
   startPolling(): Subscription {
@@ -18,12 +20,29 @@ export class MultiClusterService {
       .subscribe(this.getClusterObserver());
   }
 
+  startClusterTokenStatusPolling() {
+    const clustersTokenMap = new Map<string, string>();
+    this.subscribe((data: any) => {
+      const config = data['config'];
+      config?.forEach((cluster: any) => {
+        cluster['token'] ? clustersTokenMap.set(cluster['name'], cluster['token']) : '';
+      });
+    })
+    return this.timerService
+      .get(() => this.checkTokenStatus(clustersTokenMap), 600000)
+      .subscribe(this.getClusterTokenStatusObserver());
+  }
+
   refresh(): Subscription {
     return this.getCluster().subscribe(this.getClusterObserver());
   }
 
   subscribe(next: (data: any) => void, error?: (error: any) => void) {
     return this.msData$.pipe(filter((value) => !!value)).subscribe(next, error);
+  }
+
+  subscribeClusterTokenStatus(next: (data: any) => void, error?: (error: any) => void) {
+    return this.tokenStatusSource$.pipe(filter((value) => !!value)).subscribe(next, error);
   }
 
   setCluster(cluster: string) {
@@ -57,6 +76,12 @@ export class MultiClusterService {
   private getClusterObserver() {
     return (data: any) => {
       this.msSource.next(data);
+    };
+  }
+
+  private getClusterTokenStatusObserver() {
+    return (data: any) => {
+      this.tokenStatusSource.next(data);
     };
   }
 

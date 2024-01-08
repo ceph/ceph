@@ -18,6 +18,8 @@ import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { NotificationService } from './notification.service';
 import { MultiClusterService } from '../api/multi-cluster.service';
+import { SummaryService } from './summary.service';
+import { AuthStorageService } from './auth-storage.service';
 // import { SummaryService } from './summary.service';
 
 export class CdHttpErrorResponse extends HttpErrorResponse {
@@ -32,9 +34,13 @@ export class ApiInterceptorService implements HttpInterceptor {
   // private URL: string;
   private apiUrl: string;
   private token: string;
+  localClusterUrl: string;
+  dashboardClustersMap: Map<string, string> = new Map<string, string>();
   constructor(
     private router: Router,
     public notificationService: NotificationService,
+    private summaryService: SummaryService,
+    private authStorageService: AuthStorageService,
     private multiClusterService: MultiClusterService // private summaryservice: SummaryService
   ) {
     this.multiClusterService.subscribe((resp: string) => {
@@ -42,6 +48,10 @@ export class ApiInterceptorService implements HttpInterceptor {
       // console.log(resp['current_url']);
       this.apiUrl = resp['current_url'];
       resp['config']?.forEach((config: any) => {
+        this.dashboardClustersMap.set(config['url'], config['name']);
+        if (config['helper_text'] === 'local-cluster') {
+          this.localClusterUrl = config['url'];
+        }
         if (config['url'] === this.apiUrl) {
           this.token = config['token'];
         }
@@ -126,10 +136,27 @@ export class ApiInterceptorService implements HttpInterceptor {
               timeoutId = this.notificationService.notifyTask(finishedTask);
               break;
             case 401:
-              this.multiClusterService.setCluster('https://192.168.100.100:8443').subscribe(() => {
-                localStorage.setItem('cluster_api_url', 'https://192.168.100.100:8443');
-              });
-              this.router.navigate(['/dashboard']);
+              if (this.dashboardClustersMap.size > 1) {
+                this.multiClusterService.setCluster(this.localClusterUrl).subscribe(() => {
+                  localStorage.setItem('cluster_api_url', this.localClusterUrl);
+                });
+                this.multiClusterService.refresh();
+                this.summaryService.refresh();
+                const currentRoute = this.router.url.split('?')[0];
+                if (currentRoute.includes('dashboard')) {
+                  this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
+                    this.router.navigate([currentRoute]);
+                  });
+                } else {
+                  this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+                    this.router.navigate([currentRoute]);
+                  });
+                }
+              } else {
+                this.authStorageService.remove();
+                this.router.navigate(['/login']);
+              }
+              
               break;
             case 403:
               this.router.navigate(['error'], {
