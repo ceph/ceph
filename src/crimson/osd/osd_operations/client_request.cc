@@ -19,14 +19,13 @@ SET_SUBSYS(osd);
 namespace crimson::osd {
 
 
-void ClientRequest::Orderer::requeue(
-  ShardServices &shard_services, Ref<PG> pg)
+void ClientRequest::Orderer::requeue(Ref<PG> pg)
 {
   LOG_PREFIX(ClientRequest::Orderer::requeue);
   for (auto &req: list) {
     DEBUGDPP("requeueing {}", *pg, req);
     req.reset_instance_handle();
-    std::ignore = req.with_pg_int(shard_services, pg);
+    std::ignore = req.with_pg_int(pg);
   }
 }
 
@@ -47,9 +46,9 @@ void ClientRequest::complete_request()
 }
 
 ClientRequest::ClientRequest(
-  ShardServices &shard_services, crimson::net::ConnectionRef conn,
+  ShardServices &_shard_services, crimson::net::ConnectionRef conn,
   Ref<MOSDOp> &&m)
-  : put_historic_shard_services(&shard_services),
+  : shard_services(&_shard_services),
     conn(std::move(conn)),
     m(std::move(m)),
     instance_handle(new instance_handle_t)
@@ -98,9 +97,10 @@ bool ClientRequest::is_pg_op() const
     [](auto& op) { return ceph_osd_op_type_pg(op.op.op); });
 }
 
-seastar::future<> ClientRequest::with_pg_int(
-  ShardServices &shard_services, Ref<PG> pgref)
+seastar::future<> ClientRequest::with_pg_int(Ref<PG> pgref)
 {
+  ceph_assert_always(shard_services);
+
   LOG_PREFIX(ClientRequest::with_pg_int);
   epoch_t same_interval_since = pgref->get_interval_start_epoch();
   DEBUGDPP("{}: same_interval_since: {}", *pgref, *this, same_interval_since);
@@ -112,11 +112,11 @@ seastar::future<> ClientRequest::with_pg_int(
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
   return interruptor::with_interruption(
-    [FNAME, this, pgref, this_instance_id, &ihref, &shard_services]() mutable {
+    [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
       DEBUGDPP("{} start", *pgref, *this);
       PG &pg = *pgref;
       if (pg.can_discard_op(*m)) {
-	return shard_services.send_incremental_map(
+	return shard_services->send_incremental_map(
 	  std::ref(*conn), m->get_map_epoch()
 	).then([FNAME, this, this_instance_id, pgref] {
 	  DEBUGDPP("{}: discarding {}", *pgref, *this, this_instance_id);
@@ -179,14 +179,12 @@ seastar::future<> ClientRequest::with_pg_int(
 }
 
 seastar::future<> ClientRequest::with_pg(
-  ShardServices &shard_services, Ref<PG> pgref)
+  ShardServices &_shard_services, Ref<PG> pgref)
 {
-  put_historic_shard_services = &shard_services;
+  shard_services = &_shard_services;
   pgref->client_request_orderer.add_request(*this);
   auto ret = on_complete.get_future();
-  std::ignore = with_pg_int(
-    shard_services, std::move(pgref)
-  );
+  std::ignore = with_pg_int(std::move(pgref));
   return ret;
 }
 
@@ -417,8 +415,8 @@ bool ClientRequest::is_misdirected(const PG& pg) const
 
 void ClientRequest::put_historic() const
 {
-  ceph_assert_always(put_historic_shard_services);
-  put_historic_shard_services->get_registry().put_historic(*this);
+  ceph_assert_always(shard_services);
+  shard_services->get_registry().put_historic(*this);
 }
 
 const SnapContext ClientRequest::get_snapc(
