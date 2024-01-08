@@ -55,7 +55,7 @@ download_from() {
             exit
         fi
         url=$url_base/$fname
-        wget -c --no-verbose -O $fname $url
+        wget --no-verbose -O $fname $url
         if [ $? != 0 -o ! -e $fname ]; then
             echo "Download of $url failed"
         elif [ $(sha256sum $fname | awk '{print $1}') != $sha256 ]; then
