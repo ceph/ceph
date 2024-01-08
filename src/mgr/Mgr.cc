@@ -388,7 +388,7 @@ void Mgr::init()
     entity_addrvec_t addrv;
     addrv.parse(ident);
     ident = (char*)realloc(ident, 0);
-    py_module_registry->register_client("libcephsqlite", addrv);
+    py_module_registry->register_client("libcephsqlite", addrv, true);
   }
 #endif
 
