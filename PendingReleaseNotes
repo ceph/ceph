@@ -1,3 +1,10 @@
+>=17.2.8
+--------
+
+* RADOS: `get_pool_is_selfmanaged_snaps_mode` C++ API has been deprecated
+  due to being prone to false negative results.  It's safer replacement is
+  `pool_is_in_selfmanaged_snaps_mode`.
+
 >=17.2.7
 --------
 
