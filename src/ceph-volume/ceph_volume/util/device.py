@@ -85,6 +85,7 @@ class Device(object):
         'lsm_data',
     ]
     pretty_report_sys_fields = [
+        'actuators',
         'human_readable_size',
         'model',
         'removable',
@@ -581,9 +582,8 @@ class Device(object):
 
     def _check_generic_reject_reasons(self):
         reasons = [
-            ('removable', 1, 'removable'),
-            ('ro', 1, 'read-only'),
-            ('locked', 1, 'locked'),
+            ('id_bus', 'usb', 'id_bus'),
+            ('ro', '1', 'read-only'),
         ]
         rejected = [reason for (k, v, reason) in reasons if
                     self.sys_api.get(k, '') == v]
@@ -619,6 +619,8 @@ class Device(object):
             rejected.append('Has GPT headers')
         if self.has_partitions:
             rejected.append('Has partitions')
+        if self.has_fs:
+            rejected.append('Has a FileSystem')
         return rejected
 
     def _check_lvm_reject_reasons(self):
