@@ -1523,7 +1523,7 @@ void PG::on_change(ceph::os::Transaction &t) {
   wait_for_active_blocker.unblock();
   if (is_primary()) {
     logger().debug("{} {}: requeueing", *this, __func__);
-    client_request_orderer.requeue(shard_services, this);
+    client_request_orderer.requeue(this);
   } else {
     logger().debug("{} {}: dropping requests", *this, __func__);
     client_request_orderer.clear_and_cancel(*this);

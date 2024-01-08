@@ -29,9 +29,8 @@ class ShardServices;
 
 class ClientRequest final : public PhasedOperationT<ClientRequest>,
                             private CommonClientRequest {
-  // Initially set to primary core, updated to pg core after move,
-  // used by put_historic
-  ShardServices *put_historic_shard_services = nullptr;
+  // Initially set to primary core, updated to pg core after with_pg()
+  ShardServices *shard_services = nullptr;
 
   crimson::net::ConnectionRef conn;
   // must be after conn due to ConnectionPipeline's life-time
@@ -199,7 +198,7 @@ public:
       list.erase(list_t::s_iterator_to(request));
       intrusive_ptr_release(&request);
     }
-    void requeue(ShardServices &shard_services, Ref<PG> pg);
+    void requeue(Ref<PG> pg);
     void clear_and_cancel(PG &pg);
   };
   void complete_request();
@@ -243,8 +242,7 @@ public:
     conn = make_local_shared_foreign(std::move(_conn));
   }
 
-  seastar::future<> with_pg_int(
-    ShardServices &shard_services, Ref<PG> pg);
+  seastar::future<> with_pg_int(Ref<PG> pg);
 
 public:
   seastar::future<> with_pg(
