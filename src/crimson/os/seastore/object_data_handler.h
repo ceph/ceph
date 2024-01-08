@@ -35,10 +35,12 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
 
   std::vector<block_delta_t> delta = {};
 
+  interval_set<extent_len_t> modified_region;
+
   explicit ObjectDataBlock(ceph::bufferptr &&ptr)
     : LogicalCachedExtent(std::move(ptr)) {}
   explicit ObjectDataBlock(const ObjectDataBlock &other)
-    : LogicalCachedExtent(other) {}
+    : LogicalCachedExtent(other), modified_region(other.modified_region) {}
   explicit ObjectDataBlock(extent_len_t length)
     : LogicalCachedExtent(length) {}
 
@@ -55,11 +57,28 @@ struct ObjectDataBlock : crimson::os::seastore::LogicalCachedExtent {
     auto iter = bl.cbegin();
     iter.copy(bl.length(), get_bptr().c_str() + offset);
     delta.push_back({offset, bl.length(), bl});
+    modified_region.union_insert(offset, bl.length());
   }
 
   ceph::bufferlist get_delta() final;
 
   void apply_delta(const ceph::bufferlist &bl) final;
+
+  std::optional<modified_region_t> get_modified_region() final {
+    if (modified_region.empty()) {
+      return std::nullopt;
+    }
+    return modified_region_t{modified_region.range_start(),
+      modified_region.range_end() - modified_region.range_start()};
+  }
+
+  void clear_modified_region() final {
+    modified_region.clear();
+  }
+
+  void logical_on_delta_write() final {
+    delta.clear();
+  }
 };
 using ObjectDataBlockRef = TCachedExtentRef<ObjectDataBlock>;
 

@@ -1307,6 +1307,8 @@ constexpr data_category_t get_extent_category(extent_types_t type) {
   }
 }
 
+bool can_inplace_rewrite(extent_types_t type);
+
 // type for extent modification time, milliseconds since the epoch
 using sea_time_point = seastar::lowres_system_clock::time_point;
 using sea_duration = seastar::lowres_system_clock::duration;

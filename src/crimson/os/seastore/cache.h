@@ -1039,7 +1039,8 @@ public:
    */
   using replay_delta_ertr = crimson::errorator<
     crimson::ct_error::input_output_error>;
-  using replay_delta_ret = replay_delta_ertr::future<bool>;
+  using replay_delta_ret = replay_delta_ertr::future<
+    std::pair<bool, CachedExtentRef>>;
   replay_delta_ret replay_delta(
     journal_seq_t seq,
     paddr_t record_block_base,

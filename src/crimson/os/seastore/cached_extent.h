@@ -587,6 +587,11 @@ public:
     rewrite_generation = gen;
   }
 
+  void set_inplace_rewrite_generation() {
+    user_hint = placement_hint_t::REWRITE;
+    rewrite_generation = OOL_GENERATION;
+  }
+
   bool is_inline() const {
     return poffset.is_relative();
   }
@@ -604,6 +609,10 @@ public:
   // and a mutation_pending extent has a valid prior_instance
   CachedExtentRef get_prior_instance() const {
     return prior_instance;
+  }
+
+  uint32_t get_last_committed_crc() const {
+    return last_committed_crc;
   }
 
 private:
@@ -1236,6 +1245,16 @@ public:
   std::ostream &_print_detail(std::ostream &out) const final;
 
   void on_replace_prior(Transaction &t) final;
+
+  struct modified_region_t {
+    extent_len_t offset;
+    extent_len_t len;
+  };
+  virtual std::optional<modified_region_t> get_modified_region() {
+    return std::nullopt;
+  }
+
+  virtual void clear_modified_region() {}
 
   virtual ~LogicalCachedExtent();
 protected:

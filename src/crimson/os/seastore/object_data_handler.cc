@@ -423,6 +423,7 @@ void ObjectDataBlock::apply_delta(const ceph::bufferlist &bl) {
   for (auto &&d : deltas) {
     auto iter = d.bl.cbegin();
     iter.copy(d.len, get_bptr().c_str() + d.offset);
+    modified_region.union_insert(d.offset, d.len);
   }
 }
 

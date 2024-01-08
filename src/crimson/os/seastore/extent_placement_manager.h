@@ -43,6 +43,9 @@ public:
 
   using close_ertr = base_ertr;
   virtual close_ertr::future<> close() = 0;
+
+  virtual bool can_inplace_rewrite(Transaction& t,
+    CachedExtentRef extent) = 0;
 };
 using ExtentOolWriterRef = std::unique_ptr<ExtentOolWriter>;
 
@@ -77,6 +80,11 @@ public:
 
   paddr_t alloc_paddr(extent_len_t length) final {
     return make_delayed_temp_paddr(0);
+  }
+
+  bool can_inplace_rewrite(Transaction& t,
+    CachedExtentRef extent) final {
+    return false;
   }
 
 private:
@@ -120,6 +128,17 @@ public:
   paddr_t alloc_paddr(extent_len_t length) final {
     assert(rb_cleaner);
     return rb_cleaner->alloc_paddr(length);
+  }
+
+  bool can_inplace_rewrite(Transaction& t,
+    CachedExtentRef extent) final {
+    if (!extent->is_dirty()) {
+      return false;
+    }
+    assert(t.get_src() == transaction_type_t::TRIM_DIRTY);
+    ceph_assert_always(extent->get_type() == extent_types_t::ROOT ||
+	extent->get_paddr().is_absolute());
+    return crimson::os::seastore::can_inplace_rewrite(extent->get_type());
   }
 
 private:
@@ -197,6 +216,14 @@ public:
 
   void set_extent_callback(ExtentCallbackInterface *cb) {
     background_process.set_extent_callback(cb);
+  }
+
+  bool can_inplace_rewrite(Transaction& t, CachedExtentRef extent) {
+    auto writer = get_writer(placement_hint_t::REWRITE,
+      get_extent_category(extent->get_type()),
+      OOL_GENERATION);
+    ceph_assert(writer);
+    return writer->can_inplace_rewrite(t, extent);
   }
 
   journal_type_t get_journal_type() const {
