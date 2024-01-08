@@ -14067,7 +14067,6 @@ int Client::_removexattr(Inode *in, const char *name, const UserPerm& perms)
 
   // same xattrs supported by kernel client
   if (strncmp(name, "user.", 5) &&
-      strncmp(name, "system.", 7) &&
       strncmp(name, "security.", 9) &&
       strncmp(name, "trusted.", 8) &&
       strncmp(name, "ceph.", 5))
