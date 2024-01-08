@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <cstdint>
 #include <limits.h>
 
 #include <array>
@@ -1648,6 +1649,50 @@ public:
   RGWOpType get_type() override { return RGW_OP_PUT_ACLS; }
   uint32_t op_mask() override { return RGW_OP_TYPE_WRITE; }
 };
+
+class RGWGetObjAttrs : public RGWGetObj {
+protected:
+  std::string version_id;
+  std::string expected_bucket_owner;
+  int marker;
+  int max_parts;
+  uint16_t requested_attributes;
+#if 0
+  /* used to decrypt attributes for objects stored with SSE-C */
+  x-amz-server-side-encryption-customer-algorithm
+  x-amz-server-side-encryption-customer-key
+  x-amz-server-side-encryption-customer-key-MD5
+#endif
+public:
+
+  enum class ReqAttributes : uint16_t {
+    None = 0,
+    Etag,
+    Checksum,
+    ObjectParts,
+    StorageClass,
+    ObjectSize
+  };
+
+  static uint16_t as_flag(ReqAttributes attr) {
+    return 1 << (uint16_t(attr) ? uint16_t(attr) - 1 : 0);
+  }
+
+  static uint16_t recognize_attrs(const std::string& hdr, uint16_t deflt = 0);
+
+  RGWGetObjAttrs() : RGWGetObj()
+  {
+    RGWGetObj::get_data = false; // it's extra false
+  }
+
+  int verify_permission(optional_yield y) override;
+  void pre_exec() override;
+  void execute(optional_yield y) override;
+  void send_response() override = 0;
+  const char* name() const override { return "get_obj_attrs"; }
+  RGWOpType get_type() override { return RGW_OP_GET_OBJ_ATTRS; }
+  uint32_t op_mask() override { return RGW_OP_TYPE_READ; }
+}; /* RGWGetObjAttrs */
 
 class RGWGetLC : public RGWOp {
 protected:
