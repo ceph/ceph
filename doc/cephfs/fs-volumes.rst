@@ -306,7 +306,7 @@ Resize a subvolume using:
    ceph fs subvolume resize <vol_name> <subvol_name> <new_size> [--group_name <subvol_group_name>] [--no_shrink]
 
 The command resizes the subvolume quota using the size specified by ``new_size``.
-The `--no_shrink`` flag prevents the subvolume from shrinking below the current  used size of the subvolume.
+The ``--no_shrink`` flag prevents the subvolume from shrinking below the current  used size of the subvolume.
 
 The subvolume can be resized to an unlimited (but sparse) logical size by passing ``inf`` or ``infinite`` as `` new_size``.
 
@@ -785,6 +785,377 @@ Will enable distributed subtree partitioning policy for the "csi" subvolume
 group.  This will cause every subvolume within the group to be automatically
 pinned to one of the available ranks on the file system.
 
+Subvolume quiesce
+-----------------
+
+It may be needed to pause IO to a set of subvolumes of a given volume (file system).
+A good example of such case is a consistent snapshot spanning multiple subvolumes.
+Such a task arises often in an environment such as k8s, where a single deployed application
+can work with many mounted subvolumes across several hosts. When a snapshot of such a system is needed,
+the application may not find the result consistent unless the snapshots were taken
+under an active write pause.
+
+The volumes plugin provides a tool to initiate and await such a pause across a set of subvolumes:
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce --set-id myset1 <vol_name> <[group_name/]sub_name...> --await
+  # perform actions while the IO pause is active, like taking snapshots
+  $ ceph fs quiesce --set-id myset1 --release --await
+  # if successful, all members of the set were confirmed as still in pause and released from such
+
+The ``quiesce`` functionality is itself based on top of a lower level QuiesceDb service maintained by the MDS
+daemons. Volumes plugin merely maps the subvolume names to their corresponding paths on the given file system
+and then issues the appropriate quiesce command to the MDS. You can learn more about the feature in the developer guides.
+
+Operations
+~~~~~~~~~~
+
+The IO pause (referred to as `quiesce`) is requested for a group of one or more subvolumes (i.e. paths in a filesystem).
+The group is referred to as "quiesce set", and every quiesce set must have a unique string id to interact with.
+A quiesce set can be manipulated in the following ways:
+
+* **include** one or more subvolumes - quiesce set members
+* **exclude** one or more members
+* **cancel** the set, asynchronously aborting the pause on all its current members
+* **release** the set, requesting the end of the pause from all members and expecting an ack from all clients
+* **query** the current state of a set by id or all active sets or all known sets
+* **cancel all** active sets in case an immediate resume of IO is required.
+
+The operations listed above are non-blocking: they perform the intended modification if it's applicable
+and get back with an up to date version of the target set, whether the operation was successful or not. 
+The set may change states as a result of the modification, and the version that's returned in the response 
+is guaranteed to be in a state consistent with this and potentialy other successful operations from 
+the same control loop batch.
+
+Some set states are `awaitable`. We will discuss those below, but for now it's important to mention that
+any of the commands above can be amended with an **await** modifier, which will cause them to block
+on the set after applying their intended modification, as long as the resulting set state is `awaitable`.
+Such a command will block until the set reaches the awaited state, gets modified by another command,
+or transitions into another state. The reason for the unblock will be clear by the result code, while
+the contents of the response will always be the most recent set state.
+
+.. image:: quiesce-set-states.svg
+
+`Awaitable` states on the diagram are marked with ``(a)`` or ``(A)``. Blocking versions of the operations
+will pend while the set is in an ``(a)`` state and will complete with success if it reaches an ``(A)`` state.
+If the set is already at an ``(A)`` state, the operation completes immediately with a success. 
+
+Most of the operations require a set-id. The exceptions are:
+
+* creation of a new set without specifying a set id,
+* query of active or all known sets, and
+* the cancel all
+
+Creating a new set is achieved by including member(s) via the `include` or `reset` commands.
+It's possible to specify a set id, and if it's a new id then the set will be created
+with the specified member(s) in the `QUIESCING` state. When no set id is specified while including
+or resetting members, then a new set with a unique set id is created. The set id will be known
+to the caller by inspecting the output
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce a sub1 --set-id=unique-id
+  {
+      "epoch": 3,
+      "db_version": 1,
+      "sets": {
+          "unique-id": {
+              "db_version": 1,
+              "age_ref": 0.0,
+              "state": {
+                  "name": "TIMEDOUT",
+                  "age": 0.0
+              },
+              "timeout": 0.0,
+              "expiration": 0.0,
+              "members": {
+                  "file:/volumes/_nogroup/sub1/b1fcce76-3418-42dd-aa76-f9076d047dd3": {
+                      "excluded": false,
+                      "state": {
+                          "name": "QUIESCING",
+                          "age": 0.0
+                      }
+                  }
+              }
+          }
+      }
+  }
+
+The output contains the set we just created successfully, however it's already `TIMEDOUT`. 
+This is expected, since we have not specified the timeout for this quiesce,
+and we can see in the output that it was initialized to 0 by default, along with the expiration.
+
+Timeouts
+~~~~~~~~
+
+The two timeout parameters, `timeout` and `expiration`, are the main guards against 
+accidentally causing a DOS condition for our application. Any command to an active set
+may carry the ``--timeout`` or ``--expiration`` arguments to update these values for the set.
+If present, the values will be applied before the action this command requests.
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce a --set-id=unique-id --timeout=10 > /dev/null
+  Error EPERM:  
+
+It's too late for our ``unique-id`` set, as it's in a terminal state. No changes are allowed
+to sets that are in their terminal states, i.e. inactive. Let's create a new set
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce a sub1 --timeout 60
+  {
+      "epoch": 3,
+      "db_version": 2,
+      "sets": {
+          "8988b419": {
+              "db_version": 2,
+              "age_ref": 0.0,
+              "state": {
+                  "name": "QUIESCING",
+                  "age": 0.0
+              },
+              "timeout": 60.0,
+              "expiration": 0.0,
+              "members": {
+                  "file:/volumes/_nogroup/sub1/b1fcce76-3418-42dd-aa76-f9076d047dd3": {
+                      "excluded": false,
+                      "state": {
+                          "name": "QUIESCING",
+                          "age": 0.0
+                      }
+                  }
+              }
+          }
+      }
+  }
+
+This time, we haven't specified a set id, so the system created a new one. We see its id
+in the output, it's ``8988b419``. The command was a success and we see that 
+this time the set is `QUIESCING`. At this point, we can add more members to the set
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce a --set-id 8988b419 --include sub2 sub3
+  {
+      "epoch": 3,
+      "db_version": 3,
+      "sets": {
+          "8988b419": {
+              "db_version": 3,
+              "age_ref": 0.0,
+              "state": {
+                  "name": "QUIESCING",
+                  "age": 30.7
+              },
+              "timeout": 60.0,
+              "expiration": 0.0,
+              "members": {
+                  "file:/volumes/_nogroup/sub1/b1fcce76-3418-42dd-aa76-f9076d047dd3": {
+                      "excluded": false,
+                      "state": {
+                          "name": "QUIESCING",
+                          "age": 30.7
+                      }
+                  },
+                  "file:/volumes/_nogroup/sub2/bc8f770e-7a43-48f3-aa26-d6d76ef98d3e": {
+                      "excluded": false,
+                      "state": {
+                          "name": "QUIESCING",
+                          "age": 0.0
+                      }
+                  },
+                  "file:/volumes/_nogroup/sub3/24c4b57b-e249-4b89-b4fa-7a810edcd35b": {
+                      "excluded": false,
+                      "state": {
+                          "name": "QUIESCING",
+                          "age": 0.0
+                      }
+                  }
+              }
+          }
+      }
+  }
+
+The ``--include`` bit is optional, as if no operation is given while members are provided, 
+then "include" is assumed.
+
+As we have seen, the timeout argument specifies how much time we are ready to give the system
+to reach the `QUIESCED` state on the set. However, since new members can be added to an
+active set at any time, it wouldn't be fair to measure the timeout from the set creation time.
+Hence, the timeout is tracked per member: every member has `timeout` seconds to quiesce,
+and if any one takes longer than that, the whole set is marked as `TIMEDOUT` and the pause is released.
+
+Once the set is in the `QUIESCED` state, it will begin its expiration timer. This timer is tracked
+per set as a whole, not per members. Once the `expiration` seconds elapse, the set will transition
+into an `EXPIRED` state, unless it was actively released or canceled by a dedicated operation.
+
+It's possible to add new members to a `QUIESCED` set. In this case, it will transition back to `QUIESCING`,
+and the new member(s) will have their own timeout to quiesce. If they succeed, then the set will
+again be `QUIESCED` and the expiration timer will restart. 
+
+.. warning:: 
+  * The `expiration timer` doesn't apply when a set is `QUIESCING`; it is reset to the
+    value of the `expiration` property when the **set** becomes `QUIESCED`
+  * The `timeout` doesn't apply to **members** that are `QUIESCED`
+
+Awaiting
+~~~~~~~~
+
+Note that the commands above are all non-blocking. If we want to wait for the quiesce set
+to reach the `QUIESCED` state, we should await it at some point. ``--await`` can be given
+along with other arguments to let the system know our intention.
+
+Technically, there are two types of await: `quiesce await` and `release await`. The former
+is the default, and the latter can only be achieved with ``--release`` present in the argument list.
+To avoid confision, it is not permitted to issue a `quiesce await` when the set is already `RELEASING`
+or `RELEASED`. Trying to ``--release`` a set that is not `QUIESCED` is an ``EPERM`` error as well, regardless
+of whether await is requested alongside. However, it's not an error to `release await` 
+an already released set, or to `quiesce await` a `QUIESCED` one.
+
+When awaiting, one may also specify a maximum duration that they would like this await request to block for,
+not affecting the two intrinsic timeouts discussed above. If the target awaited state isn't reached
+within the specified duration, then ``EINPROGRESS`` is returned. For that, one should use the argument
+``--await-for=<seconds>``. One could think of ``--await`` as equivalent to ``--await-for=Infinity``.
+While it doesn't make sense to specify both arguments, it is not considered an error. If
+both ``--await`` and ``--await-for`` are present, then the former is ignored, and the time limit
+from ``--await-for`` is honored.
+
+.. prompt:: bash $ auto
+
+  $ time ceph fs quiesce a sub1 --timeout=10 --await-for=2
+  {
+      "epoch": 6,
+      "db_version": 3,
+      "sets": {
+          "c3c1d8de": {
+              "db_version": 3,
+              "age_ref": 0.0,
+              "state": {
+                  "name": "QUIESCING",
+                  "age": 2.0
+              },
+              "timeout": 10.0,
+              "expiration": 0.0,
+              "members": {
+                  "file:/volumes/_nogroup/sub1/b1fcce76-3418-42dd-aa76-f9076d047dd3": {
+                      "excluded": false,
+                      "state": {
+                          "name": "QUIESCING",
+                          "age": 2.0
+                      }
+                  }
+              }
+          }
+      }
+  }
+  Error EINPROGRESS: 
+  ceph fs quiesce a sub1 --timeout=10 --await-for=2  0.41s user 0.04s system 17% cpu 2.563 total
+
+(there is a ~0.5 sec overhead that the ceph client adds, at least in a local debug setup)
+
+Quiesce-Await and Expiration
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Quiesce await has a side effect: it resets the internal expiration timer. This allows for a watchdog
+approach to a long running multistep process under the IO pause by repeatedly ``--await``\ ing an already
+`QUIESCED` set. Consider the following example script:
+
+.. prompt:: bash $ auto
+
+  $ set -e   # (1)
+  $ ceph fs quiesce a sub1 sub2 sub3 --timeout=30 --expiration=10 --set-id="snapshots" --await # (2)
+  $ ceph fs subvolume snapshot create a sub1 snap1-sub1  # (3)
+  $ ceph fs quiesce a --set-id="snapshots" --await  # (4)
+  $ ceph fs subvolume snapshot create a sub2 snap1-sub2  # (3)
+  $ ceph fs quiesce a --set-id="snapshots" --await  # (4)
+  $ ceph fs subvolume snapshot create a sub3 snap1-sub3  # (3)
+  $ ceph fs quiesce a --set-id="snapshots" --release --await  # (5)
+
+.. warning:: This example uses arbitrary timeouts to convey the concept. In real life, the values must be carefully
+  chosen in accordance with the actual system requirements and specifications.
+
+The goal of the script is to take consistent snapshots of 3 subvolumes. 
+We begin by setting the bash ``-e`` option `(1)` to exit this script if any or the following commands 
+returns with a non-zero status.
+
+We go on requesting an IO pause for the three subvolumes `(2)`. We set our timeouts allowing 
+the system to spend up to 30 seconds reaching the quiesced state across all members
+and stay quiesced for up to 10 seconds before the quiesce expires and the IO
+is resumed. We also specify ``--await`` to only proceed once the quiesce is reached.
+
+We then proceed with a set of command pairs that take the next snapshot and call ``--await`` on our set
+to extend the expiration timeout for 10 more seconds `(3,4)`. This approach gives us up to 10 seconds
+for every snapshot, but also allows taking as many snapshots as we need without losing the IO pause,
+and with it - consistency. If we wanted, we could update the `expiration` every time we called for await.
+
+If any of the snapshots gets stuck and takes longer than 10 seconds to complete, then the next call
+to ``--await`` will return an error since the set will be `EXPIRED` which is not an awaitable state.
+This limits the impact on the applications in the bad case scenarios.
+
+We could have set the `expiration` timeout to 30 at the beginning `(2)`, but that would mean that
+a single stuck snapshot would keep the applications pending for all this time.
+
+If Version
+~~~~~~~~~~
+
+Sometimes, it's not enough to just observe the successful quiesce or release. The reason could be
+a concurrent change of the set by another client. Consider this example:
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce a sub1 sub2 sub3 --timeout=30 --expiration=60 --set-id="snapshots" --await  # (1)
+  $ ceph fs subvolume snapshot create a sub1 snap1-sub1  # (2)
+  $ ceph fs subvolume snapshot create a sub2 snap1-sub2  # (3)
+  $ ceph fs subvolume snapshot create a sub3 snap1-sub3  # (4)
+  $ ceph fs quiesce a --set-id="snapshots" --release --await  # (5)
+
+The sequence looks good, and the release `(5)` completes successfully. However, it could be that
+before snap for sub3 `(4)` is taken, another session excludes sub3 from the set, resuming its IOs
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce a --set-id="snapshots" --exclude sub3
+
+Since removing a member from a set doesn't affect its `QUIESCED` state, the release command `(5)`
+has no reason to fail. It will ack the two unexcluded members sub1 and sub2 and report success.
+
+In order to address this or similar problems, the quiesce command supports an optimistic concurrency
+mode. To activate it, one needs to pass an ``--if-version=<db_version>`` that will be compared
+to the set's db version and the operation will only proceed if the values match. Otherwise, the command
+will not be executed and the return status will be ``ESTALE``.
+
+It's easy to know which version to expect of a set, since every command that modifies a set will return
+this set on the stdout, regarldess of the exit status. In the examples above one can notice that every
+set carries a ``"db_version"`` property which is the last db version where this set got modified.
+
+In the example at the beginning of this subsection, the initial quiesce command `(1)` would have returned
+the newly created set with id ``"snapshots"`` and some version, let's say ``13``. Since we don't expect any other
+changes to the set while we are making snapshots with the commands `(2,3,4)`, the release command `(5)`
+could have looked like
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce a --set-id="snapshots" --release --await --if-version=13 # (5)
+
+This way, the result of the release command would have been ``ESTALE`` instead of 0, and we would
+know that something wasn't right with the quiesce set and our snapshots might not be consistent.
+
+.. tip:: When ``--if-version`` and the command returns ``ESTALE``, the requested action is **not** executed.
+  It means that the script may want to execute some unconditional command on the set to adjust its state
+  according to the requirements
+
+There is another use of the ``--if-version`` argument which could come handy for automation software.
+As we have discussed earlier, it is possible to create a new quiesce set with a given set id. Drivers like
+the CSI for k8s could use their internal request id to eliminate the need to keep an additional mapping
+to the quiesce set id. However, to guarantee uniqueness, the driver may want to verify that the set is
+indeed new. For that, ``if-version=0`` may be used, and it will only create the new set if no other
+set with this id was present in the database
+
+.. prompt:: bash $ auto
+
+  $ ceph fs quiesce a sub1 sub2 sub3 --set-id="external-id" --if-version=0
 
 .. _manila: https://github.com/openstack/manila
 .. _CSI: https://github.com/ceph/ceph-csi
