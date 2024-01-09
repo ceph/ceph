@@ -715,10 +715,11 @@ void PgScrubber::on_operator_periodic_cmd(
   asok_response_section(f, true, scrub_level, stamp);
 
   if (scrub_level == scrub_level_t::deep) {
+    // this call sets both stamps
     m_pg->set_last_deep_scrub_stamp(stamp);
+  } else {
+    m_pg->set_last_scrub_stamp(stamp);
   }
-  // and in both cases:
-  m_pg->set_last_scrub_stamp(stamp);
 }
 
 // when asked to force a high-priority scrub
