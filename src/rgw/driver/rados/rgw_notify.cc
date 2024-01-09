@@ -1086,7 +1086,7 @@ int publish_reserve(const DoutPrefixProvider* dpp,
       rgw_pubsub_topic result;
       const RGWPubSub ps(res.store, res.user_tenant, site);
       auto ret =
-          ps.get_topic(res.dpp, topic_cfg.name, result, res.yield, nullptr);
+          ps.get_topic(res.dpp, topic_cfg.dest.arn_topic, result, res.yield, nullptr);
       if (ret < 0) {
         ldpp_dout(res.dpp, 1)
             << "INFO: failed to load topic: " << topic_cfg.name
