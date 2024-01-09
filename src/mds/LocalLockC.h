@@ -20,7 +20,7 @@
 
 class LocalLockC : public SimpleLock {
 public:
-  LocalLockC(MDSCacheObject *o, LockType *t) : 
+  LocalLockC(MDSCacheObject *o, const LockType *t) :
     SimpleLock(o, t) {
     set_state(LOCK_LOCK); // always.
   }
