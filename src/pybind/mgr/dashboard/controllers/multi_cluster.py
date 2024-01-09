@@ -1,10 +1,11 @@
 from . import APIDoc, APIRouter, CreatePermission, UpdatePermission, ReadPermission, Endpoint, EndpointDoc, RESTController
 import requests
+from urllib.parse import urlparse
 from ..exceptions import DashboardException
 
 from ..settings import Settings
 from ..security import Scope
-
+from ..services.orchestrator import OrchClient
 from ..tools import configure_cors 
 
 import logging
@@ -49,8 +50,10 @@ class MultiClusterRoute(RESTController):
             requests.request('PUT', base_url + 'api/multicluster/update_cors', json={'url': origin}, verify=verify, headers=headers)
             response = requests.request('GET', base_url + 'api/health/get_cluster_fsid',
                                         headers=headers, verify=verify)
-            logger.info('hellojii %s', response)
-                            
+            prometheus_url_response = requests.request('GET', base_url + 'api/settings/PROMETHEUS_API_HOST',
+                                            headers=headers, verify=False)
+            prometheus_api_host = json.loads(prometheus_url_response.content, strict=False)
+            self.set_prometheus_federation_target(prometheus_api_host['value'])                         
         except Exception as e:
             raise DashboardException(
                 "Could not reach {}".format(base_url+path),
@@ -59,7 +62,6 @@ class MultiClusterRoute(RESTController):
 
         try:
             fsid = json.loads(response.content, strict=False)
-            logger.info('hellojii2 %s', fsid)
         except json.JSONDecodeError as e:
             raise DashboardException(
                 "Error parsing Dashboard API response: {}".format(e.msg),
@@ -88,7 +90,10 @@ class MultiClusterRoute(RESTController):
                 requests.request('PUT', url + 'api/multicluster/update_cors', json={'url': origin}, verify=False, headers=headers)
                 response = requests.request('GET', url + 'api/health/get_cluster_fsid',
                                             headers=headers, verify=False)
-                logger.info('hellojii %s', response)
+                prometheus_url_response = requests.request('GET', url + 'api/settings?PROMETHEUS_API_HOST',
+                                            headers=headers, verify=False)
+                prometheus_api_host = json.loads(prometheus_url_response.content, strict=False)                    
+                self.set_prometheus_federation_target(prometheus_api_host['value'])
             except Exception as e:
                 raise DashboardException(
                     "Could not reach {}".format(url+'api/auth'),
@@ -97,7 +102,6 @@ class MultiClusterRoute(RESTController):
 
             try:
                 fsid = json.loads(response.content, strict=False)
-                logger.info('hellojii2 %s', fsid)
             except json.JSONDecodeError as e:
                 raise DashboardException(
                     "Error parsing Dashboard API response: {}".format(e.msg),
@@ -110,13 +114,18 @@ class MultiClusterRoute(RESTController):
             return
         params = { "username": username, "password": password }
         response = self._proxy('POST', url, path='api/auth', payload=json.dumps(params), origin=origin)
-        logger.info('hellojii3 %s', response)
         try:
             copy_config['config'].append({'name': response['fsid'], 'url': url, 'token': response['token'], 'helper_text': helper_text})
         except KeyError:
             copy_config = {'current_url': url, 'config': [{'name': response['fsid'], 'url': url, 'token': response['token'], 'helper_text': helper_text}]}
-        logger.info('hellojii4 %s', copy_config)
         Settings.MULTICLUSTER_CONFIG = copy_config
+
+    def set_prometheus_federation_target(self, host_url):
+        prometheus_target_url = urlparse(host_url)
+        target_url_and_host = prometheus_target_url.netloc
+        orch = OrchClient.instance()
+        if orch.available():
+            orch.multiclustertargets.set_prometheus_targets(target_url_and_host)
 
     @Endpoint('PUT')
     @UpdatePermission
@@ -150,8 +159,6 @@ class MultiClusterRoute(RESTController):
             decoded_token = jwt.decode(jwt_token, verify=False)
             expiration_time = decoded_token['exp']
             current_time = time.time()
-            logger.info('current_time %s', current_time)
-            logger.info('expiration_time %s', expiration_time)
             return expiration_time < current_time
         except jwt.ExpiredSignatureError:
             return True
@@ -168,8 +175,6 @@ class MultiClusterRoute(RESTController):
         token_status_map = {}
 
         for item in clusters_token_array:
-            logger.info('asdf %s', item)
-            logger.info('asdfqq %s', item['key'])
             cluster_name = item['key']
             token = item['value']
             status = self.check_token_status_expiration(token)

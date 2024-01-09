@@ -170,6 +170,12 @@ class DaemonManager(ResourceManager):
         return self.api.daemon_action(daemon_name=daemon_name, action=action, image=image)
 
 
+class MultiClusterManager(ResourceManager):
+    @wait_api_result
+    def set_prometheus_targets(self, host_url):
+        return self.api.set_prometheus_targets(host_url)
+
+
 class UpgradeManager(ResourceManager):
     @wait_api_result
     def list(self, image: Optional[str], tags: bool,
@@ -220,6 +226,7 @@ class OrchClient(object):
         self.osds = OsdManager(self.api)
         self.daemons = DaemonManager(self.api)
         self.upgrades = UpgradeManager(self.api)
+        self.multiclustertargets = MultiClusterManager(self.api)
 
     def available(self, features: Optional[List[str]] = None) -> bool:
         available = self.status()['available']

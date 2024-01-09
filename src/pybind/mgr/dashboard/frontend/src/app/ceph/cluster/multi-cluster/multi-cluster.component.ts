@@ -15,6 +15,7 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { MultiClusterFormComponent } from './multi-cluster-form/multi-cluster-form.component';
+import { Router } from '@angular/router';
 
 @Component({
   selector: 'cd-multi-cluster',
@@ -98,6 +99,7 @@ export class MultiClusterComponent implements OnInit {
   constructor(
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
+    private router: Router,
     public modalService: ModalService,
     public multiClusterService: MultiClusterService,
     private prometheusService: PrometheusService,
@@ -401,6 +403,13 @@ export class MultiClusterComponent implements OnInit {
 
   openRemoteClusterInfoModal() {
     this.bsModalRef = this.modalService.show(MultiClusterFormComponent, {
+      submitAction: () => {
+        setTimeout(() => {
+          this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+            this.router.navigate(['/multi-cluster']);
+          });
+        }, 3000);
+      },
       size: 'lg'
     });
   }

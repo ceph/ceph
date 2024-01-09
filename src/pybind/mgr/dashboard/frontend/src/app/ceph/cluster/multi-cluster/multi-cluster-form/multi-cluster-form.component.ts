@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, EventEmitter, Output } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
@@ -13,6 +13,10 @@ import { NotificationService } from '~/app/shared/services/notification.service'
   styleUrls: ['./multi-cluster-form.component.scss']
 })
 export class MultiClusterFormComponent {
+
+  @Output()
+  submitAction = new EventEmitter();
+
   remoteClusterForm: CdFormGroup;
   showToken = false;
   interval: NodeJS.Timer;
@@ -73,10 +77,11 @@ export class MultiClusterFormComponent {
       .subscribe({
         error: () => this.remoteClusterForm.setErrors({ cdSubmitButton: true }),
         complete: () => {
+          this.submitAction.emit();
           this.notificationService.show(
             NotificationType.success,
             $localize`Cluster added successfully`
-          );
+          );   
           this.activeModal.close();
         }
       });

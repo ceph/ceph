@@ -57,7 +57,7 @@
     </div>
     <div class="d-flex mb-4">
       <div class="col-lg-2 pe-3"
-           *ngIf="queriesResults.CLUSTER_COUNT[0]">
+           *ngIf="queriesResults.CLUSTER_COUNT && queriesResults.CLUSTER_COUNT[0]">
         <cd-card cardTitle="Clusters"
                  i18n-title
                  class="col-sm-6 pb-3"
@@ -67,7 +67,8 @@
           </span>
         </cd-card>
       </div>
-      <div class="col-lg-2 pe-3">
+      <div class="col-lg-2 pe-3"
+           *ngIf="queriesResults['ALERTS_COUNT'] && queriesResults['ALERTS_COUNT'][0]">
         <cd-card cardTitle="Alerts"
                  i18n-title
                  class="col-sm-6"
@@ -78,7 +79,7 @@
         </cd-card>
       </div>
       <div class="col-lg-2 pe-3"
-           *ngIf="queriesResults['TOTAL_USED_CAPACITY'][0]">
+           *ngIf="queriesResults['TOTAL_USED_CAPACITY'] && queriesResults['TOTAL_USED_CAPACITY'][0]">
         <cd-card cardTitle="Connection Errors"
                  i18n-title
                  class="col-sm-6 pb-3"
@@ -89,7 +90,7 @@
         </cd-card>
       </div>
       <div class="col-lg-2 pe-3"
-           *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'][0]">
+           *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'] && queriesResults['TOTAL_CLUSTERS_CAPACITY'][0]">
         <cd-card cardTitle="Total Capacity"
                  i18n-title
                  class="col-sm-6 pb-3"
@@ -100,7 +101,7 @@
         </cd-card>
       </div>
       <div class="col-lg-2 pe-3"
-           *ngIf="queriesResults['TOTAL_USED_CAPACITY'][0]">
+           *ngIf="queriesResults['TOTAL_USED_CAPACITY'] && queriesResults['TOTAL_USED_CAPACITY'][0]">
         <cd-card cardTitle="Total Used Capacity"
                  i18n-title
                  class="col-sm-6 pb-3"
@@ -111,7 +112,7 @@
         </cd-card>
       </div>
       <div class="col-lg-2"
-           *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'][0] && queriesResults['TOTAL_USED_CAPACITY'][0]">
+           *ngIf="queriesResults['TOTAL_CLUSTERS_CAPACITY'] && queriesResults['TOTAL_CLUSTERS_CAPACITY'][0] && queriesResults['TOTAL_USED_CAPACITY'] && queriesResults['TOTAL_USED_CAPACITY'][0]">
         <cd-card cardTitle="Total Available Capacity"
                  i18n-title
                  class="col-sm-6 pb-3"
@@ -125,7 +126,7 @@
   </div>
   <div class="row mb-4 d-flex">
     <div class="col-lg-3 pe-0"
-         *ngIf="queriesResults['HEALTH_OK_COUNT'][0] && queriesResults['HEALTH_WARNING_COUNT'][0]">
+         *ngIf="queriesResults['HEALTH_OK_COUNT'] && queriesResults['HEALTH_OK_COUNT'][0] && queriesResults['HEALTH_WARNING_COUNT'] && queriesResults['HEALTH_WARNING_COUNT'][0]">
       <cd-card cardTitle="Status"
                i18n-title
                class="d-flex h-100"
@@ -166,7 +167,7 @@
 
   <div class="row">
     <div class="col-lg-3 pe-0 mb-4"
-         *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'][0] && queriesResults['WARNING_ALERTS_COUNT'][0]">
+         *ngIf="queriesResults['CRITICAL_ALERTS_COUNT'] && queriesResults['CRITICAL_ALERTS_COUNT'][0] && queriesResults['WARNING_ALERTS_COUNT'] && queriesResults['WARNING_ALERTS_COUNT'][0]">
       <cd-card cardTitle="Alert Status"
                i18n-title
                class="d-flex h-100"
