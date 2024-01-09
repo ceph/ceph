@@ -20,8 +20,6 @@
 #include "rgw_period_history.h"
 #include "rgw_period_puller.h"
 
-#include "svc_meta_be.h"
-
 
 class RGWMetadataLog;
 class RGWMetadataLogHistory;
@@ -105,6 +103,11 @@ public:
 		    optional_yield y, bool exclusive = false);
 
   int add_entry(const DoutPrefixProvider *dpp, const std::string& hash_key, const std::string& section, const std::string& key, bufferlist& bl, optional_yield y);
+
+  // encode a RGWMetadataLogData with MDLOG_STATUS_COMPLETE and add it
+  int complete_entry(const DoutPrefixProvider* dpp, optional_yield y,
+                     const std::string& section, const std::string& key,
+                     const RGWObjVersionTracker* objv);
 
   int get_shard_id(const std::string& hash_key, int *shard_id);
 

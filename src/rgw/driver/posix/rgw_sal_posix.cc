@@ -21,6 +21,7 @@
 #include "rgw_multi.h"
 #include "rgw_acl_s3.h"
 #include "include/scope_guard.h"
+#include "common/errno.h"
 
 #define dout_subsys ceph_subsys_rgw
 #define dout_context g_ceph_context

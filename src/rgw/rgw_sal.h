@@ -44,6 +44,7 @@ class RGWCompressionInfo;
 struct rgw_pubsub_topics;
 struct rgw_pubsub_bucket_topics;
 class RGWZonePlacementInfo;
+struct RGWRoleInfo;
 
 
 using RGWBucketListNameFilter = std::function<bool (const std::string&)>;
@@ -383,9 +384,12 @@ class Driver {
     /** Get all IAM Roles optionally filtered by path */
     virtual int get_roles(const DoutPrefixProvider *dpp,
 			  optional_yield y,
-			  const std::string& path_prefix,
 			  const std::string& tenant,
-			  std::vector<std::unique_ptr<RGWRole>>& roles) = 0;
+			  const std::string& marker,
+			  int max_items,
+			  const std::string& path_prefix,
+			  std::vector<RGWRoleInfo>& roles,
+			  std::string& next_marker) = 0;
     /** Get an empty Open ID Connector provider */
     virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() = 0;
     /** Get all Open ID Connector providers, optionally filtered by tenant  */

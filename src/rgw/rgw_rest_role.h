@@ -15,7 +15,6 @@ protected:
   std::string trust_policy;
   std::string policy_name;
   std::string perm_policy;
-  std::string path_prefix;
   std::string max_session_duration;
   std::multimap<std::string,std::string> tags;
   std::vector<std::string> tagKeys;
@@ -85,6 +84,10 @@ public:
 };
 
 class RGWListRoles : public RGWRoleRead {
+  std::string marker;
+  int max_items = 0;
+  std::string path_prefix;
+  std::string next_marker;
 public:
   RGWListRoles() = default;
   int verify_permission(optional_yield y) override;

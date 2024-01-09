@@ -84,7 +84,7 @@ int RGWRestRole::verify_permission(optional_yield y)
   string role_name = s->info.args.get("RoleName");
   std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
 							    s->user->get_tenant());
-  if (op_ret = role->get(s, y); op_ret < 0) {
+  if (op_ret = role->load_by_name(s, y); op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_ROLE_FOUND;
     }
@@ -328,7 +328,7 @@ void RGWCreateRole::execute(optional_yield y)
     ldpp_dout(this, 0) << "role_id decoded from master zonegroup response is" << role_id << dendl;
   }
 
-  op_ret = role->create(s, true, role_id, y);
+  op_ret = role->create(s, role_id, y);
   if (op_ret == -EEXIST) {
     op_ret = -ERR_ROLE_EXISTS;
     return;
@@ -457,7 +457,7 @@ void RGWGetRole::execute(optional_yield y)
   }
   std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
 							    s->user->get_tenant());
-  op_ret = role->get(s, y);
+  op_ret = role->load_by_name(s, y);
 
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
@@ -529,7 +529,8 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
   }
 
   _role->update_trust_policy(trust_policy);
-  op_ret = _role->update(this, y);
+  constexpr bool exclusive = false;
+  op_ret = _role->store_info(this, exclusive, y);
 
   s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
@@ -560,8 +561,12 @@ int RGWListRoles::verify_permission(optional_yield y)
 
 int RGWListRoles::get_params()
 {
+  marker = s->info.args.get("Marker");
+  s->info.args.get_int("MaxItems", &max_items, 1000);
+  if (max_items > 1000) {
+    max_items = 1000;
+  }
   path_prefix = s->info.args.get("PathPrefix");
-
   return 0;
 }
 
@@ -571,20 +576,29 @@ void RGWListRoles::execute(optional_yield y)
   if (op_ret < 0) {
     return;
   }
-  vector<std::unique_ptr<rgw::sal::RGWRole>> result;
-  op_ret = driver->get_roles(s, y, path_prefix, s->user->get_tenant(), result);
+
+  std::vector<RGWRoleInfo> result;
+  op_ret = driver->get_roles(this, y, s->user->get_tenant(),
+                             marker, max_items, path_prefix,
+                             result, next_marker);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");
     s->formatter->open_array_section("ListRolesResult");
     s->formatter->open_object_section("Roles");
-    for (const auto& it : result) {
+    for (const auto& role : result) {
       s->formatter->open_object_section("member");
-      it->dump(s->formatter);
+      role.dump(s->formatter);
       s->formatter->close_section();
     }
-    s->formatter->close_section();
-    s->formatter->close_section();
+    s->formatter->close_section(); // Roles
+    if (!next_marker.empty()) {
+      s->formatter->dump_bool("IsTruncated", false);
+      s->formatter->dump_string("Marker", next_marker);
+    } else {
+      s->formatter->dump_bool("IsTruncated", true);
+    }
+    s->formatter->close_section(); // ListRolesResult
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
@@ -648,7 +662,8 @@ void RGWPutRolePolicy::execute(optional_yield y)
   }
 
   _role->set_perm_policy(policy_name, perm_policy);
-  op_ret = _role->update(this, y);
+  constexpr bool exclusive = false;
+  op_ret = _role->store_info(this, exclusive, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("PutRolePolicyResponse");
@@ -780,7 +795,8 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
   }
 
   if (op_ret == 0) {
-    op_ret = _role->update(this, y);
+    constexpr bool exclusive = false;
+    op_ret = _role->store_info(this, exclusive, y);
   }
 
   s->formatter->open_object_section("DeleteRolePoliciesResponse");
@@ -843,7 +859,8 @@ void RGWTagRole::execute(optional_yield y)
 
   op_ret = _role->set_tags(this, tags);
   if (op_ret == 0) {
-    op_ret = _role->update(this, y);
+    constexpr bool exclusive = false;
+    op_ret = _role->store_info(this, exclusive, y);
   }
 
   if (op_ret == 0) {
@@ -954,7 +971,8 @@ void RGWUntagRole::execute(optional_yield y)
   }
 
   _role->erase_tags(tagKeys);
-  op_ret = _role->update(this, y);
+  constexpr bool exclusive = false;
+  op_ret = _role->store_info(this, exclusive, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("UntagRoleResponse");
@@ -1014,7 +1032,8 @@ void RGWUpdateRole::execute(optional_yield y)
     return;
   }
 
-  op_ret = _role->update(this, y);
+  constexpr bool exclusive = false;
+  op_ret = _role->store_info(this, exclusive, y);
 
   s->formatter->open_object_section("UpdateRoleResponse");
   s->formatter->open_object_section("UpdateRoleResult");

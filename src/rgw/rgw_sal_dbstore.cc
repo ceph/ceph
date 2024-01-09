@@ -26,6 +26,8 @@
 #include "rgw_sal_dbstore.h"
 #include "rgw_bucket.h"
 
+#include "driver/rados/rgw_rados.h" // XXX: for RGW_OBJ_NS_MULTIPART, PUT_OBJ_CREATE, etc
+
 #define dout_subsys ceph_subsys_rgw
 
 using namespace std;
@@ -1426,9 +1428,12 @@ namespace rgw::sal {
 
   int DBStore::get_roles(const DoutPrefixProvider *dpp,
       optional_yield y,
-      const std::string& path_prefix,
       const std::string& tenant,
-      vector<std::unique_ptr<RGWRole>>& roles)
+      const std::string& marker,
+      int max_items,
+      const std::string& path_prefix,
+      std::vector<RGWRoleInfo>& roles,
+      std::string& next_marker)
   {
     return 0;
   }
