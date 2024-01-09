@@ -77,12 +77,12 @@ export class MultiClusterFormComponent {
       .subscribe({
         error: () => this.remoteClusterForm.setErrors({ cdSubmitButton: true }),
         complete: () => {
-          this.submitAction.emit();
           this.notificationService.show(
             NotificationType.success,
             $localize`Cluster added successfully`
           );   
           this.activeModal.close();
+          this.submitAction.emit();
         }
       });
   }

@@ -202,5 +202,10 @@ export class NavigationComponent implements OnInit, OnDestroy {
     this.bsModalRef = this.modalService.show(MultiClusterFormComponent, {
       size: 'lg'
     });
+    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
+      setTimeout(() => {
+          window.location.reload();
+        }, 4000)
+    });
   }
 }

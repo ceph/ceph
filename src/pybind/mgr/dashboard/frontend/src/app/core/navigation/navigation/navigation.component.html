@@ -134,7 +134,11 @@
           class="nav-item tc_menuitem_multi_cluster">
         <a i18n
            class="nav-link"
-           routerLink="/multi-cluster">Multi-Cluster</a>
+           routerLink="/multi-cluster">
+          <span >
+            <i [ngClass]="[icons.users]"></i>
+            Multi-Cluster</span>
+        </a>
       </li>
       <!-- Cluster -->
       <li routerLinkActive="active"

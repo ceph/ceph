@@ -15,7 +15,7 @@ import { DimlessBinaryPipe } from '~/app/shared/pipes/dimless-binary.pipe';
 import { CellTemplate } from '~/app/shared/enum/cell-template.enum';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 import { MultiClusterFormComponent } from './multi-cluster-form/multi-cluster-form.component';
-import { Router } from '@angular/router';
+
 
 @Component({
   selector: 'cd-multi-cluster',
@@ -99,7 +99,6 @@ export class MultiClusterComponent implements OnInit {
   constructor(
     public actionLabels: ActionLabelsI18n,
     private authStorageService: AuthStorageService,
-    private router: Router,
     public modalService: ModalService,
     public multiClusterService: MultiClusterService,
     private prometheusService: PrometheusService,
@@ -126,13 +125,11 @@ export class MultiClusterComponent implements OnInit {
         });
         this.multiClusterService.checkTokenStatus(this.clustersTokenMap).subscribe((resp: object) => {
           this.clusterTokenStatus = resp;
-        });      
-        if (this.dashboardClustersMap.size > 1) {
-          this.getPrometheusData(this.prometheusService.lastHourDateObject);
-        }
-        else {
+        });
+        if (this.dashboardClustersMap.size === 1) {
           this.loading = false;
         }
+        this.getPrometheusData(this.prometheusService.lastHourDateObject);
       })
     );
     
@@ -299,7 +296,6 @@ export class MultiClusterComponent implements OnInit {
     }
 
     this.clusters = clusters;
-    console.log(this.clusters);
     
     this.clusterCapacityLabel1 = this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0]
       ? this.queriesResults.CLUSTER_CAPACITY_UTILIZATION[0].metric.cluster
@@ -400,17 +396,16 @@ export class MultiClusterComponent implements OnInit {
     const version = fullVersion.replace('ceph version ', '').split(' ');
     return version[0] + ' ' + version.slice(2, version.length).join(' ');
   }
+  
 
   openRemoteClusterInfoModal() {
     this.bsModalRef = this.modalService.show(MultiClusterFormComponent, {
-      submitAction: () => {
-        setTimeout(() => {
-          this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
-            this.router.navigate(['/multi-cluster']);
-          });
-        }, 3000);
-      },
       size: 'lg'
+    });
+    this.bsModalRef.componentInstance.submitAction.subscribe(() => {
+      setTimeout(() => {
+        window.location.reload();
+      }, 4000)
     });
   }
 }

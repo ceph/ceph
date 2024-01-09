@@ -37,7 +37,7 @@
 
 
 <div class="container-fluid h-100 p-4">
-  <div *ngIf="dashboardClustersMap?.size <= 1">
+  <div *ngIf="dashboardClustersMap?.size === 1">
     <ng-container *ngTemplateOutlet="emptyCluster"></ng-container>
   </div>
 
