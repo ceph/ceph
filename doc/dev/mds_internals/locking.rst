@@ -17,6 +17,7 @@ MDS defines a handful of lock types associated with different metadata for an in
 
   CEPH_LOCK_DN       - dentry
   CEPH_LOCK_DVERSION - dentry version
+  CEPH_LOCK_IQUIESCE - inode quiesce lock (a type of superlock)
   CEPH_LOCK_IVERSION - inode version
   CEPH_LOCK_IAUTH    - mode, uid, gid
   CEPH_LOCK_ILINK    - nlink

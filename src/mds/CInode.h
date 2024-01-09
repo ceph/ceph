@@ -1099,18 +1099,23 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const LockType nestlock_type;
   static const LockType flocklock_type;
   static const LockType policylock_type;
+  static const LockType quiescelock_type;
 
-  // FIXME not part of mempool
-  LocalLockC  versionlock;
-  SimpleLock authlock;
-  SimpleLock linklock;
-  ScatterLock dirfragtreelock;
-  ScatterLock filelock;
-  SimpleLock xattrlock;
-  SimpleLock snaplock;
-  ScatterLock nestlock;
-  SimpleLock flocklock;
-  SimpleLock policylock;
+  /* Please consult doc/dev/mds_internals/quiesce.rst for information about the
+   * quiescelock.
+   */
+
+  SimpleLock quiescelock; // FIXME not part of mempool
+  LocalLockC versionlock; // FIXME not part of mempool
+  SimpleLock authlock; // FIXME not part of mempool
+  SimpleLock linklock; // FIXME not part of mempool
+  ScatterLock dirfragtreelock; // FIXME not part of mempool
+  ScatterLock filelock; // FIXME not part of mempool
+  SimpleLock xattrlock; // FIXME not part of mempool
+  SimpleLock snaplock; // FIXME not part of mempool
+  ScatterLock nestlock; // FIXME not part of mempool
+  SimpleLock flocklock; // FIXME not part of mempool
+  SimpleLock policylock; // FIXME not part of mempool
 
   // -- caps -- (new)
   // client caps
