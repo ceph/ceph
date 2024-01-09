@@ -562,10 +562,10 @@ class RGWPubSub
   const std::string tenant;
   bool use_notification_v2 = false;
 
-  int read_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, 
-      RGWObjVersionTracker* objv_tracker, optional_yield y) const;
-  int write_topics(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
-			RGWObjVersionTracker* objv_tracker, optional_yield y) const;
+  int read_topics_v1(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result,
+                     RGWObjVersionTracker* objv_tracker, optional_yield y) const;
+  int write_topics_v1(const DoutPrefixProvider *dpp, const rgw_pubsub_topics& topics,
+                      RGWObjVersionTracker* objv_tracker, optional_yield y) const;
 
 public:
   RGWPubSub(rgw::sal::Driver* _driver, const std::string& tenant);
@@ -620,11 +620,13 @@ public:
     int remove_notifications(const DoutPrefixProvider *dpp, optional_yield y) const;
   };
 
-  // get the list of topics
-  // return 0 on success or if no topic was associated with the bucket, error code otherwise
-  int get_topics(const DoutPrefixProvider *dpp, rgw_pubsub_topics& result, optional_yield y) const {
-    return read_topics(dpp, result, nullptr, y);
-  }
+  // get a paginated list of topics
+  // return 0 on success, error code otherwise
+  int get_topics(const DoutPrefixProvider* dpp,
+                 const std::string& start_marker, int max_items,
+                 rgw_pubsub_topics& result, std::string& next_marker,
+                 optional_yield y) const;
+
   // get a topic with by its name and populate it into "result"
   // return -ENOENT if the topic does not exists
   // return 0 on success, error code otherwise.

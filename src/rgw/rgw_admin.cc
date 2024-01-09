@@ -1166,7 +1166,7 @@ static void show_reshard_status(
 }
 
 static void show_topics_info_v2(const rgw_pubsub_topic& topic,
-                                std::set<std::string> subscribed_buckets,
+                                const std::set<std::string>& subscribed_buckets,
                                 Formatter* formatter) {
   formatter->open_object_section("topic");
   topic.dump(formatter);
@@ -10548,39 +10548,47 @@ next:
 
   if (opt_cmd == OPT::PUBSUB_TOPIC_LIST) {
     RGWPubSub ps(driver, tenant, *site);
-    rgw_pubsub_topics result;
-    ret = ps.get_topics(dpp(), result, null_yield);
-    if (ret < 0 && ret != -ENOENT) {
-      cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
-      return -ret;
-    }
-    if (!rgw::sal::User::empty(user)) {
-      for (auto it = result.topics.cbegin(); it != result.topics.cend();) {
-        const auto& topic = it->second;
-        if (user->get_id() != topic.user) {
-          result.topics.erase(it++);
-        } else {
-          ++it;
-        }
+    std::string next_token = marker;
+
+    formatter->open_object_section("result");
+    formatter->open_array_section("topics");
+    do {
+      rgw_pubsub_topics result;
+      int ret = ps.get_topics(dpp(), next_token, max_entries,
+                              result, next_token, null_yield);
+      if (ret < 0 && ret != -ENOENT) {
+        cerr << "ERROR: could not get topics: " << cpp_strerror(-ret) << std::endl;
+        return -ret;
       }
-    }
-    if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
-      Formatter::ObjectSection top_section(*formatter, "result");
-      Formatter::ArraySection s(*formatter, "topics");
       for (const auto& [_, topic] : result.topics) {
+        if (!rgw::sal::User::empty(user) && user->get_id() != topic.user) {
+          continue;
+        }
         std::set<std::string> subscribed_buckets;
-        ret = driver->get_bucket_topic_mapping(topic, subscribed_buckets,
-                                               null_yield, dpp());
-        if (ret < 0) {
-          cerr << "failed to fetch bucket topic mapping info for topic: "
-               << topic.name << ", ret=" << ret << std::endl;
-        } else {
+        if (rgw::all_zonegroups_support(*site, rgw::zone_features::notification_v2)) {
+          ret = driver->get_bucket_topic_mapping(topic, subscribed_buckets,
+                                                 null_yield, dpp());
+          if (ret < 0) {
+            cerr << "failed to fetch bucket topic mapping info for topic: "
+                 << topic.name << ", ret=" << ret << std::endl;
+          }
           show_topics_info_v2(topic, subscribed_buckets, formatter.get());
+        } else {
+          encode_json("result", result, formatter.get());
+        }
+        if (max_entries_specified) {
+          --max_entries;
         }
       }
-    } else {
-      encode_json("result", result, formatter.get());
+    } while (!next_token.empty() && max_entries > 0);
+    formatter->close_section(); // topics
+    if (max_entries_specified) {
+      encode_json("truncated", !next_token.empty(), formatter.get());
+      if (!next_token.empty()) {
+        encode_json("marker", next_token, formatter.get());
+      }
     }
+    formatter->close_section(); // result
     formatter->flush(cout);
   }
 

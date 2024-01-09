@@ -293,6 +293,7 @@ void RGWPSCreateTopicOp::execute(optional_yield y) {
 class RGWPSListTopicsOp : public RGWOp {
 private:
   rgw_pubsub_topics result;
+  std::string next_token;
 
 public:
   int verify_permission(optional_yield) override {
@@ -325,15 +326,21 @@ public:
     f->close_section(); // ListTopicsResult
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
-    f->close_section(); // ResponseMetadat
+    f->close_section(); // ResponseMetadata
+    if (!next_token.empty()) {
+      encode_xml("NextToken", next_token, f);
+    }
     f->close_section(); // ListTopicsResponse
     rgw_flush_formatter_and_reset(s, f);
   }
 };
 
 void RGWPSListTopicsOp::execute(optional_yield y) {
+  const std::string start_token = s->info.args.get("NextToken");
+
   const RGWPubSub ps(driver, s->owner.id.tenant, *s->penv.site);
-  op_ret = ps.get_topics(this, result, y);
+  constexpr int max_items = 100;
+  op_ret = ps.get_topics(this, start_token, max_items, result, next_token, y);
   // if there are no topics it is not considered an error
   op_ret = op_ret == -ENOENT ? 0 : op_ret;
   if (op_ret < 0) {
