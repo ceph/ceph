@@ -135,8 +135,15 @@ struct ScrubMachineListener {
 
   virtual void replica_handling_done() = 0;
 
-  /// the version of 'scrub_clear_state()' that does not try to invoke FSM
-  /// services (thus can be called from FSM reactions)
+  /**
+   * clears both internal scrub state, and some PG-visible flags:
+   * - the two scrubbing PG state flags;
+   * - primary/replica scrub position (chunk boundaries);
+   * - primary/replica interaction state;
+   * - the backend state;
+   * Also runs pending callbacks, and clears the active flags.
+   * Does not try to invoke FSM events.
+   */
   virtual void clear_pgscrub_state() = 0;
 
   /// Get time to sleep before next scrub

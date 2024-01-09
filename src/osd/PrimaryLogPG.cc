@@ -13027,8 +13027,7 @@ void PrimaryLogPG::on_change(ObjectStore::Transaction &t)
     finish_degraded_object(p->first);
   }
 
-  // requeues waiting_for_scrub
-  m_scrubber->scrub_clear_state();
+  ceph_assert(waiting_for_scrub.empty());
 
   for (auto p = waiting_for_blocked_object.begin();
        p != waiting_for_blocked_object.end();
