@@ -257,6 +257,8 @@ ostream& operator<<(ostream& out, const CInode& in)
     out << " " << in.xattrlock;
   if (!in.versionlock.is_sync_and_unlocked())  
     out << " " << in.versionlock;
+  if (!in.quiescelock.is_sync_and_unlocked())
+    out << " " << in.quiescelock;
 
   // hack: spit out crap on which clients have caps
   if (in.get_inode()->client_ranges.size())
@@ -324,6 +326,7 @@ CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l) :
     item_dirty_dirfrag_nest(this),
     item_dirty_dirfrag_dirfragtree(this),
     pop(c->decayrate),
+    quiescelock(this, &quiescelock_type),
     versionlock(this, &versionlock_type),
     authlock(this, &authlock_type),
     linklock(this, &linklock_type),
@@ -1660,6 +1663,7 @@ SimpleLock* CInode::get_lock(int type)
     case CEPH_LOCK_INEST: return &nestlock;
     case CEPH_LOCK_IFLOCK: return &flocklock;
     case CEPH_LOCK_IPOLICY: return &policylock;
+    case CEPH_LOCK_IQUIESCE: return &quiescelock;
   }
   return 0;
 }
@@ -2203,6 +2207,13 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     encode_lock_ipolicy(bl);
     break;
+
+  case CEPH_LOCK_IQUIESCE: {
+    ENCODE_START(1, 1, bl);
+    /* skeleton */
+    ENCODE_FINISH(bl);
+    break;
+  }
   
   default:
     ceph_abort();
@@ -2269,6 +2280,13 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
   case CEPH_LOCK_IPOLICY:
     decode_lock_ipolicy(p);
     break;
+
+  case CEPH_LOCK_IQUIESCE: {
+    DECODE_START(1, p);
+    /* skeleton */
+    DECODE_FINISH(p);
+    break;
+  }
 
   default:
     ceph_abort();
@@ -4265,8 +4283,8 @@ void CInode::_encode_locks_full(bufferlist& bl)
   encode(nestlock, bl);
   encode(flocklock, bl);
   encode(policylock, bl);
-
   encode(loner_cap, bl);
+  encode(quiescelock, bl);
 }
 void CInode::_decode_locks_full(bufferlist::const_iterator& p)
 {
@@ -4280,15 +4298,15 @@ void CInode::_decode_locks_full(bufferlist::const_iterator& p)
   decode(nestlock, p);
   decode(flocklock, p);
   decode(policylock, p);
-
   decode(loner_cap, p);
   set_loner_cap(loner_cap);
   want_loner_cap = loner_cap;  // for now, we'll eval() shortly.
+  decode(quiescelock, p);
 }
 
 void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   authlock.encode_state_for_replica(bl);
   linklock.encode_state_for_replica(bl);
   dirfragtreelock.encode_state_for_replica(bl);
@@ -4299,11 +4317,13 @@ void CInode::_encode_locks_state_for_replica(bufferlist& bl, bool need_recover)
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
   encode(need_recover, bl);
+  quiescelock.encode_state_for_replica(bl);
   ENCODE_FINISH(bl);
 }
 
 void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
 {
+  // TODO versioning?
   authlock.encode_state_for_replica(bl);
   linklock.encode_state_for_replica(bl);
   dirfragtreelock.encode_state_for_rejoin(bl, rep);
@@ -4313,11 +4333,12 @@ void CInode::_encode_locks_state_for_rejoin(bufferlist& bl, int rep)
   snaplock.encode_state_for_replica(bl);
   flocklock.encode_state_for_replica(bl);
   policylock.encode_state_for_replica(bl);
+  quiescelock.encode_state_for_replica(bl);
 }
 
 void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool is_new)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   authlock.decode_state(p, is_new);
   linklock.decode_state(p, is_new);
   dirfragtreelock.decode_state(p, is_new);
@@ -4330,6 +4351,11 @@ void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool
 
   bool need_recover;
   decode(need_recover, p);
+
+  if (struct_v >= 2) {
+    quiescelock.decode_state(p, is_new);
+  }
+
   if (need_recover && is_new) {
     // Auth mds replicated this inode while it's recovering. Auth mds may take xlock on the lock
     // and change the object when replaying unsafe requests.
@@ -4342,6 +4368,7 @@ void CInode::_decode_locks_state_for_replica(bufferlist::const_iterator& p, bool
     snaplock.mark_need_recover();
     flocklock.mark_need_recover();
     policylock.mark_need_recover();
+    quiescelock.mark_need_recover();
   }
   DECODE_FINISH(p);
 }
@@ -4357,6 +4384,7 @@ void CInode::_decode_locks_rejoin(bufferlist::const_iterator& p, MDSContext::vec
   snaplock.decode_state_rejoin(p, waiters, survivor);
   flocklock.decode_state_rejoin(p, waiters, survivor);
   policylock.decode_state_rejoin(p, waiters, survivor);
+  quiescelock.decode_state_rejoin(p, waiters, survivor);
 
   if (!dirfragtreelock.is_stable() && !dirfragtreelock.is_wrlocked())
     eval_locks.push_back(&dirfragtreelock);
@@ -4371,7 +4399,7 @@ void CInode::_decode_locks_rejoin(bufferlist::const_iterator& p, MDSContext::vec
 
 void CInode::encode_export(bufferlist& bl)
 {
-  ENCODE_START(5, 4, bl);
+  ENCODE_START(6, 6, bl);
   _encode_base(bl, mdcache->mds->mdsmap->get_up_features());
 
   encode(state, bl);
@@ -4422,7 +4450,7 @@ void CInode::finish_export()
 void CInode::decode_import(bufferlist::const_iterator& p,
 			   LogSegment *ls)
 {
-  DECODE_START(5, p);
+  DECODE_START(6, p);
 
   _decode_base(p);
 
@@ -5099,6 +5127,10 @@ void CInode::dump(Formatter *f, int flags) const
 
     f->open_object_section("policylock");
     policylock.dump(f);
+    f->close_section();
+
+    f->open_object_section("quiescelock");
+    quiescelock.dump(f);
     f->close_section();
   }
 

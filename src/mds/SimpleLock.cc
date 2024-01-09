@@ -57,6 +57,7 @@ int SimpleLock::get_wait_shift() const {
     case CEPH_LOCK_INEST:    return 8 + 9*SimpleLock::WAIT_BITS;
     case CEPH_LOCK_IFLOCK:   return 8 +10*SimpleLock::WAIT_BITS;
     case CEPH_LOCK_IPOLICY:  return 8 +11*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IQUIESCE: return 8 +12*SimpleLock::WAIT_BITS;
     default:
       ceph_abort();
   }

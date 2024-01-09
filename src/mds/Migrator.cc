@@ -1698,6 +1698,7 @@ void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
   in->snaplock.export_twiddle();
   in->flocklock.export_twiddle();
   in->policylock.export_twiddle();
+  in->quiescelock.export_twiddle();
   
   // mark auth
   ceph_assert(in->is_auth());
@@ -3247,6 +3248,10 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   if (in->policylock.is_stable() &&
       in->policylock.get_state() != LOCK_SYNC)
       mds->locker->try_eval(&in->policylock, NULL);
+
+  if (in->quiescelock.is_stable() &&
+      in->quiescelock.get_state() != LOCK_SYNC)
+      mds->locker->try_eval(&in->quiescelock, NULL);
 }
 
 void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,

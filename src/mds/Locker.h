@@ -54,7 +54,8 @@ public:
   bool acquire_locks(const MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
-		     bool auth_pin_nonblocking=false);
+		     bool auth_pin_nonblocking=false,
+                     bool skip_quiesce=false);
 
   bool try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
 			      int n=0, bool want_layout=false);
@@ -259,6 +260,8 @@ private:
   friend class C_Locker_ScatterWB;
   friend class LockerContext;
   friend class LockerLogContext;
+
+  void handle_quiesce_failure(const MDRequestRef& mdr, std::string_view& marker);
 
   bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;
   uint64_t calc_new_max_size(const CInode::inode_const_ptr& pi, uint64_t size);
