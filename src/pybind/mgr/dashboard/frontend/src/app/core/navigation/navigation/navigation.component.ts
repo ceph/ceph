@@ -1,7 +1,9 @@
 import { Component, HostBinding, OnDestroy, OnInit } from '@angular/core';
+import { Router } from '@angular/router';
 
 import * as _ from 'lodash';
 import { Subscription } from 'rxjs';
+import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { Permissions } from '~/app/shared/models/permissions';
@@ -22,6 +24,7 @@ import { TelemetryNotificationService } from '~/app/shared/services/telemetry-no
 })
 export class NavigationComponent implements OnInit, OnDestroy {
   notifications: string[] = [];
+  clusterDetails: any[] = [];
   @HostBinding('class') get class(): string {
     return 'top-notification-' + this.notifications.length;
   }
@@ -40,8 +43,13 @@ export class NavigationComponent implements OnInit, OnDestroy {
   displayedSubMenu = {};
   private subs = new Subscription();
 
+  clustersMap: Map<string, any> = new Map<string, any>();
+  selectedCluster: object;
+
   constructor(
     private authStorageService: AuthStorageService,
+    private multiClusterService: MultiClusterService,
+    private router: Router,
     private summaryService: SummaryService,
     private featureToggles: FeatureTogglesService,
     private telemetryNotificationService: TelemetryNotificationService,
@@ -53,6 +61,31 @@ export class NavigationComponent implements OnInit, OnDestroy {
   }
 
   ngOnInit() {
+    this.subs.add(
+      this.multiClusterService.subscribe((resp: any) => {
+        const clustersConfig = resp['config'];
+        if (clustersConfig) {
+          Object.keys(clustersConfig).forEach((clusterKey: string) => {
+            const clusterDetailsList = clustersConfig[clusterKey];
+            clusterDetailsList.forEach((clusterDetails: any) => {
+              const clusterName = clusterDetails['name'];
+              const clusterUser = clusterDetails['user'];
+              const clusterUrl = clusterDetails['url'];
+              const clusterUniqueKey = `${clusterUrl}-${clusterUser}`;
+              this.clustersMap.set(clusterUniqueKey, {
+                name: clusterName,
+                cluster_alias: clusterDetails['cluster_alias'],
+                user: clusterDetails['user'],
+                url: clusterUrl
+              });
+            });
+          });
+          this.selectedCluster =
+            this.clustersMap.get(`${resp['current_url']}-${resp['current_user']}`) || {};
+        }
+      })
+    );
+
     this.subs.add(
       this.summaryService.subscribe((summary) => {
         this.summaryData = summary;
@@ -115,5 +148,48 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.notifications.splice(index, 1);
       }
     }
+  }
+
+  onClusterSelection(value: object) {
+    this.multiClusterService.setCluster(value).subscribe(
+      (resp: any) => {
+        localStorage.setItem('cluster_api_url', value['url']);
+        this.selectedCluster = this.clustersMap.get(`${value['url']}-${value['user']}`) || {};
+        const clustersConfig = resp['config'];
+        if (clustersConfig && typeof clustersConfig === 'object') {
+          Object.keys(clustersConfig).forEach((clusterKey: string) => {
+            const clusterDetailsList = clustersConfig[clusterKey];
+
+            clusterDetailsList.forEach((clusterDetails: any) => {
+              const clusterName = clusterDetails['name'];
+              const clusterToken = clusterDetails['token'];
+              const clusterUser = clusterDetails['user'];
+
+              if (
+                clusterName === this.selectedCluster['name'] &&
+                clusterUser === this.selectedCluster['user']
+              ) {
+                localStorage.setItem('token_of_selected_cluster', clusterToken);
+              }
+            });
+          });
+        }
+      },
+      () => {},
+      () => {
+        this.multiClusterService.refresh();
+        this.summaryService.refresh();
+        const currentRoute = this.router.url.split('?')[0];
+        if (currentRoute.includes('dashboard')) {
+          this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
+            this.router.navigate([currentRoute]);
+          });
+        } else {
+          this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+            this.router.navigate([currentRoute]);
+          });
+        }
+      }
+    );
   }
 }
