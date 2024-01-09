@@ -2653,6 +2653,52 @@ void MDSRankDispatcher::handle_asok_command(
     if (!op_tracker.dump_ops_in_flight(f, false, {""}, false, lambda)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
+  } else if (command == "op get") {
+    vector<string> flags;
+    cmd_getval(cmdmap, "flags", flags);
+
+    std::string id;
+    if(!cmd_getval(cmdmap, "id", id)) {
+      *css << "malformed id";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    metareqid_t mrid;
+    try {
+      mrid = metareqid_t(id);
+    } catch (const std::exception& e) {
+      *css << "malformed id: " << e.what();
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+
+    auto dumper = OpTracker::default_dumper;
+    if (flags.size()) {
+      if (flags.size()) {
+        /* use std::function if we actually want to capture flags someday */
+        dumper = [](const TrackedOp& op, Formatter* f) {
+          auto* req = dynamic_cast<const MDRequestImpl*>(&op);
+          if (req) {
+            req->dump_with_mds_lock(f);
+          } else {
+            op.dump_type(f);
+          }
+        };
+      }
+    }
+
+    std::lock_guard l(mds_lock);
+    if (!mdcache->have_request(mrid)) {
+      *css << "request does not exist";
+      r = -CEPHFS_ENOENT;
+      goto out;
+    }
+    auto mdr = mdcache->request_get(mrid);
+
+    f->open_object_section("op");
+    mdr->dump(ceph_clock_now(), f, dumper);
+    f->close_section();
+    r = 0;
   } else if (command == "op kill") {
     std::string id;
     if(!cmd_getval(cmdmap, "id", id)) {
