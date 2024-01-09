@@ -1089,16 +1089,16 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   elist<CInode*>::item item_pop_lru;
 
   // -- locks --
-  static LockType versionlock_type;
-  static LockType authlock_type;
-  static LockType linklock_type;
-  static LockType dirfragtreelock_type;
-  static LockType filelock_type;
-  static LockType xattrlock_type;
-  static LockType snaplock_type;
-  static LockType nestlock_type;
-  static LockType flocklock_type;
-  static LockType policylock_type;
+  static const LockType versionlock_type;
+  static const LockType authlock_type;
+  static const LockType linklock_type;
+  static const LockType dirfragtreelock_type;
+  static const LockType filelock_type;
+  static const LockType xattrlock_type;
+  static const LockType snaplock_type;
+  static const LockType nestlock_type;
+  static const LockType flocklock_type;
+  static const LockType policylock_type;
 
   // FIXME not part of mempool
   LocalLockC  versionlock;

@@ -91,16 +91,17 @@ public:
 
 sr_t* const CInode::projected_inode::UNDEF_SRNODE = (sr_t*)(unsigned long)-1;
 
-LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
-LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
-LockType CInode::linklock_type(CEPH_LOCK_ILINK);
-LockType CInode::dirfragtreelock_type(CEPH_LOCK_IDFT);
-LockType CInode::filelock_type(CEPH_LOCK_IFILE);
-LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
-LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
-LockType CInode::nestlock_type(CEPH_LOCK_INEST);
-LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
-LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
+const LockType CInode::quiescelock_type(CEPH_LOCK_IQUIESCE);
+const LockType CInode::versionlock_type(CEPH_LOCK_IVERSION);
+const LockType CInode::authlock_type(CEPH_LOCK_IAUTH);
+const LockType CInode::linklock_type(CEPH_LOCK_ILINK);
+const LockType CInode::dirfragtreelock_type(CEPH_LOCK_IDFT);
+const LockType CInode::filelock_type(CEPH_LOCK_IFILE);
+const LockType CInode::xattrlock_type(CEPH_LOCK_IXATTR);
+const LockType CInode::snaplock_type(CEPH_LOCK_ISNAP);
+const LockType CInode::nestlock_type(CEPH_LOCK_INEST);
+const LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
+const LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
 
 std::string_view CInode::pin_name(int p) const
 {
