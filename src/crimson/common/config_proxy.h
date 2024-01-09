@@ -14,6 +14,11 @@ namespace ceph {
 class Formatter;
 }
 
+namespace ceph::global {
+int g_conf_set_val(const std::string& key, const std::string& s);
+int g_conf_rm_val(const std::string& key);
+}
+
 namespace crimson::common {
 
 // a facade for managing config. each shard has its own copy of ConfigProxy.
@@ -128,6 +133,7 @@ public:
     obs_mgr.remove_observer(obs);
   }
   seastar::future<> rm_val(const std::string& key) {
+    ceph::global::g_conf_rm_val(key);
     return do_change([key, this](ConfigValues& values) {
       auto ret = get_config().rm_val(values, key);
       if (ret < 0) {
@@ -137,6 +143,7 @@ public:
   }
   seastar::future<> set_val(const std::string& key,
 			    const std::string& val) {
+    ceph::global::g_conf_set_val(key, val);
     return do_change([key, val, this](ConfigValues& values) {
       std::stringstream err;
       auto ret = get_config().set_val(values, obs_mgr, key, val, &err);
