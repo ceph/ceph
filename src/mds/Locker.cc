@@ -161,6 +161,7 @@ bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
 
     if (!found_locked) {
       if (!t->snaplock.can_rdlock(client)) {
+        mdr->mark_event("failed to acquire snap lock");
 	t->snaplock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
 	goto failed;
       }
@@ -171,6 +172,7 @@ bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
     if (want_layout && !found_layout) {
       if (!mdr->is_rdlocked(&t->policylock)) {
 	if (!t->policylock.can_rdlock(client)) {
+          mdr->mark_event("failed to acquire policy lock");
 	  t->policylock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
 	  goto failed;
 	}
