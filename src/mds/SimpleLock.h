@@ -41,6 +41,7 @@ struct LockType {
   explicit LockType(int t) : type(t) {
     switch (type) {
     case CEPH_LOCK_DN:
+    case CEPH_LOCK_IQUIESCE:
     case CEPH_LOCK_IAUTH:
     case CEPH_LOCK_ILINK:
     case CEPH_LOCK_IXATTR:
@@ -150,6 +151,7 @@ public:
       case CEPH_LOCK_ISNAP: return "isnap";
       case CEPH_LOCK_IFLOCK: return "iflock";
       case CEPH_LOCK_IPOLICY: return "ipolicy";
+      case CEPH_LOCK_IQUIESCE: return "iquiesce";
       default: return "unknown";
     }
   }

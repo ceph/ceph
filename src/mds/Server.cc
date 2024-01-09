@@ -3076,8 +3076,9 @@ void Server::dispatch_peer_request(const MDRequestRef& mdr)
 	  replycode = MMDSPeerRequest::OP_WRLOCKACK;
 	  break;
 	}
-	
-	if (!mds->locker->acquire_locks(mdr, lov))
+
+        // don't add quiescelock, let the peer acquire that rdlock themselves
+	if (!mds->locker->acquire_locks(mdr, lov, nullptr, {}, false, true))
 	  return;
 	
 	// ack
@@ -4890,6 +4891,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
       return;
   }
 
+  /* readdir can add dentries to cache: acquire the quiescelock */
+  lov.add_rdlock(&diri->quiescelock);
   lov.add_rdlock(&diri->filelock);
   lov.add_rdlock(&diri->dirfragtreelock);
 
