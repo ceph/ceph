@@ -281,6 +281,7 @@ public:
     recovery_state.update_stats(
       [t](auto &history, auto &stats) {
 	set_last_deep_scrub_stamp(t, history, stats);
+	set_last_scrub_stamp(t, history, stats);
 	return true;
       });
     on_scrub_schedule_input_change();
