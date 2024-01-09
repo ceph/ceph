@@ -819,11 +819,6 @@ ReplicaActive::ReservationAttemptRes ReplicaActive::get_remote_reservation()
 {
   using ReservationAttemptRes = ReplicaActive::ReservationAttemptRes;
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  if (!scrbr->get_pg_cct()->_conf.get_val<bool>("osd_scrub_during_recovery") &&
-      m_osds->is_recovery_active()) {
-    return ReservationAttemptRes{
-	MOSDScrubReserve::REJECT, "recovery is active", false};
-  }
 
   if (m_osds->get_scrub_services().inc_scrubs_remote(scrbr->get_spgid().pgid)) {
     return ReservationAttemptRes{MOSDScrubReserve::GRANT, "", true};
