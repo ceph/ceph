@@ -1707,9 +1707,13 @@ bool Locker::rdlock_try_set(MutationImpl::LockOpVec& lov, MutationRef& mut)
 
 void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION ||
-      lock->get_type() == CEPH_LOCK_DVERSION)
-    return local_wrlock_grab(static_cast<LocalLockC*>(lock), mut);
+  switch  (lock->get_type()) {
+    case CEPH_LOCK_DVERSION:
+    case CEPH_LOCK_IVERSION:
+      return local_wrlock_grab(static_cast<LocalLockC*>(lock), mut);
+    default:
+      break;
+  }
 
   dout(7) << "wrlock_force  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
@@ -1754,9 +1758,13 @@ bool Locker::wrlock_try(SimpleLock *lock, const MutationRef& mut, client_t clien
 bool Locker::wrlock_start(const MutationImpl::LockOp &op, const MDRequestRef& mut)
 {
   SimpleLock *lock = op.lock;
-  if (lock->get_type() == CEPH_LOCK_IVERSION ||
-      lock->get_type() == CEPH_LOCK_DVERSION)
-    return local_wrlock_start(static_cast<LocalLockC*>(lock), mut);
+  switch  (lock->get_type()) {
+    case CEPH_LOCK_DVERSION:
+    case CEPH_LOCK_IVERSION:
+      return local_wrlock_start(static_cast<LocalLockC*>(lock), mut);
+    default:
+      break;
+  }
 
   dout(10) << "wrlock_start " << *lock << " on " << *lock->get_parent() << dendl;
 
@@ -1815,9 +1823,15 @@ void Locker::wrlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *
   ceph_assert(it->is_wrlock());
   SimpleLock* lock = it->lock;
 
-  if (lock->get_type() == CEPH_LOCK_IVERSION ||
-      lock->get_type() == CEPH_LOCK_DVERSION)
-    return local_wrlock_finish(it, mut);
+  switch  (lock->get_type()) {
+    case CEPH_LOCK_DVERSION:
+    case CEPH_LOCK_IVERSION:
+      return local_wrlock_finish(it, mut);
+    default:
+      break;
+  }
+
+
 
   dout(7) << "wrlock_finish on " << *lock << " on " << *lock->get_parent() << dendl;
   lock->put_wrlock();
@@ -1897,9 +1911,14 @@ void Locker::remote_wrlock_finish(const MutationImpl::lock_iterator& it, Mutatio
 
 bool Locker::xlock_start(SimpleLock *lock, const MDRequestRef& mut)
 {
-  if (lock->get_type() == CEPH_LOCK_IVERSION ||
-      lock->get_type() == CEPH_LOCK_DVERSION)
-    return local_xlock_start(static_cast<LocalLockC*>(lock), mut);
+  switch  (lock->get_type()) {
+    case CEPH_LOCK_DVERSION:
+    case CEPH_LOCK_IVERSION:
+      return local_xlock_start(static_cast<LocalLockC*>(lock), mut);
+    default:
+      break;
+  }
+
 
   dout(7) << "xlock_start on " << *lock << " on " << *lock->get_parent() << dendl;
   client_t client = mut->get_client();
@@ -2018,9 +2037,14 @@ void Locker::xlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *m
   ceph_assert(it->is_xlock());
   SimpleLock *lock = it->lock;
 
-  if (lock->get_type() == CEPH_LOCK_IVERSION ||
-      lock->get_type() == CEPH_LOCK_DVERSION)
-    return local_xlock_finish(it, mut);
+  switch  (lock->get_type()) {
+    case CEPH_LOCK_DVERSION:
+    case CEPH_LOCK_IVERSION:
+      return local_xlock_finish(it, mut);
+    default:
+      break;
+  }
+
 
   dout(10) << "xlock_finish on " << *lock << " " << *lock->get_parent() << dendl;
 
