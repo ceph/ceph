@@ -1303,7 +1303,7 @@ def osd_scrub_pgs(ctx, config):
                     # request was missed.  do not do it every time because
                     # the scrub may be in progress or not reported yet and
                     # we will starve progress.
-                    manager.raw_cluster_cmd('tell', pgid, 'deep_scrub')
+                    manager.raw_cluster_cmd('tell', pgid, 'deep-scrub')
             if gap_cnt > retries:
                 raise RuntimeError('Exiting scrub checking -- not all pgs scrubbed.')
         if loop:
