@@ -171,7 +171,7 @@ seastar::future<> ClientRequest::with_pg_int(Ref<PG> pgref)
       DEBUGDPP("{}.{}: interrupted due to {}",
 	       *pgref, *this, this_instance_id, eptr);
     }, pgref).finally(
-      [this, FNAME, opref=std::move(opref), pgref=std::move(pgref),
+      [this, FNAME, opref=std::move(opref), pgref,
        this_instance_id, instance_handle=std::move(instance_handle), &ihref] {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
 	ihref.handle.exit();
