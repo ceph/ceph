@@ -422,6 +422,11 @@ class PrometheusService(CephadmService):
             # default to disabled
             retention_size = '0'
 
+        try:
+            enable_admin_api = spec.enable_admin_api
+        except AttributeError:
+            enable_admin_api = False
+
         # build service discovery end-point
         port = self.mgr.service_discovery_port
         mgr_addr = wrap_ipv6(self.mgr.get_mgr_ip())
@@ -493,6 +498,7 @@ class PrometheusService(CephadmService):
                     'retention_time': retention_time,
                     'retention_size': retention_size,
                     'ip_to_bind_to': ip_to_bind_to,
+                    'enable_admin_api': enable_admin_api,
                     'web_config': '/etc/prometheus/web.yml'
                 }
         else:
@@ -502,7 +508,8 @@ class PrometheusService(CephadmService):
                 },
                 'retention_time': retention_time,
                 'retention_size': retention_size,
-                'ip_to_bind_to': ip_to_bind_to
+                'ip_to_bind_to': ip_to_bind_to,
+                'enable_admin_api': enable_admin_api,
             }
 
         # include alerts, if present in the container

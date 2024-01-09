@@ -1906,6 +1906,7 @@ class PrometheusSpec(MonitoringSpec):
                  retention_time: Optional[str] = None,
                  retention_size: Optional[str] = None,
                  targets: Optional[List[str]] = None,
+                 enable_admin_api: bool = False,
                  extra_container_args: Optional[GeneralArgList] = None,
                  extra_entrypoint_args: Optional[GeneralArgList] = None,
                  custom_configs: Optional[List[CustomConfig]] = None,
@@ -1921,6 +1922,7 @@ class PrometheusSpec(MonitoringSpec):
         self.retention_time = retention_time.strip() if retention_time else None
         self.retention_size = retention_size.strip() if retention_size else None
         self.only_bind_port_on_networks = only_bind_port_on_networks
+        self.enable_admin_api = enable_admin_api
 
     def validate(self) -> None:
         super(PrometheusSpec, self).validate()
