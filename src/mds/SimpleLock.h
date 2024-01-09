@@ -173,7 +173,7 @@ public:
     }
   }
 
-  SimpleLock(MDSCacheObject *o, LockType *lt) :
+  SimpleLock(MDSCacheObject *o, const LockType *lt) :
     type(lt),
     parent(o)
   {}
@@ -599,7 +599,7 @@ public:
     out << ")";
   }
 
-  LockType *type;
+  const LockType *type;
 
 protected:
   // parent (what i lock)
