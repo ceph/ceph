@@ -8370,6 +8370,13 @@ int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
       continue;
     }
 
+    /* path_traverse may add dentries to cache: acquire quiescelock */
+    lov.clear();
+    lov.add_rdlock(&cur->quiescelock);
+    if (!mds->locker->acquire_locks(mdr, lov)) {
+      return 1;
+    }
+
     // open dir
     frag_t fg = cur->pick_dirfrag(path[depth]);
     CDir *curdir = cur->get_dirfrag(fg);

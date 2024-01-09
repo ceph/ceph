@@ -4877,6 +4877,8 @@ void Server::handle_client_readdir(const MDRequestRef& mdr)
       return;
   }
 
+  /* readdir can add dentries to cache: acquire the quiescelock */
+  lov.add_rdlock(&diri->quiescelock);
   lov.add_rdlock(&diri->filelock);
   lov.add_rdlock(&diri->dirfragtreelock);
 

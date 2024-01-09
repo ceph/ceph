@@ -148,6 +148,8 @@ bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
   int depth = -1;
   bool found_locked = false;
   bool found_layout = false;
+  bool dropped_locks = false;
+  std::string_view err;
 
   ceph_assert(!want_layout || n == 0);
 
@@ -156,12 +158,13 @@ bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
   CInode *t = in;
   while (true) {
     ++depth;
+
     if (!found_locked && mdr->is_rdlocked(&t->snaplock))
       found_locked = true;
 
     if (!found_locked) {
       if (!t->snaplock.can_rdlock(client)) {
-        mdr->mark_event("failed to acquire snap lock");
+        err = "failed to acquire snap lock"sv;
 	t->snaplock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
 	goto failed;
       }
@@ -172,7 +175,7 @@ bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
     if (want_layout && !found_layout) {
       if (!mdr->is_rdlocked(&t->policylock)) {
 	if (!t->policylock.can_rdlock(client)) {
-          mdr->mark_event("failed to acquire policy lock");
+          err = "failed to acquire policy lock"sv;
 	  t->policylock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
 	  goto failed;
 	}
@@ -200,8 +203,11 @@ bool Locker::try_rdlock_snap_layout(CInode *in, const MDRequestRef& mdr,
 failed:
   dout(10) << __func__ << " failed" << dendl;
 
-  drop_locks(mdr.get(), nullptr);
-  mdr->drop_local_auth_pins();
+  mdr->mark_event(err);
+  if (!dropped_locks) {
+    drop_locks(mdr.get(), nullptr);
+    mdr->drop_local_auth_pins();
+  }
   return false;
 }
 
@@ -242,10 +248,12 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
     mustpin.insert(auth_pin_freeze);
 
   // xlocks
+  bool need_quiescelock = true;
   for (size_t i = 0; i < lov.size(); ++i) {
     auto& p = lov[i];
     SimpleLock *lock = p.lock;
     MDSCacheObject *object = lock->get_parent();
+    auto t = lock->get_type();
 
     if (p.is_xlock()) {
       if ((lock->get_type() == CEPH_LOCK_ISNAP ||
@@ -301,19 +309,30 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	  lov.add_xlock(&dn->versionlock, i + 1);
 	}
       }
-      if (lock->get_type() >= CEPH_LOCK_IFIRST && lock->get_type() != CEPH_LOCK_IVERSION) {
-	// inode version lock?
-	CInode *in = static_cast<CInode*>(object);
-	if (!in->is_auth())
-	  continue;
-	if (mdr->is_leader()) {
-	  // leader.  wrlock versionlock so we can pipeline inode updates to journal.
-	  lov.add_wrlock(&in->versionlock, i + 1);
-	} else {
-	  // peer.  exclusively lock the inode version (i.e. block other journal updates).
-	  // this makes rollback safe.
-	  lov.add_xlock(&in->versionlock, i + 1);
-	}
+      if (is_inode_lock(t)) {
+        switch (t) {
+          case CEPH_LOCK_IVERSION:
+          case CEPH_LOCK_IQUIESCE:
+            break;
+          default:
+	    CInode *in = static_cast<CInode*>(object);
+            if (need_quiescelock) {
+              need_quiescelock = false;
+              lov.add_rdlock(&in->quiescelock);
+            }
+	    if (!in->is_auth())
+	      continue;
+	    // inode version lock?
+	    if (mdr->is_leader()) {
+	      // leader.  wrlock versionlock so we can pipeline inode updates to journal.
+	      lov.add_wrlock(&in->versionlock, i + 1);
+	    } else {
+	      // peer.  exclusively lock the inode version (i.e. block other journal updates).
+	      // this makes rollback safe.
+	      lov.add_xlock(&in->versionlock, i + 1);
+	    }
+            break;
+        }
       }
     } else if (p.is_wrlock()) {
       dout(20) << " must wrlock " << *lock << " " << *object << dendl;
@@ -327,12 +346,21 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 		 << " in case we need to request a scatter" << dendl;
 	mustpin.insert(object);
       }
+      if (need_quiescelock && is_inode_lock(t) && t != CEPH_LOCK_IQUIESCE) {
+	CInode *in = static_cast<CInode*>(object);
+        lov.add_rdlock(&in->quiescelock);
+        need_quiescelock = false;
+      }
     } else if (p.is_remote_wrlock()) {
       dout(20) << " must remote_wrlock on mds." << p.wrlock_target << " "
 	       << *lock << " " << *object << dendl;
       mustpin.insert(object);
+      if (need_quiescelock && is_inode_lock(t) && t != CEPH_LOCK_IQUIESCE) {
+	CInode *in = static_cast<CInode*>(object);
+        lov.add_rdlock(&in->quiescelock);
+        need_quiescelock = false;
+      }
     } else if (p.is_rdlock()) {
-
       dout(20) << " must rdlock " << *lock << " " << *object << dendl;
       if (object->is_auth()) {
 	mustpin.insert(object);
@@ -341,6 +369,33 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	dout(15) << " will also auth_pin " << *object
 		 << " in case we need to request a rdlock" << dendl;
 	mustpin.insert(object);
+      }
+
+      /* We treat rdlocks differently when adding the quiescelock. If the lock
+       * can be acquired immediately for reading without waiting
+       * (SimpleLock::can_rdlock), then skip adding the quiescelock. This is to
+       * allow some rdonly operations (like lookup) to proceed without blocking
+       * on the exclusively locked quiescelock. This is safe from deadlock (due
+       * to lock ordering) when Locker::acquire_locks is called more than once
+       * with different LockOpVectors for a given inode (already a dangerous
+       * thing to do) where there may be a wrlock/xlock in one set but not the
+       * other. The reason is simple: if Locker::acquire_locks ever adds the
+       * quiescelock, it is always the first lock to be acquired, and if it is
+       * xlocked, then all locks are dropped (s.f.
+       * Locker::handle_quiesce_failure). So adding the quiescelock can never
+       * contribute to deadlock.
+       */
+
+      if (need_quiescelock && !mdr->is_rdlocked(lock)) {
+        /* Can we get the lock without waiting? */
+        if (!lock->can_rdlock(client)) {
+          /* To prevent deadlock where an op holds a parent snaplock
+           * (Locker::try_rdlock_snap_layout), add quiescelock.
+           */
+	  CInode *in = static_cast<CInode*>(object);
+          lov.add_rdlock(&in->quiescelock);
+          need_quiescelock = false;
+        }
       }
     } else {
       ceph_assert(0 == "locker unknown lock operation");
@@ -508,6 +563,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
   // make sure they match currently acquired locks.
   for (const auto& p : lov) {
     auto lock = p.lock;
+    auto t = lock->get_type();
     if (p.is_xlock()) {
       if (mdr->is_xlocked(lock)) {
 	dout(10) << " already xlocked " << *lock << " " << *lock->get_parent() << dendl;
@@ -516,7 +572,11 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
       if (mdr->locking && lock != mdr->locking)
 	cancel_locking(mdr.get(), &issue_set);
       if (!xlock_start(lock, mdr)) {
-	marker.message = "failed to xlock, waiting";
+        if (t == CEPH_LOCK_IQUIESCE) {
+          handle_quiesce_failure(mdr, marker.message);
+        } else {
+	  marker.message = "failed to xlock, waiting";
+        }
 	goto out;
       }
       dout(10) << " got xlock on " << *lock << " " << *lock->get_parent() << dendl;
@@ -542,18 +602,26 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	if (p.is_remote_wrlock()) {
 	  // nowait if we have already gotten remote wrlock
 	  if (!wrlock_try(lock, mdr, _client)) {
-	    marker.message = "failed to wrlock, dropping remote wrlock and waiting";
 	    // can't take the wrlock because the scatter lock is gathering. need to
 	    // release the remote wrlock, so that the gathering process can finish.
 	    ceph_assert(it != mdr->locks.end());
 	    remote_wrlock_finish(it, mdr.get());
 	    remote_wrlock_start(lock, p.wrlock_target, mdr);
+            if (t == CEPH_LOCK_IQUIESCE) {
+              handle_quiesce_failure(mdr, marker.message);
+            } else {
+	      marker.message = "failed to wrlock, dropping remote wrlock and waiting";
+            }
 	    goto out;
 	  }
 	} else {
 	  if (!wrlock_start(p, mdr)) {
 	    ceph_assert(!p.is_remote_wrlock());
-	    marker.message = "failed to wrlock, waiting";
+            if (t == CEPH_LOCK_IQUIESCE) {
+              handle_quiesce_failure(mdr, marker.message);
+            } else {
+	      marker.message = "failed to wrlock, waiting";
+            }
 	    goto out;
 	  }
 	}
@@ -584,7 +652,11 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
       }
 
       if (!rdlock_start(lock, mdr)) {
-	marker.message = "failed to rdlock, waiting";
+        if (t == CEPH_LOCK_IQUIESCE) {
+          handle_quiesce_failure(mdr, marker.message);
+        } else {
+	  marker.message = "failed to rdlock, waiting";
+        }
 	goto out;
       }
       dout(10) << " got rdlock on " << *lock << " " << *lock->get_parent() << dendl;
@@ -599,6 +671,23 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
   issue_caps_set(issue_set);
   return result;
 }
+
+/* Dropping *all* locks here is necessary so parent directory
+ * snap/layout/quiesce locks are unlocked for a future mksnap.  This is the
+ * primary purpose of the new quiescelock. An op, e.g. getattr, cannot block
+ * waiting for another lock held by quiesce_subvolume_inode, e.g. filelock,
+ * which will prevent a mksnap on a subvolume inode (because getattr will
+ * already have gotten parent snaplocks, see Locker::try_rdlock_snap_layout).
+ */
+
+void Locker::handle_quiesce_failure(const MDRequestRef& mdr, std::string_view& marker)
+{
+  dout(10) << " failed to acquire quiesce lock; dropping all locks" << dendl;
+  marker = "failed to acquire quiesce lock"sv;
+  drop_locks(mdr.get(), NULL);
+  mdr->drop_local_auth_pins();
+}
+
 
 void Locker::notify_freeze_waiter(MDSCacheObject *o)
 {
@@ -1336,6 +1425,8 @@ bool Locker::eval(CInode *in, int mask, bool caps_imported)
     eval_any(&in->flocklock, &need_issue, &finishers, caps_imported);
   if (mask & CEPH_LOCK_IPOLICY)
     eval_any(&in->policylock, &need_issue, &finishers, caps_imported);
+  if (mask & CEPH_LOCK_IQUIESCE)
+    eval_any(&in->quiescelock, &need_issue, &finishers, caps_imported);
 
   // drop loner?
   if (in->is_auth() && in->is_head() && in->get_wanted_loner() != in->get_loner()) {
@@ -4420,6 +4511,7 @@ SimpleLock *Locker::get_lock(int lock_type, const MDSCacheObjectInfo &info)
   case CEPH_LOCK_ISNAP:
   case CEPH_LOCK_IFLOCK:
   case CEPH_LOCK_IPOLICY:
+  case CEPH_LOCK_IQUIESCE:
     {
       CInode *in = mdcache->get_inode(info.ino, info.snapid);
       if (!in) {
@@ -4436,6 +4528,7 @@ SimpleLock *Locker::get_lock(int lock_type, const MDSCacheObjectInfo &info)
       case CEPH_LOCK_ISNAP: return &in->snaplock;
       case CEPH_LOCK_IFLOCK: return &in->flocklock;
       case CEPH_LOCK_IPOLICY: return &in->policylock;
+      case CEPH_LOCK_IQUIESCE: return &in->quiescelock;
       }
     }
 
@@ -4461,6 +4554,7 @@ void Locker::handle_lock(const cref_t<MLock> &m)
 
   switch (lock->get_type()) {
   case CEPH_LOCK_DN:
+  case CEPH_LOCK_IQUIESCE:
   case CEPH_LOCK_IAUTH:
   case CEPH_LOCK_ILINK:
   case CEPH_LOCK_ISNAP:
