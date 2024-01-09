@@ -6785,6 +6785,55 @@ paths:
       summary: Get Monitor Details
       tags:
       - Monitor
+  /api/multi-cluster/auth:
+    post:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                hub_url:
+                  type: string
+                name:
+                  type: string
+                password:
+                  type: string
+                token:
+                  type: string
+                url:
+                  type: string
+                username:
+                  type: string
+              required:
+              - url
+              - name
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: Authenticate to a remote cluster
+      tags:
+      - Multi-cluster
   /api/nfs-ganesha/cluster:
     get:
       parameters: []
@@ -13872,6 +13921,8 @@ tags:
   name: MonPerfCounter
 - description: Get Monitor Details
   name: Monitor
+- description: Multi-cluster Management API
+  name: Multi-cluster
 - description: NFS-Ganesha Cluster Management API
   name: NFS-Ganesha
 - description: NVMe-oF Gateway Management API
