@@ -2212,30 +2212,10 @@ PerfCounters& PgScrubber::get_counters_set() const
 void PgScrubber::cleanup_on_finish()
 {
   dout(10) << __func__ << dendl;
-  ceph_assert(m_pg->is_locked());
+  clear_pgscrub_state();
 
-  state_clear(PG_STATE_SCRUBBING);
-  state_clear(PG_STATE_DEEP_SCRUB);
-
-  m_local_osd_resource.reset();
-  requeue_waiting();
-
-  reset_internal_state();
-  m_flags = scrub_flags_t{};
-
-  // type-specific state clear
-  _scrub_clear_state();
   // PG state flags changed:
   m_pg->publish_stats_to_osd();
-}
-
-// uses process_event(), so must be invoked externally
-void PgScrubber::scrub_clear_state()
-{
-  dout(10) << __func__ << dendl;
-
-  clear_pgscrub_state();
-  m_fsm->process_event(FullReset{});
 }
 
 /*
