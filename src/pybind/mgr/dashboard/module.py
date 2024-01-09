@@ -44,6 +44,7 @@ except ImportError:
     # To be picked up and reported by .can_run()
     cherrypy = None
 
+from cheroot.ssl.pyopenssl import pyOpenSSLAdapter
 from .services.sso import load_sso_db
 
 if cherrypy is not None:
@@ -150,6 +151,7 @@ class CherryPyConfig(object):
             'tools.json_in.on': True,
             'tools.json_in.force': True,
             'tools.plugin_hooks_filter_request.on': True,
+            'response.stream': True,
         }
 
         if use_ssl:
@@ -188,10 +190,13 @@ class CherryPyConfig(object):
                 else:
                     context.options |= ssl.OP_NO_TLSv1 | ssl.OP_NO_TLSv1_1 | ssl.OP_NO_TLSv1_2
 
-            config['server.ssl_module'] = 'builtin'
+            config['server.ssl_module'] = 'pyopenssl'
             config['server.ssl_certificate'] = cert_fname
             config['server.ssl_private_key'] = pkey_fname
-            config['server.ssl_context'] = context
+            config['server.ssl_adapter'] = pyOpenSSLAdapter(
+                certificate=cert_fname,
+                private_key=pkey_fname
+            )
 
         self.update_cherrypy_config(config)
 
