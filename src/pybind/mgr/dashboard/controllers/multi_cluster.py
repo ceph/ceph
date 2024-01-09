@@ -1,28 +1,37 @@
 # -*- coding: utf-8 -*-
 
 import json
+
 import requests
 
-from . import APIDoc, APIRouter, CreatePermission, UpdatePermission, ReadPermission, Endpoint, EndpointDoc, RESTController
 from ..exceptions import DashboardException
-from ..settings import Settings
 from ..security import Scope
+from ..settings import Settings
+from ..tools import configure_cors
+from . import APIDoc, APIRouter, CreatePermission, Endpoint, EndpointDoc, \
+    RESTController, UIRouter, UpdatePermission
 
 
 @APIRouter('/multi-cluster', Scope.CONFIG_OPT)
 @APIDoc('Multi-cluster Management API', 'Multi-cluster')
 class MultiCluster(RESTController):
-    def _proxy(self, method, base_url, path, params=None, payload=None, verify=False):
+    def _proxy(self, method, base_url, path, params=None, payload=None, verify=False, token=None):
         try:
-            headers = {
-                'Accept': 'application/vnd.ceph.api.v1.0+json',
-                'Content-Type': 'application/json',
-            }
+            if token:
+                headers = {
+                    'Accept': 'application/vnd.ceph.api.v1.0+json',
+                    'Authorization': 'Bearer ' + token,
+                }
+            else:
+                headers = {
+                    'Accept': 'application/vnd.ceph.api.v1.0+json',
+                    'Content-Type': 'application/json',
+                }
             response = requests.request(method, base_url + path, params=params,
                                         json=payload, verify=verify, headers=headers)
         except Exception as e:
             raise DashboardException(
-                "Could not reach {}".format(base_url+path),
+                "Could not reach {}, {}".format(base_url+path, e),
                 http_status_code=404,
                 component='dashboard')
 
@@ -34,11 +43,10 @@ class MultiCluster(RESTController):
                 component='dashboard')
         return content
 
-
     @Endpoint('POST')
     @CreatePermission
     @EndpointDoc("Authenticate to a remote cluster")
-    def auth(self, url: str, name: str, username=None, password=None, token=None):
+    def auth(self, url: str, name: str, username=None, password=None, token=None, hub_url=None):
         multicluster_config = {}
 
         if isinstance(Settings.MULTICLUSTER_CONFIG, str):
@@ -49,6 +57,9 @@ class MultiCluster(RESTController):
             multicluster_config = item_to_dict.copy()
         else:
             multicluster_config = Settings.MULTICLUSTER_CONFIG.copy()
+
+        if 'hub_url' not in multicluster_config:
+            multicluster_config['hub_url'] = hub_url
 
         if 'config' not in multicluster_config:
             multicluster_config['config'] = []
@@ -75,13 +86,23 @@ class MultiCluster(RESTController):
                     http_status_code=400,
                     component='dashboard')
 
-            else:
-                token = content['token']
+            token = content['token']
+            # Set CORS endpoint on remote cluster
+            self._proxy('PUT', url, 'ui-api/multi-cluster/set_cors_endpoint',
+                        payload={'url': multicluster_config['hub_url']}, token=token)
 
-                multicluster_config['config'].append({
-                    'name': name,
-                    'url': url,
-                    'token': token
-                })
+            multicluster_config['config'].append({
+                'name': name,
+                'url': url,
+                'token': token
+            })
 
-                Settings.MULTICLUSTER_CONFIG = multicluster_config
+            Settings.MULTICLUSTER_CONFIG = multicluster_config
+
+
+@UIRouter('/multi-cluster', Scope.CONFIG_OPT)
+class MultiClusterUi(RESTController):
+    @Endpoint('PUT')
+    @UpdatePermission
+    def set_cors_endpoint(self, url: str):
+        configure_cors(url)
