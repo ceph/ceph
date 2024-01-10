@@ -584,20 +584,24 @@ commands, as in the following examples:
 Rate Limit Management
 =====================
 
-Quotas may be set for The Ceph Object Gateway on users and buckets.  "Rate
+Quotas can be set for The Ceph Object Gateway on users and buckets. The "rate
 limit" includes the maximum number of read operations (read ops) and write
-operations (write ops) per minute and the number of bytes per minute that can
-be written or read per user or per bucket.
+operations (write ops) per minute as well as the number of bytes per minute
+that can be written or read per user or per bucket.
 
+Read Requests and Write Requests
+--------------------------------
 Operations that use the ``GET`` method or the ``HEAD`` method in their REST
 requests are "read requests". All other requests are "write requests".  
 
+How Metrics Work
+----------------
 Each object gateway tracks per-user metrics separately from bucket metrics.
 These metrics are not shared with other gateways. The configured limits should
 be divided by the number of active object gateways. For example, if "user A" is
 to be be limited to 10 ops per minute and there are two object gateways in the
 cluster, then the limit on "user A" should be ``5`` (10 ops per minute / 2
-RGWs).  If the requests are **not** balanced between RGWs, the rate limit might
+RGWs). If the requests are **not** balanced between RGWs, the rate limit might
 be underutilized. For example: if the ops limit is ``5`` and there are two
 RGWs, **but** the Load Balancer sends load to only one of those RGWs, the
 effective limit is 5 ops, because this limit is enforced per RGW. If the rate
@@ -626,22 +630,25 @@ time has elapsed, "user A" will be able to send ``GET`` requests again.
 - **User:** The ``--uid`` option allows you to specify a rate limit for a
   user.
 
-- **Maximum Read Ops:** The ``--max-read-ops`` setting allows you to specify
-  the maximum number of read ops per minute per RGW. A 0 value disables this setting (which means unlimited access).
+- **Maximum Read Ops:** The ``--max-read-ops`` setting allows you to limit read
+  bytes per minute per RGW instance. A ``0`` value disables throttling. 
   
-- **Maximum Read Bytes:** The ``--max-read-bytes`` setting allows you to specify
-  the maximum number of read bytes per minute per RGW. A 0 value disables this setting (which means unlimited access).
+- **Maximum Read Bytes:** The ``--max-read-bytes`` setting allows you to limit
+  read bytes per minute per RGW instance. A ``0`` value disables throttling. 
 
 - **Maximum Write Ops:** The ``--max-write-ops`` setting allows you to specify
-  the maximum number of write ops per minute per RGW. A 0 value disables this setting (which means unlimited access).
+  the maximum number of write ops per minute per RGW instance. A ``0`` value
+  disables throttling.
   
-- **Maximum Write Bytes:** The ``--max-write-bytes`` setting allows you to specify
-  the maximum number of write bytes per minute per RGW. A 0 value disables this setting (which means unlimited access).
+- **Maximum Write Bytes:** The ``--max-write-bytes`` setting allows you to
+  specify the maximum number of write bytes per minute per RGW instance. A
+  ``0`` value disables throttling.
  
-- **Rate Limit Scope:** The ``--ratelimit-scope`` option sets the scope for the rate limit.
-  The options are ``bucket`` , ``user`` and ``anonymous``. Bucket rate limit apply to buckets. 
-  The user rate limit applies to a user. Anonymous applies to an unauthenticated user.
-  Anonymous scope is only available for global rate limit.
+- **Rate Limit Scope:** The ``--ratelimit-scope`` option sets the scope for the
+  rate limit.  The options are ``bucket`` , ``user`` and ``anonymous``. Bucket
+  rate limit apply to buckets.  The user rate limit applies to a user.  The
+  ``anonymous`` option applies to an unauthenticated user. Anonymous scope is
+  available only for global rate limit.
 
 
 Set User Rate Limit
