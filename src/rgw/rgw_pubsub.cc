@@ -12,7 +12,6 @@
 #include "rgw_pubsub_push.h"
 #include "rgw_bucket.h"
 #include "common/errno.h"
-#include "svc_topic_rados.h"
 #include <regex>
 #include <algorithm>
 
