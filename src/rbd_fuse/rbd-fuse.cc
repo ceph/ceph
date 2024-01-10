@@ -678,7 +678,7 @@ int
 rbdfs_setxattr(const char *path, const char *name, const char *value,
 	       size_t size,
 	       int flags
-#if defined(DARWIN)
+#if defined(__APPLE__)
 	       ,uint32_t pos
 #endif
     )
@@ -701,7 +701,7 @@ rbdfs_setxattr(const char *path, const char *name, const char *value,
 int
 rbdfs_getxattr(const char *path, const char *name, char *value,
 		 size_t size
-#if defined(DARWIN)
+#if defined(__APPLE__)
 	       ,uint32_t position
 #endif
   )
