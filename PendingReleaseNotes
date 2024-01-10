@@ -49,6 +49,14 @@
   affected and to clean them up accordingly.
 * mgr/snap-schedule: For clusters with multiple CephFS file systems, all the
   snap-schedule commands now expect the '--fs' argument.
+* RGW: Fixed a S3 Object Lock bug with PutObjectRetention requests that specify
+  a RetainUntilDate after the year 2106. This date was truncated to 32 bits when
+  stored, so a much earlier date was used for object lock enforcement. This does
+  not effect PutBucketObjectLockConfiguration where a duration is given in Days.
+  The RetainUntilDate encoding is fixed for new PutObjectRetention requests, but
+  cannot repair the dates of existing object locks. Such objects can be identified
+  with a HeadObject request based on the x-amz-object-lock-retain-until-date
+  response header.
 
 >=18.0.0
 
