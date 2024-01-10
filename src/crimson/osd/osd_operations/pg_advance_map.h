@@ -25,8 +25,8 @@ public:
   static constexpr OperationTypeCode type = OperationTypeCode::pg_advance_map;
 
 protected:
-  ShardServices &shard_services;
   Ref<PG> pg;
+  ShardServices &shard_services;
   PipelineHandle handle;
 
   std::optional<epoch_t> from;
@@ -37,7 +37,7 @@ protected:
 
 public:
   PGAdvanceMap(
-    ShardServices &shard_services, Ref<PG> pg, epoch_t to,
+    Ref<PG> pg, ShardServices &shard_services, epoch_t to,
     PeeringCtx &&rctx, bool do_init);
   ~PGAdvanceMap();
 
