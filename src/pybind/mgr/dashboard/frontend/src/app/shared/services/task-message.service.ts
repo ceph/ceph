@@ -379,6 +379,10 @@ export class TaskMessageService {
     ),
     'cephfs/subvolume/group/remove': this.newTaskMessage(this.commonOperations.remove, (metadata) =>
       this.subvolumegroup(metadata)
+    ),
+    'cephfs/subvolume/snapshot/create': this.newTaskMessage(
+      this.commonOperations.create,
+      (metadata) => this.snapshot(metadata)
     )
   };
 
@@ -445,6 +449,10 @@ export class TaskMessageService {
 
   subvolumegroup(metadata: any) {
     return $localize`subvolume group '${metadata.subvolumegroupName}'`;
+  }
+
+  snapshot(metadata: any) {
+    return $localize`snapshot '${metadata.snapshotName}'`;
   }
 
   crudMessageId(id: string) {
