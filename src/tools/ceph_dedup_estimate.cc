@@ -67,7 +67,9 @@ using std::vector;
 #define dout_context g_ceph_context
 std::mutex print_mtx;
 
-uint8_t g_4MB_buffer[4*1024*1024];
+const string RAW_FP_NSPACE("RAW_FP");
+const string REDUCED_FP_NSPACE("REDUCED_FP");
+
 struct dedup_params_t {
   uint32_t max_objs    = 0;
   uint32_t chunk_size  = 2 * 1024;
@@ -402,7 +404,7 @@ struct FP_BUFFER {
     }
 
     char name_buf[16];
-    // make sure thread_id will fit in 2 hex digits 
+    // make sure thread_id will fit in 2 hex digits
     static_assert(THREAD_LIMIT_STRICT < 0xFF);
     unsigned n = snprintf(name_buf, sizeof(name_buf),
 			  "hash%02X.%08X", d_thread_id, d_part_number);
@@ -412,6 +414,7 @@ struct FP_BUFFER {
       cout << __func__ << "::oid=" << oid << std::endl;
     }
     bufferlist bl = bufferlist::static_from_mem((char*)d_buffer, d_byte_offset);
+    d_obj_ioctx->set_namespace(RAW_FP_NSPACE);
     d_obj_ioctx->write_full(oid, bl);
     d_byte_offset = FP_HEADER_LEN;
     d_part_number++;
@@ -491,9 +494,7 @@ static int thread_collect(const dedup_params_t &params, unsigned thread_id, uint
   auto start_itr = itr_ioctx.nobjects_begin(split_start);
   for (auto itr = start_itr; itr.get_cursor() < split_finish; ++itr) {
     string oid = itr->get_oid();
-    if (oid.starts_with("obj") == false) {
-      continue;
-    }
+
     obj_ioctx.set_namespace(itr->get_nspace());
     obj_ioctx.locator_set_key(itr->get_locator());
     bufferlist bl;
@@ -622,13 +623,15 @@ static void reduced_fp_flush(REDUCED_FP_HEADER header,
   }
 
   char name_buf[16];
-  // make sure shard_id will fit in 3 hex digits 
-  static_assert(SHARDS_COUNT_MAX < 0x999);
+  // TBD: allow 0xFF server-shards each with 0xFF internal shards
+  // make sure shard_id will fit in 3 hex digits
+  static_assert(SHARDS_COUNT_MAX < 0xFFFF);
   unsigned n = snprintf(name_buf, sizeof(name_buf),
-			"rdc%03X.%08X", shard_id, serial_id);
+			"rc%04X.%08X", shard_id, serial_id);
   std::string oid(name_buf, n);
 
   bufferlist bl = bufferlist::static_from_mem((char*)buffer, offset);
+  obj_ioctx.set_namespace(REDUCED_FP_NSPACE);
   obj_ioctx.write_full(oid, bl);
 }
 
@@ -730,16 +733,14 @@ static int reduce_shard_fingerprints(const dedup_params_t &params,
   if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, params.pool_name.c_str()) != 0) {
     return -1;
   }
-
+  itr_ioctx.set_namespace(RAW_FP_NSPACE);
   FP_Dict fp_dict;
   auto start_itr = itr_ioctx.nobjects_begin();
   auto end_itr   = itr_ioctx.nobjects_end();
   for (auto itr = start_itr; itr != end_itr; ++itr) {
     string oid = itr->get_oid();
-    if (oid.starts_with("hash") == false) {
-      continue;
-    }
-    //cout << oid << std::endl;
+    ceph_assert(oid.starts_with("hash"));
+
     obj_ioctx.set_namespace(itr->get_nspace());
     obj_ioctx.locator_set_key(itr->get_locator());
     bufferlist bl;
@@ -818,15 +819,14 @@ static int merge_reduced_fingerprints(const dedup_params_t &params)
   if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, params.pool_name.c_str()) != 0) {
     return -1;
   }
-
+  itr_ioctx.set_namespace(REDUCED_FP_NSPACE);
   FP_Dict fp_dict;
   auto start_itr = itr_ioctx.nobjects_begin();
   auto end_itr   = itr_ioctx.nobjects_end();
   for (auto itr = start_itr; itr != end_itr; ++itr) {
     string oid = itr->get_oid();
-    if (oid.starts_with("rdc") == false) {
-      continue;
-    }
+    ceph_assert(oid.starts_with("rc"));
+
     if (params.verbose ) {
       cout << oid << std::endl;
     }
@@ -849,34 +849,46 @@ static int merge_reduced_fingerprints(const dedup_params_t &params)
 }
 
 //---------------------------------------------------------------------------
-static int clean_intermediate_objs(const string & pool_name, bool verbose)
+static int clean_namespace(IoCtx *p_itr_ioctx,
+			   IoCtx *p_obj_ioctx,
+			   const string &nspace,
+			   bool verbose)
+{
+  p_itr_ioctx->set_namespace(nspace);
+  auto start_itr = p_itr_ioctx->nobjects_begin();
+  auto end_itr   = p_itr_ioctx->nobjects_end();
+  for (auto itr = start_itr; itr != end_itr; ++itr) {
+    string oid = itr->get_oid();
+    ceph_assert(oid.starts_with("hash") || oid.starts_with("rc"));
+
+    if (verbose ) {
+      cout << "removing " << oid << std::endl;
+    }
+    p_obj_ioctx->set_namespace(itr->get_nspace());
+    p_obj_ioctx->locator_set_key(itr->get_locator());
+    int ret = p_obj_ioctx->remove(oid);
+    if (ret != 0) {
+      cerr << "failed to remove obj: " << oid
+	   << ", error = " << cpp_strerror(ret) << std::endl;
+      return ret;
+    }
+  }
+
+  return 0;
+}
+
+//---------------------------------------------------------------------------
+static int clean_intermediate_objs(const string &pool_name, bool verbose)
 {
   Rados rados;
   IoCtx itr_ioctx, obj_ioctx;
   if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, pool_name.c_str()) != 0) {
     return -1;
   }
-
-  auto start_itr = itr_ioctx.nobjects_begin();
-  auto end_itr   = itr_ioctx.nobjects_end();
-  for (auto itr = start_itr; itr != end_itr; ++itr) {
-    string oid = itr->get_oid();
-    if (oid.starts_with("hash") || oid.starts_with("rdc")) {
-      if (verbose ) {
-	cout << "removing " << oid << std::endl;
-      }
-      obj_ioctx.set_namespace(itr->get_nspace());
-      obj_ioctx.locator_set_key(itr->get_locator());
-      int ret = obj_ioctx.remove(oid);
-      if (ret != 0) {
-	cerr << "failed to remove obj: " << oid
-	     << ", error = " << cpp_strerror(ret) << std::endl;
-	return ret;
-      }
-    }
+  if (clean_namespace(&itr_ioctx, &obj_ioctx, RAW_FP_NSPACE, verbose) != 0) {
+    return -1;
   }
-
-  return 0;
+  return clean_namespace(&itr_ioctx, &obj_ioctx, REDUCED_FP_NSPACE, verbose);
 }
 
 //================================================================================
