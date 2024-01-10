@@ -466,12 +466,13 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
   });
 }
 
-seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
-                                  epoch_t start, Ref<MOSDMap> m)
+seastar::future<> OSDSingletonState::store_maps(
+  ceph::os::Transaction& t,
+  epoch_t start, Ref<MOSDMap> m)
 {
   LOG_PREFIX(OSDSingletonState::store_maps);
   return seastar::do_with(
-    std::map<epoch_t, OSDMap*>(),
+    std::map<epoch_t, local_cached_map_t>(),
     [&t, FNAME, m, start, this](auto &added_maps) {
     return seastar::do_for_each(
       boost::make_counting_iterator(start),
@@ -482,8 +483,7 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	o->decode(p->second);
 	INFO("storing osdmap.{}", e);
 	store_map_bl(t, e, std::move(std::move(p->second)));
-	added_maps.emplace(e, o.get());
-	osdmaps.insert(e, std::move(o));
+	added_maps.emplace(e, osdmaps.insert(e, std::move(o)));
 	return seastar::now();
       } else if (auto p = m->incremental_maps.find(e);
 		 p != m->incremental_maps.end()) {
@@ -500,8 +500,7 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	  o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
 	  INFO("storing osdmap.{}", o->get_epoch());
 	  store_map_bl(t, e, std::move(fbl));
-	  added_maps.emplace(e, o.get());
-	  osdmaps.insert(e, std::move(o));
+	  added_maps.emplace(e, osdmaps.insert(e, std::move(o)));
 	  return seastar::now();
 	});
       } else {
@@ -509,10 +508,19 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	return seastar::now();
       }
     }).then([&t, FNAME, this, &added_maps] {
-      auto [e, map] = *added_maps.begin();
-      auto lastmap = osdmaps.find(e - 1).get();
-      meta_coll->store_final_pool_info(t, lastmap, added_maps);
-      return seastar::now();
+      epoch_t last_map_epoch = superblock.get_newest_map();
+      auto last_map_fut = last_map_epoch > 0
+	? get_local_map(last_map_epoch)
+	: seastar::make_ready_future<local_cached_map_t>();
+      return last_map_fut.then(
+	[&t, FNAME, last_map_epoch, this, &added_maps](auto lastmap) {
+	INFO("storing final pool info lastmap epoch {}, added maps {}->{}",
+	     last_map_epoch,
+	     added_maps.begin()->first,
+	     added_maps.rbegin()->first);
+	meta_coll->store_final_pool_info(t, lastmap, added_maps);
+	return seastar::now();
+      });
     });
   });
 }
