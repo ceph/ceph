@@ -77,6 +77,8 @@ class MgrTestCase(CephTestCase):
         for daemon in cls.mgr_cluster.mgr_daemons.values():
             daemon.stop()
 
+        cls.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "set", "down", "false")
+
         for mgr_id in cls.mgr_cluster.mgr_ids:
             cls.mgr_cluster.mgr_fail(mgr_id)
 
