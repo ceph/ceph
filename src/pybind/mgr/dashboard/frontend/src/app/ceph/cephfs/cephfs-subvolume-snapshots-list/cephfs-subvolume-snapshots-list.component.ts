@@ -16,6 +16,10 @@ import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import { Permissions } from '~/app/shared/models/permissions';
 import { CdTableSelection } from '~/app/shared/models/cd-table-selection';
 import { CdDatePipe } from '~/app/shared/pipes/cd-date.pipe';
+import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
+import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { FinishedTask } from '~/app/shared/models/finished-task';
+import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
@@ -30,6 +34,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
   tableActions: CdTableAction[];
   selection = new CdTableSelection();
   permissions: Permissions;
+  modalRef: NgbModalRef;
 
   subVolumes$: Observable<CephfsSubvolume[]>;
   snapshots$: Observable<any[]>;
@@ -53,7 +58,8 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
     private actionLabels: ActionLabelsI18n,
     private modalService: ModalService,
     private authStorageService: AuthStorageService,
-    private cdDatePipe: CdDatePipe
+    private cdDatePipe: CdDatePipe,
+    private taskWrapper: TaskWrapperService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -91,6 +97,12 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         permission: 'create',
         icon: Icons.add,
         click: () => this.openModal()
+      },
+      {
+        name: this.actionLabels.REMOVE,
+        permission: 'delete',
+        icon: Icons.destroy,
+        click: () => this.deleteSnapshot()
       }
     ];
 
@@ -189,5 +201,37 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
 
   updateSelection(selection: CdTableSelection) {
     this.selection = selection;
+  }
+
+  deleteSnapshot() {
+    const snapshotName = this.selection.first().name;
+    const subVolumeName = this.activeSubVolumeName;
+    const subVolumeGroupName = this.activeGroupName;
+    const fsName = this.fsName;
+    this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
+      actionDescription: 'Remove',
+      itemNames: [snapshotName],
+      itemDescription: 'Snapshot',
+      submitAction: () =>
+        this.taskWrapper
+          .wrapTaskAroundCall({
+            task: new FinishedTask('cephfs/subvolume/snapshot/delete', {
+              fsName: fsName,
+              subVolumeName: subVolumeName,
+              subVolumeGroupName: subVolumeGroupName,
+              snapshotName: snapshotName
+            }),
+            call: this.cephfsSubvolumeService.deleteSnapshot(
+              fsName,
+              subVolumeName,
+              snapshotName,
+              subVolumeGroupName
+            )
+          })
+          .subscribe({
+            complete: () => this.modalRef.close(),
+            error: () => this.modalRef.componentInstance.stopLoadingSpinner()
+          })
+    });
   }
 }
