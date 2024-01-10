@@ -837,3 +837,16 @@ class CephFSSubvolumeSnapshots(RESTController):
                 f'Failed to create subvolume snapshot {snap_name}: {err}'
             )
         return f'Subvolume snapshot {snap_name} created successfully'
+
+    def delete(self, vol_name: str, subvol_name: str, snap_name: str, group_name='', force=True):
+        params = {'vol_name': vol_name, 'sub_name': subvol_name, 'snap_name': snap_name}
+        if group_name:
+            params['group_name'] = group_name
+        params['force'] = str_to_bool(force)
+        error_code, _, err = mgr.remote('volumes', '_cmd_fs_subvolume_snapshot_rm', None,
+                                        params)
+        if error_code != 0:
+            raise DashboardException(
+                f'Failed to delete subvolume snapshot {snap_name}: {err}'
+            )
+        return f'Subvolume snapshot {snap_name} removed successfully'

@@ -161,4 +161,14 @@ export class CephfsSubvolumeService {
       { observe: 'response' }
     );
   }
+
+  deleteSnapshot(fsName: string, subVolumeName: string, snapshotName: string, groupName = '') {
+    return this.http.delete(`${this.baseURL}/snapshot/${fsName}/${subVolumeName}`, {
+      params: {
+        snap_name: snapshotName,
+        group_name: groupName
+      },
+      observe: 'response'
+    });
+  }
 }
