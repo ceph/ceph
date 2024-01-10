@@ -80,8 +80,8 @@ ostream& operator<<(ostream &out, const Inode &in)
   if (in.is_file())
     out << " " << in.oset;
 
-  if (!in.dentries.empty())
-    out << " parents=" << in.dentries;
+  if (in.is_dir() && !in.dentries.empty())
+    out << " dentries=" << in.dentries;
 
   if (in.is_dir() && in.has_dir_layout())
     out << " has_dir_layout";
