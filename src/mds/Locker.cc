@@ -274,7 +274,7 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 	if (wait) {
 	  dout(10) << " must xlock " << *lock << " " << *object
 		   << ", waiting for cluster recovered" << dendl;
-	  mds->locker->drop_locks(mdr.get(), NULL);
+	  drop_locks(mdr.get(), NULL);
 	  mdr->drop_local_auth_pins();
 	  mds->wait_for_cluster_recovered(new C_MDS_RetryRequest(mdcache, mdr));
 	  return false;
