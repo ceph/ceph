@@ -71,7 +71,15 @@ def get_binary_url(
     if len(result) == 0:
         raise RuntimeError(f'no results found at {resp.url}')
 
-    # TODO: filter the result down to the correct arch etc.?
+    # if arch was supplied, filter down to only results
+    # that include the desired arch
+    if arch:
+        result = [r for r in result if ('archs' in r and arch in r['archs'])]
+
+    # TODO: Is there any further filtering we should do beyond arch?
+    # We already use flavor, ref, etc. in our search.
+
+    # TODO: After filtering, does it matter which result we take?
     result = result[0]
 
     status = result['status']

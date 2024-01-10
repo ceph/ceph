@@ -6,8 +6,7 @@ tasks:
 
 - cephadm:
     image: quay.ceph.io/ceph-ci/ceph:reef
-    cephadm_branch: reef
-    cephadm_git_url: https://github.com/ceph/ceph
+    compiled_cephadm_branch: reef
     conf:
       osd:
         #set config option for which cls modules are allowed to be loaded / used
