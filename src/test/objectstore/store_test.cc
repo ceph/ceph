@@ -9670,13 +9670,26 @@ TEST_P(StoreTestSpecificAUSize, BluestoreRepairSharedBlobTest) {
   bstore->umount();
   bstore->mount();
   {
+    bufferlist bl;
     string key;
     _key_encode_u64(1, &key);
     bluestore_shared_blob_t sb(1);
-    sb.ref_map.get(0x822000, block_size);
-    sb.ref_map.get(0x824000, block_size);
-    sb.ref_map.get(0x824000, block_size);
-    bufferlist bl;
+    int r = bstore->get_shared_blob(key, bl);
+    ASSERT_EQ(r, 0);
+    decode(sb, bl);
+    cout << sb.ref_map << std::endl;
+    ASSERT_EQ(sb.ref_map.ref_map.size(), 2);
+    auto it = sb.ref_map.ref_map.begin();
+    ASSERT_EQ(it->second.refs, 1);
+    ASSERT_EQ(it->second.length, block_size);
+    it++;
+    ASSERT_EQ(it->second.refs, 1);
+    ASSERT_EQ(it->second.length, block_size);
+
+    sb.ref_map.get(it->first, block_size);
+    cout << sb.ref_map << std::endl;
+
+    bl.clear();
     encode(sb, bl);
     bstore->inject_broken_shared_blob_key(key, bl);
   }
