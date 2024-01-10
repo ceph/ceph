@@ -66,6 +66,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "rgw_pubsub.h"
+#include "topic.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -1141,59 +1142,35 @@ int RadosStore::read_topic_v2(const std::string& topic_name,
                               rgw_pubsub_topic& topic,
                               RGWObjVersionTracker* objv_tracker,
                               optional_yield y,
-                              const DoutPrefixProvider* dpp) {
-  bufferlist bl;
-  auto mtime = ceph::real_clock::zero();
-  RGWSI_MBSObj_GetParams params(&bl, nullptr, &mtime);
-  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(
-      svc()->topic->svc.meta_be->alloc_ctx());
-  ctx->init(svc()->topic->get_be_handler());
-  const int ret = svc()->topic->svc.meta_be->get(
-      ctx.get(), get_topic_metadata_key(tenant, topic_name),
-      params, objv_tracker, y, dpp);
-  if (ret < 0) {
-    return ret;
-  }
-
-  auto iter = bl.cbegin();
-  try {
-    decode(topic, iter);
-  } catch (buffer::error& err) {
-    ldpp_dout(dpp, 20) << " failed to decode topic: " << topic_name
-                       << ". error: " << err.what() << dendl;
-    return -EIO;
-  }
-  return 0;
+                              const DoutPrefixProvider* dpp)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const std::string key = get_topic_metadata_key(tenant, topic_name);
+  return rgwrados::topic::read(dpp, y, *svc()->sysobj, *svc()->cache,
+                               zone, key, topic, *ctl()->meta.topic_cache,
+                               nullptr, objv_tracker);
 }
 
-int RadosStore::write_topic_v2(const rgw_pubsub_topic& topic,
-                               RGWObjVersionTracker* objv_tracker,
+int RadosStore::write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                               RGWObjVersionTracker& objv_tracker,
                                optional_yield y,
-                               const DoutPrefixProvider* dpp) {
-  bufferlist bl;
-  encode(topic, bl);
-  RGWSI_MBSObj_PutParams params(bl, nullptr, ceph::real_clock::zero(),
-                                /*exclusive*/ false);
-  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(
-      svc()->topic->svc.meta_be->alloc_ctx());
-  ctx->init(svc()->topic->get_be_handler());
-  return svc()->topic->svc.meta_be->put(
-      ctx.get(), get_topic_metadata_key(topic.user.tenant, topic.name),
-      params, objv_tracker, y, dpp);
+                               const DoutPrefixProvider* dpp)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  return rgwrados::topic::write(dpp, y, *svc()->sysobj, svc()->mdlog, zone,
+                                topic, objv_tracker, {}, exclusive);
 }
 
 int RadosStore::remove_topic_v2(const std::string& topic_name,
                                 const std::string& tenant,
-                                RGWObjVersionTracker* objv_tracker,
+                                RGWObjVersionTracker& objv_tracker,
                                 optional_yield y,
-                                const DoutPrefixProvider* dpp) {
-  RGWSI_MBSObj_RemoveParams params;
-  std::unique_ptr<RGWSI_MetaBackend::Context> ctx(
-      svc()->topic->svc.meta_be->alloc_ctx());
-  ctx->init(svc()->topic->get_be_handler());
-  return svc()->topic->svc.meta_be->remove(ctx.get(),
-                                           get_topic_metadata_key(tenant, topic_name),
-                                           params, objv_tracker, y, dpp);
+                                const DoutPrefixProvider* dpp)
+{
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const std::string key = get_topic_metadata_key(tenant, topic_name);
+  return rgwrados::topic::remove(dpp, y, *svc()->sysobj, svc()->mdlog,
+                                 zone, key, objv_tracker);
 }
 
 int RadosStore::remove_bucket_mapping_from_topics(
@@ -1223,18 +1200,15 @@ int RadosStore::update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
                                             bool add_mapping,
                                             optional_yield y,
                                             const DoutPrefixProvider* dpp) {
-  bufferlist empty_bl;
-  librados::ObjectWriteOperation op;
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const std::string key = get_topic_metadata_key(topic.user.tenant, topic.name);
   int ret = 0;
   if (add_mapping) {
-    std::map<std::string, bufferlist> mapping{{bucket_key, empty_bl}};
-    op.omap_set(mapping);
+    ret = rgwrados::topic::link_bucket(dpp, y, rados, zone, key, bucket_key);
   } else {
-    std::set<std::string> to_rm{{bucket_key}};
-    op.omap_rm_keys(to_rm);
+    ret = rgwrados::topic::unlink_bucket(dpp, y, rados, zone, key, bucket_key);
   }
-  ret = rgw_rados_operate(dpp, rados->get_topics_pool_ctx(),
-                          get_bucket_topic_mapping_oid(topic), &op, y);
   if (ret < 0) {
     ldpp_dout(dpp, 1) << "ERROR: failed to " << (add_mapping ? "add" : "remove")
                       << " topic bucket mapping for bucket: " << bucket_key
@@ -1250,57 +1224,25 @@ int RadosStore::update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
 int RadosStore::get_bucket_topic_mapping(const rgw_pubsub_topic& topic,
                                          std::set<std::string>& bucket_keys,
                                          optional_yield y,
-                                         const DoutPrefixProvider* dpp) {
-  constexpr auto max_chunk = 1024U;
-  std::string start_after;
-  bool more = true;
-  int rval;
-  while (more) {
-    librados::ObjectReadOperation op;
-    std::set<std::string> curr_keys;
-    op.omap_get_keys2(start_after, max_chunk, &curr_keys, &more, &rval);
-    const auto ret =
-        rgw_rados_operate(dpp, rados->get_topics_pool_ctx(),
-                          get_bucket_topic_mapping_oid(topic), &op, nullptr, y);
-    if (ret == -ENOENT) {
-      // mapping object was not created - nothing to do
-      return 0;
-    }
+                                         const DoutPrefixProvider* dpp)
+{
+  librados::Rados& rados = *getRados()->get_rados_handle();
+  const RGWZoneParams& zone = svc()->zone->get_zone_params();
+  const std::string key = get_topic_metadata_key(topic.user.tenant, topic.name);
+  constexpr int max_chunk = 1024;
+  std::string marker;
+
+  do {
+    int ret = rgwrados::topic::list_buckets(dpp, y, rados, zone, key, marker,
+                                            max_chunk, bucket_keys, marker);
     if (ret < 0) {
-      // TODO: do we need to check on rval as well as ret?
       ldpp_dout(dpp, 1)
           << "ERROR: failed to read bucket topic mapping object for topic: "
           << topic.name << ", ret= " << ret << dendl;
       return ret;
     }
-    if (more) {
-      if (curr_keys.empty()) {
-        return -EINVAL;  // something wrong.
-      }
-      start_after = *curr_keys.rbegin();
-    }
-    bucket_keys.merge(curr_keys);
-  }
-  return 0;
-}
+  } while (!marker.empty());
 
-int RadosStore::delete_bucket_topic_mapping(const rgw_pubsub_topic& topic,
-                                            optional_yield y,
-                                            const DoutPrefixProvider* dpp) {
-  librados::ObjectWriteOperation op;
-  op.remove();
-  const int ret =
-      rgw_rados_operate(dpp, rados->get_topics_pool_ctx(),
-                        get_bucket_topic_mapping_oid(topic), &op, y);
-  if (ret < 0 && ret != -ENOENT) {
-    ldpp_dout(dpp, 1)
-        << "ERROR: failed removing bucket topic mapping omap for topic: "
-        << topic.name << ", ret=" << ret << dendl;
-    return ret;
-  }
-  ldpp_dout(dpp, 20)
-      << "Successfully deleted topic bucket mapping omap for topic: "
-      << topic.name << dendl;
   return 0;
 }
 
