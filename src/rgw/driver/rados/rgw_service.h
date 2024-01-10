@@ -17,6 +17,8 @@ class RadosStore;
 
 struct RGWServices_Def;
 
+namespace rgwrados::topic { struct cache_entry; }
+
 class RGWServiceInstance
 {
   friend struct RGWServices_Def;
@@ -186,6 +188,9 @@ class RGWUserCtl;
 class RGWBucketCtl;
 class RGWOTPCtl;
 
+template <class T>
+class RGWChainedCacheImpl;
+
 struct RGWCtlDef {
   struct _meta {
     std::unique_ptr<RGWMetadataManager> mgr;
@@ -195,6 +200,8 @@ struct RGWCtlDef {
     std::unique_ptr<RGWMetadataHandler> otp;
     std::unique_ptr<RGWMetadataHandler> role;
     std::unique_ptr<RGWMetadataHandler> topic;
+
+    std::unique_ptr<RGWChainedCacheImpl<rgwrados::topic::cache_entry>> topic_cache;
 
     _meta();
     ~_meta();
@@ -225,6 +232,8 @@ struct RGWCtl {
     RGWMetadataHandler *otp{nullptr};
     RGWMetadataHandler *role{nullptr};
     RGWMetadataHandler* topic{nullptr};
+
+    RGWChainedCacheImpl<rgwrados::topic::cache_entry>* topic_cache{nullptr};
   } meta;
 
   RGWUserCtl *user{nullptr};

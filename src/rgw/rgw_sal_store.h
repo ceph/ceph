@@ -42,15 +42,15 @@ class StoreDriver : public Driver {
                       const DoutPrefixProvider* dpp) override {
       return -EOPNOTSUPP;
     }
-    int write_topic_v2(const rgw_pubsub_topic& topic,
-                       RGWObjVersionTracker* objv_tracker,
+    int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                       RGWObjVersionTracker& objv_tracker,
                        optional_yield y,
                        const DoutPrefixProvider* dpp) override {
       return -EOPNOTSUPP;
     }
     int remove_topic_v2(const std::string& topic_name,
                         const std::string& tenant,
-                        RGWObjVersionTracker* objv_tracker,
+                        RGWObjVersionTracker& objv_tracker,
                         optional_yield y,
                         const DoutPrefixProvider* dpp) override {
       return -EOPNOTSUPP;
@@ -73,11 +73,6 @@ class StoreDriver : public Driver {
                                  std::set<std::string>& bucket_keys,
                                  optional_yield y,
                                  const DoutPrefixProvider* dpp) override {
-      return -EOPNOTSUPP;
-    }
-    int delete_bucket_topic_mapping(const rgw_pubsub_topic& topic,
-                                    optional_yield y,
-                                    const DoutPrefixProvider* dpp) override {
       return -EOPNOTSUPP;
     }
 };

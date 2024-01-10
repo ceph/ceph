@@ -1212,10 +1212,6 @@ int RGWRados::init_complete(const DoutPrefixProvider *dpp, optional_yield y)
   if (ret < 0)
     return ret;
 
-  ret = open_topics_pool_ctx(dpp);
-  if (ret < 0)
-    return ret;
-
   pools_initialized = true;
 
   if (use_gc) {
@@ -1445,12 +1441,6 @@ int RGWRados::open_reshard_pool_ctx(const DoutPrefixProvider *dpp)
 int RGWRados::open_notif_pool_ctx(const DoutPrefixProvider *dpp)
 {
   return rgw_init_ioctx(dpp, get_rados_handle(), svc.zone->get_zone_params().notif_pool, notif_pool_ctx, true, true);
-}
-
-int RGWRados::open_topics_pool_ctx(const DoutPrefixProvider* dpp) {
-  return rgw_init_ioctx(dpp, get_rados_handle(),
-                        svc.zone->get_zone_params().topics_pool,
-                        topics_pool_ctx, true, true);
 }
 
 int RGWRados::open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx& io_ctx,
