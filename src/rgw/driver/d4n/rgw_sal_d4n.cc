@@ -35,17 +35,18 @@ static inline Object* nextObject(Object* t)
 
 D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next) 
 {
+  conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
+
   rgw::cache::Partition partition_info;
   partition_info.location = g_conf()->rgw_d4n_l1_datacache_persistent_path;
   partition_info.name = "d4n";
   partition_info.type = "read-cache";
   partition_info.size = g_conf()->rgw_d4n_l1_datacache_size;
 
-  //cacheDriver = new rgw::cache::RedisDriver(io_context, partition_info); // change later -Sam
   cacheDriver = new rgw::cache::SSDDriver(partition_info);
-  objDir = new rgw::d4n::ObjectDirectory(io_context);
-  blockDir = new rgw::d4n::BlockDirectory(io_context);
-  policyDriver = new rgw::d4n::PolicyDriver(io_context, cacheDriver, "lfuda");
+  objDir = new rgw::d4n::ObjectDirectory(conn);
+  blockDir = new rgw::d4n::BlockDirectory(conn);
+  policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda");
 }
 
  D4NFilterDriver::~D4NFilterDriver()
@@ -58,14 +59,28 @@ D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_cont
 
 int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
 {
+  namespace net = boost::asio;
+  using boost::redis::config;
+
+  std::string address = cct->_conf->rgw_local_cache_address;
+  config cfg;
+  cfg.addr.host = address.substr(0, address.find(":"));
+  cfg.addr.port = address.substr(address.find(":") + 1, address.length());
+  cfg.clientname = "D4N.Filter";
+
+  if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
+    ldpp_dout(dpp, 10) << "D4NFilterDriver::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
+    return -EDESTADDRREQ;
+  }
+
+  conn->async_run(cfg, {}, net::consign(net::detached, conn));
+
   FilterDriver::initialize(cct, dpp);
 
   cacheDriver->initialize(dpp);
-
-  objDir->init(cct, dpp);
-  blockDir->init(cct, dpp);
-
-  policyDriver->get_cache_policy()->init(cct, dpp);
+  objDir->init(cct);
+  blockDir->init(cct);
+  policyDriver->get_cache_policy()->init(cct);
 
   return 0;
 }

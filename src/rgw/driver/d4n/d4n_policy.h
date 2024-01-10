@@ -33,7 +33,7 @@ class CachePolicy {
     CachePolicy() {}
     virtual ~CachePolicy() = default; 
 
-    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp) { return 0; } 
+    virtual void init(CephContext *cct) = 0; 
     virtual int exist_key(std::string key) = 0;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) = 0;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) = 0;
@@ -65,7 +65,6 @@ class LFUDAPolicy : public CachePolicy {
     std::unordered_map<std::string, LFUDAEntry*> entries_map;
     std::mutex lfuda_lock;
 
-    net::io_context& io;
     std::shared_ptr<connection> conn;
     BlockDirectory* dir;
     rgw::cache::CacheDriver* cacheDriver;
@@ -77,32 +76,18 @@ class LFUDAPolicy : public CachePolicy {
     CacheBlock* get_victim_block(const DoutPrefixProvider* dpp, optional_yield y);
 
   public:
-    LFUDAPolicy(net::io_context& io_context, rgw::cache::CacheDriver* cacheDriver) : CachePolicy(), io(io_context), cacheDriver{cacheDriver} {
-      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-      dir = new BlockDirectory{io};
+    LFUDAPolicy(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver) : CachePolicy(), 
+                                                                         conn(conn), 
+                                                                         cacheDriver(cacheDriver)
+    {
+      dir = new BlockDirectory{conn};
     }
     ~LFUDAPolicy() {
-      shutdown();
       delete dir;
     } 
 
-    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp) {
-      std::string address = cct->_conf->rgw_local_cache_address;
-
-      config cfg;
-      cfg.addr.host = address.substr(0, address.find(":"));
-      cfg.addr.port = address.substr(address.find(":") + 1, address.length());
-      cfg.clientname = "D4N.Policy";
-
-      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-	ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
-	return -EDESTADDRREQ;
-      }
-
-      dir->init(cct, dpp);
-      conn->async_run(cfg, {}, net::consign(net::detached, conn));
-
-      return 0;
+    virtual void init(CephContext *cct) {
+      dir->init(cct);
     }
     virtual int exist_key(std::string key) override;
     //virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
@@ -117,7 +102,6 @@ class LFUDAPolicy : public CachePolicy {
         return nullptr;
       return it->second;
     }
-    void shutdown();
 };
 
 class LRUPolicy : public CachePolicy {
@@ -134,6 +118,7 @@ class LRUPolicy : public CachePolicy {
   public:
     LRUPolicy(rgw::cache::CacheDriver* cacheDriver) : cacheDriver{cacheDriver} {}
 
+    virtual void init(CephContext *cct) {} 
     virtual int exist_key(std::string key) override;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) override;
@@ -146,10 +131,10 @@ class PolicyDriver {
     CachePolicy* cachePolicy;
 
   public:
-    PolicyDriver(net::io_context& io_context, rgw::cache::CacheDriver* cacheDriver, std::string _policyName) : policyName(_policyName) 
+    PolicyDriver(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver, std::string _policyName) : policyName(_policyName) 
     {
       if (policyName == "lfuda") {
-	cachePolicy = new LFUDAPolicy(io_context, cacheDriver);
+	cachePolicy = new LFUDAPolicy(conn, cacheDriver);
       } else if (policyName == "lru") {
 	cachePolicy = new LRUPolicy(cacheDriver);
       }

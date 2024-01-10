@@ -40,32 +40,12 @@ class Directory {
 
 class ObjectDirectory: public Directory {
   public:
-    ObjectDirectory(net::io_context& io_context) {
-      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-    }
-    ~ObjectDirectory() {
-      shutdown();
-    }
+    ObjectDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
 
-    int init(CephContext* cct, const DoutPrefixProvider* dpp) {
+    void init(CephContext* cct) {
       this->cct = cct;
-
-      config cfg;
-      cfg.addr.host = cct->_conf->rgw_d4n_host;
-      cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
-      cfg.clientname = "D4N.ObjectDir";
-
-      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-	ldpp_dout(dpp, 10) << "ObjectDirectory::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
-	return -EDESTADDRREQ;
-      }
-      
-      conn->async_run(cfg, {}, net::consign(net::detached, conn)); 
-
-      return 0;
     }
     int exist_key(CacheObj* object, optional_yield y);
-    void shutdown();
 
     int set(CacheObj* object, optional_yield y);
     int get(CacheObj* object, optional_yield y);
@@ -81,32 +61,12 @@ class ObjectDirectory: public Directory {
 
 class BlockDirectory: public Directory {
   public:
-    BlockDirectory(net::io_context& io_context) {
-      conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
-    }
-    ~BlockDirectory() {
-      shutdown();
-    }
+    BlockDirectory(std::shared_ptr<connection>& conn) : conn(conn) {}
     
-    int init(CephContext* cct, const DoutPrefixProvider* dpp) {
+    void init(CephContext* cct) {
       this->cct = cct;
-
-      config cfg;
-      cfg.addr.host = cct->_conf->rgw_d4n_host;
-      cfg.addr.port = std::to_string(cct->_conf->rgw_d4n_port);
-      cfg.clientname = "D4N.BlockDir";
-
-      if (!cfg.addr.host.length() || !cfg.addr.port.length()) {
-	ldpp_dout(dpp, 10) << "BlockDirectory::" << __func__ << "(): Endpoint was not configured correctly." << dendl;
-	return -EDESTADDRREQ;
-      }
-
-      conn->async_run(cfg, {}, net::consign(net::detached, conn)); 
-
-      return 0;
     }
     int exist_key(CacheBlock* block, optional_yield y);
-    void shutdown();
 
     int set(CacheBlock* block, optional_yield y);
     int get(CacheBlock* block, optional_yield y);
