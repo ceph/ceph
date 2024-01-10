@@ -257,9 +257,11 @@ class AMQPReceiver(object):
 def amqp_receiver_thread_runner(receiver):
     """main thread function for the amqp receiver"""
     try:
-        log.info('AMQP receiver started')
+        ct = datetime.datetime.now()
+        log.info('AMQP receiver started ['+str(ct)+']')
         receiver.channel.start_consuming()
-        log.info('AMQP receiver ended')
+        ct = datetime.datetime.now()
+        log.info('AMQP receiver ended ['+str(ct)+']')
     except Exception as error:
         log.info('AMQP receiver ended unexpectedly: %s', str(error))
 
@@ -269,6 +271,17 @@ def create_amqp_receiver_thread(exchange, topic, external_endpoint_address=None,
     receiver = AMQPReceiver(exchange, topic, external_endpoint_address, ca_location)
     task = threading.Thread(target=amqp_receiver_thread_runner, args=(receiver,))
     task.daemon = True
+    task.start()
+    wait_sleep_time = 1
+    max_wait_for_task = 30
+    while not task.is_alive():
+        ct = datetime.datetime.now()
+        log.info('wait for AMQP receiver ['+str(ct)+']...')
+        time.sleep(wait_sleep_time)
+        max_wait_for_task = max_wait_for_task - wait_sleep_time
+        if (max_wait_for_task <= 0):
+            log.info('not waiting for AMQP receiver anymore')
+            break
     return task, receiver
 
 def stop_amqp_receiver(receiver, task):
@@ -459,17 +472,16 @@ class KafkaReceiver(object):
 def kafka_receiver_thread_runner(receiver):
     """main thread function for the kafka receiver"""
     try:
-        log.info('Kafka receiver started')
-        print('Kafka receiver started')
+        ct = datetime.datetime.now()
+        log.info('Kafka receiver started ['+str(ct)+']')
         while not receiver.stop:
             for msg in receiver.consumer:
                 receiver.events.append(json.loads(msg.value))
             time.sleep(0.1)
-        log.info('Kafka receiver ended')
-        print('Kafka receiver ended')
+        ct = datetime.datetime.now()
+        log.info('Kafka receiver ended ['+str(ct)+']')
     except Exception as error:
         log.info('Kafka receiver ended unexpectedly: %s', str(error))
-        print('Kafka receiver ended unexpectedly: ' + str(error))
 
 
 def create_kafka_receiver_thread(topic, security_type='PLAINTEXT'):
@@ -477,7 +489,19 @@ def create_kafka_receiver_thread(topic, security_type='PLAINTEXT'):
     receiver = KafkaReceiver(topic, security_type)
     task = threading.Thread(target=kafka_receiver_thread_runner, args=(receiver,))
     task.daemon = True
+    task.start()
+    wait_sleep_time = 1
+    max_wait_for_task = 30
+    while not task.is_alive():
+        ct = datetime.datetime.now()
+        log.info('wait for Kafka receiver ['+str(ct)+']...')
+        time.sleep(wait_sleep_time)
+        max_wait_for_task = max_wait_for_task - wait_sleep_time
+        if (max_wait_for_task <= 0):
+            log.info('not waiting for Kafka receiver anymore')
+            break
     return task, receiver
+
 
 def stop_kafka_receiver(receiver, task):
     """stop the receiver thread and wait for it to finish"""
@@ -984,7 +1008,6 @@ def test_ps_s3_notification_filter_on_master():
     # start amqp receivers
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    task.start()
 
     # create s3 topic
     endpoint_address = 'amqp://' + hostname
@@ -1257,8 +1280,6 @@ def test_ps_s3_notification_push_amqp_on_master():
     exchange = 'ex1'
     task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name1)
     task2, receiver2 = create_amqp_receiver_thread(exchange, topic_name2)
-    task1.start()
-    task2.start()
 
     # create two s3 topic
     endpoint_address = 'amqp://' + hostname
@@ -1267,7 +1288,7 @@ def test_ps_s3_notification_push_amqp_on_master():
     topic_conf1 = PSTopicS3(conn, topic_name1, zonegroup, endpoint_args=endpoint_args)
     topic_arn1 = topic_conf1.set_config()
     # without acks from broker
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=routable'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=none'
     topic_conf2 = PSTopicS3(conn, topic_name2, zonegroup, endpoint_args=endpoint_args)
     topic_arn2 = topic_conf2.set_config()
     # create s3 notification
@@ -1359,7 +1380,6 @@ def test_ps_s3_notification_push_amqp_idleness_check():
     # start amqp receivers
     exchange = 'ex1'
     task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name1)
-    task1.start()
 
     # create two s3 topic
     endpoint_address = 'amqp://' + hostname
@@ -1493,7 +1513,6 @@ def test_ps_s3_notification_push_kafka_on_master():
         topic_conf2 = None
         receiver = None
         task, receiver = create_kafka_receiver_thread(topic_name+'_1')
-        task.start()
 
         # create s3 topic
         endpoint_address = 'kafka://' + kafka_server
@@ -2112,7 +2131,6 @@ def ps_s3_creation_triggers_on_master(external_endpoint_address=None, ca_locatio
     # start amqp receiver
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name, external_endpoint_address, ca_location)
-    task.start()
 
     # create s3 topic
     if external_endpoint_address:
@@ -2208,7 +2226,6 @@ def test_ps_s3_creation_triggers_on_master_external():
 
 def generate_private_key(tempdir):
 
-    import datetime
     import stat
     from cryptography import x509
     from cryptography.x509.oid import NameOID
@@ -2360,7 +2377,6 @@ def test_http_post_object_upload():
     # start amqp receivers
     exchange = 'ex1'
     task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name+'_1')
-    task1.start()
 
     # create s3 topics
     endpoint_address = 'amqp://' + hostname
@@ -2477,11 +2493,8 @@ def test_ps_s3_multipart_on_master():
     # start amqp receivers
     exchange = 'ex1'
     task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name+'_1')
-    task1.start()
     task2, receiver2 = create_amqp_receiver_thread(exchange, topic_name+'_2')
-    task2.start()
     task3, receiver3 = create_amqp_receiver_thread(exchange, topic_name+'_3')
-    task3.start()
 
     # create s3 topics
     endpoint_address = 'amqp://' + hostname
@@ -2566,7 +2579,6 @@ def test_ps_s3_metadata_filter_on_master():
     # start amqp receivers
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    task.start()
 
     # create s3 topic
     endpoint_address = 'amqp://' + hostname
@@ -2670,7 +2682,6 @@ def test_ps_s3_metadata_on_master():
     # start amqp receivers
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    task.start()
 
     # create s3 topic
     endpoint_address = 'amqp://' + hostname
@@ -2764,7 +2775,6 @@ def test_ps_s3_tags_on_master():
     # start amqp receiver
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    task.start()
 
     # create s3 topic
     endpoint_address = 'amqp://' + hostname
@@ -2876,7 +2886,6 @@ def test_ps_s3_versioning_on_master():
     # start amqp receiver
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    task.start()
 
     # create s3 topic
     endpoint_address = 'amqp://' + hostname
@@ -2951,7 +2960,6 @@ def test_ps_s3_versioned_deletion_on_master():
     # start amqp receiver
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    task.start()
 
     # create s3 topic
     endpoint_address = 'amqp://' + hostname
@@ -3478,7 +3486,6 @@ def test_ps_s3_notification_kafka_idle_behaviour():
     # create consumer on the topic
    
     task, receiver = create_kafka_receiver_thread(topic_name+'_1')
-    task.start()
 
     # create s3 topic
     endpoint_address = 'kafka://' + kafka_server
@@ -3904,7 +3911,6 @@ def persistent_notification(endpoint_type):
         # start amqp receiver
         exchange = 'ex1'
         task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-        task.start()
         endpoint_address = 'amqp://' + host
         endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange='+exchange+'&amqp-ack-level=broker'+'&persistent=true'
         # amqp broker guarantee ordering
@@ -3912,7 +3918,6 @@ def persistent_notification(endpoint_type):
     elif endpoint_type == 'kafka':
         # start amqp receiver
         task, receiver = create_kafka_receiver_thread(topic_name)
-        task.start()
         endpoint_address = 'kafka://' + host
         endpoint_args = 'push-endpoint='+endpoint_address+'&kafka-ack-level=broker'+'&persistent=true'
         # amqp broker guarantee ordering
@@ -4026,7 +4031,6 @@ def test_ps_s3_persistent_notification_large():
     # start amqp receiver
     exchange = 'ex1'
     task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    task.start()
     endpoint_address = 'amqp://' + host
     opaque_data = random_string(1024*2)
     endpoint_args = 'push-endpoint='+endpoint_address+'&OpaqueData='+opaque_data+'&amqp-exchange='+exchange+'&amqp-ack-level=broker'+'&persistent=true'
@@ -4108,7 +4112,6 @@ def test_ps_s3_topic_update():
     hostname = get_ip()
     exchange = 'ex1'
     amqp_task, receiver = create_amqp_receiver_thread(exchange, topic_name)
-    amqp_task.start()
     #topic_conf = PSTopic(ps_zone.conn, topic_name,endpoint='amqp://' + hostname,endpoint_args='amqp-exchange=' + exchange + '&amqp-ack-level=none')
     topic_conf = PSTopicS3(conn, topic_name, zonegroup, endpoint_args='amqp-exchange=' + exchange + '&amqp-ack-level=none')
     
@@ -4220,7 +4223,6 @@ def test_ps_s3_notification_update():
     # start amqp receiver in a separate thread
     exchange = 'ex1'
     amqp_task, receiver = create_amqp_receiver_thread(exchange, topic_name1)
-    amqp_task.start()
     # create random port for the http server
     http_port = random.randint(10000, 20000)
     # start an http server in a separate thread
@@ -4309,7 +4311,6 @@ def test_ps_s3_multiple_topics_notification():
     # start amqp receiver in a separate thread
     exchange = 'ex1'
     amqp_task, receiver = create_amqp_receiver_thread(exchange, topic_name1)
-    amqp_task.start()
     # create random port for the http server
     http_port = random.randint(10000, 20000)
     # start an http server in a separate thread
@@ -4498,7 +4499,6 @@ def kafka_security(security_type, mechanism='PLAIN'):
     
     # create consumer on the topic
     task, receiver = create_kafka_receiver_thread(topic_name)
-    task.start()
     
     topic_arn = topic_conf.set_config()
     # create s3 notification
