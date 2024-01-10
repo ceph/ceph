@@ -1149,8 +1149,8 @@ int RadosStore::read_topic_v2(const std::string& topic_name,
       svc()->topic->svc.meta_be->alloc_ctx());
   ctx->init(svc()->topic->get_be_handler());
   const int ret = svc()->topic->svc.meta_be->get(
-      ctx.get(), get_topic_key(topic_name, tenant), params, objv_tracker, y,
-      dpp);
+      ctx.get(), get_topic_metadata_key(tenant, topic_name),
+      params, objv_tracker, y, dpp);
   if (ret < 0) {
     return ret;
   }
@@ -1178,8 +1178,8 @@ int RadosStore::write_topic_v2(const rgw_pubsub_topic& topic,
       svc()->topic->svc.meta_be->alloc_ctx());
   ctx->init(svc()->topic->get_be_handler());
   return svc()->topic->svc.meta_be->put(
-      ctx.get(), get_topic_key(topic.name, topic.user.tenant), params,
-      objv_tracker, y, dpp);
+      ctx.get(), get_topic_metadata_key(topic.user.tenant, topic.name),
+      params, objv_tracker, y, dpp);
 }
 
 int RadosStore::remove_topic_v2(const std::string& topic_name,
@@ -1192,7 +1192,7 @@ int RadosStore::remove_topic_v2(const std::string& topic_name,
       svc()->topic->svc.meta_be->alloc_ctx());
   ctx->init(svc()->topic->get_be_handler());
   return svc()->topic->svc.meta_be->remove(ctx.get(),
-                                           get_topic_key(topic_name, tenant),
+                                           get_topic_metadata_key(tenant, topic_name),
                                            params, objv_tracker, y, dpp);
 }
 

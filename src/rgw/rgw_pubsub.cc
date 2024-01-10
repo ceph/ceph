@@ -5,6 +5,7 @@
 #include "rgw_b64.h"
 #include "rgw_sal.h"
 #include "rgw_pubsub.h"
+#include "rgw_string.h"
 #include "rgw_tools.h"
 #include "rgw_xml.h"
 #include "rgw_arn.h"
@@ -16,6 +17,30 @@
 #include <algorithm>
 
 #define dout_subsys ceph_subsys_rgw
+
+static constexpr std::string_view topic_tenant_delim = ":";
+
+// format and parse topic metadata keys as tenant:name
+std::string get_topic_metadata_key(std::string_view tenant,
+                                   std::string_view topic_name)
+{
+  return string_cat_reserve(tenant, topic_tenant_delim, topic_name);
+}
+
+void parse_topic_metadata_key(const std::string& key,
+                              std::string& tenant,
+                              std::string& name)
+{
+  // expected format: tenant_name:topic_name*
+  auto pos = key.find(topic_tenant_delim);
+  if (pos != std::string::npos) {
+    tenant = key.substr(0, pos);
+    name = key.substr(pos + 1);
+  } else {
+    tenant.clear();
+    name = key;
+  }
+}
 
 void set_event_id(std::string& id, const std::string& hash, const utime_t& ts) {
   char buf[64];
@@ -540,10 +565,10 @@ int RGWPubSub::get_topics(const DoutPrefixProvider* dpp,
         << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
     return ret;
   }
-  for (auto& topic_entry : topics) {
+  for (const auto& key : topics) {
     std::string topic_name;
     std::string topic_tenant;
-    parse_topic_entry(topic_entry, &topic_tenant, &topic_name);
+    parse_topic_metadata_key(key, topic_tenant, topic_name);
     if (tenant != topic_tenant) {
       continue;
     }
