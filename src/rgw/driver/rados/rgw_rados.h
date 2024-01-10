@@ -359,7 +359,6 @@ class RGWRados
   int open_objexp_pool_ctx(const DoutPrefixProvider *dpp);
   int open_reshard_pool_ctx(const DoutPrefixProvider *dpp);
   int open_notif_pool_ctx(const DoutPrefixProvider *dpp);
-  int open_topics_pool_ctx(const DoutPrefixProvider* dpp);
 
   int open_pool_ctx(const DoutPrefixProvider *dpp, const rgw_pool& pool, librados::IoCtx&  io_ctx,
 		    bool mostly_omap, bool bulk);
@@ -449,7 +448,6 @@ protected:
   librados::IoCtx objexp_pool_ctx;
   librados::IoCtx reshard_pool_ctx;
   librados::IoCtx notif_pool_ctx;     // .rgw.notif
-  librados::IoCtx topics_pool_ctx;  // .rgw.meta:topics
 
   bool pools_initialized{false};
 
@@ -535,8 +533,6 @@ public:
   librados::IoCtx& get_notif_pool_ctx() {
     return notif_pool_ctx;
   }
-
-  librados::IoCtx& get_topics_pool_ctx() { return topics_pool_ctx; }
   
   void set_context(CephContext *_cct) {
     cct = _cct;
