@@ -194,13 +194,6 @@ CacheBlock* LFUDAPolicy::get_victim_block(const DoutPrefixProvider* dpp, optiona
   return victim;
 }
 
-void LFUDAPolicy::shutdown() {
-  dir->shutdown();
-  
-  // call cancel() on the connection's executor
-  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
-}
-
 int LFUDAPolicy::exist_key(std::string key) {
   const std::lock_guard l(lfuda_lock);
   if (entries_map.count(key) != 0) {
