@@ -12,12 +12,6 @@
 #include "crimson/osd/osd_operation_external_tracking.h"
 #include "crimson/osd/osd_operations/background_recovery.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_osd);
-  }
-}
-
 namespace crimson {
   template <>
   struct EventBackendRegistry<osd::UrgentRecovery> {
