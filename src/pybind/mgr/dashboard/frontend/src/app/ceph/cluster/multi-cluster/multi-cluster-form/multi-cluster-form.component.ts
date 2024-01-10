@@ -75,7 +75,9 @@ export class MultiClusterFormComponent {
     this.multiClusterService
       .addCluster(url, name, helperText, username, password, token, window.location.origin)
       .subscribe({
-        error: () => this.remoteClusterForm.setErrors({ cdSubmitButton: true }),
+        error: () => {
+          this.remoteClusterForm.setErrors({ cdSubmitButton: true });
+        },
         complete: () => {
           this.notificationService.show(
             NotificationType.success,

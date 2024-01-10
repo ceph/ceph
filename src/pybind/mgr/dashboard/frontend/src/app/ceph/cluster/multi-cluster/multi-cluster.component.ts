@@ -143,13 +143,13 @@ export class MultiClusterComponent implements OnInit {
       {
         prop: 'cluster_connection_status',
         name: $localize`Connection`,
-        flexGrow: 1,
+        flexGrow: 2,
         cellTransformation: CellTemplate.badge,
         customTemplateConfig: {
           map: {
-            1: { value: 'ERROR', class: 'badge-danger' },
-            0: { value: 'OK', class: 'badge-success' },
-            2: { value: 'CHECKING..', class: 'badge-dark' }
+            1: { value: 'DISCONNECTED', class: 'badge-danger' },
+            0: { value: 'CONNECTED', class: 'badge-success' },
+            2: { value: 'CHECKING..', class: 'badge-info' }
           }
         }
       },

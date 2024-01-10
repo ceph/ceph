@@ -90,7 +90,7 @@ class MultiClusterRoute(RESTController):
                 requests.request('PUT', url + 'api/multicluster/update_cors', json={'url': origin}, verify=False, headers=headers)
                 response = requests.request('GET', url + 'api/health/get_cluster_fsid',
                                             headers=headers, verify=False)
-                prometheus_url_response = requests.request('GET', url + 'api/settings?PROMETHEUS_API_HOST',
+                prometheus_url_response = requests.request('GET', url + 'api/settings/PROMETHEUS_API_HOST',
                                             headers=headers, verify=False)
                 prometheus_api_host = json.loads(prometheus_url_response.content, strict=False)                    
                 self.set_prometheus_federation_target(prometheus_api_host['value'])
