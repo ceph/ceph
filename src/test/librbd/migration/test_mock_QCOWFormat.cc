@@ -12,6 +12,7 @@
 #include "gtest/gtest.h"
 #include "gmock/gmock.h"
 #include "json_spirit/json_spirit.h"
+#include "include/endian_compat.h"
 
 namespace librbd {
 namespace {
