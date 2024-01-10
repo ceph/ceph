@@ -690,3 +690,10 @@ int remove_notification_v2(const DoutPrefixProvider* dpp,
 int get_bucket_notifications(const DoutPrefixProvider* dpp,
                              rgw::sal::Bucket* bucket,
                              rgw_pubsub_bucket_topics& bucket_topics);
+
+// format and parse topic metadata keys as tenant:name
+std::string get_topic_metadata_key(std::string_view topic_name,
+                                   std::string_view tenant);
+void parse_topic_metadata_key(const std::string& key,
+                              std::string& tenant_name,
+                              std::string& topic_name);
