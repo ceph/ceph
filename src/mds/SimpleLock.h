@@ -581,28 +581,7 @@ public:
     return false;
   }
 
-  void _print(std::ostream& out) const {
-    out << get_lock_type_name(get_type()) << " ";
-    out << get_state_name(get_state());
-    if (!get_gather_set().empty())
-      out << " g=" << get_gather_set();
-    if (is_leased())
-      out << " l";
-    if (is_rdlocked()) 
-      out << " r=" << get_num_rdlocks();
-    if (is_wrlocked()) 
-      out << " w=" << get_num_wrlocks();
-    if (is_xlocked()) {
-      out << " x=" << get_num_xlocks();
-      if (get_xlock_by())
-	out << " by " << get_xlock_by();
-    }
-    /*if (is_stable())
-      out << " stable";
-    else
-      out << " unstable";
-    */
-  }
+  void _print(std::ostream& out) const;
 
   /**
    * Write bare values (caller must be in an object section)
