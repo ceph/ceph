@@ -38,8 +38,11 @@ namespace rgw::d4n {
 
 namespace rgw { namespace sal {
 
+using boost::redis::connection;
+
 class D4NFilterDriver : public FilterDriver {
   private:
+    std::shared_ptr<connection> conn;
     rgw::cache::CacheDriver* cacheDriver;
     rgw::d4n::ObjectDirectory* objDir;
     rgw::d4n::BlockDirectory* blockDir;

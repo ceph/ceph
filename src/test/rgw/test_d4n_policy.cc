@@ -60,20 +60,20 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	.hostsList = { env->redisHost }
       };
 
+      conn = std::make_shared<connection>(boost::asio::make_strand(io));
       rgw::cache::Partition partition_info{ .location = "RedisCache", .size = 1000 };
       cacheDriver = new rgw::cache::RedisDriver{io, partition_info};
-      policyDriver = new rgw::d4n::PolicyDriver(io, cacheDriver, "lfuda");
-      dir = new rgw::d4n::BlockDirectory{io};
-      conn = new connection{boost::asio::make_strand(io)};
+      policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda");
+      dir = new rgw::d4n::BlockDirectory{conn};
 
       ASSERT_NE(dir, nullptr);
       ASSERT_NE(cacheDriver, nullptr);
       ASSERT_NE(policyDriver, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      dir->init(env->cct, env->dpp);
+      dir->init(env->cct);
       cacheDriver->initialize(env->dpp);
-      policyDriver->get_cache_policy()->init(env->cct, env->dpp);
+      policyDriver->get_cache_policy()->init(env->cct);
 
       bl.append("test data");
       bufferlist attrVal;
@@ -89,7 +89,6 @@ class LFUDAPolicyFixture : public ::testing::Test {
     } 
 
     virtual void TearDown() {
-      delete conn;
       delete block;
       delete dir;
       delete cacheDriver;
@@ -150,7 +149,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
     rgw::cache::RedisDriver* cacheDriver;
 
     net::io_context io;
-    connection* conn;
+    std::shared_ptr<connection> conn;
 
     bufferlist bl;
     rgw::sal::Attrs attrs;
@@ -165,9 +164,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
 
     ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
 
-    dir->shutdown();
     cacheDriver->shutdown();
-    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->shutdown(); 
 
     boost::system::error_code ec;
     request req;
@@ -228,9 +225,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
 
     ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
 
-    dir->shutdown();
     cacheDriver->shutdown();
-    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->shutdown(); 
 
     std::string key = block->cacheObj.bucketName + "_" + block->cacheObj.objName + "_" + std::to_string(block->blockID) + "_" + std::to_string(block->size);
     boost::system::error_code ec;
@@ -260,9 +255,7 @@ TEST_F(LFUDAPolicyFixture, BackendGetBlockYield)
   spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
 
-    dir->shutdown();
     cacheDriver->shutdown();
-    dynamic_cast<rgw::d4n::LFUDAPolicy*>(policyDriver->get_cache_policy())->shutdown(); 
 
     boost::system::error_code ec;
     request req;

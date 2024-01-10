@@ -49,7 +49,8 @@ class Environment : public ::testing::Environment {
 class ObjectDirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-      dir = new rgw::d4n::ObjectDirectory{io};
+      conn = std::make_shared<connection>(boost::asio::make_strand(io));
+      dir = new rgw::d4n::ObjectDirectory{conn};
       obj = new rgw::d4n::CacheObj{
 	.objName = "testName",
 	.bucketName = "testBucket",
@@ -58,13 +59,11 @@ class ObjectDirectoryFixture: public ::testing::Test {
 	.hostsList = { env->redisHost }
       };
 
-      conn = new connection{boost::asio::make_strand(io)};
-
       ASSERT_NE(obj, nullptr);
       ASSERT_NE(dir, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      dir->init(env->cct, env->dpp);
+      dir->init(env->cct);
 
       /* Run fixture's connection */
       config cfg;
@@ -75,7 +74,6 @@ class ObjectDirectoryFixture: public ::testing::Test {
     } 
 
     virtual void TearDown() {
-      delete conn;
       delete obj;
       delete dir;
     }
@@ -84,7 +82,7 @@ class ObjectDirectoryFixture: public ::testing::Test {
     rgw::d4n::ObjectDirectory* dir;
 
     net::io_context io;
-    connection* conn;
+    std::shared_ptr<connection> conn;
 
     std::vector<std::string> vals{"testName", "testBucket", "", "0", env->redisHost};
     std::vector<std::string> fields{"objName", "bucketName", "creationTime", "dirty", "objHosts"};
@@ -93,7 +91,8 @@ class ObjectDirectoryFixture: public ::testing::Test {
 class BlockDirectoryFixture: public ::testing::Test {
   protected:
     virtual void SetUp() {
-      dir = new rgw::d4n::BlockDirectory{io};
+      conn = std::make_shared<connection>(boost::asio::make_strand(io));
+      dir = new rgw::d4n::BlockDirectory{conn};
       block = new rgw::d4n::CacheBlock{
         .cacheObj = {
 	  .objName = "testName",
@@ -108,13 +107,11 @@ class BlockDirectoryFixture: public ::testing::Test {
 	.hostsList = { env->redisHost }
       };
 
-      conn = new connection{boost::asio::make_strand(io)};
-
       ASSERT_NE(block, nullptr);
       ASSERT_NE(dir, nullptr);
       ASSERT_NE(conn, nullptr);
 
-      dir->init(env->cct, env->dpp);
+      dir->init(env->cct);
 
       /* Run fixture's connection */
       config cfg;
@@ -125,7 +122,6 @@ class BlockDirectoryFixture: public ::testing::Test {
     } 
 
     virtual void TearDown() {
-      delete conn;
       delete block;
       delete dir;
     }
@@ -134,7 +130,7 @@ class BlockDirectoryFixture: public ::testing::Test {
     rgw::d4n::BlockDirectory* dir;
 
     net::io_context io;
-    connection* conn;
+    std::shared_ptr<connection> conn;
 
     std::vector<std::string> vals{"0", "", "0", "0", env->redisHost, 
                                    "testName", "testBucket", "", "0", env->redisHost};
@@ -146,7 +142,6 @@ TEST_F(ObjectDirectoryFixture, SetYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
-    dir->shutdown();
 
     boost::system::error_code ec;
     request req;
@@ -185,7 +180,6 @@ TEST_F(ObjectDirectoryFixture, GetYield)
 
     ASSERT_EQ(0, dir->get(obj, optional_yield{io, yield}));
     EXPECT_EQ(obj->objName, "newoid");
-    dir->shutdown();
 
     {
       boost::system::error_code ec;
@@ -207,7 +201,6 @@ TEST_F(ObjectDirectoryFixture, CopyYield)
   spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->copy(obj, "copyTestName", "copyBucketName", optional_yield{io, yield}));
-    dir->shutdown();
 
     boost::system::error_code ec;
     request req;
@@ -252,7 +245,6 @@ TEST_F(ObjectDirectoryFixture, DelYield)
     }
 
     ASSERT_EQ(0, dir->del(obj, optional_yield{io, yield}));
-    dir->shutdown();
 
     {
       boost::system::error_code ec;
@@ -279,7 +271,6 @@ TEST_F(ObjectDirectoryFixture, UpdateFieldYield)
     ASSERT_EQ(0, dir->set(obj, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(obj, "objName", "newTestName", optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(obj, "objHosts", "127.0.0.1:5000", optional_yield{io, yield}));
-    dir->shutdown();
 
     boost::system::error_code ec;
     request req;
@@ -305,7 +296,6 @@ TEST_F(BlockDirectoryFixture, SetYield)
 {
   spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
-    dir->shutdown();
 
     boost::system::error_code ec;
     request req;
@@ -344,7 +334,6 @@ TEST_F(BlockDirectoryFixture, GetYield)
 
     ASSERT_EQ(0, dir->get(block, optional_yield{io, yield}));
     EXPECT_EQ(block->cacheObj.objName, "newoid");
-    dir->shutdown();
 
     {
       boost::system::error_code ec;
@@ -366,7 +355,6 @@ TEST_F(BlockDirectoryFixture, CopyYield)
   spawn::spawn(io, [this] (spawn::yield_context yield) {
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->copy(block, "copyTestName", "copyBucketName", optional_yield{io, yield}));
-    dir->shutdown();
 
     boost::system::error_code ec;
     request req;
@@ -411,7 +399,6 @@ TEST_F(BlockDirectoryFixture, DelYield)
     }
 
     ASSERT_EQ(0, dir->del(block, optional_yield{io, yield}));
-    dir->shutdown();
 
     {
       boost::system::error_code ec;
@@ -438,7 +425,6 @@ TEST_F(BlockDirectoryFixture, UpdateFieldYield)
     ASSERT_EQ(0, dir->set(block, optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(block, "objName", "newTestName", optional_yield{io, yield}));
     ASSERT_EQ(0, dir->update_field(block, "blockHosts", "127.0.0.1:5000", optional_yield{io, yield}));
-    dir->shutdown();
 
     boost::system::error_code ec;
     request req;
@@ -481,7 +467,6 @@ TEST_F(BlockDirectoryFixture, RemoveHostYield)
     }
 
     ASSERT_EQ(0, dir->remove_host(block, "127.0.0.1:6000", optional_yield{io, yield}));
-    dir->shutdown();
 
     {
       boost::system::error_code ec;

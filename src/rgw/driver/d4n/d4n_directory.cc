@@ -68,12 +68,6 @@ int ObjectDirectory::exist_key(CacheObj* object, optional_yield y)
   return std::get<0>(resp).value();
 }
 
-void ObjectDirectory::shutdown()
-{
-  // call cancel() on the connection's executor
-  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
-}
-
 int ObjectDirectory::set(CacheObj* object, optional_yield y) 
 {
   std::string key = build_index(object);
@@ -330,12 +324,6 @@ int BlockDirectory::exist_key(CacheBlock* block, optional_yield y)
   } catch (std::exception &e) {}
 
   return std::get<0>(resp).value();
-}
-
-void BlockDirectory::shutdown()
-{
-  // call cancel() on the connection's executor
-  boost::asio::dispatch(conn->get_executor(), [c = conn] { c->cancel(); });
 }
 
 int BlockDirectory::set(CacheBlock* block, optional_yield y) 
