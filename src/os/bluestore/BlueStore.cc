@@ -11498,6 +11498,12 @@ int BlueStore::get_shared_blob(const string& key,
 };
 
 /// methods to inject various errors fsck can repair
+int BlueStore::get_shared_blob(const string& key,
+			        bufferlist& bl)
+{
+  return db->get(PREFIX_SHARED_BLOB, key, &bl);
+};
+
 void BlueStore::inject_broken_shared_blob_key(const string& key,
 				  const bufferlist& bl)
 {
