@@ -1701,7 +1701,7 @@ TEST(ExtentMap, dup_extent_map)
     BlueStore::BlobRef b2 = em2.seek_lextent(ext1_offs)->blob;
     ASSERT_TRUE(b2->get_blob().is_shared());
     ASSERT_EQ(b2->get_referenced_bytes(), ext1_len);
-    ASSERT_EQ(b1->shared_blob, b2->shared_blob);
+    ASSERT_EQ(b1->get_shared_blob(), b2->get_shared_blob());
     auto &_b2 = b2->get_blob();
     ASSERT_EQ(_b1.get_csum_count(), _b2.get_csum_count());
     for(size_t i = 0; i < _b2.get_csum_count(); i++) {
@@ -1733,14 +1733,14 @@ TEST(ExtentMap, dup_extent_map)
     // make sure (basically) onode1&2 are unmodified
     BlueStore::BlobRef b1 = em1.seek_lextent(ext1_offs)->blob;
     BlueStore::BlobRef b2 = em2.seek_lextent(ext1_offs)->blob;
-    ASSERT_EQ(b1->shared_blob, b2->shared_blob);
+    ASSERT_EQ(b1->get_shared_blob(), b2->get_shared_blob());
 
     BlueStore::Extent &ext3 = *em3.seek_lextent(clone_offs);
     ASSERT_EQ(ext3.blob_offset, clone_shift);
     ASSERT_EQ(ext3.length, clone_len);
     BlueStore::BlobRef b3 = ext3.blob;
     ASSERT_TRUE(b3->get_blob().is_shared());
-    ASSERT_EQ(b3->shared_blob, b1->shared_blob);
+    ASSERT_EQ(b3->get_shared_blob(), b1->get_shared_blob());
     ASSERT_EQ(b3->get_referenced_bytes(), clone_len);
     auto ll = b3->get_blob().get_logical_length();
     ASSERT_EQ(ll, ext1_len);
@@ -1777,8 +1777,8 @@ TEST(ExtentMap, dup_extent_map)
     BlueStore::BlobRef b1 = em1.seek_lextent(ext1_offs)->blob;
     BlueStore::BlobRef b2 = em2.seek_lextent(ext1_offs)->blob;
     BlueStore::BlobRef b3 = em3.seek_lextent(ext1_offs)->blob;
-    ASSERT_EQ(b1->shared_blob, b2->shared_blob);
-    ASSERT_EQ(b1->shared_blob, b3->shared_blob);
+    ASSERT_EQ(b1->get_shared_blob(), b2->get_shared_blob());
+    ASSERT_EQ(b1->get_shared_blob(), b3->get_shared_blob());
     auto &_b2 = b2->get_blob();
 
     BlueStore::Extent &ext4 = *em4.seek_lextent(clone_offs);
@@ -1786,7 +1786,7 @@ TEST(ExtentMap, dup_extent_map)
     ASSERT_EQ(ext4.length, clone_len);
     BlueStore::BlobRef b4 = ext4.blob;
     ASSERT_TRUE(b4->get_blob().is_shared());
-    ASSERT_EQ(b4->shared_blob, b2->shared_blob);
+    ASSERT_EQ(b4->get_shared_blob(), b2->get_shared_blob());
     ASSERT_EQ(b4->get_referenced_bytes(), clone_len);
     auto &_b4 = b4->get_blob();
     auto ll = _b4.get_logical_length();
