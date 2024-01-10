@@ -39,6 +39,7 @@
 #include "rgw_user.h"
 #include "rgw_role.h"
 #include "rgw_pubsub.h"
+#include "topic.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -416,6 +417,13 @@ int RGWCtlDef::init(RGWServices& svc, rgw::sal::Driver* driver, const DoutPrefix
   bucket_meta_handler->init(svc.bucket, bucket.get());
   bi_meta_handler->init(svc.zone, svc.bucket, svc.bi);
 
+  meta.topic_cache = std::make_unique<RGWChainedCacheImpl<rgwrados::topic::cache_entry>>();
+  meta.topic_cache->init(svc.cache);
+
+  meta.topic = rgwrados::topic::create_metadata_handler(
+      *svc.sysobj, svc.cache, *svc.mdlog, svc.zone->get_zone_params(),
+      *meta.topic_cache);
+
   RGWOTPMetadataHandlerBase *otp_handler = static_cast<RGWOTPMetadataHandlerBase *>(meta.otp.get());
   otp_handler->init(svc.zone, svc.meta_be_otp, svc.otp);
 
@@ -449,6 +457,7 @@ int RGWCtl::init(RGWServices *_svc, rgw::sal::Driver* driver, const DoutPrefixPr
   meta.otp = _ctl.meta.otp.get();
   meta.role = _ctl.meta.role.get();
   meta.topic = _ctl.meta.topic.get();
+  meta.topic_cache = _ctl.meta.topic_cache.get();
 
   user = _ctl.user.get();
   bucket = _ctl.bucket.get();

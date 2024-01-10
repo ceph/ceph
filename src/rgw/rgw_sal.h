@@ -321,15 +321,15 @@ class Driver {
                               RGWObjVersionTracker* objv_tracker,
                               optional_yield y,
                               const DoutPrefixProvider* dpp) = 0;
-    /** Write topic info and (optionally) @a objv_tracker into the config */
-    virtual int write_topic_v2(const rgw_pubsub_topic& topic,
-                               RGWObjVersionTracker* objv_tracker,
+    /** Write topic info and @a objv_tracker into the config */
+    virtual int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                               RGWObjVersionTracker& objv_tracker,
                                optional_yield y,
                                const DoutPrefixProvider* dpp) = 0;
     /** Remove the topic config, optionally a specific version */
     virtual int remove_topic_v2(const std::string& topic_name,
                                 const std::string& tenant,
-                                RGWObjVersionTracker* objv_tracker,
+                                RGWObjVersionTracker& objv_tracker,
                                 optional_yield y,
                                 const DoutPrefixProvider* dpp) = 0;
     /** Update the bucket-topic mapping in the store, if |add_mapping|=true then
@@ -356,10 +356,6 @@ class Driver {
                                          std::set<std::string>& bucket_keys,
                                          optional_yield y,
                                          const DoutPrefixProvider* dpp) = 0;
-    /** Remove the bucket-topic mapping from the backend store. */
-    virtual int delete_bucket_topic_mapping(const rgw_pubsub_topic& topic,
-                                            optional_yield y,
-                                            const DoutPrefixProvider* dpp) = 0;
     /** Get access to the lifecycle management thread */
     virtual RGWLC* get_rgwlc(void) = 0;
     /** Get access to the coroutine registry.  Used to create new coroutine managers */

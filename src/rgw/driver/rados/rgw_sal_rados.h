@@ -170,13 +170,13 @@ class RadosStore : public StoreDriver {
                       RGWObjVersionTracker* objv_tracker,
                       optional_yield y,
                       const DoutPrefixProvider* dpp) override;
-    int write_topic_v2(const rgw_pubsub_topic& topic,
-                       RGWObjVersionTracker* objv_tracker,
+    int write_topic_v2(const rgw_pubsub_topic& topic, bool exclusive,
+                       RGWObjVersionTracker& objv_tracker,
                        optional_yield y,
                        const DoutPrefixProvider* dpp) override;
     int remove_topic_v2(const std::string& topic_name,
                         const std::string& tenant,
-                        RGWObjVersionTracker* objv_tracker,
+                        RGWObjVersionTracker& objv_tracker,
                         optional_yield y,
                         const DoutPrefixProvider* dpp) override;
     int update_bucket_topic_mapping(const rgw_pubsub_topic& topic,
@@ -193,9 +193,6 @@ class RadosStore : public StoreDriver {
                                  std::set<std::string>& bucket_keys,
                                  optional_yield y,
                                  const DoutPrefixProvider* dpp) override;
-    int delete_bucket_topic_mapping(const rgw_pubsub_topic& topic,
-                                    optional_yield y,
-                                    const DoutPrefixProvider* dpp) override;
     virtual RGWLC* get_rgwlc(void) override { return rados->get_lc(); }
     virtual RGWCoroutinesManagerRegistry* get_cr_registry() override { return rados->get_cr_registry(); }
 
