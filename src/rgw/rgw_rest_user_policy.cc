@@ -15,19 +15,12 @@
 #include "rgw_op.h"
 #include "rgw_process_env.h"
 #include "rgw_rest.h"
+#include "rgw_rest_iam.h"
 #include "rgw_rest_user_policy.h"
 #include "rgw_sal.h"
 #include "services/svc_zone.h"
 
 #define dout_subsys ceph_subsys_rgw
-
-
-void RGWRestUserPolicy::dump(Formatter *f) const
-{
-  encode_json("PolicyName", policy_name , f);
-  encode_json("UserName", user_name , f);
-  encode_json("PolicyDocument", policy, f);
-}
 
 void RGWRestUserPolicy::send_response()
 {
@@ -38,41 +31,52 @@ void RGWRestUserPolicy::send_response()
   end_header(s);
 }
 
+int RGWRestUserPolicy::get_params()
+{
+  user_name = s->info.args.get("UserName");
+  if (!validate_iam_user_name(user_name, s->err.message)) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
+int RGWRestUserPolicy::init_processing(optional_yield y)
+{
+  int r = get_params();
+  if (r < 0) {
+    return r;
+  }
+
+  // interpret UserName as a uid with optional tenant
+  const auto uid = rgw_user{user_name};
+  // user ARN includes tenant and user id
+  user_arn = rgw::ARN{uid.id, "user", uid.tenant};
+
+  user = driver->get_user(uid);
+  r = user->load_user(this, y);
+  if (r == -ENOENT) {
+    s->err.message = "No such UserName in the tenant";
+    return -ERR_NO_SUCH_ENTITY;
+  }
+
+  return r;
+}
+
 int RGWRestUserPolicy::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
     return -EACCES;
   }
 
-  if(int ret = check_caps(s->user->get_caps()); ret == 0) {
-    return ret;
+  if (check_caps(s->user->get_caps()) == 0) {
+    return 0;
   }
 
   uint64_t op = get_op();
-  std::string user_name = s->info.args.get("UserName");
-  rgw_user user_id(user_name);
-  if (! verify_user_permission(this, s, rgw::ARN(rgw::ARN(user_id.id,
-                                                "user",
-                                                 user_id.tenant)), op)) {
+  if (! verify_user_permission(this, s, user_arn, op)) {
     return -EACCES;
   }
   return 0;
-}
-
-bool RGWRestUserPolicy::validate_input()
-{
-  if (policy_name.length() > MAX_POLICY_NAME_LEN) {
-    ldpp_dout(this, 0) << "ERROR: Invalid policy name length " << dendl;
-    return false;
-  }
-
-  std::regex regex_policy_name("[A-Za-z0-9:=,.@-]+");
-  if (! std::regex_match(policy_name, regex_policy_name)) {
-    ldpp_dout(this, 0) << "ERROR: Invalid chars in policy name " << dendl;
-    return false;
-  }
-
-  return true;
 }
 
 int RGWUserPolicyRead::check_caps(const RGWUserCaps& caps)
@@ -85,6 +89,7 @@ int RGWUserPolicyWrite::check_caps(const RGWUserCaps& caps)
     return caps.check_cap("user-policy", RGW_CAP_WRITE);
 }
 
+
 uint64_t RGWPutUserPolicy::get_op()
 {
   return rgw::IAM::iamPutUserPolicy;
@@ -93,44 +98,22 @@ uint64_t RGWPutUserPolicy::get_op()
 int RGWPutUserPolicy::get_params()
 {
   policy_name = s->info.args.get("PolicyName");
-  user_name = s->info.args.get("UserName");
+  if (!validate_iam_policy_name(policy_name, s->err.message)) {
+    return -EINVAL;
+  }
+
   policy = s->info.args.get("PolicyDocument");
-
-  if (policy_name.empty() || user_name.empty() || policy.empty()) {
-    ldpp_dout(this, 20) << "ERROR: one of policy name, user name or policy document is empty"
-    << dendl;
+  if (policy.empty()) {
+    s->err.message = "Missing required element PolicyDocument";
     return -EINVAL;
   }
 
-  if (! validate_input()) {
-    return -EINVAL;
-  }
-
-  return 0;
+  return RGWUserPolicyWrite::get_params();
 }
 
 void RGWPutUserPolicy::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   bufferlist bl = bufferlist::static_from_string(policy);
-
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_name));
-
-  op_ret = user->load_user(s, s->yield);
-  if (op_ret < 0) {
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
-
-  op_ret = user->read_attrs(s, s->yield);
-  if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
 
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
                                          nullptr, nullptr, s->info, y);
@@ -145,8 +128,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     std::map<std::string, std::string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
-      bufferlist out_bl = it->second;
-      decode(policies, out_bl);
+      decode(policies, it->second);
     }
     bufferlist in_bl;
     policies[policy_name] = policy;
@@ -156,7 +138,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
     if (policies.size() > max_num) {
       ldpp_dout(this, 4) << "IAM user policies has reached the num config: "
                          << max_num << ", cant add another" << dendl;
-      op_ret = -ERR_INVALID_REQUEST;
+      op_ret = -ERR_LIMIT_EXCEEDED;
       s->err.message =
           "The number of IAM user policies should not exceed allowed limit "
           "of " +
@@ -180,7 +162,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
   }
 
   if (op_ret == 0) {
-    s->formatter->open_object_section("PutUserPolicyResponse");
+    s->formatter->open_object_section_in_ns("PutUserPolicyResponse", RGW_REST_IAM_XMLNS);
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
     s->formatter->close_section();
@@ -196,67 +178,43 @@ uint64_t RGWGetUserPolicy::get_op()
 int RGWGetUserPolicy::get_params()
 {
   policy_name = s->info.args.get("PolicyName");
-  user_name = s->info.args.get("UserName");
-
-  if (policy_name.empty() || user_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: one of policy name or user name is empty"
-    << dendl;
+  if (!validate_iam_policy_name(policy_name, s->err.message)) {
     return -EINVAL;
   }
 
-  return 0;
+  return RGWUserPolicyRead::get_params();
 }
 
 void RGWGetUserPolicy::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
+  std::map<std::string, std::string> policies;
+  if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
+    try {
+      decode(policies, it->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+      op_ret = -EIO;
+      return;
+    }
   }
 
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_name));
-  op_ret = user->read_attrs(s, s->yield);
-  if (op_ret == -ENOENT) {
-    ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
+  auto policy = policies.find(policy_name);
+  if (policy == policies.end()) {
+    s->err.message = "No such PolicyName on the user";
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
 
-  if (op_ret == 0) {
-    s->formatter->open_object_section("GetUserPolicyResponse");
-    s->formatter->open_object_section("ResponseMetadata");
-    s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
-    s->formatter->open_object_section("GetUserPolicyResult");
-    std::map<std::string, std::string> policies;
-    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
-      bufferlist bl = it->second;
-      try {
-        decode(policies, bl);
-      } catch (buffer::error& err) {
-        ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
-        op_ret = -EIO;
-        return;
-      }
-      if (auto it = policies.find(policy_name); it != policies.end()) {
-        policy = policies[policy_name];
-        dump(s->formatter);
-      } else {
-        ldpp_dout(this, 0) << "ERROR: policy not found" << policy << dendl;
-        op_ret = -ERR_NO_SUCH_ENTITY;
-        return;
-      }
-    } else {
-      ldpp_dout(this, 0) << "ERROR: RGW_ATTR_USER_POLICY not found" << dendl;
-      op_ret = -ERR_NO_SUCH_ENTITY;
-      return;
-    }
-    s->formatter->close_section();
-    s->formatter->close_section();
-  }
-  if (op_ret < 0) {
-    op_ret = -ERR_INTERNAL_ERROR;
-  }
+  s->formatter->open_object_section_in_ns("GetUserPolicyResponse", RGW_REST_IAM_XMLNS);
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->open_object_section("GetUserPolicyResult");
+  encode_json("PolicyName", policy_name , s->formatter);
+  encode_json("UserName", user_name, s->formatter);
+  encode_json("PolicyDocument", policy->second, s->formatter);
+  s->formatter->close_section();
+  s->formatter->close_section();
 }
 
 uint64_t RGWListUserPolicies::get_op()
@@ -264,65 +222,31 @@ uint64_t RGWListUserPolicies::get_op()
   return rgw::IAM::iamListUserPolicies;
 }
 
-int RGWListUserPolicies::get_params()
-{
-  user_name = s->info.args.get("UserName");
-
-  if (user_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: user name is empty" << dendl;
-    return -EINVAL;
-  }
-
-  return 0;
-}
-
 void RGWListUserPolicies::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_name));
-  op_ret = user->read_attrs(s, s->yield);
-  if (op_ret == -ENOENT) {
-    ldpp_dout(this, 0) << "ERROR: attrs not found for user" << user_name << dendl;
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
-
-  if (op_ret == 0) {
-    std::map<std::string, std::string> policies;
-    if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
-      s->formatter->open_object_section("ListUserPoliciesResponse");
-      s->formatter->open_object_section("ResponseMetadata");
-      s->formatter->dump_string("RequestId", s->trans_id);
-      s->formatter->close_section();
-      s->formatter->open_object_section("ListUserPoliciesResult");
-      bufferlist bl = it->second;
-      try {
-        decode(policies, bl);
-      } catch (buffer::error& err) {
-        ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
-        op_ret = -EIO;
-        return;
-      }
-      s->formatter->open_object_section("PolicyNames");
-      for (const auto& p : policies) {
-        s->formatter->dump_string("member", p.first);
-      }
-      s->formatter->close_section();
-      s->formatter->close_section();
-      s->formatter->close_section();
-    } else {
-      ldpp_dout(this, 0) << "ERROR: RGW_ATTR_USER_POLICY not found" << dendl;
-      op_ret = -ERR_NO_SUCH_ENTITY;
+  std::map<std::string, std::string> policies;
+  if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {
+    try {
+      decode(policies, it->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+      op_ret = -EIO;
       return;
     }
   }
-  if (op_ret < 0) {
-    op_ret = -ERR_INTERNAL_ERROR;
+
+  s->formatter->open_object_section_in_ns("ListUserPoliciesResponse", RGW_REST_IAM_XMLNS);
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->open_object_section("ListUserPoliciesResult");
+  s->formatter->open_array_section("PolicyNames");
+  for (const auto& p : policies) {
+    s->formatter->dump_string("member", p.first);
   }
+  s->formatter->close_section(); // PolicyNames
+  s->formatter->close_section(); // ListUserPoliciesResult
+  s->formatter->close_section(); // ListUserPoliciesResponse
 }
 
 uint64_t RGWDeleteUserPolicy::get_op()
@@ -333,36 +257,15 @@ uint64_t RGWDeleteUserPolicy::get_op()
 int RGWDeleteUserPolicy::get_params()
 {
   policy_name = s->info.args.get("PolicyName");
-  user_name = s->info.args.get("UserName");
-
-  if (policy_name.empty() || user_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: One of policy name or user name is empty"<< dendl;
+  if (!validate_iam_policy_name(policy_name, s->err.message)) {
     return -EINVAL;
   }
 
-  return 0;
+  return RGWUserPolicyWrite::get_params();
 }
 
 void RGWDeleteUserPolicy::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
-  std::unique_ptr<rgw::sal::User> user = driver->get_user(rgw_user(user_name));
-  op_ret = user->load_user(s, s->yield);
-  if (op_ret < 0) {
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
-
-  op_ret = user->read_attrs(this, s->yield);
-  if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
-
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
                                          nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
@@ -385,30 +288,29 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
       op_ret = -EIO;
       return;
     }
+  }
 
-    if (auto p = policies.find(policy_name); p != policies.end()) {
-      bufferlist in_bl;
-      policies.erase(p);
-      encode(policies, in_bl);
-      user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
-
-      op_ret = user->store_user(s, s->yield, false);
-      if (op_ret < 0) {
-        op_ret = -ERR_INTERNAL_ERROR;
-      }
-      if (op_ret == 0) {
-        s->formatter->open_object_section("DeleteUserPoliciesResponse");
-        s->formatter->open_object_section("ResponseMetadata");
-        s->formatter->dump_string("RequestId", s->trans_id);
-        s->formatter->close_section();
-        s->formatter->close_section();
-      }
-    } else {
-      op_ret = -ERR_NO_SUCH_ENTITY;
-      return;
-    }
-  } else {
+  auto policy = policies.find(policy_name);
+  if (policy == policies.end()) {
+    s->err.message = "No such PolicyName on the user";
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
+
+  bufferlist in_bl;
+  policies.erase(policy);
+  encode(policies, in_bl);
+  user->get_attrs()[RGW_ATTR_USER_POLICY] = in_bl;
+
+  op_ret = user->store_user(s, s->yield, false);
+  if (op_ret < 0) {
+    op_ret = -ERR_INTERNAL_ERROR;
+    return;
+  }
+
+  s->formatter->open_object_section_in_ns("DeleteUserPoliciesResponse", RGW_REST_IAM_XMLNS);
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->close_section();
 }
