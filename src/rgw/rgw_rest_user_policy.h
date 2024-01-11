@@ -5,6 +5,7 @@
 
 #include "rgw_arn.h"
 #include "rgw_rest.h"
+#include "rgw_user_types.h"
 #include "rgw_sal_fwd.h"
 
 class RGWRestUserPolicy : public RGWRESTOp {
@@ -13,6 +14,7 @@ protected:
 
   uint64_t action;
   uint32_t perm;
+  rgw_account_id account_id;
   std::unique_ptr<rgw::sal::User> user;
   rgw::ARN user_arn;
   std::string policy_name;
