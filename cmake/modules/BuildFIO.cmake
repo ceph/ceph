@@ -37,7 +37,6 @@ function(build_fio)
   add_library(fio INTERFACE IMPORTED)
   add_dependencies(fio fio_ext)
   set_target_properties(fio PROPERTIES
-    CXX_EXTENSIONS ON
     INTERFACE_INCLUDE_DIRECTORIES ${source_dir}
     INTERFACE_COMPILE_OPTIONS "-include;${source_dir}/config-host.h;$<$<COMPILE_LANGUAGE:C>:-std=gnu99>")
 endfunction()
