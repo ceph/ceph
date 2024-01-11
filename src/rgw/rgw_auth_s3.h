@@ -410,6 +410,7 @@ class AWSv4ComplMulti : public rgw::auth::Completer,
       /* The evolving state. */
       chunk_meta(ChunkMeta::create_first(
 		   seed_signature, flags, 0 /* first call in cycle */)),
+      lf_bytes(0),
       stream_pos(0),
       sha256_hash(calc_hash_sha256_open_stream()),
       prev_chunk_signature(std::move(seed_signature))
