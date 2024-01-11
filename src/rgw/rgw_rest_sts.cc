@@ -621,7 +621,7 @@ void RGWSTSGetSessionToken::execute(optional_yield y)
   op_ret = std::move(ret);
   //Dump the output
   if (op_ret == 0) {
-    s->formatter->open_object_section("GetSessionTokenResponse");
+    s->formatter->open_object_section_in_ns("GetSessionTokenResponse", RGW_REST_STS_XMLNS);
     s->formatter->open_object_section("GetSessionTokenResult");
     s->formatter->open_object_section("Credentials");
     creds.dump(s->formatter);
@@ -677,7 +677,7 @@ void RGWSTSAssumeRoleWithWebIdentity::execute(optional_yield y)
 
   //Dump the output
   if (op_ret == 0) {
-    s->formatter->open_object_section("AssumeRoleWithWebIdentityResponse");
+    s->formatter->open_object_section_in_ns("AssumeRoleWithWebIdentityResponse", RGW_REST_STS_XMLNS);
     s->formatter->open_object_section("AssumeRoleWithWebIdentityResult");
     encode_json("SubjectFromWebIdentityToken", response.sub , s->formatter);
     encode_json("Audience", response.aud , s->formatter);
@@ -738,7 +738,7 @@ void RGWSTSAssumeRole::execute(optional_yield y)
   op_ret = std::move(response.retCode);
   //Dump the output
   if (op_ret == 0) {
-    s->formatter->open_object_section("AssumeRoleResponse");
+    s->formatter->open_object_section_in_ns("AssumeRoleResponse", RGW_REST_STS_XMLNS);
     s->formatter->open_object_section("AssumeRoleResult");
     s->formatter->open_object_section("Credentials");
     response.creds.dump(s->formatter);
