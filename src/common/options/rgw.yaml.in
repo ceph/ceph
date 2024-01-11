@@ -4009,3 +4009,12 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_op_counters_dump_expiration
+  type: uint
+  level: advanced
+  desc: Time in seconds greater than 0 after which performance counters that are not updated will not be dumped.
+    If the value is set to 0, all op counters will always be dumped.
+  default: 600
+  services:
+  - rgw
+  with_legacy: true

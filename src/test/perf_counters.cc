@@ -690,3 +690,440 @@ TEST(PerfCounters, TestLabelStrings) {
 
   g_ceph_context->get_perfcounters_collection()->clear();
 }
+
+enum {
+  TEST_PERFCOUNTERS4_ELEMENT_FIRST = 500,
+  TEST_PERFCOUNTERS4_ELEMENT_FOO,
+  TEST_PERFCOUNTERS4_ELEMENT_LAST,
+};
+
+static PerfCounters* setup_test_perfcounter5(std::string name, CephContext *cct)
+{
+  PerfCountersBuilder bld(cct, name,
+	  TEST_PERFCOUNTERS4_ELEMENT_FIRST, TEST_PERFCOUNTERS4_ELEMENT_LAST);
+  bld.add_u64(TEST_PERFCOUNTERS4_ELEMENT_FOO, "foo");
+
+  PerfCounters* counters = bld.create_perf_counters();
+  cct->get_perfcounters_collection()->add(counters);
+  return counters;
+}
+
+void configure_counters_expiration(PerfCounters* counters, uint64_t time) {
+  ceph::coarse_real_clock::duration expiration_time(time*1000000000);
+  counters->time_alive = expiration_time;
+  counters->last_updated = ceph::coarse_real_clock::now();
+}
+
+TEST(PerfCounters, TestLabeledCountersDumpFilteredByTime1Counter) {
+  AdminSocketClient client(get_rand_socket_path());
+  std::string message;
+  using namespace std::chrono_literals;
+
+  std::string counter_key1 = ceph::perf_counters::key_create("ctrs", {{"label1", "val1"}});
+
+
+  PerfCounters* counters1 = setup_test_perfcounter5(counter_key1, g_ceph_context);
+  counters1->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+
+  // TESTCASE: counter dumped before expiration time
+  configure_counters_expiration(counters1, 2);
+  this_thread::sleep_for(1s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  // TESTCASE: counter filtered after expiration time
+  this_thread::sleep_for(2s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ("{}\n", message);
+
+  // TESTCASE: counter dumped again after new last updated time
+  configure_counters_expiration(counters1, 3);
+  this_thread::sleep_for(1s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  // TESTCASE: counter dumped after time_alive set to 0
+  configure_counters_expiration(counters1, 0);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  g_ceph_context->get_perfcounters_collection()->clear();
+}
+
+TEST(PerfCounters, TestLabeledCountersDumpFilteredByTime2Counters) {
+  AdminSocketClient client(get_rand_socket_path());
+  std::string message;
+  using namespace std::chrono_literals;
+
+  std::string counter_key1 = ceph::perf_counters::key_create("ctrs", {{"label1", "val1"}});
+  std::string counter_key2 = ceph::perf_counters::key_create("ctrs", {{"label2", "val2"}});
+
+
+  PerfCounters* counters1 = setup_test_perfcounter5(counter_key1, g_ceph_context);
+  PerfCounters* counters2 = setup_test_perfcounter5(counter_key2, g_ceph_context);
+  counters1->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+  counters2->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+
+  // TESTCASE: counter 2 dumped, counter 1 filtered
+  configure_counters_expiration(counters1, 1);
+  configure_counters_expiration(counters2, 8);
+  this_thread::sleep_for(2s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label2": "val2"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  // TESTCASE: counter 1 dumped, counter 2 filtered
+  configure_counters_expiration(counters1, 8);
+  configure_counters_expiration(counters2, 1);
+  this_thread::sleep_for(2s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  // TESTCASE: all counters filtered
+  configure_counters_expiration(counters1, 1);
+  this_thread::sleep_for(3s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ("{}\n", message);
+
+  // TESTCASE: all counters dumped
+  configure_counters_expiration(counters1, 0);
+  configure_counters_expiration(counters2, 0);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  //this_thread::sleep_for(1s);
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label2": "val2"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  g_ceph_context->get_perfcounters_collection()->clear();
+}
+
+TEST(PerfCounters, TestLabeledCountersDumpFilteredByTime6Counters) {
+  AdminSocketClient client(get_rand_socket_path());
+  std::string message;
+  using namespace std::chrono_literals;
+
+  std::string counter_key1 = ceph::perf_counters::key_create("ctrs", {{"label1", "val1"}});
+  std::string counter_key2 = ceph::perf_counters::key_create("ctrs", {{"label1", "val2"}});
+  std::string counter_key3 = ceph::perf_counters::key_create("ctrs", {{"label1", "val3"}});
+  std::string counter_key4 = ceph::perf_counters::key_create("ctrs", {{"label1", "val4"}});
+  std::string counter_key5 = ceph::perf_counters::key_create("ctrs", {{"label1", "val5"}});
+  std::string counter_key6 = ceph::perf_counters::key_create("ctrs", {{"label1", "val6"}});
+
+  PerfCounters* counters1 = setup_test_perfcounter5(counter_key1, g_ceph_context);
+  PerfCounters* counters2 = setup_test_perfcounter5(counter_key2, g_ceph_context);
+  PerfCounters* counters3 = setup_test_perfcounter5(counter_key3, g_ceph_context);
+  PerfCounters* counters4 = setup_test_perfcounter5(counter_key4, g_ceph_context);
+  PerfCounters* counters5 = setup_test_perfcounter5(counter_key5, g_ceph_context);
+  PerfCounters* counters6 = setup_test_perfcounter5(counter_key6, g_ceph_context);
+  counters1->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+  counters2->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+  counters3->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+  counters4->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+  counters5->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+  counters6->inc(TEST_PERFCOUNTERS4_ELEMENT_FOO, 1);
+
+  // TESTCASE: counters 1,3,5 dumped, counters 2,4,6 filtered
+  configure_counters_expiration(counters2, 1);
+  configure_counters_expiration(counters4, 1);
+  configure_counters_expiration(counters6, 1);
+  this_thread::sleep_for(2s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val3"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val5"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  // TESTCASE: counters 2,4,6 dumped, counters 1,3,5 filtered
+  configure_counters_expiration(counters1, 1);
+  configure_counters_expiration(counters2, 10);
+  configure_counters_expiration(counters3, 1);
+  configure_counters_expiration(counters4, 10);
+  configure_counters_expiration(counters5, 1);
+  configure_counters_expiration(counters6, 10);
+  this_thread::sleep_for(2s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val2"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val4"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val6"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  // TESTCASE: counters 4,5,6 dumped, counters 1,2,3 filtered
+  configure_counters_expiration(counters1, 1);
+  configure_counters_expiration(counters2, 1);
+  configure_counters_expiration(counters3, 1);
+  configure_counters_expiration(counters4, 10);
+  configure_counters_expiration(counters5, 10);
+  configure_counters_expiration(counters6, 10);
+  this_thread::sleep_for(2s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val4"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val5"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val6"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  // TESTCASE: counters 1,2,3 dumped, counters 4,5,6 filtered
+  configure_counters_expiration(counters1, 10);
+  configure_counters_expiration(counters2, 10);
+  configure_counters_expiration(counters3, 10);
+  configure_counters_expiration(counters4, 1);
+  configure_counters_expiration(counters5, 1);
+  configure_counters_expiration(counters6, 1);
+  this_thread::sleep_for(2s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val2"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val3"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  // TESTCASE: all counters filtered
+  configure_counters_expiration(counters1, 1);
+  configure_counters_expiration(counters2, 1);
+  configure_counters_expiration(counters3, 1);
+  configure_counters_expiration(counters4, 1);
+  configure_counters_expiration(counters5, 1);
+  configure_counters_expiration(counters6, 1);
+  this_thread::sleep_for(2s);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ("{}\n", message);
+
+  // TESTCASE: all counters dumped
+  configure_counters_expiration(counters1, 0);
+  configure_counters_expiration(counters2, 0);
+  configure_counters_expiration(counters3, 0);
+  configure_counters_expiration(counters4, 0);
+  configure_counters_expiration(counters5, 0);
+  configure_counters_expiration(counters6, 0);
+  ASSERT_EQ("", client.do_request(R"({ "prefix": "counter dump", "format": "raw" })", &message));
+  ASSERT_EQ(R"({
+    "ctrs": [
+        {
+            "labels": {
+                "label1": "val1"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val2"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val3"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val4"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val5"
+            },
+            "counters": {
+                "foo": 1
+            }
+        },
+        {
+            "labels": {
+                "label1": "val6"
+            },
+            "counters": {
+                "foo": 1
+            }
+        }
+    ]
+}
+)", message);
+
+  g_ceph_context->get_perfcounters_collection()->clear();
+}
