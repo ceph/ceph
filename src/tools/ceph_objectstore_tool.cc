@@ -3737,7 +3737,28 @@ int main(int argc, char **argv)
     return 0;
   }
 
-  int ret = fs->mount();
+  int ret;
+  bool mount_readonly =
+    op == "export" ||
+    op == "list" ||
+    op == "list-pgs" ||
+    op == "meta-list" ||
+    op == "get-osdmap" ||
+    op == "get-superblock" ||
+    op == "get-inc-osdmap" ||
+    objcmd == "get-bytes" ||
+    objcmd == "get-attrs" ||
+    objcmd == "get-omap" ||
+    objcmd == "get-omaphdr" ||
+    objcmd == "list-attrs" ||
+    objcmd == "list-omap" ||
+    objcmd == "dump";
+  if(mount_readonly) {
+    ret = fs->mount_readonly();
+  } else {
+    ret = fs->mount();
+  }
+
   if (ret < 0) {
     if (ret == -EBUSY) {
       cerr << "OSD has the store locked" << std::endl;
@@ -4625,7 +4646,7 @@ out:
     cout <<  ostr.str() << std::endl;
   }
 
-  int r = fs->umount();
+  int r = mount_readonly ? fs->umount_readonly() : fs->umount();
   if (r < 0) {
     cerr << "umount failed: " << cpp_strerror(r) << std::endl;
     // If no previous error, then use umount() error
