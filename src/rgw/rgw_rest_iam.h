@@ -7,6 +7,7 @@
 #include "rgw_auth_filters.h"
 #include "rgw_rest.h"
 
+
 class RGWHandler_REST_IAM : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
   bufferlist bl_post_body;

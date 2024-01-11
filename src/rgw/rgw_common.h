@@ -213,7 +213,16 @@ static inline const char* to_mime_type(const RGWFormat f)
 #define RGW_REST_WEBSITE     0x8
 #define RGW_REST_STS            0x10
 #define RGW_REST_IAM            0x20
-#define RGW_REST_SNS            0x30
+#define RGW_REST_SNS            0x40
+
+inline constexpr const char* RGW_REST_IAM_XMLNS =
+    "https://iam.amazonaws.com/doc/2010-05-08/";
+
+inline constexpr const char* RGW_REST_SNS_XMLNS =
+    "https://sns.amazonaws.com/doc/2010-03-31/";
+
+inline constexpr const char* RGW_REST_STS_XMLNS =
+    "https://sts.amazonaws.com/doc/2011-06-15/";
 
 #define RGW_SUSPENDED_USER_AUID (uint64_t)-2
 
