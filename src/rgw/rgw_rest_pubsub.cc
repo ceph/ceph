@@ -23,8 +23,6 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
-static const char* AWS_SNS_NS("https://sns.amazonaws.com/doc/2010-03-31/");
-
 bool verify_transport_security(CephContext *cct, const RGWEnv& env) {
   const auto is_secure = rgw_transport_is_secure(cct, env);
   if (!is_secure && g_conf().get_val<bool>("rgw_allow_notification_secrets_in_cleartext")) {
@@ -264,7 +262,7 @@ class RGWPSCreateTopicOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("CreateTopicResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("CreateTopicResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("CreateTopicResult");
     encode_xml("TopicArn", topic_arn, f); 
     f->close_section(); // CreateTopicResult
@@ -340,7 +338,7 @@ public:
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("ListTopicsResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("ListTopicsResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ListTopicsResult");
     encode_xml("Topics", result, f); 
     f->close_section(); // ListTopicsResult
@@ -513,7 +511,7 @@ class RGWPSGetTopicAttributesOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("GetTopicAttributesResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("GetTopicAttributesResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("GetTopicAttributesResult");
     result.dump_xml_as_attributes(f);
     f->close_section(); // GetTopicAttributesResult
@@ -701,7 +699,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("SetTopicAttributesResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("SetTopicAttributesResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f);
     f->close_section();  // ResponseMetadata
@@ -799,7 +797,7 @@ class RGWPSDeleteTopicOp : public RGWOp {
     }
 
     const auto f = s->formatter;
-    f->open_object_section_in_ns("DeleteTopicResponse", AWS_SNS_NS);
+    f->open_object_section_in_ns("DeleteTopicResponse", RGW_REST_SNS_XMLNS);
     f->open_object_section("ResponseMetadata");
     encode_xml("RequestId", s->req_id, f); 
     f->close_section(); // ResponseMetadata

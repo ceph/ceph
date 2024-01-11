@@ -374,6 +374,15 @@ void set_req_state_err(req_state* s, int err_no)
 
 void dump(req_state* s)
 {
+  std::optional<Formatter::ObjectSection> error_response;
+  if (s->prot_flags & RGW_REST_IAM) {
+    error_response.emplace(*s->formatter, "ErrorResponse", RGW_REST_IAM_XMLNS);
+  } else if (s->prot_flags & RGW_REST_SNS) {
+    error_response.emplace(*s->formatter, "ErrorResponse", RGW_REST_SNS_XMLNS);
+  } else if (s->prot_flags & RGW_REST_STS) {
+    error_response.emplace(*s->formatter, "ErrorResponse", RGW_REST_STS_XMLNS);
+  }
+
   if (s->format != RGWFormat::HTML)
     s->formatter->open_object_section("Error");
   if (!s->err.err_code.empty())
@@ -385,7 +394,7 @@ void dump(req_state* s)
     s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->dump_string("HostId", s->host_id);
   if (s->format != RGWFormat::HTML)
-    s->formatter->close_section();
+    s->formatter->close_section(); // Error
 }
 
 struct str_len {
