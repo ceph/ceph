@@ -52,16 +52,36 @@ int RGWRestUserPolicy::init_processing(optional_yield y)
     return r;
   }
 
-  // interpret UserName as a uid with optional tenant
-  const auto uid = rgw_user{user_name};
-  // user ARN includes tenant and user id
-  user_arn = rgw::ARN{uid.id, "user", uid.tenant};
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account_id = *id;
 
-  user = driver->get_user(uid);
-  r = user->load_user(this, y);
-  if (r == -ENOENT) {
-    s->err.message = "No such UserName in the tenant";
-    return -ERR_NO_SUCH_ENTITY;
+    // look up account user by UserName
+    const std::string& tenant = s->auth.identity->get_tenant();
+    r = driver->load_account_user_by_name(this, y, account_id,
+                                          tenant, user_name, &user);
+
+    if (r == -ENOENT) {
+      s->err.message = "No such UserName in the account";
+      return -ERR_NO_SUCH_ENTITY;
+    }
+    if (r >= 0) {
+      // user ARN includes account id, path, and display name
+      const RGWUserInfo& info = user->get_info();
+      const std::string resource = string_cat_reserve(info.path, info.display_name);
+      user_arn = rgw::ARN{resource, "user", account_id, true};
+    }
+  } else {
+    // interpret UserName as a uid with optional tenant
+    const auto uid = rgw_user{user_name};
+    // user ARN includes tenant and user id
+    user_arn = rgw::ARN{uid.id, "user", uid.tenant};
+
+    user = driver->get_user(uid);
+    r = user->load_user(this, y);
+    if (r == -ENOENT) {
+      s->err.message = "No such UserName in the tenant";
+      return -ERR_NO_SUCH_ENTITY;
+    }
   }
 
   return r;
@@ -78,6 +98,7 @@ int RGWRestUserPolicy::verify_permission(optional_yield y)
     return -EACCES;
   }
 
+  // admin caps are required for non-account users
   if (check_caps(s->user->get_caps()) == 0) {
     return 0;
   }
