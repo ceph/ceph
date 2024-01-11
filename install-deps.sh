@@ -304,7 +304,8 @@ function populate_wheelhouse() {
     pip $PIP_OPTS $install \
       'setuptools >= 0.8' 'pip >= 21.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
     if test $# != 0 ; then
-        pip $PIP_OPTS $install $@ || return 1
+        echo "cython<3" > /tmp/constraint.txt
+        PIP_CONSTRAINT=/tmp/constraint.txt pip $PIP_OPTS $install $@ || return 1
     fi
 }
 
