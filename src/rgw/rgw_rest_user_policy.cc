@@ -22,6 +22,11 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+RGWRestUserPolicy::RGWRestUserPolicy(uint64_t action, uint32_t perm)
+  : action(action), perm(perm)
+{
+}
+
 void RGWRestUserPolicy::send_response()
 {
   if (op_ret) {
@@ -62,6 +67,11 @@ int RGWRestUserPolicy::init_processing(optional_yield y)
   return r;
 }
 
+int RGWRestUserPolicy::check_caps(const RGWUserCaps& caps)
+{
+  return caps.check_cap("user-policy", perm);
+}
+
 int RGWRestUserPolicy::verify_permission(optional_yield y)
 {
   if (s->auth.identity->is_anonymous()) {
@@ -72,27 +82,16 @@ int RGWRestUserPolicy::verify_permission(optional_yield y)
     return 0;
   }
 
-  uint64_t op = get_op();
-  if (! verify_user_permission(this, s, user_arn, op)) {
+  if (! verify_user_permission(this, s, user_arn, action)) {
     return -EACCES;
   }
   return 0;
 }
 
-int RGWUserPolicyRead::check_caps(const RGWUserCaps& caps)
-{
-    return caps.check_cap("user-policy", RGW_CAP_READ);
-}
 
-int RGWUserPolicyWrite::check_caps(const RGWUserCaps& caps)
+RGWPutUserPolicy::RGWPutUserPolicy()
+  : RGWRestUserPolicy(rgw::IAM::iamPutUserPolicy, RGW_CAP_WRITE)
 {
-    return caps.check_cap("user-policy", RGW_CAP_WRITE);
-}
-
-
-uint64_t RGWPutUserPolicy::get_op()
-{
-  return rgw::IAM::iamPutUserPolicy;
 }
 
 int RGWPutUserPolicy::get_params()
@@ -108,7 +107,7 @@ int RGWPutUserPolicy::get_params()
     return -EINVAL;
   }
 
-  return RGWUserPolicyWrite::get_params();
+  return RGWRestUserPolicy::get_params();
 }
 
 void RGWPutUserPolicy::execute(optional_yield y)
@@ -170,9 +169,10 @@ void RGWPutUserPolicy::execute(optional_yield y)
   }
 }
 
-uint64_t RGWGetUserPolicy::get_op()
+
+RGWGetUserPolicy::RGWGetUserPolicy()
+  : RGWRestUserPolicy(rgw::IAM::iamGetUserPolicy, RGW_CAP_READ)
 {
-  return rgw::IAM::iamGetUserPolicy;
 }
 
 int RGWGetUserPolicy::get_params()
@@ -182,7 +182,7 @@ int RGWGetUserPolicy::get_params()
     return -EINVAL;
   }
 
-  return RGWUserPolicyRead::get_params();
+  return RGWRestUserPolicy::get_params();
 }
 
 void RGWGetUserPolicy::execute(optional_yield y)
@@ -217,9 +217,10 @@ void RGWGetUserPolicy::execute(optional_yield y)
   s->formatter->close_section();
 }
 
-uint64_t RGWListUserPolicies::get_op()
+
+RGWListUserPolicies::RGWListUserPolicies()
+  : RGWRestUserPolicy(rgw::IAM::iamListUserPolicies, RGW_CAP_READ)
 {
-  return rgw::IAM::iamListUserPolicies;
 }
 
 void RGWListUserPolicies::execute(optional_yield y)
@@ -249,9 +250,10 @@ void RGWListUserPolicies::execute(optional_yield y)
   s->formatter->close_section(); // ListUserPoliciesResponse
 }
 
-uint64_t RGWDeleteUserPolicy::get_op()
+
+RGWDeleteUserPolicy::RGWDeleteUserPolicy()
+  : RGWRestUserPolicy(rgw::IAM::iamDeleteUserPolicy, RGW_CAP_WRITE)
 {
-  return rgw::IAM::iamDeleteUserPolicy;
 }
 
 int RGWDeleteUserPolicy::get_params()
@@ -261,7 +263,7 @@ int RGWDeleteUserPolicy::get_params()
     return -EINVAL;
   }
 
-  return RGWUserPolicyWrite::get_params();
+  return RGWRestUserPolicy::get_params();
 }
 
 void RGWDeleteUserPolicy::execute(optional_yield y)

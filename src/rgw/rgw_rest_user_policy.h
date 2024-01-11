@@ -9,6 +9,10 @@
 
 class RGWRestUserPolicy : public RGWRESTOp {
 protected:
+  RGWRestUserPolicy(uint64_t action, uint32_t perm);
+
+  uint64_t action;
+  uint32_t perm;
   std::unique_ptr<rgw::sal::User> user;
   rgw::ARN user_arn;
   std::string policy_name;
@@ -20,58 +24,42 @@ protected:
 
 public:
   int init_processing(optional_yield y) override;
+  int check_caps(const RGWUserCaps& caps) override;
   int verify_permission(optional_yield y) override;
-  virtual uint64_t get_op() = 0;
   void send_response() override;
 };
 
-class RGWUserPolicyRead : public RGWRestUserPolicy {
-public:
-  RGWUserPolicyRead() = default;
-  int check_caps(const RGWUserCaps& caps) override;
-};
-
-class RGWUserPolicyWrite : public RGWRestUserPolicy {
-public:
-  RGWUserPolicyWrite() = default;
-  int check_caps(const RGWUserCaps& caps) override;
-};
-
-class RGWPutUserPolicy : public RGWUserPolicyWrite {
+class RGWPutUserPolicy : public RGWRestUserPolicy {
   int get_params() override;
 public:
-  RGWPutUserPolicy() = default;
+  RGWPutUserPolicy();
   void execute(optional_yield y) override;
   const char* name() const override { return "put_user_policy"; }
-  uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_PUT_USER_POLICY; }
 };
 
-class RGWGetUserPolicy : public RGWUserPolicyRead {
+class RGWGetUserPolicy : public RGWRestUserPolicy {
   int get_params() override;
 public:
-  RGWGetUserPolicy() = default;
+  RGWGetUserPolicy();
   void execute(optional_yield y) override;
   const char* name() const override { return "get_user_policy"; }
-  uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_GET_USER_POLICY; }
 };
 
-class RGWListUserPolicies : public RGWUserPolicyRead {
+class RGWListUserPolicies : public RGWRestUserPolicy {
 public:
-  RGWListUserPolicies() = default;
+  RGWListUserPolicies();
   void execute(optional_yield y) override;
   const char* name() const override { return "list_user_policies"; }
-  uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_LIST_USER_POLICIES; }
 };
 
-class RGWDeleteUserPolicy : public RGWUserPolicyWrite {
+class RGWDeleteUserPolicy : public RGWRestUserPolicy {
   int get_params() override;
 public:
-  RGWDeleteUserPolicy() = default;
+  RGWDeleteUserPolicy();
   void execute(optional_yield y) override;
   const char* name() const override { return "delete_user_policy"; }
-  uint64_t get_op() override;
   RGWOpType get_type() override { return RGW_OP_DELETE_USER_POLICY; }
 };
