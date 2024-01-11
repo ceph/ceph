@@ -39,4 +39,4 @@ pushd jcksum
 ./mvnw clean package
 ./mvnw test -Dtest=PutObjects
 
-exit 0
+exit

@@ -42,6 +42,7 @@ public class jcksum {
 	/* files containing test data of the corresponding names/sizes */
 	public static Stream<String> inputFileNames() {
 	    return Stream.of(
+          "file-0b",
 	    		"file-8b",
 	    		"file-200b",
 	    		"file-21983b",
