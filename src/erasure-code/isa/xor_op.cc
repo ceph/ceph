@@ -15,6 +15,11 @@
 #include <stdio.h>
 #include <string.h>
 #include "arch/intel.h"
+#include "arch/arm.h"
+
+#if defined(__aarch64__) && defined(__ARM_NEON)
+  #include <arm_neon.h>
+#endif
 
 #include "include/ceph_assert.h"
 
@@ -101,6 +106,16 @@ region_xor(unsigned char** src,
       // 64-byte region xor
       region_sse2_xor((char**) src, (char*) parity, src_size, region_size);
     } else
+#elif defined (__aarch64__) && defined(__ARM_NEON)
+    if (ceph_arch_neon) {
+      // -----------------------------
+      // use NEON region xor function
+      // -----------------------------
+      unsigned region_size = 
+        (size / EC_ISA_VECTOR_NEON_WORDSIZE) * EC_ISA_VECTOR_NEON_WORDSIZE;
+      size_left -= region_size;
+      region_neon_xor((char**) src, (char *) parity, src_size, region_size);
+    } else
 #endif
     {
       // --------------------------------------------
@@ -181,3 +196,42 @@ region_sse2_xor(char** src,
 #endif // __x86_64__
   return;
 }
+
+#if defined(__aarch64__) && defined(__ARM_NEON)
+void
+// -----------------------------------------------------------------------------
+region_neon_xor(char **src,
+                char *parity,
+                int src_size,
+                unsigned size)
+// -----------------------------------------------------------------------------
+{
+  ceph_assert(!(size % EC_ISA_VECTOR_NEON_WORDSIZE));
+  unsigned char *p = (unsigned char *)parity;
+  unsigned char *vbuf[256] = { NULL };
+  for (int v = 0; v < src_size; v++) {
+    vbuf[v] = (unsigned char *)src[v];
+  }
+
+  // ----------------------------------------------------------------------------------------
+  // NEON load instructions can load 128bits of data each time, and there are 2 load channels
+  // ----------------------------------------------------------------------------------------
+  for (unsigned i = 0; i < size; i += EC_ISA_VECTOR_NEON_WORDSIZE) {
+    uint64x2_t d0_1 = vld1q_u64((uint64_t *)(&(vbuf[0][i])));
+    uint64x2_t d0_2 = vld1q_u64((uint64_t *)(&(vbuf[0][i + 16])));
+
+    for (int d = 1; d < src_size; d++) {
+      uint64x2_t di_1 = vld1q_u64((uint64_t *)(&(vbuf[d][i])));
+      uint64x2_t di_2 = vld1q_u64((uint64_t *)(&(vbuf[d][i + 16])));
+
+      d0_1 = veorq_u64(d0_1, di_1);
+      d0_2 = veorq_u64(d0_2, di_2);
+    }
+
+    vst1q_u64((uint64_t *)p, d0_1);
+    vst1q_u64((uint64_t *)(p + 16), d0_2);
+    p += EC_ISA_VECTOR_NEON_WORDSIZE;
+  }
+  return;
+}
+#endif // __aarch64__ && __ARM_NEON

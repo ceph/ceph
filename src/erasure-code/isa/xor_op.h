@@ -27,7 +27,7 @@
 
 #define EC_ISA_ADDRESS_ALIGNMENT 32u
 #define EC_ISA_VECTOR_SSE2_WORDSIZE 64u
-
+#define EC_ISA_VECTOR_NEON_WORDSIZE 32u
 #if __GNUC__ > 4 || \
   ( (__GNUC__ == 4) && (__GNUC_MINOR__ >= 4) ) ||\
   (__clang__ == 1 )
@@ -83,5 +83,15 @@ region_sse2_xor(char** src /* array of 64-byte aligned source pointer to xor */,
                 int src_size /* size of the source pointer array */,
                 unsigned size /* size of the region to xor */);
 
-
+#if defined(__aarch64__) && defined(__ARM_NEON)
+// -------------------------------------------------------------------------
+// compute region XOR like parity = src[0] ^ src[1] ... ^ src[src_size-1]
+// using NEON 32-byte operations
+// -------------------------------------------------------------------------
+void
+region_neon_xor(char** src    /* array of 64-byte aligned source pointer to xor */,
+                char* parity  /* 32-byte aligned output pointer containing the parity */,
+                int src_size  /* size of the source pointer array */,
+                unsigned size /* size of the region to xor */);
+#endif // __aarch64__ && __ARM_NEON
 #endif // EC_ISA_XOR_OP_H
