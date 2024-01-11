@@ -525,11 +525,9 @@ out:
 };
 
 void ECCommon::ReadPipeline::objects_read_and_reconstruct(
-  const map<hobject_t,
-    std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
-  > &reads,
+  const map<hobject_t, std::list<ECCommon::ec_align_t>> &reads,
   bool fast_read,
-  GenContextURef<map<hobject_t,pair<int, extent_map> > &&> &&func)
+  GenContextURef<ECCommon::ec_extents_t &&> &&func)
 {
   in_progress_client_reads.emplace_back(
     reads.size(), std::move(func));
@@ -589,8 +587,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
   if (r)
     return r;
 
-  list<boost::tuple<uint64_t, uint64_t, uint32_t> > offsets =
-    rop.to_read.find(hoid)->second.to_read;
+  list<ec_align_t> to_read = rop.to_read.find(hoid)->second.to_read;
 
   // (Note cuixf) If we need to read attrs and we read failed, try to read again.
   bool want_attrs =
@@ -604,7 +601,7 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
   rop.to_read.insert(make_pair(
       hoid,
       read_request_t(
-	offsets,
+	to_read,
 	shards,
 	want_attrs)));
   return 0;

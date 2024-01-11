@@ -1531,8 +1531,8 @@ int ECBackend::objects_read_sync(
 
 void ECBackend::objects_read_async(
   const hobject_t &hoid,
-  const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-             pair<bufferlist*, Context*> > > &to_read,
+  const list<pair<ECCommon::ec_align_t,
+                  pair<bufferlist*, Context*>>> &to_read,
   Context *on_complete,
   bool fast_read)
 {
