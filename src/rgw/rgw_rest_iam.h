@@ -10,6 +10,8 @@
 
 struct RGWUserInfo;
 
+bool validate_iam_policy_name(const std::string& name, std::string& err);
+bool validate_iam_policy_arn(const std::string& arn, std::string& err);
 bool validate_iam_user_name(const std::string& name, std::string& err);
 bool validate_iam_path(const std::string& path, std::string& err);
 
