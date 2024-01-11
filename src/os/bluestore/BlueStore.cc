@@ -8626,6 +8626,131 @@ bool BlueStore::has_null_manager() const
   return (fm && fm->is_null_manager());
 }
 
+int BlueStore::mount_readonly()
+{
+  int r = _mount_readonly();
+  if (r < 0) {
+    return r;
+  }
+  r = _open_collections();
+  if (r < 0) {
+    return r;
+  }
+  auto shutdown_cache = make_scope_guard([&] {
+    if (!mounted) {
+      _shutdown_cache();
+    }
+  });
+
+  _kv_start();
+  auto stop_kv = make_scope_guard([&] {
+    if (!mounted) {
+      _kv_stop();
+    }
+  });
+
+  r = _deferred_replay();
+  if (r < 0) {
+    return r;
+  }
+  mempool_thread.init();
+  mounted = true;
+  return r;
+}
+
+int BlueStore::_mount_readonly()
+{
+  dout(5) << __func__ << dendl;
+  {
+    string type;
+    int r = read_meta("type", &type);
+    if (r < 0) {
+      derr << __func__ << " failed to load os-type: " << cpp_strerror(r)
+	   << dendl;
+      return r;
+     }
+
+     if (type != "bluestore") {
+       derr << __func__ << " expected bluestore, but type is " << type << dendl;
+       return -EIO;
+     }
+   }
+
+  int r = _open_path();
+  if (r < 0)
+    return r;
+  r = _open_fsid(false);
+  if (r < 0)
+    goto out_path;
+
+  r = _read_fsid(&fsid);
+  if (r < 0)
+    goto out_fsid;
+
+  r = _lock_fsid();
+  if (r < 0)
+    goto out_fsid;
+
+  r = _open_bdev(false);
+  if (r < 0)
+    goto out_fsid;
+
+  r = _open_db(false, false, true);
+  if (r < 0)
+    goto out_bdev;
+
+  r = _open_super_meta();
+  if (r < 0) {
+    goto out_db;
+  }
+  return 0;
+
+out_db:
+  _close_db();
+out_bdev:
+  _close_bdev();
+  out_fsid:
+  _close_fsid();
+out_path:
+  _close_path();
+  return r;
+}
+
+int BlueStore::umount_readonly()
+{
+  ceph_assert(_kv_only || mounted);
+  _osr_drain_all();
+
+  mounted = false;
+
+  if (!_kv_only) {
+    mempool_thread.shutdown();
+    dout(20) << __func__ << " stopping kv thread" << dendl;
+    _kv_stop();
+    // skip cache cleanup step on fast shutdown
+    if (likely(!m_fast_shutdown)) {
+      _shutdown_cache();
+    }
+    dout(20) << __func__ << " closing" << dendl;
+  }
+  return _umount_readonly();
+}
+
+int BlueStore::_umount_readonly()
+{
+  dout(5) << __func__ << dendl;
+  if (db) {
+    _close_db();
+  }
+  if (bluefs) {
+    _close_bluefs();
+  }
+  _close_bdev();
+  _close_fsid();
+  _close_path();
+  return 0;
+}
+
 int BlueStore::_mount()
 {
   dout(5) << __func__ << " path " << path << dendl;
@@ -13735,7 +13860,8 @@ void BlueStore::_txc_release_alloc(TransContext *txc)
   bool discard_queued = false;
   // it's expected we're called with lazy_release_lock already taken!
   if (unlikely(cct->_conf->bluestore_debug_no_reuse_blocks ||
-               txc->released.size() == 0)) {
+               txc->released.size() == 0 ||
+               !alloc)) {
       goto out;
   }
   discard_queued = bdev->try_discard(txc->released);
@@ -14118,7 +14244,8 @@ void BlueStore::_kv_sync_thread()
       auto sync_start = mono_clock::now();
 #endif
       // submit synct synchronously (block and wait for it to commit)
-      int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
+      int r = db_was_opened_read_only || cct->_conf->bluestore_debug_omit_kv_commit ?
+	0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
 #ifdef WITH_BLKIN
@@ -14275,9 +14402,8 @@ void BlueStore::_kv_finalize_thread()
 
       // this is as good a place as any ...
       _reap_collections();
-
       logger->set(l_bluestore_fragmentation,
-	  (uint64_t)(alloc->get_fragmentation() * 1000));
+	(uint64_t)(alloc ? alloc->get_fragmentation() * 1000 : 0));
 
       log_latency("kv_final",
 	l_bluestore_kv_final_lat,
