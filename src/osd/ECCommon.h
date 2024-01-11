@@ -209,6 +209,9 @@ struct ECListener {
 };
 
 struct ECCommon {
+  using ec_align_t = boost::tuple<uint64_t, uint64_t, uint32_t>;
+  using ec_extents_t = std::map<hobject_t,std::pair<int, extent_map>>;
+
   virtual ~ECCommon() = default;
 
   virtual void handle_sub_write(
@@ -220,10 +223,9 @@ struct ECCommon {
     ) = 0;
 
   virtual void objects_read_and_reconstruct(
-    const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
-    > &reads,
+    const std::map<hobject_t, std::list<ec_align_t>> &reads,
     bool fast_read,
-    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func) = 0;
+    GenContextURef<ec_extents_t &&> &&func) = 0;
 
   struct read_request_t {
     const std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > to_read;
@@ -282,8 +284,8 @@ struct ECCommon {
   friend struct CallClientContexts;
   struct ClientAsyncReadStatus {
     unsigned objects_to_read;
-    GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> func;
-    std::map<hobject_t,std::pair<int, extent_map> > results;
+    GenContextURef<ec_extents_t &&> func;
+    ec_extents_t results;
     explicit ClientAsyncReadStatus(
       unsigned objects_to_read,
       GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func)
@@ -365,10 +367,9 @@ struct ECCommon {
   };
   struct ReadPipeline {
     void objects_read_and_reconstruct(
-      const std::map<hobject_t, std::list<boost::tuple<uint64_t, uint64_t, uint32_t> >
-      > &reads,
+      const std::map<hobject_t, std::list<ec_align_t>> &reads,
       bool fast_read,
-      GenContextURef<std::map<hobject_t,std::pair<int, extent_map> > &&> &&func);
+      GenContextURef<ec_extents_t &&> &&func);
 
     template <class F, class G>
     void filter_read_op(
@@ -618,7 +619,7 @@ struct ECCommon {
       const std::map<hobject_t,extent_set> &to_read,
       Func &&on_complete
     ) {
-      std::map<hobject_t,std::list<boost::tuple<uint64_t, uint64_t, uint32_t> > > _to_read;
+      std::map<hobject_t, std::list<ec_align_t>> _to_read;
       for (auto &&hpair: to_read) {
         auto &l = _to_read[hpair.first];
         for (auto extent: hpair.second) {
