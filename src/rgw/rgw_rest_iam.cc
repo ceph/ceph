@@ -100,6 +100,49 @@ RGWRESTMgr_IAM::get_handler(rgw::sal::Driver* driver,
   return new RGWHandler_REST_IAM(auth_registry, bl);
 }
 
+static constexpr size_t MAX_POLICY_NAME_LEN = 128;
+
+bool validate_iam_policy_name(const std::string& name, std::string& err)
+{
+  if (name.empty()) {
+    err = "Missing required element PolicyName";
+    return false;
+  }
+
+  if (name.size() > MAX_POLICY_NAME_LEN) {
+    err = "PolicyName too long";
+    return false;
+  }
+
+  std::regex regex_policy_name("[A-Za-z0-9:=,.@-]+");
+  if (! std::regex_match(name, regex_policy_name)) {
+    err = "PolicyName contains invalid characters";
+    return false;
+  }
+
+  return true;
+}
+
+bool validate_iam_policy_arn(const std::string& arn, std::string& err)
+{
+  if (arn.empty()) {
+    err = "Missing required element PolicyArn";
+    return false;
+  }
+
+  if (arn.size() > 2048) {
+    err = "PolicyArn must be at most 2048 characters long";
+    return false;
+  }
+
+  if (arn.size() < 20) {
+    err = "PolicyArn must be at least 20 characters long";
+    return false;
+  }
+
+  return true;
+}
+
 static constexpr size_t MAX_USER_NAME_LEN = 64;
 
 bool validate_iam_user_name(const std::string& name, std::string& err)
