@@ -1187,10 +1187,18 @@ bool AWSv4ComplMulti::is_signature_mismatched()
 		     << calc_signature << dendl;
     ldout(cct(), 16) << "AWSv4ComplMulti: prev_chunk_signature="
 		     << prev_chunk_signature << dendl;
-
   }
 
-  if (chunk_meta.get_signature() != calc_signature) {
+  auto match_signatures = [&]() -> bool {
+    /* sentinel case: 0-length chunk, likely chunk 0 */
+    if (chunk_meta.get_offset() == 0) [[unlikely]] {
+      return chunk_meta.get_signature() == prev_chunk_signature;
+    }
+    /* all other cases */
+    return chunk_meta.get_signature() == calc_signature;
+  };
+
+  if (! match_signatures()) [[unlikely]] {
     ldout(cct(), 16) << "AWSv4ComplMulti: ERROR: chunk signature mismatch"
                    << dendl;
     return true;
@@ -1198,7 +1206,7 @@ bool AWSv4ComplMulti::is_signature_mismatched()
     prev_chunk_signature = chunk_meta.get_signature();
     return false;
   }
-}
+} /* AWSv4ComplMulti::is_signature_mismatched */
 
 AWSv4ComplMulti::ReceiveChunkResult AWSv4ComplMulti::recv_chunk(
   char* const buf, const size_t buf_max, uint32_t cnt, bool& eof)
