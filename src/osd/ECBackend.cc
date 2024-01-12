@@ -1225,10 +1225,10 @@ void ECBackend::handle_sub_read_reply(
 	 ++j, ++req_iter, ++riter) {
       ceph_assert(req_iter != rop.to_read.find(i->first)->second.to_read.end());
       ceph_assert(riter != rop.complete[i->first].returned.end());
-      pair<uint64_t, uint64_t> adjusted =
+      pair<uint64_t, uint64_t> aligned =
 	sinfo.aligned_offset_len_to_chunk(
 	  make_pair(req_iter->get<0>(), req_iter->get<1>()));
-      ceph_assert(adjusted.first == j->first);
+      ceph_assert(aligned.first == j->first);
       riter->get<2>()[from] = std::move(j->second);
     }
   }
@@ -1546,9 +1546,14 @@ void ECBackend::objects_read_async(
 	 to_read.begin();
        i != to_read.end();
        ++i) {
+#if 0
     pair<uint64_t, uint64_t> tmp =
       sinfo.offset_len_to_stripe_bounds(
 	make_pair(i->first.get<0>(), i->first.get<1>()));
+#else
+    pair<uint64_t, uint64_t> tmp =
+      make_pair(i->first.get<0>(), i->first.get<1>());
+#endif
 
     es.union_insert(tmp.first, tmp.second);
     flags |= i->first.get<2>();

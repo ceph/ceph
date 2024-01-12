@@ -298,6 +298,30 @@ int ECCommon::ReadPipeline::get_min_avail_to_read_shards(
   return 0;
 }
 
+void ECCommon::ReadPipeline::get_min_want_to_read_shards(
+  pair<uint64_t, uint64_t> off_len,
+  set<int> *want_to_read)
+{
+  uint64_t off = off_len.first;
+  uint64_t len = off_len.second;
+  uint64_t chunk_size = sinfo.get_chunk_size();
+  int data_chunk_count = sinfo.get_stripe_width() / sinfo.get_chunk_size();
+  const vector<int> &chunk_mapping = ec_impl->get_chunk_mapping();
+
+  int total_chunks = (chunk_size - 1 + len) / chunk_size;
+  int first_chunk = (off / chunk_size) % data_chunk_count;
+
+  if (total_chunks > data_chunk_count) {
+    total_chunks = data_chunk_count;
+  }
+
+  for(int i = 0; i < total_chunks; i++) {
+    int j = (first_chunk + i) % data_chunk_count;
+    int chunk = (int)chunk_mapping.size()  > j ? chunk_mapping[j] : j;
+    want_to_read->insert(chunk);
+  }
+}
+
 int ECCommon::ReadPipeline::get_remaining_shards(
   const hobject_t &hoid,
   const set<int> &avail,
@@ -478,11 +502,21 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     ceph_assert(res.returned.size() == to_read.size());
     ceph_assert(res.errors.empty());
     for (auto &&read: to_read) {
+#if 0
       pair<uint64_t, uint64_t> adjusted =
 	read_pipeline.sinfo.offset_len_to_stripe_bounds(
 	  make_pair(read.get<0>(), read.get<1>()));
       ceph_assert(res.returned.front().get<0>() == adjusted.first);
       ceph_assert(res.returned.front().get<1>() == adjusted.second);
+#else
+      auto bounds = make_pair(read.get<0>(), read.get<1>());
+      auto aligned = read_pipeline.sinfo.offset_len_to_stripe_bounds(bounds);
+      if (aligned.first != read.get<0>() || aligned.second != read.get<1>()) {
+        aligned = read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds);
+      }
+      ceph_assert(res.returned.front().get<0>() == aligned.first);
+      ceph_assert(res.returned.front().get<1>() == aligned.second);
+#endif
       map<int, bufferlist> to_decode;
       bufferlist bl;
       for (map<pg_shard_t, bufferlist>::iterator j =
@@ -501,11 +535,19 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         goto out;
       }
       bufferlist trimmed;
+#if 0
       trimmed.substr_of(
 	bl,
 	read.get<0>() - adjusted.first,
 	std::min(read.get<1>(),
 	    bl.length() - (read.get<0>() - adjusted.first)));
+#else
+      // XXX: hmm, just refactor, at least at first glance
+      auto off = read.get<0>() - aligned.first;
+      auto len =
+          std::min(read.get<1>(), bl.length() - (read.get<0>() - aligned.first));
+      trimmed.substr_of(bl, off, len);
+#endif
       result.insert(
 	read.get<0>(), trimmed.length(), std::move(trimmed));
       res.returned.pop_front();
@@ -524,6 +566,46 @@ out:
   ECCommon::ClientAsyncReadStatus *status;
 };
 
+bool ECCommon::ReadPipeline::should_partial_read(
+  const hobject_t &hoid,
+  std::list<ECCommon::ec_align_t> to_read,
+  const std::set<int> &want,
+  bool fast_read,
+  bool for_recovery)
+{
+    // Don't partial read if we are doing a fast_read
+    if (fast_read) {
+      return false;
+    }
+    // Don't partial read if the EC isn't systematic
+    if (!ec_impl->is_systematic()) {
+      return false;
+    }
+    // Don't partial read if we have multiple stripes
+    if (to_read.size() != 1) {
+      return false;
+    }
+    // Only partial read if the length is inside the stripe boundary
+    auto read = to_read.front();
+    auto bounds = make_pair(read.get<0>(), read.get<1>());
+    auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
+    if (sinfo.get_stripe_width() != aligned.second) {
+      return false;
+    }
+
+    set<int> have;
+    map<shard_id_t, pg_shard_t> shards;
+    set<pg_shard_t> error_shards;
+    get_all_avail_shards(hoid, error_shards, have, shards, for_recovery);
+
+    set<int> data_shards;
+    get_want_to_read_shards(&data_shards);
+
+    return includes(data_shards.begin(), data_shards.end(), want.begin(), want.end())
+        && includes(have.begin(), have.end(), want.begin(), want.end());
+}
+
+
 void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   const map<hobject_t, std::list<ECCommon::ec_align_t>> &reads,
   bool fast_read,
@@ -537,11 +619,49 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   }
 
   map<hobject_t, set<int>> obj_want_to_read;
-  set<int> want_to_read;
-  get_want_to_read_shards(&want_to_read);
     
   map<hobject_t, read_request_t> for_read_op;
   for (auto &&to_read: reads) {
+    set<int> want_to_read;
+    get_want_to_read_shards(&want_to_read);
+#if 1
+    std::list<ec_align_t> align_offsets;
+    bool partial_read = should_partial_read(
+        to_read.first,
+        to_read.second,
+        want_to_read,
+        fast_read,
+        false);
+
+    // Our extent set and flags
+    extent_set es;
+    uint32_t flags = 0;
+
+    for (auto read : to_read.second) {
+      auto bounds = make_pair(read.get<0>(), read.get<1>()); 
+
+      // By default, align to the stripe
+      auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
+      if (partial_read) {
+        // align to the chunk instead
+        aligned = sinfo.offset_len_to_chunk_bounds(bounds);
+        set<int> new_want_to_read;
+        get_min_want_to_read_shards(aligned, &new_want_to_read);
+        want_to_read = new_want_to_read;
+      }
+      // Add the new extents/flags
+      extent_set new_es;
+      new_es.insert(aligned.first, aligned.second);
+      es.union_of(new_es);
+      flags |= read.get<2>();
+    }
+    if (!es.empty()) {
+      for (auto e = es.begin(); e != es.end(); ++e) {
+        align_offsets.push_back(
+          boost::make_tuple(e.get_start(), e.get_len(), flags));
+      }
+    }
+#endif
     map<pg_shard_t, vector<pair<int, int>>> shards;
     int r = get_min_avail_to_read_shards(
       to_read.first,
@@ -555,9 +675,14 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       make_pair(
 	to_read.first,
 	read_request_t(
+#if 1
+	  align_offsets,
+#else
 	  to_read.second,
+#endif
 	  shards,
-	  false)));
+	  false,
+	  partial_read)));
     obj_want_to_read.insert(make_pair(to_read.first, want_to_read));
   }
 
@@ -589,6 +714,19 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 
   list<ec_align_t> to_read = rop.to_read.find(hoid)->second.to_read;
 
+  bool partial_read = rop.to_read.find(hoid)->second.partial_read;
+  // realign the offset and len to make partial reads normal reads.
+  if (partial_read) {
+    list<ec_align_t> new_to_read;
+    for(const auto& read : to_read) {
+      auto bounds = make_pair(read.get<0>(), read.get<1>());
+      auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
+      new_to_read.push_back(
+          boost::make_tuple(aligned.first, aligned.second, read.get<2>()));
+    }
+    to_read = new_to_read;
+  }
+
   // (Note cuixf) If we need to read attrs and we read failed, try to read again.
   bool want_attrs =
     rop.to_read.find(hoid)->second.want_attrs &&
@@ -604,6 +742,9 @@ int ECCommon::ReadPipeline::send_all_remaining_reads(
 	to_read,
 	shards,
 	want_attrs)));
+  if (partial_read) {
+    rop.refresh_complete(hoid);
+  }
   return 0;
 }
 

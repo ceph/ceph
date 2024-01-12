@@ -352,17 +352,41 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
 			       bufferlist *decoded)
 {
   set<int> want_to_read;
+  set<int> decode_chunks;
+  bool need_decode = false;
 
   for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
     want_to_read.insert(chunk_index(i));
   }
+#if 1
+  if (chunks.size() < get_data_chunk_count()) {
+    // for partial_read
+    for (const auto& [key, bl] : chunks) {
+      if (want_to_read.contains(key)) {
+        decode_chunks.insert(key);
+      } else {
+        need_decode = true;
+        break;
+      }
+    }
+    if (!need_decode) {
+      want_to_read.swap(decode_chunks);
+    }
+  }
+#endif
   map<int, bufferlist> decoded_map;
   int r = _decode(want_to_read, chunks, &decoded_map);
   if (r == 0) {
     for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
-      decoded->claim_append(decoded_map[chunk_index(i)]);
+      if (decoded_map.contains(chunk_index(i))) {
+        decoded->claim_append(decoded_map[chunk_index(i)]);
+      }
     }
   }
   return r;
+}
+
+bool ErasureCode::is_systematic() const {
+  return true;
 }
 }
