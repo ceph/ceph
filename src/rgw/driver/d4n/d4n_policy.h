@@ -1,6 +1,11 @@
 #pragma once
 
+#include <boost/asio/awaitable.hpp>
+#include <boost/asio/use_awaitable.hpp>
+#include <boost/asio/co_spawn.hpp>
 #include <boost/heap/fibonacci_heap.hpp>
+#include <boost/system/detail/errc.hpp>
+
 #include "d4n_directory.h"
 #include "rgw_sal_d4n.h"
 #include "rgw_cache_driver.h"
@@ -10,6 +15,9 @@ namespace rgw::sal {
 }
 
 namespace rgw { namespace d4n {
+
+namespace asio = boost::asio;
+namespace sys = boost::system;
 
 class CachePolicy {
   protected:
@@ -33,7 +41,7 @@ class CachePolicy {
     CachePolicy() {}
     virtual ~CachePolicy() = default; 
 
-    virtual void init(CephContext *cct) = 0; 
+    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context) = 0; 
     virtual int exist_key(std::string key) = 0;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) = 0;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) = 0;
@@ -63,45 +71,51 @@ class LFUDAPolicy : public CachePolicy {
     using Heap = boost::heap::fibonacci_heap<LFUDAEntry*, boost::heap::compare<EntryComparator<LFUDAEntry>>>;
     Heap entries_heap;
     std::unordered_map<std::string, LFUDAEntry*> entries_map;
-    std::mutex lfuda_lock;
+    std::mutex lfuda_lock; 
 
+    int age = 1, weightSum = 0, postedSum = 0;
+    optional_yield y = null_yield;
     std::shared_ptr<connection> conn;
     BlockDirectory* dir;
     rgw::cache::CacheDriver* cacheDriver;
+    std::optional<asio::steady_timer> rthread_timer;
 
-    int set_age(int age, optional_yield y);
-    int get_age(optional_yield y);
-    int set_local_weight_sum(int weight, optional_yield y);
-    int get_local_weight_sum(optional_yield y);
     CacheBlock* get_victim_block(const DoutPrefixProvider* dpp, optional_yield y);
+    int age_sync(const DoutPrefixProvider* dpp, optional_yield y); 
+    int local_weight_sync(const DoutPrefixProvider* dpp, optional_yield y); 
+    asio::awaitable<void> redis_sync(const DoutPrefixProvider* dpp, optional_yield y);
+    void rthread_stop() {
+      std::lock_guard l{lfuda_lock};
 
-  public:
-    LFUDAPolicy(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver) : CachePolicy(), 
-                                                                         conn(conn), 
-                                                                         cacheDriver(cacheDriver)
-    {
-      dir = new BlockDirectory{conn};
+      if (rthread_timer) {
+	rthread_timer->cancel();
+      }
     }
-    ~LFUDAPolicy() {
-      delete dir;
-    } 
-
-    virtual void init(CephContext *cct) {
-      dir->init(cct);
-    }
-    virtual int exist_key(std::string key) override;
-    //virtual int get_block(const DoutPrefixProvider* dpp, CacheBlock* block, rgw::cache::CacheDriver* cacheNode, optional_yield y) override;
-    virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
-    virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) override;
-    virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
-
-    void set_local_weight(std::string& key, int localWeight);
     LFUDAEntry* find_entry(std::string key) { 
       auto it = entries_map.find(key); 
       if (it == entries_map.end())
         return nullptr;
       return it->second;
     }
+
+  public:
+    LFUDAPolicy(std::shared_ptr<connection>& conn, rgw::cache::CacheDriver* cacheDriver) : CachePolicy(), 
+											   conn(conn), 
+											   cacheDriver(cacheDriver)
+    {
+      dir = new BlockDirectory{conn};
+    }
+    ~LFUDAPolicy() {
+      rthread_stop();
+      delete dir;
+    } 
+
+    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context);
+    virtual int exist_key(std::string key) override;
+    virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
+    virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) override;
+    virtual bool erase(const DoutPrefixProvider* dpp, const std::string& key, optional_yield y) override;
+    void save_y(optional_yield y) { this->y = y; }
 };
 
 class LRUPolicy : public CachePolicy {
@@ -118,7 +132,7 @@ class LRUPolicy : public CachePolicy {
   public:
     LRUPolicy(rgw::cache::CacheDriver* cacheDriver) : cacheDriver{cacheDriver} {}
 
-    virtual void init(CephContext *cct) {} 
+    virtual int init(CephContext *cct, const DoutPrefixProvider* dpp, asio::io_context& io_context) { return 0; } 
     virtual int exist_key(std::string key) override;
     virtual int eviction(const DoutPrefixProvider* dpp, uint64_t size, optional_yield y) override;
     virtual void update(const DoutPrefixProvider* dpp, std::string& key, uint64_t offset, uint64_t len, std::string version, optional_yield y) override;

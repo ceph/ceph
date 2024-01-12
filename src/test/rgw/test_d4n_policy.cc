@@ -5,6 +5,7 @@
 #include "gtest/gtest.h"
 #include "gtest/gtest_prod.h"
 #include "common/ceph_argparse.h"
+#include "common/async/blocked_completion.h"
 #include "rgw_auth_registry.h"
 #include "driver/d4n/d4n_policy.h"
 
@@ -60,7 +61,7 @@ class LFUDAPolicyFixture : public ::testing::Test {
 	.hostsList = { env->redisHost }
       };
 
-      conn = std::make_shared<connection>(boost::asio::make_strand(io));
+      conn = std::make_shared<connection>(net::make_strand(io));
       rgw::cache::Partition partition_info{ .location = "RedisCache", .size = 1000 };
       cacheDriver = new rgw::cache::RedisDriver{io, partition_info};
       policyDriver = new rgw::d4n::PolicyDriver(conn, cacheDriver, "lfuda");
@@ -73,7 +74,6 @@ class LFUDAPolicyFixture : public ::testing::Test {
 
       dir->init(env->cct);
       cacheDriver->initialize(env->dpp);
-      policyDriver->get_cache_policy()->init(env->cct);
 
       bl.append("test data");
       bufferlist attrVal;
@@ -100,13 +100,12 @@ class LFUDAPolicyFixture : public ::testing::Test {
     }
 
     int lfuda(const DoutPrefixProvider* dpp, rgw::d4n::CacheBlock* block, rgw::cache::CacheDriver* cacheDriver, optional_yield y) {
-      int age = 5; /* Arbitrary number for testing */ 
+      int age = 1;  
       std::string oid = build_index(block->cacheObj.bucketName, block->cacheObj.objName, block->blockID, block->size);
 
       if (this->policyDriver->get_cache_policy()->exist_key(build_index(block->cacheObj.bucketName, block->cacheObj.objName, block->blockID, block->size))) { /* Local copy */
-	auto entry = dynamic_cast<rgw::d4n::LFUDAPolicy*>(this->policyDriver->get_cache_policy())->find_entry(oid);
-	entry->localWeight += age;
-	return cacheDriver->set_attr(dpp, oid, "localWeight", std::to_string(entry->localWeight), y);
+	policyDriver->get_cache_policy()->update(env->dpp, oid, 0, bl.length(), "", y);
+        return 0;
       } else {
 	if (this->policyDriver->get_cache_policy()->eviction(dpp, block->size, y) < 0)
 	  return -1;
@@ -162,13 +161,13 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
     ASSERT_EQ(0, cacheDriver->put(env->dpp, key, bl, bl.length(), attrs, optional_yield{io, yield}));
     policyDriver->get_cache_policy()->update(env->dpp, key, 0, bl.length(), "", optional_yield{io, yield});
 
-    ASSERT_GE(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
+    ASSERT_EQ(lfuda(env->dpp, block, cacheDriver, optional_yield{io, yield}), 0);
 
     cacheDriver->shutdown();
 
     boost::system::error_code ec;
     request req;
-    req.push("HGET", "RedisCache/testBucket_testName_0_0", "localWeight");
+    req.push("HGET", "RedisCache/testBucket_testName_0_0", "user.rgw.localWeight");
     req.push("FLUSHALL");
 
     response<std::string, boost::redis::ignore_t> resp;
@@ -176,7 +175,7 @@ TEST_F(LFUDAPolicyFixture, LocalGetBlockYield)
     conn->async_exec(req, resp, yield[ec]);
 
     ASSERT_EQ((bool)ec, false);
-    EXPECT_EQ(std::get<0>(resp).value(), "6");
+    EXPECT_EQ(std::get<0>(resp).value(), "2");
     conn->cancel();
   });
 
@@ -243,7 +242,7 @@ TEST_F(LFUDAPolicyFixture, RemoteGetBlockYield)
     ASSERT_EQ((bool)ec, false);
     EXPECT_EQ(std::get<0>(resp).value(), 0);
     EXPECT_EQ(std::get<1>(resp).value(), 0);
-    EXPECT_EQ(std::get<2>(resp).value(), "5");
+    EXPECT_EQ(std::get<2>(resp).value(), "1");
     conn->cancel();
   });
 
