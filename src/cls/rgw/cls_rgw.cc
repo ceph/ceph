@@ -1906,11 +1906,10 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   BIOLHEntry olh(hctx, dest_key);
 
   int ret = obj.init();
-  if (ret == -ENOENT) {
-    return 0; /* already removed */
-  }
   if (ret < 0) {
-    CLS_LOG(0, "ERROR: obj.init() returned ret=%d", ret);
+    if (ret != -ENOENT) {
+      CLS_LOG(0, "ERROR: obj.init() returned ret=%d", ret);
+    }
     return ret;
   }
 
