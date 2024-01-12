@@ -213,7 +213,6 @@ inline auto matches_gen(uint64_t gen)
 
 inline bucket_index_layout_generation log_to_index_layout(const bucket_log_layout_generation& log_layout)
 {
-  ceph_assert(log_layout.layout.type == BucketLogType::InIndex);
   bucket_index_layout_generation index;
   index.gen = log_layout.layout.in_index.gen;
   index.layout.normal = log_layout.layout.in_index.layout;
