@@ -132,13 +132,30 @@
       <!-- Multi-cluster Dashboard -->
       <li routerLinkActive="active"
           class="nav-item tc_menuitem_multi_cluster">
-        <a i18n
-           class="nav-link"
-           routerLink="/multi-cluster">
-          <span >
-            <i [ngClass]="[icons.users]"></i>
-            Multi-Cluster</span>
+        <a (click)="toggleSubMenu('multiCluster')"
+           class="nav-link dropdown-toggle"
+           [attr.aria-expanded]="displayedSubMenu.multiCluster"
+           aria-controls="multi-cluster-nav"
+           role="button">
+         <ng-container i18n>
+           <i [ngClass]="[icons.users]"></i>
+           Multi-Cluster
+         </ng-container>
         </a>
+        <ul class="list-unstyled"
+            id="multi-cluster-nav"
+            [ngbCollapse]="!displayedSubMenu.multiCluster">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_multiCluster_overview">
+            <a i18n
+               routerLink="/multi-cluster">Overview</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters">
+            <a i18n
+               routerLink="/manage-clusters">Manage Clusters</a>
+          </li>
+        </ul>
       </li>
       <!-- Cluster -->
       <li routerLinkActive="active"

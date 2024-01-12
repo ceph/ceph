@@ -64,6 +64,7 @@ import { UpgradeProgressComponent } from './upgrade/upgrade-progress/upgrade-pro
 import { MultiClusterComponent } from './multi-cluster/multi-cluster.component';
 import { MultiClusterFormComponent } from './multi-cluster/multi-cluster-form/multi-cluster-form.component';
 import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
+import { MultiClusterListComponent } from './multi-cluster/multi-cluster-list/multi-cluster-list.component';
 
 @NgModule({
   imports: [
@@ -130,7 +131,8 @@ import { DashboardV3Module } from '../dashboard-v3/dashboard-v3.module';
     UpgradeStartModalComponent,
     UpgradeProgressComponent,
     MultiClusterComponent,
-    MultiClusterFormComponent
+    MultiClusterFormComponent,
+    MultiClusterListComponent
   ],
   providers: [NgbActiveModal]
 })

@@ -82,7 +82,6 @@ export enum Icons {
   navicon = 'fa fa-navicon', // Navigation
   areaChart = 'fa fa-area-chart', // Area Chart, dashboard
   eye = 'fa fa-eye', // Observability
-  objectGroup = 'fa-object-group', // Network
 
   /* Icons for special effect */
   large = 'fa fa-lg', // icon becomes 33% larger

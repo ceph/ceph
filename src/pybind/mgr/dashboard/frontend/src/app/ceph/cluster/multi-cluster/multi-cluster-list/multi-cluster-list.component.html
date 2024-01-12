@@ -1,0 +1,26 @@
+<nav ngbNav
+     #nav="ngbNav"
+     class="nav-tabs">
+  <ng-container ngbNavItem>
+    <a ngbNavLink
+       i18n>Clusters List</a>
+    <ng-template ngbNavContent>
+      <cd-table #table
+                [data]="data"
+                [columns]="columns"
+                columnMode="flex"
+                selectionType="single">
+        <div class="table-actions btn-toolbar">
+          <cd-table-actions [permission]="permissions.hosts"
+                            [selection]="selection"
+                            class="btn-group"
+                            id="host-actions"
+                            [tableActions]="tableActions">
+          </cd-table-actions>
+        </div>
+      </cd-table>
+    </ng-template>
+  </ng-container>
+</nav>
+
+<div [ngbNavOutlet]="nav"></div>

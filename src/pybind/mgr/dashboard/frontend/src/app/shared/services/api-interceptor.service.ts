@@ -33,7 +33,6 @@ export class CdHttpErrorResponse extends HttpErrorResponse {
 export class ApiInterceptorService implements HttpInterceptor {
   // private URL: string;
   private apiUrl: string;
-  private token: string;
   localClusterUrl: string;
   dashboardClustersMap: Map<string, string> = new Map<string, string>();
   constructor(
@@ -53,7 +52,6 @@ export class ApiInterceptorService implements HttpInterceptor {
           this.localClusterUrl = config['url'];
         }
         if (config['url'] === this.apiUrl) {
-          this.token = config['token'];
         }
       });
     });
@@ -74,7 +72,6 @@ export class ApiInterceptorService implements HttpInterceptor {
       });
     }
 
-    console.log(this.apiUrl, this.token);
     const apiUrl = localStorage.getItem('cluster_api_url');
     const currentRoute = this.router.url.split('?')[0];
 
