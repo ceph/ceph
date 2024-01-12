@@ -459,6 +459,12 @@ namespace ceph {
      */
     virtual int decode_concat(const std::map<int, bufferlist> &chunks,
 			      bufferlist *decoded) = 0;
+
+
+    /**
+     * @return **true** if the EC plugin's data placement is systematic.
+     */
+    virtual bool is_systematic() const = 0;
   };
 
   typedef std::shared_ptr<ErasureCodeInterface> ErasureCodeInterfaceRef;
