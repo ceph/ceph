@@ -678,6 +678,45 @@ options:
   services:
   - rgw
   with_legacy: true
+- name: rgw_keystone_service_token_enabled
+  type: bool
+  level: advanced
+  desc: Service tokens allowing the usage of expired Keystone auth tokens
+  fmt_desc: The service token support allows the incoming request to contain
+    a X-Service-Token header with a Keystone token that if it has acceptable
+    roles allows using an expired token in the X-Auth-Token header.
+  default: false
+  see_also:
+  - rgw_keystone_service_token_accepted_roles
+  - rgw_keystone_expired_token_cache_expiration
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_service_token_accepted_roles
+  type: str
+  level: advanced
+  desc: Only users with one of these roles will be valid for service users.
+  fmt_desc: The users that created the service token given must have one of
+    these roles to be considered a valid service user.
+  default: admin
+  see_also:
+  - rgw_keystone_service_token_enabled
+  services:
+  - rgw
+  with_legacy: true
+- name: rgw_keystone_expired_token_cache_expiration
+  type: int
+  level: advanced
+  desc: The number of seconds to add to current time for expired token expiration
+  fmt_desc: The expired token that is allowed when a valid service token is given
+    need a new expiration date for the caching. This is the seconds to add to the
+    current time and then set on an expired token that is verified with a service token.
+  default: 3600
+  services:
+  - rgw
+  see_also:
+  - rgw_keystone_service_token_enabled
+  with_legacy: true
 - name: rgw_keystone_barbican_user
   type: str
   level: advanced
