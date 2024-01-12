@@ -559,13 +559,16 @@ int take_min_status(
   const uint64_t min_generation,
   std::vector<BucketTrimInstanceCR::StatusShards>::const_iterator first,
   std::vector<BucketTrimInstanceCR::StatusShards>::const_iterator last,
-  std::vector<std::string> *status) {
+  std::vector<std::string> *status, const DoutPrefixProvider *dpp) {
   for (auto peer = first; peer != last; ++peer) {
     // Peers on later generations don't get a say in the matter
     if (peer->generation > min_generation) {
       continue;
     }
     if (peer->shards.size() != status->size()) {
+    ldpp_dout(dpp, 5) << __PRETTY_FUNCTION__ << ":"
+    << "ERROR: shards don't match. peer shard:" << peer->shards.size() << " my shards:" << status->size()
+    << "for generation:" << peer->generation << dendl; 
       // all peers must agree on the number of shards
       return -EINVAL;
     }
@@ -794,7 +797,7 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
 
       retcode = take_min_status(cct, totrim.gen, peer_status.cbegin(),
-				peer_status.cend(), &min_markers);
+				peer_status.cend(), &min_markers, dpp);
       if (retcode < 0) {
 	ldpp_dout(dpp, 4) << "failed to correlate bucket sync status from peers" << dendl;
 	return set_cr_error(retcode);
