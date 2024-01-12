@@ -128,6 +128,46 @@ def main():
     assert num_leftover_olh_entries == 0, \
       'Found leftover olh entries after concurrent deletes'
 
+    
+    # TESTCASE 'verify that index entries can be cleaned up if index completion ops are not applied'
+    log.debug('TEST: verify that index entries can be cleaned up if index completion ops are not applied\n')
+    bucket.object_versions.all().delete()
+    
+    def delete_request(key, version_id):
+        connection.ObjectVersion(bucket.name, key, version_id).delete()
+        
+    def check_olh(*args):
+        exec_cmd(f'radosgw-admin bucket check olh --fix --bucket {BUCKET_NAME}')
+        
+    def check_unlinked(*args):
+        exec_cmd(f'radosgw-admin bucket check unlinked --fix --min-age-hours=0 --bucket {BUCKET_NAME}')
+    
+    fix_funcs = [delete_request, check_olh, check_unlinked]
+    bucket.object_versions.all().delete()
+    
+    for fix_func in fix_funcs:
+        key = str(uuid.uuid4())
+        put_resp = bucket.put_object(Key=key, Body=b"data")
+        version_id = put_resp.version_id
+        try:
+            exec_cmd('ceph config set client rgw_debug_inject_skip_index_clear_olh true')
+            exec_cmd('ceph config set client rgw_debug_inject_skip_index_complete_del true')
+            time.sleep(1)
+            connection.ObjectVersion(bucket.name, key, version_id).delete()
+        finally:
+            exec_cmd('ceph config rm client rgw_debug_inject_skip_index_clear_olh')
+            exec_cmd('ceph config rm client rgw_debug_inject_skip_index_complete_del')
+            
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        json_out = json.loads(out.replace(b'\x80', b'0x80'))
+        assert len(json_out) == 3, 'failed to find leftover bi entries'
+
+        fix_func(key, version_id)
+
+        out = exec_cmd(f'radosgw-admin bi list --bucket {BUCKET_NAME} --object {key}')
+        json_out = json.loads(out.replace(b'\x80', b'0x80'))
+        assert len(json_out) == 0, f'{fix_func.__name__} did not remove leftover index entries for {key}'
+        
     # Clean up
     log.debug("Deleting bucket {}".format(BUCKET_NAME))
     bucket.object_versions.all().delete()

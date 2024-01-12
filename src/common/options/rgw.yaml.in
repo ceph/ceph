@@ -2672,6 +2672,28 @@ options:
   with_legacy: true
   services:
   - rgw
+- name: rgw_debug_inject_skip_index_clear_olh
+  type: bool
+  level: dev
+  desc: Whether to inject a condition to skip bucket index clear olh ops
+    when unlinking a bucket index entry. This is useful to simulate behavior
+    for testing cases where the op is lost due to a crash or other
+    abnormal scenario.
+  default: false
+  with_legacy: true
+  services:
+  - rgw
+- name: rgw_debug_inject_skip_index_complete_del
+  type: bool
+  level: dev
+  desc: Whether to inject a condition to skip bucket index complete_del ops
+    when removing a version bucket object instance. This is useful to simulate
+    behavior for testing cases where the op is lost due to a crash or other
+    abnormal scenario.
+  default: false
+  with_legacy: true
+  services:
+  - rgw
 - name: rgw_reshard_batch_size
   type: uint
   level: advanced

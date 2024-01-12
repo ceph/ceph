@@ -5802,7 +5802,10 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
       tombstone_entry entry{*state};
       obj_tombstone_cache->add(obj, entry);
     }
-    r = index_op.complete_del(dpp, poolid, ioctx.get_last_version(), state->mtime, params.remove_objs, y, log_op);
+    
+    if (!store->ctx()->_conf->rgw_debug_inject_skip_index_complete_del) {
+      r = index_op.complete_del(dpp, poolid, ioctx.get_last_version(), state->mtime, params.remove_objs, y, log_op);
+    }
 
     int ret = target->complete_atomic_modification(dpp, y);
     if (ret < 0) {
@@ -8228,6 +8231,10 @@ int RGWRados::clear_olh(const DoutPrefixProvider *dpp,
   if (r == -ECANCELED) {
     return r; /* someone else made a modification in the meantime */
   }
+  if (cct->_conf->rgw_debug_inject_skip_index_clear_olh) {
+    return 0;  
+  }
+
   /* 
    * only clear if was successful, otherwise we might clobber pending operations on this object
    */
