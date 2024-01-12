@@ -73,13 +73,13 @@ class BaseRedfishSystem(BaseSystem):
                     executor.map(lambda f: f(), update_funcs)
 
                 self.data_ready = True
-                sleep(5)
             except RuntimeError as e:
                 self.run = False
                 self.log.logger.error(f'Error detected, trying to gracefully log out from redfish api.\n{e}')
                 self.client.logout()
             finally:
                 self.lock.release()
+                sleep(5)
                 self.log.logger.debug('lock released in the update loop.')
 
     def flush(self) -> None:
