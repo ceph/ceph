@@ -6931,7 +6931,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
     op_ret = 0;
   }
 
-  send_partial_response(o, obj->get_delete_marker(), del_op->result.version_id, op_ret, formatter_flush_cond);
+  send_partial_response(o, del_op->result.delete_marker, del_op->result.version_id, op_ret, formatter_flush_cond);
 
   // send request to notification manager
   int ret = res->publish_commit(this, obj_size, ceph::real_clock::now(), etag, version_id);
