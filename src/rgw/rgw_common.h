@@ -1824,13 +1824,14 @@ static inline ssize_t rgw_unescape_str(const std::string& s, ssize_t ofs,
   return std::string::npos;
 }
 
-static inline std::string rgw_bl_str(ceph::buffer::list& raw)
+/// Return a string copy of the given bufferlist with trailing nulls removed
+static inline std::string rgw_bl_str(const ceph::buffer::list& bl)
 {
-  size_t len = raw.length();
-  std::string s(raw.c_str(), len);
-  while (len && !s[len - 1]) {
-    --len;
-    s.resize(len);
+  // use to_str() instead of c_str() so we don't reallocate a flat bufferlist
+  std::string s = bl.to_str();
+  // with to_str(), the result may include null characters. trim trailing nulls
+  while (!s.empty() && s.back() == '\0') {
+    s.pop_back();
   }
   return s;
 }
