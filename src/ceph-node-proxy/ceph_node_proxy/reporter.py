@@ -24,7 +24,7 @@ class Reporter:
         self.reporter_port: str = reporter_port
         self.reporter_endpoint: str = reporter_endpoint
         self.log = Logger(__name__)
-        self.reporter_url: str = (f'{reporter_scheme}:{reporter_hostname}:'
+        self.reporter_url: str = (f'{reporter_scheme}://{reporter_hostname}:'
                                   f'{reporter_port}{reporter_endpoint}')
         self.log.logger.info(f'Reporter url set to {self.reporter_url}')
 
