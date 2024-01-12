@@ -13,6 +13,11 @@
  *
  */
 
+/* N.B., this header defines fundamental serialized types.  Do not
+ * introduce changes or include files which can only be compiled in
+ * radosgw or OSD contexts (e.g., rgw_sal.h, rgw_common.h)
+ */
+
 #pragma once
 
 #include <optional>

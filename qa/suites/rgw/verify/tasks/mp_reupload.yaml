@@ -1,0 +1,5 @@
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - rgw/test_rgw_s3_mp_reupload.sh

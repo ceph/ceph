@@ -21,6 +21,11 @@ class RGWCtl;
 struct rgw_log_entry;
 
 namespace rgw {
+
+namespace sal {
+  class Store;
+}
+
 namespace auth {
 
 using Exception = std::system_error;
