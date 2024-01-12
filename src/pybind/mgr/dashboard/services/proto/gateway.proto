@@ -31,21 +31,21 @@ enum AddressFamily {
 enum LogLevel {
     DISABLED = 0;
     ERROR = 1;
-    WARN = 2;
+    WARNING = 2;
     NOTICE = 3;
     INFO = 4;
     DEBUG = 5;
 }
 
+enum AutoHAState {
+    AUTO_HA_UNSET = 0;
+    AUTO_HA_OFF = 1;
+    AUTO_HA_ON = 2;
+}
+
 service Gateway {
-	// Creates a bdev from an RBD image
-	rpc create_bdev(create_bdev_req) returns (bdev) {}
-
-	// Resizes a bdev
-	rpc resize_bdev(resize_bdev_req) returns (req_status) {}
-
-	// Deletes a bdev
-	rpc delete_bdev(delete_bdev_req) returns (req_status) {}
+	// Creates a namespace from an RBD image
+	rpc namespace_add(namespace_add_req) returns (nsid_status) {}
 
 	// Creates a subsystem
 	rpc create_subsystem(create_subsystem_req) returns(req_status) {}
@@ -53,11 +53,23 @@ service Gateway {
 	// Deletes a subsystem
 	rpc delete_subsystem(delete_subsystem_req) returns(req_status) {}
 
-	// Adds a namespace to a subsystem
-	rpc add_namespace(add_namespace_req) returns(nsid_status) {}
+	// List namespaces
+	rpc list_namespaces(list_namespaces_req) returns(namespaces_info) {}
 
-	// Removes a namespace from a subsystem
-	rpc remove_namespace(remove_namespace_req) returns(req_status) {}
+	// Resizes a namespace
+	rpc namespace_resize(namespace_resize_req) returns (req_status) {}
+
+	// Gets namespace's IO stats
+	rpc namespace_get_io_stats(namespace_get_io_stats_req) returns (namespace_io_stats_info) {}
+
+	// Sets namespace's qos limits
+	rpc namespace_set_qos_limits(namespace_set_qos_req) returns (req_status) {}
+
+	// Changes namespace's load balancing group
+	rpc namespace_change_load_balancing_group(namespace_change_load_balancing_group_req) returns (req_status) {}
+
+	// Deletes a namespace
+	rpc namespace_delete(namespace_delete_req) returns (req_status) {}
 
 	// Adds a host to a subsystem
 	rpc add_host(add_host_req) returns (req_status) {}
@@ -65,70 +77,104 @@ service Gateway {
 	// Removes a host from a subsystem
 	rpc remove_host(remove_host_req) returns (req_status) {}
 
+	// List hosts
+	rpc list_hosts(list_hosts_req) returns(hosts_info) {}
+
+	// List connections
+	rpc list_connections(list_connections_req) returns(connections_info) {}
+
 	// Creates a listener for a subsystem at a given IP/Port
 	rpc create_listener(create_listener_req) returns(req_status) {}
 
 	// Deletes a listener from a subsystem at a given IP/Port
 	rpc delete_listener(delete_listener_req) returns(req_status) {}
 
-	// Gets subsystems
-	rpc get_subsystems(get_subsystems_req) returns(subsystems_info) {}
+	// List listeners
+	rpc list_listeners(list_listeners_req) returns(listeners_info) {}
+
+	// List subsystems
+	rpc list_subsystems(list_subsystems_req) returns(subsystems_info) {}
 
 	// Gets spdk nvmf log flags and level
 	rpc get_spdk_nvmf_log_flags_and_level(get_spdk_nvmf_log_flags_and_level_req) returns(spdk_nvmf_log_flags_and_level_info) {}
 
-	// Disables spdk nvmf logs
-	rpc disable_spdk_nvmf_logs(disable_spdk_nvmf_logs_req) returns(req_status) {}
+        // Disables spdk nvmf logs
+        rpc disable_spdk_nvmf_logs(disable_spdk_nvmf_logs_req) returns(req_status) {}
 
 	// Set spdk nvmf logs
 	rpc set_spdk_nvmf_logs(set_spdk_nvmf_logs_req) returns(req_status) {}
 
-	// Set spdk nvmf logs
+	// Get gateway info
 	rpc get_gateway_info(get_gateway_info_req) returns(gateway_info) {}
 }
 
 // Request messages
 
-message create_bdev_req {
-	string bdev_name = 1;
-	string rbd_pool_name = 2;
-	string rbd_image_name = 3;
-	int32 block_size = 4;
-	optional string uuid = 5;
+message namespace_add_req {
+	string rbd_pool_name = 1;
+	string rbd_image_name = 2;
+	string subsystem_nqn = 3;
+	optional uint32 nsid = 4;
+	uint32 block_size = 5;
+	optional string uuid = 6;
+	optional int32 anagrpid = 7;
+	optional bool create_image = 8;
+	optional uint32 size = 9;
 }
 
-message resize_bdev_req {
-	string bdev_name = 1;
-	int32 new_size = 2;
+message namespace_resize_req {
+	string subsystem_nqn = 1;
+	optional uint32 nsid = 2;
+	optional string uuid = 3;
+	uint32 new_size = 4;
 }
 
-message delete_bdev_req {
-	string bdev_name = 1;
-	bool force = 2;
+message namespace_get_io_stats_req {
+	string subsystem_nqn = 1;
+	optional uint32 nsid = 2;
+	optional string uuid = 3;
+}
+
+message namespace_set_qos_req {
+	string subsystem_nqn = 1;
+	optional uint32 nsid = 2;
+	optional string uuid = 3;
+	optional uint64 rw_ios_per_second = 4;
+	optional uint64 rw_mbytes_per_second = 5;
+	optional uint64 r_mbytes_per_second = 6;
+	optional uint64 w_mbytes_per_second = 7;
+}
+
+message namespace_change_load_balancing_group_req {
+	string subsystem_nqn = 1;
+	optional uint32 nsid = 2;
+	optional string uuid = 3;
+	int32 anagrpid = 4;
+}
+
+message namespace_delete_req {
+	string subsystem_nqn = 1;
+	optional uint32 nsid = 2;
+	optional string uuid = 3;
 }
 
 message create_subsystem_req {
 	string subsystem_nqn = 1;
 	string serial_number = 2;
-	int32 max_namespaces = 3;
-	bool  ana_reporting  = 4;
-	bool  enable_ha      = 5;
+	optional uint32 max_namespaces = 3;
+	bool ana_reporting = 4;
+	bool enable_ha = 5;
 }
 
 message delete_subsystem_req {
 	string subsystem_nqn = 1;
+	optional bool force = 2;
 }
 
-message add_namespace_req {
-	string subsystem_nqn = 1;
-	string bdev_name = 2;
-	optional uint32 nsid = 3;
-	optional int32 anagrpid = 4;
-}
-
-message remove_namespace_req {
-	string subsystem_nqn = 1;
-	uint32 nsid = 2;
+message list_namespaces_req {
+	string subsystem = 1;
+	optional uint32 nsid = 2;
+	optional string uuid = 3;
 }
 
 message add_host_req {
@@ -141,25 +187,40 @@ message remove_host_req {
 	string host_nqn = 2;
 }
 
+message list_hosts_req {
+	string subsystem = 1;
+}
+
+message list_connections_req {
+	string subsystem = 1;
+}
+
 message create_listener_req {
 	string nqn = 1;
 	string gateway_name = 2;
-	TransportType trtype = 3;
-	AddressFamily adrfam = 4;
-	string traddr = 5;
-	string trsvcid = 6;
+	string traddr = 3;
+	optional TransportType trtype = 4;
+	optional AddressFamily adrfam = 5;
+	optional uint32 trsvcid = 6;
+	optional AutoHAState auto_ha_state = 7;
 }
 
 message delete_listener_req {
 	string nqn = 1;
 	string gateway_name = 2;
-	TransportType trtype = 3;
-	AddressFamily adrfam = 4;
-	string traddr = 5;
-	string trsvcid = 6;
+	string traddr = 3;
+	optional TransportType trtype = 4;
+	optional AddressFamily adrfam = 5;
+	optional uint32 trsvcid = 6;
 }
 
-message get_subsystems_req {
+message list_listeners_req {
+	string subsystem = 1;
+}
+
+message list_subsystems_req {
+	optional string subsystem_nqn = 1;
+	optional string serial_number = 2;
 }
 
 message get_spdk_nvmf_log_flags_and_level_req {
@@ -174,74 +235,175 @@ message set_spdk_nvmf_logs_req {
 }
 
 message get_gateway_info_req {
-	string cli_version = 1;
+	optional string cli_version = 1;
 }
 
 // Return messages 
 
-message bdev {
-	string bdev_name = 1;
-	bool status = 2;
+message bdev_status {
+	int32 status = 1;
+	string error_message = 2;
+	string bdev_name = 3;
 }
 
 message req_status {
-	bool status = 1;
+	int32 status = 1;
+	string error_message = 2;
 }
 
 message nsid_status {
-	uint32 nsid = 1;
-	bool status = 2;
+	int32 status = 1;
+	string error_message = 2;
+	uint32 nsid = 3;
 }
 
 message subsystems_info {
-	repeated subsystem subsystems = 1;
+	int32 status = 1;
+	string error_message = 2;
+	repeated subsystem subsystems = 3;
 }
 
 message subsystem {
 	string nqn = 1;
-	string subtype = 2;
-	repeated listen_address listen_addresses = 3;
-	repeated host hosts = 4;
-	bool allow_any_host = 5;
-	optional string serial_number = 6;
-	optional string model_number = 7;
-	optional uint32 max_namespaces = 8;
-	optional uint32 min_cntlid = 9;
-	optional uint32 max_cntlid = 10;
-	repeated namespace namespaces = 11;
+	bool enable_ha = 2;
+	string serial_number = 3;
+	string model_number = 4;
+	uint32 min_cntlid = 5;
+	uint32 max_cntlid = 6;
+	uint32 namespace_count = 7;
+	string subtype = 8;
 }
 
 message gateway_info {
 	string cli_version = 1;
-	string gateway_version = 2;
-	string gateway_name = 3;
-	string gateway_group = 4;
-	string gateway_addr = 5;
-	string gateway_port = 6;
-	bool status = 7;
+	string version = 2;
+	string name = 3;
+	string group = 4;
+	string addr = 5;
+	string port = 6;
+	bool bool_status = 7;
+	int32 status = 8;
+	string error_message = 9;
+	string spdk_version = 10;
 }
 
-message listen_address {
-	string transport = 1;
+message cli_version {
+	int32 status = 1;
+	string error_message = 2;
+	string version = 3;
+}
+
+message gw_version {
+	int32 status = 1;
+	string error_message = 2;
+	string version = 3;
+}
+
+message listener_info {
+	string gateway_name = 1;
 	TransportType trtype = 2;
 	AddressFamily adrfam = 3;
 	string traddr = 4;
-	string trsvcid = 5;
+	uint32 trsvcid = 5;
+}
+
+message listeners_info {
+	int32 status = 1;
+	string error_message = 2;
+	repeated listener_info listeners = 3;
 }
 
 message host {
     string nqn = 1;
 }
 
+message hosts_info {
+	int32 status = 1;
+	string error_message = 2;
+	bool allow_any_host = 3;
+	string subsystem_nqn = 4;
+	repeated host hosts = 5;
+}
+
+message connection {
+	string nqn = 1;
+	string traddr = 2;
+	uint32 trsvcid = 3;
+	TransportType trtype = 4;
+	AddressFamily adrfam = 5;
+	bool connected = 6;
+	int32 qpairs_count = 7;
+	int32 controller_id = 8;
+}
+
+message connections_info {
+	int32 status = 1;
+	string error_message = 2;
+	string subsystem_nqn = 3;
+	repeated connection connections = 4;
+}
+
 message namespace {
-    uint32 nsid = 1;
-    string name = 2;
-    optional string bdev_name = 3;
-    optional string nguid = 4;
-    optional string uuid = 5;
-    optional uint32 anagrpid = 6;
+	uint32 nsid = 1;
+	string bdev_name = 2;
+	string rbd_image_name = 3;
+	string rbd_pool_name = 4;
+	uint32 load_balancing_group = 5;
+	uint32 block_size = 6;
+	uint64 rbd_image_size = 7;
+	string uuid = 8;
+	uint64 rw_ios_per_second = 9;
+	uint64 rw_mbytes_per_second = 10;
+	uint64 r_mbytes_per_second = 11;
+	uint64 w_mbytes_per_second = 12;
+}
+
+message namespaces_info {
+	int32 status = 1;
+	string error_message = 2;
+	string subsystem_nqn = 3;
+	repeated namespace namespaces = 4;
+}
+
+message namespace_io_stats_info {
+	int32 status = 1;
+	string error_message = 2;
+	string subsystem_nqn = 3;
+	uint32 nsid = 4;
+	string uuid = 5;
+	string bdev_name = 6;
+	uint64 tick_rate = 7;
+	uint64 ticks = 8;
+	uint64 bytes_read = 9;
+	uint64 num_read_ops = 10;
+	uint64 bytes_written = 11;
+	uint64 num_write_ops = 12;
+	uint64 bytes_unmapped = 13;
+	uint64 num_unmap_ops = 14;
+	uint64 read_latency_ticks = 15;
+	uint64 max_read_latency_ticks = 16;
+	uint64 min_read_latency_ticks = 17;
+	uint64 write_latency_ticks = 18;
+	uint64 max_write_latency_ticks = 19;
+	uint64 min_write_latency_ticks = 20;
+	uint64 unmap_latency_ticks = 21;
+	uint64 max_unmap_latency_ticks = 22;
+	uint64 min_unmap_latency_ticks = 23;
+	uint64 copy_latency_ticks = 24;
+	uint64 max_copy_latency_ticks = 25;
+	uint64 min_copy_latency_ticks = 26;
+	repeated uint32 io_error = 27;
+}
+
+message spdk_log_flag_info {
+    string name = 1;
+    bool enabled = 2;
 }
 
 message spdk_nvmf_log_flags_and_level_info {
-	string flags_level =1;
+	int32 status = 1;
+	string error_message = 2;
+	repeated spdk_log_flag_info nvmf_log_flags = 3;
+	LogLevel log_level = 4;
+	LogLevel log_print_level = 5;
 }

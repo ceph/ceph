@@ -29,6 +29,7 @@ from mgr_util import ServerConfigException, build_url, \
 from . import mgr
 from .controllers import Router, json_error_page
 from .grafana import push_local_dashboards
+from .services import nvmeof_cli  # noqa # pylint: disable=unused-import
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.exception import dashboard_exception_handler
 from .services.rgw_client import configure_rgw_credentials
@@ -36,9 +37,6 @@ from .services.sso import SSO_COMMANDS, handle_sso_command
 from .settings import handle_option_command, options_command_list, options_schema_list
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
     prepare_url_prefix, str_to_bool
-
-# pylint: disable=unused-import
-from .services import nvmeof_cli
 
 try:
     import cherrypy
