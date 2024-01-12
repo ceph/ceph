@@ -47,7 +47,7 @@ class Reporter:
             self.system.lock.acquire()
             self.log.logger.debug('lock acquired in reporter loop.')
             if self.system.data_ready:
-                self.log.logger.info('data ready to be sent to the mgr.')
+                self.log.logger.debug('data ready to be sent to the mgr.')
                 if not self.system.get_system() == self.system.previous_data:
                     self.log.logger.info('data has changed since last iteration.')
                     self.data['patch'] = self.system.get_system()
@@ -68,7 +68,7 @@ class Reporter:
                     else:
                         self.system.previous_data = self.system.get_system()
                 else:
-                    self.log.logger.info('no diff, not sending data to the mgr.')
+                    self.log.logger.debug('no diff, not sending data to the mgr.')
             self.system.lock.release()
             self.log.logger.debug('lock released in reporter loop.')
             time.sleep(5)
