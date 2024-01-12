@@ -474,26 +474,24 @@ following command:
 
    ceph tell mds.{mds-id} config set {setting} {value}
 
-Example:
+Example: to enable debug messages, run the following command:
 
 .. prompt:: bash $
 
    ceph tell mds.0 config set debug_ms 1
 
-To enable debug messages, run the following command:
+To display the status of all metadata servers, run the following command:
 
 .. prompt:: bash $
 
    ceph mds stat
 
-To display the status of all metadata servers, run the following command:
+To mark the active metadata server as failed (and to trigger failover to a
+standby if a standby is present), run the following command:
 
 .. prompt:: bash $
 
    ceph mds fail 0
-
-To mark the active metadata server as failed (and to trigger failover to a
-standby if a standby is present), run the following command:
 
 .. todo:: ``ceph mds`` subcommands missing docs: set, dump, getmap, stop, setmap
 
