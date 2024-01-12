@@ -121,7 +121,7 @@ class NvmeofService(CephService):
             'name': daemon.hostname,
         })
         if not ret:
-            logger.info(f'{daemon.hostname} removed from iscsi gateways dashboard config')
+            logger.info(f'{daemon.hostname} removed from nvmeof gateways dashboard config')
 
         # and any certificates being used for mTLS
 
