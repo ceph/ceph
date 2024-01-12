@@ -47,6 +47,7 @@ class D4NFilterDriver : public FilterDriver {
     rgw::d4n::ObjectDirectory* objDir;
     rgw::d4n::BlockDirectory* blockDir;
     rgw::d4n::PolicyDriver* policyDriver;
+    boost::asio::io_context& io_context;
 
   public:
     D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context);

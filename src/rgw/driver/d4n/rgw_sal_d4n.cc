@@ -33,7 +33,8 @@ static inline Object* nextObject(Object* t)
   return dynamic_cast<FilterObject*>(t)->get_next();
 }
 
-D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next) 
+D4NFilterDriver::D4NFilterDriver(Driver* _next, boost::asio::io_context& io_context) : FilterDriver(_next),
+                                                                                       io_context(io_context) 
 {
   conn = std::make_shared<connection>(boost::asio::make_strand(io_context));
 
@@ -83,7 +84,7 @@ int D4NFilterDriver::initialize(CephContext *cct, const DoutPrefixProvider *dpp)
   cacheDriver->initialize(dpp);
   objDir->init(cct);
   blockDir->init(cct);
-  policyDriver->get_cache_policy()->init(cct);
+  policyDriver->get_cache_policy()->init(cct, dpp, io_context);
 
   return 0;
 }
@@ -985,8 +986,6 @@ int D4NFilterWriter::complete(size_t accounted_size, const std::string& etag,
   }
 
   baseAttrs.insert(attrs.begin(), attrs.end());
-
-  // is the accounted_size equivalent to the length? -Sam
   
   //bufferlist bl_empty;
   //int putReturn = driver->get_cache_driver()->
