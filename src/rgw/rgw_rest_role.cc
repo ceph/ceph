@@ -65,7 +65,7 @@ int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
     return ret;
   }
 
-  std::string r = outdata.to_str();
+  std::string r = rgw_bl_str(outdata);
   boost::replace_all(r, "&quot;", "\"");
 
   if (!parser.parse(r.c_str(), r.length(), 1)) {
