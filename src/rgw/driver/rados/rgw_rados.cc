@@ -5766,14 +5766,14 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     }
   }
 
-  if (!state->exists) {
-    target->invalidate_state();
-    return -ENOENT;
-  }
+  bool need_invalidate = !state->exists;
+  bool exists = state->exists;
 
-  r = target->prepare_atomic_modification(dpp, op, false, NULL, NULL, NULL, true, false, y);
-  if (r < 0)
-    return r;
+  if (exists) {
+    r = target->prepare_atomic_modification(dpp, op, false, NULL, NULL, NULL, true, false, y);
+    if (r < 0)
+      return r;
+  }
 
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -5787,13 +5787,15 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
   if (r < 0)
     return r;
 
-  store->remove_rgw_head_obj(op);
-
   auto& ioctx = ref.ioctx;
-  r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y);
+  if (exists) {
+    store->remove_rgw_head_obj(op);
+  
+    r = rgw_rados_operate(dpp, ioctx, ref.obj.oid, &op, y);
+    /* raced with another operation, object state is indeterminate */
+    need_invalidate = (r == -ECANCELED);
+  }
 
-  /* raced with another operation, object state is indeterminate */
-  const bool need_invalidate = (r == -ECANCELED);
 
   int64_t poolid = ioctx.get_id();
   if (r >= 0) {
@@ -5823,6 +5825,9 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y, const DoutPrefixProvi
     target->invalidate_state();
   }
 
+  if (!exists) {
+    return -ENOENT;
+  }
   if (r < 0)
     return r;
 
@@ -8150,7 +8155,7 @@ int RGWRados::apply_olh_log(const DoutPrefixProvider *dpp,
 
   /* update olh object */
   r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &op, y);
-  if (r < 0) {
+  if (r < 0 && !(r == -ENOENT && need_to_remove)) {
     ldpp_dout(dpp, 0) << "ERROR: " << __func__ << ": could not apply olh update to oid \"" << ref.obj.oid << "\", r=" << r << dendl;
     return r;
   }
@@ -8206,31 +8211,34 @@ int RGWRados::clear_olh(const DoutPrefixProvider *dpp,
   if (r < 0) {
     return r;
   }
-  map<string, bufferlist> pending_entries;
-  rgw_filter_attrset(s->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
-
-  map<string, bufferlist> rm_pending_entries;
-  check_pending_olh_entries(dpp, pending_entries, &rm_pending_entries);
-
-  if (!rm_pending_entries.empty()) {
-    r = remove_olh_pending_entries(dpp, bucket_info, *s, obj, rm_pending_entries, y);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: rm_pending_entries returned ret=" << r << dendl;
-      return r;
+  if (s->exists) {
+    map<string, bufferlist> pending_entries;
+    rgw_filter_attrset(s->attrset, RGW_ATTR_OLH_PENDING_PREFIX, &pending_entries);
+  
+    map<string, bufferlist> rm_pending_entries;
+    check_pending_olh_entries(dpp, pending_entries, &rm_pending_entries);
+  
+    if (!rm_pending_entries.empty()) {
+      r = remove_olh_pending_entries(dpp, bucket_info, *s, obj, rm_pending_entries, y);
+      if (r < 0) {
+        ldpp_dout(dpp, 0) << "ERROR: rm_pending_entries returned ret=" << r << dendl;
+        return r;
+      }
+    }
+  
+    bufferlist tag_bl;
+    tag_bl.append(tag.c_str(), tag.length());
+    rm_op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, tag_bl);
+    rm_op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_EQ, ver);
+    cls_obj_check_prefix_exist(rm_op, RGW_ATTR_OLH_PENDING_PREFIX, true); /* fail if found one of these, pending modification */
+    rm_op.remove();
+  
+    r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &rm_op, y);
+    if (r == -ECANCELED) {
+      return r; /* someone else made a modification in the meantime */
     }
   }
 
-  bufferlist tag_bl;
-  tag_bl.append(tag.c_str(), tag.length());
-  rm_op.cmpxattr(RGW_ATTR_OLH_ID_TAG, CEPH_OSD_CMPXATTR_OP_EQ, tag_bl);
-  rm_op.cmpxattr(RGW_ATTR_OLH_VER, CEPH_OSD_CMPXATTR_OP_EQ, ver);
-  cls_obj_check_prefix_exist(rm_op, RGW_ATTR_OLH_PENDING_PREFIX, true); /* fail if found one of these, pending modification */
-  rm_op.remove();
-
-  r = rgw_rados_operate(dpp, ref.ioctx, ref.obj.oid, &rm_op, y);
-  if (r == -ECANCELED) {
-    return r; /* someone else made a modification in the meantime */
-  }
   if (cct->_conf->rgw_debug_inject_skip_index_clear_olh) {
     return 0;  
   }
