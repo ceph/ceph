@@ -2379,6 +2379,19 @@ void Monitor::collect_metadata(Metadata *m)
   for (auto& i : errs) {
     dout(1) << __func__ << " " << i.first << ": " << i.second << dendl;
   }
+
+  string ceph_version_when_created;
+  int r = store->read_meta("ceph_version_when_created", &ceph_version_when_created);
+  if (r < 0 || ceph_version_when_created.empty()) {
+    ceph_version_when_created = "";
+  }
+  (*m)["ceph_version_when_created"] = ceph_version_when_created;
+  string created_at;
+  r = store->read_meta("created_at", &created_at);
+  if (r < 0 || created_at.empty()) {
+    created_at = "";
+  }
+  (*m)["created_at"] = created_at;
 }
 
 void Monitor::finish_election()
