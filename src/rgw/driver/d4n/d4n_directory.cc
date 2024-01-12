@@ -61,7 +61,7 @@ int ObjectDirectory::exist_key(CacheObj* object, optional_yield y)
 
     redis_exec(conn, ec, req, resp, y);
 
-    if ((bool)ec)
+    if (ec)
       return false;
   } catch (std::exception &e) {}
 
@@ -319,7 +319,7 @@ int BlockDirectory::exist_key(CacheBlock* block, optional_yield y)
 
     redis_exec(conn, ec, req, resp, y);
 
-    if ((bool)ec)
+    if (ec)
       return false;
   } catch (std::exception &e) {}
 

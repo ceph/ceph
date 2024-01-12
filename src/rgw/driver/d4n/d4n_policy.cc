@@ -357,7 +357,12 @@ void LFUDAPolicy::update(const DoutPrefixProvider* dpp, std::string& key, uint64
   if (cacheDriver->set_attr(dpp, key, "user.rgw.localWeight", std::to_string(localWeight), y) < 0) 
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): CacheDriver set_attr method failed." << dendl;
 
-  auto localWeights = get_local_weight_sum(y);
+  int localWeights = get_local_weight_sum(y);
+  if (localWeights < 0) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Failed to retrieve sum of local weights for the cache backend." << dendl;
+    return;
+  }
+
   localWeights += ((localWeight < 0) ? 0 : localWeight);
   if (set_local_weight_sum(localWeights, y) < 0)
     ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Failed to update sum of local weights for the cache backend." << dendl;
@@ -370,13 +375,20 @@ bool LFUDAPolicy::erase(const DoutPrefixProvider* dpp, const std::string& key, o
     return false;
   }
 
-  auto localWeights = get_local_weight_sum(y);
-  localWeights -= ((p->second->localWeight < 0) ? 0 : p->second->localWeight);
-  if (set_local_weight_sum(localWeights, y) < 0)
-    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Failed to update sum of local weights for the cache backend." << dendl;
+  int localWeights = get_local_weight_sum(y);
+  if (localWeights < 0) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Failed to retrieve sum of local weights for the cache backend." << dendl;
+    return false;
+  }
 
-  entries_map.erase(p);
+  localWeights -= ((p->second->localWeight < 0) ? 0 : p->second->localWeight);
+  if (set_local_weight_sum(localWeights, y) < 0) {
+    ldpp_dout(dpp, 10) << "LFUDAPolicy::" << __func__ << "(): Failed to update sum of local weights for the cache backend." << dendl;
+    return false;
+  }
+
   entries_heap.erase(p->second->handle);
+  entries_map.erase(p);
 
   return true;
 }
