@@ -3666,6 +3666,14 @@ options:
   see_also:
   - rgw_thread_pool_size
   with_legacy: true
+- name: rgw_lfuda_sync_frequency
+  type: int
+  level: advanced
+  desc: LFUDA variables' sync frequency in seconds 
+  default: 60
+  services:
+  - rgw
+  with_legacy: true
 - name: rgw_backend_store
   type: str
   level: advanced
