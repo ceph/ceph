@@ -7465,10 +7465,10 @@ void BlueStore::_close_around_db()
   _close_path();
 }
 
-int BlueStore::open_db_environment(KeyValueDB **pdb, bool to_repair)
+int BlueStore::open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair)
 {
   _kv_only = true;
-  int r = _open_db_and_around(false, to_repair);
+  int r = _open_db_and_around(read_only, to_repair);
   if (r == 0) {
     *pdb = db;
   } else {

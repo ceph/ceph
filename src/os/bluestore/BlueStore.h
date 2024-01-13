@@ -2960,7 +2960,7 @@ public:
   }
   int umount() override;
 
-  int open_db_environment(KeyValueDB **pdb, bool to_repair);
+  int open_db_environment(KeyValueDB **pdb, bool read_only, bool to_repair);
   int close_db_environment();
   BlueFS* get_bluefs();
 
