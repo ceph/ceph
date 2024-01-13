@@ -58,6 +58,7 @@ public:
     string fingerprint = "";
     bufferlist data;
     snap_t snap;
+    uint64_t ver;
   };
 
   using dup_count_t = size_t;
@@ -320,7 +321,7 @@ private:
     ObjectCursor end,
     size_t max_object_count);
   std::vector<size_t> sample_object(size_t count);
-  list<SampleDedupWorkerThread::chunk_t> scan_duplicate_chunks(ObjectItem &object, snap_t snap = 0);
+  list<SampleDedupWorkerThread::chunk_t> scan_duplicate_chunks(ObjectItem &object, uint64_t ver, snap_t snap = 0);
   bufferlist read_object(ObjectItem &object);
   std::vector<std::tuple<bufferlist, pair<uint64_t, uint64_t>>> do_cdc(
     ObjectItem &object,
@@ -385,23 +386,48 @@ void SampleDedupWorkerThread::crawl()
     list<chunk_t> redundant_chunks;
     for (size_t index : sampled_indexes) {
       ObjectItem target = objects[index];
+      auto get_ver_with_operation = 
+	[this](ObjectReadOperation &op, string &oid) -> std::optional<uint64_t> {
+	AioCompRef comp(librados::Rados::aio_create_completion());
+	int r = io_ctx.aio_operate(
+	  oid,
+	  comp.get(),
+	  &op,
+	  NULL);
+	if (r < 0) {
+	  return std::nullopt;
+	}
+	comp->wait_for_complete();
+	return comp->get_version64();
+      };
       if (snap) {
 	io_ctx.snap_set_read(librados::SNAP_DIR);
 	snap_set_t snap_set;
 	int snap_ret;
 	ObjectReadOperation op;
 	op.list_snaps(&snap_set, &snap_ret);
-	io_ctx.operate(target.oid, &op, NULL);
+	auto v = get_ver_with_operation(op, target.oid);
+	if (!v) {
+	  derr << "list snap error" << dendl;
+	  continue;
+	}
 
 	for (vector<librados::clone_info_t>::const_iterator r = snap_set.clones.begin();
 	  r != snap_set.clones.end();
 	  ++r) {
 	  io_ctx.snap_set_read(r->cloneid);
-	  auto ret = scan_duplicate_chunks(target, r->cloneid);
+	  auto ret = scan_duplicate_chunks(target, *v, r->cloneid);
 	  redundant_chunks.splice(redundant_chunks.end(), ret);
 	}
       } else {
-	auto ret = scan_duplicate_chunks(target);
+	ObjectReadOperation op;
+	op.stat(nullptr, nullptr, nullptr);
+	auto v = get_ver_with_operation(op, target.oid);
+	if (!v) {
+	  derr << "stat error" << dendl;
+	  continue;
+	}
+	auto ret = scan_duplicate_chunks(target, *v);
 	redundant_chunks.splice(redundant_chunks.end(), ret);
       }
       std::unique_lock l{m_lock};
@@ -454,7 +480,9 @@ std::vector<size_t> SampleDedupWorkerThread::sample_object(size_t count)
   return indexes;
 }
 
-list<SampleDedupWorkerThread::chunk_t> SampleDedupWorkerThread::scan_duplicate_chunks(ObjectItem &object, snap_t snap)
+list<SampleDedupWorkerThread::chunk_t> 
+SampleDedupWorkerThread::scan_duplicate_chunks(ObjectItem &object,
+  uint64_t ver, snap_t snap)
 {
   bufferlist data = read_object(object);
   list<chunk_t> redundant_chunks;
@@ -488,7 +516,8 @@ list<SampleDedupWorkerThread::chunk_t> SampleDedupWorkerThread::scan_duplicate_c
       .size = chunk_boundary.second,
       .fingerprint = fingerprint,
       .data = chunk_data,
-      .snap = snap
+      .snap = snap,
+      .ver = ver
       };
 
     dout(20) << "generate a chunk (chunk oid: " << chunk_info.oid << ", offset: " 
@@ -525,6 +554,7 @@ void SampleDedupWorkerThread::do_dedup(list<chunk_t> &redundant_chunks)
     }
 
     ObjectReadOperation op;
+    op.assert_version(chunk.ver);
     op.set_chunk(
       chunk.start,
       chunk.size,
@@ -563,6 +593,8 @@ void SampleDedupWorkerThread::do_dedup(list<chunk_t> &redundant_chunks)
       if (comp) {
 	wait_evict_comp.push_back(std::make_pair(p, std::move(comp)));
       }
+    } else {
+      dout(5) << " set_chunk returns: " << ret << dendl;
     }
     std::unique_lock l{m_lock};
     if (stop) {
