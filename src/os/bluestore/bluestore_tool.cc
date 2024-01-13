@@ -242,7 +242,7 @@ static void bluefs_import(
   }
   BlueStore bluestore(cct, path);
   KeyValueDB *db_ptr;
-  r = bluestore.open_db_environment(&db_ptr, false);
+  r = bluestore.open_db_environment(&db_ptr, false, false);
   if (r < 0) {
     cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
     exit(EXIT_FAILURE);
@@ -1117,7 +1117,7 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
     }
-    int r = bluestore.open_db_environment(&db_ptr, true);
+    int r = bluestore.open_db_environment(&db_ptr, false, true);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
@@ -1135,7 +1135,7 @@ int main(int argc, char **argv)
   } else if (action == "show-sharding") {
     BlueStore bluestore(cct.get(), path);
     KeyValueDB *db_ptr;
-    int r = bluestore.open_db_environment(&db_ptr, false);
+    int r = bluestore.open_db_environment(&db_ptr, false, false);
     if (r < 0) {
       cerr << "error preparing db environment: " << cpp_strerror(r) << std::endl;
       exit(EXIT_FAILURE);
