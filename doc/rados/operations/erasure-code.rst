@@ -179,6 +179,8 @@ This can be enabled only on a pool residing on BlueStore OSDs, since
 BlueStore's checksumming is used during deep scrubs to detect bitrot
 or other corruption. Using Filestore with EC overwrites is not only
 unsafe, but it also results in lower performance compared to BlueStore.
+Moreover, Filestore is deprecated and any Filestore OSDs in your cluster
+should be migrated to BlueStore.
 
 Erasure-coded pools do not support omap, so to use them with RBD and
 CephFS you must instruct them to store their data in an EC pool and
@@ -191,6 +193,182 @@ erasure-coded pool as the ``--data-pool`` during image creation:
 
 For CephFS, an erasure-coded pool can be set as the default data pool during
 file system creation or via `file layouts <../../../cephfs/file-layouts>`_.
+
+Erasure-coded pool overhead
+---------------------------
+
+The overhead factor (space amplification) of an erasure-coded pool
+is `(k+m) / k`.  For a 4,2 profile, the overhead is
+thus 1.5, which means that 1.5 GiB of underlying storage are used to store
+1 GiB of user data.  Contrast with default three-way replication, with
+which the overhead factor is 3.0.  Do not mistake erasure coding for a free
+lunch: there is a significant performance tradeoff, especially when using HDDs
+and when performing cluster recovery or backfill.
+
+Below is a table showing the overhead factors for various values of `k` and `m`.
+As `m` increases above 2, the incremental capacity overhead gain quickly
+experiences diminishing returns but the performance impact grows proportionally.
+We recommend that you do not choose a profile with `k` > 4 or `m` > 2 until
+and unless you fully understand the ramifications, including the number of
+failure domains your cluster topology must contain.  If  you choose `m=1`,
+expect data unavailability during maintenance and data loss if component
+failures overlap.
+
+.. list-table:: Erasure coding overhead
+   :widths: 4 4 4 4 4 4 4 4 4 4 4 4
+   :header-rows: 1
+   :stub-columns: 1
+
+   * -
+     - m=1
+     - m=2
+     - m=3
+     - m=4
+     - m=4
+     - m=6
+     - m=7
+     - m=8
+     - m=9
+     - m=10
+     - m=11
+   * - k=1
+     - 2.00
+     - 3.00
+     - 4.00
+     - 5.00
+     - 6.00
+     - 7.00
+     - 8.00
+     - 9.00
+     - 10.00
+     - 11.00
+     - 12.00
+   * - k=2
+     - 1.50
+     - 2.00
+     - 2.50
+     - 3.00
+     - 3.50
+     - 4.00
+     - 4.50
+     - 5.00
+     - 5.50
+     - 6.00
+     - 6.50
+   * - k=3
+     - 1.33
+     - 1.67
+     - 2.00
+     - 2.33
+     - 2.67
+     - 3.00
+     - 3.33
+     - 3.67
+     - 4.00
+     - 4.33
+     - 4.67
+   * - k=4
+     - 1.25
+     - 1.50
+     - 1.75
+     - 2.00
+     - 2.25
+     - 2.50
+     - 2.75
+     - 3.00
+     - 3.25
+     - 3.50
+     - 3.75
+   * - k=5
+     - 1.20
+     - 1.40
+     - 1.60
+     - 1.80
+     - 2.00
+     - 2.20
+     - 2.40
+     - 2.60
+     - 2.80
+     - 3.00
+     - 3.20
+   * - k=6
+     - 1.16
+     - 1.33
+     - 1.50
+     - 1.66
+     - 1.83
+     - 2.00
+     - 2.17
+     - 2.33
+     - 2.50
+     - 2.66
+     - 2.83
+   * - k=7
+     - 1.14
+     - 1.29
+     - 1.43
+     - 1.58
+     - 1.71
+     - 1.86
+     - 2.00
+     - 2.14
+     - 2.29
+     - 2.43
+     - 2.58
+   * - k=8
+     - 1.13
+     - 1.25
+     - 1.38
+     - 1.50
+     - 1.63
+     - 1.75
+     - 1.88
+     - 2.00
+     - 2.13
+     - 2.25
+     - 2.38
+   * - k=9
+     - 1.11
+     - 1.22
+     - 1.33
+     - 1.44
+     - 1.56
+     - 1.67
+     - 1.78
+     - 1.88
+     - 2.00
+     - 2.11
+     - 2.22
+   * - k=10
+     - 1.10
+     - 1.20
+     - 1.30
+     - 1.40
+     - 1.50
+     - 1.60
+     - 1.70
+     - 1.80
+     - 1.90
+     - 2.00
+     - 2.10
+   * - k=11
+     - 1.09
+     - 1.18
+     - 1.27
+     - 1.36
+     - 1.45
+     - 1.54
+     - 1.63
+     - 1.72
+     - 1.82
+     - 1.91
+     - 2.00
+
+
+
+
+
+
 
 
 Erasure-coded pools and cache tiering
