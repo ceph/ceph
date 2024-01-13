@@ -98,9 +98,20 @@ int main(int argc, const char *argv[])
     return 1;
   }
 
+  bool read_only =
+    cmd == "list" ||
+    cmd == "list-crc" ||
+    cmd == "dump" ||
+    cmd == "exists" ||
+    cmd == "get" ||
+    cmd == "crc" ||
+    cmd == "get-size" ||
+    cmd == "store-crc" ||
+    cmd == "stats" ||
+    cmd == "histogram";
   bool to_repair = (cmd == "destructive-repair");
   bool need_stats = (cmd == "stats");
-  StoreTool st(type, path, to_repair, need_stats);
+  StoreTool st(type, path, read_only, to_repair, need_stats);
 
   if (cmd == "destructive-repair") {
     int ret = st.destructive_repair();
