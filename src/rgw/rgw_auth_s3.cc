@@ -1552,9 +1552,15 @@ bool AWSv4ComplMulti::complete()
     std::string_view expected_trailer_signature;
     std::string calculated_trailer_signature;
 
-    if (tbuf_pos > sarrlen("\r\n0;")) {
-      const std::string_view sv_trailer(trailer_vec.data() + sarrlen("\r\n0;"),
-                                        tbuf_pos - sarrlen("\r\n0;"));
+    /* the trailer boundary is just "\r\n0" when we have no trailer
+     * signature */
+    if (tbuf_pos > sarrlen("\r\n0")) {
+      auto trailer_off = sarrlen("\r\n0");
+      if (*(trailer_vec.data() + trailer_off) == ';') {
+	++trailer_off;
+      }
+      const std::string_view sv_trailer(
+        trailer_vec.data() + trailer_off, tbuf_pos - trailer_off);
 
       if (cct()->_conf->subsys.should_gather(ceph_subsys_rgw, 10)) [[unlikely]] {
         ldout(cct(), 10) << "trailer_section: " << sv_trailer << dendl;
