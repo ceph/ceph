@@ -1217,7 +1217,7 @@ hobject_t PG::get_oid(const hobject_t& hobj)
 
 RWState::State PG::get_lock_type(const OpInfo &op_info)
 {
-
+  ceph_assert(op_info.get_flags());
   if (op_info.rwordered() && op_info.may_read()) {
     return RWState::RWEXCL;
   } else if (op_info.rwordered()) {
