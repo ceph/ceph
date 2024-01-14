@@ -118,12 +118,20 @@ show_info() {
     echo "==========================="
 }
 
+create_default_network(){
+    virsh net-define /usr/share/libvirt/networks/default.xml
+    virsh net-start default
+    virsh net-autostart default
+    sudo systemctl restart libvirtd
+}
+
 ####################################################################
 ####################################################################
 
 trap 'on_error $? $LINENO' ERR
 
 configure_libvirt
+create_default_network
 setup_minikube_env
 build_ceph_image
 create_rook_cluster
