@@ -583,18 +583,14 @@ void RGWDeleteUser_IAM::execute(optional_yield y)
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     op_ret = forward_to_master(y, site);
-    if (op_ret) {
-      return;
-    }
+  } else {
+    op_ret = check_empty();
+  }
+  if (op_ret) {
+    return;
   }
 
-  op_ret = retry_raced_user_write(this, y, user.get(),
-      [this, y] {
-        if (int r = check_empty(); r < 0) {
-          return r;
-        }
-        return user->remove_user(this, y);
-      });
+  op_ret = user->remove_user(this, y);
 
   if (op_ret == -ENOENT) {
     if (!site.is_meta_master()) {
@@ -771,9 +767,16 @@ void dump_access_key(const RGWAccessKey& key, Formatter* f)
 
 // CreateAccessKey
 class RGWCreateAccessKey_IAM : public RGWOp {
+  bufferlist post_body;
   std::unique_ptr<rgw::sal::User> user;
   RGWAccessKey key;
+
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site,
+                        RGWAccessKey& cred);
  public:
+  explicit RGWCreateAccessKey_IAM(const ceph::bufferlist& post_body)
+    : post_body(post_body) {}
+
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
@@ -830,6 +833,57 @@ int RGWCreateAccessKey_IAM::verify_permission(optional_yield y)
   return -EACCES;
 }
 
+int RGWCreateAccessKey_IAM::forward_to_master(optional_yield y,
+                                              const rgw::SiteConfig& site,
+                                              RGWAccessKey& cred)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("UserName");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+
+  XMLObj* response = parser.find_first("CreateAccessKeyResponse");;
+  if (!response) {
+    ldpp_dout(this, 5) << "ERROR: unexpected xml: CreateAccessKeyResponse" << dendl;
+    return -EINVAL;
+  }
+
+  XMLObj* result = response->find_first("CreateAccessKeyResult");
+  if (!result) {
+    ldpp_dout(this, 5) << "ERROR: unexpected xml: CreateAccessKeyResult" << dendl;
+    return -EINVAL;
+  }
+
+  XMLObj* access_key = result->find_first("AccessKey");
+  if (!user) {
+    ldpp_dout(this, 5) << "ERROR: unexpected xml: AccessKey" << dendl;
+    return -EINVAL;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("AccessKeyId", cred.id, access_key, true);
+    RGWXMLDecoder::decode_xml("SecretAccessKey", cred.key, access_key, true);
+    RGWXMLDecoder::decode_xml("CreateDate", cred.create_date, access_key);
+  } catch (RGWXMLDecoder::err& err) {
+    ldpp_dout(this, 5) << "ERROR: unexpected xml: AccessKey" << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 void RGWCreateAccessKey_IAM::execute(optional_yield y)
 {
   RGWUserInfo& info = user->get_info();
@@ -853,6 +907,7 @@ void RGWCreateAccessKey_IAM::execute(optional_yield y)
     }
   }
 
+  // generate the key. forward_to_master() may overwrite this
   if (rgw_generate_access_key(this, y, driver, key.id) < 0) {
     s->err.message = "failed to generate s3 access key";
     op_ret = -ERR_INTERNAL_ERROR;
@@ -860,6 +915,15 @@ void RGWCreateAccessKey_IAM::execute(optional_yield y)
   }
   rgw_generate_secret_key(get_cct(), key.key);
   key.create_date = ceph::real_clock::now();
+
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site, key);
+    if (op_ret) {
+      return;
+    }
+  }
+
   info.access_keys[key.id] = key;
 
   // check the current count against account limit
@@ -902,10 +966,16 @@ void RGWCreateAccessKey_IAM::send_response()
 
 // UpdateAccessKey
 class RGWUpdateAccessKey_IAM : public RGWOp {
+  bufferlist post_body;
   std::string access_key_id;
   bool new_status = false;
   std::unique_ptr<rgw::sal::User> user;
+
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site);
  public:
+  explicit RGWUpdateAccessKey_IAM(const ceph::bufferlist& post_body)
+    : post_body(post_body) {}
+
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
@@ -982,6 +1052,30 @@ int RGWUpdateAccessKey_IAM::verify_permission(optional_yield y)
   return -EACCES;
 }
 
+int RGWUpdateAccessKey_IAM::forward_to_master(optional_yield y,
+                                              const rgw::SiteConfig& site)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("AccessKeyId");
+  s->info.args.remove("Status");
+  s->info.args.remove("UserName");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 void RGWUpdateAccessKey_IAM::execute(optional_yield y)
 {
   RGWUserInfo& info = user->get_info();
@@ -996,6 +1090,14 @@ void RGWUpdateAccessKey_IAM::execute(optional_yield y)
 
   if (key->second.active == new_status) {
     return; // nothing to do, return success
+  }
+
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site);
+    if (op_ret) {
+      return;
+    }
   }
 
   key->second.active = new_status;
@@ -1023,9 +1125,15 @@ void RGWUpdateAccessKey_IAM::send_response()
 
 // DeleteAccessKey
 class RGWDeleteAccessKey_IAM : public RGWOp {
+  bufferlist post_body;
   std::string access_key_id;
   std::unique_ptr<rgw::sal::User> user;
+
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site);
  public:
+  explicit RGWDeleteAccessKey_IAM(const ceph::bufferlist& post_body)
+    : post_body(post_body) {}
+
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
@@ -1088,13 +1196,47 @@ int RGWDeleteAccessKey_IAM::verify_permission(optional_yield y)
   return -EACCES;
 }
 
+int RGWDeleteAccessKey_IAM::forward_to_master(optional_yield y,
+                                              const rgw::SiteConfig& site)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("AccessKeyId");
+  s->info.args.remove("UserName");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 void RGWDeleteAccessKey_IAM::execute(optional_yield y)
 {
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site);
+    if (op_ret) {
+      return;
+    }
+  }
+
   RGWUserInfo& info = user->get_info();
   RGWUserInfo old_info = info;
 
   auto key = info.access_keys.find(access_key_id);
   if (key == info.access_keys.end()) {
+    if (!site.is_meta_master()) {
+      return; // delete succeeded on the master
+    }
     s->err.message = "No such AccessKeyId in the user";
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
@@ -1266,14 +1408,14 @@ RGWOp* make_iam_list_users_op(const ceph::bufferlist&) {
   return new RGWListUsers_IAM;
 }
 
-RGWOp* make_iam_create_access_key_op(const ceph::bufferlist& unused) {
-  return new RGWCreateAccessKey_IAM;
+RGWOp* make_iam_create_access_key_op(const ceph::bufferlist& post_body) {
+  return new RGWCreateAccessKey_IAM(post_body);
 }
-RGWOp* make_iam_update_access_key_op(const ceph::bufferlist& unused) {
-  return new RGWUpdateAccessKey_IAM;
+RGWOp* make_iam_update_access_key_op(const ceph::bufferlist& post_body) {
+  return new RGWUpdateAccessKey_IAM(post_body);
 }
-RGWOp* make_iam_delete_access_key_op(const ceph::bufferlist& unused) {
-  return new RGWDeleteAccessKey_IAM;
+RGWOp* make_iam_delete_access_key_op(const ceph::bufferlist& post_body) {
+  return new RGWDeleteAccessKey_IAM(post_body);
 }
 RGWOp* make_iam_list_access_keys_op(const ceph::bufferlist& unused) {
   return new RGWListAccessKeys_IAM;
