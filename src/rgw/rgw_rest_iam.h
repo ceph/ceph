@@ -6,8 +6,11 @@
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_rest.h"
+#include "rgw_xml.h"
 
 
+class DoutPrefixProvider;
+namespace rgw { class SiteConfig; }
 struct RGWUserInfo;
 
 bool validate_iam_policy_name(const std::string& name, std::string& err);
@@ -16,6 +19,13 @@ bool validate_iam_user_name(const std::string& name, std::string& err);
 bool validate_iam_path(const std::string& path, std::string& err);
 
 std::string iam_user_arn(const RGWUserInfo& info);
+
+int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
+                                  const rgw::SiteConfig& site,
+                                  const RGWUserInfo& user,
+                                  bufferlist& indata,
+                                  RGWXMLDecoder::XMLParser& parser,
+                                  req_info& req, optional_yield y);
 
 class RGWHandler_REST_IAM : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
