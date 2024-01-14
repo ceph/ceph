@@ -27,7 +27,7 @@ RGWOp* make_iam_delete_user_op(const ceph::bufferlist& post_body);
 RGWOp* make_iam_list_users_op(const ceph::bufferlist& unused);
 
 // AccessKey op factory functions
-RGWOp* make_iam_create_access_key_op(const ceph::bufferlist& unused);
-RGWOp* make_iam_update_access_key_op(const ceph::bufferlist& unused);
-RGWOp* make_iam_delete_access_key_op(const ceph::bufferlist& unused);
+RGWOp* make_iam_create_access_key_op(const ceph::bufferlist& post_body);
+RGWOp* make_iam_update_access_key_op(const ceph::bufferlist& post_body);
+RGWOp* make_iam_delete_access_key_op(const ceph::bufferlist& post_body);
 RGWOp* make_iam_list_access_keys_op(const ceph::bufferlist& unused);
