@@ -10,14 +10,6 @@
 
 class RGWRestRole : public RGWRESTOp {
 protected:
-  std::string role_name;
-  std::string role_path;
-  std::string trust_policy;
-  std::string policy_name;
-  std::string perm_policy;
-  std::string path_prefix;
-  std::string max_session_duration;
-  std::multimap<std::string,std::string> tags;
   std::unique_ptr<rgw::sal::RGWRole> _role;
   int verify_permission(optional_yield y) override;
   int init_processing(optional_yield y) override;
@@ -39,6 +31,11 @@ public:
 
 class RGWCreateRole : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::string role_name;
+  std::string role_path;
+  std::string trust_policy;
+  std::string max_session_duration;
+  std::multimap<std::string, std::string> tags;
 public:
   RGWCreateRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   int verify_permission(optional_yield y) override;
@@ -52,6 +49,7 @@ public:
 
 class RGWDeleteRole : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::string role_name;
 public:
   RGWDeleteRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
@@ -62,6 +60,7 @@ public:
 };
 
 class RGWGetRole : public RGWRoleRead {
+  std::string role_name;
   int _verify_permission(const rgw::sal::RGWRole* role);
 public:
   RGWGetRole() = default;
@@ -76,6 +75,8 @@ public:
 
 class RGWModifyRoleTrustPolicy : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::string role_name;
+  std::string trust_policy;
 public:
   RGWModifyRoleTrustPolicy(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
@@ -86,6 +87,7 @@ public:
 };
 
 class RGWListRoles : public RGWRoleRead {
+  std::string path_prefix;
 public:
   RGWListRoles() = default;
   int verify_permission(optional_yield y) override;
@@ -99,6 +101,9 @@ public:
 
 class RGWPutRolePolicy : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::string role_name;
+  std::string policy_name;
+  std::string perm_policy;
 public:
   RGWPutRolePolicy(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
@@ -109,6 +114,9 @@ public:
 };
 
 class RGWGetRolePolicy : public RGWRoleRead {
+  std::string role_name;
+  std::string policy_name;
+  std::string perm_policy;
 public:
   RGWGetRolePolicy() = default;
   void execute(optional_yield y) override;
@@ -119,6 +127,7 @@ public:
 };
 
 class RGWListRolePolicies : public RGWRoleRead {
+  std::string role_name;
 public:
   RGWListRolePolicies() = default;
   void execute(optional_yield y) override;
@@ -130,6 +139,8 @@ public:
 
 class RGWDeleteRolePolicy : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::string role_name;
+  std::string policy_name;
 public:
   RGWDeleteRolePolicy(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
@@ -141,6 +152,8 @@ public:
 
 class RGWTagRole : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::string role_name;
+  std::multimap<std::string, std::string> tags;
 public:
   RGWTagRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
@@ -151,6 +164,8 @@ public:
 };
 
 class RGWListRoleTags : public RGWRoleRead {
+  std::string role_name;
+  std::multimap<std::string, std::string> tags;
 public:
   RGWListRoleTags() = default;
   void execute(optional_yield y) override;
@@ -162,6 +177,7 @@ public:
 
 class RGWUntagRole : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::string role_name;
   std::vector<std::string> untag;
 public:
   RGWUntagRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
@@ -174,6 +190,8 @@ public:
 
 class RGWUpdateRole : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::string role_name;
+  std::string max_session_duration;
 public:
   RGWUpdateRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
