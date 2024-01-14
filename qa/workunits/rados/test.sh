@@ -4,6 +4,10 @@ set -ex
 parallel=1
 [ "$1" = "--serial" ] && parallel=0
 
+# let crimson run in serial mode
+crimson=0
+[ "$1" = "--crimson" ] && parallel=0 && crimson=1
+
 color=""
 [ -t 1 ] && color="--gtest_color=yes"
 
@@ -49,7 +53,7 @@ do
 done
 
 for f in \
-    cls cmd handler_error io list misc pool read_operations snapshots \
+    cls cmd handler_error io ec_io list misc pool read_operations snapshots \
     watch_notify write_operations
 do
     if [ $parallel -eq 1 ]; then
@@ -60,6 +64,10 @@ do
 	echo "test $f on pid $pid"
 	pids[$f]=$pid
     else
+	if [ $crimson -eq 1 ] && [ $f = "ec_io" ]; then
+		echo "Skipping EC with Crimson"
+		continue
+	fi
 	ceph_test_neorados_$f
     fi
 done
