@@ -64,13 +64,15 @@ int RGWRestRole::init_processing(optional_yield y)
   return 0;
 }
 
-int RGWRestRole::parse_tags()
+static int parse_tags(const DoutPrefixProvider* dpp,
+                      const std::map<std::string, std::string>& params,
+                      std::multimap<std::string, std::string>& tags,
+                      std::string& message)
 {
   vector<string> keys, vals;
-  auto val_map = s->info.args.get_params();
   const regex pattern_key("Tags.member.([0-9]+).Key");
   const regex pattern_value("Tags.member.([0-9]+).Value");
-  for (auto& v : val_map) {
+  for (const auto& v : params) {
     string key_index="", value_index="";
     for(sregex_iterator it = sregex_iterator(
         v.first.begin(), v.first.end(), pattern_key);
@@ -78,7 +80,7 @@ int RGWRestRole::parse_tags()
         smatch match;
         match = *it;
         key_index = match.str(1);
-        ldout(s->cct, 20) << "Key index: " << match.str(1) << dendl;
+        ldpp_dout(dpp, 20) << "Key index: " << match.str(1) << dendl;
         if (!key_index.empty()) {
           int index = stoi(key_index);
           auto pos = keys.begin() + (index-1);
@@ -91,7 +93,7 @@ int RGWRestRole::parse_tags()
         smatch match;
         match = *it;
         value_index = match.str(1);
-        ldout(s->cct, 20) << "Value index: " << match.str(1) << dendl;
+        ldpp_dout(dpp, 20) << "Value index: " << match.str(1) << dendl;
         if (!value_index.empty()) {
           int index = stoi(value_index);
           auto pos = vals.begin() + (index-1);
@@ -100,12 +102,12 @@ int RGWRestRole::parse_tags()
     }
   }
   if (keys.size() != vals.size()) {
-    ldout(s->cct, 0) << "No. of keys doesn't match with no. of values in tags" << dendl;
+    message = "Tags array found mismatched Keys/Values";
     return -EINVAL;
   }
   for (size_t i = 0; i < keys.size(); i++) {
     tags.emplace(keys[i], vals[i]);
-    ldout(s->cct, 0) << "Tag Key: " << keys[i] << " Tag Value is: " << vals[i] << dendl;
+    ldpp_dout(dpp, 4) << "Tag Key: " << keys[i] << " Tag Value is: " << vals[i] << dendl;
   }
   return 0;
 }
@@ -184,14 +186,14 @@ int RGWCreateRole::get_params()
     return -ERR_MALFORMED_DOC;
   }
 
-  int ret = parse_tags();
+  int ret = parse_tags(this, s->info.args.get_params(), tags, s->err.message);
   if (ret < 0) {
     return ret;
   }
 
   if (tags.size() > 50) {
-    ldout(s->cct, 0) << "No. tags is greater than 50" << dendl;
-    return -EINVAL;
+    s->err.message = "Tags count cannot exceed 50";
+    return -ERR_LIMIT_EXCEEDED;
   }
 
   return 0;
@@ -765,7 +767,7 @@ int RGWTagRole::get_params()
     ldout(s->cct, 0) << "ERROR: Role name is empty" << dendl;
     return -EINVAL;
   }
-  int ret = parse_tags();
+  int ret = parse_tags(this, s->info.args.get_params(), tags, s->err.message);
   if (ret < 0) {
     return ret;
   }

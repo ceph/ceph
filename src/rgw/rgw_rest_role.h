@@ -24,7 +24,6 @@ protected:
   int init_processing(optional_yield y) override;
   void send_response() override;
   virtual uint64_t get_op() = 0;
-  int parse_tags();
 };
 
 class RGWRoleRead : public RGWRestRole {
