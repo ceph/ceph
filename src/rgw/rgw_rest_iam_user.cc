@@ -21,6 +21,7 @@
 #include "rgw_arn.h"
 #include "rgw_common.h"
 #include "rgw_op.h"
+#include "rgw_process_env.h"
 #include "rgw_rest.h"
 #include "rgw_rest_iam.h"
 
@@ -46,8 +47,14 @@ static void dump_iam_user(const RGWUserInfo& info, Formatter* f)
 
 // CreateUser
 class RGWCreateUser_IAM : public RGWOp {
+  bufferlist post_body;
   RGWUserInfo info;
+
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site, std::string& uid);
  public:
+  explicit RGWCreateUser_IAM(const ceph::bufferlist& post_body)
+    : post_body(post_body) {}
+
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
@@ -93,6 +100,63 @@ int RGWCreateUser_IAM::verify_permission(optional_yield y)
   return -EACCES;
 }
 
+int RGWCreateUser_IAM::forward_to_master(optional_yield y,
+                                         const rgw::SiteConfig& site,
+                                         std::string& uid)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("UserName");
+  s->info.args.remove("Path");
+  s->info.args.remove("PermissionsBoundary");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+  auto& params = s->info.args.get_params();
+  if (auto lower = params.lower_bound("Tags.member."); lower != params.end()) {
+    auto upper = params.upper_bound("Tags.member.");
+    params.erase(lower, upper);
+  }
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+
+  XMLObj* response = parser.find_first("CreateUserResponse");;
+  if (!response) {
+    ldpp_dout(this, 5) << "ERROR: unexpected xml: CreateUserResponse" << dendl;
+    return -EINVAL;
+  }
+
+  XMLObj* result = response->find_first("CreateUserResult");
+  if (!result) {
+    ldpp_dout(this, 5) << "ERROR: unexpected xml: CreateUserResult" << dendl;
+    return -EINVAL;
+  }
+
+  XMLObj* user = result->find_first("User");
+  if (!user) {
+    ldpp_dout(this, 5) << "ERROR: unexpected xml: User" << dendl;
+    return -EINVAL;
+  }
+
+  try {
+    RGWXMLDecoder::decode_xml("UserId", uid, user, true);
+  } catch (RGWXMLDecoder::err& err) {
+    ldpp_dout(this, 5) << "ERROR: unexpected xml: UserId" << dendl;
+    return -EINVAL;
+  }
+
+  ldpp_dout(this, 4) << "user_id decoded from forwarded response is " << uid << dendl;
+  return 0;
+}
+
 void RGWCreateUser_IAM::execute(optional_yield y)
 {
   // check the current user count against account limit
@@ -123,13 +187,21 @@ void RGWCreateUser_IAM::execute(optional_yield y)
     }
   }
 
-  // generate user id
+  // generate user id. forward_to_master() may overwrite this
   uuid_d uuid;
   uuid.generate_random();
   info.user_id.id = uuid.to_string();
   info.user_id.tenant = s->auth.identity->get_tenant();
 
   info.create_date = ceph::real_clock::now();
+
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site, info.user_id.id);
+    if (op_ret) {
+      return;
+    }
+  }
 
   std::unique_ptr<rgw::sal::User> user = driver->get_user(info.user_id);
   user->get_info() = info;
@@ -251,10 +323,16 @@ void RGWGetUser_IAM::send_response()
 
 // UpdateUser
 class RGWUpdateUser_IAM : public RGWOp {
+  bufferlist post_body;
   std::string new_path;
   std::string new_username;
   std::unique_ptr<rgw::sal::User> user;
+
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site);
  public:
+  explicit RGWUpdateUser_IAM(const ceph::bufferlist& post_body)
+    : post_body(post_body) {}
+
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
@@ -314,8 +392,39 @@ int RGWUpdateUser_IAM::verify_permission(optional_yield y)
   return -EACCES;
 }
 
+int RGWUpdateUser_IAM::forward_to_master(optional_yield y, const rgw::SiteConfig& site)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("NewPath");
+  s->info.args.remove("NewUserName");
+  s->info.args.remove("UserName");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
 void RGWUpdateUser_IAM::execute(optional_yield y)
 {
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site);
+    if (op_ret) {
+      return;
+    }
+  }
+
   RGWUserInfo& info = user->get_info();
   RGWUserInfo old_info = info;
 
@@ -357,8 +466,15 @@ void RGWUpdateUser_IAM::send_response()
 
 // DeleteUser
 class RGWDeleteUser_IAM : public RGWOp {
+  bufferlist post_body;
   std::unique_ptr<rgw::sal::User> user;
+
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site);
+  int check_empty();
  public:
+  explicit RGWDeleteUser_IAM(const ceph::bufferlist& post_body)
+    : post_body(post_body) {}
+
   int init_processing(optional_yield y) override;
   int verify_permission(optional_yield y) override;
   void execute(optional_yield y) override;
@@ -407,14 +523,40 @@ int RGWDeleteUser_IAM::verify_permission(optional_yield y)
   return -EACCES;
 }
 
-void RGWDeleteUser_IAM::execute(optional_yield y)
+int RGWDeleteUser_IAM::forward_to_master(optional_yield y, const rgw::SiteConfig& site)
 {
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("UserName");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int RGWDeleteUser_IAM::check_empty()
+{
+  if (!s->penv.site->is_meta_master()) {
+    // only check on the master zone. if a forwarded DeleteUser request
+    // succeeds on the master zone, it needs to succeed here too
+    return 0;
+  }
+
   // verify that all user resources are removed first
   const RGWUserInfo& info = user->get_info();
   if (!info.access_keys.empty()) {
     s->err.message = "The user cannot be deleted until its AccessKeys are removed";
-    op_ret = -ERR_DELETE_CONFLICT;
-    return;
+    return -ERR_DELETE_CONFLICT;
   }
 
   const auto& attrs = user->get_attrs();
@@ -424,18 +566,45 @@ void RGWDeleteUser_IAM::execute(optional_yield y)
       decode(policies, p->second);
     } catch (const buffer::error&) {
       ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
-      op_ret = -EIO;
-      return;
+      return -EIO;
     }
 
     if (!policies.empty()) {
       s->err.message = "The user cannot be deleted until all user policies are removed";
-      op_ret = -ERR_DELETE_CONFLICT;
+      return -ERR_DELETE_CONFLICT;
+    }
+  }
+
+  return 0;
+}
+
+void RGWDeleteUser_IAM::execute(optional_yield y)
+{
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site);
+    if (op_ret) {
       return;
     }
   }
 
-  op_ret = user->remove_user(this, y);
+  op_ret = retry_raced_user_write(this, y, user.get(),
+      [this, y] {
+        if (int r = check_empty(); r < 0) {
+          return r;
+        }
+        return user->remove_user(this, y);
+      });
+
+  if (op_ret == -ENOENT) {
+    if (!site.is_meta_master()) {
+      // delete succeeded on the master, return that success here too
+      op_ret = 0;
+    } else {
+      s->err.message = "No such UserName in the account";
+      op_ret = -ERR_NO_SUCH_ENTITY;
+    }
+  }
 }
 
 void RGWDeleteUser_IAM::send_response()
@@ -1081,17 +1250,17 @@ void RGWListAccessKeys_IAM::send_response()
 }
 
 
-RGWOp* make_iam_create_user_op(const ceph::bufferlist&) {
-  return new RGWCreateUser_IAM;
+RGWOp* make_iam_create_user_op(const ceph::bufferlist& post_body) {
+  return new RGWCreateUser_IAM(post_body);
 }
 RGWOp* make_iam_get_user_op(const ceph::bufferlist&) {
   return new RGWGetUser_IAM;
 }
-RGWOp* make_iam_update_user_op(const ceph::bufferlist&) {
-  return new RGWUpdateUser_IAM;
+RGWOp* make_iam_update_user_op(const ceph::bufferlist& post_body) {
+  return new RGWUpdateUser_IAM(post_body);
 }
-RGWOp* make_iam_delete_user_op(const ceph::bufferlist&) {
-  return new RGWDeleteUser_IAM;
+RGWOp* make_iam_delete_user_op(const ceph::bufferlist& post_body) {
+  return new RGWDeleteUser_IAM(post_body);
 }
 RGWOp* make_iam_list_users_op(const ceph::bufferlist&) {
   return new RGWListUsers_IAM;
