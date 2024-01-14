@@ -7,6 +7,7 @@ from cpython cimport PyObject, ref, exc, array
 from libc.stdint cimport *
 from libc.stdlib cimport malloc, realloc, free
 from cstat cimport stat
+cimport libcpp
 
 IF BUILD_DOC:
     include "mock_rgw.pxi"
@@ -373,7 +374,7 @@ cdef class LibRGWFS(object):
         cdef:
             rgw_file_handle *_dir_handler = <rgw_file_handle*>dir_handler.handler
             uint64_t _offset = offset
-            bint _eof
+            libcpp.bool _eof
             uint32_t _flags = flags
         with nogil:
             ret = rgw_readdir(self.fs, _dir_handler, &_offset, &readdir_cb,

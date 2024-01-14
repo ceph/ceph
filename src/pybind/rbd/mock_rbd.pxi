@@ -3,6 +3,11 @@
 from libc.stdint cimport *
 from ctime cimport time_t, timespec
 
+# Make the bool type available as libcpp.bool, for both C and C++.
+cimport libcpp
+cdef extern from "<stdbool.h>":
+    pass
+
 cdef nogil:
     enum:
         _LIBRADOS_SNAP_HEAD "LIBRADOS_SNAP_HEAD"
@@ -637,7 +642,7 @@ cdef nogil:
     int rbd_snap_is_protected(rbd_image_t image, const char *snap_name,
                               int *is_protected):
         pass
-    int rbd_snap_exists(rbd_image_t image, const char *snapname, bint *exists):
+    int rbd_snap_exists(rbd_image_t image, const char *snapname, libcpp.bool *exists):
         pass
     int rbd_snap_get_limit(rbd_image_t image, uint64_t *limit):
         pass
@@ -896,7 +901,7 @@ cdef nogil:
                            size_t *size):
         pass
     int rbd_namespace_exists(rados_ioctx_t io, const char *namespace_name,
-                             bint *exists):
+                             libcpp.bool *exists):
         pass
     int rbd_pool_init(rados_ioctx_t io, bint force):
         pass
