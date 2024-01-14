@@ -9,6 +9,8 @@
 #include "rgw_rest_role.h"
 #include "rgw_rest_user_policy.h"
 #include "rgw_rest_oidc_provider.h"
+#include "rgw_rest_conn.h"
+#include "driver/rados/rgw_zone.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -88,3 +90,55 @@ RGWRESTMgr_IAM::get_handler(rgw::sal::Driver* driver,
   bufferlist bl;
   return new RGWHandler_REST_IAM(auth_registry, bl);
 }
+
+int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
+                                  const rgw::SiteConfig& site,
+                                  const RGWUserInfo& user,
+                                  bufferlist& indata,
+                                  RGWXMLDecoder::XMLParser& parser,
+                                  req_info& req, optional_yield y)
+{
+  const auto& period = site.get_period();
+  if (!period) {
+    return 0; // not multisite
+  }
+  if (site.is_meta_master()) {
+    return 0; // don't need to forward metadata requests
+  }
+  const auto& pmap = period->period_map;
+  auto zg = pmap.zonegroups.find(pmap.master_zonegroup);
+  if (zg == pmap.zonegroups.end()) {
+    return -EINVAL;
+  }
+  auto z = zg->second.zones.find(zg->second.master_zone);
+  if (z == zg->second.zones.end()) {
+    return -EINVAL;
+  }
+
+  RGWAccessKey creds;
+  if (auto i = user.access_keys.begin(); i != user.access_keys.end()) {
+    creds.id = i->first;
+    creds.key = i->second.key;
+  }
+
+  // use the master zone's endpoints
+  auto conn = RGWRESTConn{dpp->get_cct(), z->second.id, z->second.endpoints,
+                          std::move(creds), zg->second.id, zg->second.api_name};
+  bufferlist outdata;
+  constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
+  int ret = conn.forward_iam_request(dpp, req, nullptr, max_response_size,
+                                     &indata, &outdata, y);
+  if (ret < 0) {
+    return ret;
+  }
+
+  std::string r = rgw_bl_str(outdata);
+  boost::replace_all(r, "&quot;", "\"");
+
+  if (!parser.parse(r.c_str(), r.length(), 1)) {
+    ldpp_dout(dpp, 0) << "ERROR: failed to parse response from master zonegroup" << dendl;
+    return -EIO;
+  }
+  return 0;
+}
+

@@ -6,7 +6,21 @@
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_rest.h"
+#include "rgw_xml.h"
 
+inline constexpr const char* RGW_REST_IAM_XMLNS =
+    "https://iam.amazonaws.com/doc/2010-05-08/";
+
+class DoutPrefixProvider;
+namespace rgw { class SiteConfig; }
+struct RGWUserInfo;
+
+int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
+                                  const rgw::SiteConfig& site,
+                                  const RGWUserInfo& user,
+                                  bufferlist& indata,
+                                  RGWXMLDecoder::XMLParser& parser,
+                                  req_info& req, optional_yield y);
 class RGWHandler_REST_IAM : public RGWHandler_REST {
   const rgw::auth::StrategyRegistry& auth_registry;
   bufferlist bl_post_body;
