@@ -679,8 +679,8 @@ limit.
 Get User Rate Limit
 -------------------
 
-The ``radosgw-admin ratelimit get`` command returns the current configured rate
-limit parameters.
+The ``radosgw-admin ratelimit get`` command returns the currently configured
+rate limit parameters.
 
 The following is the general form of the command that returns the current
 configured limit parameters:  
@@ -738,18 +738,26 @@ specific rate limit attribute check is disabled.
 Get Bucket Rate Limit
 ---------------------
 
-Get the current configured rate limit parameters
-For example:: 
+The ``radosgw-admin ratelimit get`` command returns the current configured rate
+limit parameters.
 
-	radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket>
+The following is the general form of the command that returns the current
+configured limit parameters:
 
-For example:: 
+.. prompt:: bash
 
-	radosgw-admin ratelimit get --ratelimit-scope=bucket --bucket=mybucket
+   radosgw-admin ratelimit get --ratelimit-scope=bucket --bucket=<bucket>
 
+An example of using ``radosgw-admin ratelimit get`` to return the rate limit
+parameters for a bucket might look like this:
 
-A 0 value for num ops and / or num bytes means that the
-specific rate limit attribute check is disabled.
+.. prompt:: bash
+
+   radosgw-admin ratelimit get --ratelimit-scope=bucket --bucket=mybucket
+
+A value of ``0`` assigned to ``--max-read-ops``, ``--max-read-bytes``,
+``--max-write-ops``, or ``--max-write-bytes`` disables the specified rate
+limit.
 
 
 Enable/Disable Bucket Rate Limit
