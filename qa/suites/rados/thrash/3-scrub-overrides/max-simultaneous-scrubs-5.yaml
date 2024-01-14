@@ -1,0 +1,5 @@
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd max scrubs: 5
