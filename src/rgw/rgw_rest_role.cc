@@ -1,7 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include <algorithm>
 #include <errno.h>
+#include <iterator>
 #include <regex>
 
 #include "common/errno.h"
@@ -874,11 +876,14 @@ int RGWUntagRole::get_params()
     return -EINVAL;
   }
 
-  auto val_map = s->info.args.get_params();
-  for (auto& it : val_map) {
-    if (it.first.find("TagKeys.member.") != string::npos) {
-        tagKeys.emplace_back(it.second);
-    }
+  const auto& params = s->info.args.get_params();
+  const std::string prefix = "TagKeys.member.";
+  if (auto l = params.lower_bound(prefix); l != params.end()) {
+    // copy matching values into untag vector
+    std::transform(l, params.upper_bound(prefix), std::back_inserter(untag),
+        [] (const std::pair<const std::string, std::string>& p) {
+          return p.second;
+        });
   }
   return 0;
 }
@@ -903,17 +908,11 @@ void RGWUntagRole::execute(optional_yield y)
     s->info.args.remove("RoleName");
     s->info.args.remove("Action");
     s->info.args.remove("Version");
-    auto& val_map = s->info.args.get_params();
-    std::vector<std::multimap<std::string, std::string>::iterator> iters;
-    for (auto it = val_map.begin(); it!= val_map.end(); it++) {
-      if (it->first.find("Tags.member.") == 0) {
-        iters.emplace_back(it);
-      }
+    auto& params = s->info.args.get_params();
+    if (auto l = params.lower_bound("TagKeys.member."); l != params.end()) {
+      params.erase(l, params.upper_bound("TagKeys.member."));
     }
 
-    for (auto& it : iters) {
-      val_map.erase(it);
-    }
     op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
                                            bl_post_body, parser, s->info, y);
     if (op_ret < 0) {
@@ -922,7 +921,7 @@ void RGWUntagRole::execute(optional_yield y)
     }
   }
 
-  _role->erase_tags(tagKeys);
+  _role->erase_tags(untag);
   op_ret = _role->update(this, y);
 
   if (op_ret == 0) {

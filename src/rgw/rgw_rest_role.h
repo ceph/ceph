@@ -18,7 +18,6 @@ protected:
   std::string path_prefix;
   std::string max_session_duration;
   std::multimap<std::string,std::string> tags;
-  std::vector<std::string> tagKeys;
   std::unique_ptr<rgw::sal::RGWRole> _role;
   int verify_permission(optional_yield y) override;
   int init_processing(optional_yield y) override;
@@ -163,6 +162,7 @@ public:
 
 class RGWUntagRole : public RGWRoleWrite {
   bufferlist bl_post_body;
+  std::vector<std::string> untag;
 public:
   RGWUntagRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   void execute(optional_yield y) override;
