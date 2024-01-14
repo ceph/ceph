@@ -20,10 +20,10 @@
 class RGWOp;
 
 // IAM User op factory functions
-RGWOp* make_iam_create_user_op(const ceph::bufferlist& unused);
+RGWOp* make_iam_create_user_op(const ceph::bufferlist& post_body);
 RGWOp* make_iam_get_user_op(const ceph::bufferlist& unused);
-RGWOp* make_iam_update_user_op(const ceph::bufferlist& unused);
-RGWOp* make_iam_delete_user_op(const ceph::bufferlist& unused);
+RGWOp* make_iam_update_user_op(const ceph::bufferlist& post_body);
+RGWOp* make_iam_delete_user_op(const ceph::bufferlist& post_body);
 RGWOp* make_iam_list_users_op(const ceph::bufferlist& unused);
 
 // AccessKey op factory functions
