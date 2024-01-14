@@ -249,7 +249,10 @@ ClientRequest::process_op(
 	  -> PG::load_obc_iertr::future<> {
 	  DEBUGDPP("{}.{}: entered get_obc stage, about to wait_scrub",
 		   *pg, *this, this_instance_id);
-          op_info.set_from_op(&*m, *pg->get_osdmap());
+          if (int res = op_info.set_from_op(&*m, *pg->get_osdmap());
+              res != 0) {
+	    return reply_op_error(pg, res);
+          }
 	  return ihref.enter_blocker(
 	    *this,
 	    pg->scrubber,
