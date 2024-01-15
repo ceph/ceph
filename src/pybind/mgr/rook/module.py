@@ -10,7 +10,7 @@ from ceph.deployment import inventory
 from ceph.deployment.service_spec import ServiceSpec, NFSServiceSpec, RGWSpec, PlacementSpec
 from ceph.utils import datetime_now
 
-from typing import List, Dict, Optional, Callable, Any, TypeVar, Tuple, TYPE_CHECKING
+from typing import List, Dict, Optional, Callable, Any, TypeVar, Tuple, TYPE_CHECKING  
 
 try:
     from ceph.deployment.drive_group import DriveGroupSpec

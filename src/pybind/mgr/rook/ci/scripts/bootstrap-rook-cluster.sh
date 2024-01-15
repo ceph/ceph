@@ -16,11 +16,16 @@ on_error() {
 }
 
 configure_libvirt(){
-    sudo usermod -aG libvirt $(id -un)
-    sudo su -l $USER  # Avoid having to log out and log in for group addition to take effect.
-    sudo systemctl enable --now libvirtd
-    sudo systemctl restart libvirtd
-    sleep 10 # wait some time for libvirtd service to restart
+    if sudo usermod -aG libvirt $(id -un); then
+	echo "User added to libvirt group successfully."
+	sudo usermod -aG libvirt $(id -un)
+	sudo systemctl enable --now libvirtd
+	sudo systemctl restart libvirtd
+	sleep 10 # wait some time for libvirtd service to restart
+	newgrp libvirt
+    else
+	echo "Error adding user to libvirt group."
+    fi
 }
 
 setup_minikube_env() {
@@ -118,12 +123,34 @@ show_info() {
     echo "==========================="
 }
 
+recreate_default_network(){
+    if sudo virsh net-destroy default; then
+	sudo virsh net-undefine default
+    fi
+
+    sudo virsh net-define /usr/share/libvirt/networks/default.xml
+    if sudo virsh net-start default; then
+        echo "Network 'default' started successfully."
+    else
+        # Optionally, handle the error (e.g., print a message)
+        echo "Failed to start network 'default', but continuing..."
+    fi
+
+    sudo systemctl restart libvirtd
+    sleep 10 # wait some time for libvirtd service to restart
+
+    # Just some debugging information
+    all_networks=$(virsh net-list --all)
+    groups=$(groups)
+}
+
 ####################################################################
 ####################################################################
 
 trap 'on_error $? $LINENO' ERR
 
 configure_libvirt
+recreate_default_network
 setup_minikube_env
 build_ceph_image
 create_rook_cluster
