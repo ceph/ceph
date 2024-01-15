@@ -83,6 +83,7 @@ elif [ "$(uname)" == Darwin ] ; then
   ARGS+=" -DWITH_RADOSGW_KAFKA_ENDPOINT=OFF"
   # currently, rgw posix driver requires inotify
   ARGS+=" -DWITH_RADOSGW_POSIX=OFF"
+  ARGS+=" -DWITH_JAEGER=OFF"
 
 # you should have configured and bootstrapped brew
   ARGS+=" -DICU_ROOT=$(brew --prefix icu4c)"
