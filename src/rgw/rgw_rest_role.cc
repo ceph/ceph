@@ -28,42 +28,16 @@ using namespace std;
 
 int RGWRestRole::verify_permission(optional_yield y)
 {
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
-  }
-  
-  string role_name = s->info.args.get("RoleName");
-  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
-    return ret;
+  if (verify_user_permission(this, s, resource, action)) {
+    return 0;
   }
 
-  string resource_name = _role->get_path() + role_name;
-  uint64_t op = get_op();
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(resource_name,
-                                            "role",
-                                             s->user->get_tenant(), true),
-                                             op)) {
-    return -EACCES;
-  }
-
-  return 0;
+  return RGWRESTOp::verify_permission(y);
 }
 
-int RGWRestRole::init_processing(optional_yield y)
+int RGWRestRole::check_caps(const RGWUserCaps& caps)
 {
-  string role_name = s->info.args.get("RoleName");
-  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
-                                                             s->user->get_tenant());
-  if (int ret = role->get(s, y); ret < 0) {
-    if (ret == -ENOENT) {
-      return -ERR_NO_ROLE_FOUND;
-    }
-    return ret;
-  }
-  _role = std::move(role);
-  return 0;
+  return caps.check_cap("roles", perm);
 }
 
 static int parse_tags(const DoutPrefixProvider* dpp,
@@ -114,68 +88,57 @@ static int parse_tags(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-void RGWRestRole::send_response()
+static rgw::ARN make_role_arn(const std::string& path,
+                              const std::string& name,
+                              const std::string& account)
 {
-  if (op_ret) {
-    set_req_state_err(s, op_ret);
-  }
-  dump_errno(s);
-  end_header(s, this);
+  return {string_cat_reserve(path, name), "role", account, true};
 }
 
-int RGWRoleRead::check_caps(const RGWUserCaps& caps)
+static int load_role(const DoutPrefixProvider* dpp, optional_yield y,
+                     rgw::sal::Driver* driver,
+                     const std::string& tenant,
+                     const std::string& name,
+                     std::unique_ptr<rgw::sal::RGWRole>& role,
+                     rgw::ARN& resource,
+                     std::string& message)
 {
-    return caps.check_cap("roles", RGW_CAP_READ);
+  role = driver->get_role(name, tenant);
+  const int r = role->get(dpp, y);
+  if (r == -ENOENT) {
+    message = "No such RoleName in the tenant";
+    return -ERR_NO_ROLE_FOUND;
+  }
+  if (r >= 0) {
+    resource = make_role_arn(role->get_path(),
+                             role->get_name(),
+                             role->get_tenant());
+  }
+  return r;
 }
 
-int RGWRoleWrite::check_caps(const RGWUserCaps& caps)
-{
-    return caps.check_cap("roles", RGW_CAP_WRITE);
-}
-
-int RGWCreateRole::verify_permission(optional_yield y)
-{
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
-  }
-
-  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
-    return ret;
-  }
-
-  string role_name = s->info.args.get("RoleName");
-  string role_path = s->info.args.get("Path");
-
-  string resource_name = role_path + role_name;
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(resource_name,
-                                            "role",
-                                             s->user->get_tenant(), true),
-                                             get_op())) {
-    return -EACCES;
-  }
-  return 0;
-}
 
 int RGWCreateRole::init_processing(optional_yield y)
 {
-  return 0; // avoid calling RGWRestRole::init_processing()
-}
-
-int RGWCreateRole::get_params()
-{
   role_name = s->info.args.get("RoleName");
-  role_path = s->info.args.get("Path");
-  trust_policy = s->info.args.get("AssumeRolePolicyDocument");
-  max_session_duration = s->info.args.get("MaxSessionDuration");
-
-  if (role_name.empty() || trust_policy.empty()) {
-    ldpp_dout(this, 20) << "ERROR: one of role name or assume role policy document is empty"
-    << dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
 
+  role_path = s->info.args.get("Path");
+  if (role_path.empty()) {
+    role_path = "/";
+  } else if (!validate_iam_path(role_path, s->err.message)) {
+    return -EINVAL;
+  }
+
+  trust_policy = s->info.args.get("AssumeRolePolicyDocument");
+  max_session_duration = s->info.args.get("MaxSessionDuration");
+
+  if (trust_policy.empty()) {
+    s->err.message = "Missing required element AssumeRolePolicyDocument";
+    return -EINVAL;
+  }
   bufferlist bl = bufferlist::static_from_string(trust_policy);
   try {
     const rgw::IAM::Policy p(
@@ -198,15 +161,12 @@ int RGWCreateRole::get_params()
     return -ERR_LIMIT_EXCEEDED;
   }
 
+  resource = make_role_arn(role_path, role_name, s->user->get_tenant());
   return 0;
 }
 
 void RGWCreateRole::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
   std::string user_tenant = s->user->get_tenant();
   std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
 							    user_tenant,
@@ -309,25 +269,20 @@ void RGWCreateRole::execute(optional_yield y)
   }
 }
 
-int RGWDeleteRole::get_params()
+int RGWDeleteRole::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-
-  if (role_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: Role name is empty"<< dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
 
-  return 0;
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWDeleteRole::execute(optional_yield y)
 {
   bool is_master = true;
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
 
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
@@ -351,7 +306,7 @@ void RGWDeleteRole::execute(optional_yield y)
     }
   }
 
-  op_ret = _role->delete_obj(s, y);
+  op_ret = role->delete_obj(s, y);
 
   if (op_ret == -ENOENT) {
     //Role has been deleted since metadata from master has synced up
@@ -371,106 +326,56 @@ void RGWDeleteRole::execute(optional_yield y)
   }
 }
 
-int RGWGetRole::verify_permission(optional_yield y)
-{
-  return 0;
-}
-
-int RGWGetRole::_verify_permission(const rgw::sal::RGWRole* role)
-{
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
-  }
-
-  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
-    return ret;
-  }
-
-  string resource_name = role->get_path() + role->get_name();
-  if (!verify_user_permission(this,
-                              s,
-                              rgw::ARN(resource_name,
-                                            "role",
-                                             s->user->get_tenant(), true),
-                                             get_op())) {
-    return -EACCES;
-  }
-  return 0;
-}
-
 int RGWGetRole::init_processing(optional_yield y)
 {
-  return 0; // avoid calling RGWRestRole::init_processing()
-}
-
-int RGWGetRole::get_params()
-{
   role_name = s->info.args.get("RoleName");
-
-  if (role_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: Role name is empty"<< dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
 
-  return 0;
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWGetRole::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-  std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
-							    s->user->get_tenant());
-  op_ret = role->get(s, y);
-
-  if (op_ret == -ENOENT) {
-    op_ret = -ERR_NO_ROLE_FOUND;
-    return;
-  }
-
-  op_ret = _verify_permission(role.get());
-
-  if (op_ret == 0) {
-    s->formatter->open_object_section("GetRoleResponse");
-    s->formatter->open_object_section("ResponseMetadata");
-    s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
-    s->formatter->open_object_section("GetRoleResult");
-    s->formatter->open_object_section("Role");
-    role->dump(s->formatter);
-    s->formatter->close_section();
-    s->formatter->close_section();
-    s->formatter->close_section();
-  }
+  s->formatter->open_object_section("GetRoleResponse");
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->open_object_section("GetRoleResult");
+  s->formatter->open_object_section("Role");
+  role->dump(s->formatter);
+  s->formatter->close_section();
+  s->formatter->close_section();
+  s->formatter->close_section();
 }
 
-int RGWModifyRoleTrustPolicy::get_params()
+int RGWModifyRoleTrustPolicy::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-  trust_policy = s->info.args.get("PolicyDocument");
-
-  if (role_name.empty() || trust_policy.empty()) {
-    ldpp_dout(this, 20) << "ERROR: One of role name or trust policy is empty"<< dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
+
+  trust_policy = s->info.args.get("PolicyDocument");
+  if (trust_policy.empty()) {
+    s->err.message = "Missing required element PolicyDocument";
+    return -EINVAL;
+  }
+
   JSONParser p;
   if (!p.parse(trust_policy.c_str(), trust_policy.length())) {
     ldpp_dout(this, 20) << "ERROR: failed to parse assume role policy doc" << dendl;
     return -ERR_MALFORMED_DOC;
   }
 
-  return 0;
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWModifyRoleTrustPolicy::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
@@ -494,8 +399,8 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
     }
   }
 
-  _role->update_trust_policy(trust_policy);
-  op_ret = _role->update(this, y);
+  role->update_trust_policy(trust_policy);
+  op_ret = role->update(this, y);
 
   s->formatter->open_object_section("UpdateAssumeRolePolicyResponse");
   s->formatter->open_object_section("ResponseMetadata");
@@ -504,32 +409,7 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
   s->formatter->close_section();
 }
 
-int RGWListRoles::verify_permission(optional_yield y)
-{
-  if (s->auth.identity->is_anonymous()) {
-    return -EACCES;
-  }
-
-  if (int ret = check_caps(s->user->get_caps()); ret == 0) {
-    return ret;
-  }
-
-  if (!verify_user_permission(this, 
-                              s,
-                              rgw::ARN(),
-                              get_op())) {
-    return -EACCES;
-  }
-
-  return 0;
-}
-
 int RGWListRoles::init_processing(optional_yield y)
-{
-  return 0; // avoid calling RGWRestRole::init_processing()
-}
-
-int RGWListRoles::get_params()
 {
   path_prefix = s->info.args.get("PathPrefix");
 
@@ -538,10 +418,6 @@ int RGWListRoles::get_params()
 
 void RGWListRoles::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
   vector<std::unique_ptr<rgw::sal::RGWRole>> result;
   op_ret = driver->get_roles(s, y, path_prefix, s->user->get_tenant(), result);
 
@@ -563,14 +439,22 @@ void RGWListRoles::execute(optional_yield y)
   }
 }
 
-int RGWPutRolePolicy::get_params()
+int RGWPutRolePolicy::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
+  if (!validate_iam_role_name(role_name, s->err.message)) {
+    return -EINVAL;
+  }
+
   policy_name = s->info.args.get("PolicyName");
   perm_policy = s->info.args.get("PolicyDocument");
 
-  if (role_name.empty() || policy_name.empty() || perm_policy.empty()) {
-    ldpp_dout(this, 20) << "ERROR: One of role name, policy name or perm policy is empty"<< dendl;
+  if (policy_name.empty()) {
+    s->err.message = "Missing required element PolicyName";
+    return -EINVAL;
+  }
+  if (perm_policy.empty()) {
+    s->err.message = "Missing required element PolicyDocument";
     return -EINVAL;
   }
   bufferlist bl = bufferlist::static_from_string(perm_policy);
@@ -584,16 +468,13 @@ int RGWPutRolePolicy::get_params()
     s->err.message = e.what();
     return -ERR_MALFORMED_DOC;
   }
-  return 0;
+
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWPutRolePolicy::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
@@ -618,8 +499,8 @@ void RGWPutRolePolicy::execute(optional_yield y)
     }
   }
 
-  _role->set_perm_policy(policy_name, perm_policy);
-  op_ret = _role->update(this, y);
+  role->set_perm_policy(policy_name, perm_policy);
+  op_ret = role->update(this, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("PutRolePolicyResponse");
@@ -630,27 +511,27 @@ void RGWPutRolePolicy::execute(optional_yield y)
   }
 }
 
-int RGWGetRolePolicy::get_params()
+int RGWGetRolePolicy::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-  policy_name = s->info.args.get("PolicyName");
-
-  if (role_name.empty() || policy_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
-  return 0;
+
+  policy_name = s->info.args.get("PolicyName");
+  if (policy_name.empty()) {
+    s->err.message = "Missing required element PolicyName";
+    return -EINVAL;
+  }
+
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWGetRolePolicy::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   string perm_policy;
-  op_ret = _role->get_role_policy(this, policy_name, perm_policy);
+  op_ret = role->get_role_policy(this, policy_name, perm_policy);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
   }
@@ -669,25 +550,20 @@ void RGWGetRolePolicy::execute(optional_yield y)
   }
 }
 
-int RGWListRolePolicies::get_params()
+int RGWListRolePolicies::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-
-  if (role_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: Role name is empty"<< dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
-  return 0;
+
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWListRolePolicies::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
-  std::vector<string> policy_names = _role->get_role_policy_names();
+  std::vector<string> policy_names = role->get_role_policy_names();
   s->formatter->open_object_section("ListRolePoliciesResponse");
   s->formatter->open_object_section("ResponseMetadata");
   s->formatter->dump_string("RequestId", s->trans_id);
@@ -702,25 +578,25 @@ void RGWListRolePolicies::execute(optional_yield y)
   s->formatter->close_section();
 }
 
-int RGWDeleteRolePolicy::get_params()
+int RGWDeleteRolePolicy::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-  policy_name = s->info.args.get("PolicyName");
-
-  if (role_name.empty() || policy_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: One of role name or policy name is empty"<< dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
-  return 0;
+
+  policy_name = s->info.args.get("PolicyName");
+  if (policy_name.empty()) {
+    s->err.message = "Missing required element PolicyName";
+    return -EINVAL;
+  }
+
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWDeleteRolePolicy::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
@@ -744,14 +620,14 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
     }
   }
 
-  op_ret = _role->delete_policy(this, policy_name);
+  op_ret = role->delete_policy(this, policy_name);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_ROLE_FOUND;
     return;
   }
 
   if (op_ret == 0) {
-    op_ret = _role->update(this, y);
+    op_ret = role->update(this, y);
   }
 
   s->formatter->open_object_section("DeleteRolePoliciesResponse");
@@ -761,29 +637,24 @@ void RGWDeleteRolePolicy::execute(optional_yield y)
   s->formatter->close_section();
 }
 
-int RGWTagRole::get_params()
+int RGWTagRole::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-
-  if (role_name.empty()) {
-    ldout(s->cct, 0) << "ERROR: Role name is empty" << dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
-  int ret = parse_tags(this, s->info.args.get_params(), tags, s->err.message);
-  if (ret < 0) {
-    return ret;
+
+  int r = parse_tags(this, s->info.args.get_params(), tags, s->err.message);
+  if (r < 0) {
+    return r;
   }
 
-  return 0;
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWTagRole::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
@@ -812,9 +683,9 @@ void RGWTagRole::execute(optional_yield y)
     }
   }
 
-  op_ret = _role->set_tags(this, tags);
+  op_ret = role->set_tags(this, tags);
   if (op_ret == 0) {
-    op_ret = _role->update(this, y);
+    op_ret = role->update(this, y);
   }
 
   if (op_ret == 0) {
@@ -826,26 +697,20 @@ void RGWTagRole::execute(optional_yield y)
   }
 }
 
-int RGWListRoleTags::get_params()
+int RGWListRoleTags::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-
-  if (role_name.empty()) {
-    ldout(s->cct, 0) << "ERROR: Role name is empty" << dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
 
-  return 0;
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWListRoleTags::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
-  boost::optional<multimap<string,string>> tag_map = _role->get_tags();
+  boost::optional<multimap<string,string>> tag_map = role->get_tags();
   s->formatter->open_object_section("ListRoleTagsResponse");
   s->formatter->open_object_section("ListRoleTagsResult");
   if (tag_map) {
@@ -867,12 +732,10 @@ void RGWListRoleTags::execute(optional_yield y)
   s->formatter->close_section();
 }
 
-int RGWUntagRole::get_params()
+int RGWUntagRole::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-
-  if (role_name.empty()) {
-    ldout(s->cct, 0) << "ERROR: Role name is empty" << dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
 
@@ -885,16 +748,13 @@ int RGWUntagRole::get_params()
           return p.second;
         });
   }
-  return 0;
+
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWUntagRole::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
@@ -921,8 +781,8 @@ void RGWUntagRole::execute(optional_yield y)
     }
   }
 
-  _role->erase_tags(untag);
-  op_ret = _role->update(this, y);
+  role->erase_tags(untag);
+  op_ret = role->update(this, y);
 
   if (op_ret == 0) {
     s->formatter->open_object_section("UntagRoleResponse");
@@ -933,26 +793,21 @@ void RGWUntagRole::execute(optional_yield y)
   }
 }
 
-int RGWUpdateRole::get_params()
+int RGWUpdateRole::init_processing(optional_yield y)
 {
   role_name = s->info.args.get("RoleName");
-  max_session_duration = s->info.args.get("MaxSessionDuration");
-
-  if (role_name.empty()) {
-    ldpp_dout(this, 20) << "ERROR: Role name is empty"<< dendl;
+  if (!validate_iam_role_name(role_name, s->err.message)) {
     return -EINVAL;
   }
 
-  return 0;
+  max_session_duration = s->info.args.get("MaxSessionDuration");
+
+  return load_role(this, y, driver, s->user->get_tenant(), role_name,
+                   role, resource, s->err.message);
 }
 
 void RGWUpdateRole::execute(optional_yield y)
 {
-  op_ret = get_params();
-  if (op_ret < 0) {
-    return;
-  }
-
   const rgw::SiteConfig& site = *s->penv.site;
   if (!site.is_meta_master()) {
     RGWXMLDecoder::XMLParser parser;
@@ -976,13 +831,13 @@ void RGWUpdateRole::execute(optional_yield y)
     }
   }
 
-  _role->update_max_session_duration(max_session_duration);
-  if (!_role->validate_max_session_duration(this)) {
+  role->update_max_session_duration(max_session_duration);
+  if (!role->validate_max_session_duration(this)) {
     op_ret = -EINVAL;
     return;
   }
 
-  op_ret = _role->update(this, y);
+  op_ret = role->update(this, y);
 
   s->formatter->open_object_section("UpdateRoleResponse");
   s->formatter->open_object_section("UpdateRoleResult");
