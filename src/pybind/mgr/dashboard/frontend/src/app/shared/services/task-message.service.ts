@@ -383,6 +383,10 @@ export class TaskMessageService {
     'cephfs/subvolume/snapshot/create': this.newTaskMessage(
       this.commonOperations.create,
       (metadata) => this.snapshot(metadata)
+    ),
+    'cephfs/subvolume/snapshot/delete': this.newTaskMessage(
+      this.commonOperations.delete,
+      (metadata) => this.snapshot(metadata)
     )
   };
 
