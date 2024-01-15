@@ -2095,10 +2095,13 @@ std::unique_ptr<RGWRole> DaosStore::get_role(std::string id) {
   return std::unique_ptr<RGWRole>(p);
 }
 
-int DaosStore::get_roles(const DoutPrefixProvider* dpp, optional_yield y,
-                         const std::string& path_prefix,
-                         const std::string& tenant,
-                         vector<std::unique_ptr<RGWRole>>& roles) {
+int DaosStore::list_roles(const DoutPrefixProvider *dpp,
+                          optional_yield y,
+                          const std::string& tenant,
+                          const std::string& path_prefix,
+                          const std::string& marker,
+                          uint32_t max_items,
+                          RoleList& listing) {
   return DAOS_NOT_IMPLEMENTED_LOG(dpp);
 }
 

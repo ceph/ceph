@@ -81,6 +81,9 @@ public:
 
 class RGWListRoles : public RGWRestRole {
   std::string path_prefix;
+  std::string marker;
+  int max_items = 100;
+  std::string next_marker;
 public:
   RGWListRoles() : RGWRestRole(rgw::IAM::iamListRoles, RGW_CAP_READ) {}
   int init_processing(optional_yield y) override;
