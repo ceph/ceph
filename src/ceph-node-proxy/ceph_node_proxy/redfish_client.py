@@ -1,7 +1,7 @@
 import json
 from urllib.error import HTTPError, URLError
-from .baseclient import BaseClient
-from .util import Logger, http_req
+from ceph_node_proxy.baseclient import BaseClient
+from ceph_node_proxy.util import Logger, http_req
 from typing import Dict, Any, Tuple, Optional
 from http.client import HTTPMessage
 
@@ -57,21 +57,24 @@ class RedFishClient(BaseClient):
         except URLError as e:
             self.log.logger.error("Can't check token "
                                   f'validity for {self.url}: {e}')
-            raise RuntimeError
+            raise
         return _status_code == 200
 
     def logout(self) -> Dict[str, Any]:
+        result: Dict[str, Any] = {}
         try:
-            _, _data, _status_code = self.query(method='DELETE',
-                                                headers={'X-Auth-Token': self.token},
-                                                endpoint=self.location)
+            if self.is_logged_in():
+                _, _data, _status_code = self.query(method='DELETE',
+                                                    headers={'X-Auth-Token': self.token},
+                                                    endpoint=self.location)
+                result = json.loads(_data)
         except URLError:
             self.log.logger.error(f"Can't log out from {self.url}")
-            return {}
 
-        response_str = _data
+        self.location = ''
+        self.token = ''
 
-        return json.loads(response_str)
+        return result
 
     def get_path(self, path: str) -> Dict[str, Any]:
         if self.PREFIX not in path:

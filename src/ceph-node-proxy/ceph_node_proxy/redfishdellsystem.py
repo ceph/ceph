@@ -1,6 +1,5 @@
-import json
-from .baseredfishsystem import BaseRedfishSystem
-from .util import Logger, normalize_dict, to_snake_case
+from ceph_node_proxy.baseredfishsystem import BaseRedfishSystem
+from ceph_node_proxy.util import Logger, normalize_dict, to_snake_case
 from typing import Dict, Any, List
 
 
@@ -8,6 +7,9 @@ class RedfishDellSystem(BaseRedfishSystem):
     def __init__(self, **kw: Any) -> None:
         super().__init__(**kw)
         self.log = Logger(__name__)
+        self.job_service_endpoint: str = '/redfish/v1/Managers/iDRAC.Embedded.1/Oem/Dell/DellJobService'
+        self.create_reboot_job_endpoint: str = f'{self.job_service_endpoint}/Actions/DellJobService.CreateRebootJob'
+        self.setup_job_queue_endpoint: str = f'{self.job_service_endpoint}/Actions/DellJobService.SetupJobQueue'
 
     def build_common_data(self,
                           data: Dict[str, Any],
@@ -161,26 +163,3 @@ class RedfishDellSystem(BaseRedfishSystem):
         self._sys['firmwares'] = self.build_common_data(data=self._system['UpdateService'],
                                                         fields=fields,
                                                         path='FirmwareInventory')
-
-    def get_chassis_led(self) -> Dict[str, Any]:
-        endpoint = f'/redfish/v1/{self.chassis_endpoint}'
-        result = self.client.query(method='GET',
-                                   endpoint=endpoint,
-                                   timeout=10)
-        response_json = json.loads(result[1])
-        _result: Dict[str, Any] = {'http_code': result[2]}
-        if result[2] == 200:
-            _result['LocationIndicatorActive'] = response_json['LocationIndicatorActive']
-        else:
-            _result['LocationIndicatorActive'] = None
-        return _result
-
-    def set_chassis_led(self, data: Dict[str, str]) -> int:
-        # '{"IndicatorLED": "Lit"}'      -> LocationIndicatorActive = false
-        # '{"IndicatorLED": "Blinking"}' -> LocationIndicatorActive = true
-        _, response, status = self.client.query(
-            data=json.dumps(data),
-            method='PATCH',
-            endpoint=f'/redfish/v1{self.chassis_endpoint}'
-        )
-        return status

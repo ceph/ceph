@@ -359,6 +359,33 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    def hardware_light(self, light_type: str, action: str, hostname: str, device: Optional[str] = None) -> OrchResult[Dict[str, Any]]:
+        """
+        Light a chassis or device ident LED.
+
+        :param light_type: led type (chassis or device).
+        :param action: set or get status led.
+        :param hostname: the name of the host.
+        :param device: the device id (when light_type = 'device')
+        """
+        raise NotImplementedError()
+
+    def hardware_powercycle(self, hostname: str, yes_i_really_mean_it: bool = False) -> OrchResult[str]:
+        """
+        Reboot a host.
+
+        :param hostname: the name of the host being rebooted.
+        """
+        raise NotImplementedError()
+
+    def hardware_shutdown(self, hostname: str, force: Optional[bool] = False, yes_i_really_mean_it: bool = False) -> OrchResult[str]:
+        """
+        Shutdown a host.
+
+        :param hostname: the name of the host to shutdown.
+        """
+        raise NotImplementedError()
+
     def hardware_status(self, hostname: Optional[str] = None, category: Optional[str] = 'summary') -> OrchResult[str]:
         """
         Display hardware status.
@@ -869,6 +896,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'crashcollector': 'crash',  # Specific Rook Daemon
         'container': 'container',
         'agent': 'agent',
+        'node-proxy': 'node-proxy',
         'snmp-gateway': 'snmp-gateway',
         'elasticsearch': 'elasticsearch',
         'jaeger-agent': 'jaeger-agent',
@@ -901,6 +929,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'crash': ['crash'],
         'container': ['container'],
         'agent': ['agent'],
+        'node-proxy': ['node-proxy'],
         'snmp-gateway': ['snmp-gateway'],
         'elasticsearch': ['elasticsearch'],
         'jaeger-agent': ['jaeger-agent'],

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 HOST_CACHE_PREFIX = "host."
 SPEC_STORE_PREFIX = "spec."
 AGENT_CACHE_PREFIX = 'agent.'
-NODE_PROXY_CACHE_PREFIX = 'node_proxy/data'
+NODE_PROXY_CACHE_PREFIX = 'node_proxy'
 
 
 class HostCacheStatus(enum.Enum):
@@ -1411,20 +1411,25 @@ class NodeProxyCache:
         self.mgr = mgr
         self.data: Dict[str, Any] = {}
         self.oob: Dict[str, Any] = {}
+        self.keyrings: Dict[str, str] = {}
 
     def load(self) -> None:
-        _oob = self.mgr.get_store('node_proxy/oob', "{}")
+        _oob = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/oob', '{}')
         self.oob = json.loads(_oob)
 
-        for k, v in self.mgr.get_store_prefix(NODE_PROXY_CACHE_PREFIX).items():
+        _keyrings = self.mgr.get_store(f'{NODE_PROXY_CACHE_PREFIX}/keyrings', '{}')
+        self.keyrings = json.loads(_keyrings)
+
+        for k, v in self.mgr.get_store_prefix(f'{NODE_PROXY_CACHE_PREFIX}/data').items():
             host = k.split('/')[-1:][0]
 
             if host not in self.mgr.inventory.keys():
                 # remove entry for host that no longer exists
-                self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/{host}", None)
+                self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/data/{host}", None)
                 try:
                     self.oob.pop(host)
                     self.data.pop(host)
+                    self.keyrings.pop(host)
                 except KeyError:
                     pass
                 continue
@@ -1434,7 +1439,15 @@ class NodeProxyCache:
     def save(self,
              host: str = '',
              data: Dict[str, Any] = {}) -> None:
-        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/{host}", json.dumps(data))
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/data/{host}", json.dumps(data))
+
+    def update_oob(self, host: str, host_oob_info: Dict[str, str]) -> None:
+        self.oob[host] = host_oob_info
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/oob", json.dumps(self.oob))
+
+    def update_keyring(self, host: str, key: str) -> None:
+        self.keyrings[host] = key
+        self.mgr.set_store(f"{NODE_PROXY_CACHE_PREFIX}/keyrings", json.dumps(self.keyrings))
 
     def fullreport(self, **kw: Any) -> Dict[str, Any]:
         """
