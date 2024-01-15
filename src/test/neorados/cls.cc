@@ -53,6 +53,7 @@ CORO_TEST_F(NeoRadosCls, DNE, NeoRadosTest)
 
 CORO_TEST_F(NeoRadosCls, RemoteReads, NeoRadosTest)
 {
+  SKIP_IF_CRIMSON();
   static constexpr std::size_t object_size = 4096;
   static constexpr std::array oids{"src_object.1"sv, "src_object.2"sv,
 				   "src_object.3"sv};
