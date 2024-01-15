@@ -35,8 +35,8 @@ class FakeMgr:
 class TestNodeProxyEndpoint(helper.CPWebCase):
     mgr = FakeMgr()
     app = NodeProxyEndpoint(mgr)
-    mgr.agent_cache.agent_keys = {"host01": "fake-secret01",
-                                  "host02": "fake-secret02"}
+    mgr.node_proxy.keyrings = {"host01": "fake-secret01",
+                               "host02": "fake-secret02"}
     mgr.node_proxy.oob = {"host01": {"username": "oob-user01",
                                      "password": "oob-pass01"},
                           "host02": {"username": "oob-user02",
@@ -68,38 +68,38 @@ class TestNodeProxyEndpoint(helper.CPWebCase):
         self.assertStatus('400 Bad Request')
 
     def test_oob_data_misses_secret_field(self):
-        data = '{"cephx": {"name": "host01"}}'
+        data = '{"cephx": {"name": "node-proxy.host01"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                 ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
 
     def test_oob_agent_not_running(self):
-        data = '{"cephx": {"name": "host03", "secret": "fake-secret03"}}'
+        data = '{"cephx": {"name": "node-proxy.host03", "secret": "fake-secret03"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                 ('Content-Length', str(len(data)))])
         self.assertStatus('502 Bad Gateway')
 
     def test_oob_wrong_keyring(self):
-        data = '{"cephx": {"name": "host01", "secret": "wrong-keyring"}}'
+        data = '{"cephx": {"name": "node-proxy.host01", "secret": "wrong-keyring"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                 ('Content-Length', str(len(data)))])
         self.assertStatus('403 Forbidden')
 
     def test_oob_ok(self):
-        data = '{"cephx": {"name": "host01", "secret": "fake-secret01"}}'
+        data = '{"cephx": {"name": "node-proxy.host01", "secret": "fake-secret01"}}'
         self.getPage("/oob", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                 ('Content-Length', str(len(data)))])
         self.assertStatus('200 OK')
 
     def test_data_missing_patch(self):
-        data = '{"cephx": {"name": "host01", "secret": "fake-secret01"}}'
+        data = '{"cephx": {"name": "node-proxy.host01", "secret": "fake-secret01"}}'
         self.getPage("/data", method="POST", body=data, headers=[('Content-Type', 'application/json'),
                                                                  ('Content-Length', str(len(data)))])
         self.assertStatus('400 Bad Request')
 
     def test_data_raises_alert(self):
         patch = node_proxy_data.full_set_with_critical
-        data = {"cephx": {"name": "host01", "secret": "fake-secret01"}, "patch": patch}
+        data = {"cephx": {"name": "node-proxy.host01", "secret": "fake-secret01"}, "patch": patch}
         data_str = json.dumps(data)
         self.getPage("/data", method="POST", body=data_str, headers=[('Content-Type', 'application/json'),
                                                                      ('Content-Length', str(len(data_str)))])

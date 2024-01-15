@@ -1,8 +1,15 @@
 import datetime
 import re
 import string
+import ssl
 
-from typing import Optional
+from typing import Optional, MutableMapping, Tuple, Any
+from urllib.error import HTTPError, URLError
+from urllib.request import urlopen, Request
+
+import logging
+
+log = logging.getLogger(__name__)
 
 
 def datetime_now() -> datetime.datetime:
@@ -121,3 +128,42 @@ def is_hex(s: str, strict: bool = True) -> bool:
             return False
 
     return True
+
+
+def http_req(hostname: str = '',
+             port: str = '443',
+             method: Optional[str] = None,
+             headers: MutableMapping[str, str] = {},
+             data: Optional[str] = None,
+             endpoint: str = '/',
+             scheme: str = 'https',
+             ssl_verify: bool = False,
+             timeout: Optional[int] = None,
+             ssl_ctx: Optional[Any] = None) -> Tuple[Any, Any, Any]:
+
+    if not ssl_ctx:
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        if not ssl_verify:
+            ssl_ctx.check_hostname = False
+            ssl_ctx.verify_mode = ssl.CERT_NONE
+        else:
+            ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+
+    url: str = f'{scheme}://{hostname}:{port}{endpoint}'
+    _data = bytes(data, 'ascii') if data else None
+    _headers = headers
+    if data and not method:
+        method = 'POST'
+    if not _headers.get('Content-Type') and method in ['POST', 'PATCH']:
+        _headers['Content-Type'] = 'application/json'
+    try:
+        req = Request(url, _data, _headers, method=method)
+        with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
+            response_str = response.read()
+            response_headers = response.headers
+            response_code = response.code
+        return response_headers, response_str.decode(), response_code
+    except (HTTPError, URLError) as e:
+        log.error(e)
+        # handle error here if needed
+        raise

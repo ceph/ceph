@@ -16,14 +16,15 @@ import time
 
 from orchestrator import DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
-from ceph.utils import datetime_now
+from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.ssl_cert_utils import SSLCerts
 from mgr_util import test_port_allocation, PortAlreadyInUse
 
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
+from urllib.error import HTTPError, URLError
+from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -138,8 +139,9 @@ class NodeProxyEndpoint:
 
         self.validate_node_proxy_data(data)
 
-        host = data["cephx"]["name"]
-        results['result'] = self.mgr.node_proxy_cache.oob.get(host)
+        # expecting name to be "node-proxy.<hostname>"
+        hostname = data['cephx']['name'][11:]
+        results['result'] = self.mgr.node_proxy_cache.oob.get(hostname, '')
         if not results['result']:
             raise cherrypy.HTTPError(400, 'The provided host has no iDrac details.')
         return results
@@ -160,13 +162,15 @@ class NodeProxyEndpoint:
                 raise cherrypy.HTTPError(400, 'The field \'cephx\' must be provided.')
             elif 'name' not in data['cephx'].keys():
                 cherrypy.response.status = 400
-                raise cherrypy.HTTPError(400, 'The field \'host\' must be provided.')
-            elif 'secret' not in data['cephx'].keys():
-                raise cherrypy.HTTPError(400, 'The agent keyring must be provided.')
-            elif not self.mgr.agent_cache.agent_keys.get(data['cephx']['name']):
-                raise cherrypy.HTTPError(502, f'Make sure the agent is running on {data["cephx"]["name"]}')
-            elif data['cephx']['secret'] != self.mgr.agent_cache.agent_keys[data['cephx']['name']]:
-                raise cherrypy.HTTPError(403, f'Got wrong keyring from agent on host {data["cephx"]["name"]}.')
+                raise cherrypy.HTTPError(400, 'The field \'name\' must be provided.')
+            # expecting name to be "node-proxy.<hostname>"
+            hostname = data['cephx']['name'][11:]
+            if 'secret' not in data['cephx'].keys():
+                raise cherrypy.HTTPError(400, 'The node-proxy keyring must be provided.')
+            elif not self.mgr.node_proxy_cache.keyrings.get(hostname, ''):
+                raise cherrypy.HTTPError(502, f'Make sure the node-proxy is running on {hostname}')
+            elif data['cephx']['secret'] != self.mgr.node_proxy_cache.keyrings[hostname]:
+                raise cherrypy.HTTPError(403, f'Got wrong keyring from agent on host {hostname}.')
         except AttributeError:
             raise cherrypy.HTTPError(400, 'Malformed data received.')
 
@@ -289,12 +293,19 @@ class NodeProxyEndpoint:
         :rtype: dict[str, Any]
         """
         method: str = cherrypy.request.method
+        header: MutableMapping[str, str] = {}
         hostname: Optional[str] = kw.get('hostname')
         led_type: Optional[str] = kw.get('type')
         id_drive: Optional[str] = kw.get('id')
-        data: Optional[str] = None
-        # this method is restricted to 'GET' or 'PATCH'
-        action: str = 'get_led' if method == 'GET' else 'set_led'
+        payload: Optional[Dict[str, str]] = None
+        endpoint: List[Any] = ['led', led_type]
+        device: str = id_drive if id_drive else ''
+
+        ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = True
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        ssl_ctx.load_verify_locations(cadata=ssl_root_crt)
 
         if not hostname:
             msg: str = "listing enclosure LED status for all nodes is not implemented."
@@ -311,16 +322,32 @@ class NodeProxyEndpoint:
             self.mgr.log.debug(msg)
             raise cherrypy.HTTPError(400, msg)
 
+        if led_type == 'drive':
+            endpoint.append(device)
+
         if hostname not in self.mgr.node_proxy_cache.data.keys():
             # TODO(guits): update unit test for this
             msg = f"'{hostname}' not found."
             self.mgr.log.debug(msg)
             raise cherrypy.HTTPError(400, msg)
 
+        addr: str = self.mgr.inventory.get_addr(hostname)
+
         if method == 'PATCH':
             # TODO(guits): need to check the request is authorized
             # allowing a specific keyring only ? (client.admin or client.agent.. ?)
-            data = json.dumps(cherrypy.request.json)
+            data: Dict[str, Any] = cherrypy.request.json
+            if 'state' not in data.keys():
+                msg = "'state' key not provided."
+                raise cherrypy.HTTPError(400, msg)
+            if 'keyring' not in data.keys():
+                msg = "'keyring' key must be provided."
+                raise cherrypy.HTTPError(400, msg)
+            if data['keyring'] != self.mgr.node_proxy_cache.keyrings.get(hostname):
+                msg = 'wrong keyring provided.'
+                raise cherrypy.HTTPError(401, msg)
+            payload = {}
+            payload['state'] = data['state']
 
             if led_type == 'drive':
                 if id_drive not in self.mgr.node_proxy_cache.data[hostname]['status']['storage'].keys():
@@ -329,28 +356,23 @@ class NodeProxyEndpoint:
                     self.mgr.log.debug(msg)
                     raise cherrypy.HTTPError(400, msg)
 
-        payload: Dict[str, Any] = {"node_proxy_oob_cmd":
-                                   {"action": action,
-                                    "type": led_type,
-                                    "id": id_drive,
-                                    "host": hostname,
-                                    "data": data}}
+        endpoint = f'/{"/".join(endpoint)}'
+        header = self.mgr.node_proxy.generate_auth_header(hostname)
+
         try:
-            message_thread = AgentMessageThread(
-                hostname, self.mgr.agent_cache.agent_ports[hostname], payload, self.mgr)
-            message_thread.start()
-            message_thread.join()  # TODO(guits): Add a timeout?
-        except KeyError:
-            raise cherrypy.HTTPError(502, f"{hostname}'s agent not running, please check.")
-        agent_response = message_thread.get_agent_response()
-        try:
-            response_json: Dict[str, Any] = json.loads(agent_response)
-        except json.decoder.JSONDecodeError:
-            cherrypy.response.status = 503
-        else:
-            cherrypy.response.status = response_json.get('http_code', 503)
-        if cherrypy.response.status != 200:
-            raise cherrypy.HTTPError(cherrypy.response.status, "Couldn't change the LED status.")
+            headers, result, status = http_req(hostname=addr,
+                                               port='8080',
+                                               headers=header,
+                                               method=method,
+                                               data=json.dumps(payload),
+                                               endpoint=endpoint,
+                                               ssl_ctx=ssl_ctx)
+            response_json = json.loads(result)
+        except HTTPError as e:
+            self.mgr.log.debug(e)
+        except URLError:
+            raise cherrypy.HTTPError(502, f'Make sure the node-proxy agent is deployed and running on {hostname}')
+
         return response_json
 
     @cherrypy.expose
@@ -840,16 +862,6 @@ class CephadmAgentHelpers:
                 payload['config'] = daemon_spec.final_config
             message_thread = AgentMessageThread(
                 host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr, daemon_spec)
-            message_thread.start()
-
-    def _shutdown_node_proxy(self) -> None:
-        hosts = set([h for h in self.mgr.cache.get_hosts() if
-                     (h in self.mgr.agent_cache.agent_ports and not self.mgr.agent_cache.messaging_agent(h))])
-
-        for host in hosts:
-            payload: Dict[str, Any] = {'node_proxy_shutdown': host}
-            message_thread = AgentMessageThread(
-                host, self.mgr.agent_cache.agent_ports[host], payload, self.mgr)
             message_thread.start()
 
     def _request_ack_all_not_up_to_date(self) -> None:

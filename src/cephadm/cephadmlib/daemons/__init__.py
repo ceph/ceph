@@ -7,6 +7,7 @@ from .nfs import NFSGanesha
 from .nvmeof import CephNvmeof
 from .snmp import SNMPGateway
 from .tracing import Tracing
+from .node_proxy import NodeProxy
 
 __all__ = [
     'Ceph',
@@ -21,4 +22,5 @@ __all__ = [
     'OSD',
     'SNMPGateway',
     'Tracing',
+    'NodeProxy',
 ]
