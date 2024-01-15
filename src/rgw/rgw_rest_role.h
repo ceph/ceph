@@ -13,6 +13,7 @@ class RGWRestRole : public RGWRESTOp {
   const uint64_t action;
   const uint32_t perm;
  protected:
+  rgw_account_id account_id;
   rgw::ARN resource; // must be initialized before verify_permission()
   int check_caps(const RGWUserCaps& caps) override;
 
