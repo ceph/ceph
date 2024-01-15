@@ -1804,13 +1804,17 @@ std::unique_ptr<RGWRole> RadosStore::get_role(const RGWRoleInfo& info)
   return std::make_unique<RadosRole>(this, info);
 }
 
-int RadosStore::get_roles(const DoutPrefixProvider *dpp,
-			  optional_yield y,
-			  const std::string& path_prefix,
-			  const std::string& tenant,
-			  vector<std::unique_ptr<RGWRole>>& roles)
+int RadosStore::list_roles(const DoutPrefixProvider *dpp,
+			   optional_yield y,
+			   const std::string& tenant,
+			   const std::string& path_prefix,
+			   const std::string& marker,
+			   uint32_t max_items,
+			   RoleList& listing)
 {
-  auto pool = svc()->zone->get_zone_params().roles_pool;
+  listing.roles.clear();
+
+  const auto& pool = svc()->zone->get_zone_params().roles_pool;
   std::string prefix;
 
   // List all roles if path prefix is empty
@@ -1821,46 +1825,53 @@ int RadosStore::get_roles(const DoutPrefixProvider *dpp,
   }
 
   //Get the filtered objects
-  list<std::string> result;
-  bool is_truncated;
   RGWListRawObjsCtx ctx;
-  do {
-    list<std::string> oids;
-    int r = rados->list_raw_objects(dpp, pool, prefix, 1000, ctx, oids, &is_truncated);
-    if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: listing filtered objects failed: "
-                  << prefix << ": " << cpp_strerror(-r) << dendl;
-      return r;
-    }
-    for (const auto& iter : oids) {
-      result.push_back(iter.substr(RGWRole::role_path_oid_prefix.size()));
-    }
-  } while (is_truncated);
+  int r = rados->list_raw_objects_init(dpp, pool, marker, &ctx);
+  if (r < 0) {
+    return r;
+  }
 
-  for (const auto& it : result) {
+  bool is_truncated = false;
+  list<std::string> oids;
+  r = rados->list_raw_objects(dpp, pool, prefix, max_items,
+                              ctx, oids, &is_truncated);
+  if (r == -ENOENT) {
+    r = 0;
+  } else if (r < 0) {
+    return r;
+  }
+
+  for (const auto& oid : oids) {
+    const std::string key = oid.substr(RGWRole::role_path_oid_prefix.size());
+
     //Find the role oid prefix from the end
-    size_t pos = it.rfind(RGWRole::role_oid_prefix);
+    size_t pos = key.rfind(RGWRole::role_oid_prefix);
     if (pos == std::string::npos) {
-        continue;
+      continue;
     }
     // Split the result into path and info_oid + id
-    std::string path = it.substr(0, pos);
+    std::string path = key.substr(0, pos);
 
     /*Make sure that prefix is part of path (False results could've been returned)
       because of the role info oid + id appended to the path)*/
     if(path_prefix.empty() || path.find(path_prefix) != std::string::npos) {
       //Get id from info oid prefix + id
-      std::string id = it.substr(pos + RGWRole::role_oid_prefix.length());
+      std::string id = key.substr(pos + RGWRole::role_oid_prefix.length());
 
       std::unique_ptr<rgw::sal::RGWRole> role = get_role(id);
-      int ret = role->read_info(dpp, y);
-      if (ret < 0) {
-        return ret;
+      r = role->read_info(dpp, y);
+      if (r < 0) {
+        return r;
       }
-      roles.push_back(std::move(role));
+      listing.roles.push_back(std::move(role->get_info()));
     }
   }
 
+  if (is_truncated) {
+    listing.next_marker = rados->list_raw_objs_get_cursor(ctx);
+  } else {
+    listing.next_marker.clear();
+  }
   return 0;
 }
 

@@ -573,11 +573,13 @@ class Driver {
     virtual std::unique_ptr<RGWRole> get_role(std::string id) = 0;
     virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) = 0;
     /** Get all IAM Roles optionally filtered by path */
-    virtual int get_roles(const DoutPrefixProvider *dpp,
-			  optional_yield y,
-			  const std::string& path_prefix,
-			  const std::string& tenant,
-			  std::vector<std::unique_ptr<RGWRole>>& roles) = 0;
+    virtual int list_roles(const DoutPrefixProvider *dpp,
+			   optional_yield y,
+			   const std::string& tenant,
+			   const std::string& path_prefix,
+			   const std::string& marker,
+			   uint32_t max_items,
+			   RoleList& listing) = 0;
     /** Get an empty Open ID Connector provider */
     virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() = 0;
     /** Get all Open ID Connector providers, optionally filtered by tenant  */
