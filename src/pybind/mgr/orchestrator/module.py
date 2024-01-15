@@ -590,6 +590,51 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
         return table.get_string()
 
+    class HardwareLightType(enum.Enum):
+        chassis = 'chassis'
+        device = 'drive'
+
+    class HardwareLightAction(enum.Enum):
+        on = 'on'
+        off = 'off'
+        get = 'get'
+
+    @_cli_write_command('orch hardware light')
+    def _hardware_light(self,
+                        light_type: HardwareLightType, action: HardwareLightAction,
+                        hostname: str, device: Optional[str] = None) -> HandleCommandResult:
+        """Enable or Disable a device or chassis LED"""
+        if light_type == self.HardwareLightType.device and not device:
+            return HandleCommandResult(stderr='you must pass a device ID.',
+                                       retval=-errno.ENOENT)
+
+        completion = self.hardware_light(light_type.value, action.value, hostname, device)
+        data = raise_if_exception(completion)
+        output: str = ''
+        if action == self.HardwareLightAction.get:
+            status = 'on' if data["LocationIndicatorActive"] else 'off'
+            if light_type == self.HardwareLightType.device:
+                output = f'ident LED for {device} on {hostname} is: {status}'
+            else:
+                output = f'ident chassis LED for {hostname} is: {status}'
+        else:
+            pass
+        return HandleCommandResult(stdout=output)
+
+    @_cli_write_command('orch hardware powercycle')
+    def _hardware_powercycle(self, hostname: str, yes_i_really_mean_it: bool = False) -> HandleCommandResult:
+        """Reboot a host"""
+        completion = self.hardware_powercycle(hostname, yes_i_really_mean_it=yes_i_really_mean_it)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
+    @_cli_write_command('orch hardware shutdown')
+    def _hardware_shutdown(self, hostname: str, force: Optional[bool] = False, yes_i_really_mean_it: bool = False) -> HandleCommandResult:
+        """Shutdown a host"""
+        completion = self.hardware_shutdown(hostname, force, yes_i_really_mean_it=yes_i_really_mean_it)
+        raise_if_exception(completion)
+        return HandleCommandResult(stdout=completion.result_str())
+
     @_cli_write_command('orch host rm')
     def _remove_host(self, hostname: str, force: bool = False, offline: bool = False) -> HandleCommandResult:
         """Remove a host"""

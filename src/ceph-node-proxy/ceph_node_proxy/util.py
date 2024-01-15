@@ -4,6 +4,7 @@ import os
 import time
 import re
 import ssl
+from tempfile import NamedTemporaryFile, _TemporaryFileWrapper
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
 from typing import Dict, List, Callable, Any, Optional, MutableMapping, Tuple
@@ -124,9 +125,13 @@ def http_req(hostname: str = '',
 
     url: str = f'{scheme}://{hostname}:{port}{endpoint}'
     _data = bytes(data, 'ascii') if data else None
-
+    _headers = headers
+    if data and not method:
+        method = 'POST'
+    if not _headers.get('Content-Type') and method in ['POST', 'PATCH']:
+        _headers['Content-Type'] = 'application/json'
     try:
-        req = Request(url, _data, headers, method=method)
+        req = Request(url, _data, _headers, method=method)
         with urlopen(req, context=ssl_ctx, timeout=timeout) as response:
             response_str = response.read()
             response_headers = response.headers
@@ -136,3 +141,11 @@ def http_req(hostname: str = '',
         print(f'{e}')
         # handle error here if needed
         raise
+
+
+def write_tmp_file(data: str, prefix_name: str = 'node-proxy-') -> _TemporaryFileWrapper:
+    f = NamedTemporaryFile(prefix=prefix_name)
+    os.fchmod(f.fileno(), 0o600)
+    f.write(data.encode('utf-8'))
+    f.flush()
+    return f

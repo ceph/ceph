@@ -1,7 +1,7 @@
 from threading import Thread
 import time
 import json
-from .util import Logger, http_req
+from ceph_node_proxy.util import Logger, http_req
 from urllib.error import HTTPError, URLError
 from typing import Dict, Any
 

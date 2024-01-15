@@ -40,7 +40,6 @@ from threading import Thread, Event
 from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen, Request
-from cephadmlib.node_proxy.main import NodeProxy
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -699,6 +698,133 @@ class Monitoring(object):
         return version
 
 ##################################
+
+
+@register_daemon_form
+class NodeProxy(ContainerDaemonForm):
+    """Defines a node-proxy container"""
+
+    daemon_type = 'node-proxy'
+    # TODO: update this if we make node-proxy an executable
+    entrypoint = 'python3'
+    required_files = ['node-proxy.json']
+
+    @classmethod
+    def for_daemon_type(cls, daemon_type: str) -> bool:
+        return cls.daemon_type == daemon_type
+
+    def __init__(
+        self,
+        ctx: CephadmContext,
+        ident: DaemonIdentity,
+        config_json: Dict,
+        image: str = DEFAULT_IMAGE,
+    ):
+        self.ctx = ctx
+        self._identity = ident
+        self.image = image
+
+        # config-json options
+        config = dict_get(config_json, 'node-proxy.json', {})
+        self.files = {'node-proxy.json': config}
+
+        # validate the supplied args
+        self.validate()
+
+    @classmethod
+    def init(
+        cls, ctx: CephadmContext, fsid: str, daemon_id: str
+    ) -> 'NodeProxy':
+        return cls.create(
+            ctx, DaemonIdentity(fsid, cls.daemon_type, daemon_id)
+        )
+
+    @classmethod
+    def create(
+        cls, ctx: CephadmContext, ident: DaemonIdentity
+    ) -> 'NodeProxy':
+        return cls(ctx, ident, fetch_configs(ctx), ctx.image)
+
+    @property
+    def identity(self) -> DaemonIdentity:
+        return self._identity
+
+    @property
+    def fsid(self) -> str:
+        return self._identity.fsid
+
+    @property
+    def daemon_id(self) -> str:
+        return self._identity.daemon_id
+
+    def customize_container_mounts(
+        self, ctx: CephadmContext, mounts: Dict[str, str]
+    ) -> None:
+        data_dir = self.identity.data_dir(ctx.data_dir)
+        # TODO: update this when we have the actual location
+        # in the ceph container we are going to keep node-proxy
+        mounts.update({os.path.join(data_dir, 'node-proxy.json'): '/usr/share/ceph/node-proxy.json:z'})
+
+    def customize_process_args(self, ctx: CephadmContext, args: List[str]) -> None:
+        # TODO: this corresponds with the mount location of
+        # the config in _get_container_mounts above. They
+        # will both need to be updated when we have a proper
+        # location in the container for node-proxy
+        args.extend(['/usr/share/ceph/ceph_node_proxy/main.py', '--config', '/usr/share/ceph/node-proxy.json'])
+
+    def validate(self):
+        # type: () -> None
+        if not is_fsid(self.fsid):
+            raise Error('not an fsid: %s' % self.fsid)
+        if not self.daemon_id:
+            raise Error('invalid daemon_id: %s' % self.daemon_id)
+        if not self.image:
+            raise Error('invalid image: %s' % self.image)
+        # check for the required files
+        if self.required_files:
+            for fname in self.required_files:
+                if fname not in self.files:
+                    raise Error(
+                        'required file missing from config-json: %s' % fname
+                    )
+
+    def get_daemon_name(self):
+        # type: () -> str
+        return '%s.%s' % (self.daemon_type, self.daemon_id)
+
+    def get_container_name(self, desc=None):
+        # type: (Optional[str]) -> str
+        cname = 'ceph-%s-%s' % (self.fsid, self.get_daemon_name())
+        if desc:
+            cname = '%s-%s' % (cname, desc)
+        return cname
+
+    def create_daemon_dirs(self, data_dir, uid, gid):
+        # type: (str, int, int) -> None
+        """Create files under the container data dir"""
+        if not os.path.isdir(data_dir):
+            raise OSError('data_dir is not a directory: %s' % (data_dir))
+
+        logger.info('Writing node-proxy config...')
+        # populate files from the config-json
+        populate_files(data_dir, self.files, uid, gid)
+
+    def container(self, ctx: CephadmContext) -> CephContainer:
+        # So the container can modprobe iscsi_target_mod and have write perms
+        # to configfs we need to make this a privileged container.
+        ctr = daemon_to_container(ctx, self, privileged=True, envs=['PYTHONPATH=$PYTHONPATH:/usr/share/ceph'])
+        return to_deployment_container(ctx, ctr)
+
+    def config_and_keyring(
+        self, ctx: CephadmContext
+    ) -> Tuple[Optional[str], Optional[str]]:
+        return get_config_and_keyring(ctx)
+
+    def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
+        return extract_uid_gid(ctx)
+
+    def default_entrypoint(self) -> str:
+        return self.entrypoint
 
 
 @contextmanager
@@ -1649,6 +1775,7 @@ def get_supported_daemons():
     supported_daemons.append(CephadmAgent.daemon_type)
     supported_daemons.append(SNMPGateway.daemon_type)
     supported_daemons.extend(Tracing.components)
+    supported_daemons.append(NodeProxy.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -3202,6 +3329,10 @@ def create_daemon_dirs(ctx, fsid, daemon_type, daemon_id, uid, gid,
         sg = SNMPGateway.init(ctx, fsid, daemon_id)
         sg.create_daemon_conf()
 
+    elif daemon_type == NodeProxy.daemon_type:
+        node_proxy = NodeProxy.init(ctx, fsid, daemon_id)
+        node_proxy.create_daemon_dirs(data_dir, uid, gid)
+
     _write_custom_conf_files(ctx, daemon_type, str(daemon_id), fsid, uid, gid)
 
 
@@ -4754,28 +4885,13 @@ class MgrListener(Thread):
                             self.agent.ls_gatherer.wakeup()
                             self.agent.volume_gatherer.wakeup()
                             logger.debug(f'Got mgr message {data}')
-                        if 'node_proxy_oob_cmd' in data:
-                            if data['node_proxy_oob_cmd']['action'] in ['get_led', 'set_led']:
-                                conn.send(bytes(json.dumps(self.node_proxy_oob_cmd_result), 'utf-8'))
             except Exception as e:
                 logger.error(f'Mgr Listener encountered exception: {e}')
 
     def shutdown(self) -> None:
         self.stop = True
 
-    def validate_node_proxy_payload(self, data: Dict[str, Any]) -> None:
-        if 'action' not in data.keys():
-            raise RuntimeError('node-proxy oob command needs an action.')
-        if data['action'] in ['get_led', 'set_led']:
-            fields = ['type', 'id']
-            if data['type'] not in ['chassis', 'drive']:
-                raise RuntimeError('the LED type must be either "chassis" or "drive".')
-            for field in fields:
-                if field not in data.keys():
-                    raise RuntimeError('Received invalid node-proxy cmd.')
-
     def handle_json_payload(self, data: Dict[Any, Any]) -> None:
-        self.node_proxy_oob_cmd_result: Dict[str, Any] = {}
         if 'counter' in data:
             self.agent.ack = int(data['counter'])
             if 'config' in data:
@@ -4788,93 +4904,8 @@ class MgrListener(Thread):
                             f.write(config[filename])
                 self.agent.pull_conf_settings()
                 self.agent.wakeup()
-        elif 'node_proxy_shutdown' in data:
-            logger.info('Received node_proxy_shutdown command.')
-            self.agent.shutdown()
-        elif 'node_proxy_oob_cmd' in data:
-            node_proxy_cmd: Dict[str, Any] = data['node_proxy_oob_cmd']
-            try:
-                self.validate_node_proxy_payload(node_proxy_cmd)
-            except RuntimeError as e:
-                logger.error(f"Couldn't validate node-proxy payload:\n{node_proxy_cmd}\n{e}")
-                raise
-            logger.info(f'Received node_proxy_oob_cmd command: {node_proxy_cmd}')
-            if node_proxy_cmd['action'] == 'get_led':
-                if node_proxy_cmd['type'] == 'chassis':
-                    self.node_proxy_oob_cmd_result = self.agent.node_proxy_mgr.node_proxy.system.get_chassis_led()
-            if node_proxy_cmd['action'] == 'set_led':
-                if node_proxy_cmd['type'] == 'chassis':
-                    _data: Dict[str, Any] = json.loads(node_proxy_cmd['data'])
-                    _result: int = self.agent.node_proxy_mgr.node_proxy.system.set_chassis_led(_data)
-                    self.node_proxy_oob_cmd_result = {'http_code': _result}
         else:
             raise RuntimeError('No valid data received.')
-
-
-class NodeProxyManager(Thread):
-    def __init__(self, agent: 'CephadmAgent', event: Event):
-        super().__init__()
-        self.agent = agent
-        self.event = event
-        self.stop = False
-
-    def run(self) -> None:
-        self.event.wait()
-        self.ssl_ctx = self.agent.ssl_ctx
-        self.init()
-        self.loop()
-
-    def init(self) -> None:
-        node_proxy_meta = {
-            'cephx': {
-                'name': self.agent.host,
-                'secret': self.agent.keyring
-            }
-        }
-        status, result = http_query(addr=self.agent.target_ip,
-                                    port=self.agent.target_port,
-                                    data=json.dumps(node_proxy_meta).encode('ascii'),
-                                    endpoint='/node-proxy/oob',
-                                    ssl_ctx=self.ssl_ctx)
-        if status != 200:
-            msg = f'No out of band tool details could be loaded: {status}, {result}'
-            logger.debug(msg)
-            raise RuntimeError(msg)
-
-        result_json = json.loads(result)
-        kwargs = {
-            'host': result_json['result']['addr'],
-            'username': result_json['result']['username'],
-            'password': result_json['result']['password'],
-            'cephx': node_proxy_meta['cephx'],
-            'mgr_target_ip': self.agent.target_ip,
-            'mgr_target_port': self.agent.target_port
-        }
-        if result_json['result'].get('port'):
-            kwargs['port'] = result_json['result']['port']
-
-        self.node_proxy: NodeProxy = NodeProxy(**kwargs)
-        self.node_proxy.start()
-
-    def loop(self) -> None:
-        while not self.stop:
-            try:
-                status = self.node_proxy.check_status()
-                label = 'Ok' if status else 'Critical'
-                logger.debug(f'node-proxy status: {label}')
-            except Exception as e:
-                logger.error(f'node-proxy not running: {e.__class__.__name__}: {e}')
-                time.sleep(120)
-                self.init()
-            else:
-                logger.debug('node-proxy alive, next check in 60sec.')
-                time.sleep(60)
-
-    def shutdown(self) -> None:
-        self.stop = True
-        # if `self.node_proxy.shutdown()` is called before self.start(), it will fail.
-        if self.__dict__.get('node_proxy'):
-            self.node_proxy.shutdown()
 
 
 class CephadmAgent():
@@ -4919,8 +4950,6 @@ class CephadmAgent():
         self.ssl_ctx = ssl.create_default_context()
         self.ssl_ctx.check_hostname = True
         self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        self.node_proxy_mgr_event = Event()
-        self.node_proxy_mgr = NodeProxyManager(self, self.node_proxy_mgr_event)
 
     def validate(self, config: Dict[str, str] = {}) -> None:
         # check for the required files
@@ -4992,8 +5021,6 @@ WantedBy=ceph-{fsid}.target
 
     def shutdown(self) -> None:
         self.stop = True
-        if self.node_proxy_mgr.is_alive():
-            self.node_proxy_mgr.shutdown()
         if self.mgr_listener.is_alive():
             self.mgr_listener.shutdown()
         if self.ls_gatherer.is_alive():
@@ -5035,9 +5062,6 @@ WantedBy=ceph-{fsid}.target
     def run(self) -> None:
         self.pull_conf_settings()
         self.ssl_ctx.load_verify_locations(self.ca_path)
-        # only after self.pull_conf_settings() was called we can actually start
-        # node-proxy
-        self.node_proxy_mgr_event.set()
 
         try:
             for _ in range(1001):
@@ -5058,9 +5082,6 @@ WantedBy=ceph-{fsid}.target
 
         if not self.volume_gatherer.is_alive():
             self.volume_gatherer.start()
-
-        if not self.node_proxy_mgr.is_alive():
-            self.node_proxy_mgr.start()
 
         while not self.stop:
             start_time = time.monotonic()
