@@ -26,6 +26,13 @@ namespace mirror {
 // this wraps up ClusterWatcher and FSMirrors to implement mirroring
 // for ceph filesystems.
 
+enum {
+  l_mirror_first = 4000,
+  //TODO:
+
+  l_mirror_last,
+};
+
 class Mirror {
 public:
   Mirror(CephContext *cct, const std::vector<const char*> &args,
@@ -104,6 +111,8 @@ private:
   RadosRef m_local;
   std::unique_ptr<ServiceDaemon> m_service_daemon;
 
+  PerfCounters *logger;
+
   int init_mon_client();
 
   // called via listener
@@ -145,6 +154,8 @@ private:
     auto &mirror_action = m_mirror_actions.at(filesystem);
     return mirror_action.restarting;
   }
+
+  void create_logger();
 };
 
 } // namespace mirror

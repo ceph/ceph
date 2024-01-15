@@ -277,6 +277,8 @@ int Mirror::init(std::string &reason) {
     return r;
   }
 
+  create_logger();
+
   return 0;
 }
 
@@ -591,6 +593,18 @@ void Mirror::run() {
     }
 
     mirror_action.fs_mirror.reset();
+  }
+}
+
+void Mirror::create_logger() {
+  dout(10) << "create_logger" << dendl;
+  {
+    PerfCountersBuilder mds_plb(g_ceph_context, "cephfs_mirror", l_mirror_first, l_mirror_last);
+    //..........................
+    //.........................,
+
+    logger = mds_plb.create_perf_counters();
+    g_ceph_context->get_perfcounters_collection()->add(logger);
   }
 }
 
