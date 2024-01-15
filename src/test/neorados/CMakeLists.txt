@@ -154,6 +154,22 @@ install(TARGETS
   ceph_test_neorados_list
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+add_executable(ceph_test_neorados_ec_list
+  ec_list.cc
+  )
+target_link_libraries(ceph_test_neorados_ec_list
+  libneorados
+  ${BLKID_LIBRARIES}
+  ${CMAKE_DL_LIBS}
+  ${CRYPTO_LIBS}
+  ${EXTRALIBS}
+  neoradostest-support
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_neorados_ec_list
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 add_executable(ceph_test_neorados_misc
   misc.cc
   )

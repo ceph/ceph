@@ -53,7 +53,7 @@ do
 done
 
 for f in \
-    cls cmd handler_error io ec_io list misc pool read_operations snapshots \
+    cls cmd handler_error io ec_io list ec_list misc pool read_operations snapshots \
     watch_notify write_operations
 do
     if [ $parallel -eq 1 ]; then
@@ -64,9 +64,11 @@ do
 	echo "test $f on pid $pid"
 	pids[$f]=$pid
     else
-	if [ $crimson -eq 1 ] && [ $f = "ec_io" ]; then
-		echo "Skipping EC with Crimson"
-		continue
+	if [ $crimson -eq 1 ]; then
+		if [ $f = "ec_io" ] || [ $f = "ec_list" ]; then
+			echo "Skipping EC with Crimson"
+			continue
+		fi
 	fi
 	ceph_test_neorados_$f
     fi
