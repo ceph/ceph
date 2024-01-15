@@ -165,6 +165,24 @@ bool validate_iam_user_name(const std::string& name, std::string& err)
   return true;
 }
 
+bool validate_iam_role_name(const std::string& name, std::string& err)
+{
+  if (name.empty()) {
+    err = "Missing required element RoleName";
+    return false;
+  }
+  if (name.size() > rgw::sal::RGWRole::MAX_ROLE_NAME_LEN) {
+    err = "RoleName too long";
+    return false;
+  }
+  const std::regex pattern("[\\w+=,.@-]+");
+  if (!std::regex_match(name, pattern)) {
+    err = "RoleName contains invalid characters";
+    return false;
+  }
+  return true;
+}
+
 static constexpr size_t MAX_PATH_LEN = 512;
 
 bool validate_iam_path(const std::string& path, std::string& err)
