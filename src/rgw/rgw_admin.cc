@@ -1163,26 +1163,6 @@ static void show_policy_names(std::vector<string> policy_names, Formatter* forma
   formatter->flush(cout);
 }
 
-static void show_role_info(rgw::sal::RGWRole* role, Formatter* formatter)
-{
-  formatter->open_object_section("role");
-  role->dump(formatter);
-  formatter->close_section();
-  formatter->flush(cout);
-}
-
-static void show_roles_info(vector<std::unique_ptr<rgw::sal::RGWRole>>& roles, Formatter* formatter)
-{
-  formatter->open_array_section("Roles");
-  for (const auto& it : roles) {
-    formatter->open_object_section("role");
-    it->dump(formatter);
-    formatter->close_section();
-  }
-  formatter->close_section();
-  formatter->flush(cout);
-}
-
 static void show_reshard_status(
   const list<cls_rgw_bucket_instance_entry>& status, Formatter *formatter)
 {
@@ -6812,7 +6792,8 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      show_role_info(role.get(), formatter.get());
+      encode_json("role", *role, formatter.get());
+      formatter->flush(cout);
       return 0;
     }
   case OPT::ROLE_DELETE:
@@ -6840,7 +6821,8 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      show_role_info(role.get(), formatter.get());
+      encode_json("role", *role, formatter.get());
+      formatter->flush(cout);
       return 0;
     }
   case OPT::ROLE_TRUST_POLICY_MODIFY:
@@ -6880,12 +6862,41 @@ int main(int argc, const char **argv)
     }
   case OPT::ROLE_LIST:
     {
-      vector<std::unique_ptr<rgw::sal::RGWRole>> result;
-      ret = driver->get_roles(dpp(), null_yield, path_prefix, tenant, result);
-      if (ret < 0) {
-        return -ret;
+      rgw::sal::RoleList listing;
+      listing.next_marker = marker;
+
+      int32_t remaining = std::numeric_limits<int32_t>::max();
+      if (max_entries_specified) {
+        remaining = max_entries;
+        formatter->open_object_section("result");
       }
-      show_roles_info(result, formatter.get());
+      formatter->open_array_section("Roles");
+
+      do {
+        constexpr int32_t max_chunk = 100;
+        int32_t count = std::min(max_chunk, remaining);
+
+        ret = driver->list_roles(dpp(), null_yield, tenant, path_prefix,
+                                 listing.next_marker, count, listing);
+        if (ret < 0) {
+          return -ret;
+        }
+        for (const auto& info : listing.roles) {
+          encode_json("member", info, formatter.get());
+        }
+        formatter->flush(cout);
+        remaining -= listing.roles.size();
+      } while (!listing.next_marker.empty() && remaining > 0);
+
+      formatter->close_section(); // Roles
+
+      if (max_entries_specified) {
+        if (!listing.next_marker.empty()) {
+          encode_json("next-marker", listing.next_marker, formatter.get());
+        }
+        formatter->close_section(); // result
+      }
+      formatter->flush(cout);
       return 0;
     }
   case OPT::ROLE_POLICY_PUT:

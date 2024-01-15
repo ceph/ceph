@@ -434,6 +434,13 @@ void RGWModifyRoleTrustPolicy::execute(optional_yield y)
 int RGWListRoles::init_processing(optional_yield y)
 {
   path_prefix = s->info.args.get("PathPrefix");
+  marker = s->info.args.get("Marker");
+
+  int r = s->info.args.get_int("MaxItems", &max_items, max_items);
+  if (r < 0 || max_items > 1000) {
+    s->err.message = "Invalid value for MaxItems";
+    return -EINVAL;
+  }
 
   return 0;
 }
@@ -441,24 +448,30 @@ int RGWListRoles::init_processing(optional_yield y)
 void RGWListRoles::execute(optional_yield y)
 {
   // TODO: list_account_roles() for account owner
-  vector<std::unique_ptr<rgw::sal::RGWRole>> result;
-  op_ret = driver->get_roles(s, y, path_prefix, s->user->get_tenant(), result);
+  rgw::sal::RoleList listing;
+  op_ret = driver->list_roles(s, y, s->user->get_tenant(), path_prefix,
+                              marker, max_items, listing);
 
   if (op_ret == 0) {
-    s->formatter->open_array_section("ListRolesResponse");
-    s->formatter->open_array_section("ListRolesResult");
-    s->formatter->open_object_section("Roles");
-    for (const auto& it : result) {
-      s->formatter->open_object_section("member");
-      it->dump(s->formatter);
-      s->formatter->close_section();
+    s->formatter->open_object_section("ListRolesResponse");
+    s->formatter->open_object_section("ListRolesResult");
+    s->formatter->open_array_section("Roles");
+    for (const auto& info : listing.roles) {
+      encode_json("member", info, s->formatter);
     }
-    s->formatter->close_section();
-    s->formatter->close_section();
+    s->formatter->close_section(); // Roles
+
+    const bool truncated = !listing.next_marker.empty();
+    encode_json("IsTruncated", truncated, s->formatter);
+    if (truncated) {
+      encode_json("Marker", listing.next_marker, s->formatter);
+    }
+
+    s->formatter->close_section(); // ListRolesResult
     s->formatter->open_object_section("ResponseMetadata");
     s->formatter->dump_string("RequestId", s->trans_id);
-    s->formatter->close_section();
-    s->formatter->close_section();
+    s->formatter->close_section(); // ResponseMetadata
+    s->formatter->close_section(); // ListRolesResponse
   }
 }
 
