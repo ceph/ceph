@@ -55,6 +55,14 @@ namespace json_spirit
         Value_impl( boost::uint64_t    value );
         Value_impl( double             value );
 
+        template < long=0 >
+          requires (!std::is_same_v< long, boost::int64_t >)
+        Value_impl( long               value );
+
+        template < long=0 >
+          requires (!std::is_same_v< unsigned long, boost::uint64_t >)
+        Value_impl( unsigned long      value );
+
         template< class Iter >
         Value_impl( Iter first, Iter last );    // constructor from containers, e.g. std::vector or std::list
 
@@ -292,6 +300,22 @@ namespace json_spirit
     template< class Config >
     Value_impl< Config >::Value_impl( int value )
     :   v_( static_cast< boost::int64_t >( value ) )
+    {
+    }
+
+    template < class Config >
+    template < long >
+      requires(!std::is_same_v< long, boost::int64_t >)
+    Value_impl< Config >::Value_impl( long value )
+    : v_( static_cast< boost::int64_t >( value ) )
+    {
+    }
+
+    template < class Config >
+    template < long >
+      requires(!std::is_same_v< unsigned long, boost::uint64_t >)
+    Value_impl< Config >::Value_impl( unsigned long value )
+    : v_( static_cast< boost::uint64_t >( value ) )
     {
     }
 
