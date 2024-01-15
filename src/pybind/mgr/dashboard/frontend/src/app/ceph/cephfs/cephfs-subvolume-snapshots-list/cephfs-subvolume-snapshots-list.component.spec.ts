@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { CephfsSubvolumeSnapshotsListComponent } from './cephfs-subvolume-snapshots-list.component';
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SharedModule } from '~/app/shared/shared.module';
+import { ToastrModule } from 'ngx-toastr';
 
 describe('CephfsSubvolumeSnapshotsListComponent', () => {
   let component: CephfsSubvolumeSnapshotsListComponent;
@@ -11,7 +12,7 @@ describe('CephfsSubvolumeSnapshotsListComponent', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
       declarations: [CephfsSubvolumeSnapshotsListComponent],
-      imports: [HttpClientTestingModule, SharedModule]
+      imports: [HttpClientTestingModule, SharedModule, ToastrModule.forRoot()]
     }).compileComponents();
 
     fixture = TestBed.createComponent(CephfsSubvolumeSnapshotsListComponent);
