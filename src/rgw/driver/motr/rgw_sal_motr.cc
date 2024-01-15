@@ -3050,11 +3050,13 @@ std::unique_ptr<RGWRole> MotrStore::get_role(std::string id)
   return std::unique_ptr<RGWRole>(p);
 }
 
-int MotrStore::get_roles(const DoutPrefixProvider *dpp,
-    optional_yield y,
-    const std::string& path_prefix,
-    const std::string& tenant,
-    vector<std::unique_ptr<RGWRole>>& roles)
+int MotrStore::list_roles(const DoutPrefixProvider *dpp,
+                          optional_yield y,
+                          const std::string& tenant,
+                          const std::string& path_prefix,
+                          const std::string& marker,
+                          uint32_t max_items,
+                          RoleList& listing)
 {
   return 0;
 }

@@ -396,11 +396,13 @@ public:
                 std::multimap<std::string,std::string> tags={}) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
   virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
-  virtual int get_roles(const DoutPrefixProvider *dpp,
-			optional_yield y,
-			const std::string& path_prefix,
-			const std::string& tenant,
-			std::vector<std::unique_ptr<RGWRole>>& roles) override;
+  virtual int list_roles(const DoutPrefixProvider *dpp,
+			 optional_yield y,
+			 const std::string& tenant,
+			 const std::string& path_prefix,
+			 const std::string& marker,
+			 uint32_t max_items,
+			 RoleList& listing) override;
   virtual std::unique_ptr<RGWOIDCProvider> get_oidc_provider() override;
   virtual int get_oidc_providers(const DoutPrefixProvider *dpp,
 				 const std::string& tenant,

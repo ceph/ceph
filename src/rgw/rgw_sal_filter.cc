@@ -570,13 +570,16 @@ std::unique_ptr<RGWRole> FilterDriver::get_role(const RGWRoleInfo& info)
   return next->get_role(info);
 }
 
-int FilterDriver::get_roles(const DoutPrefixProvider *dpp,
-			   optional_yield y,
-			   const std::string& path_prefix,
-			   const std::string& tenant,
-			   std::vector<std::unique_ptr<RGWRole>>& roles)
+int FilterDriver::list_roles(const DoutPrefixProvider *dpp,
+			     optional_yield y,
+			     const std::string& tenant,
+			     const std::string& path_prefix,
+			     const std::string& marker,
+			     uint32_t max_items,
+			     RoleList& listing)
 {
-  return next->get_roles(dpp, y, path_prefix, tenant, roles);
+  return next->list_roles(dpp, y, tenant, path_prefix,
+                          marker, max_items, listing);
 }
 
 std::unique_ptr<RGWOIDCProvider> FilterDriver::get_oidc_provider()
