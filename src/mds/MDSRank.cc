@@ -3472,6 +3472,9 @@ void MDSRank::create_logger()
                     PerfCountersBuilder::PRIO_INTERESTING);
     mdm_plb.add_u64(l_mdm_dn, "dn", "Dentries", "dn",
                     PerfCountersBuilder::PRIO_INTERESTING);
+    // mds rss metric is set to PRIO_USEFUL as it can be useful to detect mds cache oversizing
+    mdm_plb.add_u64(l_mdm_rss, "rss", "RSS", "rss",
+                    PerfCountersBuilder::PRIO_USEFUL);
 
     mdm_plb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
     mdm_plb.add_u64_counter(l_mdm_inoa, "ino+", "Inodes opened");
@@ -3485,9 +3488,6 @@ void MDSRank::create_logger()
     mdm_plb.add_u64_counter(l_mdm_capa, "cap+", "Capabilities added");
     mdm_plb.add_u64_counter(l_mdm_caps, "cap-", "Capabilities removed");
     mdm_plb.add_u64(l_mdm_heap, "heap", "Heap size");
-
-    mdm_plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
-    mdm_plb.add_u64(l_mdm_rss, "rss", "RSS");
 
     mlogger = mdm_plb.create_perf_counters();
     g_ceph_context->get_perfcounters_collection()->add(mlogger);
