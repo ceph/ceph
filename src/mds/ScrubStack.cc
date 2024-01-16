@@ -891,22 +891,30 @@ void ScrubStack::handle_scrub(const cref_t<MMDSScrub> &m)
 
       std::vector<CDir*> dfs;
       MDSGatherBuilder gather(g_ceph_context);
+      frag_vec_t frags;
+      diri->dirfragtree.get_leaves(frags);
       for (const auto& fg : m->get_frags()) {
-	CDir *dir = diri->get_dirfrag(fg);
-	if (!dir) {
-	  dout(10) << __func__ << " no frag " << fg << dendl;
-	  continue;
+	for (auto f : frags) {
+	  if (!fg.contains(f)) {
+	    dout(20) << __func__ << " skipping " << f << dendl;
+	    continue;
+	  }
+	  CDir *dir = diri->get_or_open_dirfrag(mdcache, f);
+	  if (!dir) {
+	    dout(10) << __func__ << " no frag " << f << dendl;
+	    continue;
+	  }
+	  if (!dir->is_auth()) {
+	    dout(10) << __func__ << " not auth " << *dir << dendl;
+	    continue;
+	  }
+	  if (!dir->can_auth_pin()) {
+	    dout(10) << __func__ << " can't auth pin " << *dir <<  dendl;
+	    dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
+	    continue;
+	  }
+	  dfs.push_back(dir);
 	}
-	if (!dir->is_auth()) {
-	  dout(10) << __func__ << " not auth " << *dir << dendl;
-	  continue;
-	}
-	if (!dir->can_auth_pin()) {
-	  dout(10) << __func__ << " can't auth pin " << *dir <<  dendl;
-	  dir->add_waiter(CDir::WAIT_UNFREEZE, gather.new_sub());
-	  continue;
-	}
-	dfs.push_back(dir);
       }
 
       if (gather.has_subs()) {
