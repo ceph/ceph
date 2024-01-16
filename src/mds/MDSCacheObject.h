@@ -326,11 +326,6 @@ class MDSCacheObject {
   static uint64_t last_wait_seq;
 };
 
-inline std::ostream& operator<<(std::ostream& out, const MDSCacheObject& o) {
-  o.print(out);
-  return out;
-}
-
 inline std::ostream& operator<<(std::ostream& out, const mdsco_db_line_prefix& o) {
   o.object->print_db_line_prefix(out);
   return out;
