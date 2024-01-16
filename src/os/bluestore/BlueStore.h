@@ -125,6 +125,7 @@ enum {
 
   // write op stats
   //****************************************
+  l_bluestore_write_lat,
   l_bluestore_write_big,
   l_bluestore_write_big_bytes,
   l_bluestore_write_big_blobs,

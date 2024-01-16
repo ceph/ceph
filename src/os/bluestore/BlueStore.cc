@@ -6211,6 +6211,9 @@ void BlueStore::_init_logger()
 
   // write op stats
   //****************************************
+  b.add_time_avg(l_bluestore_write_lat, "write_lat",
+	    "write_op average execution time",
+	    "aw", PerfCountersBuilder::PRIO_USEFUL);
   b.add_u64_counter(l_bluestore_write_big, "write_big",
 		    "Large aligned writes into fresh blobs");
   b.add_u64_counter(l_bluestore_write_big_bytes, "write_big_bytes",
@@ -16931,6 +16934,7 @@ int BlueStore::_write(TransContext *txc,
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << dendl;
+  auto start = mono_clock::now();
   int r = 0;
   if (offset + length >= OBJECT_MAX_SIZE) {
     r = -E2BIG;
@@ -16939,6 +16943,8 @@ int BlueStore::_write(TransContext *txc,
     r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
     txc->write_onode(o);
   }
+  auto finish = mono_clock::now();
+  logger->tinc(l_bluestore_write_lat, finish - start);
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
