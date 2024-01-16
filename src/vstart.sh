@@ -58,13 +58,21 @@ get_cmake_variable() {
     grep "${variable}:" CMakeCache.txt | cut -d "=" -f 2
 }
 
+PYTHON3="python3"
+
 # for running out of the CMake build directory
 if [ -e CMakeCache.txt ]; then
     # Out of tree build, learn source location from CMakeCache.txt
     CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
     CEPH_BUILD_DIR=`pwd`
     [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
+    PYTHON3=$(get_cmake_variable _Python3_EXECUTABLE)
+    debug echo "using _Python3_EXECUTABLE from CMakeCache.txt: $PYTHON3"
 fi
+
+VENV_SITE_PACKAGES=$(\
+  $PYTHON3 -c 'import site; import sys; print(":".join(site.getsitepackages()) if sys.prefix != sys.base_prefix else "");' \
+  || echo "couldn't determine venv site packages" >&2)
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install'
 if [ -n "$CEPH_BUILD_ROOT" ]; then
@@ -93,12 +101,13 @@ fi
 
 [ -z "$PYBIND" ] && PYBIND=./pybind
 
-[ -n "$CEPH_PYTHON_COMMON" ] && CEPH_PYTHON_COMMON="$CEPH_PYTHON_COMMON:"
 CYTHON_PYTHONPATH="$CEPH_LIB/cython_modules/lib.3"
-export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON$PYTHONPATH
+PYTHONPATH_SUFFIX=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON:$VENV_SITE_PACKAGES
+export PYTHONPATH=$PYTHONPATH_SUFFIX:$PYTHONPATH
 
-export LD_LIBRARY_PATH=$CEPH_LIB:$CEPH_EXT_LIB:$LD_LIBRARY_PATH
-export DYLD_LIBRARY_PATH=$CEPH_LIB:$CEPH_EXT_LIB:$DYLD_LIBRARY_PATH
+LIBRARY_PATH_SUFFIX=$CEPH_LIB:$CEPH_EXT_LIB
+export LD_LIBRARY_PATH=$LIBRARY_PATH_SUFFIX:$LD_LIBRARY_PATH
+export DYLD_LIBRARY_PATH=$LIBRARY_PATH_SUFFIX:$DYLD_LIBRARY_PATH
 # Suppress logging for regular use that indicated that we are using a
 # development version. vstart.sh is only used during testing and
 # development
@@ -2064,8 +2073,9 @@ echo ""
     echo "#"
 } > $CEPH_DIR/vstart_environment.sh
 {
-    echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
-    echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
+    echo "export PYTHONPATH=$PYTHONPATH_SUFFIX:\$PYTHONPATH"
+    echo "export LD_LIBRARY_PATH=$LIBRARY_PATH_SUFFIX:\$LD_LIBRARY_PATH"
+    echo "export DYLD_LIBRARY_PATH=$LIBRARY_PATH_SUFFIX:\$DYLD_LIBRARY_PATH"
     echo "export PATH=$CEPH_DIR/bin:\$PATH"
     echo "export CEPH_CONF=$conf_fn"
     # We cannot set CEPH_KEYRING if this is sourced by vstart_runner.py (API tests)
