@@ -242,6 +242,22 @@ CyanStore::Shard::list_collections()
   return seastar::make_ready_future<std::vector<coll_core_t>>(std::move(collections));
 }
 
+CyanStore::Shard::base_errorator::future<bool>
+CyanStore::Shard::exists(
+  CollectionRef ch,
+  const ghobject_t &oid)
+{
+  auto c = static_cast<Collection*>(ch.get());
+  if (!c->exists) {
+    return base_errorator::make_ready_future<bool>(false);
+  }
+  auto o = c->get_object(oid);
+  if (!o) {
+    return base_errorator::make_ready_future<bool>(false);
+  }
+  return base_errorator::make_ready_future<bool>(true);
+}
+
 CyanStore::Shard::read_errorator::future<ceph::bufferlist>
 CyanStore::Shard::read(
   CollectionRef ch,
