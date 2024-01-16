@@ -14,9 +14,12 @@ class TestClusterAffinity(CephFSTestCase):
     CLIENTS_REQUIRED = 0
     MDSS_REQUIRED = 4
 
-    def _verify_join_fs(self, target, status=None):
+    def _verify_join_fs(self, target, status=None, fs=None):
+        fs_select = fs
+        if fs_select is None:
+            fs_select = self.fs
         if status is None:
-            status = self.fs.wait_for_daemons(timeout=30)
+            status = fs_select.wait_for_daemons(timeout=30)
             log.debug("%s", status)
         target = sorted(target, key=operator.itemgetter('name'))
         log.info("target = %s", target)
@@ -37,11 +40,14 @@ class TestClusterAffinity(CephFSTestCase):
                 return
         self.fail("no entity")
 
-    def _verify_init(self):
-        status = self.fs.status()
+    def _verify_init(self, fs=None):
+        fs_select = fs
+        if fs_select is None:
+            fs_select = self.fs
+        status = fs_select.status()
         log.info("status = {0}".format(status))
         target = [{'join_fscid': -1, 'name': info['name']} for info in status.get_all()]
-        self._verify_join_fs(target, status=status)
+        self._verify_join_fs(target, status=status, fs=fs_select)
         return (status, target)
 
     def _reach_target(self, target):
@@ -107,12 +113,21 @@ class TestClusterAffinity(CephFSTestCase):
         fs2 = self.mds_cluster.newfs(name="cephfs2")
         status, target = self._verify_init()
         active = self.fs.get_active_names(status=status)[0]
+        status2, _ = self._verify_init(fs=fs2)
+        active2 = fs2.get_active_names(status=status2)[0]
         standbys = [info['name'] for info in status.get_standbys()]
         victim = standbys.pop()
         # Set a bogus fs on the others
         for mds in standbys:
             self.config_set('mds.'+mds, 'mds_join_fs', 'cephfs2')
             self._change_target_state(target, mds, {'join_fscid': fs2.id})
+        # The active MDS for cephfs2 will be replaced by the MDS for which
+        # file system affinity has been set. Also, set the affinity for
+        # the earlier active MDS so that it is not chosen by the monitors
+        # as an active MDS for the existing file system.
+        log.info(f'assigning affinity to cephfs2 for active mds (mds.{active2})')
+        self.config_set(f'mds.{active2}', 'mds_join_fs', 'cephfs2')
+        self._change_target_state(target, active2, {'join_fscid': fs2.id})
         self.fs.rank_fail()
         self._change_target_state(target, victim, {'state': 'up:active'})
         self._reach_target(target)
