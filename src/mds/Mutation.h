@@ -78,6 +78,12 @@ public:
       return lock < r.lock;
     }
 
+    void print(std::ostream& out) const {
+      CachedStackStringStream css;
+      *css << "0x" << std::hex << flags;
+      out << "LockOp(l=" << *lock << ",f=" << css->strv() << ",wt=" << wrlock_target << ")";
+    }
+
     SimpleLock* lock;
     mutable unsigned flags;
     mutable mds_rank_t wrlock_target;
