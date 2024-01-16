@@ -65,13 +65,7 @@ public:
     return (offset / chunk_size) * stripe_width;
   }
   std::pair<uint64_t, uint64_t> aligned_offset_len_to_chunk(
-    std::pair<uint64_t, uint64_t> in) const {
-    // we need to align to stripe again to deal with partial chunk read.
-    std::pair<uint64_t, uint64_t> aligned = offset_len_to_stripe_bounds(in);
-    return std::make_pair(
-      aligned_logical_offset_to_chunk_offset(aligned.first),
-      aligned_logical_offset_to_chunk_offset(aligned.second));
-  }
+    std::pair<uint64_t, uint64_t> in) const;
   std::pair<uint64_t, uint64_t> offset_len_to_stripe_bounds(
     std::pair<uint64_t, uint64_t> in) const {
     uint64_t off = logical_to_prev_stripe_offset(in.first);
