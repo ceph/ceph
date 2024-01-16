@@ -6,7 +6,7 @@ options:
   type: uint
   level: advanced
   desc: Number of obcs to cache
-  default: 10
+  default: 512
 - name: crimson_osd_scheduler_concurrency
   type: uint
   level: advanced
