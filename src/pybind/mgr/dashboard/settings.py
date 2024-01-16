@@ -119,6 +119,8 @@ class Options(object):
                                                   'gateway', 'logs', 'crush', 'maps']),
                                         [str])
 
+    MULTICLUSTER_CONFIG = Setting({}, [dict, str])
+
     UNSAFE_TLS_v1_2 = Setting(False, [bool])
 
     @staticmethod
