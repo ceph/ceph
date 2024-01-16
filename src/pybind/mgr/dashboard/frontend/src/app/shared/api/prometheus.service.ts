@@ -154,6 +154,8 @@ export class PrometheusService {
             }).subscribe((data: any) => {
               if (data.result.length) {
                 queriesResults[queryName] = data.result[0].values;
+              } else {
+                queriesResults[queryName] = [];
               }
               if (
                 queriesResults[queryName] !== undefined &&
