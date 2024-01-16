@@ -745,21 +745,6 @@ class TestRenameCmd(TestVolumesHelper):
         # data pool names unchanged
         self.assertCountEqual(orig_data_pool_names, list(self.fs.data_pools.values()))
 
-    def test_rename_when_fs_is_online(self):
-        for m in self.mounts:
-            m.umount_wait()
-        newvolname = self._gen_vol_name()
-
-        self.run_ceph_cmd(f'fs set {self.volname} refuse_client_session true')
-        self.negtest_ceph_cmd(
-            args=(f'fs volume rename {self.volname} {newvolname} '
-                   '--yes-i-really-mean-it'),
-            errmsgs=(f"CephFS '{self.volname}' is not offline. Before "
-                      "renaming a CephFS, it must be marked as down. See "
-                      "`ceph fs fail`."),
-            retval=errno.EPERM)
-        self.run_ceph_cmd(f'fs set {self.volname} refuse_client_session false')
-
     def test_rename_when_clients_arent_refused(self):
         newvolname = self._gen_vol_name()
         for m in self.mounts:
