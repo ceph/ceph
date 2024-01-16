@@ -3531,7 +3531,7 @@ MDPeerUpdate* MDCache::get_uncommitted_peer(metareqid_t reqid, mds_rank_t leader
   return su;
 }
 
-void MDCache::finish_rollback(metareqid_t reqid, MDRequestRef& mdr) {
+void MDCache::finish_rollback(metareqid_t reqid, const MDRequestRef& mdr) {
   auto p = resolve_need_rollback.find(reqid);
   ceph_assert(p != resolve_need_rollback.end());
   if (mds->is_resolve()) {
@@ -8240,7 +8240,7 @@ void MDCache::dispatch(const cref_t<Message> &m)
   }
 }
 
-int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
+int MDCache::path_traverse(const MDRequestRef& mdr, MDSContextFactory& cf,
                            const filepath& path, int flags,
                            vector<CDentry*> *pdnvec, CInode **pin)
 {
@@ -8657,7 +8657,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   return 0;
 }
 
-int MDCache::maybe_request_forward_to_auth(MDRequestRef& mdr, MDSContextFactory& cf,
+int MDCache::maybe_request_forward_to_auth(const MDRequestRef& mdr, MDSContextFactory& cf,
 					   MDSCacheObject *p)
 {
   if (p->is_ambiguous_auth()) {
@@ -8739,7 +8739,7 @@ void MDCache::open_remote_dirfrag(CInode *diri, frag_t approxfg, MDSContext *fin
  * will return inode for primary, or link up/open up remote link's inode as necessary.
  * If it's not available right now, puts mdr on wait list and returns null.
  */
-CInode *MDCache::get_dentry_inode(CDentry *dn, MDRequestRef& mdr, bool projected)
+CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool projected)
 {
   CDentry::linkage_t *dnl;
   if (projected)
@@ -9667,7 +9667,7 @@ MDRequestRef MDCache::request_get(metareqid_t rid)
   return p->second;
 }
 
-void MDCache::request_finish(MDRequestRef& mdr)
+void MDCache::request_finish(const MDRequestRef& mdr)
 {
   dout(7) << "request_finish " << *mdr << dendl;
   mdr->mark_event("finishing request");
@@ -9714,7 +9714,7 @@ void MDCache::request_finish(MDRequestRef& mdr)
 }
 
 
-void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
+void MDCache::request_forward(const MDRequestRef& mdr, mds_rank_t who, int port)
 {
   CachedStackStringStream css;
   *css << "forwarding request to mds." << who;
@@ -9739,7 +9739,7 @@ void MDCache::request_forward(MDRequestRef& mdr, mds_rank_t who, int port)
 }
 
 
-void MDCache::dispatch_request(MDRequestRef& mdr)
+void MDCache::dispatch_request(const MDRequestRef& mdr)
 {
   if (mdr->client_request) {
     mds->server->dispatch_client_request(mdr);
@@ -9775,7 +9775,7 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
 }
 
 
-void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
+void MDCache::request_drop_foreign_locks(const MDRequestRef& mdr)
 {
   if (!mdr->has_more())
     return;
@@ -9830,19 +9830,19 @@ void MDCache::request_drop_foreign_locks(MDRequestRef& mdr)
                                 * this function can get called more than once */
 }
 
-void MDCache::request_drop_non_rdlocks(MDRequestRef& mdr)
+void MDCache::request_drop_non_rdlocks(const MDRequestRef& mdr)
 {
   request_drop_foreign_locks(mdr);
   mds->locker->drop_non_rdlocks(mdr.get());
 }
 
-void MDCache::request_drop_locks(MDRequestRef& mdr)
+void MDCache::request_drop_locks(const MDRequestRef& mdr)
 {
   request_drop_foreign_locks(mdr);
   mds->locker->drop_locks(mdr.get());
 }
 
-void MDCache::request_cleanup(MDRequestRef& mdr)
+void MDCache::request_cleanup(const MDRequestRef& mdr)
 {
   dout(15) << "request_cleanup " << *mdr << dendl;
 
@@ -9884,7 +9884,7 @@ void MDCache::request_cleanup(MDRequestRef& mdr)
   mdr->mark_event("cleaned up request");
 }
 
-void MDCache::request_kill(MDRequestRef& mdr)
+void MDCache::request_kill(const MDRequestRef& mdr)
 {
   // rollback peer requests is tricky. just let the request proceed.
   if (mdr->has_more() &&
@@ -11132,7 +11132,7 @@ void MDCache::decode_remote_dentry_link(CDir *dir, CDentry *dn, bufferlist::cons
   DECODE_FINISH(p);
 }
 
-void MDCache::send_dentry_link(CDentry *dn, MDRequestRef& mdr)
+void MDCache::send_dentry_link(CDentry *dn, const MDRequestRef& mdr)
 {
   dout(7) << __func__ << " " << *dn << dendl;
 
@@ -11202,7 +11202,7 @@ void MDCache::handle_dentry_link(const cref_t<MDentryLink> &m)
 
 // UNLINK
 
-void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr)
+void MDCache::send_dentry_unlink(CDentry *dn, CDentry *straydn, const MDRequestRef& mdr)
 {
   dout(10) << __func__ << " " << *dn << dendl;
   // share unlink news with replicas
@@ -11522,7 +11522,7 @@ class C_MDC_FragmentFrozen : public MDSInternalContext {
   MDCache *mdcache;
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentFrozen(MDCache *m, MDRequestRef& r) :
+  C_MDC_FragmentFrozen(MDCache *m, const MDRequestRef& r) :
     MDSInternalContext(m->mds), mdcache(m), mdr(r) {}
   void finish(int r) override {
     mdcache->fragment_frozen(mdr, r);
@@ -11680,13 +11680,13 @@ void MDCache::fragment_freeze_dirs(const std::vector<CDir*>& dirs)
 class C_MDC_FragmentMarking : public MDCacheContext {
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentMarking(MDCache *m, MDRequestRef& r) : MDCacheContext(m), mdr(r) {}
+  C_MDC_FragmentMarking(MDCache *m, const MDRequestRef& r) : MDCacheContext(m), mdr(r) {}
   void finish(int r) override {
     mdcache->fragment_mark_and_complete(mdr);
   }
 };
 
-void MDCache::fragment_mark_and_complete(MDRequestRef& mdr)
+void MDCache::fragment_mark_and_complete(const MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
@@ -11868,7 +11868,7 @@ void MDCache::find_stale_fragment_freeze()
 class C_MDC_FragmentPrep : public MDCacheLogContext {
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentPrep(MDCache *m, MDRequestRef& r) : MDCacheLogContext(m),  mdr(r) {}
+  C_MDC_FragmentPrep(MDCache *m, const MDRequestRef& r) : MDCacheLogContext(m),  mdr(r) {}
   void finish(int r) override {
     mdcache->_fragment_logged(mdr);
   }
@@ -11877,7 +11877,7 @@ public:
 class C_MDC_FragmentStore : public MDCacheContext {
   MDRequestRef mdr;
 public:
-  C_MDC_FragmentStore(MDCache *m, MDRequestRef& r) : MDCacheContext(m), mdr(r) {}
+  C_MDC_FragmentStore(MDCache *m, const MDRequestRef& r) : MDCacheContext(m), mdr(r) {}
   void finish(int r) override {
     mdcache->_fragment_stored(mdr);
   }
@@ -11911,7 +11911,7 @@ public:
   }
 };
 
-void MDCache::fragment_frozen(MDRequestRef& mdr, int r)
+void MDCache::fragment_frozen(const MDRequestRef& mdr, int r)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
@@ -11930,7 +11930,7 @@ void MDCache::fragment_frozen(MDRequestRef& mdr, int r)
   dispatch_fragment_dir(mdr);
 }
 
-void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
+void MDCache::dispatch_fragment_dir(const MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   map<dirfrag_t,fragment_info_t>::iterator it = fragments.find(basedirfrag);
@@ -12035,7 +12035,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   mds->mdlog->flush();
 }
 
-void MDCache::_fragment_logged(MDRequestRef& mdr)
+void MDCache::_fragment_logged(const MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   auto& info = fragments.at(basedirfrag);
@@ -12065,7 +12065,7 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
   gather.activate();
 }
 
-void MDCache::_fragment_stored(MDRequestRef& mdr)
+void MDCache::_fragment_stored(const MDRequestRef& mdr)
 {
   dirfrag_t basedirfrag = mdr->more()->fragment_base;
   fragment_info_t &info = fragments.at(basedirfrag);
@@ -12957,7 +12957,7 @@ void MDCache::enqueue_scrub(
   enqueue_scrub_work(mdr);
 }
 
-void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
+void MDCache::enqueue_scrub_work(const MDRequestRef& mdr)
 {
   CInode *in;
   CF_MDS_RetryRequestFactory cf(this, mdr, true);
@@ -12989,7 +12989,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 
 struct C_MDC_RespondInternalRequest : public MDCacheLogContext {
   MDRequestRef mdr;
-  C_MDC_RespondInternalRequest(MDCache *c, MDRequestRef& m) :
+  C_MDC_RespondInternalRequest(MDCache *c, const MDRequestRef& m) :
     MDCacheLogContext(c), mdr(m) {}
   void finish(int r) override {
     mdr->apply();
@@ -13021,7 +13021,7 @@ void MDCache::repair_dirfrag_stats(CDir *dir)
   repair_dirfrag_stats_work(mdr);
 }
 
-void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
+void MDCache::repair_dirfrag_stats_work(const MDRequestRef& mdr)
 {
   CDir *dir = static_cast<CDir*>(mdr->internal_op_private);
   dout(10) << __func__ << " " << *dir << dendl;
@@ -13128,7 +13128,7 @@ void MDCache::repair_inode_stats(CInode *diri)
   repair_inode_stats_work(mdr);
 }
 
-void MDCache::repair_inode_stats_work(MDRequestRef& mdr)
+void MDCache::repair_inode_stats_work(const MDRequestRef& mdr)
 {
   CInode *diri = static_cast<CInode*>(mdr->internal_op_private);
   dout(10) << __func__ << " " << *diri << dendl;
@@ -13228,7 +13228,7 @@ void MDCache::rdlock_dirfrags_stats(CInode *diri, MDSInternalContext* fin)
   return rdlock_dirfrags_stats_work(mdr);
 }
 
-void MDCache::rdlock_dirfrags_stats_work(MDRequestRef& mdr)
+void MDCache::rdlock_dirfrags_stats_work(const MDRequestRef& mdr)
 {
   CInode *diri = static_cast<CInode*>(mdr->internal_op_private);
   dout(10) << __func__ << " " << *diri << dendl;
@@ -13274,11 +13274,11 @@ protected:
   MDRequestRef mdr;
   MDSRank *get_mds() override { return mds; }
 public:
-  C_FinishIOMDR(MDSRank *mds_, MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
+  C_FinishIOMDR(MDSRank *mds_, const MDRequestRef& mdr_) : mds(mds_), mdr(mdr_) {}
   void finish(int r) override { mds->server->respond_to_request(mdr, r); }
 };
 
-void MDCache::flush_dentry_work(MDRequestRef& mdr)
+void MDCache::flush_dentry_work(const MDRequestRef& mdr)
 {
   MutationImpl::LockOpVec lov;
   CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
