@@ -5000,7 +5000,8 @@ int OSDMap::balance_primaries(
   CephContext *cct,
   int64_t pid,
   OSDMap::Incremental *pending_inc,
-  OSDMap& tmp_osd_map) const
+  OSDMap& tmp_osd_map,
+  const std::optional<rb_policy>& rbp) const
 {
   // This function only handles replicated pools.
   const pg_pool_t* pool = get_pg_pool(pid);
@@ -5037,7 +5038,7 @@ int OSDMap::balance_primaries(
   // calculate desired primary distribution for each osd
   map<uint64_t,float> desired_prim_dist;
   int rc = 0;
-  rc = calc_desired_primary_distribution(cct, pid, osds_to_check, desired_prim_dist);
+  rc = calc_desired_primary_distribution(cct, pid, osds_to_check, desired_prim_dist, rbp);
   if (rc < 0) {
     ldout(cct, 10) << __func__ << " Error in calculating desired primary distribution" << dendl;
     return -EINVAL;
@@ -5155,11 +5156,56 @@ int OSDMap::balance_primaries(
   return num_changes;
 }
 
+void OSDMap::rm_all_upmap_prims(CephContext *cct, OSDMap::Incremental *pending_inc, uint64_t pid) {
+  map<uint64_t,set<pg_t>> prim_pgs_by_osd;
+  get_pgs_by_osd(cct, pid, &prim_pgs_by_osd);
+  for (auto &[_, pgs] : prim_pgs_by_osd) {
+    for (auto &pg : pgs) {
+      if (pending_inc->new_pg_upmap_primary.contains(pg)) {
+        ldout(cct,30) << __func__ << "Removing pending pg_upmap_prim for pg " << pg << dendl;
+        pending_inc->new_pg_upmap_primary.erase(pg);
+      }
+      if (pg_upmap_primaries.contains(pg)) {
+        ldout(cct, 30) << __func__ << "Removing pg_upmap_prim for pg " << pg << dendl;
+        pending_inc->old_pg_upmap_primary.insert(pg);
+      }
+    }
+  }
+}
+
 int OSDMap::calc_desired_primary_distribution(
   CephContext *cct,
   int64_t pid,
   const vector<uint64_t> &osds,
-  std::map<uint64_t, float>& desired_primary_distribution) const
+  map<uint64_t, float>& desired_primary_distribution,
+  const std::optional<rb_policy>& rbp) const
+{
+  rb_policy policy;
+  if (rbp) {
+    policy = rbp.value();
+  }
+  else {
+    //TODO: Change this to support policy parameters in the future
+    policy = RB_SIMPLE;
+  }
+
+  switch (policy) {
+    case RB_SIMPLE:
+      return calc_desired_primary_distribution_simple(cct, pid, osds, desired_primary_distribution);
+    case RB_OSDSIZEOPT:
+      return calc_desired_primary_distribution_osdsize_opt(cct, pid, osds, desired_primary_distribution);
+    default:
+      ldout(cct, 10) << __func__ << " invalid read balance policy" << int(policy) << dendl;
+      return -EINVAL;
+  }
+
+}
+
+int OSDMap::calc_desired_primary_distribution_simple(
+  CephContext *cct,
+  int64_t pid,
+  const vector<uint64_t> &osds,
+  map<uint64_t, float>& desired_primary_distribution) const
 {
   // will return a perfect distribution of floats
   // without calculating the floor of each value
@@ -5167,7 +5213,7 @@ int OSDMap::calc_desired_primary_distribution(
   // This function only handles replicated pools.
   const pg_pool_t* pool = get_pg_pool(pid);
   if (pool->is_replicated()) {
-    ldout(cct, 20) << __func__ << " calculating distribution for replicated pool "
+    ldout(cct, 20) << __func__ << " calculating simple distribution for replicated pool "
                    << get_pool_name(pid) << dendl;
     uint64_t replica_count = pool->get_size();
     
@@ -5206,6 +5252,229 @@ int OSDMap::calc_desired_primary_distribution(
   return 0;
 }
 
+//
+// For read balancing with different osd sizes - calculate the desired number of primaries
+// per OSD for a given pool with constraints (forced*) that are set by previous
+// assignments.
+//
+float OSDMap::calc_desired_prims_for_osdsizeopt(int npgs, int forced_primaries,
+                                                int forced_secondaries, int iops_per_osd,
+                                                int write_ratio) const {
+  int forced_iops_per_pg = forced_primaries * 100 + forced_secondaries * write_ratio;
+  int pgs_left = npgs - forced_primaries - forced_secondaries;
+  int iops_left = iops_per_osd - forced_iops_per_pg;
+  if (pgs_left <= 0)
+    return float(forced_primaries);
+  else
+    return float(forced_primaries) + float(iops_left - pgs_left * write_ratio) / float(100 - write_ratio);
+}
+
+int OSDMap::calc_desired_primary_distribution_osdsize_opt(
+  CephContext *cct,
+  int64_t pid,
+  const vector<uint64_t> &osds,
+  map<uint64_t, float>& desired_primary_distribution) const
+{
+  const pg_pool_t* pool = get_pg_pool(pid);
+  if (!pool->is_replicated()) {   // read balancing works only for replicated pools
+    ldout(cct, 10) << __func__ <<" skipping erasure pool "
+                   << get_pool_name(pid) << dendl;
+    return -EINVAL;
+  } else if (pool->get_size() <= 1) {
+    ldout(cct, 10) << __func__ << " skipping replicated pool "
+                   << get_pool_name(pid) <<  " with a single replica" << dendl;
+    return -EINVAL;
+  } else {
+    int replica_count = pool->get_size();
+    int pg_num = pool->get_pg_num();
+    map<uint64_t,set<pg_t>> pgs_by_osd;
+    pgs_by_osd = get_pgs_by_osd(cct, pid);
+    int sum_pgs = 0;
+    for (auto& [_, pgs] : pgs_by_osd) {
+      sum_pgs += pgs.size();
+    }
+    if (sum_pgs != pg_num * replica_count) {
+      ldout(cct, 10) << __func__ << " Some of the PGs for pool '"
+                     << get_pool_name(pid) << "' don't have" << replica_count << " replicas "
+                     << "- can't perform osd-size-optimized read balancing " << dendl;
+      return -EINVAL;
+    }
+    ldout(cct, 20) << __func__ << " calculating OSD size optimized primary distribution for replicated pool "
+                   << get_pool_name(pid) << dendl;
+
+    int64_t read_ratio = 0;
+    {
+      // new scope since it is not allowed to use def_read_ratio after std::move
+      uint64_t def_read_ratio = cct->_conf.get_val<uint64_t>("osd_pool_default_read_ratio");
+      read_ratio = pool->opts.value_or<int64_t>(pool_opts_t::key_t::READ_RATIO, std::move(def_read_ratio));
+    }
+    int write_ratio = 100 - read_ratio;
+    ldout(cct, 30) << __func__ << " Pool: " << pid << " read ratio: " << read_ratio << " write ratio: " << write_ratio << dendl;
+    int num_osds = osds.size();
+    if (pg_num != (pool->get_pgp_num_mask() + 1)) {
+      // TODO: handle pgs with different sizes
+      //pool_t op:  unsigned get_pg_num_divisor(pg_t pgid) const;
+      ldout(cct, 10) << __func__ << " number of PGs for pool '"
+                     << get_pool_name(pid) << "' is not a power of 2 "
+                     << "- read balance calculation is not optinmal" << dendl;
+    }
+
+    vector<bool> osds_set(num_osds, false);
+    int osd_set_count = 0;
+    set<pg_t> pgs_used;
+    int osds_left = num_osds;
+    int iops_left = pg_num * (100 + ((replica_count - 1) * write_ratio));
+    int primaries_left = pg_num;
+    bool cont = true;
+    int iops_per_osd;
+
+    // first loop - mark OSDs in which all PGs should be primary (very small one, if exist)
+    // for OSDs selected in this loop we "force" the primary to be on these OSDs so that there
+    // is only little freedom to the balancer (in cases where one PG is mapped to more than 1 of these OSDs).
+    //
+    while (cont) {
+      cont = false;
+      if (osds_left <= 0 || iops_left <= 0 || primaries_left <= 0)
+        break;    // We are done here
+      iops_per_osd = iops_left / osds_left;
+      int p_pgs;
+
+      for (int i = 0 ; i < num_osds ; i++) {
+        int npgs = pgs_by_osd[osds[i]].size();
+        p_pgs = npgs;
+        if (osds_set[i])
+          continue;   // We are already done with this OSD
+        for (auto &p : pgs_by_osd[osds[i]]) {
+          if (pgs_used.contains(p))
+            p_pgs--;   // We already force primary on this pg
+        }
+        int osd_max_io_load = p_pgs * 100 + ((npgs - p_pgs) * write_ratio);
+        //
+        // Check if for this OSD we can mark all non-set PGs to primaries
+        //
+        if (osd_max_io_load < iops_per_osd) {
+          osds_set[i] = true;
+          osd_set_count++;
+          desired_primary_distribution.insert({osds[i], float(p_pgs)});
+          iops_left -= osd_max_io_load;
+          osds_left--;
+          primaries_left -= p_pgs;
+          cont = true;
+          for (auto &p : pgs_by_osd[osds[i]]) {
+            // Doesn't matter that we count some PGs twice - if we are here all
+            // PGs of this OSD are already forced to choose a primary
+            if (!pgs_used.contains(p))
+              pgs_used.insert(p);
+          }
+          if (osd_set_count == num_osds) {
+            break;    // We are done here
+          }
+        }
+      }
+    }
+    ldout(cct, 30) << __func__ << " read-balancer: All primaries OSDs for pool '"
+                   << get_pool_name(pid) << "': " << osds_set << dendl;
+    ldout(cct, 30) << __func__ << " read-balancer: PGs with primaries fixes " << pgs_used << dendl;
+    //
+    // Second loop - mark all OSDs which should have no primaries (if any) - these
+    // are the large OSDs which will make the disk fully loaded only with write operations
+    //
+    cont = true;
+    map <pg_t, int> wo_pgs;  // count PGs which are not yet marked as primaries
+    while (cont) {
+      cont = false;
+      if (osds_left <= 0 || iops_left <= 0 || primaries_left <= 0)
+        break;    // We are done here
+      iops_per_osd = iops_left / osds_left;
+      int p_pgs;
+
+      for (int i = 0 ; i < num_osds; i++) {
+        int npgs = pgs_by_osd[osds[i]].size();
+        p_pgs = 0;
+        if (osds_set[i])
+          continue;   // We are already done with this OSD
+        // Check minimal load on this device - all the pgs are secondary but those
+        // which are already marked asecondaries (size - 1) times.
+        for (auto &p : pgs_by_osd[osds[i]]) {
+          if (!pgs_used.contains(p)) {   // no mark for the primary of this PG yet
+            // so we count that no more than (size - 1) PGs are marked as secondaries
+            if (wo_pgs.contains(p)) {
+              if (wo_pgs[p] >= (replica_count - 1)) {
+                // the >= instead of == will allow us to later increase the number of wo_pgs[p] without
+                // knowing which PGs secondaries and which are primaries
+                p_pgs++;   // We force primary on this pg since all other OSDs in this PG are secondaries
+              }
+            }
+          }
+        }
+        int osd_min_io_load = p_pgs * 100 + (npgs - p_pgs) * write_ratio;
+        if (osd_min_io_load > iops_per_osd) {
+          osds_set[i] = true;
+          osd_set_count++;
+          desired_primary_distribution.insert({osds[i], float(p_pgs)});
+          //iops_left -= iops_per_osd;  //TODO: consider replaceing with -= osd_min_io_load
+          iops_left -= osd_min_io_load;
+          osds_left--;
+          primaries_left -= p_pgs;
+          cont = true;
+          for (auto &p : pgs_by_osd[osds[i]]) {
+            if (!pgs_used.contains(p)) {
+              if (wo_pgs.contains(p)) {
+                wo_pgs[p]++;
+              } else {
+                wo_pgs.insert({p, 1});
+              }
+            }
+          }
+          if (osds_left == 0) {
+            break;    // We are done here
+          }
+        }
+      }
+    }
+    ldout(cct, 30) << __func__ << " read-balancer: OSDs with all primaries or no primaries '"
+                   << get_pool_name(pid) << "': " << osds_set << dendl;
+    ldout(cct, 30) << __func__ << " read-balancer: wo_pgs " << wo_pgs << dendl;
+
+    //TODO: should we iterate over the above 2 loops or one iteration is enough? ^^
+    //
+    // Now split the rest of the primaries between the remaining OSDs (if any) based on the
+    // number of PGs mapped to them
+    //
+    if (osds_left > 0) {
+      iops_per_osd = iops_left / osds_left;
+
+      ldout(cct, 30) << __func__
+                    << " read-balancer: primaries_left [" << primaries_left
+                    << "] osds_left [" << osds_left
+                    << "] iops_left [" << iops_left
+                    << "] iops_per_osd [" << iops_per_osd << "]" << dendl;
+
+      for (int i = 0 ; i < num_osds ; i++) {
+        if (desired_primary_distribution.contains(osds[i]))
+          continue;   // We are already done with this OSD
+        int npgs = pgs_by_osd[osds[i]].size();
+        int forced_primaries = 0;
+        int forced_secondaries = 0;
+        for (auto &p : pgs_by_osd[osds[i]]) {
+          if (pgs_used.contains(p)) {
+            forced_secondaries++;
+          } else if (wo_pgs.contains(p) && wo_pgs[p] >= (replica_count - 1)) {
+            forced_primaries++;
+          }
+        }
+        float nprims = calc_desired_prims_for_osdsizeopt(npgs, forced_primaries, forced_secondaries, iops_per_osd, write_ratio);
+        desired_primary_distribution.insert({osds[i], nprims});
+      }
+    }
+  }
+
+  ldout(cct, 30) << __func__ << " read-balancer: desired_primary_distribution: "
+                 << desired_primary_distribution << dendl;
+
+  return 0;
+
+}
 int OSDMap::calc_pg_upmaps(
   CephContext *cct,
   uint32_t max_deviation,

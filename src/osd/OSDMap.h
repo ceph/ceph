@@ -1479,17 +1479,41 @@ public:
     std::vector<int> *orig,
     std::vector<int> *out);             ///< resulting alternative mapping
 
+  enum rb_policy {
+    RB_SIMPLE = 0,
+    RB_OSDSIZEOPT
+  };
+
   int balance_primaries(
     CephContext *cct,
     int64_t pid,
     Incremental *pending_inc,
-    OSDMap& tmp_osd_map) const;
+    OSDMap& tmp_osd_map,
+    const std::optional<rb_policy>& rbp = std::nullopt) const;
+
+  void rm_all_upmap_prims(CephContext *cct, Incremental *pending_inc, uint64_t pid);
 
   int calc_desired_primary_distribution(
     CephContext *cct,
     int64_t pid, // pool id
     const std::vector<uint64_t> &osds,
-    std::map<uint64_t, float>& desired_primary_distribution) const; // vector of osd ids
+    std::map<uint64_t, float>& desired_primary_distribution, // vector of osd ids
+    const std::optional<rb_policy>& rbp = std::nullopt) const;
+
+  int calc_desired_primary_distribution_simple(
+    CephContext *cct,
+    int64_t pid, // pool id
+    const std::vector<uint64_t> &osds,
+    std::map<uint64_t, float>& desired_primary_distribution /* vector of osd ids */) const;
+
+  int calc_desired_primary_distribution_osdsize_opt(
+    CephContext *cct,
+    int64_t pid, // pool id
+    const std::vector<uint64_t> &osds,
+    std::map<uint64_t, float>& desired_primary_distribution /* vector of osd ids */) const;
+
+  float calc_desired_prims_for_osdsizeopt(int npgs, int forced_primaries, int forced_secondaries,
+                                          int iops_per_osd, int write_ratio) const;
 
   int calc_pg_upmaps(
     CephContext *cct,
