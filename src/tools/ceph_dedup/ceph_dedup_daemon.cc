@@ -540,6 +540,7 @@ void SampleDedupWorkerThread::do_dedup(list<chunk_t> &redundant_chunks)
   auto do_set_chunk = [this](chunk_t &chunk) {
     uint64_t size;
     time_t mtime;
+    bool remove_if_fail = false;
     int ret = chunk_io_ctx.stat(chunk.fingerprint, &size, &mtime);
     if (ret == -ENOENT) {
       bufferlist bl;
@@ -547,6 +548,7 @@ void SampleDedupWorkerThread::do_dedup(list<chunk_t> &redundant_chunks)
       ObjectWriteOperation wop;
       wop.write_full(bl);
       ret = chunk_io_ctx.operate(chunk.fingerprint, &wop);
+      remove_if_fail = true;
     } 
 
     if (ret < 0) {
@@ -562,7 +564,17 @@ void SampleDedupWorkerThread::do_dedup(list<chunk_t> &redundant_chunks)
       chunk.fingerprint,
       0,
       CEPH_OSD_OP_FLAG_WITH_REFERENCE);
-    return io_ctx.operate(chunk.oid, &op, nullptr);
+    ret = io_ctx.operate(chunk.oid, &op, nullptr);
+    if (ret < 0 && remove_if_fail) {
+      ObjectWriteOperation wop;
+      wop.remove();
+      ret = chunk_io_ctx.operate(chunk.fingerprint, &wop);
+      if (ret < 0) {
+	derr << " error occurs. " << chunk.fingerprint << " in " 
+	  << d_opts.get_chunk_pool_name() << " must be deleted." << dendl;
+      }
+    }
+    return ret;
   };
 
   auto do_async_evict = [this](string oid) {
