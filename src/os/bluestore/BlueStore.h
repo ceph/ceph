@@ -3768,6 +3768,13 @@ private:
                       uint64_t length,
                       ceph::buffer::list& bl,
                       WriteContext *wctx);
+  int _do_write_v2(
+    TransContext *txc,
+    CollectionRef &c,
+    OnodeRef& o,
+    uint64_t offset, uint64_t length,
+    ceph::buffer::list& bl,
+    uint32_t fadvise_flags);
 
   int _touch(TransContext *txc,
 	     CollectionRef& c,

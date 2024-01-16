@@ -53,6 +53,7 @@
 #include "common/pretty_binary.h"
 #include "common/WorkQueue.h"
 #include "kv/KeyValueHistogram.h"
+#include "Writer.h"
 
 #if defined(WITH_LTTNG)
 #define TRACEPOINT_DEFINE
@@ -16921,6 +16922,55 @@ int BlueStore::_do_write(
   r = 0;
 
  out:
+  return r;
+}
+
+int BlueStore::_do_write_v2(
+  TransContext *txc,
+  CollectionRef& c,
+  OnodeRef& o,
+  uint64_t offset,
+  uint64_t length,
+  bufferlist& bl,
+  uint32_t fadvise_flags)
+{
+  int r = 0;
+
+  dout(20) << __func__
+	   << " " << o->oid
+	   << " 0x" << std::hex << offset << "~" << length
+	   << " - have 0x" << o->onode.size
+	   << " (" << std::dec << o->onode.size << ")"
+	   << " bytes" << std::hex
+	   << " fadvise_flags 0x" << fadvise_flags
+	   << " alloc_hint 0x" << o->onode.alloc_hint_flags
+           << " expected_object_size " << o->onode.expected_object_size
+           << " expected_write_size " << o->onode.expected_write_size
+           << std::dec
+	   << dendl;
+  _dump_onode<30>(cct, *o);
+  if (length == 0) {
+    return 0;
+  }
+  if (bl.length() != length) {
+    bl.splice(length, bl.length() - length);
+  }
+  WriteContext wctx;
+  _choose_write_options(c, o, fadvise_flags, &wctx);
+  o->extent_map.fault_range(db, offset, length);
+  BlueStore::Writer wr(this, txc, &wctx, o);
+  wr.do_write(offset, bl);
+  // equivalent of wctx_finish
+  // do_write updates allocations itself
+  // update statfs
+  txc->statfs_delta += wr.statfs_delta;
+  // update shared blobs
+  for (auto b: wr.shared_changed) {
+    txc->write_shared_blob(b);
+  }
+  o->extent_map.compress_extent_map(offset, length);
+  o->extent_map.dirty_range(offset, length);
+  o->extent_map.maybe_reshard(offset, offset + length);
   return r;
 }
 
