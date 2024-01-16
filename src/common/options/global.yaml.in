@@ -5041,6 +5041,18 @@ options:
   flags:
   - create
   with_legacy: false
+- name: bluestore_write_v2
+  type: bool
+  level: advanced
+  desc: Use faster write path
+  long_desc: Original write path was developed over long time by constantly adding features.
+    The price was layered inefficiencies gained along the way.
+    Rework of write path done from scratch clears it and optimizes for typical cases.
+    Write_v2 is necessary for recompression feature.
+  default: false
+  flags:
+  - startup
+  with_legacy: false
 - name: bluestore_allocator
   type: str
   level: advanced

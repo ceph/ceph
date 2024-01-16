@@ -9149,7 +9149,7 @@ int BlueStore::_mount()
       return r;
     }
   }
-
+  use_write_v2 =   cct->_conf.get_val<bool>("bluestore_write_v2");
   _kv_only = false;
   if (cct->_conf->bluestore_fsck_on_mount) {
     int rc = fsck(cct->_conf->bluestore_fsck_on_mount_deep);
@@ -17400,7 +17400,11 @@ int BlueStore::_write(TransContext *txc,
     r = -E2BIG;
   } else {
     _assign_nid(txc, o);
-    r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+    if (use_write_v2) {
+      r = _do_write_v2(txc, c, o, offset, length, bl, fadvise_flags);
+    } else {
+      r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+    }
     txc->write_onode(o);
   }
   auto finish = mono_clock::now();
