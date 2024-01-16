@@ -1,7 +1,8 @@
 import enum
 import json
-import pathlib
 import logging
+import pathlib
+import socket
 
 from typing import List, Dict, Tuple, Optional, Any
 
@@ -55,6 +56,7 @@ class Config:
     custom_dns: List[str]
     smb_port: int
     ceph_config_entity: str
+    vhostname: str
 
     def __init__(
         self,
@@ -69,6 +71,7 @@ class Config:
         custom_dns: Optional[List[str]] = None,
         smb_port: int = 0,
         ceph_config_entity: str = 'client.admin',
+        vhostname: str = '',
     ) -> None:
         self.instance_id = instance_id
         self.source_config = source_config
@@ -80,6 +83,7 @@ class Config:
         self.custom_dns = custom_dns or []
         self.smb_port = smb_port
         self.ceph_config_entity = ceph_config_entity
+        self.vhostname = vhostname
 
     def __str__(self) -> str:
         return (
@@ -88,6 +92,15 @@ class Config:
             f' domain_member={self.domain_member},'
             f' clustered={self.clustered}]'
         )
+
+
+def _container_dns_args(cfg: Config) -> List[str]:
+    cargs = []
+    for dns in cfg.custom_dns:
+        cargs.append(f'--dns={dns}')
+    if cfg.vhostname:
+        cargs.append(f'--hostname={cfg.vhostname}')
+    return cargs
 
 
 class SambaContainerCommon:
@@ -136,6 +149,7 @@ class SMBDContainer(SambaContainerCommon):
         cargs = []
         if self.cfg.smb_port:
             cargs.append(f'--publish={self.cfg.smb_port}:{self.cfg.smb_port}')
+        cargs.extend(_container_dns_args(self.cfg))
         return cargs
 
 
@@ -166,9 +180,7 @@ class MustJoinContainer(SambaContainerCommon):
         return args
 
     def container_args(self) -> List[str]:
-        cargs = []
-        for dns in self.cfg.custom_dns:
-            cargs.append(f'--dns={dns}')
+        cargs = _container_dns_args(self.cfg)
         return cargs
 
 
@@ -230,6 +242,7 @@ class SMB(ContainerDaemonForm):
         instance_features = configs.get('features', [])
         files = data_utils.dict_get(configs, 'files', {})
         ceph_config_entity = configs.get('config_auth_entity', '')
+        vhostname = configs.get('virtual_hostname', '')
 
         if not instance_id:
             raise Error('invalid instance (cluster) id')
@@ -244,6 +257,11 @@ class SMB(ContainerDaemonForm):
             )
         if Features.CLUSTERED.value in instance_features:
             raise NotImplementedError('clustered instance')
+        if not vhostname:
+            # if a virtual hostname is not provided, generate one by prefixing
+            # the cluster/instanced id to the system hostname
+            hname = socket.getfqdn()
+            vhostname = f'{instance_id}-{hname}'
 
         self._instance_cfg = Config(
             instance_id=instance_id,
@@ -255,6 +273,7 @@ class SMB(ContainerDaemonForm):
             samba_debug_level=6,
             smb_port=self.smb_port,
             ceph_config_entity=ceph_config_entity,
+            vhostname=vhostname,
         )
         self._files = files
         logger.debug('SMB Instance Config: %s', self._instance_cfg)
