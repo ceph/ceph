@@ -1,6 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 
 #include <errno.h>
+#include "common/ceph_context.h"
+#include "global/global_context.h"
 #include "include/encoding.h"
 #include "ECUtil.h"
 
@@ -12,7 +14,8 @@ using ceph::Formatter;
 std::pair<uint64_t, uint64_t> ECUtil::stripe_info_t::aligned_offset_len_to_chunk(
   std::pair<uint64_t, uint64_t> in) const {
   // we need to align to stripe again to deal with partial chunk read.
-  std::pair<uint64_t, uint64_t> aligned = offset_len_to_stripe_bounds(in);
+  auto aligned =
+    g_conf()->osd_ec_partial_reads ? offset_len_to_stripe_bounds(in) : in;
   return std::make_pair(
     aligned_logical_offset_to_chunk_offset(aligned.first),
     aligned_logical_offset_to_chunk_offset(aligned.second));
@@ -50,9 +53,9 @@ int ECUtil::decode(
     bufferlist bl;
     int r = ec_impl->decode_concat(chunks, &bl);
     ceph_assert(r == 0);
-#if 0 //ndef EC_PARTIAL_READ
-    ceph_assert(bl.length() == sinfo.get_stripe_width());
-#endif
+    if (!g_conf()->osd_ec_partial_reads) {
+      ceph_assert(bl.length() == sinfo.get_stripe_width());
+    }
     out->claim_append(bl);
   }
   return 0;

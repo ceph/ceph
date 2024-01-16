@@ -502,21 +502,14 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
     ceph_assert(res.returned.size() == to_read.size());
     ceph_assert(res.errors.empty());
     for (auto &&read: to_read) {
-#if 0
-      pair<uint64_t, uint64_t> adjusted =
-	read_pipeline.sinfo.offset_len_to_stripe_bounds(
-	  make_pair(read.get<0>(), read.get<1>()));
-      ceph_assert(res.returned.front().get<0>() == adjusted.first);
-      ceph_assert(res.returned.front().get<1>() == adjusted.second);
-#else
       auto bounds = make_pair(read.get<0>(), read.get<1>());
       auto aligned = read_pipeline.sinfo.offset_len_to_stripe_bounds(bounds);
-      if (aligned.first != read.get<0>() || aligned.second != read.get<1>()) {
+      if (g_conf()->osd_ec_partial_reads
+          && (aligned.first != read.get<0>() || aligned.second != read.get<1>())) {
         aligned = read_pipeline.sinfo.offset_len_to_chunk_bounds(bounds);
       }
       ceph_assert(res.returned.front().get<0>() == aligned.first);
       ceph_assert(res.returned.front().get<1>() == aligned.second);
-#endif
       map<int, bufferlist> to_decode;
       bufferlist bl;
       for (map<pg_shard_t, bufferlist>::iterator j =
@@ -535,19 +528,10 @@ struct ClientReadCompleter : ECCommon::ReadCompleter {
         goto out;
       }
       bufferlist trimmed;
-#if 0
-      trimmed.substr_of(
-	bl,
-	read.get<0>() - adjusted.first,
-	std::min(read.get<1>(),
-	    bl.length() - (read.get<0>() - adjusted.first)));
-#else
-      // XXX: hmm, just refactor, at least at first glance
       auto off = read.get<0>() - aligned.first;
       auto len =
           std::min(read.get<1>(), bl.length() - (read.get<0>() - aligned.first));
       trimmed.substr_of(bl, off, len);
-#endif
       result.insert(
 	read.get<0>(), trimmed.length(), std::move(trimmed));
       res.returned.pop_front();
@@ -624,44 +608,45 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
   for (auto &&to_read: reads) {
     set<int> want_to_read;
     get_want_to_read_shards(&want_to_read);
-#if 1
+    bool partial_read = false;
     std::list<ec_align_t> align_offsets;
-    bool partial_read = should_partial_read(
-        to_read.first,
-        to_read.second,
-        want_to_read,
-        fast_read,
-        false);
+    if (cct->_conf->osd_ec_partial_reads) {
+      partial_read = should_partial_read(
+          to_read.first,
+          to_read.second,
+          want_to_read,
+          fast_read,
+          false);
 
-    // Our extent set and flags
-    extent_set es;
-    uint32_t flags = 0;
+      // Our extent set and flags
+      extent_set es;
+      uint32_t flags = 0;
 
-    for (auto read : to_read.second) {
-      auto bounds = make_pair(read.get<0>(), read.get<1>()); 
+      for (auto read : to_read.second) {
+        auto bounds = make_pair(read.get<0>(), read.get<1>()); 
 
-      // By default, align to the stripe
-      auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
-      if (partial_read) {
-        // align to the chunk instead
-        aligned = sinfo.offset_len_to_chunk_bounds(bounds);
-        set<int> new_want_to_read;
-        get_min_want_to_read_shards(aligned, &new_want_to_read);
-        want_to_read = new_want_to_read;
+        // By default, align to the stripe
+        auto aligned = sinfo.offset_len_to_stripe_bounds(bounds);
+        if (partial_read) {
+          // align to the chunk instead
+          aligned = sinfo.offset_len_to_chunk_bounds(bounds);
+          set<int> new_want_to_read;
+          get_min_want_to_read_shards(aligned, &new_want_to_read);
+          want_to_read = new_want_to_read;
+        }
+        // Add the new extents/flags
+        extent_set new_es;
+        new_es.insert(aligned.first, aligned.second);
+        es.union_of(new_es);
+        flags |= read.get<2>();
       }
-      // Add the new extents/flags
-      extent_set new_es;
-      new_es.insert(aligned.first, aligned.second);
-      es.union_of(new_es);
-      flags |= read.get<2>();
-    }
-    if (!es.empty()) {
-      for (auto e = es.begin(); e != es.end(); ++e) {
-        align_offsets.push_back(
-          boost::make_tuple(e.get_start(), e.get_len(), flags));
+      if (!es.empty()) {
+        for (auto e = es.begin(); e != es.end(); ++e) {
+          align_offsets.push_back(
+            boost::make_tuple(e.get_start(), e.get_len(), flags));
+        }
       }
     }
-#endif
     map<pg_shard_t, vector<pair<int, int>>> shards;
     int r = get_min_avail_to_read_shards(
       to_read.first,
@@ -675,11 +660,7 @@ void ECCommon::ReadPipeline::objects_read_and_reconstruct(
       make_pair(
 	to_read.first,
 	read_request_t(
-#if 1
-	  align_offsets,
-#else
-	  to_read.second,
-#endif
+	  partial_read ? align_offsets : to_read.second,
 	  shards,
 	  false,
 	  partial_read)));
