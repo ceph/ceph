@@ -701,16 +701,21 @@ A value of ``0`` assigned to ``--max-read-ops``, ``--max-read-bytes``,
 limit.  
 
 
-Enable/Disable User Rate Limit
-------------------------------
+Enable and Disable User Rate Limit
+----------------------------------
 
-Once you set a user rate limit, you may enable it. For example:: 
+After you have set a user rate limit, you must enable it in order for it to
+take effect. Run a command of the following form to enable a user rate limit: 
 
-	radosgw-admin ratelimit enable --ratelimit-scope=user --uid=<uid>
+.. prompt:: bash
 
-You may disable an enabled user rate limit. For example:: 
+   radosgw-admin ratelimit enable --ratelimit-scope=user --uid=<uid>
 
-	radosgw-admin ratelimit disable --ratelimit-scope=user --uid=johndoe
+To disable an enabled user rate limit, run a command of the following form: 
+
+.. prompt:: bash
+
+   radosgw-admin ratelimit disable --ratelimit-scope=user --uid=johndoe
 
 
 Set Bucket Rate Limit
