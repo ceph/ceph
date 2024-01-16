@@ -491,10 +491,11 @@ class TestDataScan(CephFSTestCase):
 
         file_count = 100
         file_names = ["%s" % n for n in range(0, file_count)]
+        split_size = 100 * file_count
 
         # Make sure and disable dirfrag auto merging and splitting
-        self.fs.set_ceph_conf('mds', 'mds bal merge size', 0)
-        self.fs.set_ceph_conf('mds', 'mds bal split size', 100 * file_count)
+        self.config_set('mds', 'mds_bal_merge_size', 0)
+        self.config_set('mds', 'mds_bal_split_size', split_size)
 
         # Create a directory of `file_count` files, each named after its
         # decimal number and containing the string of its decimal number
