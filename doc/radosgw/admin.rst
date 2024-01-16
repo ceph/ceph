@@ -747,17 +747,22 @@ A 0 value for num ops and / or num bytes means that the
 specific rate limit attribute check is disabled.
 
 
-Enable/Disable Bucket Rate Limit
---------------------------------
+Enable and Disable Bucket Rate Limit
+------------------------------------
 
-Once you set a bucket rate limit, you may enable it. For example:: 
+After you set a bucket rate limit, you can enable it. The following is the
+general form of the ``radosgw-admin ratelimit enable`` command that enables
+bucket rate limits: 
 
-	radosgw-admin ratelimit enable --ratelimit-scope=bucket --bucket=<bucket>
+.. prompt:: bash
 
-You may disable an enabled bucket rate limit. For example:: 
+   radosgw-admin ratelimit enable --ratelimit-scope=bucket --bucket=<bucket>
 
-	radosgw-admin ratelimit disable --ratelimit-scope=bucket --uid=mybucket
+An enabled bucket rate limit can be disabled by running a command of the following form:
 
+.. prompt:: bash
+
+   radosgw-admin ratelimit disable --ratelimit-scope=bucket --uid=mybucket
 
 Reading / Writing Global Rate Limit Configuration
 -------------------------------------------------
