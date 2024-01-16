@@ -660,9 +660,4 @@ private:
 };
 WRITE_CLASS_ENCODER(SimpleLock)
 
-inline std::ostream& operator<<(std::ostream& out, const SimpleLock& l) 
-{
-  l.print(out);
-  return out;
-}
 #endif

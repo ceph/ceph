@@ -543,9 +543,4 @@ struct MDLockCache : public MutationImpl {
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
-inline std::ostream& operator<<(std::ostream &out, const MutationImpl &mut)
-{
-  mut.print(out);
-  return out;
-}
 #endif
