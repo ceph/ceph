@@ -54,15 +54,17 @@ export class DashboardV3Component extends PrometheusListHelper implements OnInit
   healthData: any;
   categoryPgAmount: Record<string, number> = {};
   totalPgs = 0;
-  queriesResults: any = {
-    USEDCAPACITY: '',
-    IPS: '',
-    OPS: '',
-    READLATENCY: '',
-    WRITELATENCY: '',
-    READCLIENTTHROUGHPUT: '',
-    WRITECLIENTTHROUGHPUT: '',
-    RECOVERYBYTES: ''
+  queriesResults: { [key: string]: [] } = {
+    USEDCAPACITY: [],
+    IPS: [],
+    OPS: [],
+    READLATENCY: [],
+    WRITELATENCY: [],
+    READCLIENTTHROUGHPUT: [],
+    WRITECLIENTTHROUGHPUT: [],
+    RECOVERYBYTES: [],
+    READIOPS: [],
+    WRITEIOPS: []
   };
   telemetryEnabled: boolean;
   telemetryURL = 'https://telemetry-public.ceph.com/';
