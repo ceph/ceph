@@ -44,6 +44,18 @@ inline std::ostream& operator<<(std::ostream& out, _bad_endl_use_dendl_t) {
   return out;
 }
 
+template<typename T>
+concept HasPrint = requires(T t, std::ostream& u) {
+  { t.print(u) } -> std::same_as<void>;
+};
+
+template<typename T> requires HasPrint<T>
+static inline std::ostream& operator<<(std::ostream& out, T&& t)
+{
+  t.print(out);
+  return out;
+}
+
 class DoutPrefixProvider {
 public:
   virtual std::ostream& gen_prefix(std::ostream& out) const = 0;
