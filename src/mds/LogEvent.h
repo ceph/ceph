@@ -125,9 +125,4 @@ private:
   LogSegment *_segment = nullptr;
 };
 
-inline std::ostream& operator<<(std::ostream& out, const LogEvent &le) {
-  le.print(out);
-  return out;
-}
-
 #endif
