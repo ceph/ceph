@@ -226,6 +226,11 @@ bool Locker::acquire_locks(const MDRequestRef& mdr,
 			   bool auth_pin_nonblocking)
 {
   dout(10) << "acquire_locks " << *mdr << dendl;
+  dout(20) << " lov = " << lov << dendl;
+  if (auth_pin_freeze) {
+    dout(20) << " auth_pin_freeze = " << *auth_pin_freeze << dendl;
+  }
+  dout(20) << " auth_pin_nonblocking=" << auth_pin_nonblocking << dendl;
 
   MarkEventOnDestruct marker(mdr, "failed to acquire_locks");
 
