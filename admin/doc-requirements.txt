@@ -1,4 +1,4 @@
-Sphinx == 4.4.0
+Sphinx == 5.0.2
 git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
 breathe >= 4.20.0
 Jinja2
