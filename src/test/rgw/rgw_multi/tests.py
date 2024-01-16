@@ -131,7 +131,7 @@ def parse_meta_sync_status(meta_sync_status_json):
         else:
             markers[i] = sync_markers[i]['val']['marker']
 
-    return period, realm_epoch, num_shards, markers
+    return global_sync_status, period, realm_epoch, num_shards, markers
 
 def meta_sync_status(zone):
     for _ in range(config.checkpoint_retries):
@@ -182,8 +182,10 @@ def zone_meta_checkpoint(zone, meta_master_zone = None, master_status = None):
     log.info('starting meta checkpoint for zone=%s', zone.name)
 
     for _ in range(config.checkpoint_retries):
-        period, realm_epoch, num_shards, sync_status = meta_sync_status(zone)
-        if realm_epoch < current_realm_epoch:
+        global_status, period, realm_epoch, num_shards, sync_status = meta_sync_status(zone)
+        if global_status != 'sync':
+            log.warning('zone %s has not started sync yet, state=%s', zone.name, global_status)
+        elif realm_epoch < current_realm_epoch:
             log.warning('zone %s is syncing realm epoch=%d, behind current realm epoch=%d',
                         zone.name, realm_epoch, current_realm_epoch)
         else:
