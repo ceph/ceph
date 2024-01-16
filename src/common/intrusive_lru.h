@@ -12,13 +12,12 @@ namespace ceph::common {
 /**
  * intrusive_lru: lru implementation with embedded map and list hook
  *
- * Elements will be stored in an intrusive set. Once an element is no longer
- * referenced it will remain in the set. The unreferenced elements will be
- * evicted from the set once the set size exceeds the `lru_target_size`.
- * Referenced elements will not be evicted as this is a registery with
- * extra caching capabilities.
+ * Elements with live references are guarranteed to remain accessible.
+ * Elements without live references may remain accessible -- implementation
+ * will release unreferenced elements based on lru_target_size.
  *
- * Note, this implementation currently is entirely thread-unsafe.
+ * Accesses, mutations, and references must be confined to a single thread or
+ * serialized via some other mechanism.
  */
 
 template <typename K, typename V, typename VToK>
@@ -43,11 +42,26 @@ void intrusive_ptr_release(intrusive_lru_base<Config> *p);
 
 template <typename Config>
 class intrusive_lru_base {
+  /* object invariants
+   *
+   * intrusive_lru objects may be in one of two states:
+   * 1. referenced
+   *    - intrusive_lru_base::lru is points to parent intrusive_lru
+   *    - present in lru_set
+   *    - use_count > 0
+   *    - not eligible for eviction
+   *    - intrusive_lru_release may be invoked externally
+   * 2. unreferenced
+   *    - intrusive_lru_base::lru is null
+   *    - present in lru_set
+   *    - present in intrusive_lru::unreferenced_list
+   *    - use_count == 0
+   *    - eligible for eviction
+   *    - intrusive_lru_release cannot be invoked
+   */
   unsigned use_count = 0;
 
-  // lru points to the corresponding intrusive_lru
-  // which will be set to null if its use_count
-  // is zero (aka unreferenced).
+  // See above, points at intrusive_lru iff referenced
   intrusive_lru<Config> *lru = nullptr;
 
 public:
@@ -232,8 +246,11 @@ void intrusive_ptr_add_ref(intrusive_lru_base<Config> *p) {
 
 template <typename Config>
 void intrusive_ptr_release(intrusive_lru_base<Config> *p) {
+  /* See object invariants above -- intrusive_ptr_release can only be invoked on
+   * referenced objects */
   assert(p);
   assert(p->use_count > 0);
+  assert(is_referenced());
   --p->use_count;
   if (p->use_count == 0) {
     p->lru->mark_as_unreferenced(*p);
