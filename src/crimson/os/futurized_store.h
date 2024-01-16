@@ -36,6 +36,7 @@ public:
     const Shard& operator=(const Shard& o) = delete;
 
     using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
+    using base_errorator = crimson::errorator<crimson::ct_error::input_output_error>;
     using read_errorator = crimson::errorator<crimson::ct_error::enoent,
 					      crimson::ct_error::input_output_error>;
     virtual read_errorator::future<ceph::bufferlist> read(
@@ -50,6 +51,10 @@ public:
       const ghobject_t& oid,
       interval_set<uint64_t>& m,
       uint32_t op_flags = 0) = 0;
+
+    virtual base_errorator::future<bool> exists(
+      CollectionRef c,
+      const ghobject_t& oid) = 0;
 
     using get_attr_errorator = crimson::errorator<
       crimson::ct_error::enoent,
