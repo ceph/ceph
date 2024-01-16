@@ -59,13 +59,13 @@ int forward_iam_request_to_master(const DoutPrefixProvider* dpp,
                           std::move(creds), zg->second.id, zg->second.api_name};
   bufferlist outdata;
   constexpr size_t max_response_size = 128 * 1024; // we expect a very small response
-  int ret = conn.forward_iam_request(dpp, creds, req, nullptr, max_response_size,
+  int ret = conn.forward_iam_request(dpp, req, nullptr, max_response_size,
                                      &indata, &outdata, y);
   if (ret < 0) {
     return ret;
   }
 
-  std::string r = outdata.to_str();
+  std::string r = rgw_bl_str(outdata);
   boost::replace_all(r, "&quot;", "\"");
 
   if (!parser.parse(r.c_str(), r.length(), 1)) {
