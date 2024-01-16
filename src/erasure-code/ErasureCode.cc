@@ -358,8 +358,8 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
   for (unsigned int i = 0; i < get_data_chunk_count(); i++) {
     want_to_read.insert(chunk_index(i));
   }
-#if 1
-  if (chunks.size() < get_data_chunk_count()) {
+  if (g_conf()->osd_ec_partial_reads &&
+      chunks.size() < get_data_chunk_count()) {
     // for partial_read
     for (const auto& [key, bl] : chunks) {
       if (want_to_read.contains(key)) {
@@ -373,7 +373,6 @@ int ErasureCode::decode_concat(const map<int, bufferlist> &chunks,
       want_to_read.swap(decode_chunks);
     }
   }
-#endif
   map<int, bufferlist> decoded_map;
   int r = _decode(want_to_read, chunks, &decoded_map);
   if (r == 0) {
