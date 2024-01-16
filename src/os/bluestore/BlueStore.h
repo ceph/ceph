@@ -2455,6 +2455,7 @@ private:
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
   bool elastic_shared_blobs = false; ///< use smart ExtentMap::dup to reduce shared blob count
+  bool use_write_v2 = false; ///< use new write path
 
   enum {
     // Please preserve the order since it's DB persistent
