@@ -1791,7 +1791,7 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
   for (auto &p : *dir) {
     CDentry *dn = p.second;
     CInode *in = dn->get_linkage()->get_inode();
-    CInode *ref_in = dn->get_linkage()->get_ref_inode();
+    CInode *ref_in = dn->get_linkage()->get_referent_inode();
 
     num_exported++;
     
@@ -1903,7 +1903,7 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
       auto&& dirs = in->get_nested_dirfrags();
       subdirs.insert(std::end(subdirs), std::begin(dirs), std::end(dirs));
     } else if (dn->get_linkage()->is_referent()) { //referent inode ?
-      CInode *ref_in = dn->get_linkage()->get_ref_inode();
+      CInode *ref_in = dn->get_linkage()->get_referent_inode();
       finish_export_inode(ref_in, peer, peer_imported[ref_in->ino()], finished);
     }
 
@@ -3350,8 +3350,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 
   // link before state  -- or not!  -sage
   if (in->get_remote_ino()) {
-    if (dn->get_linkage()->get_ref_inode() != in) {
-      ceph_assert(!dn->get_linkage()->get_ref_inode());
+    if (dn->get_linkage()->get_referent_inode() != in) {
+      ceph_assert(!dn->get_linkage()->get_referent_inode());
       dn->dir->link_referent_inode(dn, in, in->get_remote_ino(), in->d_type());
     }
   } else if (dn->get_linkage()->get_inode() != in) {
@@ -3615,11 +3615,11 @@ void Migrator::decode_import_dir(bufferlist::const_iterator& blp,
       if (dn->get_linkage()->is_referent()) {
 	ceph_assert(dn->get_linkage()->get_remote_ino() == ino);
         ceph_assert(dn->get_alternate_name() == alternate_name);
-	ceph_assert(dn->get_linkage()->get_ref_inode()->get_remote_ino() == ino);
+	ceph_assert(dn->get_linkage()->get_referent_inode()->get_remote_ino() == ino);
       } else {
 	// remote could be set and not the referent.
         dn->get_linkage()->set_remote(0, 0);
-        dn->get_linkage()->ref_inode = 0;
+        dn->get_linkage()->referent_inode = 0;
         ceph_assert(le);
         DECODE_START(2, blp);
         decode_import_inode(dn, blp, oldauth, ls,

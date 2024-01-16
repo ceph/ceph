@@ -584,7 +584,7 @@ void CDir::link_remote_inode(CDentry *dn, inodeno_t ino, unsigned char d_type)
 void CDir::set_referent_inode(CDentry *dn, CInode *ref_in)
 {
   // remote ino and dtype is already set, just set the referent inode and parent
-  dn->get_linkage()->ref_inode = ref_in;
+  dn->get_linkage()->referent_inode = ref_in;
   link_inode_work(dn, ref_in);
 }
 
@@ -595,7 +595,7 @@ void CDir::link_referent_inode(CDentry *dn, CInode *ref_in, inodeno_t rino, unsi
 
   // If remote is set, remote is written to backend instead of CInode created.
   dn->get_linkage()->set_remote(rino, d_type);
-  dn->get_linkage()->ref_inode = ref_in;
+  dn->get_linkage()->referent_inode = ref_in;
 
   link_inode_work(dn, ref_in);
 
@@ -644,7 +644,7 @@ void CDir::link_primary_inode(CDentry *dn, CInode *in)
 
 void CDir::link_inode_work( CDentry *dn, CInode *in)
 {
-  ceph_assert(dn->get_linkage()->get_inode() == in || dn->get_linkage()->get_ref_inode() == in);
+  ceph_assert(dn->get_linkage()->get_inode() == in || dn->get_linkage()->get_referent_inode() == in);
   in->set_primary_parent(dn);
 
   // set inode version
@@ -741,7 +741,7 @@ void CDir::unlink_inode_work(CDentry *dn)
     dn->get_linkage()->set_remote(0, 0);
   } else if(dn->get_linkage()->is_referent()) {
     // referent remote
-      CInode *ref_in = dn->get_linkage()->get_ref_inode();
+      CInode *ref_in = dn->get_linkage()->get_referent_inode();
       // referent inode - unpin dentry?
       if (ref_in->get_num_ref())
         dn->put(CDentry::PIN_INODEPIN);
@@ -751,7 +751,7 @@ void CDir::unlink_inode_work(CDentry *dn)
         dn->unlink_remote(dn->get_linkage());
 
       dn->get_linkage()->set_remote(0, 0);
-      dn->get_linkage()->ref_inode = 0;
+      dn->get_linkage()->referent_inode = 0;
   } else if (dn->get_linkage()->is_primary()) {
     // primary
     // unpin dentry?
@@ -2006,7 +2006,7 @@ CDentry *CDir::_load_dentry(
         dout(12) << "_fetched  got remote link " << remote_ino << " which we have " << *remote_in << dendl;
       } else {
         dout(12) << "_fetched  got remote link " << remote_ino << " (don't have it)" << dendl;
-	dn->get_linkage()->ref_inode = ref_in;
+	dn->get_linkage()->referent_inode = ref_in;
       }
     }
   } else if (type == 'I' || type == 'i') {
@@ -2797,7 +2797,7 @@ void CDir::_parse_dentry(CDentry *dn, dentry_commit_item &item,
     item.ino = linkage.get_remote_ino();
     item.d_type = linkage.get_remote_d_type();
 
-    CInode *in = linkage.get_ref_inode();
+    CInode *in = linkage.get_referent_inode();
     ceph_assert(in);
 
     dout(14) << " dn '" << dn->get_name() << "' ref inode " << *in << "' remote ino " << item.ino << dendl;
@@ -2947,7 +2947,7 @@ void CDir::_committed(int r, version_t v)
     
     // referent inode
     if (dn->linkage.is_referent()) {
-      CInode *in = dn->linkage.get_ref_inode();
+      CInode *in = dn->linkage.get_referent_inode();
       ceph_assert(in);
       ceph_assert(in->is_auth());
 

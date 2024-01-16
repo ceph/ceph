@@ -7078,7 +7078,7 @@ bool MDCache::trim_dentry(CDentry *dn, expiremap& expiremap)
     dir->unlink_inode(dn, false);
   } else if (dnl->is_referent()) {
     // expire the referent inode, too.
-    CInode *ref_in = dnl->get_ref_inode();
+    CInode *ref_in = dnl->get_referent_inode();
     ceph_assert(ref_in);
     if (trim_inode(dn, ref_in, con, expiremap))
       return true; // purging stray instead of trimming
@@ -7802,7 +7802,7 @@ void MDCache::dentry_remove_replica(CDentry *dn, mds_rank_t from, set<SimpleLock
   if (dnl->is_primary()) {
     maybe_eval_stray(dnl->get_inode());
   } else if (dnl->is_referent()) {
-    maybe_eval_stray(dnl->get_ref_inode());
+    maybe_eval_stray(dnl->get_referent_inode());
   }
 }
 
@@ -8862,7 +8862,7 @@ CInode *MDCache::get_dentry_inode(CDentry *dn, const MDRequestRef& mdr, bool pro
   ceph_assert(dnl->is_remote() || dnl->is_referent());
   CInode *in = get_inode(dnl->get_remote_ino());
   if (in) {
-    CInode *ref_in = dnl->get_ref_inode();
+    CInode *ref_in = dnl->get_referent_inode();
     dout(7) << "get_dentry_inode linking in remote in " << *in << "referent " << *ref_in << dendl;
     dn->link_remote(dnl, in, ref_in);
     return in;
@@ -10762,15 +10762,15 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
 	dout(7) << *dnl->get_inode() << " is frozen, non-empty reply, stopping" << dendl;
 	break;
       }
-    } else if (dnl->is_referent() && dnl->get_ref_inode()->is_frozen_inode()) {
+    } else if (dnl->is_referent() && dnl->get_referent_inode()->is_frozen_inode()) {
       if (tailitem && dis->is_path_locked()) {
-	dout(7) << "handle_discover allowing discovery of frozen tail referent inode" << *dnl->get_ref_inode() << dendl;
+	dout(7) << "handle_discover allowing discovery of frozen tail referent inode" << *dnl->get_referent_inode() << dendl;
       } else if (reply->is_empty()) {
-	dout(7) << *dnl->get_ref_inode() << " referent inode is frozen, empty reply, waiting" << dendl;
-	dnl->get_ref_inode()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
+	dout(7) << *dnl->get_referent_inode() << " referent inode is frozen, empty reply, waiting" << dendl;
+	dnl->get_referent_inode()->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryMessage(mds, dis));
 	return;
       } else {
-	dout(7) << *dnl->get_ref_inode() << " referent inode is frozen, non-empty reply, stopping" << dendl;
+	dout(7) << *dnl->get_referent_inode() << " referent inode is frozen, non-empty reply, stopping" << dendl;
 	break;
       }
     }
@@ -10783,11 +10783,11 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
     
     // add referent inode
     if (dnl->is_referent()) {
-      CInode *ref_inode = dnl->get_ref_inode();
-      ceph_assert(ref_inode->is_auth());
+      CInode *referent_inode = dnl->get_referent_inode();
+      ceph_assert(referent_inode->is_auth());
 
-      encode_replica_inode(ref_inode, from, reply->trace, mds->mdsmap->get_up_features());
-      dout(7) << "handle_discover added referent inode " << *ref_inode << dendl;
+      encode_replica_inode(referent_inode, from, reply->trace, mds->mdsmap->get_up_features());
+      dout(7) << "handle_discover added referent inode " << *referent_inode << dendl;
     }
 
     if (!dnl->is_primary()) break;  // stop on null or remote link.
@@ -11496,7 +11496,7 @@ void MDCache::handle_dentry_unlink(const cref_t<MDentryUnlink> &m)
 	
 	straydn = NULL;
       } else if (dnl->is_referent()) {
-	CInode *ref_in = dnl->get_ref_inode();
+	CInode *ref_in = dnl->get_referent_inode();
 	dn->dir->unlink_inode(dn);
 	ceph_assert(straydn);
 	straydn->dir->link_primary_inode(straydn, ref_in);
