@@ -1,0 +1,61 @@
+<ng-template #emptyCluster>
+  <div class="container h-75">
+    <div class="row h-100 justify-content-center align-items-center">
+      <div class="blank-page">
+        <i class="mx-auto d-block"
+           [ngClass]="icons.wrench">
+        </i>
+      <div class="mt-4 text-center">
+        <h3><b>Connect Cluster </b></h3>
+        <h4 class="mt-3">Upgrade your current cluster to a multi-cluster setup effortlessly.
+            Click on the "Connect Cluster" button to begin the process.</h4>
+      </div>
+      <div class="mt-4">
+        <div class="text-center">
+          <button class="btn btn-primary"
+                  (click)="openRemoteClusterInfoModal()">
+            <i class="mx-auto"
+               [ngClass]="icons.add">
+            </i> Connect Cluster
+          </button>
+        </div>
+      </div>
+      </div>
+    </div>
+  </div>
+</ng-template>
+
+<ng-template #nametpl>
+  <div class="datatable-body-cell-label">
+    <span title="{{cluster}}">
+      <a href="#">
+        {{cluster}}
+      </a>
+    </span>
+  </div>
+</ng-template>
+
+<div class="container-fluid h-100 p-4">
+  <div *ngIf="dashboardClustersMap?.size === 1">
+    <ng-container *ngTemplateOutlet="emptyCluster"></ng-container>
+  </div>
+
+  <span *ngIf="loading"
+        class="d-flex justify-content-center">
+    <i [ngClass]="[icons.large3x, icons.spinner, icons.spin]"></i>
+  </span>
+  <div *ngIf="dashboardClustersMap?.size > 1">
+    <div *ngIf="!loading">
+      <div class="mt-4">
+        <div class="text-center">
+          <button class="btn btn-primary"
+                  (click)="openRemoteClusterInfoModal()">
+            <i class="mx-auto"
+               [ngClass]="icons.add">
+            </i> Connect Cluster
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

@@ -16,8 +16,10 @@ import { CdHelperClass } from '~/app/shared/classes/cd-helper.class';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
-import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
+import { MultiClusterService } from '../api/multi-cluster.service';
+import { SummaryService } from './summary.service';
+import { AuthStorageService } from './auth-storage.service';
 
 export class CdHttpErrorResponse extends HttpErrorResponse {
   preventDefault: Function;
@@ -28,15 +30,42 @@ export class CdHttpErrorResponse extends HttpErrorResponse {
   providedIn: 'root'
 })
 export class ApiInterceptorService implements HttpInterceptor {
+  localClusterDetails: object;
+  dashboardClustersMap: Map<string, string> = new Map<string, string>();
   constructor(
     private router: Router,
+    public notificationService: NotificationService,
+    private summaryService: SummaryService,
     private authStorageService: AuthStorageService,
-    public notificationService: NotificationService
-  ) {}
+    private multiClusterService: MultiClusterService
+  ) {
+    this.multiClusterService.subscribe((resp: any) => {
+      const clustersConfig = resp['config'];
+      const hub_url = resp['hub_url'];
+      if (clustersConfig) {
+        Object.keys(clustersConfig).forEach((clusterKey: string) => {
+          const clusterDetailsList = clustersConfig[clusterKey];
+
+          clusterDetailsList.forEach((clusterDetails: any) => {
+            const clusterUrl = clusterDetails['url'];
+            const clusterName = clusterDetails['name'];
+
+            this.dashboardClustersMap.set(clusterUrl, clusterName);
+
+            if (clusterDetails['url'] === hub_url) {
+              this.localClusterDetails = clusterDetails;
+            }
+          });
+        });
+      }
+    });
+  }
 
   intercept(request: HttpRequest<any>, next: HttpHandler): Observable<HttpEvent<any>> {
     const acceptHeader = request.headers.get('Accept');
     let reqWithVersion: HttpRequest<any>;
+
+    const origin = window.location.origin;
     if (acceptHeader && acceptHeader.startsWith('application/vnd.ceph.api.v')) {
       reqWithVersion = request.clone();
     } else {
@@ -46,6 +75,35 @@ export class ApiInterceptorService implements HttpInterceptor {
         }
       });
     }
+
+    const apiUrl = localStorage.getItem('cluster_api_url');
+    const currentRoute = this.router.url.split('?')[0];
+
+    const ALWAYS_TO_HUB_APIs = [
+      'api/auth/login',
+      'api/auth/logout',
+      'api/multi-cluster/get_config',
+      'api/multi-cluster/set_config',
+      'api/multi-cluster/auth'
+    ];
+
+    const token = localStorage.getItem('token_of_selected_cluster');
+
+    if (
+      !currentRoute.includes('login') &&
+      !ALWAYS_TO_HUB_APIs.includes(request.url) &&
+      apiUrl &&
+      !apiUrl.includes(origin)
+    ) {
+      reqWithVersion = reqWithVersion.clone({
+        url: `${apiUrl}${reqWithVersion.url}`,
+        setHeaders: {
+          'Access-Control-Allow-Origin': origin,
+          Authorization: `Bearer ${token}`
+        }
+      });
+    }
+
     return next.handle(reqWithVersion).pipe(
       catchError((resp: CdHttpErrorResponse) => {
         if (resp instanceof HttpErrorResponse) {
@@ -69,8 +127,26 @@ export class ApiInterceptorService implements HttpInterceptor {
               timeoutId = this.notificationService.notifyTask(finishedTask);
               break;
             case 401:
-              this.authStorageService.remove();
-              this.router.navigate(['/login']);
+              if (this.dashboardClustersMap.size > 1) {
+                this.multiClusterService.setCluster(this.localClusterDetails).subscribe(() => {
+                  localStorage.setItem('cluster_api_url', this.localClusterDetails['url']);
+                });
+                this.multiClusterService.refresh();
+                this.summaryService.refresh();
+                const currentRoute = this.router.url.split('?')[0];
+                if (currentRoute.includes('dashboard')) {
+                  this.router.navigateByUrl('/pool', { skipLocationChange: true }).then(() => {
+                    this.router.navigate([currentRoute]);
+                  });
+                } else {
+                  this.router.navigateByUrl('/', { skipLocationChange: true }).then(() => {
+                    this.router.navigate([currentRoute]);
+                  });
+                }
+              } else {
+                this.authStorageService.remove();
+                this.router.navigate(['/login']);
+              }
               break;
             case 403:
               this.router.navigate(['error'], {

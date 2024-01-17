@@ -141,6 +141,7 @@ export class ActionLabelsI18n {
   IMPORT: any;
   MIGRATE: string;
   START_UPGRADE: string;
+  CONNECT: string;
 
   constructor() {
     /* Create a new item */
@@ -218,6 +219,8 @@ export class ActionLabelsI18n {
     this.DEMOTE = $localize`Demote`;
 
     this.START_UPGRADE = $localize`Start Upgrade`;
+
+    this.CONNECT = $localize`Connect`;
   }
 }
 
