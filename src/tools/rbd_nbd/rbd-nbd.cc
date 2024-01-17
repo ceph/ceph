@@ -106,7 +106,6 @@ struct Config {
   bool quiesce = false;
   bool readonly = false;
   bool set_max_part = false;
-  bool try_netlink = false;
   bool show_cookie = false;
 
   std::string poolname;
@@ -166,7 +165,6 @@ static void usage()
             << "  --read-only                   Map read-only\n"
             << "  --reattach-timeout <sec>      Set nbd re-attach timeout\n"
             << "                                (default: " << Config().reattach_timeout << ")\n"
-            << "  --try-netlink                 Use the nbd netlink interface\n"
             << "  --show-cookie                 Show device cookie\n"
             << "  --cookie                      Specify device cookie\n"
             << "  --snap-id <snap-id>           Specify snapshot by ID instead of by name\n"
@@ -1682,7 +1680,7 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
   unsigned long flags;
   unsigned long size;
   unsigned long blksize = RBD_NBD_BLKSIZE;
-  bool use_netlink;
+  bool use_netlink = true;
 
   int fd[2];
 
@@ -1859,20 +1857,17 @@ static int do_map(int argc, const char *argv[], Config *cfg, bool reconnect)
 
   server = start_server(fd[1], image, cfg);
 
-  use_netlink = cfg->try_netlink || reconnect;
-  if (use_netlink) {
-    // generate when the cookie is not supplied at CLI
-    if (!reconnect && cfg->cookie.empty()) {
-      uuid_d uuid_gen;
-      uuid_gen.generate_random();
-      cfg->cookie = uuid_gen.to_string();
-    }
-    r = try_netlink_setup(cfg, fd[0], size, flags, reconnect);
-    if (r < 0) {
-      goto free_server;
-    } else if (r == 1) {
-      use_netlink = false;
-    }
+  // generate when the cookie is not supplied at CLI
+  if (!reconnect && cfg->cookie.empty()) {
+    uuid_d uuid_gen;
+    uuid_gen.generate_random();
+    cfg->cookie = uuid_gen.to_string();
+  }
+  r = try_netlink_setup(cfg, fd[0], size, flags, reconnect);
+  if (r < 0) {
+    goto free_server;
+  } else if (r == 1) {
+    use_netlink = false;
   }
 
   if (!use_netlink) {
@@ -2216,7 +2211,8 @@ static int parse_args(vector<const char*>& args, std::ostream *err_msg,
     } else if (ceph_argparse_flag(args, i, "--pretty-format", (char *)NULL)) {
       cfg->pretty_format = true;
     } else if (ceph_argparse_flag(args, i, "--try-netlink", (char *)NULL)) {
-      cfg->try_netlink = true;
+      // netlink used by default. option not required anymore.
+      // accept for compatibility.
     } else if (ceph_argparse_flag(args, i, "--show-cookie", (char *)NULL)) {
       cfg->show_cookie = true;
     } else if (ceph_argparse_witharg(args, i, &cfg->cookie, "--cookie", (char *)NULL)) {
