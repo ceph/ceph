@@ -45,6 +45,7 @@ using neorados::WriteOp;
 static constexpr auto oid = "oid"sv;
 
 CORO_TEST_F(NeoRadosIo, Limits, NeoRadosTest) {
+  SKIP_IF_CRIMSON(); // See: https://tracker.ceph.com/issues/64040
   co_await expect_error_code(
     execute(oid, WriteOp{}
 	    .write(std::numeric_limits<std::uint64_t>::max(), {})),
