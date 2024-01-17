@@ -2070,6 +2070,16 @@ options:
   services:
   - mon
   with_legacy: true
+# actively release memory
+- name: mon_tcmalloc_aggressive_mem_decommit
+  type: bool
+  level: advanced
+  default: true
+  fmt_desc: tcmalloc.aggressive_memory_decommit,
+    actively release memory to OS.
+  services:
+  - mon
+  with_legacy: true
 # required of mon, mds, osd daemons
 - name: auth_cluster_required
   type: str

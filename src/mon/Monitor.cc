@@ -467,6 +467,47 @@ int Monitor::do_admin_command(
       cmd_vec.push_back(val);
     }
     ceph_heap_profiler_handle_command(cmd_vec, out);
+  } else if (command == "set_heap_property") {
+    string property;
+    int64_t value = 0;
+    string error;
+    bool success = false;
+    if (!cmd_getval(cmdmap, "property", property)) {
+      error = "unable to get property";
+      success = false;
+    } else if (!cmd_getval(cmdmap, "value", value)) {
+      error = "unable to get value";
+      success = false;
+    } else if (value < 0) {
+      error = "negative value not allowed";
+      success = false;
+    } else if (!ceph_heap_set_numeric_property(property.c_str(), (size_t)value)) {
+      error = "invalid property";
+      success = false;
+    } else {
+      success = true;
+    }
+    out << "set_heap_property result:" << std::endl;
+    out << "  error: " << error << std::endl;
+    out << "  success: " << (success ? "true" : "false") << std::endl;
+  } else if (command == "get_heap_property") {
+    string property;
+    size_t value = 0;
+    string error;
+    bool success = false;
+    if (!cmd_getval(cmdmap, "property", property)) {
+      error = "unable to get property";
+      success = false;
+    } else if (!ceph_heap_get_numeric_property(property.c_str(), &value)) {
+      error = "invalid property";
+      success = false;
+    } else {
+      success = true;
+    }
+    out << "get_heap_property result:" << std::endl;
+    out << "  error: " << error << std::endl;
+    out << "  success: " << (success ? "true" : "false") << std::endl;
+    out << "  value: " << value << std::endl;    
   } else if (command == "compact") {
     dout(1) << "triggering manual compaction" << dendl;
     auto start = ceph::coarse_mono_clock::now();
