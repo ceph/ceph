@@ -105,7 +105,7 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 	 obj != list.end();
 	 ++obj) {
       object_info_t oi;
-      if (coll != coll_t::meta()) {
+      if (coll != coll_t::meta() && !obj->is_pgmeta()) {
         bufferlist attr;
         r = store->getattr(ch, *obj, OI_ATTR, attr);
         if (r < 0) {
