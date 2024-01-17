@@ -1069,6 +1069,8 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
 
 int AsioFrontend::run()
 {
+  ceph_assert(!is_asio_thread);
+
   auto cct = ctx();
   const int thread_count = cct->_conf->rgw_thread_pool_size;
   threads.reserve(thread_count);
@@ -1093,6 +1095,8 @@ int AsioFrontend::run()
 
 void AsioFrontend::stop()
 {
+  ceph_assert(!is_asio_thread);
+
   ldout(ctx(), 4) << "frontend initiating shutdown..." << dendl;
 
   going_down = true;
