@@ -2,4 +2,4 @@ overrides:
   ceph:
     conf:
       osd:
-        osd max scrubs: 2
+        osd max scrubs: 1
