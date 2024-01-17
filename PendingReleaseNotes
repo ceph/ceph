@@ -236,6 +236,11 @@
   than the number mentioned against the config tunable `mds_max_snaps_per_dir`
   so that a new snapshot can be created and retained during the next schedule
   run.
+* `ceph config dump --format <json|xml>` output will display the localized
+  option names instead of its normalized version. For e.g.,
+  "mgr/prometheus/x/server_port" will be displayed instead of
+  "mgr/prometheus/server_port". This matches the output of the non pretty-print
+  formatted version of the command.
 
 >=17.2.1
 
