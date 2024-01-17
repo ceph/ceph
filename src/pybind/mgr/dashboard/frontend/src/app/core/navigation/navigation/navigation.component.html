@@ -30,6 +30,29 @@
 
       <div class="collapse navbar-collapse"
            [ngClass]="{'show': rightSidebarOpen}">
+        <ng-container *ngIf="clustersMap?.size > 1">
+          <div ngbDropdown
+               placement="bottom-left"
+               class="d-inline-block ms-5">
+            <button ngbDropdownToggle
+                    class="btn btn-outline-light cd-context-bar"
+                    i18n-title
+                    title="Selected Cluster:">
+              <span class="dropdown-text"> {{ selectedCluster?.name }} </span>
+              <span>- {{ selectedCluster?.cluster_alias }} - {{ selectedCluster?.user }}</span>
+            </button>
+            <div ngbDropdownMenu>
+              <ng-container *ngFor="let cluster of clustersMap | keyvalue">
+                <button ngbDropdownItem
+                        (click)="onClusterSelection(cluster.value)">
+                  <div class="dropdown-text">{{ cluster.value.name }}</div>
+                  <div *ngIf="cluster.value.cluster_alias"
+                       class="text-secondary">{{ cluster.value.cluster_alias }} - {{ cluster.value.user }}</div>
+                </button>
+              </ng-container>
+            </div>
+          </div>
+        </ng-container>
         <ul class="nav navbar-nav cd-navbar-utility my-2 my-md-0">
           <ng-container *ngTemplateOutlet="cd_utilities"> </ng-container>
         </ul>
@@ -91,7 +114,29 @@
           </i>
         </a>
       </li>
-
+      <!-- Multi-cluster Dashboard -->
+      <li routerLinkActive="active"
+          class="nav-item tc_menuitem_multi_cluster">
+        <a (click)="toggleSubMenu('multiCluster')"
+           class="nav-link dropdown-toggle"
+           [attr.aria-expanded]="displayedSubMenu.multiCluster"
+           aria-controls="multi-cluster-nav"
+           role="button">
+          <ng-container i18n>
+            <i [ngClass]="[icons.sitemap]"></i>
+              Multi-Cluster
+          </ng-container>
+        </a>
+        <ul class="list-unstyled"
+            id="multi-cluster-nav"
+            [ngbCollapse]="!displayedSubMenu.multiCluster">
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_multiCluster_overview">
+            <a i18n
+               routerLink="/multi-cluster">Overview</a>
+          </li>
+        </ul>
+      </li>
       <!-- Cluster -->
       <li routerLinkActive="active"
           class="nav-item tc_menuitem_cluster"
