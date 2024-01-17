@@ -64,6 +64,7 @@ export class LoginComponent implements OnInit {
   }
 
   login() {
+    localStorage.setItem('cluster_api_url', window.location.origin);
     this.authService.login(this.model).subscribe(() => {
       const urlPath = this.postInstalled ? '/' : '/expand-cluster';
       let url = _.get(this.route.snapshot.queryParams, 'returnUrl', urlPath);
