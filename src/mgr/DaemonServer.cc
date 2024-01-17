@@ -1981,6 +1981,37 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(-EINVAL, ss);
       return true;
     }
+    /*
+     *  RGW has the daemon name stored in the daemon metadata
+     *  and uses the GID as key in the service_map.
+     *  We need to match the user's query with the daemon name to
+     *  find the correct key for retrieving daemon state.
+     */
+    string daemon_name = key.name;
+    auto p = daemon_name.find("rgw");
+    if (p != daemon_name.npos) {
+      auto rgw_daemons = daemon_state.get_by_service("rgw");
+      for (auto& rgw_daemon : rgw_daemons) {
+	DaemonStatePtr daemon = rgw_daemon.second;
+	string name = daemon->metadata.find("id")->second;
+	/*
+	 * The id stored in the metadata is the port number
+	 * for the RGW daemon.
+	 * In the case of multiple RGW daemons, the user might
+	 * use the port number (rgw.8000) to specify the daemon.
+	 */
+	auto p = daemon_name.find('.');
+	if (p == key.name.npos) {
+          key = daemon->key;
+	} else {
+	  // if user has specified port number in the query
+	  if (daemon_name.substr(p + 1) == name) {
+	    key = daemon->key;
+	    break;
+	  }
+        }
+      }
+    }
     DaemonStatePtr daemon = daemon_state.get(key);
     if (!daemon) {
       ss << "no config state for daemon " << who;
