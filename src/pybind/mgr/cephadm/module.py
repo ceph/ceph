@@ -584,8 +584,8 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.cache = HostCache(self)
         self.cache.load()
 
-        self.node_proxy = NodeProxyCache(self)
-        self.node_proxy.load()
+        self.node_proxy_cache = NodeProxyCache(self)
+        self.node_proxy_cache.load()
 
         self.agent_cache = AgentCache(self)
         self.agent_cache.load()
@@ -1638,19 +1638,19 @@ Then run the following:
 
     @handle_orch_error
     def node_proxy_summary(self, hostname: Optional[str] = None) -> Dict[str, Any]:
-        return self.node_proxy.summary(hostname=hostname)
+        return self.node_proxy_cache.summary(hostname=hostname)
 
     @handle_orch_error
     def node_proxy_firmwares(self, hostname: Optional[str] = None) -> Dict[str, Any]:
-        return self.node_proxy.firmwares(hostname=hostname)
+        return self.node_proxy_cache.firmwares(hostname=hostname)
 
     @handle_orch_error
     def node_proxy_criticals(self, hostname: Optional[str] = None) -> Dict[str, Any]:
-        return self.node_proxy.criticals(hostname=hostname)
+        return self.node_proxy_cache.criticals(hostname=hostname)
 
     @handle_orch_error
     def node_proxy_common(self, category: str, hostname: Optional[str] = None) -> Dict[str, Any]:
-        return self.node_proxy.common(category, hostname=hostname)
+        return self.node_proxy_cache.common(category, hostname=hostname)
 
     @handle_orch_error
     def remove_host(self, host: str, force: bool = False, offline: bool = False) -> str:
