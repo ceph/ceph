@@ -21,6 +21,8 @@
 #include "common/debug.h"
 #include "common/errno.h"
 #include "common/ceph_crypto.h"
+#include "common/CDC.h"
+#include "common/FastCDC.h"
 
 #include <filesystem>
 #include <algorithm>
@@ -70,13 +72,15 @@ std::mutex print_mtx;
 const string RAW_FP_NSPACE("RAW_FP");
 const string REDUCED_FP_NSPACE("REDUCED_FP");
 
+enum chunk_algo_t { CHUNK_ALGO_NONE, CHUNK_ALGO_FBC, CHUNK_ALGO_CDC };
 struct dedup_params_t {
   uint32_t max_objs    = 0;
   uint32_t chunk_size  = 2 * 1024;
   uint16_t max_threads = 16;
   uint16_t num_shards  = 1;
-  bool     verbose     = false;
   uint16_t dedup_threshold = 2;
+  bool verbose = false;
+  chunk_algo_t chunk_algo = CHUNK_ALGO_NONE;
   string   pool_name;
 };
 
@@ -86,7 +90,7 @@ constexpr int THREAD_LIMIT_STRICT = 16;
 //---------------------------------------------------------------------------
 void usage(ostream& out)
 {
-  out << "usage: ceph-dedup-estimate-tool [options] [commands]\n\n"
+  out << "\nusage: ceph-dedup-estimate-tool [options] [commands]\n\n"
     "Commands:\n"
     "   clean:   clean intermediate objects created by previous runs\n"
     "   collect: collect chunks finger prints\n"
@@ -104,6 +108,8 @@ void usage(ostream& out)
     "        set chunk size for finger-print (must be a full multiplication of " << CHUNK_BASESIZE << ")\n\n"
 
     "Collect options:\n"
+    "   --chunk_algo=algo\n"
+    "        set the chunking algorithm (FBC=FIXED BLOCK CHUNKING / CDC=CONTENT DEFINED CHUNKING)\n"
     "   --max-objs=count\n"
     "        --DEBUG ONLY-- maximum number of objs to read per-thread\n\n"
 
@@ -194,24 +200,35 @@ struct Key
   static_assert(FP_SIZE % sizeof(uint32_t) == 0);
   static_assert(FP_SIZE >= sizeof(uint64_t));
 
-  Key(uint8_t *p) {
-    memcpy(fp_buff, p, FP_SIZE);
+  void copy_from_bl_itr(bufferlist::const_iterator &ci,
+			uint32_t byte_count,
+			uint8_t *p_dest ) {
+    while (byte_count > 0) {
+      const char *p_src = nullptr;
+      size_t n = ci.get_ptr_and_advance(byte_count, &p_src);
+      memcpy(p_dest, p_src, n);
+      byte_count -= n;
+      p_dest     += n;
+    }
   }
 
   Key(bufferlist::const_iterator &ci) {
-    uint32_t count  = FP_SIZE;
-    uint8_t *p_dest = fp_buff;
-    while (count > 0) {
-      const char *p_src = nullptr;
-      size_t n = ci.get_ptr_and_advance(count, &p_src);
-      memcpy(p_dest, p_src, n);
-      count  -= n;
-      p_dest += n;
-    }
+    uint32_t byte_count = FP_SIZE;
+    uint8_t *p_dest     = fp_buff;
+    copy_from_bl_itr(ci, byte_count, p_dest);
+#ifndef FBC
+    byte_count = sizeof(chunk_size);
+    copy_from_bl_itr(ci, byte_count, (uint8_t*)&chunk_size);
+    chunk_size = CEPHTOH_32(chunk_size);
+#endif
   }
 
   const uint8_t* get_fp_buff() const {
     return fp_buff;
+  }
+
+  const uint32_t get_chunk_size() const {
+    return chunk_size;
   }
 
   // TBD: When we calculate FP for the same data chunk will we get the same FP
@@ -223,7 +240,8 @@ struct Key
   }
 
 private:
-  uint8_t fp_buff[FP_SIZE];
+  uint8_t  fp_buff[FP_SIZE];
+  uint32_t chunk_size;
 
 public:
   struct KeyHash
@@ -240,21 +258,22 @@ public:
   {
     bool operator()(const Key& lhs, const Key& rhs) const
     {
-      return (memcmp(lhs.get_fp_buff(), rhs.get_fp_buff(), lhs.FP_SIZE) == 0);
+      return ((memcmp(lhs.get_fp_buff(), rhs.get_fp_buff(), lhs.FP_SIZE) == 0) &&
+	      (lhs.chunk_size == rhs.chunk_size));
     }
   };
 } __attribute__((__packed__));
 
 std::ostream &operator<<(std::ostream &stream, const Key & k)
 {
-  stream << std::hex << "0x";
+  stream << "[" << k.get_chunk_size() << "]" << std::hex << " 0x";
   for (unsigned i = 0; i < k.FP_SIZE; i++) {
     stream << std::hex << k.get_fp_buff()[i];
   }
   return stream;
 }
 
-static_assert(sizeof(Key) == SHA1_SIZE);
+static_assert(sizeof(Key) == SHA1_SIZE + sizeof(uint32_t));
 using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
 
 //---------------------------------------------------------------------------
@@ -269,10 +288,10 @@ using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
   uint64_t unique_data     = 0, unique_data_chunks = 0;
 
   for (auto const& entry : fp_dict) {
-    //const Key & key = entry.first;
+    const Key & key = entry.first;
     const unsigned count = entry.second;
-    //unique_data     += params.chunk_size;
-    //duplicated_data += (count-1)*(params.chunk_size);
+    unique_data     += key.get_chunk_size();
+    duplicated_data += (count-1)*(key.get_chunk_size());
     unique_data_chunks++;
     duplicated_data_chunks += (count-1);
     if (count < ARR_SIZE) {
@@ -282,19 +301,15 @@ using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
       summery[ARR_SIZE]++;
     }
   }
-  unique_data     = unique_data_chunks * params.chunk_size;
-  duplicated_data = duplicated_data_chunks * params.chunk_size;
+
   unsigned sample_rate = 1;
   duplicated_data *= sample_rate;
   unique_data     *= sample_rate;
-  //uint64_t total_size = duplicated_data + unique_data;
+  std::cout << "unique_data_chunks     = " << unique_data_chunks     << std::endl;
+  std::cout << "duplicated_data_chunks = " << duplicated_data_chunks << std::endl;
+  uint64_t total_size = duplicated_data + unique_data;
   std::cout << "============================================================" << std::endl;
-  std::cout << "Summery:" << std::endl;
-  std::cout << "Chunks repeating " << params.dedup_threshold << " times or more = " << unique_data_chunks << std::endl;
-
-  //std::cout << "Unique Count = " << unique_data_chunks << std::endl;
-  //<< ", Dup Count = " << duplicated_data_chunks << std::endl;
-#if 0
+#if 1
   std::cout << "We had a total of " << total_size/1024 << " KiB stored in the system\n";
   std::cout << "We had " << unique_data/1024 << " Unique Data KiB stored in the system\n";
   std::cout << "We had " << duplicated_data/1024 << " Duplicated KiB Bytes stored in the system\n";
@@ -368,7 +383,7 @@ struct FP_BUFFER {
   }
 
   //---------------------------------------------------------------------------
-  int add_fp(const char *fp, const ObjectCursor &cursor) {
+  int add_fp(const char *fp, unsigned chunk_size, const ObjectCursor &cursor) {
     if (unlikely(d_byte_offset+d_fp_size >= sizeof(d_buffer))) {
       if (0) {
 	std::unique_lock<std::mutex> lock(print_mtx);
@@ -379,6 +394,10 @@ struct FP_BUFFER {
 
     memcpy(d_buffer+d_byte_offset, fp, d_fp_size);
     d_byte_offset += d_fp_size;
+#ifndef FBC
+    *(uint32_t*)(d_buffer+d_byte_offset) = HTOCEPH_32(chunk_size);
+    d_byte_offset += sizeof(chunk_size);
+#endif
     return 0;
   }
 
@@ -389,7 +408,11 @@ struct FP_BUFFER {
     header.fp_size    = HTOCEPH_16(d_fp_size);
     uint16_t len      = cursor.to_str().copy(header.cursor, sizeof(header.cursor));
     header.cursor_len = HTOCEPH_16(len);
+#ifndef FBC
+    header.fp_count   = HTOCEPH_32((d_byte_offset - FP_HEADER_LEN) / sizeof(Key));
+#else
     header.fp_count   = HTOCEPH_32((d_byte_offset - FP_HEADER_LEN) / d_fp_size);
+#endif
     header.pad32      = 0;
     header.crc        = 0;
     memcpy(d_buffer, (uint8_t*)&header, FP_HEADER_LEN);
@@ -438,7 +461,7 @@ static void calc_and_write_fp(FP_BUFFER *fp_buffer,
 			      const ObjectCursor &cursor)
 {
   sha1_digest_t sha1 = ceph::crypto::digest<ceph::crypto::SHA1>(p, chunk_size);
-  fp_buffer->add_fp((const char*)(sha1.v), cursor);
+  fp_buffer->add_fp((const char*)(sha1.v), chunk_size, cursor);
 }
 
 //---------------------------------------------------------------------------
@@ -470,6 +493,100 @@ static void calculate_fp(FP_BUFFER *fp_buffer,
     }
   }
 }
+
+#if 1
+//---------------------------------------------------------------------------
+static void calculate_fp_cdc(FP_BUFFER *fp_buffer,
+			     bufferlist &bl,
+			     unsigned chunk_size,
+			     const ObjectCursor &cursor)
+{
+  constexpr unsigned MAX_CHUNK_SIZE = 256*1024;
+  uint8_t temp[MAX_CHUNK_SIZE];
+  auto bl_itr = bl.cbegin();
+
+  std::vector<std::pair<uint64_t, uint64_t>> chunks;
+  std::string chunk_algo = "fastcdc";
+  unique_ptr<CDC> cdc = CDC::create(chunk_algo, cbits(chunk_size) - 1);
+  cdc->calc_chunks(bl, &chunks);
+
+  for (auto &p : chunks) {
+    unsigned chunk_size = p.second;
+    const char *p_src = nullptr;
+    size_t n = bl_itr.get_ptr_and_advance(chunk_size, &p_src);
+    if (n == chunk_size) {
+      calc_and_write_fp(fp_buffer, (uint8_t*)p_src, chunk_size, cursor);
+    }
+    else {
+      memcpy(temp, p_src, n);
+      uint32_t count  = chunk_size - n;
+      uint8_t *p_dest = temp + n;
+      do {
+	n = bl_itr.get_ptr_and_advance(count, &p_src);
+	memcpy(p_dest, p_src, n);
+	count  -= n;
+	p_dest += n;
+      } while (count > 0);
+      calc_and_write_fp(fp_buffer, temp, chunk_size, cursor);
+    }
+  }
+}
+#else
+//---------------------------------------------------------------------------
+static void calculate_fp_cdc(FP_BUFFER *fp_buffer,
+			     bufferlist &bl,
+			     unsigned chunk_size,
+			     const ObjectCursor &cursor)
+{
+  std::vector<std::pair<uint64_t, uint64_t>> chunks;
+#if 0
+  std::string chunk_algo = "fastcdc";
+  unique_ptr<CDC> cdc = CDC::create(chunk_algo, cbits(chunk_size) - 1);
+  cdc->calc_chunks(bl, &chunks);
+#else
+  size_t pos = 0;
+  size_t len = bl.length();
+  size_t last_chunk_size = (rand() % (3*chunk_size)) + chunk_size/10;
+  while (pos < len - last_chunk_size ) {
+    size_t curr_chunk_size = (rand() % (3*chunk_size)) + chunk_size/10;
+    curr_chunk_size = std::min(curr_chunk_size, len-pos);
+    chunks.push_back(std::pair<uint64_t,uint64_t>(pos, curr_chunk_size));
+    pos += curr_chunk_size;
+  }
+  if (pos < len) {
+    chunks.push_back(std::pair<uint64_t,uint64_t>(pos, len-pos));
+  }
+#endif
+
+#define CDC_DEBUG
+#ifdef  CDC_DEBUG
+  static bool first_time = true;
+  unsigned bl_len = bl.length();
+  unsigned aggregated_len = 0;
+  unsigned max_len = 0, min_len = 16*1024*1024;
+#endif
+  for (auto &p : chunks) {
+    bufferlist chunk_bl;
+#ifdef CDC_DEBUG
+    min_len = std::min(min_len, (unsigned)p.second);
+    max_len = std::max(max_len, (unsigned)p.second);
+    aggregated_len += p.second;
+#endif
+    chunk_bl.substr_of(bl, p.first, p.second);
+    calc_and_write_fp(fp_buffer, (const uint8_t*)(chunk_bl.c_str()), chunk_bl.length(), cursor);
+  }
+
+#ifdef CDC_DEBUG
+  if (first_time)
+    {
+      first_time = false;
+      cout << "bl_len = " << bl_len << ", aggregated_len = " << aggregated_len << std::endl;
+      cout << "min_len = " << min_len << ", max_len = " << max_len << std::endl;
+      cout << "avg_len = " << aggregated_len / chunks.size() << std::endl;
+    }
+#endif
+}
+#endif
 
 //---------------------------------------------------------------------------
 static int thread_collect(const dedup_params_t &params, unsigned thread_id, uint64_t *p_bytes_read)
@@ -508,7 +625,14 @@ static int thread_collect(const dedup_params_t &params, unsigned thread_id, uint
     *p_bytes_read += bl.length();
     min_size = std::min(min_size, (uint64_t)bl.length());
     max_size = std::max(max_size, (uint64_t)bl.length());
-    calculate_fp(fp_buffer.get(), bl, params.chunk_size, itr.get_cursor());
+    if (params.chunk_algo == CHUNK_ALGO_FBC) {
+      calculate_fp(fp_buffer.get(), bl, params.chunk_size, itr.get_cursor());
+    }
+    else {
+      assert(params.chunk_algo == CHUNK_ALGO_CDC);
+      calculate_fp_cdc(fp_buffer.get(), bl, params.chunk_size, itr.get_cursor());
+    }
+
     if (unlikely(max_objs && objs_read >= max_objs)) {
       break;
     }
@@ -534,6 +658,11 @@ static int thread_collect(const dedup_params_t &params, unsigned thread_id, uint
 static int collect_fingerprints(const dedup_params_t &params, uint64_t *p_total_bytes_read)
 {
   cout << "collect chunks finger prints" << std::endl;
+  if (params.chunk_algo != CHUNK_ALGO_FBC && params.chunk_algo != CHUNK_ALGO_CDC) {
+    cerr << "** illegal chunking algorithm **" << std::endl;
+    usage_exit();
+  }
+
   unsigned max_threads = params.max_threads;
   std::cout << "max_threads = " << max_threads << std::endl;
 
@@ -609,7 +738,11 @@ static void reduced_fp_flush(REDUCED_FP_HEADER header,
 			     uint32_t serial_id,
 			     IoCtx   &obj_ioctx)
 {
+#ifndef FBC
+  header.fp_count  = HTOCEPH_32((offset - sizeof(REDUCED_FP_HEADER)) / sizeof(Key));
+#else
   header.fp_count  = HTOCEPH_32((offset - sizeof(REDUCED_FP_HEADER)) / fp_size);
+#endif
   header.serial_id = HTOCEPH_32(serial_id);
   header.crc       = 0;
   memcpy(buffer, (uint8_t*)&header, sizeof(REDUCED_FP_HEADER));
@@ -651,22 +784,30 @@ static int store_reduced_fingerprints(const dedup_params_t &params,
   header.threshold = HTOCEPH_16(params.dedup_threshold);
   header.pad16     = 0;
   header.pad32     = 0;
-
+#ifndef FBC
+  unsigned key_size = sizeof(Key);
+#else
+  unsigned key_size = fp_size;
+#endif
   uint32_t serial_id = 0;
   unsigned offset    = sizeof(REDUCED_FP_HEADER);
   for (auto const& entry : fp_dict) {
     const Key & key = entry.first;
     const unsigned count = entry.second;
     if (count >= params.dedup_threshold) {
-      if (unlikely(offset+fp_size >= sizeof(buffer))) {
+      if (unlikely(offset+key_size >= sizeof(buffer))) {
 	reduced_fp_flush(header, buffer, offset, fp_size, shard_id, serial_id++, obj_ioctx);
 	offset = sizeof(REDUCED_FP_HEADER);
       }
       memcpy(buffer+offset, key.get_fp_buff(), fp_size);
       offset += fp_size;
+#ifndef FBC
+      *(uint32_t*)(buffer+offset) = HTOCEPH_32(key.get_chunk_size());
+      offset += sizeof(key.get_chunk_size());
+#endif
 
       //file.write((const char*)(key.get_fp_buff()), key.FP_SIZE);
-      *p_reduced_bytes += (count-1)*params.chunk_size;
+      *p_reduced_bytes += (count-1)*(key.get_chunk_size());
     }
   }
 
@@ -919,6 +1060,19 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 	cout << "Max-Objs was set to " << count << std::endl;
 	params.max_objs = count;
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--chunk_algo", (char*)NULL)) {
+      if (val == "FBC") {
+	params.chunk_algo = CHUNK_ALGO_FBC;
+	cout << "Chunking algorithm was set to Fixed Block Chunking(FBC)" << std::endl;
+      }
+      else if (val == "CDC") {
+	params.chunk_algo = CHUNK_ALGO_CDC;
+	cout << "Chunking algorithm was set to Content Defined Chunking(CDC)" << std::endl;
+      }
+      else {
+	cerr << "** illegal chunking algorithm **" << std::endl;
+	usage_exit();
+      }
     } else if (ceph_argparse_witharg(args, i, &val, "--shards-count", (char*)NULL)) {
       int count = atoi(val.c_str());
       if (count > 0 && count <= SHARDS_COUNT_MAX) {
@@ -926,7 +1080,7 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 	params.num_shards = count;
       }
       else {
-	cerr << "illegal shards-count" << std::endl;
+	cerr << "** illegal shards-count **" << std::endl;
 	usage_exit();
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--chunk-size", (char*)NULL)) {
@@ -936,7 +1090,7 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 	cout << "Chunk Size was set to " << size/1024 << " KiB" << std::endl;
       }
       else {
-	cerr << "illegal chunk-size (must be a full multiplication of " << CHUNK_BASESIZE << ")" << std::endl;
+	cerr << "** illegal chunk-size (must be a full multiplication of " << CHUNK_BASESIZE << ") **" << std::endl;
 	usage_exit();
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--thread-count", (char*)NULL)) {
@@ -945,7 +1099,7 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 	params.max_threads = count;
       }
       else {
-	cerr << "illegal thread-count (must be between 1-" << THREAD_LIMIT_STRICT << ")" << std::endl;
+	cerr << "** illegal thread-count (must be between 1-" << THREAD_LIMIT_STRICT << ") **" << std::endl;
 	usage_exit();
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--dedup_threshold", (char*)NULL)) {
@@ -955,13 +1109,13 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 	params.dedup_threshold = count;
       }
       else {
-	cerr << "illegal dedup-threshold (must be between 1-" <<
-	  DEDUP_THRESHOLD_MAX << ")" << std::endl;
+	cerr << "** illegal dedup-threshold (must be between 1-" <<
+	  DEDUP_THRESHOLD_MAX << ") **" << std::endl;
 	usage_exit();
       }
     } else {
       if (val[0] == '-') {
-	cerr << "Bad argument <" << val[0] << ">" << std::endl;
+	cerr << "** Bad argument <" << val[0] << "> **" << std::endl;
 	usage_exit();
       }
       ++i;
@@ -969,7 +1123,7 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
   }
 
   if (params.pool_name.length() == 0) {
-    cerr << "No poolname was passed" << std::endl;
+    cerr << "** No poolname was passed **" << std::endl;
     usage_exit();
   }
 }
