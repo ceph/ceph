@@ -807,7 +807,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   target_coid.snap = snapid;
   return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
-    [this, &os, &txn, &delta_stats, &osd_op_params, &snapid]
+    [this, &os, &txn, &delta_stats, &osd_op_params, snapid]
     (auto, auto resolved_obc) {
     if (resolved_obc->obs.oi.soid.is_head()) {
       // no-op: The resolved oid returned the head object
@@ -869,7 +869,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
     // if there's no snapshot, we delete the object;
     // otherwise, do nothing.
     crimson::ct_error::enoent::handle(
-    [this, &os, &snapid, &txn, &delta_stats, &snapc, &ss, &osd_op_params] {
+    [this, &os, snapid, &txn, &delta_stats, &snapc, &ss, &osd_op_params] {
       logger().debug("PGBackend::rollback: deleting head on {}"
                      " with snap_id of {}"
                      " because got ENOENT|whiteout on obc lookup",
