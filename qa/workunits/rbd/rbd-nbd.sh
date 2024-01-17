@@ -205,6 +205,7 @@ used=`rbd -p ${POOL} --format xml du ${IMAGE} |
 unmap_device ${DEV} ${PID}
 
 # resize test
+# also test that try-netlink option is accepted for compatibility
 DEV=`_sudo rbd device -t nbd -o try-netlink map ${POOL}/${IMAGE}`
 get_pid ${POOL}
 devname=$(basename ${DEV})
@@ -391,7 +392,7 @@ cat ${LOG_FILE}
 expect_false grep 'quiesce failed' ${LOG_FILE}
 
 # test detach/attach
-OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map ${POOL}/${IMAGE}`
+OUT=`_sudo rbd device --device-type nbd --show-cookie map ${POOL}/${IMAGE}`
 read DEV COOKIE <<< "${OUT}"
 get_pid ${POOL}
 _sudo mount ${DEV} ${TEMPDIR}/mnt
@@ -419,7 +420,7 @@ _sudo umount ${TEMPDIR}/mnt
 unmap_device ${DEV} ${PID}
 # if kernel supports cookies
 if [ -n "${COOKIE}" ]; then
-    OUT=`_sudo rbd device --device-type nbd --show-cookie --cookie "abc de" --options try-netlink map ${POOL}/${IMAGE}`
+    OUT=`_sudo rbd device --device-type nbd --show-cookie --cookie "abc de" map ${POOL}/${IMAGE}`
     read DEV ANOTHER_COOKIE <<< "${OUT}"
     get_pid ${POOL}
     test "${ANOTHER_COOKIE}" = "abc de"
@@ -429,7 +430,7 @@ DEV=
 
 # test detach/attach with --snap-id
 SNAPID=`rbd snap ls ${POOL}/${IMAGE} | awk '$2 == "snap" {print $1}'`
-OUT=`_sudo rbd device --device-type nbd --options try-netlink,show-cookie map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
+OUT=`_sudo rbd device --device-type nbd --show-cookie map --snap-id ${SNAPID} ${POOL}/${IMAGE}`
 read DEV COOKIE <<< "${OUT}"
 get_pid ${POOL}
 _sudo rbd device detach ${POOL}/${IMAGE} --snap-id ${SNAPID} --device-type nbd
