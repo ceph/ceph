@@ -19,9 +19,11 @@
 
 class MOSDScrubReserve : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 1;
+  static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
 public:
+  using reservation_nonce_t = uint32_t;
+
   spg_t pgid;
   epoch_t map_epoch;
   enum ReserveMsgOp {
@@ -32,6 +34,7 @@ public:
   };
   int32_t type;
   pg_shard_t from;
+  reservation_nonce_t reservation_nonce{0};
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -46,10 +49,11 @@ public:
   MOSDScrubReserve(spg_t pgid,
 		   epoch_t map_epoch,
 		   int type,
-		   pg_shard_t from)
+		   pg_shard_t from,
+		   reservation_nonce_t nonce)
     : MOSDFastDispatchOp{MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), map_epoch(map_epoch),
-      type(type), from(from) {}
+      type(type), from(from), reservation_nonce{nonce} {}
 
   std::string_view get_type_name() const {
     return "MOSDScrubReserve";
@@ -71,7 +75,8 @@ public:
       out << "RELEASE ";
       break;
     }
-    out << "e" << map_epoch << ")";
+    out << "e" << map_epoch << " from: " << from
+	<< " reservation_nonce: " << reservation_nonce << ")";
     return;
   }
 
@@ -82,6 +87,13 @@ public:
     decode(map_epoch, p);
     decode(type, p);
     decode(from, p);
+    if (header.version >= 2) {
+      decode(reservation_nonce, p);
+    } else {
+      // a zero nonce (identifying legacy senders) is ignored when
+      // checking the request for obsolescence
+      reservation_nonce = 0;
+    }
   }
 
   void encode_payload(uint64_t features) {
@@ -90,6 +102,7 @@ public:
     encode(map_epoch, payload);
     encode(type, payload);
     encode(from, payload);
+    encode(reservation_nonce, payload);
   }
 private:
   template<class T, typename... Args>
