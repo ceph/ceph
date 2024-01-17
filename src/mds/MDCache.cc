@@ -6668,6 +6668,13 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
           << " pinned=" << lru.lru_get_num_pinned()
           << dendl;
 
+  dout(20) << "bottom_lru: " << bottom_lru.lru_get_size() << " items"
+              ", " << bottom_lru.lru_get_top() << " top"
+              ", " << bottom_lru.lru_get_bot() << " bot"
+              ", " << bottom_lru.lru_get_pintail() << " pintail"
+              ", " << bottom_lru.lru_get_num_pinned() << " pinned"
+              << dendl;
+
   const uint64_t trim_counter_start = trim_counter.get();
   bool throttled = false;
   while (1) {
@@ -6688,20 +6695,25 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   }
   unexpirables.clear();
 
+  dout(20) << "lru: " << lru.lru_get_size() << " items"
+              ", " << lru.lru_get_top() << " top"
+              ", " << lru.lru_get_bot() << " bot"
+              ", " << lru.lru_get_pintail() << " pintail"
+              ", " << lru.lru_get_num_pinned() << " pinned"
+              << dendl;
+
   // trim dentries from the LRU until count is reached
-  // if mds is in standby_replay and skip trimming the inodes
-  while (!throttled && (cache_toofull() || count > 0 || is_standby_replay)) {
+  while (!throttled && (cache_toofull() || count > 0)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) break;
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
     if (!dn) {
       break;
     }
-    if (is_standby_replay && dn->get_linkage()->inode) {
-      // we move the inodes that need to be trimmed to the end of the lru queue.
-      // refer to MDCache::standby_trim_segment
-      lru.lru_insert_bot(dn);
-      break;
+    if ((is_standby_replay && dn->get_linkage()->inode &&
+        dn->get_linkage()->inode->item_open_file.is_on_list())) {
+      dout(20) << "unexpirable: " << *dn << dendl;
+      unexpirables.push_back(dn);
     } else if (trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
     } else {
@@ -7346,69 +7358,42 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
 
 void MDCache::standby_trim_segment(LogSegment *ls)
 {
-  auto try_trim_inode = [this](CInode *in) {
-    if (in->get_num_ref() == 0 &&
-	!in->item_open_file.is_on_list() &&
-	in->parent != NULL &&
-	in->parent->get_num_ref() == 0){
-      touch_dentry_bottom(in->parent);
-    }
-  };
-
-  auto try_trim_dentry = [this](CDentry *dn) {
-    if (dn->get_num_ref() > 0)
-      return;
-    auto in = dn->get_linkage()->inode;
-    if(in && in->item_open_file.is_on_list())
-      return;
-    touch_dentry_bottom(dn);
-  };
-  
   ls->new_dirfrags.clear_list();
   ls->open_files.clear_list();
 
   while (!ls->dirty_dirfrags.empty()) {
     CDir *dir = ls->dirty_dirfrags.front();
     dir->mark_clean();
-    if (dir->inode)
-      try_trim_inode(dir->inode);
   }
   while (!ls->dirty_inodes.empty()) {
     CInode *in = ls->dirty_inodes.front();
     in->mark_clean();
-    try_trim_inode(in);
   }
   while (!ls->dirty_dentries.empty()) {
     CDentry *dn = ls->dirty_dentries.front();
     dn->mark_clean();
-    try_trim_dentry(dn);
   }
   while (!ls->dirty_parent_inodes.empty()) {
     CInode *in = ls->dirty_parent_inodes.front();
     in->clear_dirty_parent();
-    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_dir.empty()) {
     CInode *in = ls->dirty_dirfrag_dir.front();
     in->filelock.remove_dirty();
-    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_nest.empty()) {
     CInode *in = ls->dirty_dirfrag_nest.front();
     in->nestlock.remove_dirty();
-    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_dirfragtree.empty()) {
     CInode *in = ls->dirty_dirfrag_dirfragtree.front();
     in->dirfragtreelock.remove_dirty();
-    try_trim_inode(in);
   }
   while (!ls->truncating_inodes.empty()) {
     auto it = ls->truncating_inodes.begin();
     CInode *in = *it;
     ls->truncating_inodes.erase(it);
     in->put(CInode::PIN_TRUNCATING);
-    try_trim_inode(in);
   }
 }
 
@@ -13401,7 +13386,7 @@ void MDCache::upkeep_main(void)
         if (active_with_clients) {
           trim_client_leases();
         }
-        if (is_open()) {
+        if (is_open() || mds->is_standby_replay()) {
           trim();
         }
         if (active_with_clients) {
