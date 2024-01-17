@@ -6,7 +6,6 @@
 #include <span>
 
 #include "common/ceph_time.h"
-#include "messages/MOSDScrubReserve.h"
 #include "osd/OSD.h"
 #include "osd/PG.h"
 #include "osd/osd_types_fmt.h"
@@ -31,11 +30,13 @@ namespace Scrub {
 
 ReplicaReservations::ReplicaReservations(
     ScrubMachineListener& scrbr,
+    reservation_nonce_t& nonce,
     PerfCounters& pc)
     : m_scrubber{scrbr}
     , m_pg{m_scrubber.get_pg()}
     , m_pgid{m_scrubber.get_spgid().pgid}
     , m_osds{m_pg->get_pg_osd(ScrubberPasskey())}
+    , m_last_request_sent_nonce{nonce}
     , m_perf_set{pc}
 {
   // the acting set is sorted by pg_shard_t. The reservations are to be issued
@@ -80,7 +81,7 @@ void ReplicaReservations::release_all()
   for (const auto& peer : replicas) {
     auto m = make_message<MOSDScrubReserve>(
 	spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::RELEASE,
-	m_pg->pg_whoami);
+	m_pg->pg_whoami, 0);
     m_pg->send_cluster_message(peer.osd, m, epoch, false);
   }
 
@@ -125,16 +126,50 @@ ReplicaReservations::~ReplicaReservations()
   log_failure_and_duration(scrbcnt_resrv_aborted);
 }
 
-bool ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
+bool ReplicaReservations::is_reservation_response_relevant(
+    reservation_nonce_t msg_nonce) const
 {
-  // verify that the grant is from the peer we expected. If not?
-  // for now - abort the OSD. \todo reconsider the reaction.
-  if (!get_last_sent().has_value() || from != *get_last_sent()) {
+  return (msg_nonce == 0) || (msg_nonce == m_last_request_sent_nonce);
+}
+
+bool ReplicaReservations::is_msg_source_correct(pg_shard_t from) const
+{
+  const auto exp_source = get_last_sent();
+  return exp_source && from == *exp_source;
+}
+
+bool ReplicaReservations::handle_reserve_grant(
+    const MOSDScrubReserve& msg,
+    pg_shard_t from)
+{
+  if (!is_reservation_response_relevant(msg.reservation_nonce)) {
+    // this is a stale response to a previous request (e.g. one that
+    // timed-out). See m_last_request_sent_nonce for details.
     dout(1) << fmt::format(
-		   "unexpected grant from {} (expected {})", from,
-		   get_last_sent().value_or(pg_shard_t{}))
+		   "stale reservation response from {} with nonce {} vs. "
+		   "expected {} (e:{})",
+		   from, msg.reservation_nonce, m_last_request_sent_nonce,
+		   msg.map_epoch)
 	    << dendl;
-    ceph_assert(from == get_last_sent());
+    return false;
+  }
+
+  // verify that the grant is from the peer we expected. If not?
+  // for now - abort the OSD. There is no known scenario in which a
+  // grant message with a correct nonce can arrive from the wrong peer.
+  // (we would not abort for arriving messages with nonce 0, as those
+  // are legacy messages, for which the nonce was not verified).
+  if (!is_msg_source_correct(from)) {
+    const auto error_text = fmt::format(
+	"unexpected reservation grant from {} vs. the expected {} (e:{} "
+	"message nonce:{})",
+	from, get_last_sent().value_or(pg_shard_t{}), msg.map_epoch,
+	msg.reservation_nonce);
+    dout(1) << error_text << dendl;
+    if (msg.reservation_nonce != 0) {
+      m_osds->clog->error() << error_text;
+      ceph_abort_msg(error_text);
+    }
     return false;
   }
 
@@ -143,15 +178,15 @@ bool ReplicaReservations::handle_reserve_grant(OpRequestRef op, pg_shard_t from)
   // log a warning if the response was slow to arrive
   if ((m_slow_response_warn_timeout > 0ms) &&
       (elapsed > m_slow_response_warn_timeout)) {
-    dout(1) << fmt::format(
-		   "slow reservation response from {} ({}ms)", from,
-		   duration_cast<milliseconds>(elapsed).count())
-	    << dendl;
+    m_osds->clog->warn() << fmt::format(
+	"slow reservation response from {} ({}ms)", from,
+	duration_cast<milliseconds>(elapsed).count());
     // prevent additional warnings
     m_slow_response_warn_timeout = 0ms;
   }
   dout(10) << fmt::format(
-		  "granted by {} ({} of {}) in {}ms", from,
+		  "(e:{} nonce:{}) granted by {} ({} of {}) in {}ms",
+		  msg.map_epoch, msg.reservation_nonce, from,
 		  active_requests_cnt(), m_sorted_secondaries.size(),
 		  duration_cast<milliseconds>(elapsed).count())
 	   << dendl;
@@ -170,44 +205,64 @@ bool ReplicaReservations::send_next_reservation_or_complete()
   // send the next reservation request
   const auto peer = *m_next_to_request;
   const auto epoch = m_pg->get_osdmap_epoch();
+  m_last_request_sent_nonce++;
+
   auto m = make_message<MOSDScrubReserve>(
-      spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::REQUEST,
-      m_pg->pg_whoami);
+      spg_t{m_pgid, peer.shard}, epoch, MOSDScrubReserve::REQUEST, m_pg->pg_whoami,
+      m_last_request_sent_nonce);
   m_pg->send_cluster_message(peer.osd, m, epoch, false);
   m_last_request_sent_at = ScrubClock::now();
   dout(10) << fmt::format(
-		  "reserving {} (the {} of {} replicas)", *m_next_to_request,
-		  active_requests_cnt() + 1, m_sorted_secondaries.size())
+		  "reserving {} (the {} of {} replicas) e:{} nonce:{}",
+		  *m_next_to_request, active_requests_cnt() + 1,
+		  m_sorted_secondaries.size(), epoch, m_last_request_sent_nonce)
 	   << dendl;
   m_next_to_request++;
   return false;
 }
 
-void ReplicaReservations::verify_rejections_source(
-    OpRequestRef op,
+bool ReplicaReservations::handle_reserve_rejection(
+    const MOSDScrubReserve& msg,
     pg_shard_t from)
 {
   // a convenient log message for the reservation process conclusion
   // (matches the one in send_next_reservation_or_complete())
   dout(10) << fmt::format(
-		  "remote reservation failure. Rejected by {} ({})", from,
-		  *op->get_req())
+		  "remote reservation failure. Rejected by {} ({})", from, msg)
 	   << dendl;
 
+  if (!is_reservation_response_relevant(msg.reservation_nonce)) {
+    // this is a stale response to a previous request (e.g. one that
+    // timed-out). See m_last_request_sent_nonce for details.
+    dout(10) << fmt::format(
+		    "stale reservation response from {} with reservation_nonce "
+		    "{} vs. expected {} (e:{})",
+		    from, msg.reservation_nonce, m_last_request_sent_nonce,
+		    msg.map_epoch)
+	     << dendl;
+    return false;
+  }
+
+  log_failure_and_duration(scrbcnt_resrv_rejected);
+
+  // we should never see a rejection carrying a valid
+  // reservation nonce - arriving while we have no pending requests
+  ceph_assert(get_last_sent().has_value() || msg.reservation_nonce == 0);
+
   // verify that the denial is from the peer we expected. If not?
+  // There is no known scenario in which this can happen, but if it does -
   // we should treat it as though the *correct* peer has rejected the request,
   // but remember to release that peer, too.
-
-  ceph_assert(get_last_sent().has_value());
-  const auto expected = *get_last_sent();
-  if (from != expected) {
-    dout(1) << fmt::format(
-		   "unexpected rejection from {} (expected {})", from, expected)
-	    << dendl;
-  } else {
-    // correct peer, wrong answer...
+  if (is_msg_source_correct(from)) {
     m_next_to_request--;  // no need to release this one
+  } else {
+    m_osds->clog->warn() << fmt::format(
+	"unexpected reservation denial from {} vs the expected {} (e:{} "
+	"message reservation_nonce:{})",
+	from, get_last_sent().value_or(pg_shard_t{}), msg.map_epoch,
+	msg.reservation_nonce);
   }
+  return true;
 }
 
 std::optional<pg_shard_t> ReplicaReservations::get_last_sent() const
