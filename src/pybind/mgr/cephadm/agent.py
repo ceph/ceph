@@ -56,7 +56,7 @@ class AgentEndpoint:
         conf = {'/': {'tools.trailing_slash.on': False}}
 
         cherrypy.tree.mount(self.host_data, '/data', config=conf)
-        cherrypy.tree.mount(self.node_proxy, '/node-proxy', config=conf)
+        cherrypy.tree.mount(self.node_proxy_endpoint, '/node-proxy', config=conf)
 
     def configure_tls(self, server: Server) -> None:
         old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
@@ -87,12 +87,12 @@ class AgentEndpoint:
     def configure(self) -> None:
         self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
         self.configure_tls(self.host_data)
-        self.node_proxy = NodeProxy(self.mgr)
+        self.node_proxy_endpoint = NodeProxyEndpoint(self.mgr)
         self.configure_routes()
         self.find_free_port()
 
 
-class NodeProxy:
+class NodeProxyEndpoint:
     def __init__(self, mgr: "CephadmOrchestrator"):
         self.mgr = mgr
         self.ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
@@ -106,7 +106,7 @@ class NodeProxy:
         self.redfish_token: str = ''
         self.redfish_session_location: str = ''
 
-    def _cp_dispatch(self, vpath: List[str]) -> "NodeProxy":
+    def _cp_dispatch(self, vpath: List[str]) -> "NodeProxyEndpoint":
         if len(vpath) > 1:  # /{hostname}/<endpoint>
             hostname = vpath.pop(0)  # /<endpoint>
             cherrypy.request.params['hostname'] = hostname
@@ -139,7 +139,7 @@ class NodeProxy:
         self.validate_node_proxy_data(data)
 
         host = data["cephx"]["name"]
-        results['result'] = self.mgr.node_proxy.oob.get(host)
+        results['result'] = self.mgr.node_proxy_cache.oob.get(host)
         if not results['result']:
             raise cherrypy.HTTPError(400, 'The provided host has no iDrac details.')
         return results
@@ -261,7 +261,7 @@ class NodeProxy:
         if 'patch' not in data.keys():
             raise cherrypy.HTTPError(400, 'Malformed data received.')
         host = data['cephx']['name']
-        self.mgr.node_proxy.save(host, data['patch'])
+        self.mgr.node_proxy_cache.save(host, data['patch'])
         self.raise_alert(data)
 
     @cherrypy.expose
@@ -311,7 +311,7 @@ class NodeProxy:
             self.mgr.log.debug(msg)
             raise cherrypy.HTTPError(400, msg)
 
-        if hostname not in self.mgr.node_proxy.data.keys():
+        if hostname not in self.mgr.node_proxy_cache.data.keys():
             # TODO(guits): update unit test for this
             msg = f"'{hostname}' not found."
             self.mgr.log.debug(msg)
@@ -323,7 +323,7 @@ class NodeProxy:
             data = json.dumps(cherrypy.request.json)
 
             if led_type == 'drive':
-                if id_drive not in self.mgr.node_proxy.data[hostname]['status']['storage'].keys():
+                if id_drive not in self.mgr.node_proxy_cache.data[hostname]['status']['storage'].keys():
                     # TODO(guits): update unit test for this
                     msg = f"'{id_drive}' not found."
                     self.mgr.log.debug(msg)
@@ -372,7 +372,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.fullreport(**kw)
+            results = self.mgr.node_proxy_cache.fullreport(**kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -396,7 +396,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.criticals(**kw)
+            results = self.mgr.node_proxy_cache.criticals(**kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -420,7 +420,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.summary(**kw)
+            results = self.mgr.node_proxy_cache.summary(**kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -445,7 +445,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.common('memory', **kw)
+            results = self.mgr.node_proxy_cache.common('memory', **kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -470,7 +470,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.common('network', **kw)
+            results = self.mgr.node_proxy_cache.common('network', **kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -495,7 +495,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.common('processors', **kw)
+            results = self.mgr.node_proxy_cache.common('processors', **kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -520,7 +520,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.common('storage', **kw)
+            results = self.mgr.node_proxy_cache.common('storage', **kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -545,7 +545,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.common('power', **kw)
+            results = self.mgr.node_proxy_cache.common('power', **kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -570,7 +570,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.common('fans', **kw)
+            results = self.mgr.node_proxy_cache.common('fans', **kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
@@ -594,7 +594,7 @@ class NodeProxy:
         :raises cherrypy.HTTPError 404: If the passed hostname is not found.
         """
         try:
-            results = self.mgr.node_proxy.firmwares(**kw)
+            results = self.mgr.node_proxy_cache.firmwares(**kw)
         except KeyError:
             raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
         return results
