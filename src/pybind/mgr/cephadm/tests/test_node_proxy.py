@@ -2,7 +2,7 @@ import cherrypy
 import json
 from _pytest.monkeypatch import MonkeyPatch
 from cherrypy.test import helper
-from cephadm.agent import NodeProxy
+from cephadm.agent import NodeProxyEndpoint
 from unittest.mock import MagicMock, call, patch
 from cephadm.inventory import AgentCache, NodeProxyCache, Inventory
 from cephadm.ssl_cert_utils import SSLCerts
@@ -21,8 +21,8 @@ class FakeMgr:
         self.inventory = Inventory(self)
         self.agent_cache = AgentCache(self)
         self.agent_cache.agent_ports = {"host01": 1234}
-        self.node_proxy = NodeProxyCache(self)
-        self.node_proxy.save = MagicMock()
+        self.node_proxy_cache = NodeProxyCache(self)
+        self.node_proxy_cache.save = MagicMock()
         self.http_server = MagicMock()
         self.http_server.agent = MagicMock()
         self.http_server.agent.ssl_certs = SSLCerts()
@@ -32,9 +32,9 @@ class FakeMgr:
         return '0.0.0.0'
 
 
-class TestNodeProxy(helper.CPWebCase):
+class TestNodeProxyEndpoint(helper.CPWebCase):
     mgr = FakeMgr()
-    app = NodeProxy(mgr)
+    app = NodeProxyEndpoint(mgr)
     mgr.agent_cache.agent_keys = {"host01": "fake-secret01",
                                   "host02": "fake-secret02"}
     mgr.node_proxy.oob = {"host01": {"username": "oob-user01",
@@ -45,8 +45,8 @@ class TestNodeProxy(helper.CPWebCase):
 
     @classmethod
     def setup_server(cls):
-        # cherrypy.tree.mount(NodeProxy(TestNodeProxy.mgr))
-        cherrypy.tree.mount(TestNodeProxy.app)
+        # cherrypy.tree.mount(NodeProxyEndpoint(TestNodeProxyEndpoint.mgr))
+        cherrypy.tree.mount(TestNodeProxyEndpoint.app)
         cherrypy.config.update({'global': {
             'server.socket_host': '127.0.0.1',
             'server.socket_port': PORT}})
@@ -115,7 +115,7 @@ class TestNodeProxy(helper.CPWebCase):
                       detail=['dimm.socket.a1 is critical: Enabled'],
                       summary='1 memory member is not ok')]
 
-        assert TestNodeProxy.mgr.set_health_warning.mock_calls == calls
+        assert TestNodeProxyEndpoint.mgr.set_health_warning.mock_calls == calls
 
     # @pytest.mark.parametrize("method", ["GET", "PATCH"])
     # def test_led_no_hostname(self, method):
@@ -213,7 +213,7 @@ class TestNodeProxy(helper.CPWebCase):
             self.assertStatus('200 OK')
 
     # def test_led_endpoint_unreachable(self):
-    #     TestNodeProxy.app.query_endpoint = MagicMock(side_effect=URLError("fake-error"))
+    #     TestNodeProxyEndpoint.app.query_endpoint = MagicMock(side_effect=URLError("fake-error"))
     #     self.getPage("/host02/led", method="GET")
     #     calls = [call(addr='10.10.10.12',
     #                   data=None,
@@ -221,9 +221,9 @@ class TestNodeProxy(helper.CPWebCase):
     #                   headers={},
     #                   method='GET',
     #                   port=8080,
-    #                   ssl_ctx=TestNodeProxy.app.ssl_ctx)]
+    #                   ssl_ctx=TestNodeProxyEndpoint.app.ssl_ctx)]
     #     self.assertStatus('502 Bad Gateway')
-    #     assert TestNodeProxy.app.query_endpoint.mock_calls == calls
+    #     assert TestNodeProxyEndpoint.app.query_endpoint.mock_calls == calls
 
     def test_fullreport_with_valid_hostname(self):
         self.getPage("/host02/fullreport", method="GET")
