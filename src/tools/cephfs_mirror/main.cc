@@ -16,6 +16,7 @@
 #include <vector>
 
 using namespace std;
+PerfCounters *g_snapshot_perf_counters = nullptr;
 
 void usage() {
   std::cout << "usage: cephfs-mirror [options...]" << std::endl;
@@ -98,6 +99,20 @@ int main(int argc, const char **argv) {
 
   msgr->start();
 
+  {
+    auto prio = g_ceph_context->_conf.get_val<int64_t>("cephfs_mirror_perf_stats_prio");
+    PerfCountersBuilder plb(g_ceph_context, "cephfs_mirror",
+                            cephfs::mirror::l_cephfs_mirror_snapshot_first,
+                            cephfs::mirror::l_cephfs_mirror_snapshot_last);
+    //..........................
+    //.........................,
+
+    //logger = mds_plb.create_perf_counters();
+    //g_ceph_context->get_perfcounters_collection()->add(logger);
+    g_snapshot_perf_counters = plb.create_perf_counters();
+  }
+  g_ceph_context->get_perfcounters_collection()->add(g_snapshot_perf_counters);
+
   mirror = new cephfs::mirror::Mirror(g_ceph_context, cmd_args, &monc, msgr);
   r = mirror->init(reason);
   if (r < 0) {
@@ -119,6 +134,9 @@ cleanup_messenger:
   unregister_async_signal_handler(SIGINT, handle_signal);
   unregister_async_signal_handler(SIGTERM, handle_signal);
   shutdown_async_signal_handler();
+
+  g_ceph_context->get_perfcounters_collection()->remove(g_snapshot_perf_counters);
+  delete g_snapshot_perf_counters;
 
   return forker.signal_exit(r);
 }

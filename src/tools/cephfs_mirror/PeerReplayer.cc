@@ -1577,5 +1577,11 @@ void PeerReplayer::reopen_logs() {
   }
 }
 
+void PeerReplayer::register_perf_counters() {
+}
+
+void PeerReplayer::unregister_perf_counters() {
+}
+
 } // namespace mirror
 } // namespace cephfs

@@ -42,6 +42,9 @@ public:
   // reopen logs
   void reopen_logs();
 
+  void register_perf_counters();
+
+  void unregister_perf_counters();
 private:
   inline static const std::string PRIMARY_SNAP_ID_KEY = "primary_snap_id";
 

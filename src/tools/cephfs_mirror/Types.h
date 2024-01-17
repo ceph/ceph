@@ -81,6 +81,13 @@ typedef std::shared_ptr<librados::IoCtx> IoCtxRef;
 // not a shared_ptr since the type is incomplete
 typedef ceph_mount_info *MountRef;
 
+// Performance Counters
+enum {
+  l_cephfs_mirror_snapshot_first = 4000,
+  //TODO:
+  l_cephfs_mirror_snapshot_last,
+};
+
 } // namespace mirror
 } // namespace cephfs
 
