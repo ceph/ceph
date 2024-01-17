@@ -808,7 +808,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
   return obc_loader.with_clone_obc_only<RWState::RWWRITE>(
     head, target_coid,
     [this, &os, &txn, &delta_stats, &osd_op_params, &snapid]
-    (auto, auto resolved_obc) {
+    (auto head_obc, auto resolved_obc) {
     if (resolved_obc->obs.oi.soid.is_head()) {
       // no-op: The resolved oid returned the head object
       logger().debug("PGBackend::rollback: loaded head_obc: {}"
@@ -846,7 +846,7 @@ PGBackend::rollback_iertr::future<> PGBackend::rollback(
 
     // 3) Calculate clone_overlaps by following overlaps
     const auto& clone_overlap =
-      resolved_obc->ssc->snapset.clone_overlap;
+      head_obc->ssc->snapset.clone_overlap;
     auto iter = clone_overlap.lower_bound(snapid);
     ceph_assert(iter != clone_overlap.end());
     interval_set<uint64_t> overlaps = iter->second;
