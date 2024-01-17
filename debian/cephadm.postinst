@@ -28,6 +28,7 @@ case "$1" in
          adduser --quiet \
                  --system \
                  --disabled-password \
+                 --home /home/cephadm \
                  --gecos 'cephadm user for mgr/cephadm' \
                  --shell /bin/bash cephadm 2>/dev/null || true
          echo "..done"
