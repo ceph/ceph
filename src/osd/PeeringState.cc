@@ -6054,6 +6054,7 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
   DECLARE_LOCALS;
   psdout(10) << "Active: handling ActMap" << dendl;
   ceph_assert(ps->is_primary());
+  pg_t pgid = context< PeeringMachine >().spgid.pgid;
 
   pl->on_active_actmap();
 
@@ -6066,13 +6067,19 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
   if (unfound > 0 &&
       ps->all_unfound_are_queried_or_lost(ps->get_osdmap())) {
     if (ps->cct->_conf->osd_auto_mark_unfound_lost) {
-      pl->get_clog_error() << context< PeeringMachine >().spgid.pgid << " has " << unfound
+      pl->get_clog_error() << pgid << " has " << unfound
 			    << " objects unfound and apparently lost, would automatically "
 			    << "mark these objects lost but this feature is not yet implemented "
 			    << "(osd_auto_mark_unfound_lost)";
     } else
-      pl->get_clog_error() << context< PeeringMachine >().spgid.pgid << " has "
+      pl->get_clog_error() << pgid << " has "
                              << unfound << " objects unfound and apparently lost";
+  }
+
+  if (ps->is_peered() && ps->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
+    psdout(10) << __func__ << "Active(AllReplicasActivated): "
+               << "need reply mon pg_created" << dendl;
+    pl->send_pg_created(pgid);
   }
 
   return forward_event();
@@ -6293,6 +6300,7 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   }
 
   if (ps->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
+    psdout(10) << __func__ << "Active(ActMap): need reply mon pg_created" << dendl;
     pl->send_pg_created(pgid);
   }
 

@@ -1264,8 +1264,15 @@ void OSDService::send_pg_created(pg_t pgid)
   dout(20) << __func__ << dendl;
   auto o = get_osdmap();
   if (o->require_osd_release >= ceph_release_t::luminous) {
-    pg_created.insert(pgid);
-    monc->send_mon_message(new MOSDPGCreated(pgid));
+    if (pg_created.count(pgid)) {
+      dout(20) << __func__ << " already reply to mon "
+               << pgid << " pg_created." << dendl;
+    } else {
+      pg_created.insert(pgid);
+      dout(20) << __func__ << " reply to mon "
+               << pgid << " pg_created." << dendl;
+      monc->send_mon_message(new MOSDPGCreated(pgid));
+    }
   }
 }
 
@@ -1276,6 +1283,8 @@ void OSDService::send_pg_created()
   auto o = get_osdmap();
   if (o->require_osd_release >= ceph_release_t::luminous) {
     for (auto pgid : pg_created) {
+      dout(20) << __func__ << " re-reply to mon "
+               << pgid << " pg_created!" << dendl;
       monc->send_mon_message(new MOSDPGCreated(pgid));
     }
   }
