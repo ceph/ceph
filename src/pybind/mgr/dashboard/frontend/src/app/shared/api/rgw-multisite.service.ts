@@ -7,7 +7,8 @@ import { RgwDaemonService } from './rgw-daemon.service';
   providedIn: 'root'
 })
 export class RgwMultisiteService {
-  private url = 'ui-api/rgw/multisite';
+  private uiUrl = 'ui-api/rgw/multisite';
+  private url = 'api/rgw/multisite';
 
   constructor(private http: HttpClient, public rgwDaemonService: RgwDaemonService) {}
 
@@ -22,7 +23,7 @@ export class RgwMultisiteService {
         access_key: zone.system_key.access_key,
         secret_key: zone.system_key.secret_key
       });
-      return this.http.put(`${this.url}/migrate`, null, { params: params });
+      return this.http.put(`${this.uiUrl}/migrate`, null, { params: params });
     });
   }
 
