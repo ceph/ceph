@@ -24,5 +24,5 @@ tasks:
 - workunit:
     clients:
       client.0:
-        - rados/test.sh
+        - rados/test.sh --crimson
         - rados/test_pool_quota.sh

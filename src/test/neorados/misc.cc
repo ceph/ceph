@@ -261,6 +261,7 @@ CORO_TEST_F(NeoRadosMisc, BigAttr, NeoRadosTest) {
 }
 
 CORO_TEST_F(NeoRadosMisc, WriteSame, NeoRadosTest) {
+  SKIP_IF_CRIMSON(); // See: https://tracker.ceph.com/issues/64040
   static constexpr auto patlen = 128u;
   static constexpr auto samelen = patlen * 4;
   static constexpr char fill = 0xcc;
