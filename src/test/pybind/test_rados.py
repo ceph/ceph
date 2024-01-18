@@ -1,7 +1,5 @@
 from __future__ import print_function
-from nose import SkipTest
-from nose.plugins.attrib import attr
-from nose.tools import eq_ as eq, ok_ as ok, assert_raises
+from assertions import assert_equal as eq, assert_raises
 from rados import (Rados, Error, RadosStateError, Object, ObjectExists,
                    ObjectNotFound, ObjectBusy, NotConnected,
                    LIBRADOS_ALL_NSPACES, WriteOpCtx, ReadOpCtx, LIBRADOS_CREATE_EXCLUSIVE,
@@ -13,6 +11,7 @@ import threading
 import json
 import errno
 import os
+import pytest
 import re
 import sys
 
@@ -98,7 +97,7 @@ class TestRadosStateError(object):
 
 class TestRados(object):
 
-    def setUp(self):
+    def setup_method(self, method):
         self.rados = Rados(conffile='')
         self.rados.conf_parse_env('FOO_DOES_NOT_EXIST_BLAHBLAH')
         self.rados.conf_parse_env()
@@ -107,7 +106,7 @@ class TestRados(object):
         # Assume any pre-existing pools are the cluster's defaults
         self.default_pools = self.rados.list_pools()
 
-    def tearDown(self):
+    def teardown_method(self, method):
         self.rados.shutdown()
 
     def test_ping_monitor(self):
@@ -124,7 +123,7 @@ class TestRados(object):
                     break
 
     def test_annotations(self):
-        with assert_raises(TypeError):
+        with pytest.raises(TypeError):
             self.rados.create_pool(0xf00)
 
     def test_create(self):
@@ -175,7 +174,7 @@ class TestRados(object):
         eq(set(['a' * 500]), self.list_non_default_pools())
         self.rados.delete_pool('a' * 500)
 
-    @attr('tier')
+    @pytest.mark.tier
     def test_get_pool_base_tier(self):
         self.rados.create_pool('foo')
         try:
@@ -213,7 +212,7 @@ class TestRados(object):
     def test_blocklist_add(self):
         self.rados.blocklist_add("1.2.3.4/123", 1)
 
-    @attr('stats')
+    @pytest.mark.stats
     def test_get_cluster_stats(self):
         stats = self.rados.get_cluster_stats()
         assert stats['kb'] > 0
@@ -241,14 +240,14 @@ class TestRados(object):
 
 class TestIoctx(object):
 
-    def setUp(self):
+    def setup_method(self, method):
         self.rados = Rados(conffile='')
         self.rados.connect()
         self.rados.create_pool('test_pool')
         assert self.rados.pool_exists('test_pool')
         self.ioctx = self.rados.open_ioctx('test_pool')
 
-    def tearDown(self):
+    def teardown_method(self, method):
         cmd = {"prefix":"osd unset", "key":"noup"}
         self.rados.mon_command(json.dumps(cmd), b'')
         self.ioctx.close()
@@ -367,17 +366,17 @@ class TestIoctx(object):
     def test_get_pool_name(self):
         eq(self.ioctx.get_pool_name(), 'test_pool')
 
-    @attr('snap')
+    @pytest.mark.snap
     def test_create_snap(self):
         assert_raises(ObjectNotFound, self.ioctx.remove_snap, 'foo')
         self.ioctx.create_snap('foo')
         self.ioctx.remove_snap('foo')
 
-    @attr('snap')
+    @pytest.mark.snap
     def test_list_snaps_empty(self):
         eq(list(self.ioctx.list_snaps()), [])
 
-    @attr('snap')
+    @pytest.mark.snap
     def test_list_snaps(self):
         snaps = ['snap1', 'snap2', 'snap3']
         for snap in snaps:
@@ -385,19 +384,19 @@ class TestIoctx(object):
         listed_snaps = [snap.name for snap in self.ioctx.list_snaps()]
         eq(snaps, listed_snaps)
 
-    @attr('snap')
+    @pytest.mark.snap
     def test_lookup_snap(self):
         self.ioctx.create_snap('foo')
         snap = self.ioctx.lookup_snap('foo')
         eq(snap.name, 'foo')
 
-    @attr('snap')
+    @pytest.mark.snap
     def test_snap_timestamp(self):
         self.ioctx.create_snap('foo')
         snap = self.ioctx.lookup_snap('foo')
         snap.get_timestamp()
 
-    @attr('snap')
+    @pytest.mark.snap
     def test_remove_snap(self):
         self.ioctx.create_snap('foo')
         (snap,) = self.ioctx.list_snaps()
@@ -405,7 +404,7 @@ class TestIoctx(object):
         self.ioctx.remove_snap('foo')
         eq(list(self.ioctx.list_snaps()), [])
 
-    @attr('snap')
+    @pytest.mark.snap
     def test_snap_rollback(self):
         self.ioctx.write("insnap", b"contents1")
         self.ioctx.create_snap("snap1")
@@ -415,7 +414,7 @@ class TestIoctx(object):
         self.ioctx.remove_snap("snap1")
         self.ioctx.remove_object("insnap")
 
-    @attr('snap')
+    @pytest.mark.snap
     def test_snap_read(self):
         self.ioctx.write("insnap", b"contents1")
         self.ioctx.create_snap("snap1")
@@ -515,7 +514,7 @@ class TestIoctx(object):
 
             write_op.remove()
             self.ioctx.operate_write_op(write_op, "write_ops")
-            with assert_raises(ObjectNotFound):
+            with pytest.raises(ObjectNotFound):
                 self.ioctx.read('write_ops')
 
     def test_execute_op(self):
@@ -544,7 +543,7 @@ class TestIoctx(object):
         with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3","4",))
             eq(ret, 0)
-            with assert_raises(ObjectNotFound):
+            with pytest.raises(ObjectNotFound):
                 self.ioctx.operate_read_op(read_op, "no_such")
 
     def test_get_omap_keys(self):
@@ -561,7 +560,7 @@ class TestIoctx(object):
         with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_keys(read_op,"",2)
             eq(ret, 0)
-            with assert_raises(ObjectNotFound):
+            with pytest.raises(ObjectNotFound):
                 self.ioctx.operate_read_op(read_op, "no_such")
 
     def test_clear_omap(self):
@@ -795,7 +794,7 @@ class TestIoctx(object):
             while count[0] < 1:
                 lock.wait()
         eq(comp.get_return_value(), 0)
-        with assert_raises(NoData):
+        with pytest.raises(NoData):
             self.ioctx.get_xattr("xyz", "key")
 
     def test_aio_write_no_comp_ref(self):
@@ -1117,7 +1116,7 @@ class TestIoctx(object):
         release = json.loads(buf.decode("utf-8")).get("require_osd_release",
                                                       None)
         if not release or release[0] < 'l':
-            raise SkipTest
+            pytest.skip('required_osd_release >= l')
 
         eq([], self.ioctx.application_list())
 
@@ -1154,10 +1153,10 @@ class TestIoctx(object):
         eq(self.ioctx.alignment(), None)
 
 
-@attr('ec')
+@pytest.mark.ec
 class TestIoctxEc(object):
 
-    def setUp(self):
+    def setup_method(self, method):
         self.rados = Rados(conffile='')
         self.rados.connect()
         self.pool = 'test-ec'
@@ -1165,17 +1164,17 @@ class TestIoctxEc(object):
         cmd = {"prefix": "osd erasure-code-profile set",
                "name": self.profile, "profile": ["k=2", "m=1", "crush-failure-domain=osd"]}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
-        eq(ret, 0, msg=out)
+        assert ret == 0, out
         # create ec pool with profile created above
         cmd = {'prefix': 'osd pool create', 'pg_num': 8, 'pgp_num': 8,
                'pool': self.pool, 'pool_type': 'erasure',
                'erasure_code_profile': self.profile}
         ret, buf, out = self.rados.mon_command(json.dumps(cmd), b'', timeout=30)
-        eq(ret, 0, msg=out)
+        assert ret == 0, out
         assert self.rados.pool_exists(self.pool)
         self.ioctx = self.rados.open_ioctx(self.pool)
 
-    def tearDown(self):
+    def teardown_method(self, method):
         cmd = {"prefix": "osd unset", "key": "noup"}
         self.rados.mon_command(json.dumps(cmd), b'')
         self.ioctx.close()
@@ -1188,7 +1187,7 @@ class TestIoctxEc(object):
 
 class TestIoctx2(object):
 
-    def setUp(self):
+    def setup_method(self, method):
         self.rados = Rados(conffile='')
         self.rados.connect()
         self.rados.create_pool('test_pool')
@@ -1197,7 +1196,7 @@ class TestIoctx2(object):
         assert pool_id > 0
         self.ioctx2 = self.rados.open_ioctx2(pool_id)
 
-    def tearDown(self):
+    def teardown_method(self, method):
         cmd = {"prefix": "osd unset", "key": "noup"}
         self.rados.mon_command(json.dumps(cmd), b'')
         self.ioctx2.close()
@@ -1226,7 +1225,7 @@ class TestIoctx2(object):
 
 class TestObject(object):
 
-    def setUp(self):
+    def setup_method(self, method):
         self.rados = Rados(conffile='')
         self.rados.connect()
         self.rados.create_pool('test_pool')
@@ -1235,7 +1234,7 @@ class TestObject(object):
         self.ioctx.write('foo', b'bar')
         self.object = Object(self.ioctx, 'foo')
 
-    def tearDown(self):
+    def teardown_method(self, method):
         self.ioctx.close()
         self.ioctx = None
         self.rados.delete_pool('test_pool')
@@ -1259,16 +1258,16 @@ class TestObject(object):
         eq(self.object.read(3), b'bar')
         eq(self.object.read(3), b'baz')
 
-@attr('snap')
+@pytest.mark.snap
 class TestIoCtxSelfManagedSnaps(object):
-    def setUp(self):
+    def setup_method(self, method):
         self.rados = Rados(conffile='')
         self.rados.connect()
         self.rados.create_pool('test_pool')
         assert self.rados.pool_exists('test_pool')
         self.ioctx = self.rados.open_ioctx('test_pool')
 
-    def tearDown(self):
+    def teardown_method(self, method):
         cmd = {"prefix":"osd unset", "key":"noup"}
         self.rados.mon_command(json.dumps(cmd), b'')
         self.ioctx.close()
@@ -1299,11 +1298,11 @@ class TestIoCtxSelfManagedSnaps(object):
 
 class TestCommand(object):
 
-    def setUp(self):
+    def setup_method(self, method):
         self.rados = Rados(conffile='')
         self.rados.connect()
 
-    def tearDown(self):
+    def teardown_method(self, method):
         self.rados.shutdown()
 
     def test_monmap_dump(self):
@@ -1352,7 +1351,7 @@ class TestCommand(object):
         e = json.loads(buf.decode("utf-8"))
         assert('release' in e)
 
-    @attr('bench')
+    @pytest.mark.bench
     def test_osd_bench(self):
         cmd = dict(prefix='bench', size=4096, count=8192)
         ret, buf, err = self.rados.osd_command(0, json.dumps(cmd), b'',
@@ -1373,11 +1372,11 @@ class TestCommand(object):
         eq(u"pool '\u9ec5' created", out)
 
 
-@attr('watch')
+@pytest.mark.watch
 class TestWatchNotify(object):
     OID = "test_watch_notify"
 
-    def setUp(self):
+    def setup_method(self, method):
         self.rados = Rados(conffile='')
         self.rados.connect()
         self.rados.create_pool('test_pool')
@@ -1393,7 +1392,7 @@ class TestWatchNotify(object):
         self.ack_data = {}
         self.instance_id = self.rados.get_instance_id()
 
-    def tearDown(self):
+    def teardown_method(self, method):
         self.ioctx.close()
         self.rados.delete_pool('test_pool')
         self.rados.shutdown()
@@ -1491,23 +1490,23 @@ class TestWatchNotify(object):
         with self.ioctx.watch(self.OID, self.make_callback_reply(),
                               self.make_error_callback()) as watch1:
             watch_id1 = watch1.get_id()
-            ok(watch_id1 > 0)
+            assert watch_id1 > 0
 
             with self.rados.open_ioctx('test_pool') as ioctx:
                 watch2 = ioctx.watch(self.OID, self.make_callback_reply(),
                                      self.make_error_callback())
             watch_id2 = watch2.get_id()
-            ok(watch_id2 > 0)
+            assert watch_id2 > 0
 
             comp = self.ioctx.aio_notify(self.OID, self.notify_callback, msg='test')
             comp.wait_for_complete_and_cb()
             with self.lock:
-                ok(self.instance_id in self.ack_cnt)
+                assert self.instance_id in self.ack_cnt
                 eq(self.ack_cnt[self.instance_id], 2)
                 eq(self.ack_data[self.instance_id], b'test')
 
-            ok(watch1.check() >= timedelta())
-            ok(watch2.check() >= timedelta())
+            assert watch1.check() >= timedelta()
+            assert watch2.check() >= timedelta()
 
             comp = self.ioctx.aio_notify(self.OID, self.notify_callback, msg='best')
             comp.wait_for_complete_and_cb()
