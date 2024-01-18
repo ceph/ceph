@@ -15,14 +15,6 @@ on_error() {
     minikube delete
 }
 
-configure_libvirt(){
-    sudo usermod -aG libvirt $(id -un)
-    sudo su -l $USER  # Avoid having to log out and log in for group addition to take effect.
-    sudo systemctl enable --now libvirtd
-    sudo systemctl restart libvirtd
-    sleep 10 # wait some time for libvirtd service to restart
-}
-
 setup_minikube_env() {
 
     # Check if Minikube is running
@@ -93,7 +85,7 @@ wait_for_ceph_cluster() {
     local max_attempts=10
     local sleep_interval=20
     local attempts=0
-    $KUBECTL rollout status deployment rook-ceph-tools -n rook-ceph --timeout=30s
+    $KUBECTL rollout status deployment rook-ceph-tools -n rook-ceph --timeout=90s
     while ! $KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.ceph.health}' | grep -q "HEALTH_OK"; do
 	echo "Waiting for Ceph cluster installed"
 	sleep $sleep_interval
@@ -118,12 +110,51 @@ show_info() {
     echo "==========================="
 }
 
+configure_libvirt(){
+    if sudo usermod -aG libvirt $(id -un); then
+	echo "User added to libvirt group successfully."
+	sudo systemctl enable --now libvirtd
+	sudo systemctl restart libvirtd
+	sleep 10 # wait some time for libvirtd service to restart
+	newgrp libvirt
+    else
+	echo "Error adding user to libvirt group."
+	return 1
+    fi
+}
+
+recreate_default_network(){
+
+    # destroy any existing kvm default network
+    if sudo virsh net-destroy default; then
+	sudo virsh net-undefine default
+    fi
+
+    # let's create a new kvm default network
+    sudo virsh net-define /usr/share/libvirt/networks/default.xml
+    if sudo virsh net-start default; then
+        echo "Network 'default' started successfully."
+    else
+        # Optionally, handle the error
+        echo "Failed to start network 'default', but continuing..."
+    fi
+
+    # restart libvirtd service and wait a little bit for the service
+    sudo systemctl restart libvirtd
+    sleep 20
+
+    # Just some debugging information
+    all_networks=$(virsh net-list --all)
+    groups=$(groups)
+}
+
 ####################################################################
 ####################################################################
 
 trap 'on_error $? $LINENO' ERR
 
 configure_libvirt
+recreate_default_network
 setup_minikube_env
 build_ceph_image
 create_rook_cluster
