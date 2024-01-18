@@ -8186,8 +8186,7 @@ inline int PrimaryLogPG::_delete_oid(
   // in luminous or later, we can't delete the head if there are
   // clones. we trust the caller passing no_whiteout has already
   // verified they don't exist.
-  if (!snapset.clones.empty() ||
-      (!ctx->snapc.snaps.empty() && ctx->snapc.snaps[0] > snapset.seq)) {
+  if (should_whiteout(snapset, ctx->snapc)) {
     if (no_whiteout) {
       dout(20) << __func__ << " has or will have clones but no_whiteout=1"
 	       << dendl;
