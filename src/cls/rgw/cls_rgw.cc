@@ -1887,9 +1887,6 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   }
 
   cls_rgw_obj_key dest_key = op.key;
-  if (dest_key.instance == "null") {
-    dest_key.instance.clear();
-  }
 
   BIVerObjEntry obj(hctx, dest_key);
   BIOLHEntry olh(hctx, dest_key);
@@ -2014,12 +2011,18 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   rgw_bucket_entry_ver ver;
   ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
 
+  if (op.null_verid) {
+    op.bilog_flags = op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP | RGW_BILOG_NULL_VERSION;
+  } else {
+    op.bilog_flags = op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP;
+  }
+
   real_time mtime = obj.mtime(); /* mtime has no real meaning in
                                   * instance removal context */
   ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
                             mtime, ver,
                             CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
-                            op.bilog_flags | RGW_BILOG_FLAG_VERSIONED_OP, NULL, NULL, &op.zones_trace);
+                            op.bilog_flags, NULL, NULL, &op.zones_trace);
   if (ret < 0)
     return ret;
 
