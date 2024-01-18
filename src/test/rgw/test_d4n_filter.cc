@@ -169,7 +169,7 @@ class D4NFilterFixture : public ::testing::Test {
                        &if_match, &if_nomatch,
                        &user_data,
                        &zones_trace, &canceled,
-                       rctx);
+                       rctx, true);
 
       return ret;
     }
@@ -429,7 +429,7 @@ TEST_F(D4NFilterFixture, CopyObjectReplace) {
 		   &if_match, &if_nomatch,
 		   &user_data,
 		   &zones_trace, &canceled,
-		   rctx), 0);
+		   rctx, true), 0);
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
@@ -554,7 +554,7 @@ TEST_F(D4NFilterFixture, CopyObjectMerge) {
 		   &if_match, &if_nomatch,
 		   &user_data,
 		   &zones_trace, &canceled,
-		   rctx), 0);
+		   rctx, true), 0);
 
   unique_ptr<rgw::sal::Object> testObject_copy = testBucket->get_object(rgw_obj_key("test_object_copy"));
 
@@ -639,7 +639,7 @@ TEST_F(D4NFilterFixture, DelObject) {
   unique_ptr<rgw::sal::Object::DeleteOp> testDOp = testObject_DelObject->get_delete_op();
 
   EXPECT_NE(testDOp, nullptr);
-  EXPECT_EQ(testDOp->delete_obj(dpp, null_yield), 0);
+  EXPECT_EQ(testDOp->delete_obj(dpp, null_yield, true), 0);
 
   /* Check the object does not exist after delete op */
   client.exists(keys, [](cpp_redis::reply& reply) {
@@ -1881,7 +1881,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 		 &if_match, &if_nomatch,
 		 &user_data,
 		 &zones_trace, &canceled,
-		 rctx), 0);
+		 rctx, true), 0);
  
   client.hget("rgw-object:test_object_DataCheck:cache", "data", [&data](cpp_redis::reply& reply) {
     if (reply.is_string()) {
@@ -1906,7 +1906,7 @@ TEST_F(D4NFilterFixture, DataCheck) {
 		 &if_match, &if_nomatch,
 		 &user_data,
 		 &zones_trace, &canceled,
-		 rctx), 0);
+		 rctx, true), 0);
 
   client.hget("rgw-object:test_object_DataCheck:cache", "data", [&dataNew](cpp_redis::reply& reply) {
     if (reply.is_string()) {

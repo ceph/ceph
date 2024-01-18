@@ -512,6 +512,28 @@ struct lc_op_ctx {
 static std::string lc_id = "rgw lifecycle";
 static std::string lc_req_id = "0";
 
+/* do all zones in the zone group process LC? */
+static bool zonegroup_lc_check(const DoutPrefixProvider *dpp, rgw::sal::Zone* zone)
+{
+  auto& zonegroup = zone->get_zonegroup();
+  std::list<std::string> ids;
+  int ret = zonegroup.list_zones(ids);
+  if (ret < 0) {
+    return false;
+  }
+
+  return std::all_of(ids.begin(), ids.end(), [&](const auto& id) {
+    std::unique_ptr<rgw::sal::Zone> zone;
+    ret = zonegroup.get_zone_by_id(id, &zone);
+    if (ret < 0) {
+      return false;
+    }
+    const auto& tier_type = zone->get_tier_type();
+    ldpp_dout(dpp, 20) << "checking zone tier_type=" << tier_type << dendl;
+    return (tier_type == "rgw" || tier_type == "archive" || tier_type == "");
+  });
+}
+
 static int remove_expired_obj(
   const DoutPrefixProvider *dpp, lc_op_ctx& oc, bool remove_indeed,
   rgw::notify::EventType event_type)
@@ -565,7 +587,10 @@ static int remove_expired_obj(
       << dendl;
     return ret;
   }
-  ret =  del_op->delete_obj(dpp, null_yield);
+
+  uint32_t flags = (!remove_indeed || !zonegroup_lc_check(dpp, oc.driver->get_zone()))
+                   ? rgw::sal::FLAG_LOG_OP : 0;
+  ret =  del_op->delete_obj(dpp, null_yield, flags);
   if (ret < 0) {
     ldpp_dout(dpp, 1) <<
       fmt::format("ERROR: {} failed, with error: {}", __func__, ret) << dendl;
@@ -1440,8 +1465,10 @@ public:
         return -EINVAL;
       }
 
+      uint32_t flags = !zonegroup_lc_check(oc.dpp, oc.driver->get_zone())
+                       ? rgw::sal::FLAG_LOG_OP : 0;
       int r = oc.obj->transition(oc.bucket, target_placement, o.meta.mtime,
-	  		         o.versioned_epoch, oc.dpp, null_yield);
+                                 o.versioned_epoch, oc.dpp, null_yield, flags);
       if (r < 0) {
         ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj " 
 			     << oc.bucket << ":" << o.key 

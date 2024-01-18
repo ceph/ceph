@@ -4530,7 +4530,7 @@ void RGWPutObj::execute(optional_yield y)
   op_ret = processor->complete(s->obj_size, etag, &mtime, real_time(), attrs,
                                (delete_at ? *delete_at : real_time()), if_match, if_nomatch,
                                (user_data.empty() ? nullptr : &user_data), nullptr, nullptr,
-                               rctx);
+                               rctx, rgw::sal::FLAG_LOG_OP);
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
   if (op_ret < 0) {
     return;
@@ -4802,7 +4802,7 @@ void RGWPostObj::execute(optional_yield y)
     op_ret = processor->complete(s->obj_size, etag, nullptr, real_time(), attrs,
                                 (delete_at ? *delete_at : real_time()),
                                 nullptr, nullptr, nullptr, nullptr, nullptr,
-                                rctx);
+                                rctx, rgw::sal::FLAG_LOG_OP);
     if (op_ret < 0) {
       return;
     }
@@ -5360,7 +5360,7 @@ void RGWDeleteObj::execute(optional_yield y)
       del_op->params.olh_epoch = epoch;
       del_op->params.marker_version_id = version_id;
 
-      op_ret = del_op->delete_obj(this, y);
+      op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
       if (op_ret >= 0) {
 	delete_marker = del_op->result.delete_marker;
 	version_id = del_op->result.version_id;
@@ -6798,7 +6798,7 @@ void RGWCompleteMultipart::complete()
   // when the bucket is, as that would add an unneeded delete marker
   // moved to complete to prevent segmentation fault in publish commit
   if (meta_obj.get() != nullptr) {
-    int ret = meta_obj->delete_object(this, null_yield, true /* prevent versioning */);
+    int ret = meta_obj->delete_object(this, null_yield, rgw::sal::FLAG_PREVENT_VERSIONING | rgw::sal::FLAG_LOG_OP);
     if (ret >= 0) {
       /* serializer's exclusive lock is released */
       serializer->clear_locked();
@@ -7273,7 +7273,7 @@ void RGWDeleteMultiObj::handle_individual_object(const rgw_obj_key& o, optional_
   del_op->params.bucket_owner = s->bucket_owner;
   del_op->params.marker_version_id = version_id;
 
-  op_ret = del_op->delete_obj(this, y);
+  op_ret = del_op->delete_obj(this, y, rgw::sal::FLAG_LOG_OP);
   if (op_ret == -ENOENT) {
     op_ret = 0;
   }
@@ -7447,7 +7447,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path, optional_yie
     del_op->params.obj_owner = bowner;
     del_op->params.bucket_owner = bucket_owner;
 
-    ret = del_op->delete_obj(dpp, y);
+    ret = del_op->delete_obj(dpp, y, rgw::sal::FLAG_LOG_OP);
     if (ret < 0) {
       goto delop_fail;
     }
@@ -7960,7 +7960,7 @@ int RGWBulkUploadOp::handle_file(const std::string_view path,
   op_ret = processor->complete(size, etag, nullptr, ceph::real_time(),
                               attrs, ceph::real_time() /* delete_at */,
                               nullptr, nullptr, nullptr, nullptr, nullptr,
-                              rctx);
+                              rctx, rgw::sal::FLAG_LOG_OP);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor::complete returned op_ret=" << op_ret << dendl;
   }
