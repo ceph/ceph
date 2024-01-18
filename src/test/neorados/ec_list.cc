@@ -40,19 +40,6 @@ using neorados::WriteOp;
 using Entries = std::vector<neorados::Entry>;
 using REntries = container::flat_set<neorados::Entry>;
 
-CORO_TEST_F(NeoradosList, ListObjects, NeoRadosTest) {
-  static constexpr auto oid = "foo";
-  co_await execute(oid, WriteOp{}.create(true));
-  auto [entries, cursor] = co_await
-    rados().enumerate_objects(pool(), Cursor::begin(), Cursor::end(), 1'000, {},
-			      asio::use_awaitable);
-
-  EXPECT_EQ(1, entries.size());
-  EXPECT_EQ(oid, entries.front().oid);
-  co_return;
-}
-
-
 asio::awaitable<void> populate(neorados::RADOS& rados, const IOContext& pool,
 			       const REntries& entries) {
   for (const auto& entry : entries) {
@@ -69,7 +56,19 @@ void compare(const REntries& ref, const Entries& res) {
   return;
 };
 
-CORO_TEST_F(NeoradosList, ListObjectsNS, NeoRadosTest) {
+CORO_TEST_F(NeoradosECList, ListObjects, NeoRadosECTest) {
+  static constexpr auto oid = "foo";
+  co_await execute(oid, WriteOp{}.create(true));
+  auto [entries, cursor] = co_await
+    rados().enumerate_objects(pool(), Cursor::begin(), Cursor::end(), 1'000, {},
+			      asio::use_awaitable);
+
+  EXPECT_EQ(1, entries.size());
+  EXPECT_EQ(oid, entries.front().oid);
+  co_return;
+}
+
+CORO_TEST_F(NeoradosECList, ListObjectsNS, NeoRadosECTest) {
   auto pdef = pool();
   IOContext p1{pool().get_pool(), "ns1"};
   IOContext p2{pool().get_pool(), "ns2"};
@@ -121,7 +120,7 @@ CORO_TEST_F(NeoradosList, ListObjectsNS, NeoRadosTest) {
   co_return;
 }
 
-CORO_TEST_F(NeoradosList, ListObjectsMany, NeoRadosTest) {
+CORO_TEST_F(NeoradosECList, ListObjectsMany, NeoRadosECTest) {
   REntries ref;
   for (auto i = 0u; i < 512; ++i) {
     ref.insert({.oid = fmt::format("{:0>3}", i)});
@@ -147,7 +146,3 @@ CORO_TEST_F(NeoradosList, ListObjectsMany, NeoRadosTest) {
 
   co_return;
 }
-
-// Sadly I don't think there's a good way to templatize testcases over
-// fixture.
-

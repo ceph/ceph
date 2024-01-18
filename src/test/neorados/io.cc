@@ -45,6 +45,7 @@ using neorados::WriteOp;
 static constexpr auto oid = "oid"sv;
 
 CORO_TEST_F(NeoRadosIo, Limits, NeoRadosTest) {
+  SKIP_IF_CRIMSON(); // See: https://tracker.ceph.com/issues/64040
   co_await expect_error_code(
     execute(oid, WriteOp{}
 	    .write(std::numeric_limits<std::uint64_t>::max(), {})),
@@ -375,97 +376,6 @@ CORO_TEST_F(NeoRadosIo, GetXattrs, NeoRadosTest) {
   EXPECT_EQ(2, attrset.size());
   EXPECT_EQ(attrval1, attrset[attrkey1]);
   EXPECT_EQ(attrval2, attrset[attrkey2]);
-
-  co_return;
-}
-
-CORO_TEST_F(NeoRadosECIo, SimpleWrite, NeoRadosECTest) {
-  SKIP_IF_CRIMSON();
-  static constexpr auto nspace = "nspace";
-  auto pool2 = pool();
-  const auto bl = filled_buffer_list(0xcc, 128);
-
-  pool2.set_ns(nspace);
-  EXPECT_EQ(nspace, pool2.get_ns());
-
-  {
-    co_await execute(oid, WriteOp().write(0, bl));
-    auto resbl = co_await read(oid);
-    EXPECT_EQ(bl, resbl);
-  }
-
-  {
-    co_await execute(oid, WriteOp().write(0, bl), pool2);
-    auto resbl = co_await read(oid, pool2);
-    EXPECT_EQ(bl, resbl);
-  }
-
-  co_return;
-}
-
-CORO_TEST_F(NeoRadosECIo, ReadOp, NeoRadosECTest) {
-  SKIP_IF_CRIMSON();
-  const auto refbl = filled_buffer_list(0xcc, 128);
-
-  co_await execute(oid, WriteOp{}.write_full(refbl));
-  {
-    buffer::list op_bl;
-    co_await rados().execute(oid, pool(),
-			     ReadOp().read(0, refbl.length(), nullptr),
-			     &op_bl, asio::use_awaitable);
-    EXPECT_EQ(refbl, op_bl);
-  }
-  {
-    buffer::list op_bl;
-    // 0 means read the whole object data.
-    co_await rados().execute(oid, pool(),
-			     ReadOp().read(0, 0, nullptr),
-			     &op_bl, asio::use_awaitable);
-    EXPECT_EQ(refbl, op_bl);
-  }
-  {
-    buffer::list read_bl, op_bl;
-    co_await rados().execute(oid, pool(),
-			     ReadOp().read(0, refbl.length(), &read_bl),
-			     &op_bl, asio::use_awaitable);
-    EXPECT_EQ(refbl, read_bl);
-    EXPECT_EQ(refbl, op_bl);
-  }
-  {
-    buffer::list read_bl, op_bl;
-    // 0 means read the whole object data.
-    co_await rados().execute(oid, pool(),
-			     ReadOp().read(0, 0, &read_bl),
-			     &op_bl, asio::use_awaitable);
-    EXPECT_EQ(refbl, read_bl);
-    EXPECT_EQ(refbl, op_bl);
-  }
-
-  {
-    buffer::list read_bl, read_bl2, op_bl;
-    // 0 means read the whole object data.
-    co_await rados().execute(oid, pool(), ReadOp{}
-			     .read(0, 0, &read_bl)
-			     .read(0, 0, &read_bl2),
-			     &op_bl, asio::use_awaitable);
-    EXPECT_EQ(refbl, read_bl);
-    EXPECT_EQ(refbl, read_bl2);
-    buffer::list bl2;
-    bl2.append(refbl);
-    bl2.append(refbl);
-    EXPECT_EQ(bl2, op_bl);
-  }
-  {
-    // Read into buffer with a cached crc
-    auto op_bl = filled_buffer_list('z', refbl.length());
-    EXPECT_NE(refbl.crc32c(0), op_bl.crc32c(0));  // cache 'x' crc
-
-    co_await rados().execute(oid, pool(),
-			     ReadOp().read(0, refbl.length(), nullptr),
-			     &op_bl, asio::use_awaitable);
-    EXPECT_EQ(refbl, op_bl);
-    EXPECT_EQ(refbl.crc32c(0), op_bl.crc32c(0));  // cache 'x' crc
-  }
 
   co_return;
 }
