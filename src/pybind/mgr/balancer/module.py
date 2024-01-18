@@ -374,13 +374,19 @@ class Module(MgrModule):
         """
         Set balancer mode
         """
+        min_compat_client = self.get_osdmap().dump().get('require_min_compat_client', '')
         if mode == Mode.upmap:
-            min_compat_client = self.get_osdmap().dump().get('require_min_compat_client', '')
-            if min_compat_client < 'luminous':  # works well because version is alphabetized..
-                warn = ('min_compat_client "%s" '
-                        '< "luminous", which is required for pg-upmap. '
-                        'Try "ceph osd set-require-min-compat-client luminous" '
-                        'before enabling this mode' % min_compat_client)
+            try:
+                release = CephReleases[min_compat_client]
+                if release.value < CephReleases.luminous.value:
+                    warn = ('min_compat_client "%s" '
+                            '< "luminous", which is required for pg-upmap. '
+                            'Try "ceph osd set-require-min-compat-client luminous" '
+                            'before enabling this mode' % min_compat_client)
+                    return (-errno.EPERM, '', warn)
+            except KeyError:
+                self.log.error('Unable to apply mode {} due to unknown min_compat_client {}'.format(mode, min_compat_client))
+                warn = ('Unable to apply mode {} due to unknown min_compat_client {}.'.format(mode, min_compat_client))
                 return (-errno.EPERM, '', warn)
         elif mode == Mode.crush_compat:
             ms = MappingState(self.get_osdmap(),

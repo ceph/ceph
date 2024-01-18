@@ -83,6 +83,27 @@ PG_STATES = [
 NFS_GANESHA_SUPPORTED_FSALS = ['CEPH', 'RGW']
 NFS_POOL_NAME = '.nfs'
 
+class CephReleases(IntEnum):
+    argonaut = 1
+    bobtail = 2
+    cuttlefish = 3
+    dumpling = 4
+    emperor = 5
+    firefly = 6
+    giant = 7
+    hammer = 8
+    infernalis = 9
+    jewel = 10
+    kraken = 11
+    luminous = 12
+    mimic = 13
+    nautilus = 14
+    octopus = 15
+    pacific = 16
+    quincy = 17
+    reef = 18
+    squid = 19
+    maximum = 20
 
 class NotifyType(str, Enum):
     mon_map = 'mon_map'
