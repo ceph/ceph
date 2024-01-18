@@ -162,6 +162,36 @@ static PyObject *osdmap_calc_pg_upmaps(BasePyOSDMap* self, PyObject *args)
   return PyLong_FromLong(r);
 }
 
+static PyObject *osdmap_balance_primaries(BasePyOSDMap* self, PyObject *args)
+{
+  int pool_id;
+  BasePyOSDMapIncremental *incobj;
+  if (!PyArg_ParseTuple(args, "iO:balance_primaries",
+                        &pool_id, &incobj)) {
+    return nullptr;
+  }
+  auto check_pool = self->osdmap->get_pg_pool(pool_id);
+  if (!check_pool) {
+    derr << __func__ << " pool '" << pool_id
+         << "' does not exist" << dendl;
+    return nullptr;
+  }
+  dout(10) << __func__ << " osdmap " << self->osdmap
+           << " pool_id " << pool_id
+           << " inc " << incobj->inc
+           << dendl;
+  PyThreadState *tstate = PyEval_SaveThread();
+  OSDMap tmp_osd_map;
+  tmp_osd_map.deepish_copy_from(*(self->osdmap));
+  int r = self->osdmap->balance_primaries(g_ceph_context,
+                                 pool_id,
+                                 incobj->inc,
+				 tmp_osd_map);
+  PyEval_RestoreThread(tstate);
+  dout(10) << __func__ << " r = " << r << dendl;
+  return PyLong_FromLong(r);
+}
+
 static PyObject *osdmap_map_pool_pgs_up(BasePyOSDMap* self, PyObject *args)
 {
   int poolid;
@@ -324,6 +354,8 @@ PyMethodDef BasePyOSDMap_methods[] = {
    "Get pools that have CRUSH rules that TAKE the given root"},
   {"_calc_pg_upmaps", (PyCFunction)osdmap_calc_pg_upmaps, METH_VARARGS,
    "Calculate new pg-upmap values"},
+  {"_balance_primaries", (PyCFunction)osdmap_balance_primaries, METH_VARARGS,
+   "Calculate new pg-upmap-primary values"},
   {"_map_pool_pgs_up", (PyCFunction)osdmap_map_pool_pgs_up, METH_VARARGS,
    "Calculate up set mappings for all PGs in a pool"},
   {"_pg_to_up_acting_osds", (PyCFunction)osdmap_pg_to_up_acting_osds, METH_VARARGS,
