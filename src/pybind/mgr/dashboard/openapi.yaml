@@ -9545,6 +9545,28 @@ paths:
       - jwt: []
       tags:
       - RgwDaemon
+  /api/rgw/multisite/sync_status:
+    get:
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - RgwMultisite
   /api/rgw/realm:
     get:
       parameters: []
@@ -13194,6 +13216,8 @@ tags:
   name: RgwDaemon
 - description: Rgw Mirroring Perf Counters Management API
   name: RgwMirrorPerfCounter
+- description: RGW Multisite Management API
+  name: RgwMultisite
 - description: Rgw Perf Counters Management API
   name: RgwPerfCounter
 - description: '*No description available*'
