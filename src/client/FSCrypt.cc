@@ -256,6 +256,7 @@ int fscrypt_calc_hkdf(char hkdf_context,
 
   int extract_len = r;
 
+//#define FSCRYPT_INFO_STR "fscrypt\x00\x01"
 #define FSCRYPT_INFO_STR "fscrypt\x00?"
 
   char info_str[sizeof(FSCRYPT_INFO_STR) + nonce_len];
