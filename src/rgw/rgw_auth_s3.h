@@ -11,6 +11,7 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/container/static_vector.hpp>
+#include <regex>
 
 #include "common/sstring.hh"
 #include "rgw_common.h"

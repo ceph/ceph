@@ -538,6 +538,12 @@ int parse_v4_credentials(const req_info& info,                     /* in */
   credential_scope = credential.substr(pos + 1);
   ldpp_dout(dpp, 10) << "credential scope = " << credential_scope << dendl;
 
+  std::string x_amz_content_sha256 = std::string(info.env->get("HTTP_X_AMZ_CONTENT_SHA256", ""));
+  std::regex hexRegex("^[0-9a-fA-F]+$");
+  if (x_amz_content_sha256.length() != 64 || !std::regex_match(x_amz_content_sha256, hexRegex)) {
+    ldpp_dout(dpp, 10) << "error x-amz-content-sha256 = " << x_amz_content_sha256 << dendl;
+    return -EINVAL;
+  }
   return 0;
 }
 
