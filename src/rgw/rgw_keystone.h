@@ -123,7 +123,8 @@ public:
                              TokenCache& token_cache,
                              const Config& config,
                              optional_yield y,
-                             std::string& token);
+                             std::string& token,
+                             bool& token_cached);
   static int issue_admin_token_request(const DoutPrefixProvider *dpp,
                                        const Config& config,
                                        optional_yield y,
@@ -284,6 +285,7 @@ public:
   void add_admin(const TokenEnvelope& token);
   void add_barbican(const TokenEnvelope& token);
   void invalidate(const DoutPrefixProvider *dpp, const std::string& token_id);
+  void invalidate_admin(const DoutPrefixProvider *dpp);
   bool going_down() const;
 private:
   void add_locked(const std::string& token_id, const TokenEnvelope& token,
