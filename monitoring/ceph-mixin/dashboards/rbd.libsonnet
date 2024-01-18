@@ -32,7 +32,7 @@ local info_rbd_stats = std.join(
                             '{{pool}} Write'),
           $.addTargetSchema(expr2, '{{pool}} Read'),
         ]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
+      ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
       'RBD Details',
@@ -163,7 +163,7 @@ local info_rbd_stats = std.join(
           $.addTargetSchema(expr2,
                             legendFormat2),
         ]
-      ) + { gridPos: { x: x, y: y, w: w, h: h } };
+      ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } };
 
     $.dashboardSchema(
       'RBD Overview',

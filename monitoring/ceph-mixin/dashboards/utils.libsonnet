@@ -314,7 +314,7 @@ local timeSeries = import 'timeseries_panel.libsonnet';
                        '$datasource')
     .addTargets(
       [$.addTargetSchema(expr, legendFormat)]
-    ) + { gridPos: { x: x, y: y, w: w, h: h } },
+    ) + { type: 'timeseries' } + { fieldConfig: { defaults: { unit: formatY1, custom: { fillOpacity: 8, showPoints: 'never' } } } } + { gridPos: { x: x, y: y, w: w, h: h } },
 
   simpleSingleStatPanel(format,
                         title,

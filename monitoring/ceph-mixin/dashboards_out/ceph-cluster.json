@@ -603,6 +603,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "short"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 6,
@@ -726,7 +735,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -759,6 +768,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "ms"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 6,
@@ -832,7 +850,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -865,6 +883,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "Bps"
+        }
+      },
       "fill": 1,
       "gridPos": {
         "h": 9,
@@ -924,7 +951,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -957,6 +984,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "Bps"
+        }
+      },
       "fill": 1,
       "gridPos": {
         "h": 9,
@@ -1003,7 +1039,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
@@ -1159,6 +1195,15 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "$datasource",
+      "fieldConfig": {
+        "defaults": {
+           "custom": {
+              "fillOpacity": 8,
+              "showPoints": "never"
+           },
+           "unit": "ops"
+        }
+      },
       "fill": 0,
       "gridPos": {
         "h": 9,
@@ -1206,7 +1251,7 @@
         "sort": 0,
         "value_type": "individual"
       },
-      "type": "graph",
+      "type": "timeseries",
       "xaxis": {
         "buckets": null,
         "mode": "time",
