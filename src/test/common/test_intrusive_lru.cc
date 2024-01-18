@@ -13,14 +13,21 @@ struct item_to_unsigned {
   }
 };
 
+
+static int LIVE_TEST_LRU_ITEMS = 0;
 struct TestLRUItem : public ceph::common::intrusive_lru_base<
   ceph::common::intrusive_lru_config<
     unsigned, TestLRUItem, item_to_unsigned<TestLRUItem>>> {
   unsigned key = 0;
   int value = 0;
+  bool invalidated = false;
 
-  TestLRUItem(unsigned key) : key(key) {}
+  TestLRUItem(unsigned key) : key(key) {
+    ++LIVE_TEST_LRU_ITEMS;
+  }
+  ~TestLRUItem() { --LIVE_TEST_LRU_ITEMS; }
 };
+using TestLRUItemRef = boost::intrusive_ptr<TestLRUItem>;
 
 class LRUTest : public TestLRUItem::lru_t {
 public:
@@ -205,4 +212,73 @@ TEST(LRU, clear_range) {
     auto [ref, existed] = cache.add(3, 4);
     ASSERT_FALSE(existed);
   }
+}
+
+TEST(LRU, clear) {
+  LRUTest cache;
+  const unsigned SIZE = 10;
+  cache.set_target_size(SIZE);
+  
+  std::vector<TestLRUItemRef> refs;
+  for (unsigned i = 0; i < 100; ++i) {
+    auto [ref, existed] = cache.add(i, i);
+    ASSERT_FALSE(existed);
+    if ((i % 2) == 0) {
+      refs.push_back(ref);
+    }
+  }
+
+  for (unsigned i = 0; i < 100; i += 2) {
+    auto [ref, existed] = cache.add(i, i);
+    ASSERT_TRUE(existed);
+  }
+
+  cache.clear([](auto &i) { i.invalidated = true; });
+  ASSERT_EQ(refs.size(), LIVE_TEST_LRU_ITEMS);
+
+  for (auto &i: refs) {
+    ASSERT_TRUE(i->invalidated);
+  }
+
+  std::vector<TestLRUItemRef> refs_new;
+  for (unsigned i = 0; i < 100; ++i) {
+    auto [ref, existed] = cache.add(i, i);
+    ASSERT_FALSE(existed);
+    ASSERT_FALSE(ref->invalidated);
+    if ((i % 2) == 0) {
+      refs_new.push_back(ref);
+    }
+  }
+
+  for (unsigned i = 0; i < 100; i += 2) {
+    auto [ref, existed] = cache.add(i, i);
+    ASSERT_TRUE(existed);
+    ASSERT_FALSE(ref->invalidated);
+  }
+
+  refs.clear();
+  cache.set_target_size(0);
+  ASSERT_EQ(refs_new.size(), LIVE_TEST_LRU_ITEMS);
+  cache.set_target_size(SIZE);
+
+  for (unsigned i = 100; i < 200; ++i) {
+    auto [ref, existed] = cache.add(i, i);
+    ASSERT_FALSE(existed);
+    ASSERT_FALSE(ref->invalidated);
+    if ((i % 2) == 0) {
+      refs_new.push_back(ref);
+    }
+  }
+
+  for (unsigned i = 0; i < 200; i += 2) {
+    auto [ref, existed] = cache.add(i, i);
+    ASSERT_TRUE(existed);
+    ASSERT_FALSE(ref->invalidated);
+  }
+
+  ASSERT_EQ(refs_new.size(), LIVE_TEST_LRU_ITEMS);
+  refs_new.clear();
+  ASSERT_EQ(SIZE, LIVE_TEST_LRU_ITEMS);
+  cache.set_target_size(0);
+  ASSERT_EQ(0, LIVE_TEST_LRU_ITEMS);
 }
