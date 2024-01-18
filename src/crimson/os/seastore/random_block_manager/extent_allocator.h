@@ -26,6 +26,17 @@ public:
    */
   virtual std::optional<interval_set<rbm_abs_addr>> alloc_extent(
     size_t size) = 0;
+
+  /**
+   * alloc_extents
+   *
+   * Allocate regions for the given size. A continuous region is returned
+   * if possible.
+   *
+   */
+  virtual std::optional<interval_set<rbm_abs_addr>> alloc_extents(
+    size_t size) = 0;
+
   /**
    * free_extent
    *

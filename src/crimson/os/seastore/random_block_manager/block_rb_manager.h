@@ -54,10 +54,10 @@ public:
    * To do so, alloc_extent() looks into both in-memory allocator
    * and freebitmap blocks.
    *
-   * TODO: multiple allocation
-   *
    */
   paddr_t alloc_extent(size_t size) final; // allocator, return blocks
+
+  allocate_ret_bare alloc_extents(size_t size) final; // allocator, return blocks
 
   void complete_allocation(paddr_t addr, size_t size) final;
 
