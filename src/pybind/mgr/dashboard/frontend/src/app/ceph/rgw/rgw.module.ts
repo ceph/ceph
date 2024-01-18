@@ -183,6 +183,7 @@ const routes: Routes = [
   },
   {
     path: 'multisite',
+    data: { breadcrumbs: 'Multi-site' },
     children: [{ path: '', component: RgwMultisiteDetailsComponent }]
   }
 ];
