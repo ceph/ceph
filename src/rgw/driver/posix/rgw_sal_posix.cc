@@ -1371,7 +1371,7 @@ int POSIXBucket::copy(const DoutPrefixProvider *dpp, optional_yield y,
   std::unique_ptr<POSIXBucket> dsb;
 
   // Delete the target, in case it's not a multipart
-  int ret = dest->delete_object(dpp, y);
+  int ret = dest->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << dest->get_name() << dendl;
@@ -1423,7 +1423,7 @@ int POSIXBucket::copy(const DoutPrefixProvider *dpp, optional_yield y,
 
 int POSIXObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				bool prevent_versioning)
+				uint32_t flags)
 {
   POSIXBucket *b = static_cast<POSIXBucket*>(get_bucket());
   if (!b) {
@@ -1658,7 +1658,8 @@ int POSIXObject::transition(Bucket* bucket,
 			    const real_time& mtime,
 			    uint64_t olh_epoch,
 			    const DoutPrefixProvider* dpp,
-			    optional_yield y)
+			    optional_yield y,
+                            uint32_t flags)
 {
   return -ERR_NOT_IMPLEMENTED;
 }
@@ -1889,7 +1890,7 @@ int POSIXObject::open(const DoutPrefixProvider* dpp, bool create, bool temp_file
   return 0;
 }
 
-int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
+int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y, uint32_t flags)
 {
   if (obj_fd < 0) {
     return 0;
@@ -1915,7 +1916,7 @@ int POSIXObject::link_temp_file(const DoutPrefixProvider *dpp, optional_yield y)
   }
 
   // Delete the target, in case it's a multipart
-  ret = delete_object(dpp, y);
+  ret = delete_object(dpp, y, flags);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << get_name() << dendl;
@@ -2366,9 +2367,9 @@ int POSIXObject::POSIXReadOp::get_attr(const DoutPrefixProvider* dpp, const char
 }
 
 int POSIXObject::POSIXDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-					   optional_yield y)
+					   optional_yield y, uint32_t flags)
 {
-  return source->delete_object(dpp, y, false);
+  return source->delete_object(dpp, y, flags);
 }
 
 int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
@@ -2384,7 +2385,7 @@ int POSIXObject::copy(const DoutPrefixProvider *dpp, optional_yield y,
   }
 
   // Delete the target, in case it's a multipart
-  ret = dobj->delete_object(dpp, y);
+  ret = dobj->delete_object(dpp, y, rgw::sal::FLAG_LOG_OP);
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: could not remove dest object "
                       << dobj->get_name() << dendl;
@@ -2809,7 +2810,8 @@ int POSIXMultipartWriter::complete(size_t accounted_size, const std::string& eta
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       uint32_t flags)
 {
   int ret;
   POSIXUploadPartInfo info;
@@ -2876,7 +2878,8 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       uint32_t flags)
 {
   int ret;
 
@@ -2925,7 +2928,7 @@ int POSIXAtomicWriter::complete(size_t accounted_size, const std::string& etag,
     }
   }
 
-  ret = obj.link_temp_file(rctx.dpp, rctx.y);
+  ret = obj.link_temp_file(rctx.dpp, rctx.y, flags);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "ERROR: POSIXAtomicWriter failed writing temp file" << dendl;
     return ret;

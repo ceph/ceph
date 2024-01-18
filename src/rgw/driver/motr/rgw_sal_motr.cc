@@ -584,7 +584,7 @@ int MotrBucket::remove(const DoutPrefixProvider *dpp, bool delete_children, opti
 
       std::unique_ptr<rgw::sal::Object> object = get_object(key);
 
-      ret = object->delete_object(dpp, null_yield);
+      ret = object->delete_object(dpp, null_yield, rgw::sal::FLAG_LOG_OP);
       if (ret < 0 && ret != -ENOENT) {
         ldpp_dout(dpp, 0) << "ERROR: remove_bucket rgw_remove_object failed rc=" << ret << dendl;
 	      return ret;
@@ -1294,7 +1294,8 @@ int MotrObject::transition(Bucket* bucket,
     const real_time& mtime,
     uint64_t olh_epoch,
     const DoutPrefixProvider* dpp,
-    optional_yield y)
+    optional_yield y,
+    uint32_t flags)
 {
   return 0;
 }
@@ -1456,7 +1457,7 @@ MotrObject::MotrDeleteOp::MotrDeleteOp(MotrObject *_source) :
 // Delete::delete_obj() in rgw_rados.cc shows how rados backend process the
 // params.
 // 2. Delete an object when its versioning is turned on.
-int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y)
+int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
   ldpp_dout(dpp, 20) << "delete " << source->get_key().get_oid() << " from " << source->get_bucket()->get_name() << dendl;
 
@@ -1500,13 +1501,13 @@ int MotrObject::MotrDeleteOp::delete_obj(const DoutPrefixProvider* dpp, optional
   return 0;
 }
 
-int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, bool prevent_versioning)
+int MotrObject::delete_object(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags)
 {
   MotrObject::MotrDeleteOp del_op(this);
   del_op.params.bucket_owner = bucket->get_info().owner;
   del_op.params.versioning_status = bucket->get_info().versioning_status();
 
-  return del_op.delete_obj(dpp, y);
+  return del_op.delete_obj(dpp, y, flags);
 }
 
 int MotrObject::copy_object(User* user,
@@ -2324,7 +2325,8 @@ int MotrAtomicWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       uint32_t flags)
 {
   int rc = 0;
 
@@ -2463,7 +2465,7 @@ int MotrMultipartUpload::delete_parts(const DoutPrefixProvider *dpp)
   return store->delete_motr_idx_by_name(obj_part_iname);
 }
 
-int MotrMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct)
+int MotrMultipartUpload::abort(const DoutPrefixProvider *dpp, CephContext *cct, optional_yield y)
 {
   int rc;
   // Check if multipart upload exists
@@ -2981,7 +2983,8 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       optional_yield y)
+                       optional_yield y,
+                       uint32_t flags)
 {
   // Should the dir entry(object metadata) be updated? For example
   // mtime.

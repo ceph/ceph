@@ -111,7 +111,7 @@ class D4NFilterObject : public FilterObject {
 										     source(_source) {}
       virtual ~D4NFilterDeleteOp() = default;
 
-      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
+      virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
     };
 
     D4NFilterObject(std::unique_ptr<Object> _next, D4NFilterDriver* _filter) : FilterObject(std::move(_next)),
@@ -177,7 +177,8 @@ class D4NFilterWriter : public FilterWriter {
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx) override;
+                       const req_context& rctx,
+                       uint32_t flags) override;
    bool is_atomic() { return atomic; };
    const DoutPrefixProvider* dpp() { return save_dpp; }
 };

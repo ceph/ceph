@@ -581,7 +581,7 @@ class DaosObject : public StoreObject {
     DaosDeleteOp(DaosObject* _source);
 
     virtual int delete_obj(const DoutPrefixProvider* dpp,
-                           optional_yield y) override;
+                           optional_yield y, uint32_t flags) override;
   };
 
   ds3_obj_t* ds3o = nullptr;
@@ -598,7 +598,7 @@ class DaosObject : public StoreObject {
   virtual ~DaosObject();
 
   virtual int delete_object(const DoutPrefixProvider* dpp, optional_yield y,
-                            bool prevent_versioning = false) override;
+                            uint32_t flags) override;
   virtual int copy_object(
       User* user, req_info* info, const rgw_zone_id& source_zone,
       rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
@@ -641,7 +641,8 @@ class DaosObject : public StoreObject {
                          const rgw_placement_rule& placement_rule,
                          const real_time& mtime, uint64_t olh_epoch,
                          const DoutPrefixProvider* dpp,
-                         optional_yield y) override;
+                         optional_yield y,
+                         uint32_t flags) override;
   virtual int transition_to_cloud(Bucket* bucket, rgw::sal::PlacementTier* tier,
                                   rgw_bucket_dir_entry& o,
                                   std::set<std::string>& cloud_targets,
@@ -745,7 +746,8 @@ class DaosAtomicWriter : public StoreWriter {
                        ceph::real_time delete_at, const char* if_match,
                        const char* if_nomatch, const std::string* user_data,
                        rgw_zone_set* zones_trace, bool* canceled,
-                       const req_context& rctx) override;
+                       const req_context& rctx,
+                       uint32_t flags) override;
 };
 
 class DaosMultipartWriter : public StoreWriter {
@@ -790,7 +792,8 @@ class DaosMultipartWriter : public StoreWriter {
                        ceph::real_time delete_at, const char* if_match,
                        const char* if_nomatch, const std::string* user_data,
                        rgw_zone_set* zones_trace, bool* canceled,
-                       optional_yield y) override;
+                       optional_yield y,
+                       uint32_t flags) override;
 
   const std::string& get_bucket_name();
 };
@@ -846,7 +849,7 @@ class DaosMultipartUpload : public StoreMultipartUpload {
                          int num_parts, int marker, int* next_marker,
                          bool* truncated,
                          bool assume_unsorted = false) override;
-  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct) override;
+  virtual int abort(const DoutPrefixProvider* dpp, CephContext* cct, optional_yield y) override;
   virtual int complete(const DoutPrefixProvider* dpp, optional_yield y,
                        CephContext* cct, std::map<int, std::string>& part_etags,
                        std::list<rgw_obj_index_key>& remove_objs,

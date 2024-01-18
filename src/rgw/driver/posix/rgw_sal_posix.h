@@ -298,7 +298,7 @@ public:
       source(_source) {}
     virtual ~POSIXDeleteOp() = default;
 
-    virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y) override;
+    virtual int delete_obj(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags) override;
   };
 
   POSIXObject(POSIXDriver *_dr, const rgw_obj_key& _k)
@@ -319,7 +319,7 @@ public:
 
   virtual int delete_object(const DoutPrefixProvider* dpp,
 			    optional_yield y,
-			    bool prevent_versioning = false) override;
+			    uint32_t flags) override;
   virtual int copy_object(User* user,
                req_info* info, const rgw_zone_id& source_zone,
                rgw::sal::Object* dest_object, rgw::sal::Bucket* dest_bucket,
@@ -355,7 +355,8 @@ public:
 			 const real_time& mtime,
 			 uint64_t olh_epoch,
 			 const DoutPrefixProvider* dpp,
-			 optional_yield y) override;
+			 optional_yield y,
+                         uint32_t flags) override;
   virtual int transition_to_cloud(Bucket* bucket,
 			 rgw::sal::PlacementTier* tier,
 			 rgw_bucket_dir_entry& o,
@@ -386,7 +387,7 @@ public:
   int close();
   int write(int64_t ofs, bufferlist& bl, const DoutPrefixProvider* dpp, optional_yield y);
   int write_attr(const DoutPrefixProvider* dpp, optional_yield y, const std::string& key, bufferlist& value);
-  int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y);
+  int link_temp_file(const DoutPrefixProvider* dpp, optional_yield y, uint32_t flags);
   void gen_temp_fname();
   /* TODO dang Escape the object name for file use */
   const std::string get_fname();
@@ -606,7 +607,8 @@ public:
 		       const char *if_match, const char *if_nomatch,
 		       const std::string *user_data,
 		       rgw_zone_set *zones_trace, bool *canceled,
-		       const req_context& rctx) override;
+		       const req_context& rctx,
+                       uint32_t flags) override;
 };
 
 class POSIXMultipartWriter : public StoreWriter {
@@ -645,7 +647,8 @@ public:
 		       const char *if_match, const char *if_nomatch,
 		       const std::string *user_data,
 		       rgw_zone_set *zones_trace, bool *canceled,
-		       const req_context& rctx) override;
+		       const req_context& rctx,
+                       uint32_t flags) override;
 
 };
 

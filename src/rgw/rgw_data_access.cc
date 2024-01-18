@@ -212,7 +212,8 @@ int RGWDataAccess::Object::put(bufferlist& data,
 			    attrs, delete_at,
                             nullptr, nullptr,
                             puser_data,
-                            nullptr, nullptr, rctx);
+                            nullptr, nullptr,
+                            rctx, rgw::sal::FLAG_LOG_OP);
 }
 
 void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)

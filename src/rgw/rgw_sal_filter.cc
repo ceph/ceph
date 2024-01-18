@@ -755,9 +755,9 @@ int FilterBucket::abort_multiparts(const DoutPrefixProvider* dpp, CephContext* c
 
 int FilterObject::delete_object(const DoutPrefixProvider* dpp,
 				optional_yield y,
-				bool prevent_versioning)
+				uint32_t flags)
 {
-  return next->delete_object(dpp, y, prevent_versioning);
+  return next->delete_object(dpp, y, flags);
 }
 
 int FilterObject::copy_object(User* user,
@@ -856,10 +856,11 @@ int FilterObject::transition(Bucket* bucket,
 			     const real_time& mtime,
 			     uint64_t olh_epoch,
 			     const DoutPrefixProvider* dpp,
-			     optional_yield y)
+			     optional_yield y,
+                             uint32_t flags)
 {
   return next->transition(nextBucket(bucket), placement_rule, mtime, olh_epoch,
-			  dpp, y);
+			  dpp, y, flags);
 }
 
 int FilterObject::transition_to_cloud(Bucket* bucket,
@@ -979,11 +980,11 @@ int FilterObject::FilterReadOp::iterate(const DoutPrefixProvider* dpp, int64_t o
 }
 
 int FilterObject::FilterDeleteOp::delete_obj(const DoutPrefixProvider* dpp,
-					   optional_yield y)
+					   optional_yield y, uint32_t flags)
 {
   /* Copy params into next */
   next->params = params;
-  int ret = next->delete_obj(dpp, y);
+  int ret = next->delete_obj(dpp, y, flags);
   /* Copy result back */
   result = next->result;
   return ret;
@@ -1201,11 +1202,12 @@ int FilterWriter::complete(size_t accounted_size, const std::string& etag,
                        const char *if_match, const char *if_nomatch,
                        const std::string *user_data,
                        rgw_zone_set *zones_trace, bool *canceled,
-                       const req_context& rctx)
+                       const req_context& rctx,
+                       uint32_t flags)
 {
   return next->complete(accounted_size, etag, mtime, set_mtime, attrs,
 			delete_at, if_match, if_nomatch, user_data, zones_trace,
-			canceled, rctx);
+			canceled, rctx, flags);
 }
 
 int FilterLuaManager::get_script(const DoutPrefixProvider* dpp, optional_yield y,
