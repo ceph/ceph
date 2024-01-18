@@ -211,14 +211,16 @@ int Service::issue_admin_token_request(const DoutPrefixProvider *dpp,
   token_req.set_url(token_url);
 
   const int ret = token_req.process(y);
-  if (ret < 0) {
-    return ret;
-  }
 
   /* Detect rejection earlier than during the token parsing step. */
   if (token_req.get_http_status() ==
           RGWGetKeystoneAdminToken::HTTP_STATUS_UNAUTHORIZED) {
     return -EACCES;
+  }
+
+  // throw any other http or connection errors
+  if (ret < 0) {
+    return ret;
   }
 
   if (t.parse(dpp, token_req.get_subject_token(), token_bl,
