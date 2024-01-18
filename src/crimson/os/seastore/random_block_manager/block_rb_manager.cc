@@ -62,6 +62,34 @@ paddr_t BlockRBManager::alloc_extent(size_t size)
   return paddr;
 }
 
+BlockRBManager::allocate_ret_bare
+BlockRBManager::alloc_extents(size_t size)
+{
+  LOG_PREFIX(BlockRBManager::alloc_extents);
+  assert(allocator);
+  auto alloc = allocator->alloc_extents(size);
+  if (!alloc) {
+    return {};
+  }
+  allocate_ret_bare ret;
+  size_t len = 0;
+  for (auto extent = (*alloc).begin();
+       extent != (*alloc).end();
+       extent++) {
+    len += extent.get_len();
+    paddr_t paddr = convert_abs_addr_to_paddr(
+      extent.get_start(),
+      device->get_device_id());
+    DEBUG("allocated addr: {}, size: {}, requested size: {}",
+         paddr, extent.get_len(), size);
+    ret.push_back(
+      {std::move(paddr),
+      static_cast<extent_len_t>(extent.get_len())});
+  }
+  ceph_assert(size == len);
+  return ret;
+}
+
 void BlockRBManager::complete_allocation(
     paddr_t paddr, size_t size)
 {
