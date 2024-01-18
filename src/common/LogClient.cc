@@ -186,13 +186,11 @@ void LogChannel::do_log(clog_type prio, const std::string& s)
 
   // log to syslog?
   if (do_log_to_syslog()) {
-    ldout(cct,0) << __func__ << " log to syslog"  << dendl;
     e.log_to_syslog(get_log_prio(), get_syslog_facility());
   }
 
   // log to graylog?
   if (do_log_to_graylog()) {
-    ldout(cct,0) << __func__ << " log to graylog"  << dendl;
     graylog->log_log_entry(&e);
   }
 }
