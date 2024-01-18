@@ -122,9 +122,9 @@ class intrusive_lru {
 
   // when the lru_set exceeds its target size, evict
   // only unreferenced elements from it (if any).
-  void evict() {
+  void evict(unsigned target_size) {
     while (!unreferenced_list.empty() &&
-	   lru_set.size() > lru_target_size) {
+	   lru_set.size() > target_size) {
       auto &evict_target = unreferenced_list.front();
       assert(evict_target.is_unreferenced());
       unreferenced_list.pop_front();
@@ -150,7 +150,7 @@ class intrusive_lru {
     assert(b.is_unreferenced());
     lru_set.insert(b);
     b.lru = this;
-    evict();
+    evict(lru_target_size);
   }
 
   // an element in the lru_set has no users,
@@ -159,7 +159,7 @@ class intrusive_lru {
     assert(b.is_referenced());
     unreferenced_list.push_back(b);
     b.lru = nullptr;
-    evict();
+    evict(lru_target_size);
   }
 
 public:
@@ -226,7 +226,7 @@ public:
 
   void set_target_size(size_t target_size) {
     lru_target_size = target_size;
-    evict();
+    evict(lru_target_size);
   }
 
   ~intrusive_lru() {
