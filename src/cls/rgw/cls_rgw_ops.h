@@ -239,11 +239,12 @@ struct rgw_cls_unlink_instance_op {
   uint16_t bilog_flags;
   std::string olh_tag;
   rgw_zone_set zones_trace;
+  bool null_verid;
 
   rgw_cls_unlink_instance_op() : olh_epoch(0), log_op(false), bilog_flags(0) {}
 
   void encode(ceph::buffer::list& bl) const {
-    ENCODE_START(3, 1, bl);
+    ENCODE_START(4, 1, bl);
     encode(key, bl);
     encode(op_tag, bl);
     encode(olh_epoch, bl);
@@ -251,11 +252,12 @@ struct rgw_cls_unlink_instance_op {
     encode(bilog_flags, bl);
     encode(olh_tag, bl);
     encode(zones_trace, bl);
+    encode(null_verid, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(ceph::buffer::list::const_iterator& bl) {
-    DECODE_START(3, bl);
+    DECODE_START(4, bl);
     decode(key, bl);
     decode(op_tag, bl);
     decode(olh_epoch, bl);
@@ -266,6 +268,9 @@ struct rgw_cls_unlink_instance_op {
     }
     if (struct_v >= 3) {
       decode(zones_trace, bl);
+    }
+    if (struct_v >= 4) {
+      decode(null_verid, bl);
     }
     DECODE_FINISH(bl);
   }
