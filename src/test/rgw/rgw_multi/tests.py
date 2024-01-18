@@ -117,6 +117,15 @@ def bucket_layout(zone, bucket, args = None):
     (bl_output,_) = zone.cluster.admin(['bucket', 'layout', '--bucket', bucket] + (args or []))
     return json.loads(bl_output)
 
+def check_bucket_instance_metadata(zone, bucket):
+    cmd = ['metadata', 'list', 'bucket.instance'] + zone.zone_args()
+    metadata_list, ret = zone.cluster.admin(cmd, check_retcode=False, read_only=True)
+    if metadata_list.find(bucket+":") >= 0:
+        log.critical('zone %s contains bucket instance %s', zone, bucket)
+        return False
+
+    return True
+
 def parse_meta_sync_status(meta_sync_status_json):
     log.debug('current meta sync status=%s', meta_sync_status_json)
     sync_status = json.loads(meta_sync_status_json)
@@ -1707,7 +1716,7 @@ def test_bucket_reshard_index_log_trim():
     # Resharding the bucket
     zone.zone.cluster.admin(['bucket', 'reshard',
         '--bucket', test_bucket.name,
-        '--num-shards', '3',
+        '--num-shards', '13',
         '--yes-i-really-mean-it'])
 
     # checking bucket layout after 1st resharding
@@ -1728,7 +1737,7 @@ def test_bucket_reshard_index_log_trim():
     # Resharding the bucket again
     zone.zone.cluster.admin(['bucket', 'reshard',
         '--bucket', test_bucket.name,
-        '--num-shards', '3',
+        '--num-shards', '15',
         '--yes-i-really-mean-it'])
 
     # checking bucket layout after 2nd resharding
@@ -1760,6 +1769,70 @@ def test_bucket_reshard_index_log_trim():
     # verify the bucket has non-empty bilog
     test_bilog = bilog_list(zone.zone, test_bucket.name)
     assert(len(test_bilog) > 0)
+
+def test_bucket_log_trim_after_delete_bucket():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+
+    primary = zonegroup_conns.rw_zones[0]
+    secondary = zonegroup_conns.rw_zones[1]
+
+    # create a test bucket, upload some objects, and wait for sync
+    def make_test_bucket():
+        name = gen_bucket_name()
+        log.info('create bucket zone=%s name=%s', primary.name, name)
+        bucket = primary.conn.create_bucket(name)
+        for objname in ('a', 'b', 'c', 'd'):
+            k = new_key(primary, name, objname)
+            k.set_contents_from_string('foo')
+        zonegroup_meta_checkpoint(zonegroup)
+        zonegroup_bucket_checkpoint(zonegroup_conns, name)
+        return bucket
+
+    # create a 'test' bucket
+    test_bucket = make_test_bucket()
+
+    # checking bucket layout before resharding
+    json_obj_1 = bucket_layout(secondary.zone, test_bucket.name)
+    assert(len(json_obj_1['layout']['logs']) == 1)
+
+    first_gen = json_obj_1['layout']['current_index']['gen']
+
+    before_reshard_bilog = bilog_list(secondary.zone, test_bucket.name, ['--gen', str(first_gen)])
+    assert(len(before_reshard_bilog) == 4)
+
+    # Resharding the bucket
+    secondary.zone.cluster.admin(['bucket', 'reshard',
+        '--bucket', test_bucket.name,
+        '--num-shards', '13',
+        '--yes-i-really-mean-it'])
+
+    # check bucket layout after 1st resharding
+    json_obj_2 = bucket_layout(secondary.zone, test_bucket.name)
+    assert(len(json_obj_2['layout']['logs']) == 2)
+
+    # Delete the objects
+    for obj in ('a', 'b', 'c', 'd'):
+        cmd = ['object', 'rm'] + primary.zone.zone_args()
+        cmd += ['--bucket', test_bucket.name]
+        cmd += ['--object', obj]
+        primary.zone.cluster.admin(cmd)
+
+    zonegroup_bucket_checkpoint(zonegroup_conns, test_bucket.name)
+
+    # delete bucket and test bilog autotrim
+    primary.conn.delete_bucket(test_bucket.name)
+
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # run bilog trim twice to clean up previous gen
+    bilog_autotrim(secondary.zone)
+
+    bilog_autotrim(secondary.zone)
+
+    # verify the bucket instance has been removed after the second trim
+    assert check_bucket_instance_metadata(secondary.zone, test_bucket.name)
+
 
 @attr('bucket_reshard')
 def test_bucket_reshard_incremental():
