@@ -5805,6 +5805,19 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
                                      std::placeholders::_3,
                                      s);
 
+  // some ops don't expect a request body at all, so never call complete() to
+  // validate the payload hash. check empty signed payloads now and return a
+  // null completer below
+  constexpr std::string_view empty_sha256sum = // echo -n | sha256sum
+      "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
+  if (is_v4_payload_empty(s) &&
+      !is_v4_payload_unsigned(exp_payload_hash) &&
+      exp_payload_hash != empty_sha256sum) {
+    ldpp_dout(s, 4) << "ERROR: empty payload checksum mismatch, expected "
+        << empty_sha256sum << " got " << exp_payload_hash << dendl;
+    throw -ERR_AMZ_CONTENT_SHA256_MISMATCH;
+  }
+
   /* Requests authenticated with the Query Parameters are treated as unsigned.
    * From "Authenticating Requests: Using Query Parameters (AWS Signature
    * Version 4)":
