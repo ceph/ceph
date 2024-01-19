@@ -722,18 +722,24 @@ Set Bucket Rate Limit
 ---------------------
 
 Before you enable a rate limit, you must first set the rate limit parameters.
-For example:: 
+The following is the general form of commands that set rate limit parameters:
 
-	radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket> <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>]
+.. prompt:: bash
+
+   radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=<bucket> <[--max-read-ops=<num ops>] [--max-read-bytes=<num bytes>]
   [--max-write-ops=<num ops>] [--max-write-bytes=<num bytes>]>
 
-For example:: 
+An example of using ``radosgw-admin ratelimit set`` to set a rate limit for a
+bucket might look like this: 
 
-	radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=mybucket --max-read-ops=1024 --max-write-bytes=10240
+.. prompt:: bash
+
+   radosgw-admin ratelimit set --ratelimit-scope=bucket --bucket=mybucket --max-read-ops=1024 --max-write-bytes=10240
 
 
-A 0 value for num ops and / or num bytes means that the
-specific rate limit attribute check is disabled.
+A value of ``0`` assigned to ``--max-read-ops``, ``--max-read-bytes``,
+``--max-write-ops``, or ``-max-write-bytes`` disables the specified bucket rate
+limit. 
 
 Get Bucket Rate Limit
 ---------------------
