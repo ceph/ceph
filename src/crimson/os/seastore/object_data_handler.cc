@@ -526,22 +526,27 @@ ObjectDataHandler::write_ret do_insertions(
 	       ctx.t,
 	       region.addr,
 	       region.len);
-	return ctx.tm.alloc_extent<ObjectDataBlock>(
+	return ctx.tm.alloc_data_extents<ObjectDataBlock>(
 	  ctx.t,
 	  region.addr,
 	  region.len
-	).si_then([&region](auto extent) {
-	  if (extent->get_laddr() != region.addr) {
-	    logger().debug(
-	      "object_data_handler::do_insertions alloc got addr {},"
-	      " should have been {}",
-	      extent->get_laddr(),
-	      region.addr);
-	  }
-	  ceph_assert(extent->get_laddr() == region.addr);
-	  ceph_assert(extent->get_length() == region.len);
+        ).si_then([&region](auto extents) {
+          auto off = region.addr;
+          auto left = region.len;
 	  auto iter = region.bl->cbegin();
-	  iter.copy(region.len, extent->get_bptr().c_str());
+          for (auto &extent : extents) {
+            ceph_assert(left >= extent->get_length());
+            if (extent->get_laddr() != off) {
+              logger().debug(
+                "object_data_handler::do_insertions alloc got addr {},"
+                " should have been {}",
+                extent->get_laddr(),
+                off);
+            }
+            iter.copy(extent->get_length(), extent->get_bptr().c_str());
+            off += extent->get_length();
+            left -= extent->get_length();
+          }
 	  return ObjectDataHandler::write_iertr::now();
 	}).handle_error_interruptible(
 	  crimson::ct_error::enospc::assert_failure{"unexpected enospc"},
