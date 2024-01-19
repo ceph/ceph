@@ -16,3 +16,13 @@ export interface CephfsSubvolumeInfo {
   gid: number;
   pool_namespace: string;
 }
+
+export interface SubvolumeSnapshot {
+  name: string;
+  info: SubvolumeSnapshotInfo;
+}
+
+export interface SubvolumeSnapshotInfo {
+  created_at: string;
+  has_pending_clones: string;
+}

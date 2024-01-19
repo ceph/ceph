@@ -1,9 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 import { Observable, of } from 'rxjs';
-import { CephfsSubvolumeGroup } from '../models/cephfs-subvolumegroup.model';
 import _ from 'lodash';
 import { mapTo, catchError } from 'rxjs/operators';
+import { CephfsSubvolumeGroup } from '../models/cephfs-subvolume-group.model';
 
 @Injectable({
   providedIn: 'root'
@@ -13,8 +13,12 @@ export class CephfsSubvolumeGroupService {
 
   constructor(private http: HttpClient) {}
 
-  get(volName: string): Observable<CephfsSubvolumeGroup[]> {
-    return this.http.get<CephfsSubvolumeGroup[]>(`${this.baseURL}/${volName}`);
+  get(volName: string, info = true): Observable<CephfsSubvolumeGroup[]> {
+    return this.http.get<CephfsSubvolumeGroup[]>(`${this.baseURL}/${volName}`, {
+      params: {
+        info: info
+      }
+    });
   }
 
   create(
