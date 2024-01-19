@@ -333,7 +333,9 @@ public:
   update_mapping_ret update_mapping(
     Transaction& t,
     laddr_t laddr,
+    extent_len_t prev_len,
     paddr_t prev_addr,
+    extent_len_t len,
     paddr_t paddr,
     LogicalCachedExtent*) final;
 
