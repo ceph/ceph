@@ -96,7 +96,7 @@ class RgwDaemonControllerTestCase(ControllerTestCase):
                 'realm_name': 'realm2',
                 'zonegroup_name': 'zg2',
                 'zone_name': 'zone2',
-                'frontend_config#0': 'beast port=80'
+                'frontend_config#0': 'beast port=80 ssl_port=443 ssl_certificate=config:/config'
             }]
         self._get('/test/api/rgw/daemon')
         self.assertStatus(200)

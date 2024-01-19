@@ -2,6 +2,7 @@
 
 import json
 import logging
+import re
 from typing import Any, Dict, List, NamedTuple, Optional, Union
 
 import cherrypy
@@ -105,7 +106,7 @@ class RgwDaemon(RESTController):
                     'zonegroup_name': metadata['zonegroup_name'],
                     'zone_name': metadata['zone_name'],
                     'default': instance.daemon.name == metadata['id'],
-                    'port': int(metadata['frontend_config#0'].split('port=')[1])
+                    'port': int(re.findall(r'port=(\d+)', metadata['frontend_config#0'])[0])
                 }
 
                 daemons.append(daemon)
