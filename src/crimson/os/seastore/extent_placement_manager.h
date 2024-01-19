@@ -35,6 +35,8 @@ public:
 
   virtual paddr_t alloc_paddr(extent_len_t length) = 0;
 
+  virtual std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) = 0;
+
   using alloc_write_ertr = base_ertr;
   using alloc_write_iertr = trans_iertr<alloc_write_ertr>;
   virtual alloc_write_iertr::future<> alloc_write_ool_extents(
@@ -80,6 +82,10 @@ public:
 
   paddr_t alloc_paddr(extent_len_t length) final {
     return make_delayed_temp_paddr(0);
+  }
+
+  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+    return {alloc_paddr_result{make_delayed_temp_paddr(0), length}};
   }
 
   bool can_inplace_rewrite(Transaction& t,
@@ -128,6 +134,11 @@ public:
   paddr_t alloc_paddr(extent_len_t length) final {
     assert(rb_cleaner);
     return rb_cleaner->alloc_paddr(length);
+  }
+
+  std::list<alloc_paddr_result> alloc_paddrs(extent_len_t length) final {
+    assert(rb_cleaner);
+    return rb_cleaner->alloc_paddrs(length);
   }
 
   bool can_inplace_rewrite(Transaction& t,
@@ -268,7 +279,7 @@ public:
     bufferptr bp;
     rewrite_gen_t gen;
   };
-  alloc_result_t alloc_new_extent(
+  alloc_result_t alloc_new_non_data_extent(
     Transaction& t,
     extent_types_t type,
     extent_len_t length,
@@ -302,17 +313,62 @@ public:
     if (gen == INLINE_GENERATION) {
 #endif
       addr = make_record_relative_paddr(0);
-    } else if (category == data_category_t::DATA) {
-      assert(data_writers_by_gen[generation_to_writer(gen)]);
-      addr = data_writers_by_gen[
-	  generation_to_writer(gen)]->alloc_paddr(length);
     } else {
       assert(category == data_category_t::METADATA);
       assert(md_writers_by_gen[generation_to_writer(gen)]);
       addr = md_writers_by_gen[
 	  generation_to_writer(gen)]->alloc_paddr(length);
     }
+    assert(!(category == data_category_t::DATA));
     return {addr, std::move(bp), gen};
+  }
+
+  std::list<alloc_result_t> alloc_new_data_extents(
+    Transaction& t,
+    extent_types_t type,
+    extent_len_t length,
+    placement_hint_t hint,
+#ifdef UNIT_TESTS_BUILT
+    rewrite_gen_t gen,
+    std::optional<paddr_t> external_paddr = std::nullopt
+#else
+    rewrite_gen_t gen
+#endif
+  ) {
+    assert(hint < placement_hint_t::NUM_HINTS);
+    assert(is_target_rewrite_generation(gen));
+    assert(gen == INIT_GENERATION || hint == placement_hint_t::REWRITE);
+
+    data_category_t category = get_extent_category(type);
+    gen = adjust_generation(category, type, hint, gen);
+    assert(gen != INLINE_GENERATION);
+
+    // XXX: bp might be extended to point to different memory (e.g. PMem)
+    // according to the allocator.
+    std::list<alloc_result_t> allocs;
+#ifdef UNIT_TESTS_BUILT
+    if (unlikely(external_paddr.has_value())) {
+      assert(external_paddr->is_fake());
+      auto bp = ceph::bufferptr(
+        buffer::create_page_aligned(length));
+      bp.zero();
+      allocs.emplace_back(alloc_result_t{*external_paddr, std::move(bp), gen});
+    } else {
+#else
+    {
+#endif
+      assert(category == data_category_t::DATA);
+      assert(data_writers_by_gen[generation_to_writer(gen)]);
+      auto addrs = data_writers_by_gen[
+          generation_to_writer(gen)]->alloc_paddrs(length);
+      for (auto &ext : addrs) {
+        auto bp = ceph::bufferptr(
+          buffer::create_page_aligned(ext.len));
+        bp.zero();
+        allocs.emplace_back(alloc_result_t{ext.start, std::move(bp), gen});
+      }
+    }
+    return allocs;
   }
 
   /**

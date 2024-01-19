@@ -262,12 +262,14 @@ struct lba_btree_test : btree_test_base {
     ceph_assert(check.count(addr) == 0);
     check.emplace(addr, get_map_val(len));
     lba_btree_update([=, this](auto &btree, auto &t) {
-      auto extent = cache->alloc_new_extent<TestBlock>(
+      auto extents = cache->alloc_new_data_extents<TestBlock>(
 	  t,
 	  TestBlock::SIZE,
 	  placement_hint_t::HOT,
 	  0,
 	  get_paddr());
+      assert(extents.size() == 1);
+      auto extent = extents.front();
       return btree.insert(
 	get_op_context(t), addr, get_map_val(len), extent.get()
       ).si_then([addr, extent](auto p){
@@ -374,7 +376,7 @@ struct btree_lba_manager_test : btree_test_base {
       test_lba_mappings
     };
     if (create_fake_extent) {
-      cache->alloc_new_extent<TestBlockPhysical>(
+      cache->alloc_new_non_data_extent<TestBlockPhysical>(
           *t.t,
           TestBlockPhysical::SIZE,
           placement_hint_t::HOT,
@@ -425,12 +427,14 @@ struct btree_lba_manager_test : btree_test_base {
     auto ret = with_trans_intr(
       *t.t,
       [=, this](auto &t) {
-	auto extent = cache->alloc_new_extent<TestBlock>(
+	auto extents = cache->alloc_new_data_extents<TestBlock>(
 	    t,
 	    TestBlock::SIZE,
 	    placement_hint_t::HOT,
 	    0,
 	    get_paddr());
+	assert(extents.size() == 1);
+	auto extent = extents.front();
 	return lba_manager->alloc_extent(
 	  t, hint, len, extent->get_paddr(), *extent);
       }).unsafe_get0();

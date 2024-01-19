@@ -30,7 +30,7 @@ FlatCollectionManager::mkfs(Transaction &t)
 {
 
   logger().debug("FlatCollectionManager: {}", __func__);
-  return tm.alloc_extent<CollectionNode>(
+  return tm.alloc_non_data_extent<CollectionNode>(
     t, L_ADDR_MIN, MIN_FLAT_BLOCK_SIZE
   ).si_then([](auto&& root_extent) {
     coll_root_t coll_root = coll_root_t(
@@ -74,7 +74,7 @@ FlatCollectionManager::create(coll_root_t &coll_root, Transaction &t,
 	// TODO return error probably, but such a nonsensically large number of
 	// collections would create a ton of other problems as well
 	assert(new_size < MAX_FLAT_BLOCK_SIZE);
-        return tm.alloc_extent<CollectionNode>(
+        return tm.alloc_non_data_extent<CollectionNode>(
 	  t, L_ADDR_MIN, new_size
 	).si_then([=, this, &coll_root, &t] (auto &&root_extent) {
           coll_root.update(root_extent->get_laddr(), root_extent->get_length());

@@ -22,7 +22,7 @@ BtreeOMapManager::initialize_omap(Transaction &t, laddr_t hint)
 {
   LOG_PREFIX(BtreeOMapManager::initialize_omap);
   DEBUGT("hint: {}", t, hint);
-  return tm.alloc_extent<OMapLeafNode>(t, hint, OMAP_LEAF_BLOCK_SIZE)
+  return tm.alloc_non_data_extent<OMapLeafNode>(t, hint, OMAP_LEAF_BLOCK_SIZE)
     .si_then([hint, &t](auto&& root_extent) {
       root_extent->set_size(0);
       omap_node_meta_t meta{1};
@@ -51,7 +51,7 @@ BtreeOMapManager::handle_root_split(
 {
   LOG_PREFIX(BtreeOMapManager::handle_root_split);
   DEBUGT("{}", oc.t, omap_root);
-  return oc.tm.alloc_extent<OMapInnerNode>(oc.t, omap_root.hint,
+  return oc.tm.alloc_non_data_extent<OMapInnerNode>(oc.t, omap_root.hint,
                                            OMAP_INNER_BLOCK_SIZE)
     .si_then([&omap_root, mresult, oc](auto&& nroot) -> handle_root_split_ret {
     auto [left, right, pivot] = *(mresult.split_tuple);
