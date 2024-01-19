@@ -259,3 +259,121 @@ Following is an example of enabling root_squash in a filesystem except within
 	caps mds = "allow rw fsname=a root_squash, allow rw fsname=a path=/volumes"
 	caps mon = "allow r fsname=a"
 	caps osd = "allow rw tag cephfs data=a"
+
+Updating Capabilities using ``fs authorize``
+============================================
+After Ceph's Reef version, ``fs authorize`` can not only be used to create a
+new client with caps for a CephFS but it can also be used to add new caps
+(for a another CephFS or another path in same FS) to an already existing
+client.
+
+Let's say we run following and create a new client::
+
+    $ ceph fs authorize a client.x / rw
+    [client.x]
+        key = AQAOtSVk9WWtIhAAJ3gSpsjwfIQ0gQ6vfSx/0w==
+    $ ceph auth get client.x
+    [client.x]
+            key = AQAOtSVk9WWtIhAAJ3gSpsjwfIQ0gQ6vfSx/0w==
+            caps mds = "allow rw fsname=a"
+            caps mon = "allow r fsname=a"
+            caps osd = "allow rw tag cephfs data=a"
+
+Previously, running ``fs authorize a client.x / rw`` a second time used to
+print an error message. But after Reef, it instead prints message that
+there's not update::
+
+    $ ./bin/ceph fs authorize a client.x / rw
+    no update for caps of client.x
+
+Adding New Caps Using ``fs authorize``
+--------------------------------------
+Users can now add caps for another path in same CephFS::
+
+    $ ceph fs authorize a client.x /dir1 rw
+    updated caps for client.x
+    $ ceph auth get client.x
+    [client.x]
+            key = AQAOtSVk9WWtIhAAJ3gSpsjwfIQ0gQ6vfSx/0w==
+            caps mds = "allow r fsname=a, allow rw fsname=a path=some/dir"
+            caps mon = "allow r fsname=a"
+            caps osd = "allow rw tag cephfs data=a"
+
+And even add caps for another CephFS on Ceph cluster::
+
+    $ ceph fs authorize b client.x / rw
+    updated caps for client.x
+    $ ceph auth get client.x
+    [client.x]
+            key = AQD6tiVk0uJdARAABMaQuLRotxTi3Qdj47FkBA==
+            caps mds = "allow rw fsname=a, allow rw fsname=b"
+            caps mon = "allow r fsname=a, allow r fsname=b"
+            caps osd = "allow rw tag cephfs data=a, allow rw tag cephfs data=b"
+
+Changing rw permissions in caps
+-------------------------------
+
+It's not possible to modify caps by running ``fs authorize`` except for the
+case when read/write permissions have to be changed. This is because the
+``fs authorize`` becomes ambiguous. For example, user runs ``fs authorize
+cephfs1 client.x /dir1 rw`` to create a client and then runs ``fs authorize
+cephfs1 client.x /dir2 rw`` (notice ``/dir1`` is changed to ``/dir2``).
+Running second command can be interpreted as changing ``/dir1`` to ``/dir2``
+in current cap or can also be interpreted as authorizing the client with a
+new cap for path ``/dir2``. As seen in previous sections, second
+interpretation is chosen and therefore it's impossible to update a part of
+capability granted except rw permissions. Following is how read/write
+permissions for ``client.x`` (that was created above) can be changed::
+
+    $ ceph fs authorize a client.x / r
+    [client.x]
+        key = AQBBKjBkIFhBDBAA6q5PmDDWaZtYjd+jafeVUQ==
+    $ ceph auth get client.x
+    [client.x]
+            key = AQBBKjBkIFhBDBAA6q5PmDDWaZtYjd+jafeVUQ==
+            caps mds = "allow r fsname=a"
+            caps mon = "allow r fsname=a"
+            caps osd = "allow r tag cephfs data=a"
+
+``fs authorize`` never deducts any part of caps
+-----------------------------------------------
+It's not possible to remove caps issued to a client by running ``fs
+authorize`` again. For example, if a client cap has ``root_squash`` applied
+on a certain CephFS, running ``fs authorize`` again for the same CephFS but
+without ``root_squash`` will not lead to any update, the client caps will
+remain unchanged::
+
+    $ ceph fs authorize a client.x / rw root_squash
+    [client.x]
+            key = AQD61CVkcA1QCRAAd0XYqPbHvcc+lpUAuc6Vcw==
+    $ ceph auth get client.x
+    [client.x]
+            key = AQD61CVkcA1QCRAAd0XYqPbHvcc+lpUAuc6Vcw==
+            caps mds = "allow rw fsname=a root_squash"
+            caps mon = "allow r fsname=a"
+            caps osd = "allow rw tag cephfs data=a"
+    $ ceph fs authorize a client.x / rw
+    [client.x]
+            key = AQD61CVkcA1QCRAAd0XYqPbHvcc+lpUAuc6Vcw==
+    no update was performed for caps of client.x. caps of client.x remains unchanged.
+
+And if a client already has a caps for FS name ``a`` and path ``dir1``,
+running ``fs authorize`` again for FS name ``a`` but path ``dir2``, instead
+of modifying the caps client already holds, a new cap for ``dir2`` will be
+granted::
+
+    $ ceph fs authorize a client.x /dir1 rw
+    $ ceph auth get client.x
+    [client.x]
+            key = AQC1tyVknMt+JxAAp0pVnbZGbSr/nJrmkMNKqA==
+            caps mds = "allow rw fsname=a path=/dir1"
+            caps mon = "allow r fsname=a"
+            caps osd = "allow rw tag cephfs data=a"
+    $ ceph fs authorize a client.x /dir2 rw
+    updated caps for client.x
+    $ ceph auth get client.x
+    [client.x]
+            key = AQC1tyVknMt+JxAAp0pVnbZGbSr/nJrmkMNKqA==
+            caps mds = "allow rw fsname=a path=dir1, allow rw fsname=a path=dir2"
+            caps mon = "allow r fsname=a"
+            caps osd = "allow rw tag cephfs data=a"
