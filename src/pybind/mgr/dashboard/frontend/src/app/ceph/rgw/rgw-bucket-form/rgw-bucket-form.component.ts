@@ -385,6 +385,12 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     window.open(url, '_blank');
   }
 
+  clearBucketPolicy() {
+    this.bucketForm.get('bucket_policy').setValue('{}');
+    this.bucketForm.markAsDirty();
+    this.bucketForm.updateValueAndValidity();
+  }
+
   openConfigModal() {
     const modalRef = this.modalService.show(RgwConfigModalComponent, null, { size: 'lg' });
     modalRef.componentInstance.configForm

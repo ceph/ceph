@@ -430,6 +430,14 @@
                 <span class="invalid-feedback"
                       *ngIf="bucketForm.showError('bucket_policy', frm, 'invalidJson')"
                       i18n>Invalid json text</span>
+                <button type="button"
+                        id="clear-bucket-policy"
+                        class="btn btn-light my-3"
+                        (click)="clearBucketPolicy()"
+                        i18n>
+                  <i [ngClass]="[icons.destroy]"></i>
+                  Clear
+                </button>
                 <div class="btn-group float-end"
                      role="group"
                      aria-label="bucket-policy-helpers">
