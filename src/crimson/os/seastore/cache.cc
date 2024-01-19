@@ -962,32 +962,33 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   LOG_PREFIX(Cache::alloc_new_extent_by_type);
   SUBDEBUGT(seastore_cache, "allocate {} {}B, hint={}, gen={}",
             t, type, length, hint, rewrite_gen_printer_t{gen});
+  ceph_assert(get_extent_category(type) == data_category_t::METADATA);
   switch (type) {
   case extent_types_t::ROOT:
     ceph_assert(0 == "ROOT is never directly alloc'd");
     return CachedExtentRef();
   case extent_types_t::LADDR_INTERNAL:
-    return alloc_new_extent<lba_manager::btree::LBAInternalNode>(t, length, hint, gen);
+    return alloc_new_non_data_extent<lba_manager::btree::LBAInternalNode>(t, length, hint, gen);
   case extent_types_t::LADDR_LEAF:
-    return alloc_new_extent<lba_manager::btree::LBALeafNode>(
+    return alloc_new_non_data_extent<lba_manager::btree::LBALeafNode>(
       t, length, hint, gen);
   case extent_types_t::ONODE_BLOCK_STAGED:
-    return alloc_new_extent<onode::SeastoreNodeExtent>(t, length, hint, gen);
+    return alloc_new_non_data_extent<onode::SeastoreNodeExtent>(
+      t, length, hint, gen);
   case extent_types_t::OMAP_INNER:
-    return alloc_new_extent<omap_manager::OMapInnerNode>(t, length, hint, gen);
+    return alloc_new_non_data_extent<omap_manager::OMapInnerNode>(
+      t, length, hint, gen);
   case extent_types_t::OMAP_LEAF:
-    return alloc_new_extent<omap_manager::OMapLeafNode>(t, length, hint, gen);
+    return alloc_new_non_data_extent<omap_manager::OMapLeafNode>(
+      t, length, hint, gen);
   case extent_types_t::COLL_BLOCK:
-    return alloc_new_extent<collection_manager::CollectionNode>(t, length, hint, gen);
-  case extent_types_t::OBJECT_DATA_BLOCK:
-    return alloc_new_extent<ObjectDataBlock>(t, length, hint, gen);
+    return alloc_new_non_data_extent<collection_manager::CollectionNode>(
+      t, length, hint, gen);
   case extent_types_t::RETIRED_PLACEHOLDER:
     ceph_assert(0 == "impossible");
     return CachedExtentRef();
-  case extent_types_t::TEST_BLOCK:
-    return alloc_new_extent<TestBlock>(t, length, hint, gen);
   case extent_types_t::TEST_BLOCK_PHYSICAL:
-    return alloc_new_extent<TestBlockPhysical>(t, length, hint, gen);
+    return alloc_new_non_data_extent<TestBlockPhysical>(t, length, hint, gen);
   case extent_types_t::NONE: {
     ceph_assert(0 == "NONE is an invalid extent type");
     return CachedExtentRef();
@@ -995,6 +996,38 @@ CachedExtentRef Cache::alloc_new_extent_by_type(
   default:
     ceph_assert(0 == "impossible");
     return CachedExtentRef();
+  }
+}
+
+std::vector<CachedExtentRef> Cache::alloc_new_data_extents_by_type(
+  Transaction &t,        ///< [in, out] current transaction
+  extent_types_t type,   ///< [in] type tag
+  extent_len_t length,   ///< [in] length
+  placement_hint_t hint, ///< [in] user hint
+  rewrite_gen_t gen      ///< [in] rewrite generation
+)
+{
+  LOG_PREFIX(Cache::alloc_new_data_extents_by_type);
+  SUBDEBUGT(seastore_cache, "allocate {} {}B, hint={}, gen={}",
+            t, type, length, hint, rewrite_gen_printer_t{gen});
+  ceph_assert(get_extent_category(type) == data_category_t::DATA);
+  std::vector<CachedExtentRef> res;
+  switch (type) {
+  case extent_types_t::OBJECT_DATA_BLOCK:
+    {
+      auto extents = alloc_new_data_extents<ObjectDataBlock>(t, length, hint, gen);
+      res.insert(res.begin(), extents.begin(), extents.end());
+    }
+    return res;
+  case extent_types_t::TEST_BLOCK:
+    {
+      auto extents = alloc_new_data_extents<TestBlock>(t, length, hint, gen);
+      res.insert(res.begin(), extents.begin(), extents.end());
+    }
+    return res;
+  default:
+    ceph_assert(0 == "impossible");
+    return res;
   }
 }
 

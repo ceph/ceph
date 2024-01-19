@@ -386,9 +386,11 @@ struct transaction_manager_test_t :
     laddr_t hint,
     extent_len_t len,
     char contents) {
-    auto extent = with_trans_intr(*(t.t), [&](auto& trans) {
-      return tm->alloc_extent<TestBlock>(trans, hint, len);
+    auto extents = with_trans_intr(*(t.t), [&](auto& trans) {
+      return tm->alloc_data_extents<TestBlock>(trans, hint, len);
     }).unsafe_get0();
+    assert(extents.size() == 1);
+    auto extent = extents.front();
     extent->set_contents(contents);
     EXPECT_FALSE(test_mappings.contains(extent->get_laddr(), t.mapping_delta));
     EXPECT_EQ(len, extent->get_length());
@@ -723,9 +725,11 @@ struct transaction_manager_test_t :
 		boost::make_counting_iterator(0),
 		boost::make_counting_iterator(num),
 		[&t, this, size](auto) {
-		  return tm->alloc_extent<TestBlock>(
+		  return tm->alloc_data_extents<TestBlock>(
 		    *(t.t), L_ADDR_MIN, size
-		  ).si_then([&t, this, size](auto extent) {
+		  ).si_then([&t, this, size](auto extents) {
+		    assert(extents.size() == 1);
+		    auto extent = extents.front();
 		    extent->set_contents(get_random_contents());
 		    EXPECT_FALSE(
 		      test_mappings.contains(extent->get_laddr(), t.mapping_delta));
@@ -1110,9 +1114,11 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_extent<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
         ).si_then([this, ret = std::move(ret), new_len,
-                   new_offset, o_laddr, &t, &bl](auto ext) mutable {
+                   new_offset, o_laddr, &t, &bl](auto extents) mutable {
+	  assert(extents.size() == 1);
+	  auto ext = extents.front();
           ceph_assert(ret.size() == 2);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
@@ -1141,9 +1147,11 @@ struct transaction_manager_test_t :
             o_len - new_offset - new_len)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_extent<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
         ).si_then([this, ret = std::move(ret), new_offset, new_len,
-                   o_laddr, &t, &bl](auto ext) mutable {
+                   o_laddr, &t, &bl](auto extents) mutable {
+	  assert(extents.size() == 1);
+	  auto ext = extents.front();
           ceph_assert(ret.size() == 1);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());
@@ -1167,9 +1175,11 @@ struct transaction_manager_test_t :
             new_offset)
         }
       ).si_then([this, new_offset, new_len, o_laddr, &t, &bl](auto ret) {
-        return tm->alloc_extent<TestBlock>(t, o_laddr + new_offset, new_len
+        return tm->alloc_data_extents<TestBlock>(t, o_laddr + new_offset, new_len
         ).si_then([this, ret = std::move(ret), new_len, o_laddr, &t, &bl]
-          (auto ext) mutable {
+          (auto extents) mutable {
+	  assert(extents.size() == 1);
+	  auto ext = extents.front();
           ceph_assert(ret.size() == 1);
           auto iter = bl.cbegin();
           iter.copy(new_len, ext->get_bptr().c_str());

@@ -131,7 +131,7 @@ class SeastoreNodeExtentManager final: public TransactionManagerHandle {
         return alloc_iertr::make_ready_future<NodeExtentRef>();
       }
     }
-    return tm.alloc_extent<SeastoreNodeExtent>(t, hint, len
+    return tm.alloc_non_data_extent<SeastoreNodeExtent>(t, hint, len
     ).si_then([len, &t](auto extent) {
       SUBDEBUGT(seastore_onode,
           "allocated {}B at {:#x} -- {}",
