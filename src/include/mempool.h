@@ -218,7 +218,7 @@ static size_t pick_a_shard_int() {
   // Dirt cheap, see:
   //   https://fossies.org/dox/glibc-2.32/pthread__self_8c_source.html
   size_t me = (size_t)pthread_self();
-  size_t i = (me >> CEPH_PAGE_SHIFT) & ((1 << num_shard_bits) - 1);
+  size_t i = (me >> 16) & ((1 << num_shard_bits) - 1);
   return i;
 #endif
 }
