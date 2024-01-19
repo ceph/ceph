@@ -3490,12 +3490,25 @@ int main(int argc, char **argv)
     tmp.swap(ceph_option_strings);
   }
 
-  vector<const char *> ceph_options;
-  ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
-  for (vector<string>::iterator i = ceph_option_strings.begin();
-       i != ceph_option_strings.end();
-       ++i) {
-    ceph_options.push_back(i->c_str());
+  boost::intrusive_ptr<CephContext> cct;
+  {
+    vector<const char *> ceph_options;
+    ceph_options.reserve(ceph_options.size() + ceph_option_strings.size());
+    for (vector<string>::iterator i = ceph_option_strings.begin();
+         i != ceph_option_strings.end();
+         ++i) {
+      ceph_options.push_back(i->c_str());
+    }
+    int init_flags = 0;
+    if (vm.count("no-mon-config") > 0) {
+      init_flags |= CINIT_FLAG_NO_MON_CONFIG;
+    }
+    cct = global_init(
+      nullptr,
+      ceph_options,
+      CEPH_ENTITY_TYPE_OSD,
+      CODE_ENVIRONMENT_UTILITY_NODOUT,
+      init_flags);
   }
 
   snprintf(fn, sizeof(fn), "%s/type", dpath.c_str());
@@ -3570,16 +3583,6 @@ int main(int argc, char **argv)
     perror(err.c_str());
     return 1;
   }
-  int init_flags = 0;
-  if (vm.count("no-mon-config") > 0) {
-    init_flags |= CINIT_FLAG_NO_MON_CONFIG;
-  }
-
-  auto cct = global_init(
-    NULL, ceph_options,
-    CEPH_ENTITY_TYPE_OSD,
-    CODE_ENVIRONMENT_UTILITY_NODOUT,
-    init_flags);
   common_init_finish(g_ceph_context);
   if (debug) {
     g_conf().set_val_or_die("log_to_stderr", "true");
