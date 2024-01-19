@@ -915,7 +915,7 @@ static int read_key_entry(cls_method_context_t hctx, const cls_rgw_obj_key& key,
 // called by rgw_bucket_complete_op() for each item in op.remove_objs
 static int complete_remove_obj(cls_method_context_t hctx,
                                rgw_bucket_dir_header& header,
-                               const cls_rgw_obj_key& key, bool log_op)
+                               const cls_rgw_obj_key& key)
 {
   rgw_bucket_dir_entry entry;
   string idx;
@@ -929,17 +929,6 @@ static int complete_remove_obj(cls_method_context_t hctx,
           entry.key.name.c_str(), entry.key.instance.c_str(),
           int(entry.meta.category));
   unaccount_entry(header, entry);
-
-  if (log_op) {
-    ++header.ver; // increment index version, or we'll overwrite keys previously written
-    const std::string tag;
-    ret = log_index_operation(hctx, key, CLS_RGW_OP_DEL, tag, entry.meta.mtime,
-                              entry.ver, CLS_RGW_STATE_COMPLETE, header.ver,
-                              header.max_marker, 0, nullptr, nullptr, nullptr);
-    if (ret < 0) {
-      return ret;
-    }
-  }
 
   ret = cls_cxx_map_remove_key(hctx, idx);
   if (ret < 0) {
@@ -1105,6 +1094,9 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d",
           (int)op.remove_objs.size());
   for (const auto& remove_key : op.remove_objs) {
+    CLS_LOG_BITX(bitx_inst, 20,
+		 "INFO: %s: completing object remove key=%s",
+		 __func__, escape_str(remove_key.to_string()).c_str());
     rc = complete_remove_obj(hctx, header, remove_key, default_log_op);
     if (rc < 0) {
       continue; // part cleanup errors are not fatal
