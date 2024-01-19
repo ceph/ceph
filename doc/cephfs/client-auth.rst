@@ -314,10 +314,10 @@ Changing rw permissions in caps
 -------------------------------
 
 It's not possible to modify caps by running ``fs authorize`` except for the
-case when read/write permissions have to be changed. This so because the
+case when read/write permissions have to be changed. This is because the
 ``fs authorize`` becomes ambiguous. For example, user runs ``fs authorize
-cephfs1 /dir1 client.x rw`` to create a client and then runs ``fs authorize
-cephfs1 /dir2 client.x rw`` (notice ``/dir1`` is changed to ``/dir2``).
+cephfs1 client.x /dir1 rw`` to create a client and then runs ``fs authorize
+cephfs1 client.x /dir2 rw`` (notice ``/dir1`` is changed to ``/dir2``).
 Running second command can be interpreted as changing ``/dir1`` to ``/dir2``
 in current cap or can also be interpreted as authorizing the client with a
 new cap for path ``/dir2``. As seen in previous sections, second
