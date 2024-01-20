@@ -40,6 +40,17 @@ int RGWRestRole::check_caps(const RGWUserCaps& caps)
   return caps.check_cap("roles", perm);
 }
 
+static void dump_iam_role(const rgw::sal::RGWRoleInfo& role, Formatter *f)
+{
+  encode_json("RoleId", role.id, f);
+  encode_json("RoleName", role.name, f);
+  encode_json("Path", role.path, f);
+  encode_json("Arn", role.arn, f);
+  encode_json("CreateDate", role.creation_date, f);
+  encode_json("MaxSessionDuration", role.max_session_duration, f);
+  encode_json("AssumeRolePolicyDocument", role.trust_policy, f);
+}
+
 static int parse_tags(const DoutPrefixProvider* dpp,
                       const std::map<std::string, std::string>& params,
                       std::multimap<std::string, std::string>& tags,
@@ -278,7 +289,7 @@ void RGWCreateRole::execute(optional_yield y)
     s->formatter->open_object_section("CreateRoleResponse");
     s->formatter->open_object_section("CreateRoleResult");
     s->formatter->open_object_section("Role");
-    role->dump(s->formatter);
+    dump_iam_role(role->get_info(), s->formatter);
     s->formatter->close_section();
     s->formatter->close_section();
     s->formatter->open_object_section("ResponseMetadata");
@@ -366,7 +377,7 @@ void RGWGetRole::execute(optional_yield y)
   s->formatter->close_section();
   s->formatter->open_object_section("GetRoleResult");
   s->formatter->open_object_section("Role");
-  role->dump(s->formatter);
+  dump_iam_role(role->get_info(), s->formatter);
   s->formatter->close_section();
   s->formatter->close_section();
   s->formatter->close_section();

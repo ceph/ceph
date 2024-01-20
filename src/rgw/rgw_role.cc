@@ -169,16 +169,6 @@ int RGWRole::get_by_id(const DoutPrefixProvider *dpp, optional_yield y)
   return 0;
 }
 
-void RGWRole::dump(Formatter *f) const
-{
-  info.dump(f);
-}
-
-void RGWRole::decode_json(JSONObj *obj)
-{
-  info.decode_json(obj);
-}
-
 bool RGWRole::validate_max_session_duration(const DoutPrefixProvider* dpp)
 {
   if (info.max_session_duration < SESSION_DURATION_MIN ||
