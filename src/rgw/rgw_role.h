@@ -140,8 +140,6 @@ public:
   boost::optional<std::multimap<std::string,std::string>> get_tags();
   void erase_tags(const std::vector<std::string>& tagKeys);
   void update_max_session_duration(const std::string& max_session_duration_str);
-  void dump(Formatter *f) const;
-  void decode_json(JSONObj *obj);
 
   static const std::string& get_names_oid_prefix();
   static const std::string& get_info_oid_prefix();
