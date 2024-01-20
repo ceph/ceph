@@ -931,12 +931,12 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
     return std::vector<snapid_t>{std::begin(snapc.snaps), last};
   }();
 
-  auto [snap_oi, clone_obc] = prepare_clone(coid);
+  auto clone_obc = prepare_clone(coid);
   // make clone
-  backend.clone(snap_oi, initial_obs, clone_obc->obs, txn);
+  backend.clone(clone_obc->obs.oi, initial_obs, clone_obc->obs, txn);
 
   delta_stats.num_objects++;
-  if (snap_oi.is_omap()) {
+  if (clone_obc->obs.oi.is_omap()) {
     delta_stats.num_objects_omap++;
   }
   delta_stats.num_object_clones++;
@@ -960,7 +960,7 @@ std::unique_ptr<OpsExecuter::CloningContext> OpsExecuter::execute_clone(
   cloning_ctx->log_entry = {
     pg_log_entry_t::CLONE,
     coid,
-    snap_oi.version,
+    clone_obc->obs.oi.version,
     initial_obs.oi.version,
     initial_obs.oi.user_version,
     osd_reqid_t(),
@@ -1028,32 +1028,23 @@ OpsExecuter::flush_clone_metadata(
   });
 }
 
-// TODO: make this static
-std::pair<object_info_t, ObjectContextRef> OpsExecuter::prepare_clone(
+ObjectContextRef OpsExecuter::prepare_clone(
   const hobject_t& coid)
 {
-  object_info_t static_snap_oi(coid);
-  static_snap_oi.version = osd_op_params->at_version;
-  static_snap_oi.prior_version = obc->obs.oi.version;
-  static_snap_oi.copy_user_bits(obc->obs.oi);
-  if (static_snap_oi.is_whiteout()) {
-    // clone shouldn't be marked as whiteout
-    static_snap_oi.clear_flag(object_info_t::FLAG_WHITEOUT);
-  }
+  ceph_assert(pg->is_primary());
+  ObjectState clone_obs{coid};
+  clone_obs.exists = true;
+  clone_obs.oi.version = osd_op_params->at_version;
+  clone_obs.oi.prior_version = obc->obs.oi.version;
+  clone_obs.oi.copy_user_bits(obc->obs.oi);
+  clone_obs.oi.clear_flag(object_info_t::FLAG_WHITEOUT);
 
-  ObjectContextRef clone_obc;
-  if (pg->is_primary()) {
-    // lookup_or_create
-    auto [c_obc, existed] =
-      pg->obc_registry.get_cached_obc(std::move(coid));
-    assert(!existed);
-    c_obc->obs.oi = static_snap_oi;
-    c_obc->obs.exists = true;
-    c_obc->ssc = obc->ssc;
-    logger().debug("clone_obc: {}", c_obc->obs.oi);
-    clone_obc = std::move(c_obc);
-  }
-  return std::make_pair(std::move(static_snap_oi), std::move(clone_obc));
+  auto [clone_obc, existed] = pg->obc_registry.get_cached_obc(std::move(coid));
+  ceph_assert(!existed);
+
+  clone_obc->set_clone_state(std::move(clone_obs));
+  clone_obc->ssc = obc->ssc;
+  return clone_obc;
 }
 
 void OpsExecuter::apply_stats()
