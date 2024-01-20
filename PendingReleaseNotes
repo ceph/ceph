@@ -1,3 +1,12 @@
+>=18.2.2
+--------
+
+* RBD: When diffing against the beginning of time (`fromsnapname == NULL`) in
+  fast-diff mode (`whole_object == true` with `fast-diff` image feature enabled
+  and valid), diff-iterate is now guaranteed to execute locally if exclusive
+  lock is available.  This brings a dramatic performance improvement for QEMU
+  live disk synchronization and backup use cases.
+
 >=19.0.0
 
 * The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
