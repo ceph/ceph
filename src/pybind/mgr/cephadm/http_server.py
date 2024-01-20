@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
 
 
-def cherrypy_filter(record: logging.LogRecord) -> int:
+def cherrypy_filter(record: logging.LogRecord) -> bool:
     blocked = [
         'TLSV1_ALERT_DECRYPT_ERROR'
     ]
