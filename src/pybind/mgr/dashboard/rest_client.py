@@ -23,7 +23,7 @@ from requests.exceptions import ConnectionError, InvalidURL, Timeout
 from .settings import Settings
 
 try:
-    from requests.packages.urllib3.exceptions import SSLError
+    from requests.packages.urllib3.exceptions import SSLError  # type: ignore
 except ImportError:
     from urllib3.exceptions import SSLError  # type: ignore
 
@@ -433,6 +433,7 @@ class RestClient(object):
                              method.upper(), str(ex))
             raise RequestException(str(ex))
         except Timeout as ex:
+            assert ex.request
             msg = "{} REST API {} timed out after {} seconds (url={}).".format(
                 self.client_name, ex.request.method, Settings.REST_REQUESTS_TIMEOUT,
                 ex.request.url)
