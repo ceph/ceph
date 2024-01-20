@@ -83,7 +83,7 @@ public:
   };
 
 public:
-  template <typename BitVectorT, typename DataIterator>
+  template <typename BitVectorT, typename DataIteratorT, typename ReferenceT>
   class IteratorImpl {
   private:
     friend class BitVector;
@@ -94,7 +94,7 @@ public:
     // cached derived values
     uint64_t m_index = 0;
     uint64_t m_shift = 0;
-    DataIterator m_data_iterator;
+    DataIteratorT m_data_iterator;
 
     IteratorImpl(BitVectorT *bit_vector, uint64_t offset)
       : m_bit_vector(bit_vector),
@@ -129,7 +129,7 @@ public:
 
     inline IteratorImpl operator++(int) {
       IteratorImpl iterator_impl(*this);
-      ++iterator_impl;
+      ++*this;
       return iterator_impl;
     }
     inline IteratorImpl operator+(uint64_t offset) {
@@ -145,17 +145,15 @@ public:
       return (m_offset != rhs.m_offset || m_bit_vector != rhs.m_bit_vector);
     }
 
-    inline ConstReference operator*() const {
-      return ConstReference(m_data_iterator, m_shift);
-    }
-    inline Reference operator*() {
-      return Reference(m_data_iterator, m_shift);
+    inline ReferenceT operator*() const {
+      return ReferenceT(m_data_iterator, m_shift);
     }
   };
 
   typedef IteratorImpl<const BitVector,
-                       bufferlist::const_iterator> ConstIterator;
-  typedef IteratorImpl<BitVector, bufferlist::iterator> Iterator;
+                       bufferlist::const_iterator,
+                       ConstReference> ConstIterator;
+  typedef IteratorImpl<BitVector, bufferlist::iterator, Reference> Iterator;
 
   static const uint32_t BLOCK_SIZE;
   static const uint8_t BIT_COUNT = _bit_count;

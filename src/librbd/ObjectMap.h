@@ -45,6 +45,12 @@ public:
     return m_object_map.size();
   }
 
+  template <typename F, typename... Args>
+  auto with_object_map(F&& f, Args&&... args) const {
+    std::shared_lock locker(m_lock);
+    return std::forward<F>(f)(m_object_map, std::forward<Args>(args)...);
+  }
+
   inline void set_state(uint64_t object_no, uint8_t new_state,
                         const boost::optional<uint8_t> &current_state) {
     std::unique_lock locker{m_lock};
