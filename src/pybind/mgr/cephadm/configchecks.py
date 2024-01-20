@@ -150,7 +150,7 @@ class CephadmCheckDefinition:
             "description": self.description,
             "name": self.name,
             "status": self.status,
-            "valid": True if self.func else False
+            "valid": True if getattr(self, 'func', None) else False
         }
 
 
