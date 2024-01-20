@@ -6792,7 +6792,7 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      encode_json("role", *role, formatter.get());
+      encode_json("role", role->get_info(), formatter.get());
       formatter->flush(cout);
       return 0;
     }
@@ -6821,7 +6821,7 @@ int main(int argc, const char **argv)
       if (ret < 0) {
         return -ret;
       }
-      encode_json("role", *role, formatter.get());
+      encode_json("role", role->get_info(), formatter.get());
       formatter->flush(cout);
       return 0;
     }
