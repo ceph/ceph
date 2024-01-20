@@ -33,7 +33,11 @@ from ceph.deployment.service_spec import (
     HostPattern,
 )
 from ceph.utils import datetime_now
-from ceph.deployment.drive_selection.matchers import SizeMatcher
+from ceph.deployment.drive_selection.matchers import (
+    AllMatcher,
+    Matcher,
+    SizeMatcher,
+)
 from nfs.cluster import create_ganesha_pool
 from nfs.module import Module
 from nfs.export import NFSRados
@@ -416,7 +420,7 @@ class DefaultCreator():
     def filter_devices(self, rook_pods: KubernetesResource, drive_group: DriveGroupSpec, matching_hosts: List[str]) -> List[Device]:
         device_list = []
         assert drive_group.data_devices is not None
-        sizematcher: Optional[SizeMatcher] = None
+        sizematcher: Matcher = AllMatcher('', None)
         if drive_group.data_devices.size:
             sizematcher = SizeMatcher('size', drive_group.data_devices.size)
         limit = getattr(drive_group.data_devices, 'limit', None)
@@ -444,7 +448,7 @@ class DefaultCreator():
                             all 
                             or (
                                 device.sys_api['node'] in matching_hosts
-                                and ((sizematcher != None) or sizematcher.compare(device))
+                                and sizematcher.compare(device)
                                 and (
                                     not drive_group.data_devices.paths
                                     or (device.path in paths)
@@ -481,7 +485,7 @@ class LSOCreator(DefaultCreator):
     def filter_devices(self, rook_pods: KubernetesResource, drive_group: DriveGroupSpec, matching_hosts: List[str]) -> List[Device]:
         device_list = []
         assert drive_group.data_devices is not None
-        sizematcher = None
+        sizematcher: Matcher = AllMatcher('', None)
         if drive_group.data_devices.size:
             sizematcher = SizeMatcher('size', drive_group.data_devices.size)
         limit = getattr(drive_group.data_devices, 'limit', None)
@@ -511,7 +515,7 @@ class LSOCreator(DefaultCreator):
                             all 
                             or (
                                 device.sys_api['node'] in matching_hosts
-                                and ((sizematcher != None) or sizematcher.compare(device))
+                                and sizematcher.compare(device)
                                 and (
                                     not drive_group.data_devices.paths
                                     or device.path in paths
