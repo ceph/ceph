@@ -1277,7 +1277,7 @@ class DaemonDescription(object):
         return DaemonDescription.from_json(self.to_json())
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'DaemonDescription') -> Any:
+    def yaml_representer(dumper: 'yaml.Dumper', data: 'DaemonDescription') -> yaml.Node:
         return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
@@ -1410,7 +1410,7 @@ class ServiceDescription(object):
         return cls(spec=spec, events=events, **c_status)
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'ServiceDescription') -> Any:
+    def yaml_representer(dumper: 'yaml.Dumper', data: 'ServiceDescription') -> yaml.Node:
         return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 

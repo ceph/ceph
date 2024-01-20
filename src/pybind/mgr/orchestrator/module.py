@@ -129,7 +129,7 @@ class HostDetails:
         return _cls
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'HostDetails') -> Any:
+    def yaml_representer(dumper: 'yaml.Dumper', data: 'HostDetails') -> yaml.Node:
         return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
