@@ -49,6 +49,12 @@
   due to being prone to false negative results.  It's safer replacement is
   `pool_is_in_selfmanaged_snaps_mode`.
 
+* RBD: When diffing against the beginning of time (`fromsnapname == NULL`) in
+  fast-diff mode (`whole_object == true` with `fast-diff` image feature enabled
+  and valid), diff-iterate is now guaranteed to execute locally if exclusive
+  lock is available.  This brings a dramatic performance improvement for QEMU
+  live disk synchronization and backup use cases.
+
 >= 16.2.14
 ----------
 
