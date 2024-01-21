@@ -17,8 +17,7 @@ CnLog::~CnLog() {
 }
 
 void CnLog::_flush(EntryVector& q, bool crash) {
-  // XXX: the waiting here will block the thread for an indeterministic peroid
-  seastar::alien::submit_to(inst, shard, [&q] {
+  std::ignore = seastar::alien::submit_to(inst, shard, [&q] {
     for (auto& it : q) {
       crimson::get_logger(it.m_subsys).log(
         crimson::to_log_level(it.m_prio),
@@ -26,7 +25,7 @@ void CnLog::_flush(EntryVector& q, bool crash) {
         it.strv());
     }
     return seastar::make_ready_future<>();
-  }).wait();
+  });
   q.clear();
   return;
 }
