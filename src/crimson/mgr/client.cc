@@ -11,6 +11,7 @@
 #include "messages/MMgrConfigure.h"
 #include "messages/MMgrMap.h"
 #include "messages/MMgrOpen.h"
+#include "messages/MMgrReport.h"
 
 namespace {
   seastar::logger& logger()
@@ -156,15 +157,44 @@ seastar::future<> Client::handle_mgr_conf(crimson::net::ConnectionRef,
 
 void Client::report()
 {
+  _send_report();
   gate.dispatch_in_background(__func__, *this, [this] {
     if (!conn) {
-      logger().warn("report: no conn available; raport skipped");
+      logger().warn("report: no conn available; report skipped");
       return seastar::now();
     }
     return with_stats.get_stats(
     ).then([this](auto &&pg_stats) {
       return conn->send(std::move(pg_stats));
     });
+  });
+}
+
+void Client::_send_report()
+{
+  // TODO: implement daemon_health_metrics support
+  // https://tracker.ceph.com/issues/63766
+  gate.dispatch_in_background(__func__, *this, [this] {
+    if (!conn) {
+      logger().warn("cannot send report; no conn available");
+      return seastar::now();
+    }
+    auto report = make_message<MMgrReport>();
+    // Adding empty information since we don't support perfcounters yet
+    report->undeclare_types.emplace_back();
+    ENCODE_START(1, 1, report->packed);
+    report->declare_types.emplace_back();
+    ENCODE_FINISH(report->packed);
+
+    if (daemon_name.size()) {
+      report->daemon_name = daemon_name;
+    } else {
+      report->daemon_name = local_conf()->name.get_id();
+    }
+    report->service_name = service_name;
+    local_conf().get_config_bl(last_config_bl_version, &report->config_bl,
+	                      &last_config_bl_version);
+    return conn->send(std::move(report));
   });
 }
 
