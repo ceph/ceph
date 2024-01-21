@@ -3022,15 +3022,10 @@ void Client::handle_fs_map_user(const MConstRef<MFSMapUser>& m)
 // Cancel all the commands for missing or laggy GIDs
 void Client::cancel_commands(const MDSMap& newmap)
 {
-  std::vector<ceph_tid_t> cancel_ops;
-
-  std::scoped_lock cmd_lock(command_lock);
-  auto &commands = command_table.get_commands();
-  for (const auto &[tid, op] : commands) {
+  cancel_commands_if([=, this](MDSCommandOp const& op) {
     const mds_gid_t op_mds_gid = op.mds_gid;
     if (newmap.is_dne_gid(op_mds_gid) || newmap.is_laggy_gid(op_mds_gid)) {
-      ldout(cct, 1) << __func__ << ": cancelling command op " << tid << dendl;
-      cancel_ops.push_back(tid);
+      ldout(cct, 1) << "cancel_commands: cancelling command op " << op.tid << dendl;
       if (op.outs) {
         std::ostringstream ss;
         ss << "MDS " << op_mds_gid << " went away";
@@ -3042,13 +3037,10 @@ void Client::cancel_commands(const MDSMap& newmap)
        * has its own lock.
        */
       op.con->mark_down();
-      if (op.on_finish)
-        op.on_finish->complete(-CEPHFS_ETIMEDOUT);
+      return -CEPHFS_ETIMEDOUT;
     }
-  }
-
-  for (const auto &tid : cancel_ops)
-    command_table.erase(tid);
+    return 0;
+  });
 }
 
 void Client::handle_mds_map(const MConstRef<MMDSMap>& m)
@@ -6312,7 +6304,8 @@ int Client::mds_command(
     const bufferlist& inbl,
     bufferlist *outbl,
     string *outs,
-    Context *onfinish)
+    Context *onfinish,
+    bool one_shot)
 {
   RWRef_t iref_reader(initialize_state, CLIENT_INITIALIZED);
   if (!iref_reader.is_state_satisfied())
@@ -6365,6 +6358,9 @@ int Client::mds_command(
 
     // Open a connection to the target MDS
     ConnectionRef conn = messenger->connect_to_mds(info.get_addrs());
+    if (one_shot) {
+      conn->send_keepalive();
+    }
 
     cl.unlock();
     {
@@ -6379,6 +6375,7 @@ int Client::mds_command(
       op.inbl = inbl;
       op.mds_gid = target_gid;
       op.con = conn;
+      op.one_shot = one_shot;
 
       ldout(cct, 4) << __func__ << ": new command op to " << target_gid
         << " tid=" << op.tid << cmd << dendl;
@@ -15818,13 +15815,41 @@ void Client::ms_handle_connect(Connection *con)
 bool Client::ms_handle_reset(Connection *con)
 {
   ldout(cct, 0) << __func__ << " on " << con->get_peer_addr() << dendl;
+
+  cancel_commands_if([=, this](MDSCommandOp const& op) {
+    if (op.one_shot && op.con.get() == con) {
+      ldout(cct, 1) << "ms_handle_reset: aborting one-shot command op " << op.tid << dendl;
+      if (op.outs) {
+        std::ostringstream ss;
+        ss << "MDS connection reset";
+        *(op.outs) = ss.str();
+      }
+      return -EPIPE;
+    }
+    return 0;
+  });
+
   return false;
 }
 
 void Client::ms_handle_remote_reset(Connection *con)
 {
-  std::scoped_lock lock(client_lock);
   ldout(cct, 0) << __func__ << " on " << con->get_peer_addr() << dendl;
+
+  cancel_commands_if([=, this](MDSCommandOp const& op) {
+    if (op.one_shot && op.con.get() == con) {
+      ldout(cct, 1) << "ms_handle_remote_reset: aborting one-shot command op " << op.tid << dendl;
+      if (op.outs) {
+        std::ostringstream ss;
+        ss << "MDS remote session reset";
+        *(op.outs) = ss.str();
+      }
+      return -EPIPE;
+    }
+    return 0;
+  });
+
+  std::scoped_lock lock(client_lock);
   switch (con->get_peer_type()) {
   case CEPH_ENTITY_TYPE_MDS:
     {
@@ -15883,6 +15908,20 @@ void Client::ms_handle_remote_reset(Connection *con)
 bool Client::ms_handle_refused(Connection *con)
 {
   ldout(cct, 1) << __func__ << " on " << con->get_peer_addr() << dendl;
+
+  cancel_commands_if([=, this](MDSCommandOp const& op) {
+    if (op.one_shot && op.con.get() == con) {
+      ldout(cct, 1) << "ms_handle_refused: aborting one-shot command op " << op.tid << dendl;
+      if (op.outs) {
+        std::ostringstream ss;
+        ss << "MDS connection refused";
+        *(op.outs) = ss.str();
+      }
+      return -EPIPE;
+    }
+    return 0;
+  });
+
   return false;
 }
 

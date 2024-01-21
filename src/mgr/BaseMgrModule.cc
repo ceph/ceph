@@ -117,7 +117,7 @@ public:
 
 
 static PyObject*
-ceph_send_command(BaseMgrModule *self, PyObject *args)
+ceph_send_command(BaseMgrModule *self, PyObject *args, PyObject *kwargs)
 {
   // Like mon, osd, mds
   char *type = nullptr;
@@ -131,9 +131,23 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
   Py_ssize_t inbuf_len = 0;
   bufferlist inbuf = {};
 
+  static const char * keywords[] {
+    "result",
+    "svc_type",
+    "svc_id",
+    "command",
+    "tag",
+    "inbuf",
+    // --- kwargs star here
+    "one_shot",   // whether to keep the command while we reestablish connection
+    nullptr       // must be the last element
+  };
+
+  int one_shot = false;
+
   PyObject *completion = nullptr;
-  if (!PyArg_ParseTuple(args, "Ossssz#:ceph_send_command",
-        &completion, &type, &name, &cmd_json, &tag, &inbuf_ptr, &inbuf_len)) {
+  if (!PyArg_ParseTupleAndKeywords(args, kwargs, "Ossssz#|$p:ceph_send_command", const_cast<char**>(keywords),
+        &completion, &type, &name, &cmd_json, &tag, &inbuf_ptr, &inbuf_len, &one_shot)) {
     return nullptr;
   }
 
@@ -208,7 +222,8 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         inbuf,
         &command_c->outbl,
         &command_c->outs,
-        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher));
+        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher),
+        one_shot);
     if (r != 0) {
       string msg("failed to send command to mds: ");
       msg.append(cpp_strerror(r));
@@ -1435,7 +1450,7 @@ PyMethodDef BaseMgrModule_methods[] = {
   {"_ceph_get_daemon_status", (PyCFunction)get_daemon_status, METH_VARARGS,
    "Get a service's status"},
 
-  {"_ceph_send_command", (PyCFunction)ceph_send_command, METH_VARARGS,
+  {"_ceph_send_command", (PyCFunction)ceph_send_command, METH_VARARGS | METH_KEYWORDS,
    "Send a mon command"},
 
   {"_ceph_set_health_checks", (PyCFunction)ceph_set_health_checks, METH_VARARGS,
