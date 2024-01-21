@@ -100,7 +100,7 @@ if 'UNITTEST' in os.environ:
         def _ceph_get(self, data_name):
             return self.mock_store_get('_ceph_get', data_name, mock.MagicMock())
 
-        def _ceph_send_command(self, res, svc_type, svc_id, command, tag, inbuf):
+        def _ceph_send_command(self, res, svc_type, svc_id, command, tag, inbuf, *, one_shot=False):
 
             cmd = json.loads(command)
             getattr(self, '_mon_commands_sent', []).append(cmd)
