@@ -425,7 +425,7 @@ class DefaultCreator():
             sizematcher = SizeMatcher('size', drive_group.data_devices.size)
         limit = getattr(drive_group.data_devices, 'limit', None)
         count = 0
-        all = getattr(drive_group.data_devices, 'all', None)
+        _all = getattr(drive_group.data_devices, 'all', None)
         paths = [device.path for device in drive_group.data_devices.paths]
         osd_list = []
         for pod in rook_pods.items:
@@ -445,7 +445,7 @@ class DefaultCreator():
                 if not limit or (count < limit):
                     if device.available:
                         if (
-                            all 
+                            _all
                             or (
                                 device.sys_api['node'] in matching_hosts
                                 and sizematcher.compare(device)
@@ -489,7 +489,7 @@ class LSOCreator(DefaultCreator):
         if drive_group.data_devices.size:
             sizematcher = SizeMatcher('size', drive_group.data_devices.size)
         limit = getattr(drive_group.data_devices, 'limit', None)
-        all = getattr(drive_group.data_devices, 'all', None)
+        _all = getattr(drive_group.data_devices, 'all', None)
         paths = [device.path for device in drive_group.data_devices.paths]
         vendor = getattr(drive_group.data_devices, 'vendor', None)
         model = getattr(drive_group.data_devices, 'model', None)
@@ -512,7 +512,7 @@ class LSOCreator(DefaultCreator):
                 if not limit or (count < limit):
                     if device.available:
                         if (
-                            all 
+                            _all
                             or (
                                 device.sys_api['node'] in matching_hosts
                                 and sizematcher.compare(device)
