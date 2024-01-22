@@ -90,6 +90,7 @@ void CommonSafeTimer<Mutex>::timer_thread()
       if (p->first > now)
 	break;
 
+      ldout(cct, 20) << "timer_thread going to execute and remove the top of a schedule sized " << schedule.size() << dendl;
       Context *callback = p->second;
       events.erase(callback);
       schedule.erase(p);
@@ -108,10 +109,11 @@ void CommonSafeTimer<Mutex>::timer_thread()
     if (!safe_callbacks && stopping)
       break;
 
-    ldout(cct,20) << "timer_thread going to sleep" << dendl;
     if (schedule.empty()) {
+      ldout(cct, 20) << "timer_thread going to sleep with an empty schedule" << dendl;
       cond.wait(l);
     } else {
+      ldout(cct, 20) << "timer_thread going to sleep with a schedule size " << schedule.size() << dendl;
       auto when = schedule.begin()->first;
       cond.wait_until(l, when);
     }
