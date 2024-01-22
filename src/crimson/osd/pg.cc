@@ -1529,6 +1529,7 @@ void PG::on_change(ceph::os::Transaction &t) {
     client_request_orderer.clear_and_cancel(*this);
   }
   scrubber.on_interval_change();
+  obc_registry.invalidate_on_interval_change();
 }
 
 void PG::context_registry_on_change() {

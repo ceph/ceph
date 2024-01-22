@@ -449,7 +449,7 @@ public:
 
   version_t get_last_user_version() const;
 
-  std::pair<object_info_t, ObjectContextRef> prepare_clone(
+  ObjectContextRef prepare_clone(
     const hobject_t& coid);
 
   void apply_stats();
