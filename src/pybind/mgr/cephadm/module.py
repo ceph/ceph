@@ -75,8 +75,18 @@ from .services.monitoring import GrafanaService, AlertmanagerService, Prometheus
 from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
 from .services.node_proxy import NodeProxy
 from .schedule import HostAssignment
-from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
-    ClientKeyringStore, ClientKeyringSpec, TunedProfileStore, NodeProxyCache
+from .inventory import (
+    Inventory,
+    SpecStore,
+    HostCache,
+    AgentCache,
+    EventStore,
+    ClientKeyringStore,
+    ClientKeyringSpec,
+    TunedProfileStore,
+    NodeProxyCache,
+    CertKeyStore,
+)
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
@@ -635,6 +645,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.tuned_profiles.load()
 
         self.tuned_profile_utils = TunedProfileUtils(self)
+
+        self.cert_key_store = CertKeyStore(self)
+        self.cert_key_store.load()
 
         # ensure the host lists are in sync
         for h in self.inventory.keys():
