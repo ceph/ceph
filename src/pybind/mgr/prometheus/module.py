@@ -1570,10 +1570,17 @@ class Module(MgrModule):
                 cast(MetricCounter, sum_metric).add(duration, (method_name,))
                 cast(MetricCounter, count_metric).add(1, (method_name,))
 
-    def get_pg_repaired_objects(self) -> None:
+    def get_pool_repaired_objects(self) -> None:
         dump = self.get('pg_dump')
         for stats in dump['pool_stats']:
-            path = 'pool_objects_repaired'
+            path = f'pool_objects_repaired{stats["poolid"]}'
+            self.metrics[path] = Metric(
+                'counter',
+                'pool_objects_repaired',
+                'Number of objects repaired in a pool Count',
+                ('poolid',)
+            )
+
             self.metrics[path].set(stats['stat_sum']['num_objects_repaired'],
                                    labelvalues=(stats['poolid'],))
 
@@ -1601,7 +1608,7 @@ class Module(MgrModule):
         self.get_mgr_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
-        self.get_pg_repaired_objects()
+        self.get_pool_repaired_objects()
         self.get_num_objects()
         self.get_all_daemon_health_metrics()
 
