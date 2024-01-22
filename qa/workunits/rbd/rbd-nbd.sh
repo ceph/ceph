@@ -202,8 +202,11 @@ provisioned=`rbd -p ${POOL} --format xml du ${IMAGE} |
 used=`rbd -p ${POOL} --format xml du ${IMAGE} |
   $XMLSTARLET sel -t -m "//stats/images/image/used_size" -v .`
 [ "${used}" -lt "${provisioned}" ]
+unmap_device ${DEV} ${PID}
 
 # resize test
+DEV=`_sudo rbd device -t nbd -o try-netlink map ${POOL}/${IMAGE}`
+get_pid ${POOL}
 devname=$(basename ${DEV})
 blocks=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks}"
@@ -216,9 +219,9 @@ rbd resize ${POOL}/${IMAGE} --allow-shrink --size ${SIZE}M
 blocks2=$(awk -v dev=${devname} '$4 == dev {print $3}' /proc/partitions)
 test -n "${blocks2}"
 test ${blocks2} -eq ${blocks}
+unmap_device ${DEV} ${PID}
 
 # read-only option test
-unmap_device ${DEV} ${PID}
 DEV=`_sudo rbd --device-type nbd map --read-only ${POOL}/${IMAGE}`
 PID=$(rbd device --device-type nbd list | awk -v pool=${POOL} -v img=${IMAGE} -v dev=${DEV} \
     '$2 == pool && $3 == img && $5 == dev {print $1}')
