@@ -16,10 +16,10 @@ function(add_tags name)
       OUTPUT_VARIABLE submodules
       OUTPUT_STRIP_TRAILING_WHITESPACE)
     if(${result_code} EQUAL 0)
-      string(REPLACE "${TAGS_SRC_DIR}/" "" submodules ${submodules})
+      string(REPLACE "${TAGS_SRC_DIR}/" "" submodules "${submodules}")
       # cmake list uses ";" as the delimiter, so split the string manually
       # before iterating in it.
-      string(REPLACE "\n" ";" submodules ${submodules})
+      string(REPLACE "\n" ";" submodules "${submodules}")
       list(APPEND excludes ${submodules})
     endif()
   endif()
