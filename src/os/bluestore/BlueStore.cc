@@ -685,6 +685,21 @@ ostream& operator<<(ostream& out, const BlueStore::Buffer& b)
   return out << ")";
 }
 
+//pool_fsck_stats_t
+
+std::ostream& operator<<(std::ostream& out, const BlueStore::pool_fsck_stats_t& s)
+{
+  out << "(" << s.num_objects << " objects, "
+      << s.shared_blobs << " shared blobs, "
+      << s.omaps << " omaps, "
+      << s.omap_key_size << " bytes in omap keys, "
+      << s.omap_val_size << " bytes in omap vals, "
+      << s.stored << " bytes stored, "
+      << s.allocated << " bytes allocated"
+      << ")";
+  return out;
+}
+
 namespace {
 
 /*
@@ -8992,12 +9007,14 @@ int BlueStore::cold_close()
 int _fsck_sum_extents(
   const PExtentVector& extents,
   bool compressed,
-  store_statfs_t& expected_statfs)
+  store_statfs_t& expected_statfs,
+  BlueStore::pool_fsck_stats_t& pool_fsck_stat)
 {
   for (auto e : extents) {
     if (!e.is_valid())
       continue;
     expected_statfs.allocated += e.length;
+    pool_fsck_stat.allocated += e.length;
     if (compressed) {
       expected_statfs.data_compressed_allocated += e.length;
     }
@@ -9013,6 +9030,7 @@ int BlueStore::_fsck_check_extents(
   uint64_t granularity,
   BlueStoreRepairer* repairer,
   store_statfs_t& expected_statfs,
+  BlueStore::pool_fsck_stats_t& pool_fsck_stat,
   FSCKDepth depth)
 {
   dout(30) << __func__ << " " << ctx_descr << ", extents " << extents << dendl;
@@ -9021,6 +9039,7 @@ int BlueStore::_fsck_check_extents(
     if (!e.is_valid())
       continue;
     expected_statfs.allocated += e.length;
+    pool_fsck_stat.allocated += e.length;
     if (compressed) {
       expected_statfs.data_compressed_allocated += e.length;
     }
@@ -9321,7 +9340,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   const bufferlist& value,
   mempool::bluestore_fsck::list<string>* expecting_shards,
   map<BlobRef, bluestore_blob_t::unused_t>* referenced,
-  const BlueStore::FSCK_ObjectCtx& ctx)
+  BlueStore::FSCK_ObjectCtx& ctx)
 {
   auto& errors = ctx.errors;
   auto& num_objects = ctx.num_objects;
@@ -9334,6 +9353,8 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   auto& sb_info = ctx.sb_info;
   auto& sb_ref_counts = ctx.sb_ref_counts;
   auto repairer = ctx.repairer;
+  pool_fsck_stats_t* pool_fsck_stat =
+    &ctx.per_pool_fsck_stats[c->cid.is_pg() ? c->cid.pool() : META_POOL_ID];
 
   store_statfs_t* res_statfs = (per_pool_stat_collection || repairer) ?
     &ctx.expected_pool_statfs[pool_id] :
@@ -9345,7 +9366,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   OnodeRef o;
   o.reset(Onode::create_decode(c, oid, key, value));
   ++num_objects;
-
+  ++pool_fsck_stat->num_objects;
   num_spanning_blobs += o->extent_map.spanning_blob_map.size();
 
   o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
@@ -9393,6 +9414,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
     }
     pos = l.logical_offset + l.length;
     res_statfs->data_stored += l.length;
+    pool_fsck_stat->stored += l.length;
     ceph_assert(l.blob);
     const bluestore_blob_t& blob = l.blob->get_blob();
 
@@ -9514,14 +9536,16 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
         blob.is_compressed(),
         *used_blocks,
         fm->get_alloc_size(),
-	repairer,
+        repairer,
         *res_statfs,
+        *pool_fsck_stat,
         depth);
     } else {
       errors += _fsck_sum_extents(
         blob.get_extents(),
         blob.is_compressed(),
-        *res_statfs);
+        *res_statfs,
+        *pool_fsck_stat);
     }
   } // for (auto& i : ref_map)
 
@@ -9638,6 +9662,7 @@ public:
       uint64_t num_spanning_blobs = 0;
       store_statfs_t expected_store_statfs;
       BlueStore::per_pool_statfs expected_pool_statfs;
+      BlueStore::per_pool_fsck_stats_t per_pool_fsck_stats;
     };
 
     size_t batchCount;
@@ -9721,6 +9746,7 @@ public:
 	*sb_ref_counts,
         batch->expected_store_statfs,
         batch->expected_pool_statfs,
+        batch->per_pool_fsck_stats,
         repairer);
 
       for (size_t i = 0; i < batch->entry_count; i++) {
@@ -9834,6 +9860,11 @@ public:
           it++) {
           ctx.expected_pool_statfs[it->first].add(it->second);
         }
+        for (auto it = batch.per_pool_fsck_stats.begin();
+          it != batch.per_pool_fsck_stats.end();
+          it++) {
+          ctx.per_pool_fsck_stats[it->first].add(it->second);
+	}
       }
     }
   };
@@ -10353,6 +10384,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   KeyValueDB::Iterator it;
   store_statfs_t expected_store_statfs;
   per_pool_statfs expected_pool_statfs;
+  per_pool_fsck_stats_t per_pool_fsck_stats;
 
   sb_info_space_efficient_map_t sb_info;
   shared_blob_2hash_tracker_t sb_ref_counts(
@@ -10571,6 +10603,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       sb_ref_counts,
       expected_store_statfs,
       expected_pool_statfs,
+      per_pool_fsck_stats,
       repair ? &repairer : nullptr);
 
     _fsck_check_objects(depth, ctx);
@@ -10689,6 +10722,9 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	}
 	std::stringstream ss;
 	ss << "sbid 0x" << std::hex << sbid << std::dec;
+
+	pool_fsck_stats_t& ppfs = per_pool_fsck_stats[sbi.pool_id];
+	ppfs.shared_blobs++;
 	errors += _fsck_check_extents(ss.str(),
 	  extents,
 	  sbi.allocated_chunks < 0,
@@ -10696,6 +10732,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  fm->get_alloc_size(),
 	  repair ? &repairer : nullptr,
 	  *expected_statfs,
+	  ppfs,
 	  depth);
       }
     }
@@ -10934,9 +10971,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     it = db->get_iterator(PREFIX_PGMETA_OMAP, KeyValueDB::ITERATOR_NOCACHE);
     if (it) {
       uint64_t last_omap_head = 0;
+      pool_fsck_stats_t& ppfs = per_pool_fsck_stats[META_POOL_ID];
       for (it->lower_bound(string()); it->valid(); it->next()) {
         uint64_t omap_head;
         _key_decode_u64(it->key().c_str(), &omap_head);
+        ppfs.omaps++;
+        ppfs.omap_key_size += it->key().size();
+        ppfs.omap_val_size += it->value().length();
         if (used_omap_head.count(omap_head) == 0 &&
 	    omap_head != last_omap_head) {
           pair<string,string> rk = it->raw_key();
@@ -10961,6 +11002,15 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         const char *c = k.c_str();
         c = _key_decode_u64(c, &pool);
         c = _key_decode_u64(c, &omap_head);
+        auto p =
+	  pool > 0 ? pool : META_POOL_ID; // we erroneously use pool==0 for
+	                                  // meta (aka pool==-1) objects
+					  // (see #64153)
+					  // hence treat it as meta
+        pool_fsck_stats_t& ppfs = per_pool_fsck_stats[p];
+        ppfs.omaps++;
+        ppfs.omap_key_size += it->key().size();
+        ppfs.omap_val_size += it->value().length();
         if (used_omap_head.count(omap_head) == 0 &&
           omap_head != last_omap_head) {
           pair<string,string> rk = it->raw_key();
@@ -10987,6 +11037,15 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
         c = _key_decode_u64(c, &pool);
         c = _key_decode_u32(c, &hash);
         c = _key_decode_u64(c, &omap_head);
+        auto p =
+	  pool > 0 ? pool : META_POOL_ID; // we erroneously use pool==0 for
+	                                  // meta (aka pool==-1) objects
+					  // (see #64153)
+					  // hence treat it as meta
+        pool_fsck_stats_t& ppfs = per_pool_fsck_stats[p];
+        ppfs.omaps++;
+        ppfs.omap_key_size += it->key().size();
+        ppfs.omap_val_size += it->value().length();
         if (used_omap_head.count(omap_head) == 0 &&
           omap_head != last_omap_head) {
           fsck_derr(errors, MAX_FSCK_ERROR_LINES)
@@ -11202,6 +11261,14 @@ out_scan:
 	  << num_spanning_blobs << " spanning, "
 	  << num_shared_blobs << " shared."
 	  << dendl;
+  dout(2) << __func__ << " Per-pool stats:"
+    << dendl;
+  for (auto& p : per_pool_fsck_stats) {
+    dout(2) << __func__
+            << " pool "
+            << p.first << " -> " << p.second
+            << dendl;
+  }
 
   utime_t duration = ceph_clock_now() - start;
   dout(1) << __func__ << " <<<FINISH>>> with " << errors << " errors, "
