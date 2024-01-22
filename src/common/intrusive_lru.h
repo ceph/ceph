@@ -12,13 +12,12 @@ namespace ceph::common {
 /**
  * intrusive_lru: lru implementation with embedded map and list hook
  *
- * Elements will be stored in an intrusive set. Once an element is no longer
- * referenced it will remain in the set. The unreferenced elements will be
- * evicted from the set once the set size exceeds the `lru_target_size`.
- * Referenced elements will not be evicted as this is a registery with
- * extra caching capabilities.
+ * Elements with live references are guarranteed to remain accessible.
+ * Elements without live references may remain accessible -- implementation
+ * will release unreferenced elements based on lru_target_size.
  *
- * Note, this implementation currently is entirely thread-unsafe.
+ * Accesses, mutations, and references must be confined to a single thread or
+ * serialized via some other mechanism.
  */
 
 template <typename K, typename V, typename VToK>
@@ -43,11 +42,36 @@ void intrusive_ptr_release(intrusive_lru_base<Config> *p);
 
 template <typename Config>
 class intrusive_lru_base {
+  /* object invariants
+   *
+   * intrusive_lru objects may be in one of three states:
+   * 1. referenced
+   *    - accessible via intrusive_lru
+   *    - intrusive_lru_base::lru is points to parent intrusive_lru
+   *    - present in intrusive_lru::lru_set
+   *    - absent from intrusive_lru::unreferenced_list
+   *    - use_count > 0
+   *    - not eligible for eviction
+   *    - intrusive_lru_release may be invoked externally
+   * 2. unreferenced
+   *    - accessible via intrusive_lru
+   *    - intrusive_lru_base::lru is null
+   *    - present in intrusive_lru::lru_set
+   *    - present in intrusive_lru::unreferenced_list
+   *    - use_count == 0
+   *    - eligible for eviction
+   *    - intrusive_lru_release cannot be invoked
+   * 3. invalidated
+   *    - inaccessible via intrusive_lru
+   *    - intrusive_lru_base::lru is null
+   *    - absent from intrusive_lru::lru_set
+   *    - absent from intrusive_lru::unreferenced_list
+   *    - use_count > 0
+   *    - intrusive_lru_release may be invoked externally
+   */
   unsigned use_count = 0;
 
-  // lru points to the corresponding intrusive_lru
-  // which will be set to null if its use_count
-  // is zero (aka unreferenced).
+  // See above, points at intrusive_lru iff referenced
   intrusive_lru<Config> *lru = nullptr;
 
 public:
@@ -55,7 +79,10 @@ public:
     return static_cast<bool>(lru);
   }
   bool is_unreferenced() const {
-    return !is_referenced();
+    return !is_referenced() && use_count == 0;
+  }
+  bool is_invalidated() const {
+    return !is_referenced() && use_count > 0;
   }
   boost::intrusive::set_member_hook<> set_hook;
   boost::intrusive::list_member_hook<> list_hook;
@@ -108,9 +135,9 @@ class intrusive_lru {
 
   // when the lru_set exceeds its target size, evict
   // only unreferenced elements from it (if any).
-  void evict() {
+  void evict(unsigned target_size) {
     while (!unreferenced_list.empty() &&
-	   lru_set.size() > lru_target_size) {
+	   lru_set.size() > target_size) {
       auto &evict_target = unreferenced_list.front();
       assert(evict_target.is_unreferenced());
       unreferenced_list.pop_front();
@@ -136,7 +163,7 @@ class intrusive_lru {
     assert(b.is_unreferenced());
     lru_set.insert(b);
     b.lru = this;
-    evict();
+    evict(lru_target_size);
   }
 
   // an element in the lru_set has no users,
@@ -145,7 +172,7 @@ class intrusive_lru {
     assert(b.is_referenced());
     unreferenced_list.push_back(b);
     b.lru = nullptr;
-    evict();
+    evict(lru_target_size);
   }
 
 public:
@@ -189,6 +216,21 @@ public:
       }
   }
 
+  /// drop all elements from lru, invoke f on any with outstanding references
+  template <typename F>
+  void clear(F &&f) {
+    evict(0);
+    assert(unreferenced_list.empty());
+    for (auto &i: lru_set) {
+      std::invoke(f, static_cast<T&>(i));
+      i.lru = nullptr;
+      assert(i.is_invalidated());
+    }
+    lru_set.clear_and_dispose([](auto *i){
+      assert(i->use_count > 0); /* don't delete, still has a ref count */
+    });
+  }
+
   template <class F>
   void for_each(F&& f) {
     for (auto& v : lru_set) {
@@ -212,7 +254,7 @@ public:
 
   void set_target_size(size_t target_size) {
     lru_target_size = target_size;
-    evict();
+    evict(lru_target_size);
   }
 
   ~intrusive_lru() {
@@ -226,17 +268,24 @@ public:
 template <typename Config>
 void intrusive_ptr_add_ref(intrusive_lru_base<Config> *p) {
   assert(p);
-  assert(p->lru);
   p->use_count++;
+  assert(p->is_referenced() || p->is_invalidated());
 }
 
 template <typename Config>
 void intrusive_ptr_release(intrusive_lru_base<Config> *p) {
+  /* See object invariants above -- intrusive_ptr_release can only be invoked on
+   * is_referenced() or is_invalidated() objects with live external references */
   assert(p);
   assert(p->use_count > 0);
+  assert(p->is_referenced() || p->is_invalidated());
   --p->use_count;
   if (p->use_count == 0) {
-    p->lru->mark_as_unreferenced(*p);
+    if (p->lru) {
+      p->lru->mark_as_unreferenced(*p);
+    } else {
+      delete p;
+    }
   }
 }
 
