@@ -77,10 +77,6 @@ void StoreTestFixture::TearDown()
   // config settings. Hence setting it to 'unsafe' here as test case is closing.
   g_conf()._clear_safe_to_start_threads();
   PopSettings(0);
-  if (!orig_death_test_style.empty()) {
-    ::testing::FLAGS_gtest_death_test_style = orig_death_test_style;
-    orig_death_test_style.clear();
-  }
 }
 
 void StoreTestFixture::SetVal(ConfigProxy& _conf, const char* key, const char* val)

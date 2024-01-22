@@ -1032,7 +1032,11 @@ void MemStore::_do_transaction(Transaction& t)
 	f.close_section();
 	f.flush(*_dout);
 	*_dout << dendl;
-	ceph_abort_msg("unexpected error");
+        if (!g_conf().get_val<bool>("objectstore_debug_throw_on_failed_txc")) {
+	  ceph_abort_msg("unexpected error");
+        } else {
+	  throw r;
+        }
       }
     }
 

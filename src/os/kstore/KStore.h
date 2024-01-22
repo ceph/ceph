@@ -276,6 +276,11 @@ public:
       std::lock_guard<std::mutex> l(qlock);
       q.push_back(*txc);
     }
+    void undo_queue(TransContext* txc) {
+      std::lock_guard<std::mutex> l(qlock);
+      ceph_assert(&q.back() == txc);
+      q.pop_back();
+    }
 
     void flush() {
       std::unique_lock<std::mutex> l(qlock);
