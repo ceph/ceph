@@ -131,7 +131,7 @@ struct fmt::formatter<spg_t> {
     if (shard_id_t::NO_SHARD == spg.shard.id) {
       return fmt::format_to(ctx.out(), "{}", spg.pgid);
     } else {
-      return fmt::format_to(ctx.out(), "{}s{}>", spg.pgid, spg.shard.id);
+      return fmt::format_to(ctx.out(), "{}s{}", spg.pgid, spg.shard.id);
     }
   }
 };
