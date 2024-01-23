@@ -460,12 +460,23 @@ done:
   if (latency) {
     *latency = lat;
   }
-  dout(1) << "====== req done req=" << hex << req << dec
-	  << " op status=" << op_ret
-	  << " http_status=" << s->err.http_ret
-	  << " latency=" << lat
-	  << " ======"
-	  << dendl;
+  // admin and system users ops log the 'req done' line at log level 2
+  if(s->user->get_info().admin || s->user->get_info().system) {
+    req_done_output<2>(req, op_ret, s->err.http_ret, lat);
+  } else {
+    req_done_output<1>(req, op_ret, s->err.http_ret, lat);
+  }
 
   return (ret < 0 ? ret : s->err.ret);
 } /* process_request */
+
+template <const int LogLevelV>
+void req_done_output(RGWRequest *const req, const int op_status, const int http_status, const ceph::coarse_real_clock::duration latency)
+{
+  dout(LogLevelV) << "====== req done req=" << hex << req << dec
+    << " op status=" << op_status
+    << " http_status=" << http_status
+    << " latency=" << latency
+    << " ======"
+    << dendl;
+}

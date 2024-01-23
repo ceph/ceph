@@ -148,6 +148,9 @@ extern int process_request(const RGWProcessEnv& penv,
                            ceph::coarse_real_clock::duration* latency,
                            int* http_ret = nullptr);
 
+template <const int LogLevelV>
+void req_done_output(RGWRequest *const req, const int op_status, const int http_status, const ceph::coarse_real_clock::duration latency);
+
 extern int rgw_process_authenticated(RGWHandler_REST* handler,
                                      RGWOp*& op,
                                      RGWRequest* req,
