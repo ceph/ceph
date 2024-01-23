@@ -429,10 +429,21 @@ Scrub::sched_params_t OsdScrub::determine_scrub_time(
 
 void OsdScrub::update_job(
     Scrub::ScrubJobRef sjob,
-    const Scrub::sched_params_t& suggested)
+    const Scrub::sched_params_t& suggested,
+    bool reset_notbefore)
 {
-  m_queue.update_job(sjob, suggested);
+  m_queue.update_job(sjob, suggested, reset_notbefore);
 }
+
+void OsdScrub::delay_on_failure(
+      Scrub::ScrubJobRef sjob,
+      std::chrono::seconds delay,
+      Scrub::delay_cause_t delay_cause,
+      utime_t now_is)
+{
+  m_queue.delay_on_failure(sjob, delay, delay_cause, now_is);
+}
+
 
 void OsdScrub::register_with_osd(
     Scrub::ScrubJobRef sjob,

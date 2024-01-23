@@ -339,6 +339,9 @@ ActiveScrubbing::~ActiveScrubbing()
   // if the begin-time stamp was not set 'off' (as done if the scrubbing
   // completed successfully), we use it now to set the 'failed scrub' duration.
   if (session.m_session_started_at != ScrubTimePoint{}) {
+    // delay the next invocation of the scrubber on this target
+    scrbr->penalize_next_scrub(Scrub::delay_cause_t::aborted);
+
     auto logged_duration = ScrubClock::now() - session.m_session_started_at;
     session.m_perf_set->tinc(scrbcnt_failed_elapsed, logged_duration);
     session.m_perf_set->inc(scrbcnt_failed);
