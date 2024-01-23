@@ -245,7 +245,7 @@ export class CephfsSubvolumeListComponent extends CdForm implements OnInit, OnCh
       switchMap(() =>
         this.cephfsSubVolumeService.get(this.fsName, this.activeGroupName).pipe(
           catchError(() => {
-            this.context.error();
+            this.context?.error();
             return of(null);
           })
         )

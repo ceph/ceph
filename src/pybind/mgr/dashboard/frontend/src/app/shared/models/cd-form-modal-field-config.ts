@@ -1,4 +1,4 @@
-import { ValidatorFn } from '@angular/forms';
+import { AsyncValidatorFn, ValidatorFn } from '@angular/forms';
 
 export class CdFormModalFieldConfig {
   // --- Generic field properties ---
@@ -11,6 +11,7 @@ export class CdFormModalFieldConfig {
   value?: any;
   errors?: { [errorName: string]: string };
   validators: ValidatorFn[];
+  asyncValidators?: AsyncValidatorFn[];
 
   // --- Specific field properties ---
   typeConfig?: {
