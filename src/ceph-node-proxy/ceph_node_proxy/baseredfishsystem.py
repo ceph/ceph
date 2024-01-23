@@ -35,6 +35,20 @@ class BaseRedfishSystem(BaseSystem):
         self.job_service_endpoint: str = ''
         self.create_reboot_job_endpoint: str = ''
         self.setup_job_queue_endpoint: str = ''
+        self.component_list: List[str] = kw.get('component_list', ['memory',
+                                                                   'power',
+                                                                   'fans',
+                                                                   'network',
+                                                                   'processors',
+                                                                   'storage',
+                                                                   'firmwares'])
+        self.update_funcs: List[Callable] = []
+        for component in self.component_list:
+            self.log.logger.debug(f'adding: {component} to hw component gathered list.')
+            func = f'_update_{component}'
+            if hasattr(self, func):
+                f = getattr(self, func)
+                self.update_funcs.append(f)
 
         self.start_client()
 
@@ -61,16 +75,9 @@ class BaseRedfishSystem(BaseSystem):
             try:
                 self._update_system()
                 self._update_sn()
-                update_funcs = [self._update_memory,
-                                self._update_power,
-                                self._update_fans,
-                                self._update_network,
-                                self._update_processors,
-                                self._update_storage,
-                                self._update_firmwares]
 
                 with concurrent.futures.ThreadPoolExecutor() as executor:
-                    executor.map(lambda f: f(), update_funcs)
+                    executor.map(lambda f: f(), self.update_funcs)
 
                 self.data_ready = True
             except RuntimeError as e:
