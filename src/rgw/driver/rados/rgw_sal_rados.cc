@@ -3270,6 +3270,7 @@ void RadosLuaManager::handle_reload_notify(const DoutPrefixProvider* dpp, option
     return;
   }
 
+#ifdef WITH_RADOSGW_LUA_PACKAGES
   rgw::lua::packages_t failed_packages;
   std::string install_dir;
   auto r = rgw::lua::install_packages(dpp, store, 
@@ -3284,7 +3285,9 @@ void RadosLuaManager::handle_reload_notify(const DoutPrefixProvider* dpp, option
     ldpp_dout(dpp, 5) << "WARNING: failed to install Lua package: " << p
             << " from allowlist" << dendl;
   }
-  
+#else 
+  const int r = 0;
+#endif  
   ack_reload(dpp, notify_id, cookie, r);
 }
 
