@@ -44,6 +44,12 @@ class ClientRequest final : public PhasedOperationT<ClientRequest>,
 public:
   class PGPipeline : public CommonPGPipeline {
     public:
+    struct RecoverMissingLockOBC : OrderedConcurrentPhaseT<RecoverMissingLockOBC> {
+      static constexpr auto type_name = "ClientRequest::PGPipeline::recover_missing_lock_obc";
+    } recover_missing_lock_obc;
+    struct RecoverMissingSnaps : OrderedExclusivePhaseT<RecoverMissingSnaps> {
+      static constexpr auto type_name = "ClientRequest::PGPipeline::recover_missing_snaps";
+    } recover_missing_snaps;
     struct AwaitMap : OrderedExclusivePhaseT<AwaitMap> {
       static constexpr auto type_name = "ClientRequest::PGPipeline::await_map";
     } await_map;
@@ -105,6 +111,8 @@ public:
       PGPipeline::WaitForActive::BlockingEvent,
       PGActivationBlocker::BlockingEvent,
       PGPipeline::RecoverMissing::BlockingEvent,
+      PGPipeline::RecoverMissingLockOBC::BlockingEvent,
+      PGPipeline::RecoverMissingSnaps::BlockingEvent,
       scrub::PGScrubber::BlockingEvent,
       PGPipeline::GetOBC::BlockingEvent,
       PGPipeline::Process::BlockingEvent,
@@ -289,6 +297,12 @@ private:
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_pg_op(
     Ref<PG> pg);
+  interruptible_future<>
+  recover_missing_snaps(
+    Ref<PG> pg,
+    instance_handle_t &ihref,
+    ObjectContextRef head,
+    std::set<snapid_t> &snaps);
   ::crimson::interruptible::interruptible_future<
     ::crimson::osd::IOInterruptCondition> process_op(
       instance_handle_t &ihref,
