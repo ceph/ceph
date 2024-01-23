@@ -1405,7 +1405,7 @@ Session *MDSRank::get_session(const cref_t<Message> &m)
     dout(20) << "get_session have " << session << " " << session->info.inst
 	     << " state " << session->get_state_name() << dendl;
     // Check if we've imported an open session since (new sessions start closed)
-    if (session->is_closed()) {
+    if (session->is_closed() && m->get_type() == CEPH_MSG_CLIENT_SESSION) {
       Session *imported_session = sessionmap.get_session(session->info.inst.name);
       if (imported_session && imported_session != session) {
         dout(10) << __func__ << " replacing connection bootstrap session "
