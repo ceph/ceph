@@ -1332,21 +1332,21 @@ static int netlink_resize(int nbd_index, const std::string& cookie,
 
   sock = netlink_init(&nl_id);
   if (!sock) {
-    cerr << "rbd-nbd: Netlink interface not supported." << std::endl;
-    return 1;
+    derr << __func__ << ": netlink interface not supported" << dendl;
+    return -EINVAL;
   }
 
   nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, genl_handle_msg, NULL);
 
   msg = nlmsg_alloc();
   if (!msg) {
-    cerr << "rbd-nbd: Could not allocate netlink message." << std::endl;
+    derr << __func__ << ": could not allocate netlink message" << dendl;
     goto free_sock;
   }
 
   if (!genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, nl_id, 0, 0,
                    NBD_CMD_RECONFIGURE, 0)) {
-    cerr << "rbd-nbd: Could not setup message." << std::endl;
+    derr << __func__ << ": could not setup netlink message" << dendl;
     goto free_msg;
   }
 
@@ -1357,7 +1357,8 @@ static int netlink_resize(int nbd_index, const std::string& cookie,
 
   ret = nl_send_sync(sock, msg);
   if (ret < 0) {
-    cerr << "rbd-nbd: netlink resize failed: " << nl_geterror(ret) << std::endl;
+    derr << __func__ << ": netlink resize failed: " << nl_geterror(ret)
+         << dendl;
     goto free_sock;
   }
 
