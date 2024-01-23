@@ -161,6 +161,7 @@ static const actpair actpairs[] =
  { "sns:DeleteTopic", snsDeleteTopic},
  { "sns:Publish", snsPublish},
  { "sns:SetTopicAttributes", snsSetTopicAttributes},
+ { "sns:CreateTopic", snsCreateTopic},
 };
 
 struct PolicyParser;
@@ -1476,6 +1477,9 @@ const char* action_bit_string(uint64_t action) {
 
   case snsPublish:
     return "sns:Publish";
+
+  case snsCreateTopic:
+    return "sns:CreateTopic";
   }
   return "s3Invalid";
 }
