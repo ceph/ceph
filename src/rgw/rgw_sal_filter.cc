@@ -552,12 +552,13 @@ std::unique_ptr<LuaManager> FilterDriver::get_lua_manager(const std::string& lua
 
 std::unique_ptr<RGWRole> FilterDriver::get_role(std::string name,
 					      std::string tenant,
+					      rgw_account_id account_id,
 					      std::string path,
 					      std::string trust_policy,
 					      std::string max_session_duration_str,
                 std::multimap<std::string,std::string> tags)
 {
-  return next->get_role(name, tenant, path, trust_policy, max_session_duration_str, tags);
+  return next->get_role(name, tenant, std::move(account_id), path, trust_policy, max_session_duration_str, tags);
 }
 
 std::unique_ptr<RGWRole> FilterDriver::get_role(std::string id)

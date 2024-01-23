@@ -389,6 +389,7 @@ public:
   virtual std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					    std::string tenant,
+					    rgw_account_id account_id,
 					    std::string path="",
 					    std::string trust_policy="",
 					    std::string

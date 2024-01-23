@@ -3331,7 +3331,7 @@ int main(int argc, const char **argv)
   string tenant;
   string user_ns;
   string account_name;
-  string account_id;
+  rgw_account_id account_id;
   rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
@@ -6783,7 +6783,7 @@ int main(int argc, const char **argv)
         cerr << "failed to parse policy: " << e.what() << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, path,
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id, path,
                                                                  assume_role_doc, max_session_duration);
       ret = role->create(dpp(), true, "", null_yield);
       if (ret < 0) {
@@ -6799,7 +6799,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->delete_obj(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6813,7 +6813,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: empty role name" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6844,7 +6844,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6873,8 +6873,16 @@ int main(int argc, const char **argv)
         constexpr int32_t max_chunk = 100;
         int32_t count = std::min(max_chunk, remaining);
 
-        ret = driver->list_roles(dpp(), null_yield, tenant, path_prefix,
-                                 listing.next_marker, count, listing);
+        if (!account_id.empty()) {
+          // list roles in the account
+          ret = driver->list_account_roles(dpp(), null_yield, account_id,
+                                           path_prefix, listing.next_marker,
+                                           count, listing);
+        } else {
+          // list roles in the tenant
+          ret = driver->list_roles(dpp(), null_yield, tenant, path_prefix,
+                                   listing.next_marker, count, listing);
+        }
         if (ret < 0) {
           return -ret;
         }
@@ -6933,7 +6941,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6952,7 +6960,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: Role name is empty" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6972,7 +6980,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       int ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -6996,7 +7004,7 @@ int main(int argc, const char **argv)
         cerr << "ERROR: policy name is empty" << std::endl;
         return -EINVAL;
       }
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
@@ -7020,7 +7028,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant);
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id);
       ret = role->get(dpp(), null_yield);
       if (ret < 0) {
         return -ret;
