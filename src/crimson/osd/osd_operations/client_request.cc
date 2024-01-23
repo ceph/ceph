@@ -253,6 +253,31 @@ ClientRequest::process_pg_op(
 }
 
 ClientRequest::interruptible_future<>
+ClientRequest::recover_missing_snaps(
+  Ref<PG> pg,
+  instance_handle_t &ihref,
+  ObjectContextRef head,
+  std::set<snapid_t> &snaps)
+{
+  co_await ihref.enter_stage<interruptor>(
+    client_pp(*pg).recover_missing_snaps, *this);
+  for (auto &snap : snaps) {
+    auto coid = head->obs.oi.soid;
+    coid.snap = snap;
+    auto oid = resolve_oid(head->get_head_ss(), coid);
+    /* Rollback targets may legitimately not exist if, for instance,
+     * the object is an rbd block which happened to be sparse and
+     * therefore non-existent at the time of the specified snapshot.
+     * In such a case, rollback will simply delete the object.  Here,
+     * we skip the oid as there is no corresponding clone to recover.
+     * See https://tracker.ceph.com/issues/63821 */
+    if (oid) {
+      co_await do_recover_missing(pg, *oid, m->get_reqid());
+    }
+  }
+}
+
+ClientRequest::interruptible_future<>
 ClientRequest::process_op(
   instance_handle_t &ihref, Ref<PG> pg, unsigned this_instance_id)
 {
@@ -268,28 +293,13 @@ ClientRequest::process_op(
     co_await do_recover_missing(pg, m->get_hobj().get_head(), m->get_reqid());
     std::set<snapid_t> snaps = snaps_need_to_recover();
     if (!snaps.empty()) {
+      // call with_obc() in order, but wait concurrently for loading.
+      ihref.enter_stage_sync(
+          client_pp(*pg).recover_missing_lock_obc, *this);
       auto with_obc = pg->obc_loader.with_obc<RWState::RWREAD>(
         m->get_hobj().get_head(),
-        [&snaps, pg, this](auto head, auto) {
-        return InterruptibleOperation::interruptor::do_for_each(
-          snaps,
-          [head, pg, this](auto &snap)
-          -> InterruptibleOperation::template interruptible_future<> {
-          auto coid = head->obs.oi.soid;
-          coid.snap = snap;
-          auto oid = resolve_oid(head->get_head_ss(), coid);
-          /* Rollback targets may legitimately not exist if, for instance,
-           * the object is an rbd block which happened to be sparse and
-           * therefore non-existent at the time of the specified snapshot.
-           * In such a case, rollback will simply delete the object.  Here,
-           * we skip the oid as there is no corresponding clone to recover.
-           * See https://tracker.ceph.com/issues/63821 */
-          if (oid) {
-            return do_recover_missing(pg, *oid, m->get_reqid());
-          } else {
-            return seastar::now();
-          }
-        });
+        [&snaps, &ihref, pg, this](auto head, auto) {
+        return recover_missing_snaps(pg, ihref, head, snaps);
       }).handle_error_interruptible(
         crimson::ct_error::assert_all("unexpected error")
       );
