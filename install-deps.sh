@@ -177,6 +177,14 @@ function clean_boost_on_ubuntu {
     # so no need to spare it.
     if test -n "$installed_ver"; then
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y --fix-missing remove "ceph-libboost*"
+	# When an error occurs during `apt-get remove ceph-libboost*`, ceph-libboost* packages
+	# may be not removed, so use `dpkg` to force remove ceph-libboost*.
+	local ceph_libboost_pkgs=$(dpkg -l | grep ceph-libboost* | awk '{print $2}' |
+		                        awk -F: '{print $1}')
+	if test -n "$ceph_libboost_pkgs"; then
+	    ci_debug "Force remove ceph-libboost* packages $ceph_libboost_pkgs"
+	    $SUDO dpkg --purge --force-all $ceph_libboost_pkgs
+	fi
     fi
 }
 
