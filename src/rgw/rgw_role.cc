@@ -52,6 +52,7 @@ void RGWRoleInfo::dump(Formatter *f) const
   encode_json("CreateDate", creation_date, f);
   encode_json("MaxSessionDuration", max_session_duration, f);
   encode_json("AssumeRolePolicyDocument", trust_policy, f);
+  encode_json("AccountId", account_id, f);
   if (!perm_policy_map.empty()) {
     f->open_array_section("PermissionPolicies");
     for (const auto& it : perm_policy_map) {
@@ -83,6 +84,7 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("CreateDate", creation_date, obj);
   JSONDecoder::decode_json("MaxSessionDuration", max_session_duration, obj);
   JSONDecoder::decode_json("AssumeRolePolicyDocument", trust_policy, obj);
+  JSONDecoder::decode_json("AccountId", account_id, obj);
 
   auto tags_iter = obj->find_first("Tags");
   if (!tags_iter.end()) {
@@ -118,12 +120,14 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
 
 RGWRole::RGWRole(std::string name,
               std::string tenant,
+              rgw_account_id account_id,
               std::string path,
               std::string trust_policy,
               std::string max_session_duration_str,
               std::multimap<std::string,std::string> tags)
 {
   info.name = std::move(name);
+  info.account_id = std::move(account_id);
   info.path = std::move(path);
   info.trust_policy = std::move(trust_policy);
   info.tenant = std::move(tenant);
