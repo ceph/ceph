@@ -4395,6 +4395,7 @@ def test_ps_s3_multiple_topics_notification():
     conn.delete_bucket(bucket_name)
     http_server.close()
 
+
 @attr('basic_test')
 def test_ps_s3_topic_permissions():
     """ test s3 topic set/get/delete permissions """
@@ -4410,7 +4411,7 @@ def test_ps_s3_topic_permissions():
                 "Sid": "Statement",
                 "Effect": "Deny",
                 "Principal": "*",
-                "Action": ["sns:Publish", "sns:SetTopicAttributes", "sns:GetTopicAttributes"],
+                "Action": ["sns:Publish", "sns:SetTopicAttributes", "sns:GetTopicAttributes", "sns:DeleteTopic", "sns:CreateTopic"],
                 "Resource": f"arn:aws:sns:{zonegroup}::{topic_name}"
             }
         ]
@@ -4421,10 +4422,23 @@ def test_ps_s3_topic_permissions():
     topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args, policy_text=topic_policy)
     topic_arn = topic_conf.set_config()
 
-    # 2nd user tries to fetch the topic
     topic_conf2 = PSTopicS3(conn2, topic_name, zonegroup, endpoint_args=endpoint_args)
+    try:
+        # 2nd user tries to override the topic
+        topic_arn = topic_conf2.set_config()
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # 2nd user tries to fetch the topic
     _, status = topic_conf2.get_config(topic_arn=topic_arn)
     assert_equal(status, 403)
+
     try:
         # 2nd user tries to set the attribute
         status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
@@ -4455,6 +4469,18 @@ def test_ps_s3_topic_permissions():
     except Exception as err:
         print('unexpected error type: '+type(err).__name__)
 
+    try:
+        # 2nd user tries to delete the topic
+        status = topic_conf2.del_config(topic_arn=topic_arn)
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
     # Topic policy is now added by the 1st user to allow 2nd user.
     topic_policy  = topic_policy.replace("Deny", "Allow")
     topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args, policy_text=topic_policy)
@@ -4469,12 +4495,89 @@ def test_ps_s3_topic_permissions():
     s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
     _, status = s3_notification_conf2.set_config()
     assert_equal(status, 200)
+    # 2nd user tries to delete the topic again
+    status = topic_conf2.del_config(topic_arn=topic_arn)
+    assert_equal(status, 200)
+
+    # cleanup
+    s3_notification_conf2.del_config()
+    # delete the bucket
+    conn2.delete_bucket(bucket_name)
+
+
+@attr('basic_test')
+def test_ps_s3_topic_no_permissions():
+    """ test s3 topic set/get/delete permissions """
+    conn1 = connection()
+    conn2 = another_user()
+    zonegroup = 'default'
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name + TOPIC_SUFFIX
+    
+    # create s3 topic without policy
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(conn1, topic_name, zonegroup, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    topic_conf2 = PSTopicS3(conn2, topic_name, zonegroup, endpoint_args=endpoint_args)
+    try:
+        # 2nd user tries to override the topic
+        topic_arn = topic_conf2.set_config()
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # 2nd user tries to fetch the topic
+    _, status = topic_conf2.get_config(topic_arn=topic_arn)
+    assert_equal(status, 403)
+
+    try:
+        # 2nd user tries to set the attribute
+        status = topic_conf2.set_attributes(attribute_name="persistent", attribute_val="false", topic_arn=topic_arn)
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
+
+    # create bucket for conn2 publish notification to topic
+    # should be allowed based on the default value of rgw_topic_require_publish_policy=false
+    _ = conn2.create_bucket(bucket_name)
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name, 'TopicArn': topic_arn,
+                         'Events': []
+                       }]
+    s3_notification_conf2 = PSNotificationS3(conn2, bucket_name, topic_conf_list)
+    _, status = s3_notification_conf2.set_config()
+    assert_equal(status, 200)
+    
+    try:
+        # 2nd user tries to delete the topic
+        status = topic_conf2.del_config(topic_arn=topic_arn)
+        assert False, "'AccessDenied' error is expected"
+    except ClientError as err:
+        if 'Error' in err.response:
+            assert_equal(err.response['Error']['Code'], 'AccessDenied')
+        else:
+            assert_equal(err.response['Code'], 'AccessDenied')
+    except Exception as err:
+        print('unexpected error type: '+type(err).__name__)
 
     # cleanup
     s3_notification_conf2.del_config()
     topic_conf.del_config()
     # delete the bucket
     conn2.delete_bucket(bucket_name)
+
 
 def kafka_security(security_type, mechanism='PLAIN'):
     """ test pushing kafka s3 notification securly to master """
