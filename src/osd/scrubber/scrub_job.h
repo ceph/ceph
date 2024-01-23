@@ -38,6 +38,7 @@ enum class qu_state_t {
 struct scrub_schedule_t {
   utime_t scheduled_at{};
   utime_t deadline{0, 0};
+  utime_t not_before{utime_t::max()};
 };
 
 struct sched_params_t {
@@ -66,19 +67,17 @@ class ScrubJob final : public RefCountedObject {
 
   /**
    * the old 'is_registered'. Set whenever the job is registered with the OSD,
-   * i.e. is in either the 'to_scrub' or the 'penalized' vectors.
+   * i.e. is in 'to_scrub'.
    */
   std::atomic_bool in_queues{false};
 
-  /// last scrub attempt failed to secure replica resources
-  bool resources_failure{false};
+  /// how the last attempt to scrub this PG ended
+  delay_cause_t last_issue{delay_cause_t::none};
 
   /**
    * 'updated' is a temporary flag, used to create a barrier after
    * 'sched_time' and 'deadline' (or any other job entry) were modified by
    * different task.
-   * 'updated' also signals the need to move a job back from the penalized
-   * queue to the regular one.
    */
   std::atomic_bool updated{false};
 
@@ -89,15 +88,13 @@ class ScrubJob final : public RefCountedObject {
   bool blocked{false};
   utime_t blocked_since{};
 
-  utime_t penalty_timeout{0, 0};
-
   CephContext* cct;
 
   bool high_priority{false};
 
   ScrubJob(CephContext* cct, const spg_t& pg, int node_id);
 
-  utime_t get_sched_time() const { return schedule.scheduled_at; }
+  utime_t get_sched_time() const { return schedule.not_before; }
 
   static std::string_view qu_state_text(qu_state_t st);
 
@@ -111,7 +108,24 @@ class ScrubJob final : public RefCountedObject {
     return qu_state_text(state.load(std::memory_order_relaxed));
   }
 
-  void update_schedule(const scrub_schedule_t& adjusted);
+  /**
+   * 'reset_failure_penalty' is used to reset the 'not_before' jo attribute to
+   * the updated 'scheduled_at' time. This is used whenever the scrub-job
+   * schedule is updated, and the update is not a result of a scrub attempt
+   * failure.
+   */
+  void update_schedule(
+      const scrub_schedule_t& adjusted,
+      bool reset_failure_penalty);
+
+  /**
+   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
+   * would not be retried before 'delay' seconds have passed.
+   */
+  void delay_on_failure(
+      std::chrono::seconds delay,
+      delay_cause_t delay_cause,
+      utime_t scrub_clock_now);
 
   void dump(ceph::Formatter* f) const;
 
@@ -223,6 +237,20 @@ struct formatter<Scrub::qu_state_t> : formatter<std::string_view> {
 };
 
 template <>
+struct formatter<Scrub::sched_params_t> {
+  constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
+  template <typename FormatContext>
+  auto format(const Scrub::sched_params_t& pm, FormatContext& ctx)
+  {
+    return fmt::format_to(
+	ctx.out(), "(proposed:{:s} min/max:{:.3f}/{:.3f} must:{:2s})",
+        utime_t{pm.proposed_time}, pm.min_interval, pm.max_interval,
+        pm.is_must == Scrub::must_scrub_t::mandatory ? "true" : "false");
+  }
+};
+
+
+template <>
 struct formatter<Scrub::ScrubJob> {
   constexpr auto parse(format_parse_context& ctx) { return ctx.begin(); }
 
@@ -230,12 +258,9 @@ struct formatter<Scrub::ScrubJob> {
   auto format(const Scrub::ScrubJob& sjob, FormatContext& ctx)
   {
     return fmt::format_to(
-	ctx.out(),
-	"pg[{}] @ {:s} (dl:{:s}) - <{}> / failure: {} / pen. t.o.: {:s} / "
-	"queue "
-	"state: {:.7}",
-	sjob.pgid, sjob.schedule.scheduled_at, sjob.schedule.deadline,
-	sjob.registration_state(), sjob.resources_failure, sjob.penalty_timeout,
+	ctx.out(), "pg[{}] @ nb:{:s} ({:s}) (dl:{:s}) - <{}> queue state:{:.7}",
+	sjob.pgid, sjob.schedule.not_before, sjob.schedule.scheduled_at,
+	sjob.schedule.deadline, sjob.registration_state(),
 	sjob.state.load(std::memory_order_relaxed));
   }
 };

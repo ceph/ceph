@@ -30,7 +30,6 @@
 │                                        │
 │                                        │
 │  ScrubQContainer    to_scrub <>────────┼────────┐
-│  ScrubQContainer    penalized          │        │
 │                                        │        │
 │                                        │        │
 │  OSD_wide resource counters            │        │
@@ -146,11 +145,6 @@ class ScrubSchedListener {
  * the queue of PGs waiting to be scrubbed.
  * Main operations are scheduling/unscheduling a PG to be scrubbed at a certain
  * time.
- *
- * A "penalty" queue maintains those PGs that have failed to reserve the
- * resources of their replicas. The PGs in this list will be reinstated into the
- * scrub queue when all eligible PGs were already handled, or after a timeout
- * (or if their deadline has passed [[disabled at this time]]).
  */
 class ScrubQueue {
  public:
@@ -208,19 +202,29 @@ class ScrubQueue {
    *   the registration will be with "beginning of time" target, making the
    *   scrub-job eligible to immediate scrub (given that external conditions
    *   do not prevent scrubbing)
-   *
    * - 'must' is asserted, and the suggested time is 'now':
    *   This happens if our stats are unknown. The results are similar to the
    *   previous scenario.
-   *
    * - not a 'must': we take the suggested time as a basis, and add to it some
    *   configuration / random delays.
-   *
    *  ('must' is sched_params_t.is_must)
+   *
+   *  'reset_notbefore' is used to reset the 'not_before' time to the updated
+   *  'scheduled_at' time. This is used whenever the scrub-job schedule is
+   *  updated not as a result of a scrub attempt failure.
    *
    *  locking: not using the jobs_lock
    */
-  void update_job(Scrub::ScrubJobRef sjob, const sched_params_t& suggested);
+  void update_job(
+      Scrub::ScrubJobRef sjob,
+      const sched_params_t& suggested,
+      bool reset_notbefore);
+
+  void delay_on_failure(
+      Scrub::ScrubJobRef sjob,
+      std::chrono::seconds delay,
+      Scrub::delay_cause_t delay_cause,
+      utime_t now_is);
 
   sched_params_t determine_scrub_time(const requested_scrub_t& request_flags,
 				      const pg_info_t& pg_info,
@@ -282,8 +286,6 @@ class ScrubQueue {
   mutable ceph::mutex jobs_lock = ceph::make_mutex("ScrubQueue::jobs_lock");
 
   Scrub::ScrubQContainer to_scrub;   ///< scrub jobs (i.e. PGs) to scrub
-  Scrub::ScrubQContainer penalized;  ///< those that failed to reserve remote resources
-  bool restore_penalized{false};
 
   static inline constexpr auto registered_job = [](const auto& jobref) -> bool {
     return jobref->state == Scrub::qu_state_t::registered;
@@ -292,11 +294,6 @@ class ScrubQueue {
   static inline constexpr auto invalid_state = [](const auto& jobref) -> bool {
     return jobref->state == Scrub::qu_state_t::not_registered;
   };
-
-  /**
-   * Are there scrub jobs that should be reinstated?
-   */
-  void scan_penalized(bool forgive_all, utime_t time_now);
 
   /**
    * clear dead entries (unregistered, or belonging to removed PGs) from a
@@ -352,16 +349,6 @@ class ScrubQueue {
    */
   Scrub::scrub_schedule_t adjust_target_time(
     const Scrub::sched_params_t& recomputed_params) const;
-
-  /**
-   * Look for scrub jobs that have their 'resources_failure' set. These jobs
-   * have failed to acquire remote resources last time we've initiated a scrub
-   * session on them. They are now moved from the 'to_scrub' queue to the
-   * 'penalized' set.
-   *
-   * locking: called with job_lock held
-   */
-  void move_failed_pgs(utime_t now_is);
 
 protected: // used by the unit-tests
   /**

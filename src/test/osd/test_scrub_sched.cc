@@ -57,7 +57,6 @@ class ScrubSchedTestWrapper : public ScrubQueue {
   void rm_unregistered_jobs()
   {
     ScrubQueue::rm_unregistered_jobs(to_scrub);
-    ScrubQueue::rm_unregistered_jobs(penalized);
   }
 
   ScrubQContainer collect_ripe_jobs()

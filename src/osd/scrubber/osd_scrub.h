@@ -90,21 +90,23 @@ class OsdScrub {
    *   the registration will be with "beginning of time" target, making the
    *   scrub-job eligible to immediate scrub (given that external conditions
    *   do not prevent scrubbing)
-   *
    * - 'must' is asserted, and the suggested time is 'now':
    *   This happens if our stats are unknown. The results are similar to the
    *   previous scenario.
-   *
    * - not a 'must': we take the suggested time as a basis, and add to it some
    *   configuration / random delays.
-   *
    *  ('must' is Scrub::sched_params_t.is_must)
+   *
+   *  'reset_notbefore' is used to reset the 'not_before' time to the updated
+   *  'scheduled_at' time. This is used whenever the scrub-job schedule is
+   *  updated not as a result of a scrub attempt failure.
    *
    *  locking: not using the jobs_lock
    */
   void update_job(
       Scrub::ScrubJobRef sjob,
-      const Scrub::sched_params_t& suggested);
+      const Scrub::sched_params_t& suggested,
+      bool reset_notbefore);
 
   /**
    * Add the scrub job to the list of jobs (i.e. list of PGs) to be periodically
@@ -146,6 +148,17 @@ class OsdScrub {
   bool set_reserving_now(spg_t reserving_id, utime_t now_is);
 
   void clear_reserving_now(spg_t reserving_id);
+
+  /**
+   * push the 'not_before' time out by 'delay' seconds, so that this scrub target
+   * would not be retried before 'delay' seconds have passed.
+   */
+  void delay_on_failure(
+      Scrub::ScrubJobRef sjob,
+      std::chrono::seconds delay,
+      Scrub::delay_cause_t delay_cause,
+      utime_t now_is);
+
 
   /**
    * \returns true if the current time is within the scrub time window

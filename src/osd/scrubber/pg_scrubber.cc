@@ -547,7 +547,7 @@ void PgScrubber::update_scrub_job(const requested_scrub_t& request_flags)
     ceph_assert(m_pg->is_locked());
     auto suggested = m_osds->get_scrub_services().determine_scrub_time(
 	request_flags, m_pg->info, m_pg->get_pgpool().info.opts);
-    m_osds->get_scrub_services().update_job(m_scrub_job, suggested);
+    m_osds->get_scrub_services().update_job(m_scrub_job, suggested, true);
     m_pg->publish_stats_to_osd();
   }
 
@@ -715,10 +715,11 @@ void PgScrubber::on_operator_periodic_cmd(
   asok_response_section(f, true, scrub_level, stamp);
 
   if (scrub_level == scrub_level_t::deep) {
+    // this call sets both stamps
     m_pg->set_last_deep_scrub_stamp(stamp);
+  } else {
+    m_pg->set_last_scrub_stamp(stamp);
   }
-  // and in both cases:
-  m_pg->set_last_scrub_stamp(stamp);
 }
 
 // when asked to force a high-priority scrub
@@ -1755,7 +1756,9 @@ void PgScrubber::clear_scrub_blocked()
 
 void PgScrubber::flag_reservations_failure()
 {
-  m_scrub_job->resources_failure = true;
+  dout(10) << __func__ << dendl;
+  // delay the next invocation of the scrubber on this target
+  penalize_next_scrub(Scrub::delay_cause_t::replicas);
 }
 
 /*
@@ -1967,6 +1970,16 @@ void PgScrubber::scrub_finish()
   }
 }
 
+/*
+ * note: arbitrary delay used in this early version of the
+ * scheduler refactoring.
+ */
+void PgScrubber::penalize_next_scrub(Scrub::delay_cause_t cause)
+{
+  m_osds->get_scrub_services().delay_on_failure(
+      m_scrub_job, 5s, cause, ceph_clock_now());
+}
+
 void PgScrubber::on_digest_updates()
 {
   dout(10) << __func__ << " #pending: " << num_digest_updates_pending << " "
@@ -2126,7 +2139,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 		  !m_planned_scrub.must_deep_scrub;
 
   // are we ripe for scrubbing?
-  if (now_is > m_scrub_job->schedule.scheduled_at) {
+  if (now_is > m_scrub_job->schedule.not_before) {
     // we are waiting for our turn at the OSD.
     return pg_scrubbing_status_t{m_scrub_job->schedule.scheduled_at,
 				 0,
@@ -2136,7 +2149,7 @@ pg_scrubbing_status_t PgScrubber::get_schedule() const
 				 periodic};
   }
 
-  return pg_scrubbing_status_t{m_scrub_job->schedule.scheduled_at,
+  return pg_scrubbing_status_t{m_scrub_job->schedule.not_before,
 			       0,
 			       pg_scrub_sched_status_t::scheduled,
 			       false,
