@@ -358,12 +358,6 @@ class Driver {
                                     std::string_view email,
                                     rgw_owner& owner) = 0;
 
-    /** Load an account's role by name. */
-    virtual int load_account_role_by_name(const DoutPrefixProvider* dpp,
-                                          optional_yield y,
-                                          std::string_view account_id,
-                                          std::string_view name,
-                                          std::unique_ptr<RGWRole>* role) = 0;
     /** Count the number of roles belonging to the given account. */
     virtual int count_account_roles(const DoutPrefixProvider* dpp,
                                     optional_yield y,
