@@ -331,6 +331,7 @@ class RadosStore : public StoreDriver {
     std::unique_ptr<LuaManager> get_lua_manager(const std::string& luarocks_path) override;
     virtual std::unique_ptr<RGWRole> get_role(std::string name,
 					      std::string tenant,
+					      rgw_account_id account_id,
 					      std::string path="",
 					      std::string trust_policy="",
 					      std::string max_session_duration_str="",
@@ -1079,10 +1080,12 @@ class RadosRole : public RGWRole {
 public:
   RadosRole(RadosStore* _store, std::string name,
           std::string tenant,
+          rgw_account_id account_id,
           std::string path,
           std::string trust_policy,
           std::string max_session_duration,
-          std::multimap<std::string,std::string> tags) : RGWRole(name, tenant, path, trust_policy, max_session_duration, tags), store(_store) {}
+          std::multimap<std::string,std::string> tags)
+    : RGWRole(name, tenant, std::move(account_id), path, trust_policy, max_session_duration, tags), store(_store) {}
   RadosRole(RadosStore* _store, std::string id) : RGWRole(id), store(_store) {}
   RadosRole(RadosStore* _store, const RGWRoleInfo& info) : RGWRole(info), store(_store) {}
   RadosRole(RadosStore* _store) : store(_store) {}

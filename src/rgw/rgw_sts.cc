@@ -18,6 +18,7 @@
 #include "include/types.h"
 #include "rgw_string.h"
 
+#include "rgw_account.h"
 #include "rgw_b64.h"
 #include "rgw_common.h"
 #include "rgw_tools.h"
@@ -290,7 +291,15 @@ std::tuple<int, rgw::sal::RGWRole*> STSService::getRoleInfo(const DoutPrefixProv
   if (auto r_arn = rgw::ARN::parse(arn); r_arn) {
     auto pos = r_arn->resource.find_last_of('/');
     string roleName = r_arn->resource.substr(pos + 1);
-    std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(roleName, r_arn->account);
+    string tenant = r_arn->account;
+
+    rgw_account_id account;
+    if (rgw::account::validate_id(tenant)) {
+      account = std::move(tenant);
+      tenant.clear();
+    }
+
+    std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(roleName, tenant, account);
     if (int ret = role->get(dpp, y); ret < 0) {
       if (ret == -ENOENT) {
         ldpp_dout(dpp, 0) << "Role doesn't exist: " << roleName << dendl;
