@@ -103,14 +103,13 @@ seastar::future<> AlienStore::start()
   }
   auto cpu_cores = seastar::resource::parse_cpuset(
     get_conf<std::string>("crimson_alien_thread_cpu_cores"));
-  // cores except the first "N_CORES_FOR_SEASTAR" ones will
-  // be used for alien threads scheduling:
-  // 	[0, N_CORES_FOR_SEASTAR) are reserved for seastar reactors
-  // 	[N_CORES_FOR_SEASTAR, ..] are assigned to alien threads.
+  //  crimson_alien_thread_cpu_cores are assigned to alien threads.
   if (!cpu_cores.has_value()) {
+    // no core isolation by default, cores [0, seastar::smp::count)
+    // will be shared between both alien and seastar reactor threads.
     seastar::resource::cpuset cpuset;
-    std::copy(boost::counting_iterator<unsigned>(N_CORES_FOR_SEASTAR),
-	      boost::counting_iterator<unsigned>(sysconf(_SC_NPROCESSORS_ONLN)),
+    std::copy(boost::counting_iterator<unsigned>(0),
+	      boost::counting_iterator<unsigned>(seastar::smp::count - 1),
 	      std::inserter(cpuset, cpuset.end()));
     if (cpuset.empty()) {
       logger().error("{}: unable to get nproc: {}", __func__, errno);
