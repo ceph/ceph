@@ -95,6 +95,7 @@ class RedfishDellSystem(BaseRedfishSystem):
         fields = ['Description',
                   'CapacityBytes',
                   'Model', 'Protocol',
+                  'LocationIndicatorActive',
                   'SerialNumber', 'Status',
                   'PhysicalLocation']
         entities = self.get_members(data=self._system['Systems'],
