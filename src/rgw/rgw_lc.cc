@@ -219,13 +219,13 @@ void *RGWLC::LCWorker::entry() {
     std::unique_ptr<rgw::sal::Bucket> all_buckets; // empty restriction
     utime_t start = ceph_clock_now();
     if (should_work(start)) {
-      ldpp_dout(dpp, 2) << "life cycle: start" << dendl;
+      ldpp_dout(dpp, 2) << "life cycle: start worker=" << ix << dendl;
       int r = lc->process(this, all_buckets, false /* once */);
       if (r < 0) {
         ldpp_dout(dpp, 0) << "ERROR: do life cycle process() returned error r="
-			  << r << dendl;
+			  << r << " worker=" << ix << dendl;
       }
-      ldpp_dout(dpp, 2) << "life cycle: stop" << dendl;
+      ldpp_dout(dpp, 2) << "life cycle: stop worker=" << ix << dendl;
       cloud_targets.clear(); // clear cloud targets
     }
     if (lc->going_down())
@@ -236,8 +236,8 @@ void *RGWLC::LCWorker::entry() {
     utime_t next;
     next.set_from_double(end + secs);
 
-    ldpp_dout(dpp, 5) << "schedule life cycle next start time: "
-		      << rgw_to_asctime(next) << dendl;
+    ldpp_dout(dpp, 5) << "schedule life cycle next start time="
+		      << rgw_to_asctime(next) << " worker=" << ix << dendl;
 
     std::unique_lock l{lock};
     cond.wait_for(l, std::chrono::seconds(secs));
@@ -924,8 +924,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
        ++prefix_iter) {
 
     if (worker_should_stop(stop_at, once)) {
-      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
-		     << worker->ix
+      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+		     << worker->ix << " bucket=" << target->get_name()
 		     << dendl;
       return 0;
     }
@@ -956,8 +956,8 @@ int RGWLC::handle_multipart_expiration(rgw::sal::Bucket* target,
 
       if ((offset % 100) == 0) {
 	if (worker_should_stop(stop_at, once)) {
-	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
-			     << worker->ix
+	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+			     << worker->ix << " bucket=" << target->get_name()
 			     << dendl;
 	  return 0;
 	}
@@ -1643,7 +1643,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   string bucket_name = result[1];
   string bucket_marker = result[2];
 
-  ldpp_dout(this, 5) << "RGWLC::bucket_lc_process ENTER " << bucket_name << dendl;
+  ldpp_dout(this, 5) << "RGWLC::bucket_lc_process ENTER bucket=" << bucket_name << dendl;
   if (unlikely(cct->_conf->rgwlc_skip_bucket_step)) {
     return 0;
   }
@@ -1684,7 +1684,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   try {
       config.decode(iter);
     } catch (const buffer::error& e) {
-      ldpp_dout(this, 0) << __func__ <<  "() decode life cycle config failed"
+      ldpp_dout(this, 0) << __func__ <<  "() decode life cycle config failed bucket=" << bucket_name
 			 << dendl;
       return -1;
     }
@@ -1692,7 +1692,7 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
   /* fetch information for zone checks */
   rgw::sal::Zone* zone = driver->get_zone();
 
-  auto pf = [](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
+  auto pf = [&bucket_name](RGWLC::LCWorker* wk, WorkQ* wq, WorkItem& wi) {
     auto wt =
       boost::get<std::tuple<LCOpRule, rgw_bucket_dir_entry>>(wi);
     auto& [op_rule, o] = wt;
@@ -1704,7 +1704,8 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
     if (ret < 0) {
       ldpp_dout(wk->get_lc(), 20)
 	<< "ERROR: orule.process() returned ret=" << ret
-	<< "thread:" << wq->thr_name()
+	<< " thread=" << wq->thr_name()
+	<< " bucket=" << bucket_name
 	<< dendl;
     }
   };
@@ -1721,8 +1722,8 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       ++prefix_iter) {
 
     if (worker_should_stop(stop_at, once)) {
-      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
-		     << worker->ix
+      ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+		     << worker->ix << " bucket=" << bucket_name
 		     << dendl;
       return 0;
     }
@@ -1768,8 +1769,8 @@ int RGWLC::bucket_lc_process(string& shard_id, LCWorker* worker,
       worker->workpool->enqueue(WorkItem{t1});
       if ((offset % 100) == 0) {
 	if (worker_should_stop(stop_at, once)) {
-	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker "
-			     << worker->ix
+	  ldpp_dout(this, 5) << __func__ << " interval budget EXPIRED worker="
+			     << worker->ix << " bucket=" << bucket_name
 			     << dendl;
 	  return 0;
 	}
@@ -1861,7 +1862,7 @@ int RGWLC::bucket_lc_post(int index, int max_lock_sec,
 
     ret = sal_lc->set_entry(obj_names[index],  entry);
     if (ret < 0) {
-      ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
+      ldpp_dout(this, 0) << "RGWLC::bucket_lc_post() failed to set entry on "
           << obj_names[index] << dendl;
     }
 clean:
@@ -2024,7 +2025,7 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
   ret = serializer->try_lock(this, time, null_yield);
   if (ret == -EBUSY || ret == -EEXIST) {
     /* already locked by another lc processor */
-    ldpp_dout(this, 0) << "RGWLC::process() failed to acquire lock on "
+    ldpp_dout(this, 0) << "RGWLC::process_bucket() failed to acquire lock on "
 		       << obj_names[index] << dendl;
     return -EBUSY;
   }
@@ -2077,6 +2078,8 @@ int RGWLC::process_bucket(int index, int max_lock_secs, LCWorker* worker,
 
   lock.unlock();
   ret = bucket_lc_process(entry->get_bucket(), worker, thread_stop_at(), once);
+  ldpp_dout(this, 5) << "RGWLC::process_bucket(): END entry 2: " << entry
+    << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
   bucket_lc_post(index, max_lock_secs, *entry, ret, worker);
 
   return ret;
@@ -2266,7 +2269,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  if (head->get_marker().empty()) {
 	    ldpp_dout(this, 5) <<
 	      "RGWLC::process() cycle finished lc_shard="
-			       << lc_shard
+			       << lc_shard << " worker=" << worker->ix
 			       << dendl;
 	    head->set_shard_rollover_date(ceph_clock_now());
 	    ret = sal_lc->put_head(lc_shard, *head.get());
@@ -2286,14 +2289,14 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
 	  if (advance_head(lc_shard, *head.get(), *entry.get(), now) < 0) {
 	    goto exit;
 	  }
-	  ldpp_dout(this, 5) << "RGWLC::process() worker ix; " << worker->ix
+	  ldpp_dout(this, 5) << "RGWLC::process() worker ix: " << worker->ix
 			     << " SKIP processing for already-processed bucket " << entry->get_bucket()
 			     << dendl;
 	  /* done with this shard */
 	  if (head->get_marker().empty()) {
 	    ldpp_dout(this, 5) <<
 	      "RGWLC::process() cycle finished lc_shard="
-			       << lc_shard
+			       << lc_shard << " worker=" << worker->ix
 			       << dendl;
 	    head->set_shard_rollover_date(ceph_clock_now());
 	    ret = sal_lc->put_head(lc_shard, *head.get());
@@ -2346,6 +2349,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
      * bucket is being processed */
     lock->unlock();
     ret = bucket_lc_process(entry->get_bucket(), worker, thread_stop_at(), once);
+    ldpp_dout(this, 5) << "RGWLC::process(): END entry 2: " << entry
+      << " index: " << index << " worker ix: " << worker->ix << " ret: " << ret << dendl;
 
     /* postamble */
     //bucket_lc_post(index, max_lock_secs, entry, ret, worker);
@@ -2375,8 +2380,8 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
       }
       ret = sal_lc->set_entry(lc_shard, *entry);
       if (ret < 0) {
-        ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on "
-                           << lc_shard
+        ldpp_dout(this, 0) << "RGWLC::process() failed to set entry on lc_shard="
+                           << lc_shard << " entry=" << entry
                            << dendl;
         /* fatal, locked */
         goto exit;
@@ -2387,7 +2392,7 @@ int RGWLC::process(int index, int max_lock_secs, LCWorker* worker,
     if (head->get_marker().empty()) {
       ldpp_dout(this, 5) <<
 	"RGWLC::process() cycle finished lc_shard="
-			 << lc_shard
+			 << lc_shard << " worker=" << worker->ix
 			 << dendl;
       head->set_shard_rollover_date(ceph_clock_now());
       ret = sal_lc->put_head(lc_shard,  *head.get());
