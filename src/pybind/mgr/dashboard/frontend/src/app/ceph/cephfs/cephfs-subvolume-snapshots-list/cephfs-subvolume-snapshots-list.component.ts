@@ -20,6 +20,12 @@ import { NgbModalRef } from '@ng-bootstrap/ng-bootstrap';
 import { CriticalConfirmationModalComponent } from '~/app/shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
+import { FormModalComponent } from '~/app/shared/components/form-modal/form-modal.component';
+import { NotificationService } from '~/app/shared/services/notification.service';
+import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import moment from 'moment';
+import { Validators } from '@angular/forms';
+import { CdValidators } from '~/app/shared/forms/cd-validators';
 
 @Component({
   selector: 'cd-cephfs-subvolume-snapshots-list',
@@ -59,7 +65,8 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
     private modalService: ModalService,
     private authStorageService: AuthStorageService,
     private cdDatePipe: CdDatePipe,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    private notificationService: NotificationService
   ) {
     this.permissions = this.authStorageService.getPermissions();
   }
@@ -99,9 +106,17 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
         click: () => this.openModal()
       },
       {
-        name: this.actionLabels.REMOVE,
+        name: this.actionLabels.CLONE,
+        permission: 'create',
+        icon: Icons.clone,
+        disable: () => !this.selection.hasSingleSelection,
+        click: () => this.cloneModal()
+      },
+      {
+        name: this.actionLabels.DELETE,
         permission: 'delete',
         icon: Icons.destroy,
+        disable: () => !this.selection.hasSingleSelection,
         click: () => this.deleteSnapshot()
       }
     ];
@@ -209,7 +224,7 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
     const subVolumeGroupName = this.activeGroupName;
     const fsName = this.fsName;
     this.modalRef = this.modalService.show(CriticalConfirmationModalComponent, {
-      actionDescription: 'Remove',
+      actionDescription: 'Delete',
       itemNames: [snapshotName],
       itemDescription: 'Snapshot',
       submitAction: () =>
@@ -232,6 +247,65 @@ export class CephfsSubvolumeSnapshotsListComponent implements OnInit, OnChanges 
             complete: () => this.modalRef.close(),
             error: () => this.modalRef.componentInstance.stopLoadingSpinner()
           })
+    });
+  }
+
+  cloneModal() {
+    const cloneName = `clone_${moment().toISOString(true)}`;
+    const allGroups = Array.from(this.subvolumeGroupList).map((group) => {
+      return { value: group, text: group === '' ? '_nogroup' : group };
+    });
+    this.modalService.show(FormModalComponent, {
+      titleText: $localize`Create clone`,
+      fields: [
+        {
+          type: 'text',
+          name: 'cloneName',
+          value: cloneName,
+          label: $localize`Name`,
+          validators: [Validators.required, Validators.pattern(/^[.A-Za-z0-9_+:-]+$/)],
+          asyncValidators: [
+            CdValidators.unique(
+              this.cephfsSubvolumeService.exists,
+              this.cephfsSubvolumeService,
+              null,
+              null,
+              this.fsName
+            )
+          ],
+          required: true,
+          errors: {
+            pattern: $localize`Allowed characters are letters, numbers, '.', '-', '+', ':' or '_'`
+          }
+        },
+        {
+          type: 'select',
+          name: 'groupName',
+          value: this.activeGroupName,
+          label: $localize`Group Name`,
+          typeConfig: {
+            options: allGroups
+          }
+        }
+      ],
+      submitButtonText: $localize`Create Clone`,
+      onSubmit: (value: any) => {
+        this.cephfsSubvolumeService
+          .createSnapshotClone(
+            this.fsName,
+            this.activeSubVolumeName,
+            this.selection.first().name,
+            value.cloneName,
+            this.activeGroupName,
+            value.groupName
+          )
+          .subscribe(() =>
+            this.notificationService.show(
+              NotificationType.success,
+              $localize`Created Clone "${value.cloneName}" successfully.`
+            )
+          );
+      }
     });
   }
 }

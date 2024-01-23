@@ -171,4 +171,26 @@ export class CephfsSubvolumeService {
       observe: 'response'
     });
   }
+
+  createSnapshotClone(
+    fsName: string,
+    subVolumeName: string,
+    snapshotName: string,
+    cloneName: string,
+    groupName = '',
+    targetGroupName = ''
+  ) {
+    return this.http.post(
+      `${this.baseURL}/snapshot/clone`,
+      {
+        vol_name: fsName,
+        subvol_name: subVolumeName,
+        snap_name: snapshotName,
+        clone_name: cloneName,
+        group_name: groupName,
+        target_group_name: targetGroupName
+      },
+      { observe: 'response' }
+    );
+  }
 }
