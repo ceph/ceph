@@ -1666,6 +1666,12 @@ fi
 
 if [ "$ceph_osd" == "crimson-osd" ]; then
     $CEPH_BIN/ceph -c $conf_fn config set osd crimson_seastar_smp $crimson_smp
+    if [ "$(expr $(nproc) - 1)" -gt "$(($CEPH_NUM_OSD * crimson_smp))" ]; then
+      echo "crimson_alien_thread_cpu_cores:" $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+      $CEPH_BIN/ceph -c $conf_fn config set osd crimson_alien_thread_cpu_cores $(($CEPH_NUM_OSD * crimson_smp))-"$(expr $(nproc) - 1)"
+    else
+      echo "No alien thread cpu core isolation"
+    fi
 fi
 
 if [ $CEPH_NUM_MGR -gt 0 ]; then
