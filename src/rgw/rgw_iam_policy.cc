@@ -558,10 +558,11 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
 	a->account = pp->tenant;
       (w->id == TokenID::Resource ? t->resource : t->notresource)
 	.emplace(std::move(*a));
-    }
-    else
+    } else {
       ldout(cct, 0) << "Supplied resource is discarded: " << string(s, l)
 		    << dendl;
+      return false;
+    }
   } else if (w->kind == TokenKind::cond_key) {
     auto& t = pp->policy.statements.back();
     if (l > 0 && *s == '$') {
@@ -1022,23 +1023,29 @@ ostream& operator <<(ostream& m, const Condition& c) {
 
 Effect Statement::eval(const Environment& e,
 		       boost::optional<const rgw::auth::Identity&> ida,
-		       uint64_t act, const ARN& res, boost::optional<PolicyPrincipal&> princ_type) const {
+		       uint64_t act, boost::optional<const ARN&> res, boost::optional<PolicyPrincipal&> princ_type) const {
 
   if (eval_principal(e, ida, princ_type) == Effect::Deny) {
     return Effect::Pass;
   }
 
-  if (!resource.empty()) {
+  if (res && resource.empty() && notresource.empty()) {
+    return Effect::Pass;
+  }
+  if (!res && (!resource.empty() || !notresource.empty())) {
+    return Effect::Pass;
+  }
+  if (!resource.empty() && res) {
     if (!std::any_of(resource.begin(), resource.end(),
           [&res](const ARN& pattern) {
-            return pattern.match(res);
+            return pattern.match(*res);
           })) {
       return Effect::Pass;
     }
-  } else if (!notresource.empty()) {
+  } else if (!notresource.empty() && res) {
     if (std::any_of(notresource.begin(), notresource.end(),
           [&res](const ARN& pattern) {
-            return pattern.match(res);
+            return pattern.match(*res);
           })) {
       return Effect::Pass;
     }
@@ -1470,7 +1477,7 @@ Policy::Policy(CephContext* cct, const string& tenant,
 
 Effect Policy::eval(const Environment& e,
 		    boost::optional<const rgw::auth::Identity&> ida,
-		    std::uint64_t action, const ARN& resource,
+		    std::uint64_t action, boost::optional<const ARN&> resource,
         boost::optional<PolicyPrincipal&> princ_type) const {
   auto allowed = false;
   for (auto& s : statements) {

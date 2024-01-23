@@ -524,7 +524,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
   try {
     const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl);
     if (!s->principal_tags.empty()) {
-      auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, rgw::ARN());
+      auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
       if (res != rgw::IAM::Effect::Allow) {
         ldout(s->cct, 0) << "evaluating policy for stsTagSession returned deny/pass" << dendl;
         return -EPERM;
@@ -537,7 +537,7 @@ int RGWREST_STS::verify_permission(optional_yield y)
       op = rgw::IAM::stsAssumeRole;
     }
 
-    auto res = p.eval(s->env, *s->auth.identity, op, rgw::ARN());
+    auto res = p.eval(s->env, *s->auth.identity, op, boost::none);
     if (res != rgw::IAM::Effect::Allow) {
       ldout(s->cct, 0) << "evaluating policy for op: " << op << " returned deny/pass" << dendl;
       return -EPERM;
