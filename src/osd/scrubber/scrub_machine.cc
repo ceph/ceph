@@ -230,7 +230,9 @@ ReservingReplicas::ReservingReplicas(my_context ctx)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
 
   // initiate the reservation process
-  session.m_reservations.emplace(*scrbr, *session.m_perf_set);
+  session.m_reservations.emplace(
+      *scrbr, context<PrimaryActive>().last_request_sent_nonce,
+      *session.m_perf_set);
 
   if (session.m_reservations->get_last_sent()) {
     // the 1'st reservation request was sent
@@ -263,9 +265,9 @@ sc::result ReservingReplicas::react(const ReplicaGrant& ev)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "ReservingReplicas::react(const ReplicaGrant&)" << dendl;
+  const auto& m = ev.m_op->get_req<MOSDScrubReserve>();
 
-  if (context<Session>().m_reservations->handle_reserve_grant(
-	  ev.m_op, ev.m_from)) {
+  if (context<Session>().m_reservations->handle_reserve_grant(*m, ev.m_from)) {
     // we are done with the reservation process
     return transit<ActiveScrubbing>();
   }
@@ -277,13 +279,21 @@ sc::result ReservingReplicas::react(const ReplicaReject& ev)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   auto& session = context<Session>();
   dout(10) << "ReservingReplicas::react(const ReplicaReject&)" << dendl;
-  session.m_reservations->log_failure_and_duration(scrbcnt_resrv_rejected);
+  const auto m = ev.m_op->get_req<MOSDScrubReserve>();
 
-  // manipulate the 'next to reserve' iterator to exclude
-  // the rejecting replica from the set of replicas requiring release
-  session.m_reservations->verify_rejections_source(ev.m_op, ev.m_from);
+  // Verify that the message is from the replica we were expecting a reply from,
+  // and that the message is not stale. If all is well - this is a real rejection:
+  // - log required details;
+  // - manipulate the 'next to reserve' iterator to exclude
+  //   the rejecting replica from the set of replicas requiring release
+  if (!session.m_reservations->handle_reserve_rejection(*m, ev.m_from)) {
+    // stale or unexpected
+    return discard_event();
+  }
 
-  // set 'reservation failure' as the scrub termination cause (affecting
+  // The rejection was carrying the correct reservation_nonce. It was
+  // logged by handle_reserve_rejection().
+  // Set 'reservation failure' as the scrub termination cause (affecting
   // the rescheduling of this PG)
   scrbr->flag_reservations_failure();
 
@@ -777,7 +787,13 @@ ReplicaActive::~ReplicaActive()
 void ReplicaActive::on_reserve_req(const ReplicaReserveReq& ev)
 {
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
-  dout(10) << "ReplicaActive::on_reserve_req()" << dendl;
+  const auto m = ev.m_op->get_req<MOSDScrubReserve>();
+  const auto msg_nonce = m->reservation_nonce;
+  dout(10)
+      << fmt::format(
+	     "ReplicaActive::on_reserve_req() from {} (reservation_nonce:{})",
+	     ev.m_from, msg_nonce)
+      << dendl;
 
   if (reserved_by_my_primary) {
     dout(10) << "ReplicaActive::on_reserve_req(): already reserved" << dendl;
@@ -797,7 +813,7 @@ void ReplicaActive::on_reserve_req(const ReplicaReserveReq& ev)
 
   Message* reply = new MOSDScrubReserve(
       spg_t(pg_id.pgid, m_pg->get_primary().shard), ev.m_op->sent_epoch, ret.op,
-      m_pg->pg_whoami);
+      m_pg->pg_whoami, msg_nonce);
   m_osds->send_message_osd_cluster(reply, ev.m_op->get_req()->get_connection());
 }
 

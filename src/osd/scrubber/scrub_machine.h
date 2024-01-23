@@ -440,6 +440,22 @@ struct PrimaryActive : sc::state<PrimaryActive, ScrubMachine, PrimaryIdle>,
   using reactions = mpl::list<
       // when the interval ends - we may not be a primary anymore
       sc::transition<IntervalChanged, NotActive>>;
+
+ /**
+  * Identifies a specific reservation request.
+  * The primary is permitted to cancel outstanding reservation requests without
+  * waiting for the pending response from the replica.  Thus, we may, in general,
+  * see responses from prior reservation attempts that we need to ignore.  Each
+  * reservation request is therefore associated with a nonce incremented within
+  * an interval with each reservation request.  Any response with a non-matching
+  * nonce must be from a reservation request we canceled.  Note that this check
+  * occurs after validating that the message is from the current interval, so
+  * reusing nonces between intervals is safe.
+  *
+  * 0 is a special value used to indicate that the sender did not include a nonce due
+  * to not being a sufficiently recent version.
+  */
+  reservation_nonce_t last_request_sent_nonce{1};
 };
 
 /**
