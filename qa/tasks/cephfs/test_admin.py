@@ -9,7 +9,7 @@ from os.path import join as os_path_join
 from teuthology.orchestra.run import Raw
 from teuthology.exceptions import CommandFailedError
 
-from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from tasks.cephfs.cephfs_test_case import CephFSTestCase, classhook
 from tasks.cephfs.filesystem import FileLayout, FSMissing
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.caps_helper import CapsHelper
@@ -38,6 +38,33 @@ class TestAdminCommands(CephFSTestCase):
         if overwrites:
             self.fs.mon_manager.raw_cluster_cmd('osd', 'pool', 'set', n+"-data", 'allow_ec_overwrites', 'true')
 
+@classhook('_add_valid_tell')
+class TestValidTell(TestAdminCommands):
+    @classmethod
+    def _add_valid_tell(cls):
+        tells = [
+          ['cache', 'status'],
+          ['damage', 'ls'],
+          ['dump_blocked_ops'],
+          ['dump_historic_ops'],
+          ['dump_historic_ops_by_duration'],
+          ['dump_mempools'],
+          ['dump_ops_in_flight'],
+          ['flush', 'journal'],
+          ['get', 'subtrees'],
+          ['ops', 'locks'],
+          ['ops'],
+          ['status'],
+          ['version'],
+        ]
+        def test(c):
+            def f(self):
+                J = self.fs.rank_tell(c)
+                json.dumps(J)
+                log.debug("dumped:\n%s", str(J))
+            return f
+        for c in tells:
+            setattr(cls, 'test_valid_' + '_'.join(c), test(c))
 
 class TestFsStatus(TestAdminCommands):
     """

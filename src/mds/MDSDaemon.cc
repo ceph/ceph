@@ -259,7 +259,9 @@ void MDSDaemon::set_up_admin_socket()
   r = admin_socket->register_command("dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("ops", asok_hook,
+  r = admin_socket->register_command("ops "
+				     "name=flags,type=CephChoices,strings=locks,n=N,req=false ",
+                                     asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump_blocked_ops",

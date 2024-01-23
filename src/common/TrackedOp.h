@@ -15,6 +15,7 @@
 #define TRACKEDREQUEST_H_
 
 #include <atomic>
+#include "common/StackStringStream.h"
 #include "common/ceph_mutex.h"
 #include "common/histogram.h"
 #include "common/Thread.h"
@@ -110,6 +111,8 @@ class OpTracker {
   ceph::shared_mutex lock = ceph::make_shared_mutex("OpTracker::lock");
 
 public:
+  using dumper = std::function<void(const TrackedOp&, Formatter*)>;
+
   CephContext *cct;
   OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards);
       
@@ -129,7 +132,8 @@ public:
   void set_tracking(bool enable) {
     tracking_enabled = enable;
   }
-  bool dump_ops_in_flight(ceph::Formatter *f, bool print_only_blocked = false, std::set<std::string> filters = {""});
+  static void default_dumper(const TrackedOp& op, Formatter* f);
+  bool dump_ops_in_flight(ceph::Formatter *f, bool print_only_blocked = false, std::set<std::string> filters = {""}, dumper lambda = default_dumper);
   bool dump_historic_ops(ceph::Formatter *f, bool by_duration = false, std::set<std::string> filters = {""});
   bool dump_historic_slow_ops(ceph::Formatter *f, std::set<std::string> filters = {""});
   bool register_inflight_op(TrackedOp *i);
@@ -259,10 +263,6 @@ protected:
   };
   std::atomic<int> state = {STATE_UNTRACKED};
 
-  mutable std::string desc_str;   ///< protected by lock
-  mutable const char *desc = nullptr;  ///< readable without lock
-  mutable std::atomic<bool> want_new_desc = {false};
-
   TrackedOp(OpTracker *_tracker, const utime_t& initiated) :
     tracker(_tracker),
     initiated_at(initiated)
@@ -275,7 +275,7 @@ protected:
   /// if you want something else to happen when events are marked, implement
   virtual void _event_marked() {}
   /// return a unique descriptor of the Op; eg the message it's attached to
-  virtual void _dump_op_descriptor_unlocked(std::ostream& stream) const = 0;
+  virtual void _dump_op_descriptor(std::ostream& stream) const = 0;
   /// called when the last non-OpTracker reference is dropped
   virtual void _unregistered() {}
 
@@ -327,24 +327,39 @@ public:
     }
   }
 
-  const char *get_desc() const {
-    if (!desc || want_new_desc.load()) {
-      std::lock_guard l(lock);
-      _gen_desc();
+  std::string get_desc() const {
+    std::string ret;
+    {
+      std::lock_guard l(desc_lock);
+      ret = desc;
     }
-    return desc;
+    if (ret.size() == 0 || want_new_desc.load()) {
+      CachedStackStringStream css;
+      std::scoped_lock l(lock, desc_lock);
+      if (desc.size() && !want_new_desc.load()) {
+        return desc;
+      }
+      _dump_op_descriptor(*css);
+      desc = css->strv();
+      want_new_desc = false;
+      return desc;
+    } else {
+      return ret;
+    }
   }
+
 private:
-  void _gen_desc() const {
-    std::ostringstream ss;
-    _dump_op_descriptor_unlocked(ss);
-    desc_str = ss.str();
-    desc = desc_str.c_str();
-    want_new_desc = false;
-  }
+  mutable ceph::mutex desc_lock = ceph::make_mutex("OpTracker::desc_lock");
+  mutable std::string desc;   ///< protected by desc_lock
+  mutable std::atomic<bool> want_new_desc = {false};
+
 public:
   void reset_desc() {
     want_new_desc = true;
+  }
+
+  void dump_type(Formatter* f) const {
+    return _dump(f);
   }
 
   const utime_t& get_initiated() const {
@@ -365,12 +380,12 @@ public:
     warn_interval_multiplier = 0;
   }
 
-  virtual std::string_view state_string() const {
+  std::string state_string() const {
     std::lock_guard l(lock);
-    return events.empty() ? std::string_view() : std::string_view(events.rbegin()->str);
+    return _get_state_string();
   }
 
-  void dump(utime_t now, ceph::Formatter *f) const;
+  void dump(utime_t now, ceph::Formatter *f, OpTracker::dumper lambda) const;
 
   void tracking_start() {
     if (tracker->register_inflight_op(this)) {
@@ -387,7 +402,15 @@ public:
   friend void intrusive_ptr_release(TrackedOp *o) {
     o->put();
   }
+
+protected:
+  virtual std::string _get_state_string() const {
+    return events.empty() ? std::string() : std::string(events.rbegin()->str);
+  }
 };
 
+inline void OpTracker::default_dumper(const TrackedOp& op, Formatter* f) {
+  op._dump(f);
+}
 
 #endif

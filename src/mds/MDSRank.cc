@@ -38,6 +38,7 @@
 #include "mon/MonClient.h"
 #include "common/HeartbeatMap.h"
 #include "ScrubStack.h"
+#include "Mutation.h"
 
 
 #include "MDSRank.h"
@@ -2617,9 +2618,29 @@ void MDSRankDispatcher::handle_asok_command(
   int r = 0;
   CachedStackStringStream css;
   bufferlist outbl;
-  if (command == "dump_ops_in_flight" ||
-      command == "ops") {
+  dout(10) << __func__ << ": " << command << dendl;
+  if (command == "dump_ops_in_flight") {
     if (!op_tracker.dump_ops_in_flight(f)) {
+      *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
+    }
+  } else if (command == "ops") {
+    vector<string> flags;
+    cmd_getval(cmdmap, "flags", flags);
+    std::unique_lock l(mds_lock, std::defer_lock);
+    auto lambda = OpTracker::default_dumper;
+    if (flags.size()) {
+      /* use std::function if we actually want to capture flags someday */
+      lambda = [](const TrackedOp& op, Formatter* f) {
+        auto* req = dynamic_cast<const MDRequestImpl*>(&op);
+        if (req) {
+          req->dump_with_mds_lock(f);
+        } else {
+          op.dump_type(f);
+        }
+      };
+      l.lock();
+    }
+    if (!op_tracker.dump_ops_in_flight(f, false, {""}, lambda)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
   } else if (command == "dump_blocked_ops") {
