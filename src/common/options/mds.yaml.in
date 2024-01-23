@@ -1156,6 +1156,24 @@ options:
   services:
   - mds
   with_legacy: true
+# Max number of slow ops to track
+- name: mds_op_history_slow_op_size
+  type: uint
+  level: advanced
+  desc: maximum size for list of historical slow operations
+  default: 20
+  services:
+  - mds
+  with_legacy: true
+# Track the op if over this threshold
+- name: mds_op_history_slow_op_threshold
+  type: uint
+  level: advanced
+  desc: track the op if over this threshold
+  default: 10
+  services:
+  - mds
+  with_legacy: true
 # how many seconds old makes an op complaint-worthy
 - name: mds_op_complaint_time
   type: float
