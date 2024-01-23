@@ -206,11 +206,6 @@ public:
                           optional_yield y,
                           std::string_view email,
                           rgw_owner& owner) override;
-  int load_account_role_by_name(const DoutPrefixProvider* dpp,
-                                optional_yield y,
-                                std::string_view account_id,
-                                std::string_view name,
-                                std::unique_ptr<RGWRole>* role) override;
   int count_account_roles(const DoutPrefixProvider* dpp,
                           optional_yield y,
                           std::string_view account_id,
