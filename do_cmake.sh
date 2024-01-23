@@ -74,7 +74,7 @@ for i in $(seq 20 -1 11); do
   fi
 done
 ARGS+=" -DCMAKE_CXX_COMPILER=$cxx_compiler"
-ARGS+=" -DCMAKE_C_COMPILER=$c_compiler"
+ARGS+=" -DCMAKE_C_COMPILER=$c_compiler --trace-expand"
 
 mkdir $BUILD_DIR
 cd $BUILD_DIR

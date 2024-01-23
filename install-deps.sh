@@ -11,7 +11,7 @@
 #  License as published by the Free Software Foundation; either
 #  version 2.1 of the License, or (at your option) any later version.
 #
-set -e
+set -ex
 
 if ! [ "${_SOURCED_LIB_BUILD}" = 1 ]; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -461,7 +461,10 @@ else
                 ;;
             *Jammy*)
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu jammy
-                $SUDO apt-get install -y gcc
+		dpkg -l | grep libisl
+		dpkg -l | grep san
+		dpkg -l | grep gcc
+                $SUDO apt-get install -f -y gcc
                 ;;
             *)
                 $SUDO apt-get install -y gcc
