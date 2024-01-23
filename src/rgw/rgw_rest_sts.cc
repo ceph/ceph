@@ -21,6 +21,7 @@
 #include "common/ceph_json.h"
 
 #include "rgw_rest.h"
+#include "rgw_account.h"
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
 #include "jwt-cpp/jwt.h"
@@ -496,14 +497,21 @@ WebTokenEngine::authenticate( const DoutPrefixProvider* dpp,
       string role_arn = s->info.args.get("RoleArn");
       string role_tenant = get_role_tenant(role_arn);
       string role_name = get_role_name(role_arn);
-      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, role_tenant);
+
+      rgw_account_id role_account;
+      if (rgw::account::validate_id(role_tenant)) {
+        role_account = std::move(role_tenant);
+        role_tenant.clear();
+      }
+
+      std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, role_tenant, role_account);
       int ret = role->get(dpp, y);
       if (ret < 0) {
         ldpp_dout(dpp, 0) << "Role not found: name:" << role_name << " tenant: " << role_tenant << dendl;
         return result_t::deny(-EACCES);
       }
       boost::optional<multimap<string,string>> role_tags = role->get_tags();
-      auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role_tenant, *t, role_tags, princ_tags);
+      auto apl = apl_factory->create_apl_web_identity(cct, s, role_session, role->get_tenant(), *t, role_tags, princ_tags);
       return result_t::grant(std::move(apl));
     }
     return result_t::deny(-EACCES);

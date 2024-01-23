@@ -113,33 +113,58 @@ static int load_role(const DoutPrefixProvider* dpp, optional_yield y,
                      std::unique_ptr<rgw::sal::RGWRole>& role,
                      rgw::ARN& resource, std::string& message)
 {
+  auto arn_account = std::ref(tenant);
   if (const auto* id = std::get_if<rgw_account_id>(&owner); id) {
     account_id = *id;
-
-    // look up account role by RoleName
-    int r = driver->load_account_role_by_name(dpp, y, account_id, name, &role);
-    if (r == -ENOENT) {
-      message = "No such RoleName in the account";
-      return -ERR_NO_ROLE_FOUND;
-    }
-    if (r >= 0) {
-      resource = make_role_arn(role->get_path(), role->get_name(), account_id);
-    }
-    return r;
+    arn_account = std::ref(account_id);
   }
 
-  role = driver->get_role(name, tenant);
+  role = driver->get_role(name, tenant, account_id);
   const int r = role->get(dpp, y);
   if (r == -ENOENT) {
     message = "No such RoleName in the tenant";
     return -ERR_NO_ROLE_FOUND;
   }
   if (r >= 0) {
+    // construct the ARN once we know the path
     resource = make_role_arn(role->get_path(),
                              role->get_name(),
-                             role->get_tenant());
+                             arn_account);
   }
   return r;
+}
+
+// check the current role count against account limit
+int check_role_limit(const DoutPrefixProvider* dpp, optional_yield y,
+                     rgw::sal::Driver* driver, std::string_view account_id,
+                     std::string& err)
+{
+  RGWAccountInfo account;
+  rgw::sal::Attrs attrs; // unused
+  RGWObjVersionTracker objv; // unused
+  int r = driver->load_account_by_id(dpp, y, account_id, account, attrs, objv);
+  if (r < 0) {
+    ldpp_dout(dpp, 4) << "failed to load iam account "
+        << account_id << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if (account.max_roles < 0) { // max_roles < 0 means unlimited
+    return 0;
+  }
+
+  uint32_t count = 0;
+  r = driver->count_account_roles(dpp, y, account_id, count);
+  if (r < 0) {
+    ldpp_dout(dpp, 4) << "failed to count roles for iam account "
+        << account_id << ": " << cpp_strerror(r) << dendl;
+    return r;
+  }
+  if (std::cmp_greater_equal(count, account.max_roles)) {
+    err = fmt::format("Role limit {} exceeded", account.max_roles);
+    return -ERR_LIMIT_EXCEEDED;
+  }
+  return 0;
 }
 
 
@@ -188,7 +213,13 @@ int RGWCreateRole::init_processing(optional_yield y)
 
 
   if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account_id = *id;
     resource = make_role_arn(role_path, role_name, *id);
+
+    ret = check_role_limit(this, y, driver, account_id, s->err.message);
+    if (ret < 0) {
+      return ret;
+    }
   } else {
     resource = make_role_arn(role_path, role_name, s->user->get_tenant());
   }
@@ -200,6 +231,7 @@ void RGWCreateRole::execute(optional_yield y)
   std::string user_tenant = s->user->get_tenant();
   std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name,
 							    user_tenant,
+							    account_id,
 							    role_path,
 							    trust_policy,
 							    max_session_duration,
@@ -453,15 +485,24 @@ int RGWListRoles::init_processing(optional_yield y)
     return -EINVAL;
   }
 
+  if (const auto* id = std::get_if<rgw_account_id>(&s->owner.id); id) {
+    account_id = *id;
+  }
   return 0;
 }
 
 void RGWListRoles::execute(optional_yield y)
 {
-  // TODO: list_account_roles() for account owner
   rgw::sal::RoleList listing;
-  op_ret = driver->list_roles(s, y, s->user->get_tenant(), path_prefix,
-                              marker, max_items, listing);
+  if (!account_id.empty()) {
+    // list roles from the account
+    op_ret = driver->list_account_roles(this, y, account_id, path_prefix,
+                                        marker, max_items, listing);
+  } else {
+    // list roles from the tenant
+    op_ret = driver->list_roles(this, y, s->auth.identity->get_tenant(),
+                                path_prefix, marker, max_items, listing);
+  }
 
   if (op_ret == 0) {
     s->formatter->open_object_section("ListRolesResponse");

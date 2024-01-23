@@ -1390,6 +1390,7 @@ namespace rgw::sal {
 
   std::unique_ptr<RGWRole> DBStore::get_role(std::string name,
       std::string tenant,
+      rgw_account_id account_id,
       std::string path,
       std::string trust_policy,
       std::string max_session_duration_str,
