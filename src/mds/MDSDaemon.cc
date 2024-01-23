@@ -1066,7 +1066,7 @@ bool MDSDaemon::parse_caps(const AuthCapsInfo& info, MDSAuthCaps& caps)
 
     dout(10) << __func__ << ": parsing auth_cap_str='" << auth_cap_str << "'" << dendl;
     CachedStackStringStream cs;
-    if (caps.parse(g_ceph_context, auth_cap_str, cs.get())) {
+    if (caps.parse(auth_cap_str, cs.get())) {
       return true;
     } else {
       dout(1) << __func__ << ": auth cap parse error: " << cs->strv() << " parsing '" << auth_cap_str << "'" << dendl;
