@@ -4,6 +4,7 @@ Teuthology task for exercising CephFS client recovery
 """
 
 import logging
+import signal
 from textwrap import dedent
 import time
 import distutils.version as version
@@ -12,6 +13,7 @@ import re
 import string
 import os
 
+from teuthology import contextutil
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.fuse_mount import FuseMount
@@ -724,3 +726,118 @@ class TestClientRecovery(CephFSTestCase):
 
         rproc.wait()
         self.assertEqual(rproc.exitstatus, 0)
+
+
+class TestClientOnLaggyOSD(CephFSTestCase):
+    CLIENTS_REQUIRED = 2
+
+    def make_osd_laggy(self, osd, sleep=120):
+        self.mds_cluster.mon_manager.signal_osd(osd, signal.SIGSTOP)
+        time.sleep(sleep)
+        self.mds_cluster.mon_manager.signal_osd(osd, signal.SIGCONT)
+
+    def clear_laggy_params(self, osd):
+        default_laggy_weight = self.config_get('mon', 'mon_osd_laggy_weight')
+        self.config_set('mon', 'mon_osd_laggy_weight', 1)
+        self.mds_cluster.mon_manager.revive_osd(osd)
+        self.config_set('mon', 'mon_osd_laggy_weight', default_laggy_weight)
+
+    def get_a_random_osd(self):
+        osds = self.mds_cluster.mon_manager.get_osd_status()
+        return random.choice(osds['live'])
+
+    def test_client_eviction_if_config_is_set(self):
+        """
+        If any client gets unresponsive/it's session get idle due to lagginess
+        with any OSD and if config option defer_client_eviction_on_laggy_osds
+        is set true(default true) then make sure clients are not evicted until
+        OSD(s) return to normal.
+        """
+
+        self.fs.mds_asok(['config', 'set', 'mds_defer_session_stale', 'false'])
+        self.config_set('mds', 'defer_client_eviction_on_laggy_osds', 'true')
+        self.assertEqual(self.config_get(
+            'mds', 'defer_client_eviction_on_laggy_osds'), 'true')
+
+        # make an OSD laggy
+        osd = self.get_a_random_osd()
+        self.make_osd_laggy(osd)
+
+        try:
+            mount_a_gid = self.mount_a.get_global_id()
+
+            self.mount_a.kill()
+
+            # client session should be open, it gets stale
+            # only after session_timeout time.
+            self.assert_session_state(mount_a_gid, "open")
+
+            # makes session stale
+            time.sleep(self.fs.get_var("session_timeout") * 1.5)
+            self.assert_session_state(mount_a_gid, "stale")
+
+            # it takes time to have laggy clients entries in cluster log,
+            # wait for 6 minutes to see if it is visible, finally restart
+            # the client
+            with contextutil.safe_while(sleep=5, tries=6) as proceed:
+                while proceed():
+                    try:
+                        with self.assert_cluster_log("1 client(s) laggy due to"
+                                                     " laggy OSDs",
+                                                     timeout=55):
+                            # make sure clients weren't evicted
+                            self.assert_session_count(2)
+                            break
+                    except (AssertionError, CommandFailedError) as e:
+                        log.debug(f'{e}, retrying')
+
+            # clear lagginess, expect to get the warning cleared and make sure
+            # client gets evicted
+            self.clear_laggy_params(osd)
+            self.wait_for_health_clear(60)
+            self.assert_session_count(1)
+        finally:
+            self.mount_a.kill_cleanup()
+            self.mount_a.mount_wait()
+            self.mount_a.create_destroy()
+
+    def test_client_eviction_if_config_is_unset(self):
+        """
+        If an OSD is laggy but config option defer_client_eviction_on_laggy_osds
+        is unset then an unresponsive client does get evicted.
+        """
+
+        self.fs.mds_asok(['config', 'set', 'mds_defer_session_stale', 'false'])
+        self.config_set('mds', 'defer_client_eviction_on_laggy_osds', 'false')
+        self.assertEqual(self.config_get(
+            'mds', 'defer_client_eviction_on_laggy_osds'), 'false')
+
+        # make an OSD laggy
+        osd = self.get_a_random_osd()
+        self.make_osd_laggy(osd)
+
+        try:
+            session_timeout = self.fs.get_var("session_timeout")
+            mount_a_gid = self.mount_a.get_global_id()
+
+            self.fs.mds_asok(['session', 'config', '%s' % mount_a_gid, 'timeout', '%s' % (session_timeout * 2)])
+
+            self.mount_a.kill()
+
+            self.assert_session_count(2)
+
+            time.sleep(session_timeout * 1.5)
+            self.assert_session_state(mount_a_gid, "open")
+
+            time.sleep(session_timeout)
+            self.assert_session_count(1)
+
+            # make sure warning wasn't seen in cluster log
+            with self.assert_cluster_log("laggy due to laggy OSDs",
+                                         timeout=120, present=False):
+                pass
+        finally:
+            self.mount_a.kill_cleanup()
+            self.mount_a.mount_wait()
+            self.mount_a.create_destroy()
+            self.clear_laggy_params(osd)

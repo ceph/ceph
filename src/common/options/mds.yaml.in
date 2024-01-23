@@ -1501,3 +1501,15 @@ options:
   - mds
   flags:
   - runtime
+- name: defer_client_eviction_on_laggy_osds
+  type: bool
+  level: advanced
+  desc: Do not evict client if any osd is laggy
+  long_desc: Laggy OSD(s) can make clients laggy or unresponsive, this can
+    lead to their eviction, this option once enabled can help defer client
+    eviction.
+  default: true
+  services:
+  - mds
+  flags:
+  - runtime

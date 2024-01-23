@@ -240,3 +240,15 @@ other daemons, please see :ref:`health-checks`.
   Description
     All MDS ranks are unavailable resulting in the file system to be completely
     offline.
+
+``MDS_CLIENTS_LAGGY``
+----------------------------
+  Message
+    "Client *ID* is laggy; not evicted because some OSD(s) is/are laggy"
+
+  Description
+    If OSD(s) is laggy (due to certain conditions like network cut-off, etc)
+    then it might make clients laggy(session might get idle or cannot flush
+    dirty data for cap revokes). If ``defer_client_eviction_on_laggy_osds`` is
+    set to true (default true), client eviction will not take place and thus
+    this health warning will be generated.

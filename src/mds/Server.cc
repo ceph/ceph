@@ -1123,10 +1123,12 @@ void Server::find_idle_sessions()
     return;
   }
 
-  std::vector<Session*> to_evict;
-
   bool defer_session_stale = g_conf().get_val<bool>("mds_defer_session_stale");
   const auto sessions_p1 = mds->sessionmap.by_state.find(Session::STATE_OPEN);
+  bool defer_client_eviction =
+  g_conf().get_val<bool>("defer_client_eviction_on_laggy_osds")
+  && mds->objecter->with_osdmap([](const OSDMap &map) {
+    return map.any_osd_laggy(); });
   if (sessions_p1 != mds->sessionmap.by_state.end() && !sessions_p1->second->empty()) {
     std::vector<Session*> new_stale;
 
@@ -1151,7 +1153,7 @@ void Server::find_idle_sessions()
 	dout(20) << "evicting session " << session->info.inst << " since autoclose "
 		    "has arrived" << dendl;
 	// evict session without marking it stale
-	to_evict.push_back(session);
+	laggy_clients.insert(session->get_client());
 	continue;
       }
 
@@ -1180,7 +1182,7 @@ void Server::find_idle_sessions()
 	}
 
 	// do not go through stale, evict it directly.
-	to_evict.push_back(session);
+	laggy_clients.insert(session->get_client());
       } else {
 	dout(10) << "new stale session " << session->info.inst
 		 << " last renewed caps " << last_cap_renew_span << "s ago" << dendl;
@@ -1196,7 +1198,7 @@ void Server::find_idle_sessions()
 	auto m = make_message<MClientSession>(CEPH_SESSION_STALE, session->get_push_seq());
 	mds->send_message_client(m, session);
       } else {
-	to_evict.push_back(session);
+	laggy_clients.insert(session->get_client());
       }
     }
   }
@@ -1215,11 +1217,21 @@ void Server::find_idle_sessions()
 		 << " and recently renewed caps " << last_cap_renew_span << "s ago" << dendl;
 	break;
       }
-      to_evict.push_back(session);
+      laggy_clients.insert(session->get_client());
     }
   }
 
-  for (auto session: to_evict) {
+  // don't evict client(s) if osds are laggy
+  if(defer_client_eviction && !laggy_clients.empty()) {
+    dout(5) << "Detected " << laggy_clients.size()
+            << " laggy clients, possibly due to laggy OSDs."
+               " Eviction is skipped until the OSDs return to normal."
+            << dendl;
+    return;
+  }
+
+  for (auto client: laggy_clients) {
+    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(client.v));
     if (session->is_importing()) {
       dout(10) << "skipping session " << session->info.inst << ", it's being imported" << dendl;
       continue;
@@ -1238,6 +1250,8 @@ void Server::find_idle_sessions()
       kill_session(session, NULL);
     }
   }
+  // clear as there's no use to keep the evicted clients in laggy_clients
+  clear_laggy_clients();
 }
 
 void Server::evict_cap_revoke_non_responders() {
@@ -1246,6 +1260,20 @@ void Server::evict_cap_revoke_non_responders() {
   }
 
   auto&& to_evict = mds->locker->get_late_revoking_clients(cap_revoke_eviction_timeout);
+  // don't evict client(s) if osds are laggy
+  bool defer_client_eviction =
+  g_conf().get_val<bool>("defer_client_eviction_on_laggy_osds")
+  && mds->objecter->with_osdmap([](const OSDMap &map) {
+    return map.any_osd_laggy(); })
+  && to_evict.size();
+  if(defer_client_eviction) {
+    laggy_clients.insert(to_evict.begin(), to_evict.end());
+    dout(0) << "Detected " << to_evict.size()
+            << " unresponsive clients, possibly due to laggy OSDs."
+               " Eviction is skipped until the OSDs return to normal."
+            << dendl;
+    return;
+  }
 
   for (auto const &client: to_evict) {
     mds->clog->warn() << "client id " << client << " has not responded to"
