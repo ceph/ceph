@@ -1200,26 +1200,6 @@ int RadosStore::load_owner_by_email(const DoutPrefixProvider* dpp,
   return 0;
 }
 
-int RadosStore::load_account_role_by_name(const DoutPrefixProvider* dpp,
-                                          optional_yield y,
-                                          std::string_view account_id,
-                                          std::string_view rolename,
-                                          std::unique_ptr<RGWRole>* role)
-{
-  RGWRoleInfo info;
-  info.account_id = account_id;
-  info.name = rolename;
-  auto p = get_role(info);
-  int r = p->get(dpp, y);
-  if (r < 0) {
-    ldpp_dout(dpp, 20) << "failed to load account role " << rolename
-        << ": " << cpp_strerror(r) << dendl;
-    return r;
-  }
-  *role = std::move(p);
-  return 0;
-}
-
 int RadosStore::count_account_roles(const DoutPrefixProvider* dpp,
                                     optional_yield y,
                                     std::string_view account_id,
