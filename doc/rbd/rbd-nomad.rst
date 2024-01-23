@@ -372,6 +372,7 @@ using the newly created nomad user id and cephx key::
       clusterID = "b9127830-b0cc-4e34-aa47-9d1a2e9949a8"
       pool = "nomad"
       imageFeatures = "layering"
+      mkfsOptions = "-t ext4"
     }
 
 After the ``ceph-volume.hcl`` file has been generated, create the volume:
