@@ -5994,28 +5994,33 @@ int BlueStore::_set_cache_sizes()
 
 int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
-  bluestore_bdev_label_t label;
   string p = path + "/block";
-  int r = _read_bdev_label(cct, p, &label);
-  if (r < 0) {
-    return ObjectStore::write_meta(key, value);
+  if (!bdev_label_valid) {
+    int r = _read_bdev_label(cct, p, &bdev_label);
+    if (r == 0) {
+      bdev_label_valid = true;
+    }
   }
-  label.meta[key] = value;
-  r = _write_bdev_label(cct, p, label);
-  ceph_assert(r == 0);
+  if (bdev_label_valid) {
+    bdev_label.meta[key] = value;
+    int r = _write_bdev_label(cct, p, bdev_label);
+    ceph_assert(r == 0);
+  }
   return ObjectStore::write_meta(key, value);
 }
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
 {
-  bluestore_bdev_label_t label;
-  string p = path + "/block";
-  int r = _read_bdev_label(cct, p, &label);
-  if (r < 0) {
-    return ObjectStore::read_meta(key, value);
+  if (!bdev_label_valid) {
+    string p = path + "/block";
+    int r = _read_bdev_label(cct, p, &bdev_label);
+    if (r < 0) {
+      return ObjectStore::read_meta(key, value);
+    }
+    bdev_label_valid = true;
   }
-  auto i = label.meta.find(key);
-  if (i == label.meta.end()) {
+  auto i = bdev_label.meta.find(key);
+  if (i == bdev_label.meta.end()) {
     return ObjectStore::read_meta(key, value);
   }
   *value = i->second;

@@ -2439,6 +2439,10 @@ private:
   double max_defer_interval = 0; ///< Time to wait between last deferred submit
   std::atomic<uint32_t> config_changed = {0}; ///< Counter to determine if there is a configuration change.
 
+  // caching of bdev_label
+  bool                   bdev_label_valid = false; // indicator if
+  bluestore_bdev_label_t bdev_label;               // this value is valid
+
   typedef std::map<uint64_t, volatile_statfs> osd_pools_map;
 
   ceph::mutex vstatfs_lock = ceph::make_mutex("BlueStore::vstatfs_lock");
