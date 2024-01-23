@@ -3029,6 +3029,7 @@ int MotrMultipartWriter::complete(size_t accounted_size, const std::string& etag
 
 std::unique_ptr<RGWRole> MotrStore::get_role(std::string name,
     std::string tenant,
+    rgw_account_id account_id,
     std::string path,
     std::string trust_policy,
     std::string max_session_duration_str,
