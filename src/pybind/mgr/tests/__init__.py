@@ -63,7 +63,7 @@ if 'UNITTEST' in os.environ:
         def _ceph_get_store_prefix(self, prefix):
             return self.mock_store_prefix('store', prefix)
 
-        def _ceph_get_module_option(self, module, key, localized_prefix= None):
+        def _ceph_get_module_option(self, module, key, localized_prefix=None):
             try:
                 _, val, _ = self.check_mon_command({
                     'prefix': 'config get',
@@ -109,7 +109,7 @@ if 'UNITTEST' in os.environ:
             # Mocking the config store is handy sometimes:
             def config_get():
                 who = cmd['who'].split('.')
-                whos = ['global'] + ['.'.join(who[:i+1]) for i in range(len(who))]
+                whos = ['global'] + ['.'.join(who[:i + 1]) for i in range(len(who))]
                 for attepmt in reversed(whos):
                     val = self.mock_store_get('config', f'{attepmt}/{cmd["key"]}', None)
                     if val is not None:
@@ -152,7 +152,7 @@ if 'UNITTEST' in os.environ:
 
         def _ceph_get_foreign_option(self, entity, name):
             who = entity.split('.')
-            whos = ['global'] + ['.'.join(who[:i+1]) for i in range(len(who))]
+            whos = ['global'] + ['.'.join(who[:i + 1]) for i in range(len(who))]
             for attepmt in reversed(whos):
                 val = self.mock_store_get('config', f'{attepmt}/{name}', None)
                 if val is not None:
@@ -175,7 +175,6 @@ if 'UNITTEST' in os.environ:
             if not hasattr(self, '_store'):
                 self._store = {}
 
-
             if self.__class__ not in M_classes:
                 # call those only once.
                 self._register_commands('')
@@ -194,7 +193,6 @@ if 'UNITTEST' in os.environ:
             self._ceph_log = mock.MagicMock()
             self._ceph_dispatch_remote = lambda *_: None
             self._ceph_get_mgr_id = mock.MagicMock()
-
 
     cm = mock.Mock()
     cm.BaseMgrModule = M
