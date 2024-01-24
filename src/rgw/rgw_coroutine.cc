@@ -1077,8 +1077,21 @@ int RGWSimpleCoroutine::operate(const DoutPrefixProvider *dpp)
   int ret = 0;
   reenter(this) {
     yield return state_init();
-    yield return state_send_request(dpp);
-    yield return state_request_complete();
+
+    for (tries = 0; tries < max_eio_retries; tries++) {
+      yield return state_send_request(dpp);
+      yield return state_request_complete();
+
+      if (op_ret == -EIO && tries < max_eio_retries - 1) {
+        ldout(cct, 20) << "request IO error. retries=" << tries << dendl;
+        continue;
+      } else if (op_ret < 0) {
+        call_cleanup();
+        return set_state(RGWCoroutine_Error, op_ret);
+      }
+      break;
+    }
+
     yield return state_all_complete();
     drain_all();
     call_cleanup();
@@ -1109,10 +1122,10 @@ int RGWSimpleCoroutine::state_send_request(const DoutPrefixProvider *dpp)
 
 int RGWSimpleCoroutine::state_request_complete()
 {
-  int ret = request_complete();
-  if (ret < 0) {
+  op_ret = request_complete();
+  if (op_ret < 0 && op_ret != -EIO) {
     call_cleanup();
-    return set_state(RGWCoroutine_Error, ret);
+    return set_state(RGWCoroutine_Error, op_ret);
   }
   return 0;
 }

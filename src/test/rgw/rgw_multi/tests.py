@@ -2885,3 +2885,194 @@ def test_sync_single_bucket_to_multiple():
     remove_sync_policy_group(c1, "sync-bucket", bucketA.name)
     remove_sync_policy_group(c1, "sync-group")
     return
+
+def stop_2nd_rgw(zonegroup):
+    rgw_down = False
+    for z in zonegroup.zones:
+        if len(z.gateways) <= 1:
+            continue
+        z.gateways[1].stop()
+        log.info('gateway stopped zone=%s gateway=%s', z.name, z.gateways[1].endpoint())
+        rgw_down = True
+    return rgw_down
+
+def start_2nd_rgw(zonegroup):
+    for z in zonegroup.zones:
+        if len(z.gateways) <= 1:
+            continue
+        z.gateways[1].start()
+        log.info('gateway started zone=%s gateway=%s', z.name, z.gateways[1].endpoint())
+
+@attr('rgw_down')
+def test_bucket_create_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_bucket_create_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        buckets, _ = create_bucket_per_zone(zonegroup_conns, 2)
+        zonegroup_meta_checkpoint(zonegroup)
+
+        for zone in zonegroup_conns.zones:
+            assert check_all_buckets_exist(zone, buckets)
+
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_bucket_remove_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_bucket_remove_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        zonegroup_conns = ZonegroupConns(zonegroup)
+        buckets, zone_bucket = create_bucket_per_zone(zonegroup_conns, 2)
+        zonegroup_meta_checkpoint(zonegroup)
+
+        for zone in zonegroup_conns.zones:
+            assert check_all_buckets_exist(zone, buckets)
+
+        for zone, bucket_name in zone_bucket:
+            zone.conn.delete_bucket(bucket_name)
+
+        zonegroup_meta_checkpoint(zonegroup)
+
+        for zone in zonegroup_conns.zones:
+            assert check_all_buckets_dont_exist(zone, buckets)
+
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_object_sync_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_object_sync_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_object_sync()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_object_delete_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_object_delete_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_object_delete()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_concurrent_versioned_object_incremental_sync_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_concurrent_versioned_object_incremental_sync_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_concurrent_versioned_object_incremental_sync()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_suspended_delete_marker_full_sync_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_suspended_delete_marker_full_sync_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_suspended_delete_marker_full_sync()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_bucket_acl_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_bucket_acl_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_bucket_acl()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_bucket_sync_enable_right_after_disable_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_bucket_sync_enable_right_after_disable_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_bucket_sync_enable_right_after_disable()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_multipart_object_sync_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_multipart_object_sync_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_multipart_object_sync()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_bucket_sync_run_basic_incremental_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_bucket_sync_run_basic_incremental_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_bucket_sync_run_basic_incremental()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_role_sync_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_role_sync_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_role_sync()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_bucket_full_sync_after_data_sync_init_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_bucket_full_sync_after_data_sync_init_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_bucket_full_sync_after_data_sync_init()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_sync_policy_config_zonegroup_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_sync_policy_config_zonegroup_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_sync_policy_config_zonegroup()
+    finally:
+        start_2nd_rgw(zonegroup)
+
+@attr('rgw_down')
+def test_sync_flow_symmetrical_zonegroup_all_rgw_down():
+    zonegroup = realm.master_zonegroup()
+    try:
+        if not stop_2nd_rgw(zonegroup):
+            raise SkipTest("test_sync_flow_symmetrical_zonegroup_all_rgw_down skipped. More than one rgw needed in any one or multiple zone(s).")
+
+        test_sync_flow_symmetrical_zonegroup_all()
+    finally:
+        start_2nd_rgw(zonegroup)

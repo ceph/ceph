@@ -4032,19 +4032,28 @@ int RGWRados::stat_remote_obj(const DoutPrefixProvider *dpp,
   constexpr bool sync_manifest = true;
   constexpr bool skip_decrypt = true;
   constexpr bool sync_cloudtiered = true;
-  int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
-                      dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                      prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
-                      true, &cb, &in_stream_req);
-  if (ret < 0) {
-    return ret;
-  }
 
-  ret = conn->complete_request(in_stream_req, nullptr, &set_mtime, psize,
-                               nullptr, pheaders, y);
-  if (ret < 0) {
-    return ret;
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+  for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+    int ret = conn->get_obj(dpp, user_id, info, src_obj, pmod, unmod_ptr,
+                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
+                        prepend_meta, get_op, rgwx_stat,
+                        sync_manifest, skip_decrypt, nullptr, sync_cloudtiered,
+                        true, &cb, &in_stream_req);
+    if (ret < 0) {
+      return ret;
+    }
+
+    ret = conn->complete_request(in_stream_req, nullptr, &set_mtime, psize,
+                                 nullptr, pheaders, y);
+    if (ret < 0) {
+      if (ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+        ldpp_dout(dpp, 20) << __func__  << "(): failed to fetch object from remote. retries=" << tries << dendl;
+        continue;
+      }
+      return ret;
+    }
+    break;
   }
 
   bufferlist& extra_data_bl = cb.get_extra_data();
@@ -4252,20 +4261,29 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   static constexpr bool sync_manifest = true;
   static constexpr bool skip_decrypt = true;
   static constexpr bool sync_cloudtiered = true;
-  ret = conn->get_obj(rctx.dpp, user_id, info, src_obj, pmod, unmod_ptr,
-                      dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
-                      prepend_meta, get_op, rgwx_stat,
-                      sync_manifest, skip_decrypt, &dst_zone_trace,
-                      sync_cloudtiered, true,
-                      &cb, &in_stream_req);
-  if (ret < 0) {
-    goto set_err_state;
-  }
 
-  ret = conn->complete_request(in_stream_req, &etag, &set_mtime,
-                               &accounted_size, nullptr, nullptr, rctx.y);
-  if (ret < 0) {
-    goto set_err_state;
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+  for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+    ret = conn->get_obj(rctx.dpp, user_id, info, src_obj, pmod, unmod_ptr,
+                        dest_mtime_weight.zone_short_id, dest_mtime_weight.pg_ver,
+                        prepend_meta, get_op, rgwx_stat,
+                        sync_manifest, skip_decrypt, &dst_zone_trace,
+                        sync_cloudtiered, true,
+                        &cb, &in_stream_req);
+    if (ret < 0) {
+      goto set_err_state;
+    }
+
+    ret = conn->complete_request(in_stream_req, &etag, &set_mtime,
+                                 &accounted_size, nullptr, nullptr, rctx.y);
+    if (ret < 0) {
+      if (ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+        ldpp_dout(rctx.dpp, 20) << __func__  << "(): failed to fetch object from remote. retries=" << tries << dendl;
+        continue;
+      }
+      goto set_err_state;
+    }
+    break;
   }
   ret = cb.flush();
   if (ret < 0) {
@@ -4499,28 +4517,37 @@ int RGWRados::copy_obj_to_remote_dest(const DoutPrefixProvider *dpp,
 
   auto rest_master_conn = svc.zone->get_master_conn();
 
-  int ret = rest_master_conn->put_obj_async_init(dpp, user_id, dest_obj, src_attrs, &out_stream_req);
-  if (ret < 0) {
-    return ret;
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+  for (int tries = 0; tries < NUM_ENPOINT_IOERROR_RETRIES; tries++) {
+    int ret = rest_master_conn->put_obj_async_init(dpp, user_id, dest_obj, src_attrs, &out_stream_req);
+    if (ret < 0) {
+      return ret;
+    }
+
+    out_stream_req->set_send_length(astate->size);
+
+    ret = RGWHTTP::send(out_stream_req);
+    if (ret < 0) {
+      delete out_stream_req;
+      return ret;
+    }
+
+    ret = read_op.iterate(dpp, 0, astate->size - 1, out_stream_req->get_out_cb(), y);
+    if (ret < 0) {
+      delete out_stream_req;
+      return ret;
+    }
+
+    ret = rest_master_conn->complete_request(out_stream_req, etag, mtime, y);
+    if (ret < 0) {
+      if (ret == -EIO && tries < NUM_ENPOINT_IOERROR_RETRIES - 1) {
+        ldpp_dout(dpp, 20) << __func__  << "(): failed to put_obj_async_init. retries=" << tries << dendl;
+        continue;
+      }
+      return ret;
+    }
+    break;
   }
-
-  out_stream_req->set_send_length(astate->size);
-
-  ret = RGWHTTP::send(out_stream_req);
-  if (ret < 0) {
-    delete out_stream_req;
-    return ret;
-  }
-
-  ret = read_op.iterate(dpp, 0, astate->size - 1, out_stream_req->get_out_cb(), y);
-  if (ret < 0) {
-    delete out_stream_req;
-    return ret;
-  }
-
-  ret = rest_master_conn->complete_request(out_stream_req, etag, mtime, y);
-  if (ret < 0)
-    return ret;
 
   return 0;
 }
