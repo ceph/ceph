@@ -5305,12 +5305,6 @@ options:
   level: dev
   default: false
   with_legacy: true
-- name: bluestore_debug_prefill
-  type: float
-  level: dev
-  desc: simulate fragmentation
-  default: 0
-  with_legacy: true
 - name: bluestore_debug_prefragment_max
   type: size
   level: dev
