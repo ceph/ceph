@@ -351,6 +351,22 @@ function preload_wheels_for_tox() {
     popd > /dev/null
 }
 
+function clean_pkg_on_ubuntu {
+    ci_debug "Running clean_pkg_on_ubuntu() in install-deps.sh"
+    local pkgs=$@
+    local installed_pkgs
+    for pkg in $pkgs; do
+        local installed=$(apt -qq list --installed ${pkg}* 2>/dev/null |
+                              awk -F/ '{print $1}')
+        if test -n "$installed"; then
+            installed_pkgs+=" $installed"
+        fi
+    done
+    if test -n "$installed_pkgs"; then
+        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y --fix-missing remove $installed_pkgs
+    fi
+}
+
 for_make_check=false
 if tty -s; then
     # interactive
@@ -433,6 +449,7 @@ else
 	# Put this before any other invocation of apt so it can clean
 	# up in a broken case.
         clean_boost_on_ubuntu
+        clean_pkg_on_ubuntu libclang clang
         if [ "$INSTALL_EXTRA_PACKAGES" ]; then
             if ! $SUDO apt-get install -y $INSTALL_EXTRA_PACKAGES ; then
                 # try again. ported over from run-make.sh (orignally e278295)
