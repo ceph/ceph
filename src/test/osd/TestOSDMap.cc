@@ -2949,6 +2949,73 @@ TEST_F(OSDMapTest, rb_osdsize_opt_1large_mixed_osds) {
   return;
 }
 
+TEST_F(OSDMapTest, rb_osdsize_opt_score) {
+  //TO-REMOVE (the comment) - look ar 43124 for examples
+  vector <pair<int, int>> weights = {
+      {57, 0}, {90, 0}, {100, 0}, {90, 0}, {100, 0},
+  };
+  set_up_map_heterogeneous(weights, 1);
+  //set_verbose(true);
+
+  // Make sure capacity is balanced first
+  balance_capacity(my_rep_pool);
+  map<uint64_t,set<pg_t>> prim_pgs_by_osd;
+  map<uint64_t,set<pg_t>> pgs_by_osd = osdmap.get_pgs_by_osd(g_ceph_context, my_rep_pool, &prim_pgs_by_osd);
+  OSDMap::read_balance_info_t rbi;
+
+  vector<int> read_ratios = {10, 25, 50, 70, 75, 80, 90, 100};
+
+  // calc fair score
+  auto rc = osdmap.calc_read_balance_score(g_ceph_context, my_rep_pool, &rbi);
+  ASSERT_GE(rc, 0);
+  // assert type is fair (no more checks needed since other tests check this)
+  ASSERT_EQ(rbi.score_type, OSDMap::RBS_FAIR);
+  float fair_score = rbi.acting_adj_score;
+  // set read_ratio
+  for (int rr : read_ratios) {
+    set_pool_read_ratio(my_rep_pool, rr);
+    // calc score
+    rc = osdmap.calc_read_balance_score(g_ceph_context, my_rep_pool, &rbi);
+    ASSERT_GE(rc, 0);
+    // assert type is size-optimal
+    ASSERT_EQ(rbi.score_type, OSDMap::RBS_SIZE_OPTIMAL);
+    // check that osd info is correct
+    if (is_verbose()) {
+      cout << "max_osd: " << rbi.max_osd << std::endl
+          << "max_osd_load: " << rbi.max_osd_load << std::endl
+          << "max_osd_pgs: " << rbi.max_osd_pgs << std::endl
+          << "max_osd_prims: " << rbi.max_osd_prims << std::endl
+          << "max_acting_osd: " << rbi.max_acting_osd << std::endl
+          << "max_acting_osd_load: " << rbi.max_acting_osd_load << std::endl
+          << "max_acting_osd_pgs: " << rbi.max_acting_osd_pgs << std::endl
+          << "max_acting_osd_prims: " << rbi.max_acting_osd_prims << std::endl
+          << "avg_osd_load: " << rbi.avg_osd_load << std::endl
+          << "acting_adj_score: " << rbi.acting_adj_score << std::endl
+          << "adjusted_score: " << rbi.adjusted_score << std::endl
+          << "fair_score: " << fair_score << std::endl;
+    }
+    ASSERT_TRUE(pgs_by_osd.contains(rbi.max_osd));
+    ASSERT_EQ(rbi.max_osd_pgs, pgs_by_osd.at(rbi.max_osd).size());
+    ASSERT_TRUE(prim_pgs_by_osd.contains(rbi.max_osd));
+    ASSERT_EQ(rbi.max_osd_prims, prim_pgs_by_osd.at(rbi.max_osd).size());
+    ASSERT_GE(rbi.acting_adj_score, 1.0);
+    if (rr <= 85) {
+      // with high read ratios, scores can be equal
+      ASSERT_NE(rbi.acting_adj_score, fair_score);
+    }
+    ASSERT_FLOAT_EQ(rbi.acting_adj_score, rbi.adjusted_score);
+    auto total_load = rbi.avg_osd_load * weights.size();
+    const pg_pool_t *p = osdmap.get_pg_pool(my_rep_pool);
+    auto pg_load = total_load / p->get_pg_num();
+    ASSERT_GE(rbi.max_osd_load, pg_load);
+    if (p->get_size() > 1) {
+      int wr = (pg_load - 100) / (p->get_size() - 1);
+      ASSERT_EQ(wr, 100 - rr);
+    }
+  }
+  return;
+}
+
 INSTANTIATE_TEST_SUITE_P(
   OSDMap,
   OSDMapTest,
