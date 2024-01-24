@@ -1651,7 +1651,7 @@ EOF
     fi
     if [ "$cephadm" -gt 0 ]; then
         debug echo Setting mon public_network ...
-        public_network=$(ip route list | grep -w "$IP" | grep -v default | awk '{print $1}')
+        public_network=$(ip route list | grep -w "$IP" | grep -v default | grep -E "/[0-9]+" | awk '{print $1}')
         ceph_adm config set mon public_network $public_network
     fi
 fi
