@@ -67,8 +67,12 @@ inline param_vec_t make_param_list(const std::map<std::string, std::string> *pp)
 
 class RGWRESTConn
 {
+  /* the endpoint is not able to connect if the timestamp is not real_clock::zero */
+  using endpoint_status_map = std::unordered_map<std::string, std::atomic<ceph::real_time>>;
+
   CephContext *cct;
   std::vector<std::string> endpoints;
+  endpoint_status_map endpoints_status;
   RGWAccessKey key;
   std::string self_zone_group;
   std::string remote_id;
@@ -99,6 +103,7 @@ public:
 
   int get_url(std::string& endpoint);
   std::string get_url();
+  void set_url_unconnectable(const std::string& endpoint);
   const std::string& get_self_zonegroup() {
     return self_zone_group;
   }
@@ -344,6 +349,9 @@ public:
   int wait(bufferlist *pbl, optional_yield y) {
     int ret = req.wait(y);
     if (ret < 0) {
+      if (ret == -EIO) {
+        conn->set_url_unconnectable(req.get_url_orig());
+      }
       return ret;
     }
 
@@ -396,6 +404,9 @@ int RGWRESTReadResource::wait(T *dest, optional_yield y)
 {
   int ret = req.wait(y);
   if (ret < 0) {
+    if (ret == -EIO) {
+      conn->set_url_unconnectable(req.get_url_orig());
+    }
     return ret;
   }
 
@@ -467,6 +478,10 @@ public:
     int ret = req.wait(y);
     *pbl = bl;
 
+    if (ret == -EIO) {
+      conn->set_url_unconnectable(req.get_url_orig());
+    }
+
     if (ret < 0 && err_result ) {
       ret = parse_decode_json(*err_result, bl);
     }
@@ -482,6 +497,10 @@ template <class T, class E>
 int RGWRESTSendResource::wait(T *dest, optional_yield y, E *err_result)
 {
   int ret = req.wait(y);
+  if (ret == -EIO) {
+    conn->set_url_unconnectable(req.get_url_orig());
+  }
+
   if (ret >= 0) {
     ret = req.get_status();
   }

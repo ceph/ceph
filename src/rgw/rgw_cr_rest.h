@@ -24,6 +24,8 @@ struct rgw_rest_obj {
 };
 
 class RGWReadRawRESTResourceCR : public RGWSimpleCoroutine {
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+
   bufferlist *result;
  protected:
   RGWRESTConn *conn;
@@ -36,21 +38,21 @@ public:
   RGWReadRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                            RGWHTTPManager *_http_manager, const std::string& _path,
                            rgw_http_param_pair *params, bufferlist *_result)
-    : RGWSimpleCoroutine(_cct), result(_result), conn(_conn), http_manager(_http_manager),
+    : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), result(_result), conn(_conn), http_manager(_http_manager),
     path(_path), params(make_param_list(params))
   {}
 
  RGWReadRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                           RGWHTTPManager *_http_manager, const std::string& _path,
                           rgw_http_param_pair *params)
-   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+   : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
     path(_path), params(make_param_list(params))
   {}
 
   RGWReadRawRESTResourceCR(CephContext *_cct, RGWRESTConn *_conn,
                            RGWHTTPManager *_http_manager, const std::string& _path,
                            rgw_http_param_pair *params, param_vec_t &hdrs)
-    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+    : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
       path(_path), params(make_param_list(params)),
       extra_headers(hdrs)
   {}
@@ -59,7 +61,7 @@ public:
                           RGWHTTPManager *_http_manager, const std::string& _path,
                           rgw_http_param_pair *params,
                           std::map <std::string, std::string> *hdrs)
-   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+   : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
     path(_path), params(make_param_list(params)),
     extra_headers(make_param_list(hdrs))
     {}
@@ -144,6 +146,8 @@ class RGWReadRESTResourceCR : public RGWReadRawRESTResourceCR {
 
 template <class T, class E = int>
 class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+
  protected:
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
@@ -167,7 +171,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
                           bufferlist& _input, T *_result,
                           bool _send_content_length,
                           E *_err_result = nullptr)
-   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+   : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
      method(_method), path(_path), params(make_param_list(_params)),
      headers(make_param_list(_attrs)), attrs(_attrs),
      result(_result), err_result(_err_result),
@@ -178,7 +182,7 @@ class RGWSendRawRESTResourceCR: public RGWSimpleCoroutine {
                           const std::string& _method, const std::string& _path,
                           rgw_http_param_pair *_params, std::map<std::string, std::string> *_attrs,
                           T *_result, E *_err_result = nullptr)
-   : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+   : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
     method(_method), path(_path), params(make_param_list(_params)), headers(make_param_list(_attrs)), attrs(_attrs), result(_result),
     err_result(_err_result) {}
 
@@ -321,6 +325,8 @@ public:
 };
 
 class RGWDeleteRESTResourceCR : public RGWSimpleCoroutine {
+  static constexpr int NUM_ENPOINT_IOERROR_RETRIES = 20;
+
   RGWRESTConn *conn;
   RGWHTTPManager *http_manager;
   std::string path;
@@ -333,7 +339,7 @@ public:
                         RGWHTTPManager *_http_manager,
                         const std::string& _path,
                         rgw_http_param_pair *_params)
-    : RGWSimpleCoroutine(_cct), conn(_conn), http_manager(_http_manager),
+    : RGWSimpleCoroutine(_cct, NUM_ENPOINT_IOERROR_RETRIES), conn(_conn), http_manager(_http_manager),
       path(_path), params(make_param_list(_params))
   {}
 
