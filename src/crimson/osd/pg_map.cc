@@ -16,6 +16,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
   spg_t pgid,
   core_id_t core)
 {
+  LOG_PREFIX(PGShardMapping::get_or_create_pg_mapping);
   auto find_iter = pg_to_core.find(pgid);
   if (find_iter != pg_to_core.end()) {
     ceph_assert_always(find_iter->second != NULL_CORE);
@@ -24,7 +25,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
     }
     return seastar::make_ready_future<core_id_t>(find_iter->second);
   } else {
-    return container().invoke_on(0,[pgid, core]
+    return container().invoke_on(0,[pgid, core, FNAME]
       (auto &primary_mapping) {
       auto [insert_iter, inserted] = primary_mapping.pg_to_core.emplace(pgid, core);
       ceph_assert_always(inserted);
@@ -43,6 +44,8 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
       ceph_assert_always(primary_mapping.core_to_num_pgs.end() != core_iter);
       insert_iter->second = core_iter->first;
       core_iter->second++;
+      DEBUG("mapping pg {} to core: {} with num_pgs of: {}",
+            pgid, insert_iter->second, core_iter->second);
       return primary_mapping.container().invoke_on_others(
         [pgid = insert_iter->first, core = insert_iter->second]
         (auto &other_mapping) {
@@ -58,6 +61,8 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
 }
 
 seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
+  LOG_PREFIX(PGShardMapping::remove_pg_mapping);
+  DEBUG("{}", pgid);
   return container().invoke_on(0, [pgid](auto &primary_mapping) {
     auto iter = primary_mapping.pg_to_core.find(pgid);
     ceph_assert_always(iter != primary_mapping.pg_to_core.end());
