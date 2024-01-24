@@ -196,7 +196,7 @@ export class DashboardAreaChartComponent implements OnChanges {
 
     this.setChartTicks();
 
-    if (this.dataArray) {
+    if (this.dataArray && this.dataArray.length && this.dataArray[0] && this.dataArray[0].length) {
       this.dataArray = changes?.dataArray?.currentValue || this.dataArray;
       this.currentChartData = this.chartData;
       for (let index = 0; index < this.dataArray.length; index++) {
@@ -223,7 +223,7 @@ export class DashboardAreaChartComponent implements OnChanges {
 
   private formatData(array: Array<any>): any {
     let formattedData = {};
-    formattedData = array.map((data: any) => ({
+    formattedData = array?.map((data: any) => ({
       x: data[0] * 1000,
       y: Number(this.convertToChartDataUnits(data[1]).replace(/[^\d,.]+/g, ''))
     }));
@@ -290,7 +290,7 @@ export class DashboardAreaChartComponent implements OnChanges {
     let maxValueDataUnits = '';
 
     const allDataValues = this.dataArray.reduce((array: string[], data) => {
-      return array.concat(data.map((values: [number, string]) => values[1]));
+      return array.concat(data?.map((values: [number, string]) => values[1]));
     }, []);
 
     maxValue = Math.max(...allDataValues.map(Number));
