@@ -495,6 +495,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc="Destination for cephadm command's persistent logging",
             enum_allowed=['file', 'syslog', 'file,syslog'],
         ),
+        Option(
+            'oob_default_addr',
+            type='str',
+            default='169.254.1.1',
+            desc="Default address for RedFish API (oob management)."
+        ),
     ]
 
     def __init__(self, *args: Any, **kwargs: Any):
@@ -579,6 +585,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.log_refresh_metadata = False
             self.default_cephadm_command_timeout = 0
             self.cephadm_log_destination = ''
+            self.oob_default_addr = ''
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -1631,7 +1638,7 @@ Then run the following:
 
         if spec.oob:
             if not spec.oob.get('addr'):
-                spec.oob['addr'] = spec.hostname
+                spec.oob['addr'] = self.oob_default_addr
             if not spec.oob.get('port'):
                 spec.oob['port'] = '443'
             host_oob_info = dict()
