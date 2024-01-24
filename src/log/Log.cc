@@ -132,7 +132,7 @@ void Log::set_max_new(std::size_t n)
 void Log::set_max_recent(std::size_t n)
 {
   std::scoped_lock lock(m_flush_mutex);
-  m_max_recent = n;
+  m_recent.set_capacity(n);
 }
 
 void Log::set_log_file(std::string_view fn)
@@ -492,8 +492,8 @@ void Log::dump_recent()
 			     tid_to_int(pthread_id), pthread_name), true);
   }
 
-  _log_message(fmt::format("  max_recent {:9}", m_max_recent), true);
-  _log_message(fmt::format("  max_new    {:9}", m_max_recent), true);
+  _log_message(fmt::format("  max_recent {:9}", m_recent.capacity()), true);
+  _log_message(fmt::format("  max_new    {:9}", m_max_new), true);
   _log_message(fmt::format("  log_file {}", m_log_file), true);
 
   _log_message("--- end dump of recent events ---", true);

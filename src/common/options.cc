@@ -597,6 +597,7 @@ std::vector<Option> get_global_options() {
     Option("log_max_recent", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(500)
     .set_daemon_default(10000)
+    .set_min(1)
     .set_description("recent log entries to keep in memory to dump in the event of a crash")
     .set_long_description("The purpose of this option is to log at a higher debug level only to the in-memory buffer, and write out the detailed log messages only if there is a crash.  Only log entries below the lower log level will be written unconditionally to the log.  For example, debug_osd=1/5 will write everything <= 1 to the log unconditionally but keep entries at levels 2-5 in memory.  If there is a seg fault or assertion failure, all entries will be dumped to the log."),
 
