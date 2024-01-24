@@ -1,6 +1,7 @@
-teuthology:
-  postmerge:
-    - if not (yaml.os_type == "ubuntu" or yaml.os_type == "centos"  and yaml.os_version == "9.stream") then reject() end
+# Right now, cephfs-shell is only available as a package on Ubuntu
+# This overrides the random distribution that's chosen in the other yaml fragments.
+os_type: ubuntu
+os_version: "20.04"
 tasks:
   - cephfs_test_runner:
       modules:
