@@ -404,7 +404,7 @@ public:
 
   auto remove_pg(spg_t pgid) {
     local_state.pg_map.remove_pg(pgid);
-    return pg_to_shard_mapping.remove_pg(pgid);
+    return pg_to_shard_mapping.remove_pg_mapping(pgid);
   }
 
   crimson::common::CephContext *get_cct() {
