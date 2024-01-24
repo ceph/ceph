@@ -29,8 +29,11 @@ class MgrCluster(CephCluster):
     def mgr_stop(self, mgr_id):
         self.mgr_daemons[mgr_id].stop()
 
-    def mgr_fail(self, mgr_id):
-        self.mon_manager.raw_cluster_cmd("mgr", "fail", mgr_id)
+    def mgr_fail(self, mgr_id=None):
+        if mgr_id is None:
+            self.mon_manager.raw_cluster_cmd("mgr", "fail")
+        else:
+            self.mon_manager.raw_cluster_cmd("mgr", "fail", mgr_id)
 
     def mgr_restart(self, mgr_id):
         self.mgr_daemons[mgr_id].restart()
@@ -76,6 +79,8 @@ class MgrTestCase(CephTestCase):
         # Stop all the daemons
         for daemon in cls.mgr_cluster.mgr_daemons.values():
             daemon.stop()
+
+        cls.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "set", "down", "false")
 
         for mgr_id in cls.mgr_cluster.mgr_ids:
             cls.mgr_cluster.mgr_fail(mgr_id)

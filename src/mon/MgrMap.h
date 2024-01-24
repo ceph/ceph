@@ -268,6 +268,10 @@ public:
   epoch_t epoch = 0;
   epoch_t last_failure_osd_epoch = 0;
 
+
+  static const uint64_t FLAG_DOWN = (1<<0);
+  uint64_t flags = 0;
+
   /// global_id of the ceph-mgr instance selected as a leader
   uint64_t active_gid = 0;
   /// server address reported by the leader once it is active
@@ -444,7 +448,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(12, 6, bl);
+    ENCODE_START(13, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -468,13 +472,14 @@ public:
     // backwards compatible messsage for older monitors.
     encode(clients_addrs, bl, features);
     encode(clients_names, bl, features);
+    encode(flags, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(12, p);
+    DECODE_START(13, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -541,12 +546,16 @@ public:
 	}
       }
     }
+    if (struct_v >= 13) {
+      decode(flags, p);
+    }
     DECODE_FINISH(p);
   }
 
   void dump(ceph::Formatter *f) const
   {
     f->dump_int("epoch", epoch);
+    f->dump_int("flags", flags);
     f->dump_int("active_gid", get_active_gid());
     f->dump_string("active_name", get_active_name());
     f->dump_object("active_addrs", active_addrs);

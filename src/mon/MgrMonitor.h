@@ -21,8 +21,9 @@
 #include "MgrMap.h"
 #include "PaxosService.h"
 #include "MonCommand.h"
+#include "CommandHandler.h"
 
-class MgrMonitor: public PaxosService
+class MgrMonitor: public PaxosService, public CommandHandler
 {
   MgrMap map;
   MgrMap pending_map;
