@@ -2047,6 +2047,7 @@ void Server::submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin, const MDRe
  */
 void Server::respond_to_request(const MDRequestRef& mdr, int r)
 {
+  mdr->result = r;
   if (mdr->client_request) {
     if (mdr->is_batch_head()) {
       dout(20) << __func__ << " batch head " << *mdr << dendl;
