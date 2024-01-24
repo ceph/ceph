@@ -30,7 +30,7 @@ setup_minikube_env() {
     fi
 
     rm -rf ~/.minikube
-    minikube start --disk-size=20g --extra-disks=4 --driver kvm2
+    minikube start --memory="6144" --disk-size=20g --extra-disks=4 --driver kvm2
     # point Docker env to use docker daemon running on minikube
     eval $(minikube docker-env -p minikube)
 }
