@@ -283,7 +283,8 @@ target_link_libraries(rgw_common
     ${LUA_LIBRARIES}
     RapidJSON::RapidJSON
     spawn
-    ${FMT_LIB})
+    ${FMT_LIB}
+    isal_md5)
 target_include_directories(rgw_common
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw/services"
   PUBLIC "${CMAKE_SOURCE_DIR}/src/rgw"
@@ -362,6 +363,7 @@ set(rgw_a_srcs
   rgw_loadgen_process.cc
   rgw_log.cc
   rgw_lua_request.cc
+  rgw_md5.cc
   rgw_opa.cc
   rgw_os_lib.cc
   rgw_period_pusher.cc

@@ -18,6 +18,8 @@
 #include <vector>
 #include <map>
 #include <string>
+#include "common/async/context_pool.h"
+#include "rgw_md5.h"
 #include "rgw_common.h"
 #include "rgw_rest.h"
 #include "rgw_frontend.h"
@@ -81,7 +83,9 @@ class AppMain {
   SiteConfig site;
   const DoutPrefixProvider* dpp;
   RGWProcessEnv env;
-
+  void need_context_pool();
+  std::optional<ceph::async::io_context_pool> context_pool;
+  std::optional<AsyncMD5> md5;
 public:
   AppMain(const DoutPrefixProvider* dpp);
   ~AppMain();
