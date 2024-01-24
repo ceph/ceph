@@ -16,7 +16,7 @@ using std::make_pair;
 
 namespace crimson::osd {
 
-seastar::future<core_id_t> PGShardMapping::maybe_create_pg(
+seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
   spg_t pgid,
   core_id_t core)
 {
@@ -61,7 +61,7 @@ seastar::future<core_id_t> PGShardMapping::maybe_create_pg(
   }
 }
 
-seastar::future<> PGShardMapping::remove_pg(spg_t pgid) {
+seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
   return container().invoke_on(0, [pgid](auto &primary_mapping) {
     auto iter = primary_mapping.pg_to_core.find(pgid);
     ceph_assert_always(iter != primary_mapping.pg_to_core.end());
