@@ -6737,48 +6737,6 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
       // bluefs doing that itself.
       fm->allocate(0, reserved, t);
     }
-    // debug code - not needed for NULL FM
-    if (cct->_conf->bluestore_debug_prefill > 0) {
-      uint64_t end = bdev->get_size() - reserved;
-      dout(1) << __func__ << " pre-fragmenting freespace, using "
-	      << cct->_conf->bluestore_debug_prefill << " with max free extent "
-	      << cct->_conf->bluestore_debug_prefragment_max << dendl;
-      uint64_t start = p2roundup(reserved, min_alloc_size);
-      uint64_t max_b = cct->_conf->bluestore_debug_prefragment_max / min_alloc_size;
-      float r = cct->_conf->bluestore_debug_prefill;
-      r /= 1.0 - r;
-      bool stop = false;
-
-      while (!stop && start < end) {
-	uint64_t l = (rand() % max_b + 1) * min_alloc_size;
-	if (start + l > end) {
-	  l = end - start;
-          l = p2align(l, min_alloc_size);
-        }
-        ceph_assert(start + l <= end);
-
-	uint64_t u = 1 + (uint64_t)(r * (double)l);
-	u = p2roundup(u, min_alloc_size);
-        if (start + l + u > end) {
-          u = end - (start + l);
-          // trim to align so we don't overflow again
-          u = p2align(u, min_alloc_size);
-          stop = true;
-        }
-        ceph_assert(start + l + u <= end);
-
-	dout(20) << __func__ << " free 0x" << std::hex << start << "~" << l
-		 << " use 0x" << u << std::dec << dendl;
-
-        if (u == 0) {
-          // break if u has been trimmed to nothing
-          break;
-        }
-
-	fm->allocate(start + l, u, t);
-	start += l + u;
-      }
-    }
     r = _write_out_fm_meta(0);
     ceph_assert(r == 0);
   } else {
