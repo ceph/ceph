@@ -6458,6 +6458,10 @@ void BlueStore::_init_logger()
     l_bluestore_allocate_hist, "allocate_histogram",
     alloc_hist_x_axis_config, alloc_hist_y_axis_config,
     "Histogram of requested block allocations vs. given ones");
+  b.add_time_avg(l_bluestore_allocator_lat, "allocator_lat",
+    "Average bluestore allocator latency",
+    "bsal",
+    PerfCountersBuilder::PRIO_USEFUL);
 
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
@@ -16814,9 +16818,14 @@ int BlueStore::_do_alloc_write(
   PExtentVector prealloc;
   prealloc.reserve(2 * wctx->writes.size());
   int64_t prealloc_left = 0;
+  auto start = mono_clock::now();
   prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
     0, &prealloc);
+  log_latency("allocator@_do_alloc_write",
+    l_bluestore_allocator_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
   if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
     derr << __func__ << " failed to allocate 0x" << std::hex << need
          << " allocated 0x " << (prealloc_left < 0 ? 0 : prealloc_left)
