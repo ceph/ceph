@@ -1,7 +1,5 @@
 >=19.0.0
 
-* The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
-  python dependencies are now available in EPEL9.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
   multi-site. Previously, the replicas of such objects were corrupted on decryption.
   A new tool, ``radosgw-admin bucket resync encrypted multipart``, can be used to
