@@ -3852,14 +3852,45 @@ void OSDMap::dump_read_balance_score(CephContext *cct,
     auto rc = calc_read_balance_score(cct, pid, &rb_info);
     if (rc >= 0) {
       f->open_object_section("read_balance");
+      string score_type_str;
+      switch (rb_info.score_type) {
+      case RBS_FAIR:
+        score_type_str = "Fair distribution";
+        break;
+      case RBS_SIZE_OPTIMAL:
+        score_type_str = "OSD size aware";
+        break;
+      default:
+        score_type_str = "Unknown";
+        break;
+      }
+      f->dump_string("score_type", score_type_str);
       f->dump_float("score_acting", rb_info.acting_adj_score);
       f->dump_float("score_stable", rb_info.adjusted_score);
-      f->dump_float("optimal_score", rb_info.optimal_score);
-      f->dump_float("raw_score_acting", rb_info.acting_raw_score);
-      f->dump_float("raw_score_stable", rb_info.raw_score);
-      f->dump_float("primary_affinity_weighted", rb_info.pa_weighted);
-      f->dump_float("average_primary_affinity", rb_info.pa_avg);
-      f->dump_float("average_primary_affinity_weighted", rb_info.pa_weighted_avg);
+      if (rb_info.score_type == RBS_FAIR) {
+        f->dump_float("optimal_score", rb_info.optimal_score);
+        f->dump_float("raw_score_acting", rb_info.acting_raw_score);
+        f->dump_float("raw_score_stable", rb_info.raw_score);
+        f->dump_float("primary_affinity_weighted", rb_info.pa_weighted);
+        f->dump_float("average_primary_affinity", rb_info.pa_avg);
+        f->dump_float("average_primary_affinity_weighted", rb_info.pa_weighted_avg);
+      } else if (rb_info.score_type == RBS_SIZE_OPTIMAL) {
+        f->dump_int("average_osd_load", rb_info.avg_osd_load);
+        f->open_object_section("most_loaded_osd");
+        f->dump_int("osd", rb_info.max_osd);
+        f->dump_int("pgs", rb_info.max_osd_pgs);
+        f->dump_int("primaries", rb_info.max_osd_prims);
+        f->dump_int("load", rb_info.max_osd_load);
+        f->close_section();
+        if (rb_info.max_osd != rb_info.max_acting_osd) {
+          f->open_object_section("most_loaded_acting_osd");
+          f->dump_int("osd", rb_info.max_acting_osd);
+          f->dump_int("pgs", rb_info.max_acting_osd_pgs);
+          f->dump_int("primaries", rb_info.max_acting_osd_prims);
+          f->dump_int("load", rb_info.max_acting_osd_load);
+          f->close_section();
+        }
+      }
       if (rb_info.err_msg.length() > 0) {
         f->dump_string("error_message", rb_info.err_msg);
       }
@@ -5310,7 +5341,7 @@ int OSDMap::calc_desired_primary_distribution_osdsize_opt(
     }
     int write_ratio = 100 - read_ratio;
     ldout(cct, 30) << __func__ << " Pool: " << pid << " read ratio: " << read_ratio << " write ratio: " << write_ratio << dendl;
-    int num_osds = osds.size();
+    auto num_osds = osds.size();
     if (pg_num != (pool->get_pgp_num_mask() + 1)) {
       // TODO: handle pgs with different sizes
       //pool_t op:  unsigned get_pg_num_divisor(pg_t pgid) const;
@@ -6286,6 +6317,7 @@ int64_t OSDMap::has_zero_pa_pgs(CephContext *cct, int64_t pool_id) const
 }
 
 void OSDMap::zero_rbi(read_balance_info_t &rbi) const {
+  rbi.score_type = RBS_FAIR;
   rbi.pa_avg = 0.;
   rbi.pa_weighted = 0.;
   rbi.pa_weighted_avg = 0.;
@@ -6294,10 +6326,18 @@ void OSDMap::zero_rbi(read_balance_info_t &rbi) const {
   rbi.adjusted_score = 0.;
   rbi.acting_raw_score = 0.;
   rbi.acting_adj_score = 0.;
+  rbi.max_osd = 0;
+  rbi.max_osd_load = 0;
+  rbi.max_osd_pgs = 0;
+  rbi.max_osd_prims = 0;
+  rbi.max_acting_osd = 0;
+  rbi.max_acting_osd_load = 0;
+  rbi.max_acting_osd_pgs = 0;
+  rbi.max_acting_osd_prims = 0;
   rbi.err_msg = "";
 }
 
-int OSDMap::set_rbi(
+int OSDMap::set_rbi_fair(
     CephContext *cct,
     read_balance_info_t &rbi,
     int64_t pool_id,
@@ -6314,8 +6354,12 @@ int OSDMap::set_rbi(
     float max_osd_score) const
 {
   // put all the ugly code here, so rest of code is nicer.
+  //TODO: split this function to 2 (or just rename) according to score type
+
   const pg_pool_t* pool = get_pg_pool(pool_id);
   zero_rbi(rbi);
+
+  rbi.score_type = RBS_FAIR;
 
   if (total_w_pa / total_osd_weight < 1. / float(pool->get_size())) {
     ldout(cct, 20) << __func__ << " pool " << pool_id << " average primary affinity is lower than"
@@ -6379,32 +6423,10 @@ int OSDMap::set_rbi(
   return 0;
 }
 
-int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
-				    read_balance_info_t *p_rbi) const
+int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id,
+                          const pg_pool_t *pgpool, read_balance_info_t &rbi) const
 {
-  //BUG: wrong score with one PG replica 3 and 4 OSDs
-  if (cct != nullptr)
-    ldout(cct,20) << __func__ << " pool " << get_pool_name(pool_id) << dendl;
-
-  OSDMap tmp_osd_map;
-  tmp_osd_map.deepish_copy_from(*this);
-  if (p_rbi == nullptr) {
-    // The only case where error message is not set - this is not tested in the unit test.
-    if (cct != nullptr)
-      ldout(cct,30) << __func__ << " p_rbi is nullptr." << dendl;
-    return -EINVAL;
-  }
-
-  if (tmp_osd_map.pools.count(pool_id) == 0) {
-    if (cct != nullptr)
-      ldout(cct,30) << __func__ << " pool " << pool_id << " not found." << dendl;
-    zero_rbi(*p_rbi);
-    p_rbi->err_msg = fmt::format("pool {} not found", pool_id);
-    return -ENOENT;
-  }
-  int rc = 0;
-  const pg_pool_t* pool = tmp_osd_map.get_pg_pool(pool_id);
-  auto num_pgs = pool->get_pg_num();
+  auto num_pgs = pgpool->get_pg_num();
 
   map<uint64_t,set<pg_t>> pgs_by_osd;
   map<uint64_t,set<pg_t>> prim_pgs_by_osd;
@@ -6417,7 +6439,7 @@ int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
 		  << prim_pgs_by_osd << dendl;
 
   if (pgs_by_osd.empty()) {
-    //p_rbi->err_msg = fmt::format("pool {} has no PGs mapped to OSDs", pool_id);
+    //rbi.err_msg = fmt::format("pool {} has no PGs mapped to OSDs", pool_id);
     return -EINVAL;
   }
   if (cct != nullptr) {
@@ -6505,8 +6527,8 @@ int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
       ldout(cct, 10) << __func__ << " pool " << pool_id
 	         << " has primary_affinity set to zero on all OSDs" << dendl;
     }
-    zero_rbi(*p_rbi);
-    p_rbi->err_msg = fmt::format("pool {} has primary_affinity set to zero on all OSDs", pool_id);
+    zero_rbi(rbi);
+    rbi.err_msg = fmt::format("pool {} has primary_affinity set to zero on all OSDs", pool_id);
 
     return -ERANGE;   // score has a different meaning now.
   }
@@ -6514,30 +6536,172 @@ int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
     max_osd_score *= prim_affinity_sum / num_osds;
   }
 
-  rc = tmp_osd_map.set_rbi(cct, *p_rbi, pool_id, total_weighted_pa,
-                           prim_affinity_sum, num_osds, osd_pa_count,
-                           total_osd_weight, max_prims_per_osd,
-                           max_acting_prims_per_osd, avg_prims_per_osd,
-                           prim_on_zero_pa, acting_on_zero_pa, max_osd_score);
+  int rc = tmp_osd_map.set_rbi_fair(cct, rbi, pool_id, total_weighted_pa,
+                                    prim_affinity_sum, num_osds, osd_pa_count,
+                                    total_osd_weight, max_prims_per_osd,
+                                    max_acting_prims_per_osd, avg_prims_per_osd,
+                                    prim_on_zero_pa, acting_on_zero_pa, max_osd_score);
 
   if (cct != nullptr) {
     ldout(cct,30) << __func__ << " pool " << get_pool_name(pool_id)
-                  << " pa_avg " << p_rbi->pa_avg
-                  << " pa_weighted " << p_rbi->pa_weighted
-                  << " pa_weighted_avg " << p_rbi->pa_weighted_avg
-                  << " optimal_score " << p_rbi->optimal_score
-                  << " adjusted_score " << p_rbi->adjusted_score
-                  << " acting_adj_score " << p_rbi->acting_adj_score
+                  << " pa_avg " << rbi.pa_avg
+                  << " pa_weighted " << rbi.pa_weighted
+                  << " pa_weighted_avg " << rbi.pa_weighted_avg
+                  << " optimal_score " << rbi.optimal_score
+                  << " adjusted_score " << rbi.adjusted_score
+                  << " acting_adj_score " << rbi.acting_adj_score
                   << dendl;
     ldout(cct,20) << __func__ << " pool " << get_pool_name(pool_id)
-		  << " raw_score: " << p_rbi->raw_score
-		  << " acting_raw_score: " << p_rbi->acting_raw_score
+		  << " raw_score: " << rbi.raw_score
+		  << " acting_raw_score: " << rbi.acting_raw_score
 		  << dendl;
     ldout(cct,10) << __func__ << " pool " << get_pool_name(pool_id)
-		  << " wl_score: " << p_rbi->acting_adj_score << dendl;
+		  << " wl_score: " << rbi.acting_adj_score << dendl;
   }
 
   return rc;
+
+}
+
+int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id,
+                                  const pg_pool_t *pgpool, read_balance_info_t &rbi) const
+{
+  zero_rbi(rbi);
+  rbi.score_type = RBS_SIZE_OPTIMAL;
+
+  auto num_pgs = pgpool->get_pg_num();
+
+  if (num_pgs == 0) {
+    rbi.err_msg = fmt::format("ERROR: pool {} has no PGs", pool_id);
+    if (cct != nullptr) {
+      ldout(cct, 20) << __func__ << " pool " << pool_id
+                     << " has no PGs - can't calculate size-optimal read balancer score" << dendl;
+    }
+  }
+
+  map<uint64_t,set<pg_t>> pgs_by_osd;
+  map<uint64_t,set<pg_t>> prim_pgs_by_osd;
+  map<uint64_t,set<pg_t>> acting_prims_by_osd;
+
+  pgs_by_osd = tmp_osd_map.get_pgs_by_osd(cct, pool_id, &prim_pgs_by_osd, &acting_prims_by_osd);
+  auto num_osds = pgs_by_osd.size();
+  int64_t num_pg_osd_legs = 0;
+  for (auto i = 0 ; i < num_osds ; i++) {
+    if (get_primary_affinity(i) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+      if (cct != nullptr) {
+        ldout(cct, 30) << __func__ << " pool " << pool_id
+                           << " has primary_affinity set to non-default value on some OSDs" << dendl;
+      }
+      if (rbi.err_msg.empty()) {
+        rbi.err_msg = fmt::format("Warning: pool {} has primary_affinity set to non-default value on some OSDs, "
+                                  "this is ignored by the size-optimal read balancer", pool_id);
+      }
+    }
+    num_pg_osd_legs += pgs_by_osd[i].size();
+  }
+  if (num_pg_osd_legs != num_pgs * pgpool->get_size()) {
+    if (cct != nullptr) {
+      ldout(cct, 30) << __func__ << " pool " << pool_id
+                     << " has " << num_pg_osd_legs << " PG OSD legs, expected " << num_pgs * pgpool->get_size()
+                     << " - can't calculate size-optimal read balancer score" << dendl;
+    }
+    rbi.err_msg = fmt::format("ERROR: pool {} has {} PG OSD legs, expected {} - Can't calculate size-optimal read balancer score",
+                              pool_id, num_pg_osd_legs, num_pgs * pgpool->get_size());
+    return -EINVAL;
+  }
+  int64_t rr = 0;
+  pgpool->opts.get(pool_opts_t::READ_RATIO, &rr);
+  if (rr <= 0 || rr > 100) {
+    if (cct != nullptr) {
+      ldout(cct, 30) << __func__ << " pool " << pool_id
+                      << " has invalid read_ratio " << rr << " - can't calculate size-optimal read balancer score" << dendl;
+    }
+    rbi.err_msg = fmt::format("ERROR: pool {} has invalid read_ratio {} - Can't calculate size-optimal read balancer score",
+                              pool_id, rr);
+    return -EINVAL;
+  }
+  uint64_t load_per_pg = 100 + (pgpool->get_size() - 1) * (100 - rr);
+  uint64_t total_load = load_per_pg * num_pgs;
+  if (num_osds == 0) {
+    rbi.err_msg = fmt::format("ERROR: pool {} has no active OSDs, can't calculate loads and read balance score", pool_id);
+    return -EINVAL;
+  }
+  float load_per_osd = total_load / num_osds;
+  rbi.max_osd = -1;
+  rbi.max_acting_osd = -1;
+  rbi.avg_osd_load = int(load_per_osd);
+  for (auto &[o, pgs] : pgs_by_osd) {
+    int64_t npgs = pgs.size();
+    int64_t nprims = prim_pgs_by_osd.contains(o) ? prim_pgs_by_osd.at(o).size() : 0;
+    int64_t nacting_prims = acting_prims_by_osd.contains(o) ? acting_prims_by_osd.at(o).size() : 0;
+    int64_t load = nprims * 100 + (npgs - nprims) * (100 - rr);
+    int64_t acting_load = nacting_prims * 100 + (npgs - nacting_prims) * (100 - rr);
+    if (load > rbi.max_osd_load) {
+      rbi.max_osd_load = load;
+      rbi.max_osd = o;
+      rbi.max_osd_pgs = npgs;
+      rbi.max_osd_prims = nprims;
+    }
+    if (acting_load > rbi.max_acting_osd_load) {
+      rbi.max_acting_osd_load = acting_load;
+      rbi.max_acting_osd = o;
+      rbi.max_acting_osd_pgs = npgs;
+      rbi.max_acting_osd_prims = nacting_prims;
+    }
+  }
+  if (rbi.max_acting_osd < 0) {
+    rbi.err_msg = fmt::format("ERROR: Could not find max_acting_load for pool {}", pool_id);
+    return -EINVAL;
+  }
+  // All conditions that can cause load_per_osd to be 0 were checked before this point.
+  ceph_assert(load_per_osd != 0.0);
+  rbi.acting_adj_score = rbi_round(float(rbi.max_acting_osd_load / load_per_osd));
+  if (rbi.max_osd < 0) {
+    // This is just a warning since the important value is the rbi.acting_adj_score
+    rbi.err_msg = fmt::format("Warning: Could not find max_load for pool {}", pool_id);
+  } else {
+    rbi.adjusted_score = rbi_round(float(rbi.max_osd_load / load_per_osd));
+  }
+  return 0;
+}
+
+int OSDMap::calc_read_balance_score(CephContext *cct, int64_t pool_id,
+				    read_balance_info_t *p_rbi) const
+{
+  //BUG: wrong score with one PG replica 3 and 4 OSDs
+  if (cct != nullptr)
+    ldout(cct,20) << __func__ << " pool " << get_pool_name(pool_id) << dendl;
+
+  OSDMap tmp_osd_map;
+  tmp_osd_map.deepish_copy_from(*this);
+  if (p_rbi == nullptr) {
+    // The only case where error message is not set - this is not tested in the unit test.
+    if (cct != nullptr)
+      ldout(cct,30) << __func__ << " p_rbi is nullptr." << dendl;
+    return -EINVAL;
+  }
+
+  if (tmp_osd_map.pools.count(pool_id) == 0) {
+    if (cct != nullptr)
+      ldout(cct,30) << __func__ << " pool " << pool_id << " not found." << dendl;
+    zero_rbi(*p_rbi);
+    p_rbi->err_msg = fmt::format("pool {} not found", pool_id);
+    return -ENOENT;
+  }
+
+  const pg_pool_t* pool = tmp_osd_map.get_pg_pool(pool_id);
+  if (!pool->is_replicated()) {
+    zero_rbi(*p_rbi);
+    p_rbi->err_msg = fmt::format("pool {} is not a replicated pool, read balance score is meaningless", pool_id);
+    return -EPERM;
+  }
+  if (pool->opts.is_set(pool_opts_t::READ_RATIO)) {
+    // if read_ratio is set use osd-size-aware read balance score
+    return calc_rbs_size_optimal(cct, tmp_osd_map, pool_id, pool, *p_rbi);
+  } else {
+    // if read ratio is not set use fair read balance score
+    return calc_rbs_fair(cct, tmp_osd_map, pool_id, pool, *p_rbi);
+  }
 }
 
 int OSDMap::get_osds_by_bucket_name(const string &name, set<int> *osds) const
