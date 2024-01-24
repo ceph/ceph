@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
+#include <limits>
+
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
@@ -224,6 +226,7 @@ public:
   void _dump_op_descriptor(std::ostream& stream) const override;
 
   metareqid_t reqid;
+  int result = std::numeric_limits<int>::min();
   __u32 attempt = 0;      // which attempt for this request
   LogSegment *ls = nullptr;  // the log segment i'm committing to
 
