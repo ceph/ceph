@@ -2,15 +2,11 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "crimson/osd/pg_map.h"
-
+#include "crimson/common/log.h"
 #include "crimson/osd/pg.h"
 #include "common/Formatter.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_osd);
-  }
-}
+SET_SUBSYS(osd);
 
 using std::make_pair;
 
@@ -121,7 +117,8 @@ Ref<PG> PGMap::get_pg(spg_t pgid)
 
 void PGMap::set_creating(spg_t pgid)
 {
-  logger().debug("Creating {}", pgid);
+  LOG_PREFIX(PGMap::set_creating);
+  DEBUG("Creating {}", pgid);
   ceph_assert(pgs.count(pgid) == 0);
   auto pg = pgs_creating.find(pgid);
   ceph_assert(pg != pgs_creating.end());
@@ -131,7 +128,8 @@ void PGMap::set_creating(spg_t pgid)
 
 void PGMap::pg_created(spg_t pgid, Ref<PG> pg)
 {
-  logger().debug("Created {}", pgid);
+  LOG_PREFIX(PGMap::pg_created);
+  DEBUG("Created {}", pgid);
   ceph_assert(!pgs.count(pgid));
   pgs.emplace(pgid, pg);
 
@@ -150,7 +148,8 @@ void PGMap::pg_loaded(spg_t pgid, Ref<PG> pg)
 
 void PGMap::pg_creation_canceled(spg_t pgid)
 {
-  logger().debug("PGMap::pg_creation_canceled: {}", pgid);
+  LOG_PREFIX(PGMap::pg_creation_canceled);
+  DEBUG("{}", pgid);
   ceph_assert(!pgs.count(pgid));
 
   auto creating_iter = pgs_creating.find(pgid);
