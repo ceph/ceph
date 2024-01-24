@@ -2,9 +2,11 @@
 // vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "rgw_sync.h"
+#include "rgw_sync_common.h"
 #include "rgw_rest_conn.h"
 #include "rgw_cr_rados.h"
 #include "rgw_cr_rest.h"
+#include "rgw_meta_sync_common.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_mdlog.h"
@@ -19,61 +21,29 @@
 
 using namespace std;
 
-static string mdlog_sync_status_oid = "mdlog.sync-status";
-static string mdlog_sync_status_shard_prefix = "mdlog.sync-status.shard";
-static string mdlog_sync_full_sync_index_prefix = "meta.full-sync.index";
-
-static const string meta_sync_bids_oid = "meta-sync-bids";
-
 RGWContinuousLeaseCR::~RGWContinuousLeaseCR() {}
 
-RGWSyncErrorLogger::RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const string &oid_prefix, int _num_shards) : store(_store), num_shards(_num_shards) {
-  for (int i = 0; i < num_shards; i++) {
-    oids.push_back(get_shard_oid(oid_prefix, i));
-  }
-}
-string RGWSyncErrorLogger::get_shard_oid(const string& oid_prefix, int shard_id) {
-  char buf[oid_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", oid_prefix.c_str(), shard_id);
-  return string(buf);
-}
-
 RGWCoroutine *RGWSyncErrorLogger::log_error_cr(const DoutPrefixProvider *dpp, const string& source_zone, const string& section, const string& name, uint32_t error_code, const string& message) {
-  cls_log_entry entry;
+  cls::log::entry entry;
 
-  rgw_sync_error_info info(source_zone, error_code, message);
+  rgw::sync::error_info info(source_zone, error_code, message);
   bufferlist bl;
   encode(info, bl);
   store->svc()->cls->timelog.prepare_entry(entry, real_clock::now(), section, name, bl);
 
-  uint32_t shard_id = ++counter % num_shards;
-
-
-  return new RGWRadosTimelogAddCR(dpp, store, oids[shard_id], entry);
-}
-
-void RGWSyncBackoff::update_wait_time()
-{
-  if (cur_wait == 0) {
-    cur_wait = 1;
-  } else {
-    cur_wait = (cur_wait << 1);
-  }
-  if (cur_wait >= max_secs) {
-    cur_wait = max_secs;
-  }
+  return new RGWRadosTimelogAddCR(dpp, store, next_oid(), entry);
 }
 
 void RGWSyncBackoff::backoff_sleep()
 {
   update_wait_time();
-  sleep(cur_wait);
+  sleep(cur_wait.count());
 }
 
 void RGWSyncBackoff::backoff(RGWCoroutine *op)
 {
   update_wait_time();
-  op->wait(utime_t(cur_wait, 0));
+  op->wait(utime_t(cur_wait.count(), 0));
 }
 
 int RGWBackoffControlCR::operate(const DoutPrefixProvider *dpp) {
@@ -116,12 +86,6 @@ int RGWBackoffControlCR::operate(const DoutPrefixProvider *dpp) {
     return set_cr_done();
   }
   return 0;
-}
-
-void rgw_mdlog_info::decode_json(JSONObj *obj) {
-  JSONDecoder::decode_json("num_objects", num_shards, obj);
-  JSONDecoder::decode_json("period", period, obj);
-  JSONDecoder::decode_json("realm_epoch", realm_epoch, obj);
 }
 
 void rgw_mdlog_entry::decode_json(JSONObj *obj) {
@@ -239,7 +203,7 @@ public:
   bool spawn_next() override;
 };
 
-int RGWRemoteMetaLog::read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info)
+int RGWRemoteMetaLog::read_log_info(const DoutPrefixProvider *dpp, rgw::sync::meta::log_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "metadata" },
                                   { NULL, NULL } };
@@ -261,7 +225,7 @@ int RGWRemoteMetaLog::read_master_log_shards_info(const DoutPrefixProvider *dpp,
     return 0;
   }
 
-  rgw_mdlog_info log_info;
+  rgw::sync::meta::log_info log_info;
   int ret = read_log_info(dpp, &log_info);
   if (ret < 0) {
     return ret;
@@ -289,7 +253,9 @@ int RGWRemoteMetaLog::init()
     return ret;
   }
 
-  error_logger = new RGWSyncErrorLogger(store, RGW_SYNC_ERROR_LOG_SHARD_PREFIX, ERROR_LOGGER_SHARDS);
+  error_logger = new RGWSyncErrorLogger(store,
+					RGWSyncErrorLogger::PREFIX,
+					RGWSyncErrorLogger::SHARDS);
 
   init_sync_env(&sync_env);
 
@@ -364,15 +330,12 @@ void RGWMetaSyncEnv::init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw
 
 string RGWMetaSyncEnv::status_oid()
 {
-  return mdlog_sync_status_oid;
+  return std::string(rgw::sync::meta::status_oid);
 }
 
 string RGWMetaSyncEnv::shard_obj_name(int shard_id)
 {
-  char buf[mdlog_sync_status_shard_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_status_shard_prefix.c_str(), shard_id);
-
-  return string(buf);
+  return fmt::format("{}.{}", rgw::sync::meta::status_shard_prefix, shard_id);
 }
 
 class RGWAsyncReadMDLogEntries : public RGWAsyncRadosRequest {
@@ -399,7 +362,7 @@ protected:
   }
 public:
   string marker;
-  list<cls_log_entry> entries;
+  vector<cls::log::entry> entries;
   bool truncated;
 
   RGWAsyncReadMDLogEntries(const DoutPrefixProvider *dpp, RGWCoroutine *caller, RGWAioCompletionNotifier *cn, rgw::sal::RadosStore* _store,
@@ -416,7 +379,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
   string marker;
   string *pmarker;
   int max_entries;
-  list<cls_log_entry> *entries;
+  vector<cls::log::entry> *entries;
   bool *truncated;
 
   RGWAsyncReadMDLogEntries *req{nullptr};
@@ -424,7 +387,7 @@ class RGWReadMDLogEntriesCR : public RGWSimpleCoroutine {
 public:
   RGWReadMDLogEntriesCR(RGWMetaSyncEnv *_sync_env, RGWMetadataLog* mdlog,
                         int _shard_id, string*_marker, int _max_entries,
-                        list<cls_log_entry> *_entries, bool *_truncated)
+                        vector<cls::log::entry> *_entries, bool *_truncated)
     : RGWSimpleCoroutine(_sync_env->cct), sync_env(_sync_env), mdlog(mdlog),
       shard_id(_shard_id), pmarker(_marker), max_entries(_max_entries),
       entries(_entries), truncated(_truncated) {}
@@ -916,7 +879,7 @@ public:
       }
       entries_index.reset(new RGWShardedOmapCRManager(sync_env->async_rados, sync_env->store, this, num_shards,
                                                       sync_env->store->svc()->zone->get_zone_params().log_pool,
-                                                      mdlog_sync_full_sync_index_prefix));
+                                                      string{rgw::sync::meta::full_sync_index_prefix}));
       yield {
 	call(new RGWReadRESTResourceCR<list<string> >(cct, conn, sync_env->http_manager,
 				       "/admin/metadata", NULL, &sections));
@@ -1026,9 +989,7 @@ public:
 
 static string full_sync_index_shard_oid(int shard_id)
 {
-  char buf[mdlog_sync_full_sync_index_prefix.size() + 16];
-  snprintf(buf, sizeof(buf), "%s.%d", mdlog_sync_full_sync_index_prefix.c_str(), shard_id);
-  return string(buf);
+  return fmt::format("{}.{}", rgw::sync::meta::full_sync_index_prefix, shard_id);
 }
 
 class RGWReadRemoteMetadataCR : public RGWCoroutine {
@@ -1449,8 +1410,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
 
   RGWMetaSyncShardMarkerTrack *marker_tracker = nullptr;
 
-  list<cls_log_entry> log_entries;
-  list<cls_log_entry>::iterator log_iter;
+  vector<cls::log::entry> log_entries;
+  decltype(log_entries)::iterator log_iter;
   bool truncated = false;
 
   string mdlog_marker;
@@ -1874,7 +1835,7 @@ public:
               continue;
             }
             tn->log(20, SSTR("log_entry: " << log_iter->id << ":" << log_iter->section << ":" << log_iter->name << ":" << log_iter->timestamp));
-            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp.to_real_time())) {
+            if (!marker_tracker->start(log_iter->id, 0, log_iter->timestamp)) {
               ldpp_dout(sync_env->dpp, 0) << "ERROR: cannot start syncing " << log_iter->id << ". Duplicate entry?" << dendl;
             } else {
               raw_key = log_iter->section + ":" + log_iter->name;
@@ -2177,7 +2138,7 @@ int RGWRemoteMetaLog::init_sync_status(const DoutPrefixProvider *dpp)
     return 0;
   }
 
-  rgw_mdlog_info mdlog_info;
+  rgw::sync::meta::log_info mdlog_info;
   int r = read_log_info(dpp, &mdlog_info);
   if (r < 0) {
     ldpp_dout(dpp, -1) << "ERROR: fail to fetch master log info (r=" << r << ")" << dendl;
@@ -2255,7 +2216,7 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
   int r = 0;
 
   // get shard count and oldest log period from master
-  rgw_mdlog_info mdlog_info;
+  rgw::sync::meta::log_info mdlog_info;
   for (;;) {
     if (going_down) {
       ldpp_dout(dpp, 1) << __func__ << "(): going down" << dendl;
@@ -2338,7 +2299,7 @@ int RGWRemoteMetaLog::run_sync(const DoutPrefixProvider *dpp, optional_yield y)
 
   // construct and start the bid manager for sync fairness
   const auto& control_pool = store->svc()->zone->get_zone_params().control_pool;
-  auto control_obj = rgw_raw_obj{control_pool, meta_sync_bids_oid};
+  auto control_obj = rgw_raw_obj{control_pool, std::string{rgw::sync::meta::bids_oid}};
 
   auto bid_manager = rgw::sync_fairness::create_rados_bid_manager(
       store, control_obj, num_shards);
@@ -2472,7 +2433,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
   const bool add_ref = false; // default constructs with refs=1
 
   completion.reset(new RGWMetadataLogInfoCompletion(
-    [this](int ret, const cls_log_header& header) {
+    [this](int ret, const cls::log::header& header) {
       if (ret < 0) {
         if (ret != -ENOENT) {
           ldpp_dout(sync_env->dpp, 1) << "ERROR: failed to read mdlog info with "
@@ -2480,7 +2441,7 @@ int RGWCloneMetaLogCoroutine::state_read_shard_status()
         }
       } else {
         shard_info.marker = header.max_marker;
-        shard_info.last_update = header.max_time.to_real_time();
+        shard_info.last_update = header.max_time;
       }
       // wake up parent stack
       io_complete();
@@ -2579,18 +2540,18 @@ int RGWCloneMetaLogCoroutine::state_receive_rest_response()
 
 int RGWCloneMetaLogCoroutine::state_store_mdlog_entries()
 {
-  list<cls_log_entry> dest_entries;
+  vector<cls::log::entry> dest_entries;
 
   vector<rgw_mdlog_entry>::iterator iter;
   for (iter = data.entries.begin(); iter != data.entries.end(); ++iter) {
     rgw_mdlog_entry& entry = *iter;
     ldpp_dout(sync_env->dpp, 20) << "entry: name=" << entry.name << dendl;
 
-    cls_log_entry dest_entry;
+    cls::log::entry dest_entry;
     dest_entry.id = entry.id;
     dest_entry.section = entry.section;
     dest_entry.name = entry.name;
-    dest_entry.timestamp = utime_t(entry.timestamp);
+    dest_entry.timestamp = entry.timestamp;
   
     encode(entry.log_data, dest_entry.data);
 
@@ -2690,10 +2651,4 @@ void rgw_meta_sync_status::decode_json(JSONObj *obj)
 void rgw_meta_sync_status::dump(Formatter *f) const {
   encode_json("info", sync_info, f);
   encode_json("markers", sync_markers, f);
-}
-
-void rgw_sync_error_info::dump(Formatter *f) const {
-  encode_json("source_zone", source_zone, f);
-  encode_json("error_code", error_code, f);
-  encode_json("message", message, f);
 }

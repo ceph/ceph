@@ -17,6 +17,8 @@ extern "C" {
 #include "auth/Crypto.h"
 #include "compressor/Compressor.h"
 
+#include "common/async/context_pool.h"
+
 #include "common/armor.h"
 #include "common/ceph_json.h"
 #include "common/config.h"
@@ -74,6 +76,7 @@ extern "C" {
 
 #include "driver/rados/rgw_bucket.h"
 #include "driver/rados/rgw_sal_rados.h"
+#include "driver/rados/rgw_sync_common.h"
 
 #define dout_context g_ceph_context
 
@@ -84,6 +87,8 @@ using namespace std;
 
 static rgw::sal::Driver* driver = NULL;
 static constexpr auto dout_subsys = ceph_subsys_rgw;
+std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
+rgw::SiteConfig site;
 
 
 static const DoutPrefixProvider* dpp() {
@@ -3053,7 +3058,7 @@ static int scan_totp(CephContext *cct, ceph::real_time& now, rados::cls::otp::ot
 
 static int trim_sync_error_log(int shard_id, const string& marker, int delay_ms)
 {
-  auto oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
+  auto oid = RGWSyncErrorLogger::get_shard_oid(RGWSyncErrorLogger::PREFIX,
                                                shard_id);
   // call cls_log_trim() until it returns -ENODATA
   for (;;) {
@@ -3309,6 +3314,7 @@ int main(int argc, const char **argv)
 
   auto cct = rgw_global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			     CODE_ENVIRONMENT_UTILITY, 0);
+  ceph::async::io_context_pool context_pool(cct->_conf->rgw_thread_pool_size);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
   if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
@@ -4255,14 +4261,26 @@ int main(int argc, const char **argv)
       return EIO;
     }
 
+    cfgstore = DriverManager::create_config_store(dpp(), config_store_type);
+    if (!cfgstore) {
+      std::cerr << "Unable to initialize config store." << std::endl;
+      exit(1);
+    }
+    auto r = site.load(dpp(), null_yield, cfgstore.get());
+    if (r < 0) {
+      std::cerr << "Unable to initialize config store." << std::endl;
+      exit(1);
+    }
+
     if (raw_storage_op) {
-      driver = DriverManager::get_raw_storage(dpp(),
-					    g_ceph_context,
-					    cfg);
+      driver = DriverManager::get_raw_storage(dpp(), g_ceph_context,
+					      cfg, context_pool, site);
     } else {
       driver = DriverManager::get_storage(dpp(),
 					g_ceph_context,
 					cfg,
+					context_pool,
+					site,
 					false,
 					false,
 					false,
@@ -8852,7 +8870,7 @@ next:
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
       void *handle;
-      list<cls_log_entry> entries;
+      vector<cls::log::entry> entries;
 
       meta_log->init_list_entries(i, {}, {}, marker, &handle);
       bool truncated;
@@ -8863,8 +8881,8 @@ next:
           return -ret;
         }
 
-        for (list<cls_log_entry>::iterator iter = entries.begin(); iter != entries.end(); ++iter) {
-          cls_log_entry& entry = *iter;
+        for (auto iter = entries.begin(); iter != entries.end(); ++iter) {
+          cls::log::entry& entry = *iter;
           static_cast<rgw::sal::RadosStore*>(driver)->ctl()->meta.mgr->dump_log_entry(entry, formatter.get());
         }
         formatter->flush(cout);
@@ -9457,16 +9475,16 @@ next:
 
     formatter->open_array_section("entries");
 
-    for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
+    for (; shard_id < RGWSyncErrorLogger::SHARDS; ++shard_id) {
       formatter->open_object_section("shard");
       encode_json("shard_id", shard_id, formatter.get());
       formatter->open_array_section("entries");
 
       int count = 0;
-      string oid = RGWSyncErrorLogger::get_shard_oid(RGW_SYNC_ERROR_LOG_SHARD_PREFIX, shard_id);
+      string oid = RGWSyncErrorLogger::get_shard_oid(RGWSyncErrorLogger::PREFIX, shard_id);
 
       do {
-        list<cls_log_entry> entries;
+        vector<cls::log::entry> entries;
         ret = static_cast<rgw::sal::RadosStore*>(driver)->svc()->cls->timelog.list(dpp(), oid, {}, {}, max_entries - count, entries, marker, &marker, &truncated,
 					      null_yield);
 	if (ret == -ENOENT) {
@@ -9480,7 +9498,7 @@ next:
         count += entries.size();
 
         for (auto& cls_entry : entries) {
-          rgw_sync_error_info log_entry;
+	  rgw::sync::error_info log_entry;
 
           auto iter = cls_entry.data.cbegin();
           try {
@@ -9537,7 +9555,7 @@ next:
       shard_id = 0;
     }
 
-    for (; shard_id < ERROR_LOGGER_SHARDS; ++shard_id) {
+    for (; shard_id < RGWSyncErrorLogger::SHARDS; ++shard_id) {
       ret = trim_sync_error_log(shard_id, marker, trim_delay_ms);
       if (ret < 0) {
         cerr << "ERROR: sync error trim: " << cpp_strerror(-ret) << std::endl;
@@ -10036,7 +10054,7 @@ next:
 
     formatter->open_array_section("entries");
     for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
-      list<cls_log_entry> entries;
+      vector<cls::log::entry> entries;
 
       RGWDataChangesLogInfo info;
       static_cast<rgw::sal::RadosStore*>(driver)->svc()->

@@ -21,93 +21,14 @@
 #include "rgw_sal_rados.h"
 #include "rgw_cr_rados.h"
 #include "sync_fairness.h"
+#include "sync_fairness_common.h"
 
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw
 
 namespace rgw::sync_fairness {
-
-using bid_value = uint16_t;
-using bid_vector = std::vector<bid_value>; // bid per replication log shard
-
-using notifier_id = uint64_t;
-using bidder_map = boost::container::flat_map<notifier_id, bid_vector>;
-
-struct BidRequest {
-  bid_vector bids;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(bids, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& p) {
-    DECODE_START(1, p);
-    decode(bids, p);
-    DECODE_FINISH(p);
-  }
-};
-WRITE_CLASS_ENCODER(BidRequest);
-
-struct BidResponse {
-  bid_vector bids;
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(bids, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator& p) {
-    DECODE_START(1, p);
-    decode(bids, p);
-    DECODE_FINISH(p);
-  }
-};
-WRITE_CLASS_ENCODER(BidResponse);
-
-
-static void encode_notify_request(const bid_vector& bids, bufferlist& bl)
-{
-  BidRequest request;
-  request.bids = bids; // copy the vector
-  encode(request, bl);
-}
-
-static int apply_notify_responses(const bufferlist& bl, bidder_map& bidders)
-{
-  bc::flat_map<std::pair<uint64_t, uint64_t>, bufferlist> replies;
-  std::vector<std::pair<uint64_t, uint64_t>> timeouts;
-  try {
-    // decode notify responses
-    auto p = bl.cbegin();
-
-    using ceph::decode;
-    decode(replies, p);
-    decode(timeouts, p);
-
-    // add peers that replied
-    for (const auto& peer : replies) {
-      auto q = peer.second.cbegin();
-      BidResponse response;
-      decode(response, q);
-
-      uint64_t peer_id = peer.first.first;
-      bidders[peer_id] = std::move(response.bids);
-    }
-
-    // remove peers that timed out
-    for (const auto& peer : timeouts) {
-      uint64_t peer_id = peer.first;
-      bidders.erase(peer_id);
-    }
-  } catch (const buffer::error& e) {
-    return -EIO;
-  }
-  return 0;
-}
-
-
+using namespace rgw::sync_fairness::detail;
 // server interface to handle bid notifications from peers
 struct Server {
   virtual ~Server() = default;

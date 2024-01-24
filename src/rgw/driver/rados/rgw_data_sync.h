@@ -775,8 +775,8 @@ class RGWBucketPipeSyncStatusManager : public DoutPrefixProvider {
   std::optional<rgw_bucket> source_bucket;
 
   std::unique_ptr<RGWSyncErrorLogger> error_logger =
-    std::make_unique<RGWSyncErrorLogger>(driver, RGW_SYNC_ERROR_LOG_SHARD_PREFIX,
-					 ERROR_LOGGER_SHARDS);
+    std::make_unique<RGWSyncErrorLogger>(driver, RGWSyncErrorLogger::PREFIX,
+					 RGWSyncErrorLogger::SHARDS);
   RGWSyncModuleInstanceRef sync_module;
 
   rgw_bucket dest_bucket;

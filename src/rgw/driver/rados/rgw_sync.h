@@ -13,23 +13,12 @@
 #include "rgw_meta_sync_status.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "rgw_sync_common.h"
 #include "rgw_sync_trace.h"
 #include "rgw_mdlog.h"
 #include "sync_fairness.h"
-
-#define ERROR_LOGGER_SHARDS 32
-#define RGW_SYNC_ERROR_LOG_SHARD_PREFIX "sync.error-log"
-
-struct rgw_mdlog_info {
-  uint32_t num_shards;
-  std::string period; //< period id of the master's oldest metadata log
-  epoch_t realm_epoch; //< realm epoch of oldest metadata log
-
-  rgw_mdlog_info() : num_shards(0), realm_epoch(0) {}
-
-  void decode_json(JSONObj *obj);
-};
-
+#include "rgw_sync_common.h"
+#include "rgw_meta_sync_common.h"
 
 struct rgw_mdlog_entry {
   std::string id;
@@ -40,11 +29,11 @@ struct rgw_mdlog_entry {
 
   void decode_json(JSONObj *obj);
 
-  bool convert_from(cls_log_entry& le) {
+  bool convert_from(cls::log::entry& le) {
     id = le.id;
     section = le.section;
     name = le.name;
-    timestamp = le.timestamp.to_real_time();
+    timestamp = le.timestamp;
     try {
       auto iter = le.data.cbegin();
       decode(log_data, iter);
@@ -69,63 +58,20 @@ class RGWMetaSyncCR;
 class RGWRESTConn;
 class RGWSyncTraceManager;
 
-class RGWSyncErrorLogger {
-  rgw::sal::RadosStore* store;
-
-  std::vector<std::string> oids;
-  int num_shards;
-
-  std::atomic<int64_t> counter = { 0 };
+class RGWSyncErrorLogger : public rgw::sync::ErrorLoggerBase {
 public:
-  RGWSyncErrorLogger(rgw::sal::RadosStore* _store, const std::string &oid_prefix, int _num_shards);
+  RGWSyncErrorLogger(rgw::sal::RadosStore* store, std::string_view oid_prefix, int num_shards)
+    : rgw::sync::ErrorLoggerBase(store, oid_prefix, num_shards) {}
   RGWCoroutine *log_error_cr(const DoutPrefixProvider *dpp, const std::string& source_zone, const std::string& section, const std::string& name, uint32_t error_code, const std::string& message);
-
-  static std::string get_shard_oid(const std::string& oid_prefix, int shard_id);
 };
 
-struct rgw_sync_error_info {
-  std::string source_zone;
-  uint32_t error_code;
-  std::string message;
 
-  rgw_sync_error_info() : error_code(0) {}
-  rgw_sync_error_info(const std::string& _source_zone, uint32_t _error_code, const std::string& _message) : source_zone(_source_zone), error_code(_error_code), message(_message) {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(source_zone, bl);
-    encode(error_code, bl);
-    encode(message, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(source_zone, bl);
-    decode(error_code, bl);
-    decode(message, bl);
-    DECODE_FINISH(bl);
-  }
-
-  void dump(Formatter *f) const;
-};
-WRITE_CLASS_ENCODER(rgw_sync_error_info)
-
-#define DEFAULT_BACKOFF_MAX 30
-
-class RGWSyncBackoff {
-  int cur_wait;
-  int max_secs;
-
-  void update_wait_time();
+class RGWSyncBackoff : public rgw::sync::BackoffBase {
 public:
-  explicit RGWSyncBackoff(int _max_secs = DEFAULT_BACKOFF_MAX) : cur_wait(0), max_secs(_max_secs) {}
+  explicit RGWSyncBackoff(std::chrono::seconds max = DEFAULT_MAX)
+    : rgw::sync::BackoffBase(max) {}
 
   void backoff_sleep();
-  void reset() {
-    cur_wait = 0;
-  }
-
   void backoff(RGWCoroutine *op);
 };
 
@@ -231,7 +177,7 @@ public:
   int init();
   void finish();
 
-  int read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info);
+  int read_log_info(const DoutPrefixProvider *dpp, rgw::sync::meta::log_info *log_info);
   int read_master_log_shards_info(const DoutPrefixProvider *dpp, const std::string& master_period, std::map<int, RGWMetadataLogInfo> *shards_info);
   int read_master_log_shards_next(const DoutPrefixProvider *dpp, const std::string& period, std::map<int, std::string> shard_markers, std::map<int, rgw_mdlog_shard_data> *result);
   int read_sync_status(const DoutPrefixProvider *dpp, rgw_meta_sync_status *sync_status);
@@ -284,7 +230,7 @@ public:
     return master_log.read_sync_status(dpp, sync_status);
   }
   int init_sync_status(const DoutPrefixProvider *dpp) { return master_log.init_sync_status(dpp); }
-  int read_log_info(const DoutPrefixProvider *dpp, rgw_mdlog_info *log_info) {
+  int read_log_info(const DoutPrefixProvider *dpp, rgw::sync::meta::log_info *log_info) {
     return master_log.read_log_info(dpp, log_info);
   }
   int read_master_log_shards_info(const DoutPrefixProvider *dpp, const std::string& master_period, std::map<int, RGWMetadataLogInfo> *shards_info) {

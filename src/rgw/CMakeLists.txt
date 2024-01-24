@@ -77,6 +77,7 @@ set(librgw_common_srcs
   rgw_es_query.cc
   rgw_formats.cc
   rgw_http_client.cc
+  curl/client.cc
   rgw_keystone.cc
   rgw_ldap.cc
   rgw_lc.cc
@@ -180,6 +181,9 @@ set(librgw_common_srcs
   driver/rados/rgw_service.cc
   driver/rados/rgw_sync.cc
   driver/rados/rgw_sync_counters.cc
+  driver/rados/rgw_sync_common.cc
+  driver/rados/rgw_sync_asio.cc
+  driver/rados/rgw_meta_sync_asio.cc
   driver/rados/rgw_sync_error_repo.cc
   driver/rados/rgw_sync_module.cc
   driver/rados/rgw_sync_module_aws.cc
@@ -193,7 +197,12 @@ set(librgw_common_srcs
   driver/rados/rgw_trim_mdlog.cc
   driver/rados/rgw_user.cc
   driver/rados/rgw_zone.cc
-  driver/rados/sync_fairness.cc)
+  driver/rados/sync_fairness.cc
+  driver/rados/obj_version_asio.cc
+  driver/rados/rgw_neorados.cc
+  driver/rados/sync_fairness_asio.cc
+  driver/rados/rgw_meta_sync_common.cc
+)
 
 list(APPEND librgw_common_srcs
   driver/immutable_config/store.cc
@@ -270,6 +279,7 @@ target_link_libraries(rgw_common
     cls_user_client
     cls_version_client
     librados
+    libneorados
     rt
     ICU::uc
     OATH::OATH

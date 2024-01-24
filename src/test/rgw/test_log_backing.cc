@@ -72,7 +72,7 @@ protected:
       lr::ObjectWriteOperation op;
       cb::list bl;
       encode(i, bl);
-      cls_log_add(op, ceph_clock_now(), {}, "meow", bl);
+      cls_log_add(op, ceph::real_clock::now(), {}, "meow", bl);
       auto r = rgw_rados_operate(&dp, ioctx, get_oid(0, i), &op, null_yield);
       ASSERT_GE(r, 0);
     }
@@ -83,7 +83,7 @@ protected:
     lr::ObjectWriteOperation op;
     cb::list bl;
     encode(i, bl);
-    cls_log_add(op, ceph_clock_now(), {}, "meow", bl);
+    cls_log_add(op, ceph::real_clock::now(), {}, "meow", bl);
     auto r = rgw_rados_operate(&dp, ioctx, get_oid(0, i), &op, null_yield);
     ASSERT_GE(r, 0);
   }
@@ -94,7 +94,7 @@ protected:
       std::string to_marker;
       {
 	lr::ObjectReadOperation op;
-	std::list<cls_log_entry> entries;
+	std::vector<cls::log::entry> entries;
 	bool truncated = false;
 	cls_log_list(op, {}, {}, {}, 1, entries, &to_marker, &truncated);
 	auto r = rgw_rados_operate(&dp, ioctx, oid, &op, nullptr, null_yield);
@@ -109,7 +109,7 @@ protected:
       }
       {
 	lr::ObjectReadOperation op;
-	std::list<cls_log_entry> entries;
+	std::vector<cls::log::entry> entries;
 	bool truncated = false;
 	cls_log_list(op, {}, {}, {}, 1, entries, &to_marker, &truncated);
 	auto r = rgw_rados_operate(&dp, ioctx, oid, &op, nullptr, null_yield);

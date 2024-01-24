@@ -10,7 +10,7 @@
 
 #include "include/rados/librados.hpp"
 
-#include "rgw_tools.h"
+#include "common/async/context_pool.h"
 
 #include "common/common_init.h"
 #include "common/config.h"
@@ -21,6 +21,8 @@
 #include "rgw_cr_rados.h"
 #include "rgw_sal.h"
 #include "rgw_sal_rados.h"
+#include "driver/rados/rgw_zone.h"
+#include "rgw_sal_config.h"
 
 #include "gtest/gtest.h"
 
@@ -321,12 +323,28 @@ int main(int argc, const char **argv)
   common_init_finish(g_ceph_context);
 
 
+  ceph::async::io_context_pool context_pool{cct->_conf->rgw_thread_pool_size};
   DriverManager::Config cfg = DriverManager::get_config(true, g_ceph_context);
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  std::unique_ptr<rgw::sal::ConfigStore> cfgstore
+    = DriverManager::create_config_store(dpp(), config_store_type);
+  if (!cfgstore) {
+    std::cerr << "Unable to initialize config store." << std::endl;
+    exit(1);
+  }
+  rgw::SiteConfig site;
+  auto r = site.load(dpp(), null_yield, cfgstore.get());
+  if (r < 0) {
+    std::cerr << "Unable to initialize config store." << std::endl;
+    exit(1);
+  }
 
   store = static_cast<rgw::sal::RadosStore*>(
     DriverManager::get_storage(dpp(),
 			      g_ceph_context,
 			      cfg,
+			      context_pool,
+			      site,
 			      false,
 			      false,
 			      false,

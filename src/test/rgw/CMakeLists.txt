@@ -85,6 +85,11 @@ add_executable(unittest_http_manager test_http_manager.cc)
 add_ceph_unittest(unittest_http_manager)
 target_link_libraries(unittest_http_manager ${rgw_libs})
 
+# unittest_rgw_curl_client
+add_executable(unittest_rgw_curl_client test_rgw_curl_client.cc)
+add_ceph_unittest(unittest_rgw_curl_client)
+target_link_libraries(unittest_rgw_curl_client ${rgw_libs})
+
 # unittest_rgw_reshard_wait
 add_executable(unittest_rgw_reshard_wait test_rgw_reshard_wait.cc)
 add_ceph_unittest(unittest_rgw_reshard_wait)
@@ -185,9 +190,16 @@ add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
 add_ceph_unittest(unittest_rgw_putobj)
 target_link_libraries(unittest_rgw_putobj ${rgw_libs} ${UNITTEST_LIBS})
 
+
 add_executable(unittest_rgw_throttle test_rgw_throttle.cc)
 add_ceph_unittest(unittest_rgw_throttle)
 target_link_libraries(unittest_rgw_throttle ${rgw_libs} ${UNITTEST_LIBS})
+
+add_executable(unittest_rgw_sync_lease test_rgw_sync_lease.cc)
+target_include_directories(unittest_rgw_sync_lease
+  PRIVATE "${CMAKE_SOURCE_DIR}/src/rgw")
+add_ceph_unittest(unittest_rgw_sync_lease)
+target_link_libraries(unittest_rgw_sync_lease ceph-common ${UNITTEST_LIBS})
 
 add_executable(unittest_rgw_iam_policy test_rgw_iam_policy.cc)
 add_ceph_unittest(unittest_rgw_iam_policy)
@@ -304,6 +316,11 @@ target_link_libraries(radosgw-cr-test ${rgw_libs} librados
   OATH::OATH
   ${CURL_LIBRARIES} ${EXPAT_LIBRARIES} ${BLKID_LIBRARIES}
   GTest::GTest)
+
+add_executable(ceph_test_rgw_neorados rgw_neorados_test.cc)
+target_link_libraries(ceph_test_rgw_neorados ${rgw_libs} libneorados
+  neoradostest-support global ${CURL_LIBRARIES} ${EXPAT_LIBRARIES}
+  ${BLKID_LIBRARIES} GTest::GTest)
 
 if(WITH_RADOSGW_POSIX)
   # unittest_posix_bucket_cache
