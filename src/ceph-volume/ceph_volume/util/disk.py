@@ -783,8 +783,6 @@ def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys
             continue
         type_ = 'disk'
         holders = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
-        if get_file_contents(os.path.join(_sys_block_path, dev, 'removable')) == "1":
-            continue
         if holder_inner_loop():
             continue
         dm_dir_path = os.path.join(_sys_block_path, dev, 'dm')
@@ -921,6 +919,10 @@ def get_devices(_sys_block_path='/sys/block', device=''):
         metadata['human_readable_size'] = human_readable_size(metadata['size'])
         metadata['path'] = diskname
         metadata['type'] = block[2]
+
+        # some facts from udevadm
+        p = udevadm_property(sysdir)
+        metadata['id_bus'] = p.get('ID_BUS', '')
 
         device_facts[diskname] = metadata
     return device_facts
