@@ -338,6 +338,16 @@ PerfCounters *build_osd_logger(CephContext *cct) {
       l_osd_scrub_reservation_dur_hist, "scrub_resrv_repnum_vs_duration",
       rsrv_hist_x_axis_config, rsrv_hist_y_axis_config, "Histogram of scrub replicas reservation duration");
 
+  // mclock QoS queue op counter
+  osd_plb.add_u64_counter(l_osd_mclock_immediate_op, "mclock_immediate_op",
+    "osd op_scheduler_class::immediate type op count");
+  osd_plb.add_u64_counter(l_osd_mclock_client_op, "mclock_client_op",
+    "osd op_scheduler_class::client type op count");
+  osd_plb.add_u64_counter(l_osd_mclock_recovery_op, "mclock_recovery_op",
+    "osd op_scheduler_class::background_recovery type op count");
+  osd_plb.add_u64_counter(l_osd_mclock_best_effort_op, "mclock_best_effort_op",
+    "osd op_scheduler_class::background_best_effort type op count");
+
   return osd_plb.create_perf_counters();
 }
 

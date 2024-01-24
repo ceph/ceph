@@ -30,13 +30,38 @@ using namespace std::placeholders;
 
 namespace ceph::osd::scheduler {
 
+static void log_mclock_op_stats(
+  PerfCounters *logger,
+  op_scheduler_class id)
+{
+  if (!logger) {
+    return;
+  }
+
+  switch (id) {
+  case op_scheduler_class::immediate:
+    logger->inc(l_osd_mclock_immediate_op);
+    break;
+  case op_scheduler_class::client:
+    logger->inc(l_osd_mclock_client_op);
+    break;
+  case op_scheduler_class::background_recovery:
+    logger->inc(l_osd_mclock_recovery_op);
+    break;
+  case op_scheduler_class::background_best_effort:
+    logger->inc(l_osd_mclock_best_effort_op);
+    break;
+  }
+}
+
 mClockScheduler::mClockScheduler(CephContext *cct,
   int whoami,
   uint32_t num_shards,
   int shard_id,
   bool is_rotational,
   unsigned cutoff_priority,
-  MonClient *monc)
+  MonClient *monc,
+  PerfCounters *logger)
   : cct(cct),
     whoami(whoami),
     num_shards(num_shards),
@@ -44,6 +69,7 @@ mClockScheduler::mClockScheduler(CephContext *cct,
     is_rotational(is_rotational),
     cutoff_priority(cutoff_priority),
     monc(monc),
+    logger(logger),
     scheduler(
       std::bind(&mClockScheduler::ClientRegistry::get_info,
                 &client_registry,
@@ -390,8 +416,10 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
   
   // TODO: move this check into OpSchedulerItem, handle backwards compat
   if (op_scheduler_class::immediate == id.class_id) {
+    log_mclock_op_stats(logger, id.class_id);
     enqueue_high(immediate_class_priority, std::move(item));
   } else if (priority >= cutoff_priority) {
+    log_mclock_op_stats(logger, op_scheduler_class::immediate);
     enqueue_high(priority, std::move(item));
   } else {
     auto cost = calc_scaled_cost(item.get_cost());
@@ -400,6 +428,8 @@ void mClockScheduler::enqueue(OpSchedulerItem&& item)
              << " item_cost: " << item.get_cost()
              << " scaled_cost: " << cost
              << dendl;
+
+    log_mclock_op_stats(logger, id.class_id);
 
     // Add item to scheduler queue
     scheduler.add_request(

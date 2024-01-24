@@ -136,6 +136,12 @@ enum {
   // are labeled, and histograms do not fully support labels.
   l_osd_scrub_reservation_dur_hist,
 
+  // mclock queue
+  l_osd_mclock_immediate_op,
+  l_osd_mclock_client_op,
+  l_osd_mclock_recovery_op,
+  l_osd_mclock_best_effort_op,
+
   l_osd_last,
 };
 

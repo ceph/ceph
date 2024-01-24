@@ -47,7 +47,7 @@ public:
     cutoff_priority(12),
     monc(nullptr),
     q(g_ceph_context, whoami, num_shards, shard_id, is_rotational,
-      cutoff_priority, monc),
+      cutoff_priority, monc, nullptr),
     client1(1001),
     client2(9999),
     client3(100000001)

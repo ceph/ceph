@@ -68,7 +68,8 @@ using OpSchedulerRef = std::unique_ptr<OpScheduler>;
 OpSchedulerRef make_scheduler(
   CephContext *cct, int whoami, uint32_t num_shards, int shard_id,
   bool is_rotational, std::string_view osd_objectstore,
-  op_queue_type_t osd_scheduler, unsigned op_queue_cut_off, MonClient *monc);
+  op_queue_type_t osd_scheduler, unsigned op_queue_cut_off, MonClient *monc,
+  PerfCounters *logger);
 
 /**
  * Implements OpScheduler in terms of OpQueue
