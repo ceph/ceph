@@ -427,7 +427,7 @@ def _run_tests(ctx, refspec, role, tests, env, basedir,
                         logger=log.getChild(role),
                         args=args + optional_args,
                         label="workunit test {workunit}".format(workunit=workunit),
-                        xml_path_regex=f'{testdir}/archive/gtest_xml_report-*.xml',
+                        xml_path_regex=f'{testdir}/archive/unit_test_xml_report/*.xml',
                         output_yaml=os.path.join(ctx.archive, 'unit_test_summary.yaml'),
                     )
                 else:
