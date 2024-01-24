@@ -671,8 +671,8 @@ void Objecter::_linger_reconnect(LingerOp *info, bs::error_code ec)
 		 << " (last_error " << info->last_error << ")" << dendl;
   std::unique_lock wl(info->watch_lock);
   if (ec) {
+    ec = _normalize_watch_error(ec);
     if (!info->last_error) {
-      ec = _normalize_watch_error(ec);
       if (info->handle) {
 	asio::defer(finish_strand, CB_DoWatchError(this, info, ec));
       }
