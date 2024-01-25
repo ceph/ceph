@@ -120,7 +120,7 @@ configure_libvirt(){
 	echo "User added to libvirt group successfully."
 	sudo systemctl enable --now libvirtd
 	sudo systemctl restart libvirtd
-	sleep 10 # wait some time for libvirtd service to restart
+	sleep 30 # wait some time for libvirtd service to restart
 	newgrp libvirt
     else
 	echo "Error adding user to libvirt group."
@@ -146,7 +146,7 @@ recreate_default_network(){
 
     # restart libvirtd service and wait a little bit for the service
     sudo systemctl restart libvirtd
-    sleep 10
+    sleep 30
 
     # Just some debugging information
     all_networks=$(virsh net-list --all)
@@ -159,6 +159,17 @@ enable_rook_orchestrator() {
     $KUBECTL -n "$ROOK_CLUSTER_NS" exec -it deploy/rook-ceph-tools -- ceph mgr module enable rook
     $KUBECTL -n "$ROOK_CLUSTER_NS" exec -it deploy/rook-ceph-tools -- ceph orch set backend rook
     $KUBECTL -n "$ROOK_CLUSTER_NS" exec -it deploy/rook-ceph-tools -- ceph orch status
+}
+
+enable_monitoring() {
+    echo "Enabling monitoring"
+    $KUBECTL apply -f https://raw.githubusercontent.com/coreos/prometheus-operator/v0.40.0/bundle.yaml
+    $KUBECTL wait --for=condition=ready pod -l app.kubernetes.io/name=prometheus-operator --timeout=90s
+    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/rbac.yaml
+    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/service-monitor.yaml
+    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/exporter-service-monitor.yaml
+    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/prometheus.yaml
+    $KUBECTL apply -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/monitoring/prometheus-service.yaml
 }
 
 ####################################################################
@@ -174,6 +185,8 @@ create_rook_cluster
 wait_for_rook_operator
 wait_for_ceph_cluster
 enable_rook_orchestrator
+enable_monitoring
+sleep 30 # wait for the metrics cache warmup
 
 ####################################################################
 ####################################################################
