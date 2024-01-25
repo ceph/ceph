@@ -39,7 +39,7 @@ jobs:
       - uses: Bhacaz/checkout-files@e3e34e7daef91a5f237485bb88a260aee4be29dd
         with:
           files: src/script/backport-create-issue src/script/requirements.backport-create-issue.txt
-      - uses: actions/setup-python@v4
+      - uses: actions/setup-python@v5
         with:
           python-version: '>=3.6 <3.12'
           cache: 'pip'
