@@ -1480,6 +1480,26 @@ class TestFsAuthorize(CephFSTestCase):
             FS_AUTH_CAPS[2], self.captesters[2], self.fs2.name, self.mount_b,
             keyring)
 
+    def test_adding_multiple_caps(self):
+        '''
+        Test that the command "ceph fs authorize" is successful in updating
+        the entity's caps when multiple caps are passed to it in one go.
+
+        Tests: https://tracker.ceph.com/issues/64127
+        '''
+        DIR = 'dir1'
+        self.mount_a.run_shell(f'mkdir {DIR}')
+        self.captesters = (CapTester(self.mount_a, '/'),
+                           CapTester(self.mount_a, f'/{DIR}'))
+        self.fs.authorize(self.client_id, ('/', 'rw'))
+
+        FS_AUTH_CAPS = ('/', 'rw', 'root_squash'), (f'/{DIR}', 'rw' )
+        # The fact that following line passes means
+        # https://tracker.ceph.com/issues/64127 has been fixed
+        keyring = self.fs.authorize(self.client_id, FS_AUTH_CAPS)
+
+        self._remount_and_run_tests(FS_AUTH_CAPS, keyring)
+
     def _remount_and_run_tests(self, fs_auth_caps, keyring):
         '''
         This method is specifically designed to meet needs of most of the
