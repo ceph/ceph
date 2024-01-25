@@ -6,6 +6,7 @@
 #include <map>
 #include <string>
 #include <seastar/core/future.hh>
+#include "osd/OSDMap.h"
 #include "osd/osd_types.h"
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
@@ -63,8 +64,8 @@ public:
 			     ec_profile_t>> load_final_pool_info(int64_t pool);
   void store_final_pool_info(
     ceph::os::Transaction&,
-    OSDMap* lastmap,
-    std::map<epoch_t, OSDMap*>&);
+    LocalOSDMapRef lastmap,
+    std::map<epoch_t, LocalOSDMapRef>&);
 private:
   static ghobject_t osdmap_oid(epoch_t epoch);
   static ghobject_t inc_osdmap_oid(epoch_t epoch);
