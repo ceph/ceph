@@ -263,8 +263,8 @@ local u = import 'utils.libsonnet';
         'short',
         |||
           label_replace(
-            rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
-              rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+            rate(ceph_rgw_op_get_obj_lat_sum{%(matchers)s}[$__rate_interval]) /
+              rate(ceph_rgw_op_get_obj_lat_count{%(matchers)s}[$__rate_interval]) *
               on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
             "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
           )
@@ -279,8 +279,8 @@ local u = import 'utils.libsonnet';
           $.addTargetSchema(
             |||
               label_replace(
-                rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
-                  rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+                rate(ceph_rgw_op_put_obj_lat_sum{%(matchers)s}[$__rate_interval]) /
+                  rate(ceph_rgw_op_put_obj_lat_count{%(matchers)s}[$__rate_interval]) *
                   on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
                 "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
               )
@@ -316,8 +316,8 @@ local u = import 'utils.libsonnet';
         'short',
         |||
           label_replace(
-            rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
-              rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+            rate(ceph_rgw_op_get_obj_lat_sum{%(matchers)s}[$__rate_interval]) /
+              rate(ceph_rgw_op_get_obj_lat_count{%(matchers)s}[$__rate_interval]) *
               on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
             "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
           )
@@ -333,14 +333,14 @@ local u = import 'utils.libsonnet';
         'Total bytes transferred in/out of all radosgw instances within the cluster',
         'bytes',
         'short',
-        'sum(rate(ceph_rgw_get_b{%(matchers)s}[$__rate_interval]))' % $.matchers(),
+        'sum(rate(ceph_rgw_op_get_obj_bytes{%(matchers)s}[$__rate_interval]))' % $.matchers(),
         'GETs',
         0,
         8,
         8,
         6
       ).addTargets(
-        [$.addTargetSchema('sum(rate(ceph_rgw_put_b{%(matchers)s}[$__rate_interval]))' % $.matchers(),
+        [$.addTargetSchema('sum(rate(ceph_rgw_op_put_obj_bytes{%(matchers)s}[$__rate_interval]))' % $.matchers(),
                            'PUTs')]
       ),
       RgwOverviewPanel(
@@ -350,8 +350,8 @@ local u = import 'utils.libsonnet';
         'short',
         |||
           label_replace(sum by (instance_id) (
-            rate(ceph_rgw_get_b{%(matchers)s}[$__rate_interval]) +
-              rate(ceph_rgw_put_b{%(matchers)s}[$__rate_interval])) *
+            rate(ceph_rgw_op_get_obj_bytes{%(matchers)s}[$__rate_interval]) +
+              rate(ceph_rgw_op_put_obj_bytes{%(matchers)s}[$__rate_interval])) *
               on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
             "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
           )
@@ -369,8 +369,8 @@ local u = import 'utils.libsonnet';
         'short',
         |||
           label_replace(
-            rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
-              rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval]) *
+            rate(ceph_rgw_op_put_obj_lat_sum{%(matchers)s}[$__rate_interval]) /
+              rate(ceph_rgw_op_put_obj_lat_count{%(matchers)s}[$__rate_interval]) *
               on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s},
             "rgw_host", "$1", "ceph_daemon", "rgw.(.*)"
           )
@@ -736,14 +736,14 @@ local u = import 'utils.libsonnet';
         'short',
         |||
           sum by (instance_id) (
-            rate(ceph_rgw_get_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
-              rate(ceph_rgw_get_initial_lat_count{%(matchers)s}[$__rate_interval])
+            rate(ceph_rgw_op_get_obj_lat_sum{%(matchers)s}[$__rate_interval]) /
+              rate(ceph_rgw_op_get_obj_lat_count{%(matchers)s}[$__rate_interval])
           ) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
         ||| % $.matchers(),
         |||
           sum by (instance_id) (
-            rate(ceph_rgw_put_initial_lat_sum{%(matchers)s}[$__rate_interval]) /
-              rate(ceph_rgw_put_initial_lat_count{%(matchers)s}[$__rate_interval])
+            rate(ceph_rgw_op_put_obj_lat_sum{%(matchers)s}[$__rate_interval]) /
+              rate(ceph_rgw_op_put_obj_lat_count{%(matchers)s}[$__rate_interval])
           ) * on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
         ||| % $.matchers(),
         'GET {{ceph_daemon}}',
@@ -760,11 +760,11 @@ local u = import 'utils.libsonnet';
         'bytes',
         'short',
         |||
-          rate(ceph_rgw_get_b{%(matchers)s}[$__rate_interval]) *
+          rate(ceph_rgw_op_get_obj_bytes{%(matchers)s}[$__rate_interval]) *
             on (instance_id) group_left (ceph_daemon) ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
         ||| % $.matchers(),
         |||
-          rate(ceph_rgw_put_b{%(matchers)s}[$__rate_interval]) *
+          rate(ceph_rgw_op_put_obj_bytes{%(matchers)s}[$__rate_interval]) *
             on (instance_id) group_left (ceph_daemon)
             ceph_rgw_metadata{%(matchers)s, ceph_daemon=~"$rgw_servers"}
         ||| % $.matchers(),
