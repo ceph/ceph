@@ -492,11 +492,6 @@ public:
 #ifndef NDEBUG
   const core_id_t core = seastar::this_shard_id();
 #endif
-
-  template <class... Args>
-  decltype(auto) enter(Args&&... args) {
-    return static_cast<T*>(this)->enter(std::forward<Args>(args)...);
-  }
 };
 
 class PipelineHandle {
@@ -504,6 +499,18 @@ class PipelineHandle {
 
   std::optional<seastar::future<>> wait_barrier() {
     return barrier ? barrier->wait() : std::nullopt;
+  }
+
+  template <typename OpT, typename T>
+  seastar::future<>
+  do_enter(T &stage, typename T::BlockingEvent::template Trigger<OpT>&& t) {
+    auto fut = t.maybe_record_blocking(stage.enter(t), stage);
+    return std::move(fut).then(
+      [this, t=std::move(t)](auto &&barrier_ref) mutable {
+      exit();
+      barrier = std::move(barrier_ref);
+      return seastar::now();
+    });
   }
 
 public:
@@ -526,23 +533,12 @@ public:
     assert(stage.core == seastar::this_shard_id());
     auto wait_fut = wait_barrier();
     if (wait_fut.has_value()) {
-      return wait_fut.value().then([this, &stage, t=std::move(t)] () mutable {
-        auto fut = t.maybe_record_blocking(stage.enter(t), stage);
-        return std::move(fut).then(
-          [this, t=std::move(t)](auto &&barrier_ref) mutable {
-          exit();
-          barrier = std::move(barrier_ref);
-          return seastar::now();
-        });
+      return wait_fut.value(
+      ).then([this, &stage, t=std::move(t)]() mutable {
+        return do_enter<OpT, T>(stage, std::move(t));
       });
     } else {
-        auto fut = t.maybe_record_blocking(stage.enter(t), stage);
-        return std::move(fut).then(
-          [this, t=std::move(t)](auto &&barrier_ref) mutable {
-          exit();
-          barrier = std::move(barrier_ref);
-          return seastar::now();
-        });
+      return do_enter<OpT, T>(stage, std::move(t));
     }
   }
 
