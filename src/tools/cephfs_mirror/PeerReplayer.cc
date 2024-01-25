@@ -1578,6 +1578,11 @@ void PeerReplayer::reopen_logs() {
 }
 
 void PeerReplayer::register_perf_counters() {
+  dout(5) << dendl;
+  std::scoped_lock locker(m_lock);
+  ceph_assert(m_perf_counters == nullptr);
+  auto prio = m_cct->_conf.get_val<int64_t>("cephfs_mirror_image_perf_stats_prio");
+
 }
 
 void PeerReplayer::unregister_perf_counters() {

@@ -103,3 +103,14 @@ options:
   - cephfs-mirror
   min: 0
   max: 11
+- name: cephfs_mirror_image_perf_stats_prio
+  type: int
+  level: advanced
+  desc: Priority level for mirror daemon per-image replication perf counters
+  long_desc: The daemon will send per-image perf counter data to the manager daemon
+    if the priority is not lower than mgr_stats_threshold.
+  default: 5
+  services:
+  - cephfs-mirror
+  min: 0
+  max: 11
