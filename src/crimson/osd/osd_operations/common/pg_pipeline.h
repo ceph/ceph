@@ -23,6 +23,9 @@ protected:
   struct GetOBC : OrderedExclusivePhaseT<GetOBC> {
     static constexpr auto type_name = "CommonPGPipeline::get_obc";
   } get_obc;
+  struct LockOBC : OrderedConcurrentPhaseT<LockOBC> {
+    static constexpr auto type_name = "CommonPGPipeline::lock_obc";
+  } lock_obc;
   struct Process : OrderedExclusivePhaseT<Process> {
     static constexpr auto type_name = "CommonPGPipeline::process";
   } process;

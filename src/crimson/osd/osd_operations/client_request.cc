@@ -343,6 +343,9 @@ ClientRequest::process_op(
 
   DEBUGDPP("{}.{}: past scrub blocker, getting obc",
 	   *pg, *this, this_instance_id);
+  // call with_locked_obc() in order, but wait concurrently for loading.
+  ihref.enter_stage_sync(
+      client_pp(*pg).lock_obc, *this);
   auto process = pg->with_locked_obc(
     m->get_hobj(), op_info,
     [FNAME, this, pg, this_instance_id, &ihref] (
