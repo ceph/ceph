@@ -50,7 +50,10 @@ export class MultiClusterComponent implements OnInit {
   }
 
   openRemoteClusterInfoModal() {
-    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, {
+    const initialState = {
+      action: 'connect'
+    };
+    this.bsModalRef = this.modalService.show(MultiClusterFormComponent, initialState, {
       size: 'xl'
     });
   }

@@ -6700,6 +6700,8 @@ paths:
               properties:
                 cluster_alias:
                   type: string
+                cluster_fsid:
+                  type: string
                 hub_url:
                   type: string
                 password:
@@ -6739,6 +6741,113 @@ paths:
       summary: Authenticate to a remote cluster
       tags:
       - Multi-cluster
+  /api/multi-cluster/check_token_status:
+    get:
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: clustersTokenMap
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Multi-cluster
+  /api/multi-cluster/delete_cluster/{cluster_name}/{cluster_user}:
+    delete:
+      parameters:
+      - in: path
+        name: cluster_name
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: cluster_user
+        required: true
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Multi-cluster
+  /api/multi-cluster/edit_cluster:
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                cluster_alias:
+                  type: string
+                url:
+                  type: string
+                username:
+                  type: string
+              required:
+              - url
+              - cluster_alias
+              - username
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Multi-cluster
   /api/multi-cluster/get_config:
     get:
       parameters: []
@@ -6748,6 +6857,49 @@ paths:
             application/vnd.ceph.api.v1.0+json:
               type: object
           description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - Multi-cluster
+  /api/multi-cluster/reconnect_cluster:
+    put:
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                password:
+                  type: string
+                token:
+                  type: string
+                url:
+                  type: string
+                username:
+                  type: string
+              required:
+              - url
+              type: object
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource updated.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
         '400':
           description: Operation exception. Please check the response body for details.
         '401':
@@ -6799,35 +6951,34 @@ paths:
       tags:
       - Multi-cluster
   /api/multi-cluster/verify_connection:
-    post:
-      parameters: []
-      requestBody:
-        content:
-          application/json:
-            schema:
-              properties:
-                password:
-                  type: string
-                token:
-                  type: string
-                url:
-                  type: string
-                username:
-                  type: string
-              required:
-              - url
-              type: object
+    get:
+      parameters:
+      - allowEmptyValue: true
+        in: query
+        name: url
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: username
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: password
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: token
+        schema:
+          type: string
       responses:
-        '201':
+        '200':
           content:
             application/vnd.ceph.api.v1.0+json:
               type: object
-          description: Resource created.
-        '202':
-          content:
-            application/vnd.ceph.api.v1.0+json:
-              type: object
-          description: Operation is still executing. Please check the task queue.
+          description: OK
         '400':
           description: Operation exception. Please check the response body for details.
         '401':
