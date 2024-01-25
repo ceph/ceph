@@ -884,7 +884,7 @@ BtreeLBAManager::_decref_intermediate(
 
       if (val.refcount == 0) {
 	return btree.remove(c, iter
-	).si_then([key, val] {
+	).si_then([key, val](auto) {
 	  return ref_iertr::make_ready_future<
 	    update_mapping_ret_bare_t>(key, val);
 	});
@@ -1070,7 +1070,7 @@ BtreeLBAManager::_update_mapping(
 	  return btree.remove(
 	    c,
 	    iter
-	  ).si_then([addr, ret] {
+	  ).si_then([addr, ret](auto) {
 	    return update_mapping_ret_bare_t(addr, ret);
 	  });
 	} else {

@@ -972,7 +972,7 @@ public:
    * @param iter [in] iterator to element to remove, must not be end
    */
   using remove_iertr = base_iertr;
-  using remove_ret = remove_iertr::future<>;
+  using remove_ret = remove_iertr::future<iterator>;
   remove_ret remove(
     op_context_t c,
     iterator iter)
@@ -999,7 +999,21 @@ public:
 
         return handle_merge(
           c, ret
-        );
+        ).si_then([&ret, c] {
+          if (ret.is_end()) {
+            if (ret.is_begin()) {
+              assert(ret.leaf.node->get_node_meta().is_root());
+              return remove_iertr::make_ready_future<iterator>(std::move(ret));
+            } else {
+              return ret.handle_boundary(c, nullptr
+              ).si_then([&ret] {
+                return std::move(ret);
+              });
+            }
+          } else {
+            return remove_iertr::make_ready_future<iterator>(std::move(ret));
+          }
+        });
       });
   }
     
