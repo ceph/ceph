@@ -827,53 +827,66 @@ all unauthenticated users:
 Usage
 =====
 
-The Ceph Object Gateway logs usage for each user. You can track
-user usage within date ranges too.
+The Ceph Object Gateway logs the usage of each user. You can track the usage of
+each user within a specified date range.
 
-- Add ``rgw_enable_usage_log = true`` in [client.rgw] section of ceph.conf and restart the radosgw service. 
+- Add ``rgw_enable_usage_log = true`` in the ``[client.rgw]`` section of
+  ``ceph.conf`` and restart the ``radosgw`` service. 
+
+  .. note:: Until Ceph has a linkable macro that handles all the many ways that options can be set, we advise that you set ``rgw_enable_usage_log = true`` in central config or in ``ceph.conf`` and restart all RGWs.
+
 
 Options include: 
 
 - **Start Date:** The ``--start-date`` option allows you to filter usage
-  stats from a particular start date and an optional start time
+  stats from a specified start date and an optional start time
   (**format:** ``yyyy-mm-dd [HH:MM:SS]``).
 
 - **End Date:** The ``--end-date`` option allows you to filter usage up
-  to a particular date and an optional end time
+  to a particular end date and an optional end time
   (**format:** ``yyyy-mm-dd [HH:MM:SS]``). 
   
 - **Log Entries:** The ``--show-log-entries`` option allows you to specify
-  whether or not to include log entries with the usage stats 
+  whether to include log entries with the usage stats 
   (options: ``true`` | ``false``).
 
-.. note:: You may specify time with minutes and seconds, but it is stored 
-   with 1 hour resolution.
+.. note:: You can specify time to a precision of minutes and seconds, but the
+   specified time is stored only with a one-hour resolution.
 
 
 Show Usage
 ----------
 
-To show usage statistics, specify the ``usage show``. To show usage for a
-particular user, you must specify a user ID. You may also specify a start date,
-end date, and whether or not to show log entries.::
+To show usage statistics, use the ``radosgw-admin usage show`` command. To show
+usage for a particular user, you must specify a user ID. You can also specify a
+start date, end date, and whether to show log entries. The following is an example
+of such a command:
 
-	radosgw-admin usage show --uid=johndoe --start-date=2012-03-01 --end-date=2012-04-01
+.. prompt:: bash $
 
-You may also show a summary of usage information for all users by omitting a user ID. ::
+   radosgw-admin usage show --uid=johndoe --start-date=2012-03-01 --end-date=2012-04-01
 
-	radosgw-admin usage show --show-log-entries=false
+You can show a summary of usage information for all users by omitting the user
+ID, as in the following example command:
+
+.. prompt:: bash $
+
+   radosgw-admin usage show --show-log-entries=false
 
 
 Trim Usage
 ----------
 
-With heavy use, usage logs can begin to take up storage space. You can trim
-usage logs for all users and for specific users. You may also specify date
-ranges for trim operations. ::
+Usage logs can consume significant storage space, especially over time and with
+heavy use. You can trim the usage logs for all users and for specific users.
+You can also specify date ranges for trim operations, as in the following
+example commands:
 
-	radosgw-admin usage trim --start-date=2010-01-01 --end-date=2010-12-31
-	radosgw-admin usage trim --uid=johndoe	
-	radosgw-admin usage trim --uid=johndoe --end-date=2013-12-31
+.. prompt:: bash $
+
+   radosgw-admin usage trim --start-date=2010-01-01 --end-date=2010-12-31
+   radosgw-admin usage trim --uid=johndoe	
+   radosgw-admin usage trim --uid=johndoe --end-date=2013-12-31
 
 
 .. _radosgw-admin: ../../man/8/radosgw-admin/
