@@ -115,6 +115,7 @@ public:
       PGPipeline::RecoverMissingSnaps::BlockingEvent,
       scrub::PGScrubber::BlockingEvent,
       PGPipeline::GetOBC::BlockingEvent,
+      PGPipeline::LockOBC::BlockingEvent,
       PGPipeline::Process::BlockingEvent,
       PGPipeline::WaitRepop::BlockingEvent,
       PGPipeline::SendReply::BlockingEvent,
