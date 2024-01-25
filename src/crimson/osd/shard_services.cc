@@ -13,6 +13,7 @@
 #include "osd/osd_perf_counters.h"
 #include "osd/PeeringState.h"
 #include "crimson/common/config_proxy.h"
+#include "crimson/common/log.h"
 #include "crimson/mgr/client.h"
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Messenger.h"
@@ -23,11 +24,7 @@
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_meta.h"
 
-namespace {
-  seastar::logger& logger() {
-    return crimson::get_logger(ceph_subsys_osd);
-  }
-}
+SET_SUBSYS(osd);
 
 using std::vector;
 
@@ -166,12 +163,13 @@ OSDSingletonState::OSDSingletonState(
 seastar::future<> OSDSingletonState::send_to_osd(
   int peer, MessageURef m, epoch_t from_epoch)
 {
+  LOG_PREFIX(OSDSingletonState::send_to_osd);
   if (osdmap->is_down(peer)) {
-    logger().info("{}: osd.{} is_down", __func__, peer);
+    INFO("osd.{} is_down", peer);
     return seastar::now();
   } else if (osdmap->get_info(peer).up_from > from_epoch) {
-    logger().info("{}: osd.{} {} > {}", __func__, peer,
-		    osdmap->get_info(peer).up_from, from_epoch);
+    INFO("osd.{} {} > {}", peer,
+	 osdmap->get_info(peer).up_from, from_epoch);
     return seastar::now();
   } else {
     auto conn = cluster_msgr.connect(
@@ -184,7 +182,8 @@ seastar::future<> OSDSingletonState::send_to_osd(
 seastar::future<> OSDSingletonState::osdmap_subscribe(
   version_t epoch, bool force_request)
 {
-  logger().info("{}({})", __func__, epoch);
+  LOG_PREFIX(OSDSingletonState::osdmap_subscribe);
+  INFO("epoch {}");
   if (monc.sub_want_increment("osdmap", epoch, CEPH_SUBSCRIBE_ONETIME) ||
       force_request) {
     return monc.renew_subs();
@@ -214,13 +213,13 @@ void OSDSingletonState::remove_want_pg_temp(pg_t pgid)
 
 void OSDSingletonState::requeue_pg_temp()
 {
+  LOG_PREFIX(OSDSingletonState::requeue_pg_temp);
   unsigned old_wanted = pg_temp_wanted.size();
   unsigned old_pending = pg_temp_pending.size();
   pg_temp_wanted.merge(pg_temp_pending);
   pg_temp_pending.clear();
-  logger().debug(
-    "{}: {} + {} -> {}",
-    __func__ ,
+  DEBUG(
+    "{} + {} -> {}",
     old_wanted,
     old_pending,
     pg_temp_wanted.size());
@@ -228,9 +227,10 @@ void OSDSingletonState::requeue_pg_temp()
 
 seastar::future<> OSDSingletonState::send_pg_temp()
 {
+  LOG_PREFIX(OSDSingletonState::send_pg_temp);
   if (pg_temp_wanted.empty())
     return seastar::now();
-  logger().debug("{}: {}", __func__, pg_temp_wanted);
+  DEBUG("{}", pg_temp_wanted);
   MURef<MOSDPGTemp> ms[2] = {nullptr, nullptr};
   for (auto& [pgid, pg_temp] : pg_temp_wanted) {
     auto& m = ms[pg_temp.forced];
@@ -265,7 +265,8 @@ std::ostream& operator<<(
 
 seastar::future<> OSDSingletonState::send_pg_created(pg_t pgid)
 {
-  logger().debug(__func__);
+  LOG_PREFIX(OSDSingletonState::send_pg_created);
+  DEBUG();
   auto o = get_osdmap();
   ceph_assert(o->require_osd_release >= ceph_release_t::luminous);
   pg_created.insert(pgid);
@@ -274,7 +275,8 @@ seastar::future<> OSDSingletonState::send_pg_created(pg_t pgid)
 
 seastar::future<> OSDSingletonState::send_pg_created()
 {
-  logger().debug(__func__);
+  LOG_PREFIX(OSDSingletonState::send_pg_created);
+  DEBUG();
   auto o = get_osdmap();
   ceph_assert(o->require_osd_release >= ceph_release_t::luminous);
   return seastar::parallel_for_each(pg_created,
@@ -285,16 +287,17 @@ seastar::future<> OSDSingletonState::send_pg_created()
 
 void OSDSingletonState::prune_pg_created()
 {
-  logger().debug(__func__);
+  LOG_PREFIX(OSDSingletonState::prune_pg_created);
+  DEBUG();
   auto o = get_osdmap();
   auto i = pg_created.begin();
   while (i != pg_created.end()) {
     auto p = o->get_pg_pool(i->pool());
     if (!p || !p->has_flag(pg_pool_t::FLAG_CREATING)) {
-      logger().debug("{} pruning {}", __func__, *i);
+      DEBUG("pruning {}", *i);
       i = pg_created.erase(i);
     } else {
-      logger().debug(" keeping {}", __func__, *i);
+      DEBUG("keeping {}", *i);
       ++i;
     }
   }
@@ -302,29 +305,24 @@ void OSDSingletonState::prune_pg_created()
 
 seastar::future<> OSDSingletonState::send_alive(const epoch_t want)
 {
-  logger().info(
-    "{} want={} up_thru_wanted={}",
-    __func__,
-    want,
-    up_thru_wanted);
-
+  LOG_PREFIX(OSDSingletonState::send_alive);
+  INFO("want={} up_thru_wanted={}", want, up_thru_wanted);
   if (want > up_thru_wanted) {
     up_thru_wanted = want;
   } else {
-    logger().debug("{} want={} <= up_thru_wanted={}; skipping",
-                   __func__, want, up_thru_wanted);
+    DEBUG("want={} <= up_thru_wanted={}; skipping", want, up_thru_wanted);
     return seastar::now();
   }
   if (!osdmap->exists(whoami)) {
-    logger().warn("{} DNE", __func__);
+    WARN("DNE");
     return seastar::now();
   } if (const epoch_t up_thru = osdmap->get_up_thru(whoami);
         up_thru_wanted > up_thru) {
-    logger().debug("{} up_thru_wanted={} up_thru={}", __func__, want, up_thru);
+    DEBUG("up_thru_wanted={} up_thru={}", want, up_thru);
     return monc.send_message(
       crimson::make_message<MOSDAlive>(osdmap->get_epoch(), want));
   } else {
-    logger().debug("{} {} <= {}", __func__, want, osdmap->get_up_thru(whoami));
+    DEBUG("{} <= {}", want, osdmap->get_up_thru(whoami));
     return seastar::now();
   }
 }
@@ -360,11 +358,12 @@ void OSDSingletonState::handle_conf_change(
 seastar::future<OSDSingletonState::local_cached_map_t>
 OSDSingletonState::get_local_map(epoch_t e)
 {
+  LOG_PREFIX(OSDSingletonState::get_local_map);
   if (auto found = osdmaps.find(e); found) {
-    logger().debug("{} osdmap.{} found in cache", __func__, e);
+    DEBUG("osdmap.{} found in cache", e);
     return seastar::make_ready_future<local_cached_map_t>(std::move(found));
   } else {
-    logger().debug("{} loading osdmap.{} from disk", __func__, e);
+    DEBUG("loading osdmap.{} from disk", e);
     return load_map(e).then([e, this](std::unique_ptr<OSDMap> osdmap) {
       return seastar::make_ready_future<local_cached_map_t>(
 	osdmaps.insert(e, std::move(osdmap)));
@@ -391,11 +390,12 @@ void OSDSingletonState::store_inc_map_bl(
 seastar::future<bufferlist> OSDSingletonState::load_map_bl(
   epoch_t e)
 {
+  LOG_PREFIX(OSDSingletonState::load_map_bl);
   if (std::optional<bufferlist> found = map_bl_cache.find(e); found) {
-    logger().debug("{} osdmap.{} found in cache", __func__, e);
+    DEBUG("osdmap.{} found in cache", e);
     return seastar::make_ready_future<bufferlist>(*found);
   } else {
-    logger().debug("{} loading osdmap.{} from disk", __func__, e);
+    DEBUG("loading osdmap.{} from disk", e);
     return meta_coll->load_map(e).then([this, e](auto&& bl) {
       map_bl_cache.insert(e, bl);
       return seastar::make_ready_future<bufferlist>(std::move(bl));
@@ -406,11 +406,12 @@ seastar::future<bufferlist> OSDSingletonState::load_map_bl(
 read_errorator::future<ceph::bufferlist> OSDSingletonState::load_inc_map_bl(
   epoch_t e)
 {
+  LOG_PREFIX(OSDSingletonState::load_inc_map_bl);
   if (std::optional<bufferlist> found = inc_map_bl_cache.find(e); found) {
-    logger().debug("{} inc map.{} found in cache", __func__, e);
+    DEBUG("inc map.{} found in cache", e);
     return read_errorator::make_ready_future<bufferlist>(*found);
   } else {
-    logger().debug("{} loading inc map.{} from disk", __func__, e);
+    DEBUG("loading inc map.{} from disk", e);
     return meta_coll->load_inc_map(e).safe_then([this, e](auto&& bl) {
       inc_map_bl_cache.insert(e, bl);
       return seastar::make_ready_future<bufferlist>(std::move(bl));
@@ -422,19 +423,18 @@ seastar::future<OSDMapService::bls_map_t> OSDSingletonState::load_map_bls(
   epoch_t first,
   epoch_t last)
 {
-  logger().debug("{} loading maps [{},{}]",
-                 __func__, first, last);
+  LOG_PREFIX(OSDSingletonState::load_map_bl);
+  DEBUG("loading maps [{},{}]", first, last);
   ceph_assert(first <= last);
   return seastar::map_reduce(boost::make_counting_iterator<epoch_t>(first),
 			     boost::make_counting_iterator<epoch_t>(last + 1),
-			     [this](epoch_t e) {
+			     [this, FNAME](epoch_t e) {
     return load_inc_map_bl(e).safe_then([](auto&& bl) {
       return seastar::make_ready_future<OSDMapService::bls_pair>(
         std::make_pair(OSDMapService::encoded_osdmap_type_t::INCMAP,
                        std::move(bl)));
-    }, read_errorator::all_same_way([this, e] {
-      logger().debug("load_map_bls: can't load inc map {}, attempting full map instread",
-                      e);
+    }, read_errorator::all_same_way([this, FNAME, e] {
+      DEBUG("can't load inc map {}, attempting full map instread", e);
       return load_map_bl(e).then([](auto&& bl) {
         return seastar::make_ready_future<OSDMapService::bls_pair>(
           std::make_pair(OSDMapService::encoded_osdmap_type_t::FULLMAP,
@@ -454,8 +454,9 @@ seastar::future<OSDMapService::bls_map_t> OSDSingletonState::load_map_bls(
 
 seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
 {
+  LOG_PREFIX(OSDSingletonState::load_map_bl);
   auto o = std::make_unique<OSDMap>();
-  logger().info("{} osdmap.{}", __func__, e);
+  INFO("osdmap.{}", e);
   if (e == 0) {
     return seastar::make_ready_future<std::unique_ptr<OSDMap>>(std::move(o));
   }
@@ -465,31 +466,31 @@ seastar::future<std::unique_ptr<OSDMap>> OSDSingletonState::load_map(epoch_t e)
   });
 }
 
-seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
-                                  epoch_t start, Ref<MOSDMap> m)
+seastar::future<> OSDSingletonState::store_maps(
+  ceph::os::Transaction& t,
+  epoch_t start, Ref<MOSDMap> m)
 {
+  LOG_PREFIX(OSDSingletonState::store_maps);
   return seastar::do_with(
-    std::map<epoch_t, OSDMap*>(),
-    [&t, m, start, this](auto &added_maps) {
+    std::map<epoch_t, local_cached_map_t>(),
+    [&t, FNAME, m, start, this](auto &added_maps) {
     return seastar::do_for_each(
       boost::make_counting_iterator(start),
       boost::make_counting_iterator(m->get_last() + 1),
-      [&t, m, this, &added_maps](epoch_t e) {
+      [&t, FNAME, m, this, &added_maps](epoch_t e) {
       if (auto p = m->maps.find(e); p != m->maps.end()) {
 	auto o = std::make_unique<OSDMap>();
 	o->decode(p->second);
-	logger().info("store_maps storing osdmap.{}", e);
+	INFO("storing osdmap.{}", e);
 	store_map_bl(t, e, std::move(std::move(p->second)));
-	added_maps.emplace(e, o.get());
-	osdmaps.insert(e, std::move(o));
+	added_maps.emplace(e, osdmaps.insert(e, std::move(o)));
 	return seastar::now();
       } else if (auto p = m->incremental_maps.find(e);
 		 p != m->incremental_maps.end()) {
-	logger().info("store_maps found osdmap.{} incremental map, "
-	              "loading osdmap.{}", e, e - 1);
+	INFO("found osdmap.{} incremental map, loading osdmap.{}", e, e - 1);
 	ceph_assert(std::cmp_greater(e, 0u));
 	return load_map(e - 1).then(
-	  [&added_maps, e, bl=p->second, &t, this](auto o) mutable {
+          [&added_maps, FNAME, e, bl=p->second, &t, this](auto o) mutable {
 	  OSDMap::Incremental inc;
 	  auto i = bl.cbegin();
 	  inc.decode(i);
@@ -497,21 +498,29 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 	  store_inc_map_bl(t, e, std::move(bl));
 	  bufferlist fbl;
 	  o->encode(fbl, inc.encode_features | CEPH_FEATURE_RESERVED);
-	  logger().info("store_maps storing osdmap.{}", o->get_epoch());
+	  INFO("storing osdmap.{}", o->get_epoch());
 	  store_map_bl(t, e, std::move(fbl));
-	  added_maps.emplace(e, o.get());
-	  osdmaps.insert(e, std::move(o));
+	  added_maps.emplace(e, osdmaps.insert(e, std::move(o)));
 	  return seastar::now();
 	});
       } else {
-	logger().error("MOSDMap lied about what maps it had?");
+	ERROR("MOSDMap lied about what maps it had?");
 	return seastar::now();
       }
-    }).then([&t, this, &added_maps] {
-      auto [e, map] = *added_maps.begin();
-      auto lastmap = osdmaps.find(e - 1).get();
-      meta_coll->store_final_pool_info(t, lastmap, added_maps);
-      return seastar::now();
+    }).then([&t, FNAME, this, &added_maps] {
+      epoch_t last_map_epoch = superblock.get_newest_map();
+      auto last_map_fut = last_map_epoch > 0
+	? get_local_map(last_map_epoch)
+	: seastar::make_ready_future<local_cached_map_t>();
+      return last_map_fut.then(
+	[&t, FNAME, last_map_epoch, this, &added_maps](auto lastmap) {
+	INFO("storing final pool info lastmap epoch {}, added maps {}->{}",
+	     last_map_epoch,
+	     added_maps.begin()->first,
+	     added_maps.rbegin()->first);
+	meta_coll->store_final_pool_info(t, lastmap, added_maps);
+	return seastar::now();
+      });
     });
   });
 }
@@ -521,6 +530,7 @@ seastar::future<> OSDSingletonState::store_maps(ceph::os::Transaction& t,
 void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
                                   OSDSuperblock& superblock)
 {
+  LOG_PREFIX(OSDSingletonState::trim_maps);
   epoch_t min =
     std::min(superblock.cluster_osdmap_trim_lower_bound,
              osdmaps.cached_key_lower_bound());
@@ -528,13 +538,13 @@ void OSDSingletonState::trim_maps(ceph::os::Transaction& t,
   if (min <= superblock.get_oldest_map()) {
     return;
   }
-  logger().debug("{}: min={} oldest_map={}", __func__, min,  superblock.get_oldest_map());
+  DEBUG("min={} oldest_map={}", min,  superblock.get_oldest_map());
 
   // Trim from the superblock's oldest_map up to `min`.
   // Break if we have exceeded the txn target size.
   while (superblock.get_oldest_map() < min &&
          t.get_num_ops() < crimson::common::local_conf()->osd_target_transaction_size) {
-    logger().debug("{}: removing old osdmap epoch {}", __func__, superblock.get_oldest_map());
+    DEBUG("removing old osdmap epoch {}", superblock.get_oldest_map());
     meta_coll->remove_map(t, superblock.get_oldest_map());
     meta_coll->remove_inc_map(t, superblock.get_oldest_map());
     superblock.maps.erase(superblock.get_oldest_map());
@@ -600,31 +610,26 @@ seastar::future<Ref<PG>> ShardServices::make_pg(
 
 seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
   std::unique_ptr<PGCreateInfo> info) {
+  LOG_PREFIX(OSDSingletonState::trim_maps);
   return seastar::do_with(
     std::move(info),
-    [this](auto &info)
+    [FNAME, this](auto &info)
     -> seastar::future<Ref<PG>> {
       return get_map(info->epoch).then(
-	[&info, this](cached_map_t startmap)
+	[&info, FNAME, this](cached_map_t startmap)
 	-> seastar::future<std::tuple<Ref<PG>, cached_map_t>> {
 	  const spg_t &pgid = info->pgid;
 	  if (info->by_mon) {
 	    int64_t pool_id = pgid.pgid.pool();
 	    const pg_pool_t *pool = get_map()->get_pg_pool(pool_id);
 	    if (!pool) {
-	      logger().debug(
-		"{} ignoring pgid {}, pool dne",
-		__func__,
-		pgid);
+	      DEBUG("ignoring pgid {}, pool dne", pgid);
 	      local_state.pg_map.pg_creation_canceled(pgid);
 	      return seastar::make_ready_future<
 		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
 		>(std::make_tuple(Ref<PG>(), startmap));
 	    } else if (!pool->is_crimson()) {
-	      logger().debug(
-		"{} ignoring pgid {}, pool lacks crimson flag",
-		__func__,
-		pgid);
+	      DEBUG("ignoring pgid {}, pool lacks crimson flag", pgid);
 	      local_state.pg_map.pg_creation_canceled(pgid);
 	      return seastar::make_ready_future<
 		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
@@ -636,10 +641,7 @@ seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
 	      // this ensures we do not process old creating messages after the
 	      // pool's initial pgs have been created (and pg are subsequently
 	      // allowed to split or merge).
-	      logger().debug(
-		"{} dropping {} create, pool does not have CREATING flag set",
-		__func__,
-		pgid);
+	      DEBUG("dropping {} create, pool does not have CREATING flag set", pgid);
 	      local_state.pg_map.pg_creation_canceled(pgid);
 	      return seastar::make_ready_future<
 		std::tuple<Ref<PG>, OSDMapService::cached_map_t>
@@ -731,7 +733,8 @@ ShardServices::wait_for_pg(
 seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
 
 {
-  logger().debug("{}: {}", __func__, pgid);
+  LOG_PREFIX(OSDSingletonState::load_pg);
+  DEBUG("{}", pgid);
 
   return seastar::do_with(PGMeta(get_store(), pgid), [](auto& pg_meta) {
     return pg_meta.get_epoch();
@@ -743,8 +746,8 @@ seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
     return pg->read_state(&get_store()).then([pg] {
 	return seastar::make_ready_future<Ref<PG>>(std::move(pg));
     });
-  }).handle_exception([pgid](auto ep) {
-    logger().info("pg {} saw exception on load {}", pgid, ep);
+  }).handle_exception([FNAME, pgid](auto ep) {
+    INFO("pg {} saw exception on load {}", pgid, ep);
     ceph_abort("Could not load pg" == 0);
     return seastar::make_exception_future<Ref<PG>>(ep);
   });
@@ -752,12 +755,13 @@ seastar::future<Ref<PG>> ShardServices::load_pg(spg_t pgid)
 
 seastar::future<> ShardServices::dispatch_context_transaction(
   crimson::os::CollectionRef col, PeeringCtx &ctx) {
+  LOG_PREFIX(OSDSingletonState::dispatch_context_transaction);
   if (ctx.transaction.empty()) {
-    logger().debug("ShardServices::dispatch_context_transaction: empty transaction");
+    DEBUG("empty transaction");
     return seastar::now();
   }
 
-  logger().debug("ShardServices::dispatch_context_transaction: do_transaction ...");
+  DEBUG("do_transaction ...");
   auto ret = get_store().do_transaction(
     col,
     std::move(ctx.transaction));
@@ -768,10 +772,11 @@ seastar::future<> ShardServices::dispatch_context_transaction(
 seastar::future<> ShardServices::dispatch_context_messages(
   BufferedRecoveryMessages &&ctx)
 {
+  LOG_PREFIX(OSDSingletonState::dispatch_context_transaction);
   auto ret = seastar::parallel_for_each(std::move(ctx.message_map),
-    [this](auto& osd_messages) {
+    [FNAME, this](auto& osd_messages) {
       auto& [peer, messages] = osd_messages;
-      logger().debug("dispatch_context_messages sending messages to {}", peer);
+      DEBUG("sending messages to {}", peer);
       return seastar::parallel_for_each(
         std::move(messages), [=, peer=peer, this](auto& m) {
         return send_to_osd(peer, std::move(m), local_state.osdmap->get_epoch());
@@ -799,19 +804,19 @@ seastar::future<MURef<MOSDMap>> OSDSingletonState::build_incremental_map_msg(
   epoch_t first,
   epoch_t last)
 {
+  LOG_PREFIX(OSDSingletonState::build_incremental_map_msg);
   return seastar::do_with(crimson::common::local_conf()->osd_map_message_max,
                           crimson::make_message<MOSDMap>(
                             monc.get_fsid(),
                             osdmap->get_encoding_features()),
-                          [this, &first, last](unsigned int map_message_max,
+                          [this, &first, FNAME, last](unsigned int map_message_max,
                                                       auto& m) {
     m->cluster_osdmap_trim_lower_bound = superblock.cluster_osdmap_trim_lower_bound;
     m->newest_map = superblock.get_newest_map();
     auto maybe_handle_mapgap = seastar::now();
     if (first < superblock.cluster_osdmap_trim_lower_bound) {
-      logger().info("{}: cluster osdmap lower bound: {} "
-                    " > first {}, starting with full map",
-                    __func__, superblock.cluster_osdmap_trim_lower_bound, first);
+      INFO("cluster osdmap lower bound: {}  > first {}, starting with full map",
+	    superblock.cluster_osdmap_trim_lower_bound, first);
       // we don't have the next map the target wants,
       // so start with a full map.
       first = superblock.cluster_osdmap_trim_lower_bound;
@@ -856,14 +861,13 @@ seastar::future<> OSDSingletonState::send_incremental_map(
   crimson::net::Connection &conn,
   epoch_t first)
 {
+  LOG_PREFIX(OSDSingletonState::send_incremental_map);
   epoch_t to = osdmap->get_epoch();
-  logger().info("{}: first osdmap: {} "
-                "superblock's oldest map: {}, "
-                "to {}",
-                __func__, first, superblock.get_oldest_map(), to);
+  INFO("first osdmap: {} superblock's oldest map: {}, to {}",
+       first, superblock.get_oldest_map(), to);
   if (to > first && (int64_t)(to - first) > crimson::common::local_conf()->osd_map_share_max_epochs) {
-    logger().debug("{} {} > max epochs to send of {}, only sending most recent,",
-                   __func__, (to - first), crimson::common::local_conf()->osd_map_share_max_epochs);
+    DEBUG("{} > max epochs to send of {}, only sending most recent,",
+	  (to - first), crimson::common::local_conf()->osd_map_share_max_epochs);
     first = to - crimson::common::local_conf()->osd_map_share_max_epochs;
   }
   return build_incremental_map_msg(first, to).then([&conn](auto&& m) {
@@ -875,8 +879,9 @@ seastar::future<> OSDSingletonState::send_incremental_map_to_osd(
   int osd,
   epoch_t first)
 {
+  LOG_PREFIX(OSDSingletonState::send_incremental_map);
   if (osdmap->is_down(osd)) {
-    logger().info("{}: osd.{} is_down", __func__, osd);
+    INFO("osd.{} is_down", osd);
     return seastar::now();
   } else {
     auto conn = cluster_msgr.connect(
