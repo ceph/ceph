@@ -82,7 +82,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   const string& bucket_name = s->init_state.url_bucket;
 
   /* TempURL requires that bucket and object names are specified. */
-  if (bucket_name.empty() || rgw::sal::Object::empty(s->object)) {
+  if (bucket_name.empty() || rgw::sal::Object::empty(s->object.get())) {
     throw -EPERM;
   }
 
