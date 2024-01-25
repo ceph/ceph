@@ -3,8 +3,8 @@ Feature: RGW Host Detail Dashboard
 Scenario: "Test $rgw_servers GET/PUT Latencies - GET"
   Given the following series:
     | metrics | values |
-    | ceph_rgw_get_initial_lat_sum{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 10 50 100 |
-    | ceph_rgw_get_initial_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 20 60 80 |
+    | ceph_rgw_op_get_obj_lat_sum{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 10 50 100 |
+    | ceph_rgw_op_get_obj_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 20 60 80 |
     | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1 1 1 |
   When interval is `30s`
   And variable `rgw_servers` is `rgw.foo`
@@ -15,8 +15,8 @@ Scenario: "Test $rgw_servers GET/PUT Latencies - GET"
 Scenario: "Test $rgw_servers GET/PUT Latencies - PUT"
   Given the following series:
     | metrics | values |
-    | ceph_rgw_put_initial_lat_sum{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 15 35 55 |
-    | ceph_rgw_put_initial_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 10 30 50 |
+    | ceph_rgw_op_put_obj_lat_sum{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 15 35 55 |
+    | ceph_rgw_op_put_obj_lat_count{instance="127.0.0.1", instance_id="58892247", job="ceph"} | 10 30 50 |
     | ceph_rgw_metadata{ceph_daemon="rgw.foo", hostname="localhost", instance="127.0.0.1", instance_id="58892247", job="ceph"} | 1 1 1 |
   When interval is `30s`
   And variable `rgw_servers` is `rgw.foo`
@@ -27,7 +27,7 @@ Scenario: "Test $rgw_servers GET/PUT Latencies - PUT"
 Scenario: "Test Bandwidth by HTTP Operation - GET"
   Given the following series:
     | metrics | values |
-    | ceph_rgw_get_b{instance="127.0.0.1", instance_id="92806566", job="ceph"} | 10 50 100 |
+    | ceph_rgw_op_get_obj_bytes{instance="127.0.0.1", instance_id="92806566", job="ceph"} | 10 50 100 |
     | ceph_rgw_metadata{ceph_daemon="rgw.1", hostname="localhost", instance="127.0.0.1", instance_id="92806566", job="ceph"} | 1 1 1 |
   When interval is `30s`
   And variable `rgw_servers` is `rgw.1`
@@ -38,7 +38,7 @@ Scenario: "Test Bandwidth by HTTP Operation - GET"
 Scenario: "Test Bandwidth by HTTP Operation - PUT"
   Given the following series:
     | metrics | values |
-    | ceph_rgw_put_b{instance="127.0.0.1", instance_id="92806566", job="ceph"} | 5 20 50 |
+    | ceph_rgw_op_put_obj_bytes{instance="127.0.0.1", instance_id="92806566", job="ceph"} | 5 20 50 |
     | ceph_rgw_metadata{ceph_daemon="rgw.1", hostname="localhost", instance="127.0.0.1", instance_id="92806566", job="ceph"} | 1 1 1 |
   When interval is `30s`
   And variable `rgw_servers` is `rgw.1`
