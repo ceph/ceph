@@ -16,13 +16,11 @@
 #include <boost/statechart/transition.hpp>
 
 #include "common/fmt_common.h"
+#include "include/Context.h"
 #include "common/version.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
 #include "messages/MOSDRepScrubMap.h"
-#include "messages/MOSDScrubReserve.h"
-
-#include "include/Context.h"
 #include "osd/scrubber_common.h"
 
 #include "scrub_machine_lstnr.h"
@@ -136,7 +134,7 @@ struct value_event_t : sc::event<T> {
 
 
 /// the async-reserver granted our reservation request
-OP_EV(ReserverGranted);
+VALUE_EVENT(ReserverGranted, AsyncScrubResData);
 
 #define MEV(E)                                          \
   struct E : sc::event<E> {                             \
@@ -783,6 +781,41 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
  *      * ReplicaWaitUpdates
  *      * ReplicaBuildingMap
  */
+/*
+ * AsyncReserver for scrub 'remote' reservations
+ * -----------------------------------------------
+ *
+ * Unless disabled by 'osd_scrub_disable_reservation_queuing' (*), scrub
+ * reservation requests are handled by an async reserver: they are queued,
+ * until the number of concurrent scrubs is below the configured limit.
+
+ * (*) Note: the 'osd_scrub_disable_reservation_queuing' option is a temporary
+ * debug measure, and will be removed without deprecation in a future release.
+ *
+ * On the replica side, all reservations are treated as having the same priority.
+ * Note that 'high priority' scrubs, e.g. user-initiated scrubs, do not perform
+ * reservations on replicas at all.
+ *
+ * A queued scrub reservation request is cancelled by any of the following events:
+ *
+ * - a new interval: in this case, we do not expect to see a cancellation request
+ *   from the primary, and we can simply remove the request from the queue;
+ *
+ * - a cancellation request from the primary: probably a result of timing out on
+ *   the reservation process. Here, we can simply remove the request from the queue.
+ *
+ * - a new reservation request for the same PG: this is a bug. We had missed the
+ *   previous cancellation request, which could never happen.
+ *   We cancel the previous request, and replace
+ *   it with the new one. We would also issue an error log message.
+ *
+ * Primary/Replica with differing versions:
+ *
+ * The updated version of MOSDScrubReserve contains a new 'wait_for_resources'
+ * field. For legacy Primary OSDs, this field is decoded as 'false', and the
+ * replica responds immediately, with grant/rejection.
+*/
+
 
 struct ReplicaIdle;
 
@@ -809,22 +842,95 @@ struct ReplicaActive : sc::state<
       const ReplicaReserveReq&,
       bool async_request);
 
+  /**
+   * the queued reservation request was granted by the async reserver.
+   * Notify the Primary.
+   * Returns 'false' if the reservation is not the last one to be received
+   * by this replica.
+   */
+  bool granted_by_reserver(const AsyncScrubResData& resevation);
+
   /// handle a 'release' from a primary
   void on_release(const ReplicaRelease& ev);
 
-  /// cancel the reserver request.
-  /// The 'failure' re 'log_failure' is logged if we are not reserved to
-  /// begin with.
-  void clear_reservation_by_remote_primary(bool log_failure);
+  /**
+   * cancel a granted or pending reservation
+   *
+   * warn_if_no_reservation is set to true if the call is in response to a
+   * cancellation from the primary.  In that event, we *must* find a
+   * a granted or pending reservation and failing to do so warrants
+   * a warning to clog as it is a bug.
+   */
+  void clear_remote_reservation(bool warn_if_no_reservation);
 
-  using reactions = mpl::list<sc::transition<IntervalChanged, NotActive>>;
+  /**
+   * discard (and log) unhandled 'reservation granted' messages
+   * from the async reserver.
+   * As canceled reservations may still be triggered, this is not
+   * necessarily a bug.
+   */
+  void ignore_unhandled_grant(const ReserverGranted&);
+
+  using reactions = mpl::list<
+      sc::transition<IntervalChanged, NotActive>,
+      sc::in_state_reaction<
+	  ReserverGranted,
+	  ReplicaActive,
+	  &ReplicaActive::ignore_unhandled_grant>>;
 
  private:
-  bool reserved_by_my_primary{false};
-
-  // shortcuts:
   PG* m_pg;
   OSDService* m_osds;
+
+  // --- remote reservation machinery
+
+  /*
+   * 'reservation_granted' is set to 'true' when we have grant confirmation
+   *  to the primary, and the reservation has not yet been canceled (either
+   *  by the primary or following an interval change).
+   *
+   * Note the interaction with 'pending_reservation_nonce': the combination
+   * of these two variables is used to track the state of the reservation
+   * with the scrub_reserver. The possible combinations:
+   * - pending_reservation_nonce == 0 && !reservation_granted -- no reservation
+   *    was granted, and none is pending;
+   * - pending_reservation_nonce != 0 && !reservation_granted -- we have a
+   *   pending cb in the AsyncReserver for a request with nonce
+   *   'pending_reservation_nonce'
+   * - pending_reservation_nonce == 0 && reservation_granted -- we have sent
+   *   a response to the primary granting the reservation
+   * (invariant: !((pending_reservation_nonce != 0) && reservation_granted)
+   *
+   * Note that in the event that the primary is too old to support asynchronous
+   * reservation, MOSDScrubReserve::wait_for_resources will be set to false by
+   * the decoder and we bypass the 2'nd case above.
+   * See ReplicaActive::on_reserve_request().
+   */
+  bool reservation_granted{false};
+
+  /**
+   * a reservation request with this nonce is queued at the scrub_reserver,
+   * and was not yet granted.
+   */
+  MOSDScrubReserve::reservation_nonce_t pending_reservation_nonce{0};
+
+  // clang-format off
+  struct RtReservationCB : public Context {
+    PGRef pg;
+    AsyncScrubResData res_data;
+
+    explicit RtReservationCB(PGRef pg, AsyncScrubResData request_details)
+	: pg{pg}
+	, res_data{request_details}
+    {}
+
+    void finish(int) override {
+      pg->lock();
+      pg->m_scrubber->send_granted_by_reserver(res_data);
+      pg->unlock();
+    }
+  };
+  // clang-format on
 };
 
 
@@ -862,9 +968,10 @@ struct ReplicaUnreserved : sc::state<ReplicaUnreserved, ReplicaIdle>,
 
   using reactions = mpl::list<
       sc::custom_reaction<ReplicaReserveReq>,
+      sc::custom_reaction<StartReplica>,
+      // unexpected (bug-induced) events:
       sc::custom_reaction<ReplicaRelease>,
-      sc::custom_reaction<ReserverGranted>,
-      sc::custom_reaction<StartReplica>>;
+      sc::custom_reaction<ReserverGranted>>;
 
   sc::result react(const ReplicaReserveReq& ev);
   sc::result react(const StartReplica& ev);
