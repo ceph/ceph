@@ -76,7 +76,11 @@ export class ApiInterceptorService implements HttpInterceptor {
       });
     }
 
-    const apiUrl = localStorage.getItem('cluster_api_url');
+    let apiUrl = localStorage.getItem('cluster_api_url');
+
+    if (apiUrl && !apiUrl.endsWith('/')) {
+      apiUrl += '/';
+    }
     const currentRoute = this.router.url.split('?')[0];
 
     const ALWAYS_TO_HUB_APIs = [

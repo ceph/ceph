@@ -6,6 +6,7 @@ import { Subscription } from 'rxjs';
 import { MultiClusterService } from '~/app/shared/api/multi-cluster.service';
 
 import { Icons } from '~/app/shared/enum/icons.enum';
+import { MultiCluster } from '~/app/shared/models/multi-cluster';
 import { Permissions } from '~/app/shared/models/permissions';
 import { AuthStorageService } from '~/app/shared/services/auth-storage.service';
 import {
@@ -31,6 +32,7 @@ export class NavigationComponent implements OnInit, OnDestroy {
 
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
+  clusterTokenStatus: object = {};
   summaryData: any;
   icons = Icons;
 
@@ -62,22 +64,17 @@ export class NavigationComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.subs.add(
-      this.multiClusterService.subscribe((resp: any) => {
+      this.multiClusterService.subscribe((resp: object) => {
         const clustersConfig = resp['config'];
         if (clustersConfig) {
           Object.keys(clustersConfig).forEach((clusterKey: string) => {
             const clusterDetailsList = clustersConfig[clusterKey];
-            clusterDetailsList.forEach((clusterDetails: any) => {
-              const clusterName = clusterDetails['name'];
+            clusterDetailsList.forEach((clusterDetails: MultiCluster) => {
               const clusterUser = clusterDetails['user'];
               const clusterUrl = clusterDetails['url'];
               const clusterUniqueKey = `${clusterUrl}-${clusterUser}`;
-              this.clustersMap.set(clusterUniqueKey, {
-                name: clusterName,
-                cluster_alias: clusterDetails['cluster_alias'],
-                user: clusterDetails['user'],
-                url: clusterUrl
-              });
+              this.clustersMap.set(clusterUniqueKey, clusterDetails);
+              this.checkClusterConnectionStatus();
             });
           });
           this.selectedCluster =
@@ -111,10 +108,38 @@ export class NavigationComponent implements OnInit, OnDestroy {
         this.showTopNotification('motdNotificationEnabled', _.isPlainObject(motd));
       })
     );
+    this.subs.add(
+      this.multiClusterService.subscribeClusterTokenStatus((resp: object) => {
+        this.clusterTokenStatus = resp;
+        this.checkClusterConnectionStatus();
+      })
+    );
   }
 
   ngOnDestroy(): void {
     this.subs.unsubscribe();
+  }
+
+  checkClusterConnectionStatus() {
+    this.clustersMap.forEach((clusterDetails, clusterName) => {
+      const clusterTokenStatus = this.clusterTokenStatus[clusterDetails.name];
+      const connectionStatus = clusterTokenStatus ? clusterTokenStatus.status : 0;
+      const user = clusterTokenStatus ? clusterTokenStatus.user : clusterDetails.user;
+
+      this.clustersMap.set(clusterName, {
+        ...clusterDetails,
+        cluster_connection_status: connectionStatus,
+        user: user
+      });
+
+      if (clusterDetails.cluster_alias === 'local-cluster') {
+        this.clustersMap.set(clusterName, {
+          ...clusterDetails,
+          cluster_connection_status: 0,
+          user: user
+        });
+      }
+    });
   }
 
   blockHealthColor() {
