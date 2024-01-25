@@ -13343,6 +13343,10 @@ void MDCache::register_perfcounters()
                         "Stray dentries migrated");
 
     // low prio internal request stats
+    pcb.add_u64_counter(l_mdss_ireq_quiesce_subvolume, "ireq_quiesce_subvolume",
+                        "Internal Request type quiesce subvolume");
+    pcb.add_u64_counter(l_mdss_ireq_quiesce_subvolume_inode, "ireq_quiesce_subvolume_inode",
+                        "Internal Request type quiesce subvolume inode");
     pcb.add_u64_counter(l_mdss_ireq_enqueue_scrub, "ireq_enqueue_scrub",
                         "Internal Request type enqueue scrub");
     pcb.add_u64_counter(l_mdss_ireq_exportdir, "ireq_exportdir",

@@ -1,8 +1,10 @@
 #include "MDSRank.h"
+#include "MDCache.h"
 
 #include "QuiesceDbManager.h"
 #include "QuiesceAgent.h"
 #include <boost/url.hpp>
+#include <chrono>
 #include <ranges>
 #include <algorithm>
 
@@ -252,38 +254,57 @@ void MDSRank::quiesce_agent_setup() {
       dout(20) << "parsed root '" << root <<"' as : " << uri->path() << " " << uri->query() << dendl;
     }
 
+    std::chrono::milliseconds quiesce_delay_ms = 0ms;
+    if (auto pit = uri->params().find("delayms"); pit != uri->params().end()) {
+      try {
+        quiesce_delay_ms = std::chrono::milliseconds((*pit).has_value ? std::stoul((*pit).value) : 1000);
+      } catch (...) {
+        dout(5) << "error parsing the time to quiesce for query: " << uri->query() << dendl;
+        c->complete(-EINVAL);
+        return std::nullopt;
+      }
+    }
+    std::optional<double> dummy_quiesce_after;
+    if (auto pit = uri->params().find("q"); pit != uri->params().end()) {
+      try {
+        dummy_quiesce_after = (*pit).has_value ? std::stod((*pit).value) : 1 /*second*/;
+      } catch (...) {
+        dout(5) << "error parsing the time for debug quiesce for query: " << uri->query() << dendl;
+        c->complete(-EINVAL);
+        return std::nullopt;
+      }
+    }
+
+    auto path = uri->path();
+    dout(20) << "got request to quiesce '" << path << "'" << dendl;
+
     std::lock_guard l(mds_lock);
 
-    // always create a new request id
-    auto req_id = metareqid_t(entity_name_t::MDS(whoami), issue_tid());
-
-    auto [it, inserted] = quiesce_requests->try_emplace(uri->path(), req_id, c);
-
-    if (!inserted) {
-      dout(3) << "duplicate quiesce request for root '" << it->first << "'" << dendl;
-      // we must update the request id so that old one can't cancel this request.
-      it->second.first = req_id;
-      if (it->second.second) {
-        it->second.second->complete(-EINTR);
-        it->second.second = c;
-      } else {
-        // if we have no context, it means we've completed it
-        // since we weren't inserted, we must have successfully quiesced
-        c->complete(0);
-      }
+    if (!dummy_quiesce_after) {
+      // the real deal!
+      auto qc = new MDCache::C_MDS_QuiesceSubvolume(mdcache, c);
+      auto mdr = mdcache->quiesce_subvolume(filepath(path), qc, nullptr, quiesce_delay_ms);
+      return mdr ? mdr->reqid : std::optional<RequestHandle>();
     } else {
-      dout(20) << "got request to quiesce '" << it->first << "'" << dendl;
-      // do quiesce if needed
-      if (auto pit = uri->params().find("q"); pit != uri->params().end()) {
-        double quiesce_after = 0;
-        try {
-          quiesce_after = (*pit).has_value ? std::stod((*pit).value) : 1 /*second*/;
-        } catch (...) {
-          dout(5) << "error parsing the time to quiesce for query: " << uri->query() << dendl;
-          quiesce_requests->erase(it);
-          c->complete(-EINVAL);
-          return std::nullopt;
+      /* dummy quiesce */
+      // always create a new request id
+      auto req_id = metareqid_t(entity_name_t::MDS(whoami), issue_tid());
+      auto [it, inserted] = quiesce_requests->try_emplace(path, req_id, c);
+
+      if (!inserted) {
+        dout(3) << "duplicate quiesce request for root '" << it->first << "'" << dendl;
+        // we must update the request id so that old one can't cancel this request.
+        it->second.first = req_id;
+        if (it->second.second) {
+          it->second.second->complete(-EINTR);
+          it->second.second = c;
+        } else {
+          // if we have no context, it means we've completed it
+          // since we weren't inserted, we must have successfully quiesced
+          c->complete(0);
         }
+      } else {
+        // do quiesce if needed
 
         auto quiesce_task = new LambdaContext([quiesce_requests, req_id, this](int) {
           // the mds lock should be held by the timer
@@ -297,18 +318,23 @@ void MDSRank::quiesce_agent_setup() {
           dout(20) << "quiesce_task: done" << dendl;
         });
 
-        dout(20) << "scheduling a quiesce_task (" << quiesce_task 
-          << ") to fire after " << quiesce_after 
-          << " seconds on timer " << &timer << dendl;
-        timer.add_event_after(quiesce_after, quiesce_task);
+        dout(20) << "scheduling a quiesce_task (" << quiesce_task
+                 << ") to fire after " << *dummy_quiesce_after
+                 << " seconds on timer " << &timer << dendl;
+        timer.add_event_after(*dummy_quiesce_after, quiesce_task);
       }
+      return it->second.first;
     }
-
-    return it->second.first;
   };
 
   ci.cancel_request = [this, quiesce_requests](RequestHandle h) {
     std::lock_guard l(mds_lock);
+
+    if (mdcache->have_request(h)) {
+      auto qimdr = mdcache->request_get(h);
+      mdcache->request_kill(qimdr);
+      return 0;
+    }
 
     auto it = std::ranges::find(*quiesce_requests, h, [](auto x) { return x.second.first; });
     if (it != quiesce_requests->end()) {
