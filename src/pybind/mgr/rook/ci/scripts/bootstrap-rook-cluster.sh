@@ -3,7 +3,10 @@
 set -eEx
 
 : ${CEPH_DEV_FOLDER:=${PWD}}
+CLUSTER_SPEC=${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci/cluster-specs/cluster-on-pvc-minikube.yaml
+DEFAULT_NS="rook-ceph"
 KUBECTL="minikube kubectl --"
+export ROOK_CLUSTER_NS="${ROOK_CLUSTER_NS:=$DEFAULT_NS}" ## CephCluster namespace
 
 # We build a local ceph image that contains the latest code
 # plus changes from the PR. This image will be used by the docker
@@ -27,14 +30,14 @@ setup_minikube_env() {
     fi
 
     rm -rf ~/.minikube
-    minikube start --memory="4096" --cpus="2" --disk-size=10g --extra-disks=1 --driver kvm2
+    minikube start --memory="6144" --disk-size=20g --extra-disks=4 --driver kvm2
     # point Docker env to use docker daemon running on minikube
     eval $(minikube docker-env -p minikube)
 }
 
 build_ceph_image() {
-    wget -q -O cluster-test.yaml https://raw.githubusercontent.com/rook/rook/master/deploy/examples/cluster-test.yaml
-    CURR_CEPH_IMG=$(grep -E '^\s*image:\s+' cluster-test.yaml | sed 's/.*image: *\([^ ]*\)/\1/')
+
+    CURR_CEPH_IMG=$(grep -E '^\s*image:\s+' $CLUSTER_SPEC | sed 's/.*image: *\([^ ]*\)/\1/')
 
     cd ${CEPH_DEV_FOLDER}/src/pybind/mgr/rook/ci
     mkdir -p tmp_build/rook
@@ -54,28 +57,39 @@ build_ceph_image() {
 }
 
 create_rook_cluster() {
-    wget -q -O cluster-test.yaml https://raw.githubusercontent.com/rook/rook/master/deploy/examples/cluster-test.yaml
     $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/crds.yaml
     $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/common.yaml
     $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/operator.yaml
-    $KUBECTL create -f cluster-test.yaml
-    $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/dashboard-external-http.yaml
+    $KUBECTL create -f $CLUSTER_SPEC
     $KUBECTL create -f https://raw.githubusercontent.com/rook/rook/master/deploy/examples/toolbox.yaml
+}
+
+is_operator_ready() {
+    local phase
+    phase=$($KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.phase}')
+    echo "PHASE: $phase"
+    [[ "$phase" == "Ready" ]]
 }
 
 wait_for_rook_operator() {
     local max_attempts=10
     local sleep_interval=20
     local attempts=0
+
     $KUBECTL rollout status deployment rook-ceph-operator -n rook-ceph --timeout=180s
-    PHASE=$($KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.phase}')
-    echo "PHASE: $PHASE"
-    while ! $KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.phase}' | grep -q "Ready"; do
-	echo "Waiting for cluster to be ready..."
-	sleep $sleep_interval
-	attempts=$((attempts+1))
+
+    while ! is_operator_ready; do
+        echo "Waiting for rook operator to be ready..."
+        sleep $sleep_interval
+
+	# log current cluster state and pods info for debugging
+        PHASE=$($KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.phase}')
+        $KUBECTL -n rook-ceph get pods
+
+        attempts=$((attempts + 1))
         if [ $attempts -ge $max_attempts ]; then
             echo "Maximum number of attempts ($max_attempts) reached. Exiting..."
+            $KUBECTL -n rook-ceph get pods | grep operator | awk '{print $1}' | xargs $KUBECTL -n rook-ceph logs
             return 1
         fi
     done
@@ -87,7 +101,7 @@ wait_for_ceph_cluster() {
     local attempts=0
     $KUBECTL rollout status deployment rook-ceph-tools -n rook-ceph --timeout=90s
     while ! $KUBECTL get cephclusters.ceph.rook.io -n rook-ceph -o jsonpath='{.items[?(@.kind == "CephCluster")].status.ceph.health}' | grep -q "HEALTH_OK"; do
-	echo "Waiting for Ceph cluster installed"
+	echo "Waiting for Ceph cluster to enter HEALTH_OK" state
 	sleep $sleep_interval
 	attempts=$((attempts+1))
         if [ $attempts -ge $max_attempts ]; then
@@ -96,18 +110,9 @@ wait_for_ceph_cluster() {
         fi
     done
     echo "Ceph cluster installed and running"
-}
 
-show_info() {
-    DASHBOARD_PASSWORD=$($KUBECTL -n rook-ceph get secret rook-ceph-dashboard-password -o jsonpath="{['data']['password']}" | base64 --decode && echo)
-    IP_ADDR=$($KUBECTL get po --selector="app=rook-ceph-mgr" -n rook-ceph --output jsonpath='{.items[*].status.hostIP}')
-    PORT="$($KUBECTL -n rook-ceph -o=jsonpath='{.spec.ports[?(@.name == "dashboard")].nodePort}' get services rook-ceph-mgr-dashboard-external-http)"
-    BASE_URL="http://$IP_ADDR:$PORT"
-    echo "==========================="
-    echo "Ceph Dashboard:  "
-    echo "   IP_ADDRESS: $BASE_URL"
-    echo "   PASSWORD: $DASHBOARD_PASSWORD"
-    echo "==========================="
+    # add an additional wait to cover with any subttle change in the state
+    sleep 20
 }
 
 configure_libvirt(){
@@ -141,11 +146,19 @@ recreate_default_network(){
 
     # restart libvirtd service and wait a little bit for the service
     sudo systemctl restart libvirtd
-    sleep 20
+    sleep 10
 
     # Just some debugging information
     all_networks=$(virsh net-list --all)
     groups=$(groups)
+}
+
+enable_rook_orchestrator() {
+    echo "Enabling rook orchestrator"
+    $KUBECTL rollout status deployment rook-ceph-tools -n "$ROOK_CLUSTER_NS" --timeout=90s
+    $KUBECTL -n "$ROOK_CLUSTER_NS" exec -it deploy/rook-ceph-tools -- ceph mgr module enable rook
+    $KUBECTL -n "$ROOK_CLUSTER_NS" exec -it deploy/rook-ceph-tools -- ceph orch set backend rook
+    $KUBECTL -n "$ROOK_CLUSTER_NS" exec -it deploy/rook-ceph-tools -- ceph orch status
 }
 
 ####################################################################
@@ -160,7 +173,7 @@ build_ceph_image
 create_rook_cluster
 wait_for_rook_operator
 wait_for_ceph_cluster
-show_info
+enable_rook_orchestrator
 
 ####################################################################
 ####################################################################
