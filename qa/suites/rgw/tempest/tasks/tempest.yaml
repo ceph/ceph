@@ -27,8 +27,6 @@ tasks:
       object-storage-feature-enabled:
         container_sync: false
         discoverability: true
-        # TODO(tobias-urdin): Use sha256 when supported in RadosGW
-        tempurl_digest_hashlib: sha1
       blocklist:
         - .*test_account_quotas_negative.AccountQuotasNegativeTest.test_user_modify_quota
         - .*test_container_acl_negative.ObjectACLsNegativeTest.*
