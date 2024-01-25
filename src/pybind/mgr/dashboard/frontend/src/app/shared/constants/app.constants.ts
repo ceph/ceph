@@ -142,6 +142,8 @@ export class ActionLabelsI18n {
   MIGRATE: string;
   START_UPGRADE: string;
   CONNECT: string;
+  DISCONNECT: string;
+  RECONNECT: string;
 
   constructor() {
     /* Create a new item */
@@ -221,6 +223,8 @@ export class ActionLabelsI18n {
     this.START_UPGRADE = $localize`Start Upgrade`;
 
     this.CONNECT = $localize`Connect`;
+    this.DISCONNECT = $localize`Disconnect`;
+    this.RECONNECT = $localize`Reconnect`;
   }
 }
 

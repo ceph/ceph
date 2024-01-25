@@ -1,15 +1,17 @@
 # -*- coding: utf-8 -*-
 
 import json
+import time
 
 import requests
 
-from ..exceptions import DashboardException
+from ..exceptions import DashboardException, ExpiredSignatureError, InvalidTokenError
 from ..security import Scope
+from ..services.auth import JwtManager
 from ..settings import Settings
 from ..tools import configure_cors
-from . import APIDoc, APIRouter, CreatePermission, Endpoint, EndpointDoc, \
-    ReadPermission, RESTController, UIRouter, UpdatePermission
+from . import APIDoc, APIRouter, CreatePermission, DeletePermission, Endpoint, \
+    EndpointDoc, ReadPermission, RESTController, UIRouter, UpdatePermission
 
 
 @APIRouter('/multi-cluster', Scope.CONFIG_OPT)
@@ -17,6 +19,8 @@ from . import APIDoc, APIRouter, CreatePermission, Endpoint, EndpointDoc, \
 class MultiCluster(RESTController):
     def _proxy(self, method, base_url, path, params=None, payload=None, verify=False,
                token=None):
+        if not base_url.endswith('/'):
+            base_url = base_url + '/'
         try:
             if token:
                 headers = {
@@ -48,12 +52,7 @@ class MultiCluster(RESTController):
     @CreatePermission
     @EndpointDoc("Authenticate to a remote cluster")
     def auth(self, url: str, cluster_alias: str, username=None,
-             password=None, token=None, hub_url=None):
-
-        multi_cluster_config = self.load_multi_cluster_config()
-
-        if not url.endswith('/'):
-            url = url + '/'
+             password=None, token=None, hub_url=None, cluster_fsid=None):
 
         if username and password:
             payload = {
@@ -67,41 +66,40 @@ class MultiCluster(RESTController):
                     http_status_code=400,
                     component='dashboard')
 
-            token = content['token']
+            cluster_token = content['token']
 
-        if token:
             self._proxy('PUT', url, 'ui-api/multi-cluster/set_cors_endpoint',
-                        payload={'url': hub_url}, token=token)
-            fsid = self._proxy('GET', url, 'api/health/get_cluster_fsid', token=token)
-            content = self._proxy('POST', url, 'api/auth/check', payload={'token': token},
-                                  token=token)
-            if 'username' in content:
-                username = content['username']
+                        payload={'url': hub_url}, token=cluster_token)
 
-            if 'config' not in multi_cluster_config:
-                multi_cluster_config['config'] = {}
+            fsid = self._proxy('GET', url, 'api/health/get_cluster_fsid', token=cluster_token)
 
-            if fsid in multi_cluster_config['config']:
-                existing_entries = multi_cluster_config['config'][fsid]
-                if not any(entry['user'] == username for entry in existing_entries):
-                    existing_entries.append({
-                        "name": fsid,
-                        "url": url,
-                        "cluster_alias": cluster_alias,
-                        "user": username,
-                        "token": token,
-                    })
-            else:
-                multi_cluster_config['current_user'] = username
-                multi_cluster_config['config'][fsid] = [{
+            self.set_multi_cluster_config(fsid, username, url, cluster_alias, cluster_token)
+
+        if token and cluster_fsid and username:
+            self.set_multi_cluster_config(cluster_fsid, username, url, cluster_alias, token)
+
+    def set_multi_cluster_config(self, fsid, username, url, cluster_alias, token):
+        multi_cluster_config = self.load_multi_cluster_config()
+        if fsid in multi_cluster_config['config']:
+            existing_entries = multi_cluster_config['config'][fsid]
+            if not any(entry['user'] == username for entry in existing_entries):
+                existing_entries.append({
                     "name": fsid,
                     "url": url,
                     "cluster_alias": cluster_alias,
                     "user": username,
                     "token": token,
-                }]
-
-            Settings.MULTICLUSTER_CONFIG = multi_cluster_config
+                })
+        else:
+            multi_cluster_config['current_user'] = username
+            multi_cluster_config['config'][fsid] = [{
+                "name": fsid,
+                "url": url,
+                "cluster_alias": cluster_alias,
+                "user": username,
+                "token": token,
+            }]
+        Settings.MULTICLUSTER_CONFIG = multi_cluster_config
 
     def load_multi_cluster_config(self):
         if isinstance(Settings.MULTICLUSTER_CONFIG, str):
@@ -124,13 +122,71 @@ class MultiCluster(RESTController):
         Settings.MULTICLUSTER_CONFIG = multicluster_config
         return Settings.MULTICLUSTER_CONFIG
 
-    @Endpoint('POST')
+    @Endpoint('PUT')
     @CreatePermission
-    # pylint: disable=R0911
-    def verify_connection(self, url: str, username=None, password=None, token=None):
-        if not url.endswith('/'):
-            url = url + '/'
+    # pylint: disable=unused-variable
+    def reconnect_cluster(self, url: str, username=None, password=None, token=None):
+        multicluster_config = self.load_multi_cluster_config()
+        if username and password:
+            payload = {
+                'username': username,
+                'password': password
+            }
+            content = self._proxy('POST', url, 'api/auth', payload=payload)
+            if 'token' not in content:
+                raise DashboardException(
+                    "Could not authenticate to remote cluster",
+                    http_status_code=400,
+                    component='dashboard')
 
+            token = content['token']
+
+        if username and token:
+            if "config" in multicluster_config:
+                for key, cluster_details in multicluster_config["config"].items():
+                    for cluster in cluster_details:
+                        if cluster["url"] == url and cluster["user"] == username:
+                            cluster['token'] = token
+            Settings.MULTICLUSTER_CONFIG = multicluster_config
+        return Settings.MULTICLUSTER_CONFIG
+
+    @Endpoint('PUT')
+    @UpdatePermission
+    # pylint: disable=unused-variable
+    def edit_cluster(self, url, cluster_alias, username):
+        multicluster_config = self.load_multi_cluster_config()
+        if "config" in multicluster_config:
+            for key, cluster_details in multicluster_config["config"].items():
+                for cluster in cluster_details:
+                    if cluster["url"] == url and cluster["user"] == username:
+                        cluster['cluster_alias'] = cluster_alias
+        Settings.MULTICLUSTER_CONFIG = multicluster_config
+        return Settings.MULTICLUSTER_CONFIG
+
+    @Endpoint(method='DELETE')
+    @DeletePermission
+    def delete_cluster(self, cluster_name, cluster_user):
+        multicluster_config = self.load_multi_cluster_config()
+        if "config" in multicluster_config:
+            keys_to_remove = []
+            for key, cluster_details in multicluster_config["config"].items():
+                cluster_details_copy = list(cluster_details)
+                for cluster in cluster_details_copy:
+                    if cluster["name"] == cluster_name and cluster["user"] == cluster_user:
+                        cluster_details.remove(cluster)
+                        if not cluster_details:
+                            keys_to_remove.append(key)
+
+            for key in keys_to_remove:
+                del multicluster_config["config"][key]
+
+        Settings.MULTICLUSTER_CONFIG = multicluster_config
+        return Settings.MULTICLUSTER_CONFIG
+
+    @Endpoint()
+    @ReadPermission
+    # pylint: disable=R0911
+    def verify_connection(self, url=None, username=None, password=None, token=None):
         if token:
             try:
                 payload = {
@@ -171,6 +227,40 @@ class MultiCluster(RESTController):
     @ReadPermission
     def get_config(self):
         return Settings.MULTICLUSTER_CONFIG
+
+    def is_token_expired(self, jwt_token):
+        try:
+            decoded_token = JwtManager.decode_token(jwt_token)
+            expiration_time = decoded_token['exp']
+            current_time = time.time()
+            return expiration_time < current_time
+        except ExpiredSignatureError:
+            return True
+        except InvalidTokenError:
+            return True
+
+    def check_token_status_expiration(self, token):
+        if self.is_token_expired(token):
+            return 1
+        return 0
+
+    def check_token_status_array(self, clusters_token_array):
+        token_status_map = {}
+
+        for item in clusters_token_array:
+            cluster_name = item['name']
+            token = item['token']
+            user = item['user']
+            status = self.check_token_status_expiration(token)
+            token_status_map[cluster_name] = {'status': status, 'user': user}
+
+        return token_status_map
+
+    @Endpoint()
+    @ReadPermission
+    def check_token_status(self, clustersTokenMap=None):
+        clusters_token_map = json.loads(clustersTokenMap)
+        return self.check_token_status_array(clusters_token_map)
 
 
 @UIRouter('/multi-cluster', Scope.CONFIG_OPT)

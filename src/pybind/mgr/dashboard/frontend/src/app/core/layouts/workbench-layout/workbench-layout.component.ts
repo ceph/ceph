@@ -27,6 +27,7 @@ export class WorkbenchLayoutComponent implements OnInit, OnDestroy {
 
   ngOnInit() {
     this.subs.add(this.multiClusterService.startPolling());
+    this.subs.add(this.multiClusterService.startClusterTokenStatusPolling());
     this.subs.add(this.summaryService.startPolling());
     this.subs.add(this.taskManagerService.init(this.summaryService));
     this.faviconService.init();
