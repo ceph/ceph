@@ -342,6 +342,15 @@ PerfCounters *build_osd_logger(CephContext *cct) {
   "Number of watches that timed out or were blocklisted",
   NULL, PerfCountersBuilder::PRIO_USEFUL);
 
+  osd_plb.add_u64_counter(
+    l_osd_heap_size_bytes,
+    "osd_heap_size_bytes",
+    "OSD process Heap size (bytes)");
+  osd_plb.add_u64_counter(
+    l_osd_rss_size_kb,
+    "osd_rss_size_kb",
+    "OSD process RSS size (kb)");
+
   return osd_plb.create_perf_counters();
 }
 

@@ -2392,6 +2392,9 @@ OSD::OSD(CephContext *cct_,
   requested_full_last(0),
   service(this, poolctx)
 {
+  // Capture initial memory usage as a baseline for later comparison, see tick()
+  MemoryModel mm(cct);
+  mm.sample(&baseline);
 
   if (!gss_ktfile_client.empty()) {
     // Assert we can export environment variable
@@ -6377,6 +6380,18 @@ void OSD::tick()
 	       << " next " << next << dendl;
     }
   }
+
+  // Memory Usage Logging: log current usage and a baseline
+  MemoryModel mm(cct);
+  mm.sample();
+  dout(2) << "OSD Memory usage: "
+	  << " total " << mm.last.get_total()
+	  << ", rss " << mm.last.get_rss()
+	  << ", heap " << mm.last.get_heap()
+	  << ", baseline " << baseline.get_heap()
+	  << dendl;
+  logger->set(l_osd_heap_size_bytes, mm.last.get_heap());
+  logger->set(l_osd_rss_size_kb, mm.last.get_rss());
 
   tick_timer.add_event_after(get_tick_interval(), new C_Tick(this));
 }
