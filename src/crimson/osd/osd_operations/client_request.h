@@ -113,12 +113,15 @@ public:
       CompletionEvent
       > pg_tracking_events;
 
+    template <class BlockingEventT>
+    typename BlockingEventT::template Trigger<ClientRequest>
+    get_trigger(ClientRequest &op) {
+      return {std::get<BlockingEventT>(pg_tracking_events), op};
+    }
+
     template <typename BlockingEventT, typename InterruptorT=void, typename F>
     auto with_blocking_event(F &&f, ClientRequest &op) {
-      auto ret = std::forward<F>(f)(
-	typename BlockingEventT::template Trigger<ClientRequest>{
-	  std::get<BlockingEventT>(pg_tracking_events), op
-	});
+      auto ret = std::forward<F>(f)(get_trigger<BlockingEventT>(op));
       if constexpr (std::is_same_v<InterruptorT, void>) {
 	return ret;
       } else {
@@ -136,6 +139,12 @@ public:
 	    return handle.template enter<ClientRequest>(
 	      stage, std::move(trigger));
 	  }, op);
+    }
+
+    template <typename StageT>
+    void enter_stage_sync(StageT &stage, ClientRequest &op) {
+      handle.template enter_sync<ClientRequest>(
+          stage, get_trigger<typename StageT::BlockingEvent>(op));
     }
 
     template <
