@@ -44,7 +44,8 @@
             <div ngbDropdownMenu>
               <ng-container *ngFor="let cluster of clustersMap | keyvalue">
                 <button ngbDropdownItem
-                        (click)="onClusterSelection(cluster.value)">
+                        (click)="onClusterSelection(cluster.value)"
+                        [disabled]="cluster.value.cluster_connection_status === 1">
                   <div class="dropdown-text">{{ cluster.value.name }}</div>
                   <div *ngIf="cluster.value.cluster_alias"
                        class="text-secondary">{{ cluster.value.cluster_alias }} - {{ cluster.value.user }}</div>
@@ -133,7 +134,12 @@
           <li routerLinkActive="active"
               class="tc_submenuitem tc_submenuitem_multiCluster_overview">
             <a i18n
-               routerLink="/multi-cluster">Overview</a>
+               routerLink="/multi-cluster/overview">Overview</a>
+          </li>
+          <li routerLinkActive="active"
+              class="tc_submenuitem tc_submenuitem_multiCluster_manage_clusters">
+            <a i18n
+               routerLink="/multi-cluster/manage-clusters">Manage Clusters</a>
           </li>
         </ul>
       </li>
