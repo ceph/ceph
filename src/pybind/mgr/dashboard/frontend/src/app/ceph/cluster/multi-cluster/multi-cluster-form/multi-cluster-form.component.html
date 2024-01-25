@@ -1,6 +1,6 @@
 <cd-modal [modalRef]="activeModal">
   <ng-container i18n="form title"
-                class="modal-title">Connect Cluster
+                class="modal-title">{{ action | titlecase }} Cluster
   </ng-container>
   <ng-container class="modal-content">
     <form name="remoteClusterForm"
@@ -64,12 +64,16 @@
                   *ngIf="remoteClusterForm.showError('clusterAlias', frm, 'required')"
                   i18n>This field is required.
             </span>
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('clusterAlias', frm, 'uniqueName')"
+                  i18n>The chosen alias name is already in use.
+            </span>
           </div>
         </div>
         <div class="form-group row"
-             *ngIf="!remoteClusterForm.getValue('showToken') && !showCrossOriginError">
+             *ngIf="action !== 'edit'">
           <label class="cd-col-form-label required"
-                 for="apiToken"
+                 for="username"
                  i18n>Username
           </label>
           <div class="cd-col-form-input">
@@ -82,10 +86,32 @@
                   *ngIf="remoteClusterForm.showError('username', frm, 'required')"
                   i18n>This field is required.
             </span>
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('username', frm, 'uniqueUrlandUser')"
+                  i18n>A cluster with the chosen user is already connected.
+            </span>
           </div>
         </div>
         <div class="form-group row"
-             *ngIf="!remoteClusterForm.getValue('showToken') && !showCrossOriginError">
+             *ngIf="remoteClusterForm.getValue('showToken') && action !== 'edit'">
+          <label class="cd-col-form-label required"
+                 for="clusterFsid"
+                 i18n>Cluster FSID
+          </label>
+          <div class="cd-col-form-input">
+            <input id="clusterFsid"
+                   name="clusterFsid"
+                   class="form-control"
+                   type="text"
+                   formControlName="clusterFsid">
+            <span class="invalid-feedback"
+                  *ngIf="remoteClusterForm.showError('clusterFsid', frm, 'required')"
+                  i18n>This field is required.
+            </span>
+          </div>
+        </div>
+        <div class="form-group row"
+             *ngIf="!remoteClusterForm.getValue('showToken') && !showCrossOriginError && action !== 'edit'">
           <label class="cd-col-form-label required"
                  for="password"
                  i18n>Password
@@ -102,23 +128,8 @@
             </span>
           </div>
         </div>
-        <div class="form-group row">
-          <div class="cd-col-form-offset">
-            <div class="custom-control custom-checkbox">
-              <input class="custom-control-input"
-                     id="showToken"
-                     type="checkbox"
-                     (click)="showToken = !showToken"
-                     formControlName="showToken"
-                     [readonly]="true">
-              <label class="custom-control-label"
-                     for="showToken"
-                     i18n>Auth with token</label>
-            </div>
-          </div>
-        </div>
         <div class="form-group row"
-             *ngIf="remoteClusterForm.getValue('showToken')">
+             *ngIf="remoteClusterForm.getValue('showToken') && action !== 'edit'">
           <label class="cd-col-form-label required"
                  for="apiToken"
                  i18n>Token
@@ -135,7 +146,23 @@
           </div>
         </div>
         <div class="form-group row"
-             *ngIf="!showCrossOriginError">
+             *ngIf="action !== 'edit'">
+          <div class="cd-col-form-offset">
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     id="showToken"
+                     type="checkbox"
+                     [checked]="showToken"
+                     (change)="toggleToken()"
+                     formControlName="showToken">
+              <label class="custom-control-label"
+                     for="showToken"
+                     i18n>Auth with token</label>
+            </div>
+          </div>
+        </div>
+        <div class="form-group row"
+             *ngIf="!showCrossOriginError && action !== 'edit' && !remoteClusterForm.getValue('showToken')">
           <div class="cd-col-form-offset">
             <div class="custom-control">
               <button class="btn btn-primary"
@@ -150,8 +177,7 @@
       </div>
       <div class="modal-footer">
         <cd-form-button-panel (submitActionEvent)="onSubmit()"
-                              [submitText]="actionLabels.CONNECT"
-                              [disabled]="!connectionVerified && !showCrossOriginError"
+                              [submitText]="(action | titlecase) + ' ' + 'Cluster'"
                               [form]="remoteClusterForm">
         </cd-form-button-panel>
       </div>
