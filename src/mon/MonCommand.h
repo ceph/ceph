@@ -22,7 +22,7 @@ struct MonCommand {
   std::string helpstring;
   std::string module;
   std::string req_perms;
-  uint64_t flags;
+  uint64_t flags = 0;
 
   // MonCommand flags
   static const uint64_t FLAG_NONE       = 0;
