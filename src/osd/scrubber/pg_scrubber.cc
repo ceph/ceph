@@ -397,6 +397,15 @@ void PgScrubber::send_scrub_is_finished(epoch_t epoch_queued)
   dout(10) << "scrubber event --<< " << __func__ << dendl;
 }
 
+void PgScrubber::send_granted_by_reserver(const AsyncScrubResData& req)
+{
+  dout(10) << "scrubber event -->> granted_by_reserver" << dendl;
+  if (check_interval(req.request_epoch)) {
+    m_fsm->process_event(Scrub::ReserverGranted{req});
+  }
+  dout(10) << "scrubber event --<< granted_by_reserver" << dendl;
+}
+
 // -----------------
 
 bool PgScrubber::is_reserving() const
