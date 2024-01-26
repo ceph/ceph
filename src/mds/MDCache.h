@@ -540,11 +540,17 @@ public:
     uint64_t inc_heartbeat_count() {
       return ++heartbeat_count;
     }
+    void inc_inodes_blocked() {
+      inodes_blocked++;
+    }
     uint64_t get_inodes() const {
       return inodes;
     }
     uint64_t get_inodes_quiesced() const {
       return inodes_quiesced;
+    }
+    uint64_t get_inodes_blocked() const {
+      return inodes_blocked;
     }
     void add_failed(const MDRequestRef& mdr, int rc) {
       failed[mdr] = rc;
@@ -559,6 +565,7 @@ public:
     void dump(Formatter* f) const {
       f->dump_unsigned("inodes", inodes);
       f->dump_unsigned("inodes_quiesced", inodes_quiesced);
+      f->dump_unsigned("inodes_blocked", inodes_blocked);
       f->open_array_section("failed");
       for (auto& [mdr, rc] : failed) {
         f->open_object_section("failure");
@@ -572,6 +579,7 @@ private:
     uint64_t heartbeat_count = 0;
     uint64_t inodes = 0;
     uint64_t inodes_quiesced = 0;
+    uint64_t inodes_blocked = 0;
     std::map<MDRequestRef, int> failed;
   };
   class C_MDS_QuiescePath : public MDSInternalContext {

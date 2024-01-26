@@ -13614,6 +13614,17 @@ void MDCache::dispatch_quiesce_inode(const MDRequestRef& mdr)
     return;
   }
 
+  if (in->get_projected_inode()->get_quiesce_block()) {
+    dout(10) << __func__ << " quiesce is blocked for this inode; dropping locks!" << dendl;
+    mdr->mark_event("quiesce blocked");
+    mds->locker->drop_locks(mdr.get());
+    /* keep authpins! */
+    qs.inc_inodes_blocked();
+    mdr->internal_op_finish->complete(0);
+    mdr->internal_op_finish = nullptr;
+    return;
+  }
+
   if (in->is_dir()) {
     for (auto& dir : in->get_dirfrags()) {
       if (!dir->is_auth() && !splitauth) {

@@ -395,6 +395,7 @@ struct inode_t {
   using client_range_map = std::map<client_t,client_writeable_range_t,std::less<client_t>,Allocator<std::pair<const client_t,client_writeable_range_t>>>;
 
   static const uint8_t F_EPHEMERAL_DISTRIBUTED_PIN = (1<<0);
+  static const uint8_t F_QUIESCE_BLOCK             = (1<<1);
 
   inode_t()
   {
@@ -499,6 +500,12 @@ struct inode_t {
   }
   bool get_ephemeral_distributed_pin() const {
     return get_flag(F_EPHEMERAL_DISTRIBUTED_PIN);
+  }
+  void set_quiesce_block(bool v) {
+    set_flag(v, F_QUIESCE_BLOCK);
+  }
+  bool get_quiesce_block() const {
+    return get_flag(F_QUIESCE_BLOCK);
   }
 
   void encode(ceph::buffer::list &bl, uint64_t features) const;
@@ -828,6 +835,7 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->dump_int("export_pin", export_pin);
   f->dump_int("export_ephemeral_random_pin", export_ephemeral_random_pin);
   f->dump_bool("export_ephemeral_distributed_pin", get_ephemeral_distributed_pin());
+  f->dump_bool("quiesce_block", get_quiesce_block());
 
   f->open_array_section("client_ranges");
   for (const auto &p : client_ranges) {
