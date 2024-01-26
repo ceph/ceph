@@ -14,6 +14,10 @@
 #ifndef CEPH_INLINE_MEMORY_H
 #define CEPH_INLINE_MEMORY_H
 
+#include <cstdint>
+#include <cstddef> // For size_t
+#include <cstring> // for memcpy
+
 #if defined(__GNUC__)
 
 // optimize for the common case, which is very small copies
@@ -25,7 +29,7 @@ void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
 			 size_t inline_len)
 {
   if (l > inline_len) {
-    return memcpy(dest, src, l);
+    return std::memcpy(dest, src, l);
   }
   switch (l) {
   case 8:
@@ -63,7 +67,7 @@ void *maybe_inline_memcpy(void *dest, const void *src, size_t l,
 
 #else
 
-#define maybe_inline_memcpy(d, s, l, x) memcpy(d, s, l)
+#define maybe_inline_memcpy(d, s, l, x) std::memcpy(d, s, l)
 
 #endif
 
