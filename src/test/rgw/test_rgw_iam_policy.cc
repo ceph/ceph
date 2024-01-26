@@ -51,6 +51,7 @@ using rgw::IAM::s3All;
 using rgw::IAM::s3All;
 using rgw::IAM::s3GetAccelerateConfiguration;
 using rgw::IAM::s3GetBucketAcl;
+using rgw::IAM::s3GetBucketOwnershipControls;
 using rgw::IAM::s3GetBucketCORS;
 using rgw::IAM::s3GetBucketLocation;
 using rgw::IAM::s3GetBucketLogging;
@@ -379,6 +380,7 @@ TEST_F(PolicyTest, Parse3) {
   act2[s3GetObjectVersionTorrent] = 1;
   act2[s3GetAccelerateConfiguration] = 1;
   act2[s3GetBucketAcl] = 1;
+  act2[s3GetBucketOwnershipControls] = 1;
   act2[s3GetBucketCORS] = 1;
   act2[s3GetBucketVersioning] = 1;
   act2[s3GetBucketRequestPayment] = 1;
@@ -449,6 +451,7 @@ TEST_F(PolicyTest, Eval3) {
   s3allow[s3GetObjectVersionTorrent] = 1;
   s3allow[s3GetAccelerateConfiguration] = 1;
   s3allow[s3GetBucketAcl] = 1;
+  s3allow[s3GetBucketOwnershipControls] = 1;
   s3allow[s3GetBucketCORS] = 1;
   s3allow[s3GetBucketVersioning] = 1;
   s3allow[s3GetBucketRequestPayment] = 1;

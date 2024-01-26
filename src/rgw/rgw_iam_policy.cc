@@ -81,6 +81,7 @@ static const actpair actpairs[] =
  { "s3:GetBucketLocation", s3GetBucketLocation },
  { "s3:GetBucketLogging", s3GetBucketLogging },
  { "s3:GetBucketNotification", s3GetBucketNotification },
+ { "s3:GetBucketOwnershipControls", s3GetBucketOwnershipControls },
  { "s3:GetBucketPolicy", s3GetBucketPolicy },
  { "s3:GetBucketPolicyStatus", s3GetBucketPolicyStatus },
  { "s3:GetBucketPublicAccessBlock", s3GetBucketPublicAccessBlock },
@@ -113,6 +114,7 @@ static const actpair actpairs[] =
  { "s3:PutBucketEncryption", s3PutBucketEncryption },
  { "s3:PutBucketLogging", s3PutBucketLogging },
  { "s3:PutBucketNotification", s3PutBucketNotification },
+ { "s3:PutBucketOwnershipControls", s3PutBucketOwnershipControls },
  { "s3:PutBucketPolicy", s3PutBucketPolicy },
  { "s3:PutBucketRequestPayment", s3PutBucketRequestPayment },
  { "s3:PutBucketTagging", s3PutBucketTagging },
@@ -1289,6 +1291,12 @@ const char* action_bit_string(uint64_t action) {
 
   case s3PutBucketAcl:
     return "s3:PutBucketAcl";
+
+  case s3GetBucketOwnershipControls:
+    return "s3:GetBucketOwnershipControls";
+
+  case s3PutBucketOwnershipControls:
+    return "s3:PutBucketOwnershipControls";
 
   case s3GetBucketCORS:
     return "s3:GetBucketCORS";
