@@ -17,6 +17,8 @@
 
 #include <string_view>
 
+using namespace std::literals::string_view_literals;
+
 #include <common/DecayCounter.h>
 
 #include "include/common_fwd.h"
@@ -436,6 +438,7 @@ private:
     return xattr_name.rfind("ceph.dir.layout", 0) == 0 ||
            xattr_name.rfind("ceph.file.layout", 0) == 0 ||
            xattr_name.rfind("ceph.quota", 0) == 0 ||
+           xattr_name == "ceph.quiesce.block"sv ||
            xattr_name == "ceph.dir.subvolume" ||
            xattr_name == "ceph.dir.pin" ||
            xattr_name == "ceph.dir.pin.random" ||
