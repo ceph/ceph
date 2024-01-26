@@ -1,5 +1,0 @@
-exclusions:
-  template-instance-rule:
-    reason: "Instance template not needed because of ceph-mgr leader election."
-  target-instance-rule:
-    reason: "Instance matcher not needed because of ceph-mgr leader election."
