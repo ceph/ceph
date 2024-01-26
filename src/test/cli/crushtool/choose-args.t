@@ -159,8 +159,6 @@
           "chooseleaf_descend_once": 0,
           "chooseleaf_vary_r": 0,
           "chooseleaf_stable": 0,
-          "msr_descents": 100,
-          "msr_collision_tries": 100,
           "straw_calc_version": 0,
           "allowed_bucket_algs": 22,
           "profile": "argonaut",
@@ -174,8 +172,7 @@
           "has_v3_rules": 0,
           "has_v4_buckets": 1,
           "require_feature_tunables5": 0,
-          "has_v5_rules": 0,
-          "has_msr_rules": 0
+          "has_v5_rules": 0
       },
       "choose_args": {
           "1": [],

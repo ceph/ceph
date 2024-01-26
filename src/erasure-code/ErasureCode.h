@@ -37,8 +37,6 @@ namespace ceph {
     std::string rule_root;
     std::string rule_failure_domain;
     std::string rule_device_class;
-    int rule_osds_per_failure_domain = -1;
-    int rule_num_failure_domains = -1;
 
     ~ErasureCode() override {}
 
