@@ -6,6 +6,7 @@ import time
 from ceph_volume import process
 from ceph_volume.api import lvm
 from ceph_volume.util.system import get_file_contents
+from typing import Dict, List
 
 
 logger = logging.getLogger(__name__)
@@ -747,34 +748,34 @@ class AllowLoopDevices(object):
 allow_loop_devices = AllowLoopDevices()
 
 
-def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys/dev/block', device=''):
-    def holder_inner_loop():
+def get_block_devs_sysfs(_sys_block_path: str = '/sys/block', _sys_dev_block_path: str = '/sys/dev/block', device: str = '') -> List[List[str]]:
+    def holder_inner_loop() -> bool:
         for holder in holders:
             # /sys/block/sdy/holders/dm-8/dm/uuid
-            holder_dm_type = get_file_contents(os.path.join(_sys_block_path, dev, f'holders/{holder}/dm/uuid')).split('-')[0].lower()
+            holder_dm_type: str = get_file_contents(os.path.join(_sys_block_path, dev, f'holders/{holder}/dm/uuid')).split('-')[0].lower()
             if holder_dm_type == 'mpath':
                 return True
 
     # First, get devices that are _not_ partitions
-    result = list()
+    result: List[List[str]] = list()
     if not device:
-        dev_names = os.listdir(_sys_block_path)
+        dev_names: List[str] = os.listdir(_sys_block_path)
     else:
         dev_names = [device]
     for dev in dev_names:
-        name = kname = os.path.join("/dev", dev)
+        name = kname = pname = os.path.join("/dev", dev)
         if not os.path.exists(name):
             continue
-        type_ = 'disk'
-        holders = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
+        type_: str = 'disk'
+        holders: List[str] = os.listdir(os.path.join(_sys_block_path, dev, 'holders'))
         if holder_inner_loop():
             continue
-        dm_dir_path = os.path.join(_sys_block_path, dev, 'dm')
+        dm_dir_path: str = os.path.join(_sys_block_path, dev, 'dm')
         if os.path.isdir(dm_dir_path):
-            dm_type = get_file_contents(os.path.join(dm_dir_path, 'uuid'))
-            type_ = dm_type.split('-')[0].lower()
-            basename = get_file_contents(os.path.join(dm_dir_path, 'name'))
-            name = os.path.join("/dev/mapper", basename)
+            dm_type: str = get_file_contents(os.path.join(dm_dir_path, 'uuid'))
+            type_: List[str] = dm_type.split('-')[0].lower()
+            basename: str = get_file_contents(os.path.join(dm_dir_path, 'name'))
+            name: str = os.path.join("/dev/mapper", basename)
         if dev.startswith('loop'):
             if not allow_loop_devices():
                 continue
@@ -782,28 +783,25 @@ def get_block_devs_sysfs(_sys_block_path='/sys/block', _sys_dev_block_path='/sys
             if not os.path.exists(os.path.join(_sys_block_path, dev, 'loop')):
                 continue
             type_ = 'loop'
-        result.append([kname, name, type_])
+        result.append([kname, name, type_, pname])
     # Next, look for devices that _are_ partitions
-    for item in os.listdir(_sys_dev_block_path):
-        is_part = get_file_contents(os.path.join(_sys_dev_block_path, item, 'partition')) == "1"
-        dev = os.path.basename(os.readlink(os.path.join(_sys_dev_block_path, item)))
-        if not is_part:
-            continue
-        name = kname = os.path.join("/dev", dev)
-        result.append([name, kname, "part"])
+    partitions: Dict[str, str] = get_partitions()
+    for partition in partitions.keys():
+        name = kname = os.path.join("/dev", partition)
+        result.append([name, kname, "part", partitions[partition]])
     return sorted(result, key=lambda x: x[0])
 
-def get_partitions(_sys_dev_block_path ='/sys/dev/block'):
-    devices = os.listdir(_sys_dev_block_path)
-    result = dict()
+def get_partitions(_sys_dev_block_path ='/sys/dev/block') -> List[str]:
+    devices: List[str] = os.listdir(_sys_dev_block_path)
+    result: Dict[str, str] = dict()
     for device in devices:
-        device_path = os.path.join(_sys_dev_block_path, device)
-        is_partition = int(get_file_contents(os.path.join(device_path, 'partition'), '0')) > 0
+        device_path: str = os.path.join(_sys_dev_block_path, device)
+        is_partition: bool = int(get_file_contents(os.path.join(device_path, 'partition'), '0')) > 0
         if not is_partition:
             continue
 
-        partition_sys_name = os.path.basename(os.readlink(device_path))
-        parent_device_sys_name = os.readlink(device_path).split('/')[-2:-1][0]
+        partition_sys_name: str = os.path.basename(os.path.realpath(device_path))
+        parent_device_sys_name: str = os.path.realpath(device_path).split('/')[-2:-1][0]
         result[partition_sys_name] = parent_device_sys_name
     return result
 
@@ -821,7 +819,6 @@ def get_devices(_sys_block_path='/sys/block', device=''):
     device_facts = {}
 
     block_devs = get_block_devs_sysfs(_sys_block_path)
-    partitions = get_partitions()
 
     block_types = ['disk', 'mpath', 'part']
     if allow_loop_devices():
@@ -834,7 +831,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             continue
         sysdir = os.path.join(_sys_block_path, devname)
         if block[2] == 'part':
-            sysdir = os.path.join(_sys_block_path, partitions[devname], devname)
+            sysdir = os.path.join(_sys_block_path, block[3], devname)
         metadata = {}
 
         # If the device is ceph rbd it gets excluded
@@ -870,7 +867,7 @@ def get_devices(_sys_block_path='/sys/block', device=''):
             metadata['device_nodes'] = ','.join(device_slaves)
         else:
             if block[2] == 'part':
-                metadata['device_nodes'] = partitions[devname]
+                metadata['device_nodes'] = block[3]
             else:
                 metadata['device_nodes'] = devname
 
