@@ -24,25 +24,30 @@ local g = import 'grafonnet/grafana.libsonnet';
       )
     )
     .addTemplate(
-      g.template.datasource('DS_PROMETHEUS', 'prometheus', 'default', label='Data Source')
+      g.template.datasource('datasource', 'prometheus', 'default', label='Data Source')
     )
 
     .addTemplate(
-      $.addTemplateSchema('Cluster',
-                          '$DS_PROMETHEUS',
-                          'label_values(ceph_health_status, cluster)',
-                          2,
-                          true,
-                          0,
-                          null,
-                          '',
-                          current='All')
+      $.addTemplateSchema(
+        'cluster',
+        '$datasource',
+        'label_values(ceph_health_status, %s)' % $._config.clusterLabel,
+        1,
+        true,
+        1,
+        'cluster',
+        '(.*)',
+        if !$._config.showMultiCluster then 'variable' else '',
+        multi=true,
+        allValues='.*',
+      ),
     )
+
     .addPanels([
       $.addRowSchema(false, true, 'Clusters') + { gridPos: { x: 0, y: 1, w: 24, h: 1 } },
       $.addStatPanel(
         title='Status',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 0, y: 2, w: 5, h: 7 },
         graphMode='none',
         colorMode='value',
@@ -87,23 +92,23 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets([
         $.addTargetSchema(
           expr='count(ceph_health_status==0) or vector(0)',
-          datasource='${DS_PROMETHEUS}',
+          datasource='$datasource',
           legendFormat='Healthy',
         ),
         $.addTargetSchema(
           expr='count(ceph_health_status==1)',
-          datasource='${DS_PROMETHEUS}',
+          datasource='$datasource',
           legendFormat='Warning'
         ),
         $.addTargetSchema(
           expr='count(ceph_health_status==2)',
-          datasource='${DS_PROMETHEUS}',
+          datasource='$datasource',
           legendFormat='Error'
         ),
       ]),
 
       $.addTableExtended(
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         title='Details',
         gridPosition={ h: 7, w: 19, x: 5, y: 2 },
         options={
@@ -241,7 +246,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       ]).addTargets([
         $.addTargetSchema(
           expr='ceph_health_status',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -252,7 +257,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         ),
         $.addTargetSchema(
           expr='ceph_mgr_metadata',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -262,8 +267,8 @@ local g = import 'grafonnet/grafana.libsonnet';
           range=false,
         ),
         $.addTargetSchema(
-          expr='count(ALERTS{alertstate="firing", cluster=~"$Cluster"})',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='count(ALERTS{alertstate="firing", cluster=~"$cluster"})',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -274,7 +279,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         ),
         $.addTargetSchema(
           expr='sum by (cluster) (irate(ceph_pool_wr[$__interval]))  \n+ sum by (cluster) (irate(ceph_pool_rd[$__interval])) ',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -285,7 +290,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         ),
         $.addTargetSchema(
           expr='sum by (cluster) (irate(ceph_pool_rd_bytes[$__interval]))\n+ sum by (cluster) (irate(ceph_pool_wr_bytes[$__interval])) ',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -296,7 +301,7 @@ local g = import 'grafonnet/grafana.libsonnet';
         ),
         $.addTargetSchema(
           expr='ceph_cluster_by_class_total_used_bytes',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -311,7 +316,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       $.addRowSchema(false, true, 'Overview') + { gridPos: { x: 0, y: 9, w: 24, h: 1 } },
       $.addStatPanel(
         title='Cluster Count',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 0, y: 10, w: 3, h: 4 },
         graphMode='none',
         colorMode='value',
@@ -325,8 +330,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='count(ceph_health_status{cluster=~"$Cluster"}) or vector(0)',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='count(ceph_health_status{cluster=~"$cluster"}) or vector(0)',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -352,15 +357,15 @@ local g = import 'grafonnet/grafana.libsonnet';
         { color: 'red', value: 0.85 },
       ])
       .addTarget($.addTargetSchema(
-        expr='sum(ceph_cluster_total_used_bytes{cluster=~"$Cluster"}) / sum(ceph_cluster_total_bytes{cluster=~"$Cluster"})',
+        expr='sum(ceph_cluster_total_used_bytes{cluster=~"$cluster"}) / sum(ceph_cluster_total_bytes{cluster=~"$cluster"})',
         instant=true,
         legendFormat='Used',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
       )),
 
       $.addStatPanel(
         title='Total Capacity',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 7, y: 10, w: 3, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -374,8 +379,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(ceph_cluster_total_bytes{cluster=~"$Cluster"})',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='sum(ceph_cluster_total_bytes{cluster=~"$cluster"})',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -388,7 +393,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='OSDs',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 10, y: 10, w: 3, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -402,8 +407,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='count(ceph_osd_metadata{cluster=~"$Cluster"})',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='count(ceph_osd_metadata{cluster=~"$cluster"})',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -416,7 +421,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='Hosts',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 13, y: 10, w: 3, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -430,8 +435,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='count(sum by (hostname) (ceph_osd_metadata{cluster=~"$Cluster"}))',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='count(sum by (hostname) (ceph_osd_metadata{cluster=~"$cluster"}))',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -444,7 +449,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='Client IOPS',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 16, y: 10, w: 4, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -458,8 +463,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_pool_wr{cluster=~"$Cluster"}[$__interval]))',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='sum(irate(ceph_pool_wr{cluster=~"$cluster"}[$__interval]))',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
           instant=false,
@@ -467,8 +472,8 @@ local g = import 'grafonnet/grafana.libsonnet';
           range=true,
         ),
         $.addTargetSchema(
-          expr='sum(irate(ceph_pool_rd{cluster=~"$Cluster"}[$__interval]))',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='sum(irate(ceph_pool_rd{cluster=~"$cluster"}[$__interval]))',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
           legendFormat='Read',
@@ -478,7 +483,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='OSD Latencies',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 20, y: 10, w: 4, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -492,8 +497,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='avg(ceph_osd_apply_latency_ms{cluster=~"$Cluster"})',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='avg(ceph_osd_apply_latency_ms{cluster=~"$cluster"})',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
           instant=false,
@@ -501,8 +506,8 @@ local g = import 'grafonnet/grafana.libsonnet';
           range=true,
         ),
         $.addTargetSchema(
-          expr='avg(ceph_osd_commit_latency_ms{cluster=~"$Cluster"})',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='avg(ceph_osd_commit_latency_ms{cluster=~"$cluster"})',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
           legendFormat='Commit',
@@ -512,7 +517,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='Alert Count',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 0, y: 14, w: 3, h: 4 },
         graphMode='none',
         colorMode='value',
@@ -526,8 +531,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='count(ALERTS{alertstate="firing", cluster=~"$Cluster"}) or vector(0)',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='count(ALERTS{alertstate="firing", cluster=~"$cluster"}) or vector(0)',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -540,7 +545,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='Total Used',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 7, y: 14, w: 3, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -554,8 +559,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(ceph_cluster_total_used_bytes{cluster=~"$Cluster"})',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='sum(ceph_cluster_total_used_bytes{cluster=~"$cluster"})',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -568,7 +573,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='Capacity Prediction',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 10, y: 14, w: 3, h: 4 },
         graphMode='none',
         colorMode='none',
@@ -583,7 +588,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addTargets([
         $.addTargetSchema(
           expr='predict_linear(avg(increase(ceph_cluster_total_used_bytes{cluster=~"${Cluster}"}[1d]))[7d:1h],120)',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
           legendFormat='__auto',
@@ -593,7 +598,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='Pools',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 13, y: 14, w: 3, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -607,8 +612,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='count(ceph_pool_metadata{cluster=~"$Cluster"})',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='count(ceph_pool_metadata{cluster=~"$cluster"})',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           format='table',
           hide=false,
           exemplar=false,
@@ -621,7 +626,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='Client Bandwidth',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 16, y: 14, w: 4, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -635,8 +640,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_pool_rd_bytes{cluster=~"$Cluster"}[$__interval]))',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='sum(irate(ceph_pool_rd_bytes{cluster=~"$cluster"}[$__interval]))',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
           instant=false,
@@ -644,8 +649,8 @@ local g = import 'grafonnet/grafana.libsonnet';
           range=true,
         ),
         $.addTargetSchema(
-          expr='sum(irate(ceph_pool_wr_bytes{cluster=~"$Cluster"}[$__interval]))',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='sum(irate(ceph_pool_wr_bytes{cluster=~"$cluster"}[$__interval]))',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
           legendFormat='Read',
@@ -655,7 +660,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
       $.addStatPanel(
         title='Recovery Rate',
-        datasource='${DS_PROMETHEUS}',
+        datasource='$datasource',
         gridPosition={ x: 20, y: 14, w: 4, h: 4 },
         graphMode='area',
         colorMode='none',
@@ -669,8 +674,8 @@ local g = import 'grafonnet/grafana.libsonnet';
       ])
       .addTargets([
         $.addTargetSchema(
-          expr='sum(irate(ceph_osd_recovery_ops{cluster=~"$Cluster"}[$__interval]))',
-          datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+          expr='sum(irate(ceph_osd_recovery_ops{cluster=~"$cluster"}[$__interval]))',
+          datasource={ type: 'prometheus', uid: '$datasource' },
           hide=false,
           exemplar=false,
           instant=false,
@@ -684,7 +689,7 @@ local g = import 'grafonnet/grafana.libsonnet';
       .addPanels([
         $.addStatPanel(
           title='Status',
-          datasource='${DS_PROMETHEUS}',
+          datasource='$datasource',
           gridPosition={ x: 0, y: 19, w: 5, h: 7 },
           graphMode='area',
           colorMode='value',
@@ -719,15 +724,15 @@ local g = import 'grafonnet/grafana.libsonnet';
         )
         .addTargets([
           $.addTargetSchema(
-            expr='count(ALERTS{alertstate="firing",severity="critical", cluster=~"$Cluster"}) OR vector(0)',
-            datasource='${DS_PROMETHEUS}',
+            expr='count(ALERTS{alertstate="firing",severity="critical", cluster=~"$cluster"}) OR vector(0)',
+            datasource='$datasource',
             legendFormat='Critical',
             instant=true,
             range=false
           ),
           $.addTargetSchema(
-            expr='count(ALERTS{alertstate="firing",severity="warning", cluster=~"$Cluster"}) OR vector(0)',
-            datasource='${DS_PROMETHEUS}',
+            expr='count(ALERTS{alertstate="firing",severity="warning", cluster=~"$cluster"}) OR vector(0)',
+            datasource='$datasource',
             legendFormat='Warning',
             instant=true,
             range=false
@@ -736,7 +741,7 @@ local g = import 'grafonnet/grafana.libsonnet';
 
 
         $.addTableExtended(
-          datasource='${DS_PROMETHEUS}',
+          datasource='$datasource',
           title='Alerts',
           gridPosition={ h: 7, w: 19, x: 5, y: 19 },
           options={
@@ -801,8 +806,8 @@ local g = import 'grafonnet/grafana.libsonnet';
           },
         ]).addTargets([
           $.addTargetSchema(
-            expr='ALERTS{alertstate="firing", cluster=~"$Cluster"}',
-            datasource={ type: 'prometheus', uid: '${DS_PROMETHEUS}' },
+            expr='ALERTS{alertstate="firing", %(matchers)s}}' % $.matchers(),
+            datasource={ type: 'prometheus', uid: '$datasource' },
             format='table',
             hide=false,
             exemplar=false,
@@ -844,7 +849,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           drawStyle='line',
           axisPlacement='auto',
           title='Top 5 - Capacity Utilization(%)',
-          datasource='${DS_PROMETHEUS}',
+          datasource='$datasource',
           gridPosition={ h: 7, w: 8, x: 0, y: 30 },
           fillOpacity=0,
           pointSize=5,
@@ -869,7 +874,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           [
             $.addTargetSchema(
               expr='topk(5, ceph_cluster_total_used_bytes/ceph_cluster_total_bytes)',
-              datasource='${DS_PROMETHEUS}',
+              datasource='$datasource',
               instant=false,
               legendFormat='{{cluster}}',
               step=300,
@@ -885,7 +890,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           drawStyle='line',
           axisPlacement='auto',
           title='Top 5 - Cluster IOPS',
-          datasource='${DS_PROMETHEUS}',
+          datasource='$datasource',
           gridPosition={ h: 7, w: 8, x: 8, y: 30 },
           fillOpacity=0,
           pointSize=5,
@@ -910,7 +915,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           [
             $.addTargetSchema(
               expr='topk(10, sum by (cluster) (irate(ceph_osd_op_w[$__interval]))  \n+ sum by (cluster) (irate(ceph_osd_op_r[$__interval])) )',
-              datasource='${DS_PROMETHEUS}',
+              datasource='$datasource',
               instant=false,
               legendFormat='{{cluster}}',
               step=300,
@@ -926,7 +931,7 @@ local g = import 'grafonnet/grafana.libsonnet';
           drawStyle='line',
           axisPlacement='auto',
           title='Top 10 - Capacity Utilization(%) by Pool',
-          datasource='${DS_PROMETHEUS}',
+          datasource='$datasource',
           gridPosition={ h: 7, w: 8, x: 16, y: 30 },
           fillOpacity=0,
           pointSize=5,
@@ -950,8 +955,8 @@ local g = import 'grafonnet/grafana.libsonnet';
         .addTargets(
           [
             $.addTargetSchema(
-              expr='topk(10, ceph_pool_bytes_used{cluster=~"$Cluster"}/ceph_pool_max_avail{cluster=~"$Cluster"} * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata{cluster=~"$Cluster"})',
-              datasource='${DS_PROMETHEUS}',
+              expr='topk(10, ceph_pool_bytes_used{%(matchers)s}}/ceph_pool_max_avail{%(matchers)s}} * on(pool_id, cluster) group_left(instance, name) ceph_pool_metadata{%(matchers)s}})' % $.matchers(),
+              datasource='$datasource',
               instant=false,
               legendFormat='{{cluster}} - {{name}}',
               step=300,
