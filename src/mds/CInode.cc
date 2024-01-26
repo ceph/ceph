@@ -493,8 +493,8 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mu
 
   bool pool_updated = get_inode()->layout.pool_id != front.inode->layout.pool_id;
   bool pin_updated = (get_inode()->export_pin != front.inode->export_pin) ||
-		     (get_inode()->export_ephemeral_distributed_pin !=
-		      front.inode->export_ephemeral_distributed_pin);
+		     (get_inode()->get_ephemeral_distributed_pin() !=
+		      front.inode->get_ephemeral_distributed_pin());
 
   reset_inode(std::move(front.inode));
   if (front.xattrs != get_xattrs())
@@ -2130,7 +2130,7 @@ void CInode::encode_lock_ipolicy(bufferlist& bl)
     encode(get_inode()->layout, bl, mdcache->mds->mdsmap->get_up_features());
     encode(get_inode()->quota, bl);
     encode(get_inode()->export_pin, bl);
-    encode(get_inode()->export_ephemeral_distributed_pin, bl);
+    encode(get_inode()->flags, bl);
     encode(get_inode()->export_ephemeral_random_pin, bl);
   }
   ENCODE_FINISH(bl);
@@ -2151,15 +2151,15 @@ void CInode::decode_lock_ipolicy(bufferlist::const_iterator& p)
     decode(_inode->quota, p);
     decode(_inode->export_pin, p);
     if (struct_v >= 2) {
-      decode(_inode->export_ephemeral_distributed_pin, p);
+      decode(_inode->flags, p);
       decode(_inode->export_ephemeral_random_pin, p);
     }
   }
   DECODE_FINISH(p);
 
   bool pin_updated = (get_inode()->export_pin != _inode->export_pin) ||
-		     (get_inode()->export_ephemeral_distributed_pin !=
-		      _inode->export_ephemeral_distributed_pin);
+		     (get_inode()->get_ephemeral_distributed_pin() !=
+		      _inode->get_ephemeral_distributed_pin());
   reset_inode(std::move(_inode));
   maybe_export_pin(pin_updated);
 }
@@ -5443,7 +5443,7 @@ void CInode::setxattr_ephemeral_rand(double probability)
 void CInode::setxattr_ephemeral_dist(bool val)
 {
   ceph_assert(is_dir());
-  _get_projected_inode()->export_ephemeral_distributed_pin = val;
+  _get_projected_inode()->set_ephemeral_distributed_pin(val);
 }
 
 void CInode::set_export_pin(mds_rank_t rank)
@@ -5479,7 +5479,7 @@ mds_rank_t CInode::get_export_pin(bool inherit) const
 
     if (in->get_inode()->export_pin >= 0) {
       return in->get_inode()->export_pin;
-    } else if (in->get_inode()->export_ephemeral_distributed_pin &&
+    } else if (in->get_inode()->get_ephemeral_distributed_pin() &&
 	       mdcache->get_export_ephemeral_distributed_config()) {
       if (in != this)
 	return mdcache->hash_into_rank_bucket(in->ino(), dir->get_frag());
@@ -5545,7 +5545,7 @@ double CInode::get_ephemeral_rand() const
      * random pin set.
      */
     if (in->get_inode()->export_pin >= 0 ||
-	in->get_inode()->export_ephemeral_distributed_pin)
+	in->get_inode()->get_ephemeral_distributed_pin())
       return 0.0;
 
     in = pdn->get_dir()->inode;
