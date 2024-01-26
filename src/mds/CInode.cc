@@ -310,6 +310,9 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (in.state_test(CInode::STATE_RANDEPHEMERALPIN)) {
     out << " randepin";
   }
+  if (in.get_inode()->get_quiesce_block()) {
+    out << " qblock";
+  }
 
   out << " " << &in;
   out << "]";

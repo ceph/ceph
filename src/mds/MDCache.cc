@@ -13544,6 +13544,10 @@ void MDCache::dispatch_quiesce_subvolume_inode(const MDRequestRef& mdr)
     // TODO request remote_authpin
 
     mdr->mark_event("quiesce complete for non-auth inode");
+  } else if (in->get_projected_inode()->get_quiesce_block()) {
+    dout(10) << __func__ << " quiesce is blocked for this inode; dropping locks!" << dendl;
+    mdr->mark_event("quiesce blocked");
+    mds->locker->drop_locks(mdr.get());
   } else {
 
     /* Acquire rdlocks on anything which prevents writing.
