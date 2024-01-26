@@ -45,8 +45,8 @@
           'for': '30s',
           expr: |||
             (
-              (ceph_health_detail{name="MON_DOWN"} == 1) * on() (
-                count(ceph_mon_quorum_status == 1) == bool (floor(count(ceph_mon_metadata) / 2) + 1)
+              (ceph_health_detail{name="MON_DOWN"} == 1) * on() group_right(cluster) (
+                count(ceph_mon_quorum_status == 1) by(cluster)== bool (floor(count(ceph_mon_metadata) by(cluster) / 2) + 1)
               )
             ) == 1
           |||,
@@ -54,22 +54,20 @@
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-down',
             summary: 'Monitor quorum is at risk%(cluster)s' % $.MultiClusterSummary(),
-            description: '{{ $min := query "floor(count(ceph_mon_metadata) / 2) + 1" | first | value }}Quorum requires a majority of monitors (x {{ $min }}) to be active. Without quorum the cluster will become inoperable, affecting all services and connected clients. The following monitors are down: {{- range query "(ceph_mon_quorum_status == 0) + on(ceph_daemon) group_left(hostname) (ceph_mon_metadata * 0)" }} - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}',
+            description: '{{ $min := printf "floor(count(ceph_mon_metadata{cluster=\'%s\'}) / 2) + 1" .Labels.cluster | query | first | value }}Quorum requires a majority of monitors (x {{ $min }}) to be active. Without quorum the cluster will become inoperable, affecting all services and connected clients. The following monitors are down: {{- range printf "(ceph_mon_quorum_status{cluster=\'%s\'} == 0) + on(cluster,ceph_daemon) group_left(hostname) (ceph_mon_metadata * 0)" .Labels.cluster | query }} - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}',
           },
         },
         {
           alert: 'CephMonDown',
           'for': '30s',
           expr: |||
-            count(ceph_mon_quorum_status == 0) <= (count(ceph_mon_metadata) - floor(count(ceph_mon_metadata) / 2) + 1)
+            (count by (cluster) (ceph_mon_quorum_status == 0)) <= (count by (cluster) (ceph_mon_metadata) - floor((count by (cluster) (ceph_mon_metadata) / 2 + 1)))
           |||,
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#mon-down',
             summary: 'One or more monitors down%(cluster)s' % $.MultiClusterSummary(),
-            description: |||
-              {{ $down := query "count(ceph_mon_quorum_status == 0)" | first | value }}{{ $s := "" }}{{ if gt $down 1.0 }}{{ $s = "s" }}{{ end }}You have {{ $down }} monitor{{ $s }} down. Quorum is still intact, but the loss of an additional monitor will make your cluster inoperable.  The following monitors are down: {{- range query "(ceph_mon_quorum_status == 0) + on(ceph_daemon) group_left(hostname) (ceph_mon_metadata * 0)" }}   - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}
-            |||,
+            description: '{{ $down := printf "count(ceph_mon_quorum_status{cluster=\'%s\'} == 0)" .Labels.cluster | query | first | value }}{{ $s := "" }}{{ if gt $down 1.0 }}{{ $s = "s" }}{{ end }}You have {{ $down }} monitor{{ $s }} down. Quorum is still intact, but the loss of an additional monitor will make your cluster inoperable. The following monitors are down: {{- range printf "(ceph_mon_quorum_status{cluster=\'%s\'} == 0) + on(cluster,ceph_daemon) group_left(hostname) (ceph_mon_metadata * 0)" .Labels.cluster | query }} - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}',
           },
         },
         {
@@ -112,11 +110,11 @@
       rules: [
         {
           alert: 'CephOSDDownHigh',
-          expr: 'count(ceph_osd_up == 0) / count(ceph_osd_up) * 100 >= 10',
+          expr: 'count by (cluster) (ceph_osd_up == 0) / count by (cluster) (ceph_osd_up) * 100 >= 10',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.4.1' },
           annotations: {
             summary: 'More than 10%% of OSDs are down%(cluster)s' % $.MultiClusterSummary(),
-            description: '{{ $value | humanize }}% or {{ with query "count(ceph_osd_up == 0)" }}{{ . | first | value }}{{ end }} of {{ with query "count(ceph_osd_up)" }}{{ . | first | value }}{{ end }} OSDs are down (>= 10%). The following OSDs are down: {{- range query "(ceph_osd_up * on(ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0" }} - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}',
+            description: '{{ $value | humanize }}% or {{ with printf "count (ceph_osd_up{cluster=\'%s\'} == 0)" .Labels.cluster | query }}{{ . | first | value }}{{ end }} of {{ with printf "count (ceph_osd_up{cluster=\'%s\'})" .Labels.cluster | query }}{{ . | first | value }}{{ end }} OSDs are down (>= 10%). The following OSDs are down: {{- range printf "(ceph_osd_up{cluster=\'%s\'} * on(cluster, ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0" .Labels.cluster | query }} - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}',
           },
         },
         {
@@ -126,7 +124,7 @@
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.4.8' },
           annotations: {
             summary: 'An OSD host is offline%(cluster)s' % $.MultiClusterSummary(),
-            description: 'The following OSDs are down: {{- range query "(ceph_osd_up * on(ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0" }} - {{ .Labels.hostname }} : {{ .Labels.ceph_daemon }} {{- end }}',
+            description: 'The following OSDs are down: {{- range printf "(ceph_osd_up{cluster=\'%s\'} * on(cluster,ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0" .Labels.cluster | query }} - {{ .Labels.hostname }} : {{ .Labels.ceph_daemon }} {{- end }}',
           },
         },
         {
@@ -137,9 +135,7 @@
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#osd-down',
             summary: 'An OSD has been marked down%(cluster)s' % $.MultiClusterSummary(),
-            description: |||
-              {{ $num := query "count(ceph_osd_up == 0)" | first | value }}{{ $s := "" }}{{ if gt $num 1.0 }}{{ $s = "s" }}{{ end }}{{ $num }} OSD{{ $s }} down for over 5mins. The following OSD{{ $s }} {{ if eq $s "" }}is{{ else }}are{{ end }} down: {{- range query "(ceph_osd_up * on(ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0"}} - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}
-            |||,
+            description: '{{ $num := printf "count(ceph_osd_up{cluster=\'%s\'} == 0) " .Labels.cluster | query | first | value }}{{ $s := "" }}{{ if gt $num 1.0 }}{{ $s = "s" }}{{ end }}{{ $num }} OSD{{ $s }} down for over 5mins. The following OSD{{ $s }} {{ if eq $s "" }}is{{ else }}are{{ end }} down: {{- range printf "(ceph_osd_up{cluster=\'%s\'} * on(cluster,ceph_daemon) group_left(hostname) ceph_osd_metadata) == 0" .Labels.cluster | query }} - {{ .Labels.ceph_daemon }} on {{ .Labels.hostname }} {{- end }}',
           },
         },
         {
@@ -235,7 +231,7 @@
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.4.7' },
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#device-health-toomany',
-            summary: 'Too many devices are predicted to fail, unable to resolve%(cluster)s' % $.MultiClusterSummary(),
+            summary: 'Too many devices are predicted to fail%(cluster)s, unable to resolve' % $.MultiClusterSummary(),
             description: 'The device health module has determined that devices predicted to fail can not be remediated automatically, since too many OSDs would be removed from the cluster to ensure performance and availability. Prevent data integrity issues by adding new OSDs so that data may be relocated.',
           },
         },
@@ -298,7 +294,7 @@
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.5.1' },
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/cephfs/health-messages#cephfs-health-messages',
-            summary: 'CephFS filesystem is damaged%(cluster)s.' % $.MultiClusterSummary(),
+            summary: 'CephFS filesystem is damaged%(cluster)s' % $.MultiClusterSummary(),
             description: 'Filesystem metadata has been corrupted. Data may be inaccessible. Analyze metrics from the MDS daemon admin socket, or escalate to support.',
           },
         },
@@ -390,7 +386,7 @@
           expr: 'up{job="ceph"} == 0',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.6.2' },
           annotations: {
-            summary: 'The mgr/prometheus module is not available%(cluster)s' % $.MultiClusterSummary(),
+            summary: 'The mgr/prometheus module is not available',
             description: "The mgr/prometheus module at {{ $labels.instance }} is unreachable. This could mean that the module has been disabled or the mgr daemon itself is down. Without the mgr/prometheus module metrics and alerts will no longer function. Open a shell to an admin node or toolbox pod and use 'ceph -s' to to determine whether the mgr is active. If the mgr is not active, restart it, otherwise you can determine module status with 'ceph mgr module ls'. If it is not listed as enabled, enable it with 'ceph mgr module enable prometheus'.",
           },
         },
@@ -507,7 +503,7 @@
           expr: 'node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"} * 100 < 5',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.1' },
           annotations: {
-            summary: 'Root filesystem is dangerously full%(cluster)s' % $.MultiClusterSummary(),
+            summary: 'Root filesystem is dangerously full',
             description: 'Root volume is dangerously full: {{ $value | humanize }}% free.',
           },
         },
@@ -527,7 +523,7 @@
           ||| % $._config,
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.2' },
           annotations: {
-            summary: 'One or more NICs reports packet drops%(cluster)s' % $.MultiClusterSummary(),
+            summary: 'One or more NICs reports packet drops',
             description: 'Node {{ $labels.instance }} experiences packet drop > %(CephNodeNetworkPacketDropsThreshold)s%% or > %(CephNodeNetworkPacketDropsPerSec)s packets/s on interface {{ $labels.device }}.' % { CephNodeNetworkPacketDropsThreshold: $._config.CephNodeNetworkPacketDropsThreshold * 100, CephNodeNetworkPacketDropsPerSec: $._config.CephNodeNetworkPacketDropsPerSec },
           },
         },
@@ -564,7 +560,7 @@
         },
         {
           alert: 'CephNodeDiskspaceWarning',
-          expr: 'predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) *on(instance) group_left(nodename) node_uname_info < 0',
+          expr: 'predict_linear(node_filesystem_free_bytes{device=~"/.*"}[2d], 3600 * 24 * 5) * on(cluster, instance) group_left(nodename) node_uname_info < 0',
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.8.4' },
           annotations: {
             summary: 'Host filesystem free space is getting low%(cluster)s' % $.MultiClusterSummary(),
@@ -573,7 +569,7 @@
         },
         {
           alert: 'CephNodeInconsistentMTU',
-          expr: 'node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==  scalar(    max by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=      quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))  )or node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==  scalar(    min by (device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=      quantile by (device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))  )',
+          expr: 'node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==  scalar(    max by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=      quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))  )or node_network_mtu_bytes * (node_network_up{device!="lo"} > 0) ==  scalar(    min by (cluster,device) (node_network_mtu_bytes * (node_network_up{device!="lo"} > 0)) !=      quantile by (cluster,device) (.5, node_network_mtu_bytes * (node_network_up{device!="lo"} > 0))  )',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             summary: 'MTU settings across Ceph hosts are inconsistent%(cluster)s' % $.MultiClusterSummary(),
@@ -611,7 +607,7 @@
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#pool-full',
             summary: 'Pool is full - writes are blocked%(cluster)s' % $.MultiClusterSummary(),
-            description: "A pool has reached its MAX quota, or OSDs supporting the pool have reached the FULL threshold. Until this is resolved, writes to the pool will be blocked. Pool Breakdown (top 5) {{- range query \"topk(5, sort_desc(ceph_pool_percent_used * on(pool_id) group_right ceph_pool_metadata))\" }} - {{ .Labels.name }} at {{ .Value }}% {{- end }} Increase the pool's quota, or add capacity to the cluster first then increase the pool's quota (e.g. ceph osd pool set quota <pool_name> max_bytes <bytes>)",
+            description: "A pool has reached its MAX quota, or OSDs supporting the pool have reached the FULL threshold. Until this is resolved, writes to the pool will be blocked. Pool Breakdown (top 5) {{- range printf \"topk(5, sort_desc(ceph_pool_percent_used{cluster='%s'} * on(cluster,pool_id) group_right ceph_pool_metadata))\" .Labels.cluster | query }} - {{ .Labels.name }} at {{ .Value }}% {{- end }} Increase the pool's quota, or add capacity to the cluster first then increase the pool's quota (e.g. ceph osd pool set quota <pool_name> max_bytes <bytes>)",
           },
         },
         {
@@ -647,7 +643,7 @@
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#slow-ops',
-            summary: '{{ $labels.ceph_daemon }} operations are slow to complete',
+            summary: '{{ $labels.ceph_daemon }} operations are slow to complete%(cluster)s' % $.MultiClusterSummary(),
             description: '{{ $labels.ceph_daemon }} operations are taking too long to process (complaint time exceeded)',
           },
         },
@@ -763,7 +759,7 @@
           expr: 'absent(up{job="ceph"})',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.12.1' },
           annotations: {
-            summary: 'The scrape job for Ceph is missing from Prometheus%(cluster)s' % $.MultiClusterSummary(),
+            summary: 'The scrape job for Ceph is missing from Prometheus',
             description: "The prometheus job that scrapes from Ceph is no longer defined, this will effectively mean you'll have no metrics or alerts for the cluster.  Please review the job definitions in the prometheus.yml file of the prometheus instance.",
           },
         },
@@ -775,7 +771,7 @@
         {
           alert: 'CephObjectMissing',
           'for': '30s',
-          expr: '(ceph_health_detail{name="OBJECT_UNFOUND"} == 1) * on() (count(ceph_osd_up == 1) == bool count(ceph_osd_metadata)) == 1',
+          expr: '(ceph_health_detail{name="OBJECT_UNFOUND"} == 1) * on() group_right(cluster) (count(ceph_osd_up == 1) by (cluster) == bool count(ceph_osd_metadata) by(cluster)) == 1',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.1' },
           annotations: {
             documentation: 'https://docs.ceph.com/en/latest/rados/operations/health-checks#object-unfound',
@@ -807,31 +803,31 @@
         {
           alert: 'CephRBDMirrorImagesPerDaemonHigh',
           'for': '1m',
-          expr: 'sum by (ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
+          expr: 'sum by (cluster, ceph_daemon, namespace) (ceph_rbd_mirror_snapshot_image_snapshots) > %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.2' },
           annotations: {
-            summary: 'Number of image replications are now above %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
-            description: 'Number of image replications per daemon is not suppossed to go beyond threshold %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
+            summary: 'Number of image replications are now above %(CephRBDMirrorImagesPerDaemonThreshold)s%(cluster)s' % [$._config.CephRBDMirrorImagesPerDaemonThreshold, $.MultiClusterSummary()],
+            description: 'Number of image replications per daemon is not supposed to go beyond threshold %(CephRBDMirrorImagesPerDaemonThreshold)s' % $._config,
           },
         },
         {
           alert: 'CephRBDMirrorImagesNotInSync',
           'for': '1m',
-          expr: 'sum by (ceph_daemon, image, namespace, pool) (topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0',
+          expr: 'sum by (cluster, ceph_daemon, image, namespace, pool) (topk by (cluster, ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (cluster, ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.3' },
           annotations: {
-            summary: 'Some of the RBD mirror images are not in sync with the remote counter parts.',
+            summary: 'Some of the RBD mirror images are not in sync with the remote counter parts%(cluster)s' % $.MultiClusterSummary(),
             description: 'Both local and remote RBD mirror images should be in sync.',
           },
         },
         {
           alert: 'CephRBDMirrorImagesNotInSyncVeryHigh',
           'for': '1m',
-          expr: 'count by (ceph_daemon) ((topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0) > (sum by (ceph_daemon) (ceph_rbd_mirror_snapshot_snapshots)*.1)',
+          expr: 'count by (ceph_daemon, cluster) ((topk by (cluster, ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_local_timestamp) - topk by (cluster, ceph_daemon, image, namespace, pool) (1, ceph_rbd_mirror_snapshot_image_remote_timestamp)) != 0) > (sum by (ceph_daemon, cluster) (ceph_rbd_mirror_snapshot_snapshots)*.1)',
           labels: { severity: 'critical', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.4' },
           annotations: {
-            summary: 'Number of unsynchronized images are very high.',
-            description: 'More than 10% of the images have synchronization problems',
+            summary: 'Number of unsynchronized images are very high%(cluster)s' % $.MultiClusterSummary(),
+            description: 'More than 10% of the images have synchronization problems.',
           },
         },
         {
@@ -840,7 +836,7 @@
           expr: 'rate(ceph_rbd_mirror_journal_replay_bytes[30m]) > %.2f' % [$._config.CephRBDMirrorImageTransferBandwidthThreshold],
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.10.5' },
           annotations: {
-            summary: 'The replication network usage has been increased over %d%s in the last 30 minutes. Review the number of images being replicated. This alert will be cleaned automatically after 30 minutes' % [$._config.CephRBDMirrorImageTransferBandwidthThreshold * 100, '%'],
+            summary: 'The replication network usage%(cluster)s has been increased over %d%s in the last 30 minutes. Review the number of images being replicated. This alert will be cleaned automatically after 30 minutes' % [$.MultiClusterSummary(), $._config.CephRBDMirrorImageTransferBandwidthThreshold * 100, '%'],
             description: 'Detected a heavy increase in bandwidth for rbd replications (over %d%s) in the last 30 min. This might not be a problem, but it is good to review the number of images being replicated simultaneously' % [$._config.CephRBDMirrorImageTransferBandwidthThreshold * 100, '%'],
           },
         },
@@ -852,50 +848,50 @@
         {
           alert: 'NVMeoFSubsystemNamespaceLimit',
           'for': '1m',
-          expr: '(count by(nqn) (ceph_nvmeof_subsystem_namespace_metadata)) >= ceph_nvmeof_subsystem_namespace_limit',
+          expr: '(count by(nqn, cluster) (ceph_nvmeof_subsystem_namespace_metadata)) >= ceph_nvmeof_subsystem_namespace_limit',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: '{{ $labels.nqn }} subsystem has reached its maximum number of namespaces %(cluster)s' % $.MultiClusterSummary(),
+            summary: '{{ $labels.nqn }} subsystem has reached its maximum number of namespaces%(cluster)s' % $.MultiClusterSummary(),
             description: 'Subsystems have a max namespace limit defined at creation time. This alert means that no more namespaces can be added to {{ $labels.nqn }}',
           },
         },
         {
           alert: 'NVMeoFTooManyGateways',
           'for': '1m',
-          expr: 'count(ceph_nvmeof_gateway_info) > %.2f' % [$._config.NVMeoFMaxGatewaysPerCluster],
+          expr: 'count(ceph_nvmeof_gateway_info) by (cluster) > %.2f' % [$._config.NVMeoFMaxGatewaysPerCluster],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'Max supported gateways exceeded %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'Max supported gateways exceeded%(cluster)s' % $.MultiClusterSummary(),
             description: 'You may create many gateways, but %(NVMeoFMaxGatewaysPerCluster)d is the tested limit' % $._config,
           },
         },
         {
           alert: 'NVMeoFMaxGatewayGroupSize',
           'for': '1m',
-          expr: 'count by(group) (ceph_nvmeof_gateway_info) > %.2f' % [$._config.NVMeoFMaxGatewaysPerGroup],
+          expr: 'count(ceph_nvmeof_gateway_info) by (cluster,group) > %.2f' % [$._config.NVMeoFMaxGatewaysPerGroup],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'Max gateways within a gateway group ({{ $labels.group }}) exceeded %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'Max gateways within a gateway group ({{ $labels.group }}) exceeded%(cluster)s' % $.MultiClusterSummary(),
             description: 'You may create many gateways in a gateway group, but %(NVMeoFMaxGatewaysPerGroup)d is the tested limit' % $._config,
           },
         },
         {
           alert: 'NVMeoFSingleGatewayGroup',
           'for': '5m',
-          expr: 'count by(group) (ceph_nvmeof_gateway_info) == 1',
+          expr: 'count(ceph_nvmeof_gateway_info) by(cluster,group) == 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'The gateway group {{ $labels.group }} consists of a single gateway - HA is not possible %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'The gateway group {{ $labels.group }} consists of a single gateway - HA is not possible%(cluster)s' % $.MultiClusterSummary(),
             description: 'Although a single member gateway group is valid, it should only be used for test purposes',
           },
         },
         {
           alert: 'NVMeoFHighGatewayCPU',
           'for': '10m',
-          expr: 'label_replace(avg by(instance) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*") > %.2f' % [$._config.NVMeoFHighGatewayCPU],
+          expr: 'label_replace(avg by(instance, cluster) (rate(ceph_nvmeof_reactor_seconds_total{mode="busy"}[1m])),"instance","$1","instance","(.*):.*") > %.2f' % [$._config.NVMeoFHighGatewayCPU],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'CPU used by {{ $labels.instance }} NVMe-oF Gateway is high %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'CPU used by {{ $labels.instance }} NVMe-oF Gateway is high%(cluster)s' % $.MultiClusterSummary(),
             description: 'Typically, high CPU may indicate degraded performance. Consider increasing the number of reactor cores',
           },
         },
@@ -905,27 +901,27 @@
           expr: 'ceph_nvmeof_subsystem_metadata{allow_any_host="yes"}',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'Subsystem {{ $labels.nqn }} has been defined without host level security %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'Subsystem {{ $labels.nqn }} has been defined without host level security%(cluster)s' % $.MultiClusterSummary(),
             description: 'It is good practice to ensure subsystems use host security to reduce the risk of unexpected data loss',
           },
         },
         {
           alert: 'NVMeoFTooManySubsystems',
           'for': '1m',
-          expr: 'count by(gateway_host) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*):.*")) > %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
+          expr: 'count by(gateway_host, cluster) (label_replace(ceph_nvmeof_subsystem_metadata,"gateway_host","$1","instance","(.*):.*")) > %.2f' % [$._config.NVMeoFMaxSubsystemsPerGateway],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'The number of subsystems defined to the gateway exceeds supported values %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'The number of subsystems defined to the gateway exceeds supported values%(cluster)s' % $.MultiClusterSummary(),
             description: 'Although you may continue to create subsystems in {{ $labels.gateway_host }}, the configuration may not be supported',
           },
         },
         {
           alert: 'NVMeoFVersionMismatch',
           'for': '1h',
-          expr: 'count(count by(version) (ceph_nvmeof_gateway_info)) > 1',
+          expr: 'count(count(ceph_nvmeof_gateway_info) by (cluster, version)) by (cluster) > 1',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'The cluster has different NVMe-oF gateway releases active %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'Too many different NVMe-oF gateway releases active%(cluster)s' % $.MultiClusterSummary(),
             description: 'This may indicate an issue with deployment. Check cephadm logs',
           },
         },
@@ -935,17 +931,17 @@
           expr: 'ceph_nvmeof_subsystem_host_count > %.2f' % [$._config.NVMeoFHighClientCount],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'The number of clients connected to {{ $labels.nqn }} is too high %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'The number of clients connected to {{ $labels.nqn }} is too high%(cluster)s' % $.MultiClusterSummary(),
             description: 'The supported limit for clients connecting to a subsystem is %(NVMeoFHighClientCount)d' % $._config,
           },
         },
         {
           alert: 'NVMeoFHighHostCPU',
           'for': '10m',
-          expr: '100-((100*(avg by(host) (label_replace(rate(node_cpu_seconds_total{mode="idle"}[5m]),"host","$1","instance","(.*):.*")) * on(host) group_right label_replace(ceph_nvmeof_gateway_info,"host","$1","instance","(.*):.*")))) >= %.2f' % [$._config.NVMeoFHighHostCPU],
+          expr: '100-((100*(avg by(cluster,host) (label_replace(rate(node_cpu_seconds_total{mode="idle"}[5m]),"host","$1","instance","(.*):.*")) * on(cluster, host) group_right label_replace(ceph_nvmeof_gateway_info,"host","$1","instance","(.*):.*")))) >= %.2f' % [$._config.NVMeoFHighHostCPU],
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'The CPU is high ({{ $value }}%%) on NVMeoF Gateway host ({{ $labels.host }}) %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'The CPU is high ({{ $value }}%%) on NVMeoF Gateway host ({{ $labels.host }})%(cluster)s' % $.MultiClusterSummary(),
             description: 'High CPU on a gateway host can lead to CPU contention and performance degradation',
           },
         },
@@ -955,7 +951,7 @@
           expr: 'ceph_nvmeof_subsystem_listener_iface_info{operstate="down"}',
           labels: { severity: 'warning', type: 'ceph_default', oid: '1.3.6.1.4.1.50495.1.2.1.14.1' },
           annotations: {
-            summary: 'Network interface {{ $labels.device }} is down %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'Network interface {{ $labels.device }} is down%(cluster)s' % $.MultiClusterSummary(),
             description: 'A NIC used by one or more subsystems is in a down state',
           },
         },
@@ -965,7 +961,7 @@
           expr: 'ceph_nvmeof_subsystem_listener_iface_info{duplex!="full"}',
           labels: { severity: 'warning', type: 'ceph_default' },
           annotations: {
-            summary: 'Network interface {{ $labels.device }} is not running in full duplex mode %(cluster)s' % $.MultiClusterSummary(),
+            summary: 'Network interface {{ $labels.device }} is not running in full duplex mode%(cluster)s' % $.MultiClusterSummary(),
             description: 'Until this is resolved, performance from the gateway will be degraded',
           },
         },
