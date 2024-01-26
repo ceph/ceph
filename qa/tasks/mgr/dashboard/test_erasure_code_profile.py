@@ -79,7 +79,7 @@ class ECPTest(DashboardTestCase):
         self.assertStatus(201)
 
         self._get('/api/erasure_code_profile/lrc')
-        self.assertJsonSubset({
+        self.assertJsonBody({
             'crush-device-class': '',
             'crush-failure-domain': 'host',
             'crush-root': 'default',
