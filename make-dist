@@ -140,7 +140,7 @@ build_dashboard_frontend() {
   echo "Building ceph-dashboard frontend with build:localize script";
   # we need to use "--" because so that "--configuration production"
   # survives accross all scripts redirections inside package.json
-  npm run build:localize -- --configuration production
+  DASHBOARD_FRONTEND_LANGS="ALL" npm run build:localize -- --configuration production
   deactivate
   cd $CURR_DIR
   rm -rf $TEMP_DIR
