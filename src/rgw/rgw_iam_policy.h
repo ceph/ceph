@@ -65,6 +65,8 @@ enum {
   s3PutAccelerateConfiguration,
   s3GetBucketAcl,
   s3PutBucketAcl,
+  s3GetBucketOwnershipControls,
+  s3PutBucketOwnershipControls,
   s3GetBucketCORS,
   s3PutBucketCORS,
   s3GetBucketVersioning,
