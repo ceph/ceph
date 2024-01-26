@@ -562,6 +562,7 @@ class Driver {
 					      rgw_account_id account_id,
 					      std::string path="",
 					      std::string trust_policy="",
+					      std::string description="",
 					      std::string max_session_duration_str="",
                 std::multimap<std::string,std::string> tags={}) = 0;
     /** Get an IAM Role by ID */

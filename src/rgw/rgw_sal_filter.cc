@@ -546,10 +546,11 @@ std::unique_ptr<RGWRole> FilterDriver::get_role(std::string name,
 					      rgw_account_id account_id,
 					      std::string path,
 					      std::string trust_policy,
+					      std::string description,
 					      std::string max_session_duration_str,
                 std::multimap<std::string,std::string> tags)
 {
-  return next->get_role(name, tenant, std::move(account_id), path, trust_policy, max_session_duration_str, tags);
+  return next->get_role(name, tenant, std::move(account_id), path, trust_policy, std::move(description), max_session_duration_str, tags);
 }
 
 std::unique_ptr<RGWRole> FilterDriver::get_role(std::string id)

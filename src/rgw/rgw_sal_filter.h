@@ -387,8 +387,8 @@ public:
 					    rgw_account_id account_id,
 					    std::string path="",
 					    std::string trust_policy="",
-					    std::string
-					    max_session_duration_str="",
+					    std::string description="",
+					    std::string max_session_duration_str="",
                 std::multimap<std::string,std::string> tags={}) override;
   virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
   virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;

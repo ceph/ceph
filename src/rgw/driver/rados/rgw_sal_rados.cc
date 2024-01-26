@@ -1761,10 +1761,11 @@ std::unique_ptr<RGWRole> RadosStore::get_role(std::string name,
 					      rgw_account_id account_id,
 					      std::string path,
 					      std::string trust_policy,
+					      std::string description,
 					      std::string max_session_duration_str,
                 std::multimap<std::string,std::string> tags)
 {
-  return std::make_unique<RadosRole>(this, name, tenant, std::move(account_id), path, trust_policy, max_session_duration_str, tags);
+  return std::make_unique<RadosRole>(this, name, tenant, std::move(account_id), path, trust_policy, std::move(description), max_session_duration_str, tags);
 }
 
 std::unique_ptr<RGWRole> RadosStore::get_role(std::string id)
