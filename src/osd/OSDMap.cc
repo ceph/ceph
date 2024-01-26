@@ -5143,6 +5143,12 @@ int OSDMap::balance_primaries(
         num_changes++;
       }
     }
+  } else { // clear out any mappings that were made since the score didn't improve
+    for (auto [pg, mapped] : prim_pgs_to_check) {
+      if (mapped) {
+	pending_inc->new_pg_upmap_primary.erase(pg);
+      }
+    }
   }
 
   ldout(cct, 10) << __func__ << " num_changes " << num_changes << dendl;
