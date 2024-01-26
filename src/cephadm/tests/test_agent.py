@@ -412,7 +412,7 @@ def test_agent_get_ls(_ls_subset, _ls, cephadm_fs):
 @mock.patch("threading.Event.clear")
 @mock.patch("threading.Event.wait")
 @mock.patch("urllib.request.Request.__init__")
-@mock.patch("cephadmlib.agent.urlopen")
+@mock.patch("cephadm.urlopen")
 @mock.patch("cephadm.list_networks")
 @mock.patch("cephadm.HostFacts.dump")
 @mock.patch("cephadm.HostFacts.__init__", lambda _, __: None)

@@ -700,8 +700,7 @@ class Monitoring(object):
 ##################################
 
 
-@register_daemon_form
-class NodeProxy(ContainerDaemonForm):
+class NodeProxy(object):
     """Defines a node-proxy container"""
 
     daemon_type = 'node-proxy'
@@ -713,18 +712,17 @@ class NodeProxy(ContainerDaemonForm):
     def for_daemon_type(cls, daemon_type: str) -> bool:
         return cls.daemon_type == daemon_type
 
-    def __init__(
-        self,
-        ctx: CephadmContext,
-        ident: DaemonIdentity,
-        config_json: Dict,
-        image: str = DEFAULT_IMAGE,
-    ):
+    def __init__(self,
+                 ctx: CephadmContext,
+                 fsid: str,
+                 daemon_id: Union[str, int],
+                 config_json: Dict[Any, Any],
+                 image: str = DEFAULT_IMAGE) -> None:
         self.ctx = ctx
-        self._identity = ident
+        self.fsid = fsid
+        self.daemon_id = daemon_id
         self.image = image
 
-        # config-json options
         config = dict_get(config_json, 'node-proxy.json', {})
         self.files = {'node-proxy.json': config}
 
@@ -732,45 +730,23 @@ class NodeProxy(ContainerDaemonForm):
         self.validate()
 
     @classmethod
-    def init(
-        cls, ctx: CephadmContext, fsid: str, daemon_id: str
-    ) -> 'NodeProxy':
-        return cls.create(
-            ctx, DaemonIdentity(fsid, cls.daemon_type, daemon_id)
-        )
+    def init(cls, ctx: CephadmContext, fsid: str, daemon_id: Union[int, str]) -> 'NodeProxy':
+        return cls(ctx, fsid, daemon_id,
+                   fetch_configs(ctx), ctx.image)
 
-    @classmethod
-    def create(
-        cls, ctx: CephadmContext, ident: DaemonIdentity
-    ) -> 'NodeProxy':
-        return cls(ctx, ident, fetch_configs(ctx), ctx.image)
+    @staticmethod
+    def get_container_mounts(data_dir, log_dir):
+        # type: (str, str) -> Dict[str, str]
+        mounts = dict()
+        mounts[os.path.join(data_dir, 'node-proxy.json')] = '/usr/share/ceph/node-proxy.json:z'
+        return mounts
 
-    @property
-    def identity(self) -> DaemonIdentity:
-        return self._identity
-
-    @property
-    def fsid(self) -> str:
-        return self._identity.fsid
-
-    @property
-    def daemon_id(self) -> str:
-        return self._identity.daemon_id
-
-    def customize_container_mounts(
-        self, ctx: CephadmContext, mounts: Dict[str, str]
-    ) -> None:
-        data_dir = self.identity.data_dir(ctx.data_dir)
-        # TODO: update this when we have the actual location
-        # in the ceph container we are going to keep node-proxy
-        mounts.update({os.path.join(data_dir, 'node-proxy.json'): '/usr/share/ceph/node-proxy.json:z'})
-
-    def customize_process_args(self, ctx: CephadmContext, args: List[str]) -> None:
+    def get_daemon_args(self) -> List[str]:
         # TODO: this corresponds with the mount location of
         # the config in _get_container_mounts above. They
         # will both need to be updated when we have a proper
         # location in the container for node-proxy
-        args.extend(['/usr/share/ceph/ceph_node_proxy/main.py', '--config', '/usr/share/ceph/node-proxy.json'])
+        return ['/usr/share/ceph/ceph_node_proxy/main.py', '--config', '/usr/share/ceph/node-proxy.json']
 
     def validate(self):
         # type: () -> None
@@ -809,12 +785,6 @@ class NodeProxy(ContainerDaemonForm):
         # populate files from the config-json
         populate_files(data_dir, self.files, uid, gid)
 
-    def container(self, ctx: CephadmContext) -> CephContainer:
-        # So the container can modprobe iscsi_target_mod and have write perms
-        # to configfs we need to make this a privileged container.
-        ctr = daemon_to_container(ctx, self, privileged=True, envs=['PYTHONPATH=$PYTHONPATH:/usr/share/ceph'])
-        return to_deployment_container(ctx, ctr)
-
     def config_and_keyring(
         self, ctx: CephadmContext
     ) -> Tuple[Optional[str], Optional[str]]:
@@ -822,9 +792,6 @@ class NodeProxy(ContainerDaemonForm):
 
     def uid_gid(self, ctx: CephadmContext) -> Tuple[int, int]:
         return extract_uid_gid(ctx)
-
-    def default_entrypoint(self) -> str:
-        return self.entrypoint
 
 
 @contextmanager
@@ -3216,6 +3183,9 @@ def get_daemon_args(ctx, fsid, daemon_type, daemon_id):
     elif daemon_type == SNMPGateway.daemon_type:
         sc = SNMPGateway.init(ctx, fsid, daemon_id)
         r.extend(sc.get_daemon_args())
+    elif daemon_type == NodeProxy.daemon_type:
+        node_proxy = NodeProxy.init(ctx, fsid, daemon_id)
+        r.extend(node_proxy.get_daemon_args())
 
     return r
 
@@ -3663,6 +3633,12 @@ def get_container_mounts(ctx, fsid, daemon_type, daemon_id,
         data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
         mounts.update(cc.get_container_mounts(data_dir))
 
+    if daemon_type == NodeProxy.daemon_type:
+        assert daemon_id
+        data_dir = get_data_dir(fsid, ctx.data_dir, daemon_type, daemon_id)
+        log_dir = get_log_dir(fsid, ctx.log_dir)
+        mounts.update(NodeProxy.get_container_mounts(data_dir, log_dir))
+
     # Modifications podman makes to /etc/hosts causes issues with
     # certain daemons (specifically referencing "host.containers.internal" entry
     # being added to /etc/hosts in this case). To avoid that, but still
@@ -3793,6 +3769,9 @@ def get_container(ctx: CephadmContext,
         host_network = False
         envs.extend(cc.get_container_envs())
         container_args.extend(cc.get_container_args())
+    elif daemon_type == NodeProxy.daemon_type:
+        entrypoint = NodeProxy.entrypoint
+        name = '%s.%s' % (daemon_type, daemon_id)
 
     if daemon_type in Monitoring.components:
         uid, gid = extract_uid_gid_monitoring(ctx, daemon_type)
@@ -6926,6 +6905,15 @@ def _dispatch_deploy(
         deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c,
                       uid=cc.uid, gid=cc.gid, config=None,
                       keyring=None,
+                      deployment_type=deployment_type,
+                      endpoints=daemon_endpoints)
+
+    elif daemon_type == NodeProxy.daemon_type:
+        config, keyring = get_config_and_keyring(ctx)
+        uid, gid = extract_uid_gid(ctx)
+        c = get_deployment_container(ctx, ctx.fsid, daemon_type, daemon_id)
+        deploy_daemon(ctx, ctx.fsid, daemon_type, daemon_id, c, uid, gid,
+                      config=config, keyring=keyring,
                       deployment_type=deployment_type,
                       endpoints=daemon_endpoints)
 
