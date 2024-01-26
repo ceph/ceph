@@ -21,7 +21,7 @@ namespace crimson::osd {
 LogMissingRequestReply::LogMissingRequestReply(
   crimson::net::ConnectionRef&& conn,
   Ref<MOSDPGUpdateLogMissingReply> &&req)
-  : conn{std::move(conn)},
+  : l_conn{std::move(conn)},
     req{std::move(req)}
 {}
 
@@ -46,7 +46,8 @@ void LogMissingRequestReply::dump_detail(Formatter *f) const
 
 ConnectionPipeline &LogMissingRequestReply::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).replicated_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).replicated_request_conn_pipeline;
 }
 
 PerShardPipeline &LogMissingRequestReply::get_pershard_pipeline(

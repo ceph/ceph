@@ -66,7 +66,7 @@ public:
 
   virtual interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
-    crimson::net::ConnectionRef conn);
+    crimson::net::ConnectionXcoreRef conn);
 
   virtual interruptible_future<> recover_object(
     const hobject_t& soid,
@@ -212,22 +212,22 @@ protected:
 private:
   void handle_backfill_finish(
     MOSDPGBackfill& m,
-    crimson::net::ConnectionRef conn);
+    crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_backfill_progress(
     MOSDPGBackfill& m);
   interruptible_future<> handle_backfill_finish_ack(
     MOSDPGBackfill& m);
   interruptible_future<> handle_backfill(
     MOSDPGBackfill& m,
-    crimson::net::ConnectionRef conn);
+    crimson::net::ConnectionXcoreRef conn);
 
   interruptible_future<> handle_scan_get_digest(
     MOSDPGScan& m,
-    crimson::net::ConnectionRef conn);
+    crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_scan_digest(
     MOSDPGScan& m);
   interruptible_future<> handle_scan(
     MOSDPGScan& m,
-    crimson::net::ConnectionRef conn);
+    crimson::net::ConnectionXcoreRef conn);
   interruptible_future<> handle_backfill_remove(MOSDPGBackfillRemove& m);
 };

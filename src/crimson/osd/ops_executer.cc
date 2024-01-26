@@ -160,13 +160,13 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_watch_subop_watch(
   logger().debug("{}", __func__);
   struct connect_ctx_t {
     ObjectContext::watch_key_t key;
-    crimson::net::ConnectionRef conn;
+    crimson::net::ConnectionXcoreRef conn;
     watch_info_t info;
 
     connect_ctx_t(
       const OSDOp& osd_op,
       const ExecutableMessage& msg,
-      crimson::net::ConnectionRef conn)
+      crimson::net::ConnectionXcoreRef conn)
       : key(osd_op.op.watch.cookie, msg.get_reqid().name),
         conn(conn),
         info(create_watch_info(osd_op, msg, conn->get_peer_addr())) {
@@ -323,13 +323,13 @@ OpsExecuter::watch_ierrorator::future<> OpsExecuter::do_op_notify(
     return crimson::ct_error::enoent::make();
   }
   struct notify_ctx_t {
-    crimson::net::ConnectionRef conn;
+    crimson::net::ConnectionXcoreRef conn;
     notify_info_t ninfo;
     const uint64_t client_gid;
     const epoch_t epoch;
 
     notify_ctx_t(const ExecutableMessage& msg,
-                 crimson::net::ConnectionRef conn)
+                 crimson::net::ConnectionXcoreRef conn)
       : conn(conn),
         client_gid(msg.get_reqid().name.num()),
         epoch(msg.get_map_epoch()) {
@@ -1058,7 +1058,7 @@ OpsExecuter::OpsExecuter(Ref<PG> pg,
                          ObjectContextRef _obc,
                          const OpInfo& op_info,
                          abstracted_msg_t&& msg,
-                         crimson::net::ConnectionRef conn,
+                         crimson::net::ConnectionXcoreRef conn,
                          const SnapContext& _snapc)
   : pg(std::move(pg)),
     obc(std::move(_obc)),

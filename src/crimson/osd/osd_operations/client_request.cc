@@ -19,14 +19,13 @@ SET_SUBSYS(osd);
 namespace crimson::osd {
 
 
-void ClientRequest::Orderer::requeue(
-  ShardServices &shard_services, Ref<PG> pg)
+void ClientRequest::Orderer::requeue(Ref<PG> pg)
 {
   LOG_PREFIX(ClientRequest::Orderer::requeue);
   for (auto &req: list) {
     DEBUGDPP("requeueing {}", *pg, req);
     req.reset_instance_handle();
-    std::ignore = req.with_pg_int(shard_services, pg);
+    std::ignore = req.with_pg_int(pg);
   }
 }
 
@@ -47,10 +46,10 @@ void ClientRequest::complete_request()
 }
 
 ClientRequest::ClientRequest(
-  ShardServices &shard_services, crimson::net::ConnectionRef conn,
+  ShardServices &_shard_services, crimson::net::ConnectionRef conn,
   Ref<MOSDOp> &&m)
-  : put_historic_shard_services(&shard_services),
-    conn(std::move(conn)),
+  : shard_services(&_shard_services),
+    l_conn(std::move(conn)),
     m(std::move(m)),
     instance_handle(new instance_handle_t)
 {}
@@ -77,7 +76,8 @@ void ClientRequest::dump_detail(Formatter *f) const
 
 ConnectionPipeline &ClientRequest::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).client_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).client_request_conn_pipeline;
 }
 
 PerShardPipeline &ClientRequest::get_pershard_pipeline(
@@ -98,9 +98,10 @@ bool ClientRequest::is_pg_op() const
     [](auto& op) { return ceph_osd_op_type_pg(op.op.op); });
 }
 
-seastar::future<> ClientRequest::with_pg_int(
-  ShardServices &shard_services, Ref<PG> pgref)
+seastar::future<> ClientRequest::with_pg_int(Ref<PG> pgref)
 {
+  ceph_assert_always(shard_services);
+
   LOG_PREFIX(ClientRequest::with_pg_int);
   epoch_t same_interval_since = pgref->get_interval_start_epoch();
   DEBUGDPP("{}: same_interval_since: {}", *pgref, *this, same_interval_since);
@@ -112,12 +113,12 @@ seastar::future<> ClientRequest::with_pg_int(
   auto instance_handle = get_instance_handle();
   auto &ihref = *instance_handle;
   return interruptor::with_interruption(
-    [FNAME, this, pgref, this_instance_id, &ihref, &shard_services]() mutable {
+    [FNAME, this, pgref, this_instance_id, &ihref]() mutable {
       DEBUGDPP("{} start", *pgref, *this);
       PG &pg = *pgref;
       if (pg.can_discard_op(*m)) {
-	return shard_services.send_incremental_map(
-	  std::ref(*conn), m->get_map_epoch()
+	return shard_services->send_incremental_map(
+	  std::ref(get_foreign_connection()), m->get_map_epoch()
 	).then([FNAME, this, this_instance_id, pgref] {
 	  DEBUGDPP("{}: discarding {}", *pgref, *this, this_instance_id);
 	  pgref->client_request_orderer.remove_request(*this);
@@ -171,7 +172,7 @@ seastar::future<> ClientRequest::with_pg_int(
       DEBUGDPP("{}.{}: interrupted due to {}",
 	       *pgref, *this, this_instance_id, eptr);
     }, pgref).finally(
-      [this, FNAME, opref=std::move(opref), pgref=std::move(pgref),
+      [this, FNAME, opref=std::move(opref), pgref,
        this_instance_id, instance_handle=std::move(instance_handle), &ihref] {
 	DEBUGDPP("{}.{}: exit", *pgref, *this, this_instance_id);
 	ihref.handle.exit();
@@ -179,14 +180,12 @@ seastar::future<> ClientRequest::with_pg_int(
 }
 
 seastar::future<> ClientRequest::with_pg(
-  ShardServices &shard_services, Ref<PG> pgref)
+  ShardServices &_shard_services, Ref<PG> pgref)
 {
-  put_historic_shard_services = &shard_services;
+  shard_services = &_shard_services;
   pgref->client_request_orderer.add_request(*this);
   auto ret = on_complete.get_future();
-  std::ignore = with_pg_int(
-    shard_services, std::move(pgref)
-  );
+  std::ignore = with_pg_int(std::move(pgref));
   return ret;
 }
 
@@ -198,7 +197,7 @@ ClientRequest::process_pg_op(
     m
   ).then_interruptible([this, pg=std::move(pg)](MURef<MOSDOpReply> reply) {
     // TODO: gate the crosscore sending
-    return conn->send_with_throttling(std::move(reply));
+    return get_foreign_connection().send_with_throttling(std::move(reply));
   });
 }
 
@@ -213,7 +212,7 @@ auto ClientRequest::reply_op_error(const Ref<PG>& pg, int err)
   reply->set_reply_versions(eversion_t(), 0);
   reply->set_op_returns(std::vector<pg_log_op_return_item_t>{});
   // TODO: gate the crosscore sending
-  return conn->send_with_throttling(std::move(reply));
+  return get_foreign_connection().send_with_throttling(std::move(reply));
 }
 
 ClientRequest::interruptible_future<>
@@ -239,7 +238,7 @@ ClientRequest::process_op(
           CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK, false);
 	reply->set_reply_versions(completed->version, completed->user_version);
         // TODO: gate the crosscore sending
-        return conn->send_with_throttling(std::move(reply));
+        return get_foreign_connection().send_with_throttling(std::move(reply));
       } else {
 	DEBUGDPP("{}.{}: not completed, entering get_obc stage",
 		 *pg, *this, this_instance_id);
@@ -325,9 +324,10 @@ ClientRequest::do_process(
     return reply_op_error(pg, -ENAMETOOLONG);
   } else if (m->get_hobj().oid.name.empty()) {
     return reply_op_error(pg, -EINVAL);
-  } else if (pg->get_osdmap()->is_blocklisted(conn->get_peer_addr())) {
+  } else if (pg->get_osdmap()->is_blocklisted(
+        get_foreign_connection().get_peer_addr())) {
     DEBUGDPP("{}.{}: {} is blocklisted",
-	     *pg, *this, this_instance_id, conn->get_peer_addr());
+	     *pg, *this, this_instance_id, get_foreign_connection().get_peer_addr());
     return reply_op_error(pg, -EBLOCKLISTED);
   }
 
@@ -363,7 +363,9 @@ ClientRequest::do_process(
 	       *pg, *this, this_instance_id, m->get_hobj());
     }
   }
-  return pg->do_osd_ops(m, conn, obc, op_info, snapc).safe_then_unpack_interruptible(
+  return pg->do_osd_ops(
+    m, r_conn, obc, op_info, snapc
+  ).safe_then_unpack_interruptible(
     [FNAME, this, pg, this_instance_id, &ihref](
       auto submitted, auto all_completed) mutable {
       return submitted.then_interruptible(
@@ -381,7 +383,9 @@ ClientRequest::do_process(
 		 reply=std::move(reply)]() mutable {
 		  DEBUGDPP("{}.{}: sending response",
 			   *pg, *this, this_instance_id);
-		  return conn->send(std::move(reply));
+		  // TODO: gate the crosscore sending
+		  return get_foreign_connection(
+                      ).send_with_throttling(std::move(reply));
 		});
 	    }, crimson::ct_error::eagain::handle(
 	      [this, pg, this_instance_id, &ihref]() mutable {
@@ -417,8 +421,8 @@ bool ClientRequest::is_misdirected(const PG& pg) const
 
 void ClientRequest::put_historic() const
 {
-  ceph_assert_always(put_historic_shard_services);
-  put_historic_shard_services->get_registry().put_historic(*this);
+  ceph_assert_always(shard_services);
+  shard_services->get_registry().put_historic(*this);
 }
 
 const SnapContext ClientRequest::get_snapc(

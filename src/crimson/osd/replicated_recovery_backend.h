@@ -25,7 +25,7 @@ public:
   {}
   interruptible_future<> handle_recovery_op(
     Ref<MOSDFastDispatchOp> m,
-    crimson::net::ConnectionRef conn) final;
+    crimson::net::ConnectionXcoreRef conn) final;
 
   interruptible_future<> recover_object(
     const hobject_t& soid,

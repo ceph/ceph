@@ -20,14 +20,15 @@ PGPeeringPipeline &RemoteScrubEventBaseT<T>::get_peering_pipeline(PG &pg)
 template <class T>
 ConnectionPipeline &RemoteScrubEventBaseT<T>::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).peering_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).peering_request_conn_pipeline;
 }
 
 template <class T>
 PerShardPipeline &RemoteScrubEventBaseT<T>::get_pershard_pipeline(
   ShardServices &shard_services)
 {
-  return shard_services.get_client_request_pipeline();
+  return shard_services.get_peering_request_pipeline();
 }
 
 template <class T>
