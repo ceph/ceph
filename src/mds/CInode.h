@@ -1024,7 +1024,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   bool has_ephemeral_policy() const {
     return get_inode()->export_ephemeral_random_pin > 0.0 ||
-           get_inode()->export_ephemeral_distributed_pin;
+           get_inode()->get_ephemeral_distributed_pin();
   }
   bool is_ephemerally_pinned() const {
     return state_test(STATE_DISTEPHEMERALPIN) ||

@@ -6887,7 +6887,7 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
     } else if (xattr_name == "ceph.dir.pin.random"sv) {
       *css << cur->get_projected_inode()->export_ephemeral_random_pin;
     } else if (xattr_name == "ceph.dir.pin.distributed"sv) {
-      *css << cur->get_projected_inode()->export_ephemeral_distributed_pin;
+      *css << cur->get_projected_inode()->get_ephemeral_distributed_pin();
     } else {
       // otherwise respond as invalid request
       // since we only handle ceph vxattrs here

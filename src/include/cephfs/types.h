@@ -375,6 +375,8 @@ struct inode_t {
    */
   using client_range_map = std::map<client_t,client_writeable_range_t,std::less<client_t>,Allocator<std::pair<const client_t,client_writeable_range_t>>>;
 
+  static const uint8_t F_EPHEMERAL_DISTRIBUTED_PIN = (1<<0);
+
   inode_t()
   {
     clear_layout();
@@ -463,6 +465,23 @@ struct inode_t {
     old_pools.insert(l);
   }
 
+  void set_flag(bool v, uint8_t flag) {
+    if (v) {
+      flags |= flag;
+    } else {
+      flags &= ~(flag);
+    }
+  }
+  bool get_flag(uint8_t flag) const {
+    return flags&flag;
+  }
+  void set_ephemeral_distributed_pin(bool v) {
+    set_flag(v, F_EPHEMERAL_DISTRIBUTED_PIN);
+  }
+  bool get_ephemeral_distributed_pin() const {
+    return get_flag(F_EPHEMERAL_DISTRIBUTED_PIN);
+  }
+
   void encode(ceph::buffer::list &bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   void dump(ceph::Formatter *f) const;
@@ -529,7 +548,23 @@ struct inode_t {
   mds_rank_t export_pin = MDS_RANK_NONE;
 
   double export_ephemeral_random_pin = 0;
-  bool export_ephemeral_distributed_pin = false;
+  /**
+   * N.B. previously this was a bool for distributed_ephemeral_pin which is
+   * encoded as a __u8. We take advantage of that to harness the remaining 7
+   * bits to avoid adding yet another field to this struct. This is safe also
+   * because the integral conversion of a bool to int (__u8) is well-defined
+   * per the standard as 0 (false) and 1 (true):
+   *
+   *     [conv.integral]
+   *     If the destination type is bool, see [conv.bool]. If the source type is
+   *     bool, the value false is converted to zero and the value true is converted
+   *     to one.
+   *
+   * So we can be certain the other bits have not be set during
+   * encoding/decoding due to implementation defined compiler behavior.
+   *
+   */
+  uint8_t flags = 0;
 
   // special stuff
   version_t version = 0;           // auth only
@@ -611,12 +646,13 @@ void inode_t<Allocator>::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(export_pin, bl);
 
   encode(export_ephemeral_random_pin, bl);
-  encode(export_ephemeral_distributed_pin, bl);
+  encode(flags, bl);
 
   encode(!fscrypt_auth.empty(), bl);
   encode(fscrypt_auth, bl);
   encode(fscrypt_file, bl);
   encode(fscrypt_last_block, bl);
+
   ENCODE_FINISH(bl);
 }
 
@@ -715,10 +751,10 @@ void inode_t<Allocator>::decode(ceph::buffer::list::const_iterator &p)
 
   if (struct_v >= 16) {
     decode(export_ephemeral_random_pin, p);
-    decode(export_ephemeral_distributed_pin, p);
+    decode(flags, p);
   } else {
     export_ephemeral_random_pin = 0;
-    export_ephemeral_distributed_pin = false;
+    flags = 0;
   }
 
   if (struct_v >= 17) {
@@ -772,7 +808,7 @@ void inode_t<Allocator>::dump(ceph::Formatter *f) const
   f->dump_unsigned("change_attr", change_attr);
   f->dump_int("export_pin", export_pin);
   f->dump_int("export_ephemeral_random_pin", export_ephemeral_random_pin);
-  f->dump_bool("export_ephemeral_distributed_pin", export_ephemeral_distributed_pin);
+  f->dump_bool("export_ephemeral_distributed_pin", get_ephemeral_distributed_pin());
 
   f->open_array_section("client_ranges");
   for (const auto &p : client_ranges) {
