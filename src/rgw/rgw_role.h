@@ -25,7 +25,8 @@ struct RGWRoleInfo
   std::string trust_policy;
   std::map<std::string, std::string> perm_policy_map;
   std::string tenant;
-  uint64_t max_session_duration;
+  std::string description;
+  uint64_t max_session_duration = 0;
   std::multimap<std::string,std::string> tags;
   std::map<std::string, bufferlist> attrs;
   RGWObjVersionTracker objv_tracker;
@@ -48,6 +49,7 @@ struct RGWRoleInfo
     encode(tenant, bl);
     encode(max_session_duration, bl);
     encode(account_id, bl);
+    encode(description, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -68,6 +70,7 @@ struct RGWRoleInfo
     }
     if (struct_v >= 4) {
       decode(account_id, bl);
+      decode(description, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -106,6 +109,7 @@ public:
               rgw_account_id account_id,
               std::string path="",
               std::string trust_policy="",
+              std::string description="",
               std::string max_session_duration_str="",
               std::multimap<std::string,std::string> tags={});
 
