@@ -50,6 +50,7 @@ void RGWRoleInfo::dump(Formatter *f) const
   encode_json("Path", path, f);
   encode_json("Arn", arn, f);
   encode_json("CreateDate", creation_date, f);
+  encode_json("Description", description, f);
   encode_json("MaxSessionDuration", max_session_duration, f);
   encode_json("AssumeRolePolicyDocument", trust_policy, f);
   encode_json("AccountId", account_id, f);
@@ -82,6 +83,7 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("Path", path, obj);
   JSONDecoder::decode_json("Arn", arn, obj);
   JSONDecoder::decode_json("CreateDate", creation_date, obj);
+  JSONDecoder::decode_json("Description", description, obj);
   JSONDecoder::decode_json("MaxSessionDuration", max_session_duration, obj);
   JSONDecoder::decode_json("AssumeRolePolicyDocument", trust_policy, obj);
   JSONDecoder::decode_json("AccountId", account_id, obj);
@@ -123,6 +125,7 @@ RGWRole::RGWRole(std::string name,
               rgw_account_id account_id,
               std::string path,
               std::string trust_policy,
+              std::string description,
               std::string max_session_duration_str,
               std::multimap<std::string,std::string> tags)
 {
@@ -135,6 +138,7 @@ RGWRole::RGWRole(std::string name,
   if (this->info.path.empty())
     this->info.path = "/";
   extract_name_tenant(this->info.name);
+  info.description = std::move(description);
   if (max_session_duration_str.empty()) {
     info.max_session_duration = SESSION_DURATION_MIN;
   } else {

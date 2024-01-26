@@ -47,6 +47,7 @@ static void dump_iam_role(const rgw::sal::RGWRoleInfo& role, Formatter *f)
   encode_json("Path", role.path, f);
   encode_json("Arn", role.arn, f);
   encode_json("CreateDate", role.creation_date, f);
+  encode_json("Description", role.description, f);
   encode_json("MaxSessionDuration", role.max_session_duration, f);
   encode_json("AssumeRolePolicyDocument", role.trust_policy, f);
 }
@@ -183,6 +184,7 @@ int RGWCreateRole::init_processing(optional_yield y)
   }
 
   trust_policy = s->info.args.get("AssumeRolePolicyDocument");
+  description = s->info.args.get("Description");
   max_session_duration = s->info.args.get("MaxSessionDuration");
 
   if (trust_policy.empty()) {
@@ -196,9 +198,13 @@ int RGWCreateRole::init_processing(optional_yield y)
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   }
   catch (rgw::IAM::PolicyParseException& e) {
-    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
+    ldpp_dout(this, 5) << "failed to parse policy '" << trust_policy << "' with: " << e.what() << dendl;
     s->err.message = e.what();
     return -ERR_MALFORMED_DOC;
+  }
+  if (description.size() > 1000) {
+    s->err.message = "Description exceeds maximum length of 1000 characters.";
+    return -EINVAL;
   }
 
   int ret = parse_tags(this, s->info.args.get_params(), tags, s->err.message);
@@ -234,6 +240,7 @@ void RGWCreateRole::execute(optional_yield y)
 							    account_id,
 							    role_path,
 							    trust_policy,
+							    description,
 							    max_session_duration,
 	                tags);
   if (!user_tenant.empty() && role->get_tenant() != user_tenant) {
@@ -895,6 +902,12 @@ int RGWUpdateRole::init_processing(optional_yield y)
     return -EINVAL;
   }
 
+  description = s->info.args.get_optional("Description");
+  if (description && description->size() > 1000) {
+    s->err.message = "Description exceeds maximum length of 1000 characters.";
+    return -EINVAL;
+  }
+
   max_session_duration = s->info.args.get("MaxSessionDuration");
 
   return load_role(this, y, driver, s->owner.id, account_id,
@@ -927,6 +940,9 @@ void RGWUpdateRole::execute(optional_yield y)
     }
   }
 
+  if (description) {
+    role->get_info().description = std::move(*description);
+  }
   role->update_max_session_duration(max_session_duration);
   if (!role->validate_max_session_duration(this)) {
     op_ret = -EINVAL;

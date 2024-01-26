@@ -1052,6 +1052,7 @@ class MotrStore : public StoreDriver {
         rgw_account_id account_id,
         std::string path="",
         std::string trust_policy="",
+        std::string description="",
         std::string max_session_duration_str="",
         std::multimap<std::string, std::string> tags={}) override;
     virtual std::unique_ptr<RGWRole> get_role(const RGWRoleInfo& info) override;
