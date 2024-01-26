@@ -24,7 +24,6 @@
 %bcond_with zbd
 %bcond_with cmake_verbose_logging
 %bcond_without ceph_test_package
-%bcond_without mgr_dashboard_frontend_support_multi_language
 %ifarch s390
 %bcond_with tcmalloc
 %else
@@ -458,9 +457,6 @@ BuildRequires:  libnuma-devel
 %endif
 %if 0%{?rhel} >= 8
 BuildRequires:  /usr/bin/pathfix.py
-%endif
-%if 0%{with mgr_dashboard_frontend_support_multi_language}
-BuildRequires:  npm
 %endif
 
 %description
@@ -1334,13 +1330,7 @@ cmake .. \
     -DSYSTEMD_SYSTEM_UNIT_DIR:PATH=%{_unitdir} \
     -DWITH_MANPAGE:BOOL=ON \
     -DWITH_PYTHON3:STRING=%{python3_version} \
-%if 0%{with mgr_dashboard_frontend_support_multi_language}
-    -DWITH_MGR_DASHBOARD_FRONTEND:BOOL=ON \
-    -DDASHBOARD_FRONTEND_LANGS:STRING="cs,de,es,fr,id,it,ja,ko,pl,zh-Hans,zh-Hant,pt" \
-    -DWITH_SYSTEM_NPM:BOOL=ON \
-%else
     -DWITH_MGR_DASHBOARD_FRONTEND:BOOL=OFF \
-%endif
 %if 0%{?suse_version}
     -DWITH_RADOSGW_SELECT_PARQUET:BOOL=OFF \
 %endif
