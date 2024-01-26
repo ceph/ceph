@@ -9,6 +9,8 @@
 
 #include "auth/Crypto.h"
 
+#include "common/async/context_pool.h"
+
 #include "common/armor.h"
 #include "common/ceph_json.h"
 #include "common/config.h"
@@ -29,6 +31,8 @@
 #include "rgw_formats.h"
 #include "rgw_usage.h"
 #include "rgw_object_expirer_core.h"
+#include "driver/rados/rgw_zone.h"
+#include "rgw_sal_config.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -81,12 +85,27 @@ int main(const int argc, const char **argv)
   }
 
   common_init_finish(g_ceph_context);
+  ceph::async::io_context_pool context_pool{cct->_conf->rgw_thread_pool_size};
 
   const DoutPrefix dp(cct.get(), dout_subsys, "rgw object expirer: ");
   DriverManager::Config cfg;
   cfg.store_name = "rados";
   cfg.filter_name = "none";
-  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, false, false, false, false, false, false, null_yield);
+  std::unique_ptr<rgw::sal::ConfigStore> cfgstore;
+  auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
+  cfgstore = DriverManager::create_config_store(&dp, config_store_type);
+  if (!cfgstore) {
+    std::cerr << "Unable to initialize config store." << std::endl;
+    exit(1);
+  }
+  rgw::SiteConfig site;
+  auto r = site.load(&dp, null_yield, cfgstore.get());
+  if (r < 0) {
+    std::cerr << "Unable to initialize config store." << std::endl;
+    exit(1);
+  }
+
+  driver = DriverManager::get_storage(&dp, g_ceph_context, cfg, context_pool, site, false, false, false, false, false, false, null_yield);
   if (!driver) {
     std::cerr << "couldn't init storage provider" << std::endl;
     return EIO;

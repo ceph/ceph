@@ -203,6 +203,17 @@ void rgw::AppMain::init_numa()
   }
 } /* init_numa */
 
+void rgw::AppMain::need_context_pool() {
+  if (!context_pool) {
+    context_pool.emplace(
+      dpp->get_cct()->_conf->rgw_thread_pool_size,
+      [] {
+	// request warnings on synchronous librados calls in this thread
+	is_asio_thread = true;
+      });
+  }
+}
+
 int rgw::AppMain::init_storage()
 {
   auto config_store_type = g_conf().get_val<std::string>("rgw_config_store");
@@ -234,9 +245,12 @@ int rgw::AppMain::init_storage()
     (g_conf()->rgw_run_sync_thread &&
       ((!nfs) || (nfs && g_conf()->rgw_nfs_run_sync_thread)));
 
+  need_context_pool();
   DriverManager::Config cfg = DriverManager::get_config(false, g_ceph_context);
   env.driver = DriverManager::get_storage(dpp, dpp->get_cct(),
           cfg,
+	  *context_pool,
+	  site,
           run_gc,
           run_lc,
           run_quota,
@@ -456,7 +470,8 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
       fe = new RGWLoadGenFrontend(env, config);
     }
     else if (framework == "beast") {
-      fe = new RGWAsioFrontend(env, config, *sched_ctx);
+      need_context_pool();
+      fe = new RGWAsioFrontend(env, config, *sched_ctx, *context_pool);
     }
     else if (framework == "rgw-nfs") {
       fe = new RGWLibFrontend(env, config);
@@ -514,8 +529,9 @@ int rgw::AppMain::init_frontends2(RGWLib* rgwlib)
     if (env.lua.background) {
       rgw_pauser->add_pauser(env.lua.background);
     }
+    need_context_pool();
     reloader = std::make_unique<RGWRealmReloader>(
-        env, *implicit_tenant_context, service_map_meta, rgw_pauser.get());
+      env, *implicit_tenant_context, service_map_meta, rgw_pauser.get(), *context_pool);
     realm_watcher = std::make_unique<RGWRealmWatcher>(dpp, g_ceph_context,
 				  static_cast<rgw::sal::RadosStore*>(env.driver)->svc()->zone->get_realm());
     realm_watcher->add_watcher(RGWRealmNotify::Reload, *reloader);
@@ -587,6 +603,23 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     fe->stop();
   }
 
+  ldh.reset(nullptr); // deletes
+  rgw_log_usage_finalize();
+
+  delete olog;
+
+  if (lua_background) {
+    lua_background->shutdown();
+  }
+
+  // Do this before closing storage so requests don't try to call into
+  // closed storage.
+  context_pool->finish();
+
+  cfgstore.reset(); // deletes
+  DriverManager::close_storage(env.driver);
+
+  // Fe can't be deleted until nobody's exeucting `io_context::run`
   for (auto& fe : fes) {
     fe->join();
     delete fe;
@@ -596,18 +629,7 @@ void rgw::AppMain::shutdown(std::function<void(void)> finalize_async_signals)
     delete fec;
   }
 
-  ldh.reset(nullptr); // deletes
   finalize_async_signals(); // callback
-  rgw_log_usage_finalize();
-  
-  delete olog;
-
-  if (lua_background) {
-    lua_background->shutdown();
-  }
-
-  cfgstore.reset(); // deletes
-  DriverManager::close_storage(env.driver);
 
   rgw_tools_cleanup();
   rgw_shutdown_resolver();
