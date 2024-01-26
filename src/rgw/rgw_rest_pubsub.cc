@@ -152,7 +152,7 @@ class RGWPSCreateTopicOp : public RGWOp {
       return -EINVAL;
     }
     // Store topic Policy.
-    policy_text = url_decode(s->info.args.get("Policy"), true);
+    policy_text = s->info.args.get("Policy");
     if (!policy_text.empty() && !get_policy_from_text(s, policy_text)) {
       return -ERR_MALFORMED_DOC;
     }
@@ -562,7 +562,7 @@ class RGWPSSetTopicAttributesOp : public RGWOp {
         return -EINVAL;
       }
     } else if (attribute_name == "Policy") {
-      policy_text = url_decode(s->info.args.get("AttributeValue"), true);
+      policy_text = s->info.args.get("AttributeValue");
       if (!policy_text.empty() && !get_policy_from_text(s, policy_text)) {
         return -ERR_MALFORMED_DOC;
       }

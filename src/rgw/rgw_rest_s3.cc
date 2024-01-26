@@ -5198,8 +5198,9 @@ void parse_post_action(const std::string& post_body, req_state* s)
           if (boost::starts_with(key, "Attributes.")) {
             update_attribute_map(t, map);
           } else {
+            constexpr bool in_query = true; // replace '+' with ' '
             s->info.args.append(t.substr(0, pos),
-                              url_decode(t.substr(pos+1, t.size() -1)));
+                              url_decode(t.substr(pos+1, t.size() -1), in_query));
           }
         }
       }
