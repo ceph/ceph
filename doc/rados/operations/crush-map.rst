@@ -709,13 +709,6 @@ The relevant erasure-code profile properties are as follows:
    [default: ``default``].
  * **crush-failure-domain**: the CRUSH bucket type used in the distribution of
    erasure-coded shards [default: ``host``].
- * **crush-osds-per-failure-domain**: Maximum number of OSDs to place in each
-   failure domain -- defaults to 1.  Using a value greater than one will
-   cause a CRUSH MSR rule to be created, see below.  Must be specified if
-   crush-num-failure-domains is specified.
- * **crush-num-failure-domains**: Number of failure domains to map.  Must be
-   specified if crush-osds-per-failure-domain is specified.  Results in
-   a CRUSH MSR rule being created.
  * **crush-device-class**: the device class on which to place data [default:
    none, which means that all devices are used].
  * **k** and **m** (and, for the ``lrc`` plugin, **l**): these determine the
@@ -731,21 +724,6 @@ The relevant erasure-code profile properties are as follows:
 .. note: When creating a new pool, it is not necessary to create the rule
    explicitly. If only the erasure-code profile is specified and the rule
    argument is omitted, then Ceph will create the CRUSH rule automatically.
-
-
-CRUSH MSR Rules
----------------
-
-Creating an erasure-code profile with a crush-osds-per-failure-domain
-value greater than one will cause a CRUSH MSR rule type to be created
-instead of a normal CRUSH rule.  Normal crush rules cannot retry prior
-steps when an out OSD is encountered and rely on CHOOSELEAF steps to
-permit moving OSDs to new hosts.  However, CHOOSELEAF rules don't
-support more than a single OSD per failure domain.  MSR rules, new in
-squid, support multiple OSDs per failure domain by retrying all prior
-steps when an out OSD is encountered.  Using MSR rules requires that
-OSDs and clients be required to support the CRUSH_MSR feature bit
-(squid or newer).
 
 
 Deleting rules
