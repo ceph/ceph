@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <boost/optional.hpp>
 #include "common/async/yield_context.h"
 
 #include "rgw_arn.h"
@@ -27,6 +28,7 @@ class RGWCreateRole : public RGWRestRole {
   std::string role_name;
   std::string role_path;
   std::string trust_policy;
+  std::string description;
   std::string max_session_duration;
   std::multimap<std::string, std::string> tags;
 public:
@@ -192,6 +194,7 @@ public:
 class RGWUpdateRole : public RGWRestRole {
   bufferlist bl_post_body;
   std::string role_name;
+  boost::optional<std::string> description;
   std::string max_session_duration;
   std::unique_ptr<rgw::sal::RGWRole> role;
 public:

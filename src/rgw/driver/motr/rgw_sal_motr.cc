@@ -3032,6 +3032,7 @@ std::unique_ptr<RGWRole> MotrStore::get_role(std::string name,
     rgw_account_id account_id,
     std::string path,
     std::string trust_policy,
+    std::string description,
     std::string max_session_duration_str,
     std::multimap<std::string,std::string> tags)
 {
