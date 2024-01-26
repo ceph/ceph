@@ -3,7 +3,7 @@
     dashboardTags: ['ceph-mixin'],
 
     clusterLabel: 'cluster',
-    showMultiCluster: false,
+    showMultiCluster: true,
 
     CephNodeNetworkPacketDropsThreshold: 0.005,
     CephNodeNetworkPacketDropsPerSec: 10,
