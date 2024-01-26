@@ -220,7 +220,7 @@ struct fmt::formatter<librados::object_id_t> {
   template <typename FormatContext>
   auto format(const auto &oid, FormatContext& ctx) const
   {
-    return format_to(ctx.out(), "{}/{}/{}", oid.locator, oid.nspace, oid.name);
+    return fmt::format_to(ctx.out(), "{}/{}/{}", oid.locator, oid.nspace, oid.name);
   }
 };
 
