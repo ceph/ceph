@@ -484,6 +484,7 @@ void usage()
   cout << "   --policy-name                 name of the policy document\n";
   cout << "   --policy-doc                  permission policy document\n";
   cout << "   --path-prefix                 path prefix for filtering roles\n";
+  cout << "   --description                 Role description\n";
   cout << "\nMFA options:\n";
   cout << "   --totp-serial                 a string that represents the ID of a TOTP token\n";
   cout << "   --totp-seed                   the secret seed that is used to calculate the TOTP\n";
@@ -3350,6 +3351,7 @@ int main(int argc, const char **argv)
   std::optional<string> opt_zonegroup_name, opt_zonegroup_id;
   std::string api_name;
   std::string role_name, path, assume_role_doc, policy_name, perm_policy_doc, path_prefix, max_session_duration;
+  std::string description;
   std::string redirect_zone;
   bool redirect_zone_set = false;
   list<string> endpoints;
@@ -4005,6 +4007,8 @@ int main(int argc, const char **argv)
       path_prefix = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--max-session-duration", (char*)NULL)) {
       max_session_duration = val;
+    } else if (ceph_argparse_witharg(args, i, &val, "--description", (char*)NULL)) {
+      description = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-serial", (char*)NULL)) {
       totp_serial = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--totp-pin", (char*)NULL)) {
@@ -6784,7 +6788,7 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
       std::unique_ptr<rgw::sal::RGWRole> role = driver->get_role(role_name, tenant, account_id, path,
-                                                                 assume_role_doc, max_session_duration);
+                                                                 assume_role_doc, description, max_session_duration);
       ret = role->create(dpp(), true, "", null_yield);
       if (ret < 0) {
         return -ret;

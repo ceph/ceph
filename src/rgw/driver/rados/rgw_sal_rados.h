@@ -329,6 +329,7 @@ class RadosStore : public StoreDriver {
 					      rgw_account_id account_id,
 					      std::string path="",
 					      std::string trust_policy="",
+					      std::string description="",
 					      std::string max_session_duration_str="",
                 std::multimap<std::string,std::string> tags={}) override;
     virtual std::unique_ptr<RGWRole> get_role(std::string id) override;
@@ -1078,9 +1079,10 @@ public:
           rgw_account_id account_id,
           std::string path,
           std::string trust_policy,
+          std::string description,
           std::string max_session_duration,
           std::multimap<std::string,std::string> tags)
-    : RGWRole(name, tenant, std::move(account_id), path, trust_policy, max_session_duration, tags), store(_store) {}
+    : RGWRole(name, tenant, std::move(account_id), path, trust_policy, std::move(description), max_session_duration, tags), store(_store) {}
   RadosRole(RadosStore* _store, std::string id) : RGWRole(id), store(_store) {}
   RadosRole(RadosStore* _store, const RGWRoleInfo& info) : RGWRole(info), store(_store) {}
   RadosRole(RadosStore* _store) : store(_store) {}
