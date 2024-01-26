@@ -93,9 +93,9 @@ uint64_t RGWPutUserPolicy::get_op()
 
 int RGWPutUserPolicy::get_params()
 {
-  policy_name = url_decode(s->info.args.get("PolicyName"), true);
-  user_name = url_decode(s->info.args.get("UserName"), true);
-  policy = url_decode(s->info.args.get("PolicyDocument"), true);
+  policy_name = s->info.args.get("PolicyName");
+  user_name = s->info.args.get("UserName");
+  policy = s->info.args.get("PolicyDocument");
 
   if (policy_name.empty() || user_name.empty() || policy.empty()) {
     ldpp_dout(this, 20) << "ERROR: one of policy name, user name or policy document is empty"
