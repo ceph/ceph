@@ -6133,6 +6133,57 @@ void Server::handle_set_vxattr(const MDRequestRef& mdr, CInode *cur)
 
     client_t exclude_ct = mdr->get_client();
     mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
+  } else if (name == "ceph.quiesce.block"sv) {
+    bool val;
+    try {
+      val = boost::lexical_cast<bool>(value);
+    } catch (boost::bad_lexical_cast const&) {
+      dout(10) << "bad vxattr value, unable to parse bool for " << name << dendl;
+      respond_to_request(mdr, -CEPHFS_EINVAL);
+      return;
+    }
+
+    /* Verify it's not already marked with lighter weight
+     * rdlock.
+     */
+    if (!mdr->more()->rdonly_checks) {
+      if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
+        lov.add_rdlock(&cur->policylock);
+        if (!mds->locker->acquire_locks(mdr, lov))
+          return;
+        mdr->locking_state |= MutationImpl::ALL_LOCKED;
+      }
+      bool is_blocked = cur->get_projected_inode()->get_quiesce_block();
+      if (is_blocked == val) {
+        dout(20) << "already F_QUIESCE_BLOCK set" << dendl;
+        respond_to_request(mdr, 0);
+        return;
+      }
+      mdr->more()->rdonly_checks = true;
+    }
+
+    if ((mdr->locking_state & MutationImpl::ALL_LOCKED) && !mdr->is_xlocked(&cur->policylock)) {
+      /* drop the rdlock and acquire xlocks */
+      dout(20) << "dropping rdlocks" << dendl;
+      mds->locker->drop_locks(mdr.get());
+      if (!xlock_policylock(mdr, cur, false, true))
+        return;
+    }
+
+    /* repeat rdonly checks in case changed between rdlock -> xlock */
+    bool is_blocked = cur->get_projected_inode()->get_quiesce_block();
+    if (is_blocked == val) {
+      dout(20) << "already F_QUIESCE_BLOCK set" << dendl;
+      respond_to_request(mdr, 0);
+      return;
+    }
+
+    auto pi = cur->project_inode(mdr);
+    pi.inode->set_quiesce_block(val);
+    dout(20) << (val ? "setting" : "unsetting") << " F_QUIESCE_BLOCK on ino: " << cur->ino() << dendl;
+
+    mdr->no_early_reply = true;
+    pip = pi.inode.get();
   } else if (name == "ceph.dir.subvolume"sv) {
     if (!cur->is_dir()) {
       respond_to_request(mdr, -CEPHFS_EINVAL);
@@ -6834,6 +6885,8 @@ void Server::handle_client_getvxattr(const MDRequestRef& mdr)
     } else {
       r = -CEPHFS_ENODATA; // no such attribute
     }
+  } else if (xattr_name == "ceph.quiesce.block"sv) {
+    *css << cur->get_projected_inode()->get_quiesce_block();
   } else if (xattr_name.substr(0, 12) == "ceph.dir.pin"sv) {
     if (xattr_name == "ceph.dir.pin"sv) {
       *css << cur->get_projected_inode()->export_pin;
