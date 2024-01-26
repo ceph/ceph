@@ -29,11 +29,12 @@ class ShardServices;
 
 class ClientRequest final : public PhasedOperationT<ClientRequest>,
                             private CommonClientRequest {
-  // Initially set to primary core, updated to pg core after move,
-  // used by put_historic
-  ShardServices *put_historic_shard_services = nullptr;
+  // Initially set to primary core, updated to pg core after with_pg()
+  ShardServices *shard_services = nullptr;
 
-  crimson::net::ConnectionRef conn;
+  crimson::net::ConnectionRef l_conn;
+  crimson::net::ConnectionXcoreRef r_conn;
+
   // must be after conn due to ConnectionPipeline's life-time
   Ref<MOSDOp> m;
   OpInfo op_info;
@@ -199,7 +200,7 @@ public:
       list.erase(list_t::s_iterator_to(request));
       intrusive_ptr_release(&request);
     }
-    void requeue(ShardServices &shard_services, Ref<PG> pg);
+    void requeue(Ref<PG> pg);
     void clear_and_cancel(PG &pg);
   };
   void complete_request();
@@ -225,26 +226,34 @@ public:
 
   PerShardPipeline &get_pershard_pipeline(ShardServices &);
 
-  crimson::net::Connection &get_connection() {
-    assert(conn);
-    return *conn;
+  crimson::net::Connection &get_local_connection() {
+    assert(l_conn);
+    assert(!r_conn);
+    return *l_conn;
   };
 
-  seastar::future<crimson::net::ConnectionFRef> prepare_remote_submission() {
-    assert(conn);
-    return conn.get_foreign(
-    ).then([this](auto f_conn) {
-      conn.reset();
-      return f_conn;
-    });
-  }
-  void finish_remote_submission(crimson::net::ConnectionFRef _conn) {
-    assert(!conn);
-    conn = make_local_shared_foreign(std::move(_conn));
+  crimson::net::Connection &get_foreign_connection() {
+    assert(r_conn);
+    assert(!l_conn);
+    return *r_conn;
+  };
+
+  crimson::net::ConnectionFFRef prepare_remote_submission() {
+    assert(l_conn);
+    assert(!r_conn);
+    auto ret = seastar::make_foreign(std::move(l_conn));
+    l_conn.reset();
+    return ret;
   }
 
-  seastar::future<> with_pg_int(
-    ShardServices &shard_services, Ref<PG> pg);
+  void finish_remote_submission(crimson::net::ConnectionFFRef conn) {
+    assert(conn);
+    assert(!l_conn);
+    assert(!r_conn);
+    r_conn = make_local_shared_foreign(std::move(conn));
+  }
+
+  seastar::future<> with_pg_int(Ref<PG> pg);
 
 public:
   seastar::future<> with_pg(

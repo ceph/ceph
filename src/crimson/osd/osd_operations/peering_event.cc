@@ -135,7 +135,8 @@ PeeringEvent<T>::complete_rctx(ShardServices &shard_services, Ref<PG> pg)
 
 ConnectionPipeline &RemotePeeringEvent::get_connection_pipeline()
 {
-  return get_osd_priv(conn.get()).peering_request_conn_pipeline;
+  return get_osd_priv(&get_local_connection()
+         ).client_request_conn_pipeline;
 }
 
 PerShardPipeline &RemotePeeringEvent::get_pershard_pipeline(
