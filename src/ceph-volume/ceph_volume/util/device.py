@@ -138,7 +138,8 @@ class Device(object):
         self._is_lvm_member = None
         self.ceph_device = False
         self._parse()
-        self.device_nodes = sys_info.devices[self.path]['device_nodes']
+        if self.path in sys_info.devices.keys():
+            self.device_nodes = sys_info.devices[self.path]['device_nodes']
         self.lsm_data = self.fetch_lsm(with_lsm)
 
         self.available_lvm, self.rejected_reasons_lvm = self._check_lvm_reject_reasons()
