@@ -189,6 +189,7 @@ class SubvolumeV2(SubvolumeV1):
 
             # Create the subvolume metadata file which manages auth-ids if it doesn't exist
             self.auth_mdata_mgr.create_subvolume_metadata_file(self.group.groupname, self.subvolname)
+            self.mark_meta()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
                 self._remove_on_failure(subvol_path, retained)
@@ -243,6 +244,7 @@ class SubvolumeV2(SubvolumeV1):
                 self.metadata_mgr.init(SubvolumeV2.VERSION, subvolume_type.value, qpath, initial_state.value)
             self.add_clone_source(source_volname, source_subvolume, snapname)
             self.metadata_mgr.flush()
+            self.mark_meta()
         except (VolumeException, MetadataMgrException, cephfs.Error) as e:
             try:
                 self._remove_on_failure(subvol_path, retained)
@@ -300,6 +302,7 @@ class SubvolumeV2(SubvolumeV1):
             self.metadata_mgr.refresh()
             # unconditionally mark as subvolume, to handle pre-existing subvolumes without the mark
             self.mark_subvolume()
+            self.mark_meta()
 
             etype = self.subvol_type
             if op_type not in self.allowed_ops_by_type(etype):
