@@ -133,10 +133,11 @@ void usage(ostream& out)
 "   getomapval <obj-name> <key> [file] show the value for the specified key\n"
 "                                    in the object's object map\n"
 "   setomapval <obj-name> <key> <val | --input-file file>\n"
-"   rmomapkey <obj-name> <key>       Remove key from the object map of <obj-name>\n"
+"   rmomapkey <obj-name> <key>       remove key from the object map of <obj-name>\n"
 "   clearomap <obj-name> [obj-name2 obj-name3...] clear all the omap keys for the specified objects\n"
-"   getomapheader <obj-name> [file]  Dump the hexadecimal value of the object map header of <obj-name>\n"
-"   setomapheader <obj-name> <val>   Set the value of the object map header of <obj-name>\n"
+"   getomapheader <obj-name> [file]  dump the hexadecimal value of the object map header of <obj-name>\n"
+"   setomapheader <obj-name> <val | --input-file file>\n"
+"                                    set the value of the object map header of <obj-name>\n"
 "   watch <obj-name>                 add watcher on this object\n"
 "   notify <obj-name> <message>      notify watcher of this object with message\n"
 "   listwatchers <obj-name>          list the watchers of this object\n"
@@ -2820,17 +2821,33 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       ret = 0;
     }
   } else if (strcmp(nargs[0], "setomapheader") == 0) {
-    if (!pool_name || nargs.size() < (obj_name ? 2 : 3)) {
+    uint32_t min_args = 3;
+    if (obj_name) {
+      min_args--;
+    }
+    if (!input_file.empty()) {
+      min_args--;
+    }
+
+    if (!pool_name || nargs.size() < min_args) {
       usage(cerr);
       return 1;
     }
 
-    bufferlist bl;
     if (!obj_name) {
       obj_name = nargs[1];
-      bl.append(nargs[2]); // val
+    }
+
+    bufferlist bl;
+    if (!input_file.empty()) {
+      string err;
+      ret = bl.read_file(input_file.c_str(), &err);
+      if (ret < 0) {
+        cerr << "error reading file " << input_file.c_str() << ": " << err << std::endl;
+        return 1;
+      }
     } else {
-      bl.append(nargs[1]); // val
+      bl.append(nargs[min_args - 1]); // val
     }
     ret = io_ctx.omap_set_header(*obj_name, bl);
     if (ret < 0) {
