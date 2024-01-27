@@ -1357,6 +1357,25 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               const uint64_t op)
 {
   perm_state_from_req_state ps(s);
+
+  if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    if (!ps.identity->is_owner_of(s->bucket_owner.id)) {
+      ldpp_dout(dpp, 4) << "cross-account request for bucket owner "
+          << s->bucket_owner.id << " != " << s->owner.id << dendl;
+      // cross-account requests evaluate the identity-based policies separately
+      // from the resource-based policies and require Allow from both
+      return verify_bucket_permission(dpp, &ps, bucket, {}, {}, {},
+                                      user_policies, session_policies, op)
+          && verify_bucket_permission(dpp, &ps, bucket, user_acl,
+                                      bucket_acl, bucket_policy, {}, {}, op);
+    } else {
+      // don't consult acls for same-account access. require an Allow from
+      // either identity- or resource-based policy
+      return verify_bucket_permission(dpp, &ps, bucket, {}, {},
+                                      bucket_policy, user_policies,
+                                      session_policies, op);
+    }
+  }
   return verify_bucket_permission(dpp, &ps, bucket,
                                   user_acl, bucket_acl,
                                   bucket_policy, user_policies,
@@ -1496,6 +1515,28 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
                               const uint64_t op)
 {
   perm_state_from_req_state ps(s);
+
+  if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    const rgw_owner& object_owner = !object_acl.get_owner().empty() ?
+        object_acl.get_owner().id : s->bucket_owner.id;
+    if (!ps.identity->is_owner_of(object_owner)) {
+      ldpp_dout(dpp, 4) << "cross-account request for object owner "
+          << object_owner << " != " << s->owner.id << dendl;
+      // cross-account requests evaluate the identity-based policies separately
+      // from the resource-based policies and require Allow from both
+      return verify_object_permission(dpp, &ps, obj, {}, {}, {}, {},
+                                      identity_policies, session_policies, op)
+          && verify_object_permission(dpp, &ps, obj,
+                                      user_acl, bucket_acl, object_acl,
+                                      bucket_policy, {}, {}, op);
+    } else {
+      // don't consult acls for same-account access. require an Allow from
+      // either identity- or resource-based policy
+      return verify_object_permission(dpp, &ps, obj, {}, {}, {},
+                                      bucket_policy, identity_policies,
+                                      session_policies, op);
+    }
+  }
   return verify_object_permission(dpp, &ps, obj,
                                   user_acl, bucket_acl,
                                   object_acl, bucket_policy,
