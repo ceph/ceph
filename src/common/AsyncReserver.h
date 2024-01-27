@@ -16,6 +16,9 @@
 #define ASYNC_RESERVER_H
 
 #include "common/Formatter.h"
+#include "common/ceph_context.h"
+#include "common/ceph_mutex.h"
+#include "include/Context.h"
 
 #define rdout(x) lgeneric_subdout(cct,reserver,x)
 
