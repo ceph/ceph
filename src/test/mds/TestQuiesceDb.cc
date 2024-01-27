@@ -119,12 +119,12 @@ class QuiesceDbTest: public testing::Test {
     void TearDown() override
     {
       dout(6) << "\n tearing down the cluster" << dendl;
-      // we want to cause the managers to destruct
-      // before we have the last_request destructed
-      // we should remove entries from `managers` under the comms lock
-      // to avoid race with attempts of messaging between the managers
-      // then we actually clear the map, destructing the managers,
-      // outside the lock which is crucial, as destruction will join the db threads
+      // We want to cause the managers to destruct
+      // before we have the last_request destructed.
+      // We should remove entries from `managers` under the comms lock
+      // to avoid race with attempts of messaging between the managers.
+      // Then we actually clear the map, destructing the managers,
+      // outside the lock: the destruction will join the db threads
       // which in turn migh attempt to send a message
       std::unique_lock l(comms_mutex);
       auto mgrs = std::move(managers);
@@ -262,6 +262,23 @@ class QuiesceDbTest: public testing::Test {
         case QS_QUIESCING:
           it->second.state = QS_QUIESCED;
           dout(10) << "QUIESCING_AGENT_CB: reporting '" << it->first << "' as " << it->second.state << dendl;
+          it++;
+          break;
+        default:
+          it = quiesce_map.roots.erase(it);
+          break;
+        }
+      }
+      return true;
+    };
+
+    const QuiesceDbManager::AgentCallback::Notify FAILING_AGENT_CB = [](QuiesceMap& quiesce_map) {
+      dout(15) << "FAILING_AGENT_CB: notified with " << quiesce_map.roots.size() << " roots for version " << quiesce_map.db_version << dendl;
+      for (auto it = quiesce_map.roots.begin(); it != quiesce_map.roots.end();) {
+        switch (it->second.state) {
+        case QS_QUIESCING:
+          it->second.state = QS_FAILED;
+          dout(10) << "FAILING_AGENT_CB: reporting '" << it->first << "' as " << it->second.state << dendl;
           it++;
           break;
         default:
@@ -778,6 +795,47 @@ TEST_F(QuiesceDbTest, Timeouts) {
 }
 
 /* ================================================================ */
+TEST_F(QuiesceDbTest, Failures) {
+  ASSERT_NO_FATAL_FAILURE(configure_cluster({ 0 }));
+
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.timeout = sec(0.1);
+    r.expiration = sec(0.1);
+    r.include_roots({"root1"});
+  }));
+
+  EXPECT_EQ(QuiesceState::QS_QUIESCING, last_request->response.sets.at("set1").rstate.state);
+
+  {
+    // wait for the agent to ack root1 as failed
+    auto did_ack = add_ack_hook([](auto rank, auto const& ack) {
+      return ack.roots.contains("file:/root1") && ack.roots.at("file:/root1").state == QS_FAILED;
+    });
+
+    // allow acks
+    managers.at(0)->reset_agent_callback(FAILING_AGENT_CB);
+
+    EXPECT_EQ(std::future_status::ready, did_ack.wait_for(std::chrono::milliseconds(100)));
+  }
+
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+  }));
+
+  EXPECT_EQ(QuiesceState::QS_FAILED, db(0).sets.at("set1").rstate.state);
+  EXPECT_EQ(QuiesceState::QS_FAILED, last_request->response.sets.at("set1").rstate.state);
+
+  ASSERT_EQ(ERR(EBADF), run_request([](auto& r) {
+    r.set_id = "set2";
+    r.timeout = sec(0.1);
+    r.expiration = sec(0.1);
+    r.include_roots({ "root1" });
+    r.await = sec(1);
+  }));
+}
+
+/* ================================================================ */
 TEST_F(QuiesceDbTest, InterruptedQuiesceAwait)
 {
   ASSERT_NO_FATAL_FAILURE(configure_cluster({ 0 }));
@@ -1269,7 +1327,7 @@ TEST_F(QuiesceDbTest, MultiRankQuiesce)
   }
 
   {
-    // wait for the late manager to ack root1 as released
+    // wait for the late peer to ack root1 as released
     auto did_ack = add_ack_hook([](auto rank, auto const& ack) {
       return rank == 2 && ack.roots.contains("file:/root1") && ack.roots.at("file:/root1").state == QS_QUIESCED;
     });
@@ -1371,7 +1429,7 @@ TEST_F(QuiesceDbTest, MultiRankRelease)
     EXPECT_EQ(QS_RELEASING, db(rank).sets.at("set2").rstate.state) << "db of rank " << rank;
   }
 
-  // wait for the late manager to ack back
+  // wait for the late peer to ack back
   auto did_ack = add_ack_hook([](auto rank, auto const &ack){
     return rank == 1;
   });

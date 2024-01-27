@@ -125,18 +125,22 @@ class QuiesceAgent {
 
         QuiesceState get_actual_state() const {
           QuiesceState result = QS_QUIESCING;
-          bool did_quiesce = quiesce_result.value_or(-1) == 0;
-          bool did_cancel = cancel_result.value_or(-1) == 0;
-          if (!did_quiesce && should_release()) {
-            // we must have lost track of this root,
-            // probably, due to expiration. But even if due to an error,
-            // this is our best guess for the situation
-            result = QS_EXPIRED;
-          } else if (did_quiesce) {
-            if (did_cancel) {
-              result = QS_RELEASED;
+          bool did_quiesce = quiesce_result == 0;
+          bool did_cancel = cancel_result == 0;
+          if (did_quiesce) {
+            if (cancel_result.has_value()) {
+              result = did_cancel ? QS_RELEASED : QS_EXPIRED;
             } else {
               result = QS_QUIESCED;
+            }
+          } else {
+            if (quiesce_result.has_value()) {
+              result = QS_FAILED;
+            } else if (should_release()) {
+              // we must have lost track of this root,
+              // probably, due to expiration. But even if due to an error,
+              // this is our best guess for the situation
+              result = QS_EXPIRED;
             }
           }
           return result;

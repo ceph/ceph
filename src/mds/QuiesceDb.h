@@ -39,6 +39,8 @@ enum QuiesceState: uint8_t {
   // the below states are all about types of failure
   QS_EXPIRED, QS__FAILURE = QS_EXPIRED,
 
+  QS_FAILED,
+
   // the below states aren't allowed for roots, only for sets
   QS_CANCELED, QS__SET_ONLY = QS_CANCELED,
   QS_TIMEDOUT,
@@ -61,6 +63,8 @@ operator<<(std::basic_ostream<CharT, Traits>& os, const QuiesceState& qs)
     return os << "QS_RELEASING (" << (int)qs << ")";
   case QS_RELEASED:
     return os << "QS_RELEASED (" << (int)qs << ")";
+  case QS_FAILED:
+    return os << "QS_FAILED (" << (int)qs << ")";
   case QS_CANCELED:
     return os << "QS_CANCELED (" << (int)qs << ")";
   case QS_TIMEDOUT:
@@ -84,6 +88,8 @@ static const char * quiesce_state_name(QuiesceState state) {
     return "RELEASING";
   case QS_RELEASED:
     return "RELEASED";
+  case QS_FAILED:
+    return "FAILED";
   case QS_CANCELED:
     return "CANCELED";
   case QS_TIMEDOUT:

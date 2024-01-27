@@ -274,19 +274,29 @@ void MDSRank::quiesce_agent_setup() {
         return std::nullopt;
       }
     }
+    std::optional<double> dummy_fail_after;
+    if (auto pit = uri->params().find("f"); pit != uri->params().end()) {
+      try {
+        dummy_fail_after = (*pit).has_value ? std::stod((*pit).value) : 1 /*second*/;
+      } catch (...) {
+        dout(5) << "error parsing the time for debug fail for query: " << uri->query() << dendl;
+        c->complete(-EINVAL);
+        return std::nullopt;
+      }
+    }
 
     auto path = uri->path();
     dout(20) << "got request to quiesce '" << path << "'" << dendl;
 
     std::lock_guard l(mds_lock);
 
-    if (!dummy_quiesce_after) {
+    if (!dummy_quiesce_after && !dummy_fail_after) {
       // the real deal!
       auto qc = new MDCache::C_MDS_QuiesceSubvolume(mdcache, c);
       auto mdr = mdcache->quiesce_subvolume(filepath(path), qc, nullptr, quiesce_delay_ms);
       return mdr ? mdr->reqid : std::optional<RequestHandle>();
     } else {
-      /* dummy quiesce */
+      /* dummy quiesce/fail */
       // always create a new request id
       auto req_id = metareqid_t(entity_name_t::MDS(whoami), issue_tid());
       auto [it, inserted] = quiesce_requests->try_emplace(path, req_id, c);
@@ -306,22 +316,36 @@ void MDSRank::quiesce_agent_setup() {
       } else {
         // do quiesce if needed
 
-        auto quiesce_task = new LambdaContext([quiesce_requests, req_id, this](int) {
+        bool do_fail = false;
+        double delay;
+        if (dummy_quiesce_after.has_value() && dummy_fail_after.has_value()) {
+          do_fail = dummy_fail_after < dummy_quiesce_after;
+        } else {
+          do_fail = dummy_fail_after.has_value();
+        }
+
+        if (do_fail) {
+          delay = dummy_fail_after.value();
+        } else {
+          delay = dummy_quiesce_after.value();
+        }
+
+        auto quiesce_task = new LambdaContext([quiesce_requests, req_id, do_fail, this](int) {
           // the mds lock should be held by the timer
           dout(20) << "quiesce_task: callback by the timer" << dendl;
           auto it = std::ranges::find(*quiesce_requests, req_id, [](auto x) { return x.second.first; });
           if (it != quiesce_requests->end() && it->second.second != nullptr) {
-            dout(20) << "quiesce_task: completing the root '" << it->first << "'" << dendl;
-            it->second.second->complete(0);
+            dout(20) << "quiesce_task: completing the root '" << it->first << "' as failed: " << do_fail << dendl;
+            it->second.second->complete(do_fail ? -EBADF : 0);
             it->second.second = nullptr;
           }
           dout(20) << "quiesce_task: done" << dendl;
         });
 
         dout(20) << "scheduling a quiesce_task (" << quiesce_task
-                 << ") to fire after " << *dummy_quiesce_after
+                 << ") to fire after " << delay
                  << " seconds on timer " << &timer << dendl;
-        timer.add_event_after(*dummy_quiesce_after, quiesce_task);
+        timer.add_event_after(delay, quiesce_task);
       }
       return it->second.first;
     }

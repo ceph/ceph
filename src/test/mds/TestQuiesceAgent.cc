@@ -321,11 +321,10 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
   EXPECT_TRUE(complete_quiesce("root2", -1));
 
   EXPECT_TRUE(await_idle());
-  // we should only see the quiesced root1 in the ack,
-  // as root 2 wasn't quiesced successfully
   EXPECT_EQ(1, latest_ack.db_version);
-  EXPECT_EQ(1, latest_ack.roots.size());
+  ASSERT_EQ(2, latest_ack.roots.size());
   EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
+  EXPECT_EQ(QS_FAILED, latest_ack.roots.at("root2").state);
 
   latest_ack.reset();
 
@@ -337,8 +336,9 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
 
   // we should see the two quiesced roots in the ack,
   EXPECT_EQ(1, latest_ack.db_version);
-  EXPECT_EQ(2, latest_ack.roots.size());
+  ASSERT_EQ(3, latest_ack.roots.size());
   EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root1").state);
+  EXPECT_EQ(QS_FAILED, latest_ack.roots.at("root2").state);
   EXPECT_EQ(QS_QUIESCED, latest_ack.roots.at("root3").state);
 
   {
@@ -352,7 +352,8 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
     // this update doesn't have root1, so it should be untracked and cancelled
     // root2 is still quiescing, no updates for it
     // root3 is released asyncrhonously so for now it should be QUIESCED
-    EXPECT_EQ(1, ack->roots.size());
+    ASSERT_EQ(2, ack->roots.size());
+    EXPECT_EQ(QS_FAILED, latest_ack.roots.at("root2").state);
     EXPECT_EQ(QS_QUIESCED, ack->roots.at("root3").state);
   }
 
@@ -362,7 +363,7 @@ TEST_F(QuiesceAgentTest, QuiesceProtocol) {
     // make sure that root1 isn't tracked
     auto tracked = agent->tracked_roots();
     EXPECT_EQ(2, agent->get_current_version());
-    EXPECT_EQ(2, tracked.size());
+    ASSERT_EQ(2, tracked.size());
     EXPECT_EQ(QS_QUIESCING, tracked.at("root2")->committed_state);
     EXPECT_EQ(QS_RELEASING, tracked.at("root3")->committed_state);
   }
@@ -392,7 +393,7 @@ TEST_F(QuiesceAgentTest, DuplicateQuiesceRequest) {
 
   {
     auto tracked = agent->tracked_roots();
-    EXPECT_EQ(3, tracked.size());
+    ASSERT_EQ(3, tracked.size());
     EXPECT_EQ(tracked.at("root1")->quiesce_request.value(), quiesce_requests.at("root1").first);
     EXPECT_EQ(tracked.at("root2")->quiesce_request.value(), quiesce_requests.at("root2").first);
     EXPECT_EQ(tracked.at("root3")->quiesce_request.value(), quiesce_requests.at("root3").first);
@@ -463,7 +464,7 @@ TEST_F(QuiesceAgentTest, DuplicateQuiesceRequest) {
 
   // the actual state of the pinned objects shouldn't have changed
   EXPECT_EQ(QS_QUIESCED, pinned1->get_actual_state());
-  EXPECT_EQ(QS_QUIESCING, pinned2->get_actual_state()); // QS_QUIESCED can only be reached with quiesce result of 0
+  EXPECT_EQ(QS_FAILED, pinned2->get_actual_state());
 
   EXPECT_EQ(0, *pinned1->quiesce_result);
   EXPECT_EQ(-EINTR, *pinned2->quiesce_result);
