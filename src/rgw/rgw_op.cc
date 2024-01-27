@@ -1236,7 +1236,7 @@ int RGWPutBucketTags::verify_permission(optional_yield y) {
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketTagging);
 }
 
 void RGWPutBucketTags::execute(optional_yield y)
@@ -1272,7 +1272,7 @@ int RGWDeleteBucketTags::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketTagging);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketTagging);
 }
 
 void RGWDeleteBucketTags::execute(optional_yield y)
@@ -1324,7 +1324,7 @@ int RGWPutBucketReplication::verify_permission(optional_yield y) {
   auto [has_s3_existing_tag, has_s3_resource_tag] = rgw_check_policy_condition(this, s, false);
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutReplicationConfiguration);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutReplicationConfiguration);
 }
 
 void RGWPutBucketReplication::execute(optional_yield y) {
@@ -1370,7 +1370,7 @@ int RGWDeleteBucketReplication::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteReplicationConfiguration);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3DeleteReplicationConfiguration);
 }
 
 void RGWDeleteBucketReplication::execute(optional_yield y)
@@ -2774,7 +2774,7 @@ int RGWGetBucketVersioning::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketVersioning);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketVersioning);
 }
 
 void RGWGetBucketVersioning::pre_exec()
@@ -2800,7 +2800,7 @@ int RGWSetBucketVersioning::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketVersioning);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketVersioning);
 }
 
 void RGWSetBucketVersioning::pre_exec()
@@ -2899,7 +2899,7 @@ int RGWGetBucketWebsite::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketWebsite);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketWebsite);
 }
 
 void RGWGetBucketWebsite::pre_exec()
@@ -2920,7 +2920,7 @@ int RGWSetBucketWebsite::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketWebsite);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketWebsite);
 }
 
 void RGWSetBucketWebsite::pre_exec()
@@ -2967,7 +2967,7 @@ int RGWDeleteBucketWebsite::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3DeleteBucketWebsite);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3DeleteBucketWebsite);
 }
 
 void RGWDeleteBucketWebsite::pre_exec()
@@ -3148,7 +3148,7 @@ int RGWGetBucketLogging::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLogging);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketLogging);
 }
 
 int RGWGetBucketLocation::verify_permission(optional_yield y)
@@ -3157,7 +3157,7 @@ int RGWGetBucketLocation::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketLocation);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketLocation);
 }
 
 static int get_account_max_buckets(const DoutPrefixProvider* dpp,
@@ -6287,7 +6287,7 @@ int RGWGetCORS::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketCORS);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketCORS);
 }
 
 void RGWGetCORS::execute(optional_yield y)
@@ -6309,7 +6309,7 @@ int RGWPutCORS::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketCORS);
 }
 
 void RGWPutCORS::execute(optional_yield y)
@@ -6341,7 +6341,7 @@ int RGWDeleteCORS::verify_permission(optional_yield y)
     rgw_iam_add_buckettags(this, s);
 
   // No separate delete permission
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketCORS);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketCORS);
 }
 
 void RGWDeleteCORS::execute(optional_yield y)
@@ -6435,7 +6435,7 @@ int RGWGetRequestPayment::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketRequestPayment);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketRequestPayment);
 }
 
 void RGWGetRequestPayment::pre_exec()
@@ -6454,7 +6454,7 @@ int RGWSetRequestPayment::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketRequestPayment);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketRequestPayment);
 }
 
 void RGWSetRequestPayment::pre_exec()
@@ -8627,7 +8627,7 @@ int RGWPutBucketObjectLock::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3PutBucketObjectLockConfiguration);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3PutBucketObjectLockConfiguration);
 }
 
 void RGWPutBucketObjectLock::execute(optional_yield y)
@@ -8694,7 +8694,7 @@ int RGWGetBucketObjectLock::verify_permission(optional_yield y)
   if (has_s3_resource_tag)
     rgw_iam_add_buckettags(this, s);
 
-  return verify_bucket_owner_or_policy(s, rgw::IAM::s3GetBucketObjectLockConfiguration);
+  return verify_bucket_owner_or_policy(this, s, rgw::IAM::s3GetBucketObjectLockConfiguration);
 }
 
 void RGWGetBucketObjectLock::execute(optional_yield y)
