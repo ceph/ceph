@@ -19,7 +19,6 @@ function(add_ceph_test test_name test_path)
     PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
     PYTHONPATH=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}/cython_modules/lib.3:${CMAKE_SOURCE_DIR}/src/pybind
     CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV})
-  # none of the tests should take more than 1 hour to complete
   set_property(TEST ${test_name}
     PROPERTY TIMEOUT ${CEPH_TEST_TIMEOUT})
 endfunction()
