@@ -901,6 +901,8 @@ $CCLIENTDEBUG
         rgw crypt s3 kms backend = testing
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
+        rgw sts key = abcdefghijklmnop
+        rgw s3 auth use sts = true
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
@@ -1819,7 +1821,7 @@ do_rgw_create_users()
         --access-key ABCDEFGHIJKLMNOPQRST \
         --secret abcdefghijklmnopqrstuvwxyzabcdefghijklmn \
         --display-name youruseridhere \
-        --email s3@example.com --caps="user-policy=*" -c $conf_fn > /dev/null
+        --email s3@example.com --caps="roles=*;user-policy=*" -c $conf_fn > /dev/null
     $CEPH_BIN/radosgw-admin user create \
         --uid 56789abcdef0123456789abcdef0123456789abcdef0123456789abcdef01234 \
         --access-key NOPQRSTUVWXYZABCDEFG \
