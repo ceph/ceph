@@ -1214,6 +1214,11 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             bool mandatory_policy)
 {
   perm_state_from_req_state ps(s);
+
+  if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    // account users always require an Allow from identity-based policy
+    mandatory_policy = true;
+  }
   return verify_user_permission(dpp, &ps, s->user_acl, s->iam_user_policies, s->session_policies, res, op, mandatory_policy);
 }
 
