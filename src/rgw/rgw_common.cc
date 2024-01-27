@@ -1337,10 +1337,15 @@ bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, struct pe
   if (bucket_acl.verify_permission(dpp, *s->identity, perm, perm,
                                    s->get_referer(),
                                    s->bucket_access_conf &&
-                                   s->bucket_access_conf->ignore_public_acls()))
+                                   s->bucket_access_conf->ignore_public_acls())) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted by bucket acl" << dendl;
     return true;
-
-  return user_acl.verify_permission(dpp, *s->identity, perm, perm);
+  }
+  if (user_acl.verify_permission(dpp, *s->identity, perm, perm)) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted by user acl" << dendl;
+    return true;
+  }
+  return false;
 }
 
 bool verify_bucket_permission_no_policy(const DoutPrefixProvider* dpp, req_state * const s,
@@ -1531,6 +1536,7 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
 					  s->bucket_access_conf &&
 					  s->bucket_access_conf->ignore_public_acls());
   if (ret) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted by user acl" << dendl;
     return true;
   }
 
@@ -1552,10 +1558,15 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
   if (bucket_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm,
-                                   s->get_referer()))
+                                   s->get_referer())) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted by bucket acl" << dendl;
     return true;
-
-  return user_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm);
+  }
+  if (user_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm)) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted by user acl" << dendl;
+    return true;
+  }
+  return false;
 }
 
 bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s,
@@ -1592,6 +1603,7 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
 					  s->bucket_access_conf &&
 					  s->bucket_access_conf->ignore_public_acls());
   if (ret) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted by object acl" << dendl;
     return true;
   }
 
@@ -1613,10 +1625,15 @@ bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp,
   /* we already verified the user mask above, so we pass swift_perm as the mask here,
      otherwise the mask might not cover the swift permissions bits */
   if (bucket_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm,
-                                   s->get_referer()))
+                                   s->get_referer())) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted by bucket acl" << dendl;
     return true;
-
-  return user_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm);
+  }
+  if (user_acl.verify_permission(dpp, *s->identity, swift_perm, swift_perm)) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted by user acl" << dendl;
+    return true;
+  }
+  return false;
 }
 
 bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, req_state *s, int perm)
