@@ -902,6 +902,7 @@ Requires: parted
 Requires: util-linux
 Requires: xfsprogs
 Requires: python%{python3_pkgversion}-setuptools
+Requires: python%{python3_pkgversion}-packaging
 Requires: python%{python3_pkgversion}-ceph-common = %{_epoch_prefix}%{version}-%{release}
 %description volume
 This package contains a tool to deploy OSD with different devices like

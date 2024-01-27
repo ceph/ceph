@@ -69,6 +69,8 @@ def activate_bluestore(osd_lvs, no_systemd=False, no_tmpfs=False):
         raise RuntimeError('could not find a bluestore OSD to activate')
 
     is_encrypted = osd_block_lv.tags.get('ceph.encrypted', '0') == '1'
+    if is_encrypted and conf.dmcrypt_no_workqueue is None:
+        encryption_utils.set_dmcrypt_no_workqueue()
     dmcrypt_secret = None
     osd_id = osd_block_lv.tags['ceph.osd_id']
     conf.cluster = osd_block_lv.tags['ceph.cluster_name']
