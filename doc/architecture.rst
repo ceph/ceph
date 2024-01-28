@@ -19,9 +19,14 @@ The Ceph Storage Cluster
 ========================
 
 Ceph provides an infinitely scalable :term:`Ceph Storage Cluster` based upon
-:abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, which you can read
-about in `RADOS - A Scalable, Reliable Storage Service for Petabyte-scale
-Storage Clusters`_.
+:abbr:`RADOS (Reliable Autonomic Distributed Object Store)`, a reliable,
+distributed storage service that uses the intelligence in each of its nodes to
+secure the data it stores and to provide that data to client. See Sage Weil's
+"`The RADOS Object Store
+<https://ceph.io/en/news/blog/2009/the-rados-distributed-object-store/>`_" blog
+post for a brief explanation of RADOS and see `RADOS - A Scalable, Reliable
+Storage Service for Petabyte-scale Storage Clusters`_ for an exhaustive
+explanation of :term:`RADOS`.
 
 A Ceph Storage Cluster consists of multiple types of daemons:
 
