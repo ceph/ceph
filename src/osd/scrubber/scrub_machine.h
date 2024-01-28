@@ -102,6 +102,39 @@ OP_EV(ReplicaReserveReq);
 /// explicit release request from the Primary
 OP_EV(ReplicaRelease);
 
+template <typename T, has_formatter V>
+struct value_event_t : sc::event<T> {
+  const V value;
+
+  template <typename... Args>
+  value_event_t(Args&&... args) : value(std::forward<Args>(args)...)
+  {
+    on_event_creation(T::event_name);
+  }
+
+  value_event_t(const value_event_t&) = default;
+  value_event_t(value_event_t&&) = default;
+  value_event_t& operator=(const value_event_t&) = default;
+  value_event_t& operator=(value_event_t&&) = default;
+  ~value_event_t() { on_event_discard(T::event_name); }
+
+  template <typename FormatContext>
+  auto fmt_print_ctx(FormatContext& ctx) const
+  {
+    return fmt::format_to(ctx.out(), "{}({})", T::event_name, value);
+  }
+};
+
+#define VALUE_EVENT(T, V)                                          \
+  struct T : value_event_t<T, V> {                                 \
+    static constexpr const char* event_name = #T;                  \
+    template <typename... Args>                                    \
+    T(Args&&... args) : value_event_t(std::forward<Args>(args)...) \
+    {                                                              \
+    }                                                              \
+  };
+
+
 /// the async-reserver granted our reservation request
 OP_EV(ReserverGranted);
 
