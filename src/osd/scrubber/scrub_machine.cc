@@ -941,7 +941,16 @@ sc::result ReplicaUnreserved::react(const ReplicaReserveReq& ev)
   DECLARE_LOCALS;  // 'scrbr' & 'pg_id' aliases
   dout(10) << "ReplicaUnreserved::react(const ReplicaReserveReq&)" << dendl;
 
-  bool async_request = true && ev.m_op->get_req<MOSDScrubReserve>()->wait_for_resources /* && a config */;
+  const auto& m = *(ev.m_op->get_req<MOSDScrubReserve>());
+  const auto async_disabled = scrbr->get_pg_cct()->_conf.get_val<bool>(
+      "osd_scrub_disable_reservation_queuing");
+  const bool async_request = !async_disabled && m.wait_for_resources;
+  dout(15) << fmt::format(
+		  "ReplicaUnreserved::react(const ReplicaReserveReq&): "
+		  "request:{} disabled?:{} -> async? {}", m.wait_for_resources,
+		  async_disabled, async_request)
+	   << dendl;
+
   switch (context<ReplicaActive>().on_reserve_request(ev, async_request)) {
     case ReplicaReactCode::discard:
       return discard_event();
