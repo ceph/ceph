@@ -468,21 +468,6 @@ void OsdScrub::dec_scrubs_local()
   m_resource_bookkeeper.dec_scrubs_local();
 }
 
-bool OsdScrub::inc_scrubs_remote(pg_t pgid)
-{
-  return m_resource_bookkeeper.inc_scrubs_remote(pgid);
-}
-
-void OsdScrub::enqueue_remote_reservation(pg_t pgid)
-{
-  m_resource_bookkeeper.enqueue_remote_reservation(pgid);
-}
-
-void OsdScrub::dec_scrubs_remote(pg_t pgid)
-{
-  m_resource_bookkeeper.dec_scrubs_remote(pgid);
-}
-
 void OsdScrub::mark_pg_scrub_blocked(spg_t blocked_pg)
 {
   m_queue.mark_pg_scrub_blocked(blocked_pg);
