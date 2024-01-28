@@ -494,6 +494,12 @@ seastar::future<> CyanStore::Shard::do_transaction_no_callbacks(
         r = _create_collection(cid, op->split_bits);
       }
       break;
+      case Transaction::OP_RMCOLL:
+      {
+        coll_t cid = i.get_cid(op->cid);
+        r = _remove_collection(cid);
+      }
+      break;
       case Transaction::OP_SETALLOCHINT:
       {
         r = 0;
@@ -860,6 +866,17 @@ int CyanStore::Shard::_create_collection(const coll_t& cid, int bits)
   result.first->second = p->second;
   result.first->second->bits = bits;
   new_coll_map.erase(p);
+  return 0;
+}
+
+int CyanStore::Shard::_remove_collection(const coll_t& cid)
+{
+  logger().debug("{} cid={}", __func__, cid);
+  auto c = _get_collection(cid);
+  if (!c) {
+    return -ENOENT;
+  }
+  coll_map.erase(cid);
   return 0;
 }
 
