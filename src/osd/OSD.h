@@ -251,6 +251,14 @@ public:
    */
   std::optional<PGLockWrapper> get_locked_pg(spg_t pgid) final;
 
+  /**
+   * the entity that counts the number of active replica scrub
+   * operations, and grant scrub reservation requests asynchronously.
+   */
+  AsyncReserver<spg_t, Finisher>& get_scrub_reserver() {
+    return scrub_reserver;
+  }
+
  private:
   // -- agent shared state --
   ceph::mutex agent_lock = ceph::make_mutex("OSDService::agent_lock");
@@ -494,6 +502,8 @@ public:
   void send_pg_created();
 
   AsyncReserver<spg_t, Finisher> snap_reserver;
+  /// keeping track of replicas being reserved for scrubbing
+  AsyncReserver<spg_t, Finisher> scrub_reserver;
   void queue_recovery_context(PG *pg,
                               GenContext<ThreadPool::TPHandle&> *c,
                               uint64_t cost,
