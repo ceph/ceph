@@ -51,6 +51,8 @@ class OsdScrub {
 
   void dump_scrubs(ceph::Formatter* f) const;  ///< fwd to the queue
 
+  void dump_scrub_reservations(ceph::Formatter* f) const;
+
   /**
    * on_config_change() (the refactored "OSD::sched_all_scrubs()")
    *
