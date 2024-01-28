@@ -29,6 +29,9 @@ public:
       dlclose(mod);
     }
 #endif
+    for (auto& [name, denc] : dencoders) {
+      delete denc;
+    }
   }
   const dencoders_t& register_dencoders() {
     static constexpr std::string_view REGISTER_DENCODERS_FUNCTION = "register_dencoders\0";
