@@ -21,6 +21,7 @@ protected:
   std::vector<std::string> tagKeys;
   std::unique_ptr<rgw::sal::RGWRole> _role;
   int verify_permission(optional_yield y) override;
+  int init_processing(optional_yield y) override;
   void send_response() override;
   virtual uint64_t get_op() = 0;
   int parse_tags();
@@ -43,6 +44,7 @@ class RGWCreateRole : public RGWRoleWrite {
 public:
   RGWCreateRole(const bufferlist& bl_post_body) : bl_post_body(bl_post_body) {};
   int verify_permission(optional_yield y) override;
+  int init_processing(optional_yield y) override;
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "create_role"; }
@@ -66,6 +68,7 @@ class RGWGetRole : public RGWRoleRead {
 public:
   RGWGetRole() = default;
   int verify_permission(optional_yield y) override;
+  int init_processing(optional_yield y) override; 
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "get_role"; }
@@ -88,6 +91,7 @@ class RGWListRoles : public RGWRoleRead {
 public:
   RGWListRoles() = default;
   int verify_permission(optional_yield y) override;
+  int init_processing(optional_yield y) override;
   void execute(optional_yield y) override;
   int get_params();
   const char* name() const override { return "list_roles"; }
