@@ -75,8 +75,8 @@ export class CephfsSubvolumeService {
     });
   }
 
-  exists(subVolumeName: string, fsName: string) {
-    return this.info(fsName, subVolumeName).pipe(
+  exists(subVolumeName: string, fsName: string, subVolumeGroupName: string = '') {
+    return this.info(fsName, subVolumeName, subVolumeGroupName).pipe(
       mapTo(true),
       catchError((error: Event) => {
         if (_.isFunction(error.preventDefault)) {
