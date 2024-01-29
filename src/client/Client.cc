@@ -6273,6 +6273,11 @@ int Client::resolve_mds(
   if (role_r == 0) {
     // We got a role, resolve it to a GID
     const auto& mdsmap = fsmap->get_filesystem(role.fscid).get_mds_map();
+    if (mdsmap.is_down(role.rank)) {
+      lderr(cct) << __func__ << ": targets rank: " << role.rank
+                 << " is down" << dendl;
+      return -CEPHFS_EAGAIN;
+    }
     auto& info = mdsmap.get_info(role.rank);
     ldout(cct, 10) << __func__ << ": resolved " << mds_spec << " to role '"
       << role << "' aka " << info.human_name() << dendl;
