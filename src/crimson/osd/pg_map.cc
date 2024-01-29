@@ -56,6 +56,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
       });
     }).then([this, pgid, FNAME] {
       auto find_iter = pg_to_core.find(pgid);
+      ceph_assert_always(find_iter != pg_to_core.end());
       DEBUG("returning pg {} mapping to core {}", pgid, find_iter->second);
       return seastar::make_ready_future<core_id_t>(find_iter->second);
     });
