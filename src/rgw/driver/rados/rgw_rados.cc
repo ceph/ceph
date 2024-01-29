@@ -5512,10 +5512,16 @@ int RGWRados::check_bucket_empty(const DoutPrefixProvider *dpp, RGWBucketInfo& b
 int RGWRados::store_delete_bucket_info_flag(RGWBucketInfo& bucket_info, std::map<std::string, bufferlist>& attrs, optional_yield y, const DoutPrefixProvider *dpp) {
   const rgw_bucket& bucket = bucket_info.bucket;
   static constexpr auto max_retries = 10;
+  rgw::bucket_log_layout_generation index_log;
+  int shards_num;
   int retries = 0;
   int r = 0;
   do {
     bucket_info.flags |= BUCKET_DELETED;
+    index_log = bucket_info.layout.logs.back();
+    shards_num = rgw::num_shards(index_log.layout.in_index);
+    const auto& log = bucket_info.layout.logs.back();
+    bucket_info.layout.logs.push_back({log.gen+1, {rgw::BucketLogType::Deleted}});
     r = ctl.bucket->store_bucket_instance_info(bucket, bucket_info, y, dpp, RGWBucketCtl::BucketInstance::PutParams()
                                                                     .set_exclusive(false)
                                                                     .set_mtime(real_time())
@@ -5530,7 +5536,21 @@ int RGWRados::store_delete_bucket_info_flag(RGWBucketInfo& bucket_info, std::map
         break;
       }
     }
+
   } while (r == -ECANCELED && ++retries < max_retries);
+
+  if (r == 0) {
+    for (int i = 0; i < shards_num; ++i) {
+      ldpp_dout(dpp, 10) << "adding to data_log shard_id: " << i << " of gen:" << index_log.gen << dendl;
+      int ret = svc.datalog_rados->add_entry(dpp, bucket_info, index_log, i,
+                                                  null_yield);
+      if (ret < 0) {
+        ldpp_dout(dpp, 1) << "WARNING: failed writing data log for bucket="
+        << bucket_info.bucket << ", shard_id=" << i << "of generation="
+        << index_log.gen << dendl;
+        } // datalog error is not fatal
+  }
+  }
 
   return r;
 }
