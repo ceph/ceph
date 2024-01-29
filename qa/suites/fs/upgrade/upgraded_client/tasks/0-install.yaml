@@ -1,9 +1,15 @@
-meta:
-- desc: |
-   install ceph/nautilus latest
+teuthology:
+  premerge: |
+            local branch = yaml.teuthology.branch
+            yaml_fragment['tasks'][0]['install']['branch'] = tostring(branch)
+            print_branch = "**** done installing "..tostring(branch)
+            yaml_fragment['tasks'][1]['print'] = print_branch
+            local exec = yaml_fragment['tasks'][3]['exec']['osd.0']
+            local set_compat = "ceph osd set-require-min-compat-client "..tostring(branch)
+            py_attrgetter(exec).append(set_compat)
 tasks:
 - install:
-    branch: nautilus
+    branch: []
     exclude_packages:
       - cephadm
       - ceph-mgr-cephadm
@@ -27,7 +33,7 @@ tasks:
       - NetworkManager
       - iproute
       - util-linux
-- print: "**** done installing nautilus"
+- print: []
 - ceph:
     log-ignorelist:
       - overall HEALTH_
@@ -48,6 +54,5 @@ tasks:
         mon warn on pool no app: false
         ms bind msgr2: false
 - exec:
-    osd.0:
-      - ceph osd set-require-min-compat-client nautilus
+    osd.0: []
 - print: "**** done ceph"
