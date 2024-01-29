@@ -749,21 +749,22 @@ static std::string strsignal_compat(int signal) {
 }
 
 class RaiseHook: public AdminSocketHook {
+  using clock = ceph::coarse_mono_clock;
   struct Killer {
     CephContext* m_cct;
     pid_t pid;
     int signal;
-    ceph::coarse_mono_clock::time_point due;
+    clock::time_point due;
 
     std::string describe()
     {
       using std::chrono::duration_cast;
       using std::chrono::seconds;
-      auto remaining = (due - coarse_mono_clock::now());
+      auto remaining = (due - clock::now());
       return fmt::format(
         "pending signal ({}) due in {}", 
         strsignal_compat(signal),
-        duration_cast<seconds>(remaining));
+        duration_cast<seconds>(remaining).count());
     }
 
     bool cancel()
@@ -801,7 +802,7 @@ class RaiseHook: public AdminSocketHook {
     static std::optional<Killer> fork(CephContext *m_cct, int signal_to_send, double delay) {
 #   ifndef WIN32
       pid_t victim = getpid();
-      auto until = ceph::coarse_mono_clock::now() + ceph::make_timespan(delay);
+      clock::time_point until = clock::now() + ceph::make_timespan(delay);
 
       int fresult = ::fork();
       if (fresult < 0) {
@@ -814,19 +815,24 @@ class RaiseHook: public AdminSocketHook {
         return {{m_cct, fresult, signal_to_send, until}};
       }
 
-      const auto poll_interval = ceph::make_timespan(0.1);
-      auto remaining = (until - ceph::coarse_mono_clock::now());
-      do {
-        using std::chrono::duration_cast;
-        using std::chrono::nanoseconds;
-        std::this_thread::sleep_for(duration_cast<nanoseconds>(std::min(remaining, poll_interval)));
-        if (getppid() != victim) {
-          // suicide if my parent has changed
-          // this means that the original parent process has terminated
-          _exit(1);
+      const ceph::signedspan poll_interval = ceph::make_timespan(0.1);
+      while (getppid() == victim) {
+        ceph::signedspan remaining = (until - clock::now());
+        if (remaining.count() > 0) {
+          using std::chrono::duration_cast;
+          using std::chrono::nanoseconds;
+          std::this_thread::sleep_for(duration_cast<nanoseconds>(std::min(remaining, poll_interval)));
+        } else {
+          break;
         }
-        remaining = (until - ceph::coarse_mono_clock::now());
-      } while (remaining > ceph::signedspan::zero());
+      }
+
+      if (getppid() != victim) {
+        // suicide if my parent has changed
+        // this means that the original parent process has terminated
+        ldout(m_cct, 5) << __func__ << "my parent isn't what it used to be, i'm out" << strerror(errno) << dendl;
+        _exit(1);
+      }
 
       int status = kill(victim, signal_to_send);
       if (0 != status) {
@@ -846,10 +852,10 @@ class RaiseHook: public AdminSocketHook {
     int result = 0;
     std::transform(sigdesc.begin(), sigdesc.end(), sigdesc.begin(),
         [](unsigned char c) { return std::toupper(c); });
-    if (sigdesc.starts_with("-")) {
+    if (0 == sigdesc.find("-")) {
       sigdesc.erase(0, 1);
     }
-    if (sigdesc.starts_with("SIG")) {
+    if (0 == sigdesc.find("SIG")) {
       sigdesc.erase(0, 3);
     }
 
