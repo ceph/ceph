@@ -1,4 +1,11 @@
-import { AfterViewChecked, ChangeDetectorRef, Component, OnInit } from '@angular/core';
+import {
+  AfterViewChecked,
+  ChangeDetectorRef,
+  Component,
+  OnInit,
+  ViewChild,
+  ElementRef
+} from '@angular/core';
 import { AbstractControl, Validators } from '@angular/forms';
 import { ActivatedRoute, Router } from '@angular/router';
 
@@ -22,6 +29,7 @@ import { RgwBucketMfaDelete } from '../models/rgw-bucket-mfa-delete';
 import { RgwBucketVersioning } from '../models/rgw-bucket-versioning';
 import { RgwConfigModalComponent } from '../rgw-config-modal/rgw-config-modal.component';
 import { BucketTagModalComponent } from '../bucket-tag-modal/bucket-tag-modal.component';
+import { TextAreaJsonFormatterService } from '~/app/shared/services/text-area-json-formatter.service';
 
 @Component({
   selector: 'cd-rgw-bucket-form',
@@ -30,6 +38,9 @@ import { BucketTagModalComponent } from '../bucket-tag-modal/bucket-tag-modal.co
   providers: [RgwBucketEncryptionModel]
 })
 export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewChecked {
+  @ViewChild('bucketPolicyTextArea')
+  public bucketPolicyTextArea: ElementRef<any>;
+
   bucketForm: CdFormGroup;
   editing = false;
   owners: string[] = null;
@@ -70,6 +81,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     private rgwUserService: RgwUserService,
     private notificationService: NotificationService,
     private rgwEncryptionModal: RgwBucketEncryptionModel,
+    private textAreaJsonFormatterService: TextAreaJsonFormatterService,
     public actionLabels: ActionLabelsI18n,
     private readonly changeDetectorRef: ChangeDetectorRef
   ) {
@@ -82,6 +94,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   ngAfterViewChecked(): void {
     this.changeDetectorRef.detectChanges();
+    this.bucketPolicyOnChange();
   }
 
   createForm() {
@@ -129,7 +142,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
         ]
       ],
       lock_mode: ['COMPLIANCE'],
-      lock_retention_period_days: [0, [CdValidators.number(false), lockDaysValidator]]
+      lock_retention_period_days: [0, [CdValidators.number(false), lockDaysValidator]],
+      bucket_policy: ['{}', CdValidators.json()]
     });
   }
 
@@ -217,6 +231,11 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
             if (value['lock_enabled']) {
               this.bucketForm.controls['versioning'].disable();
             }
+            if (value['bucket_policy']) {
+              this.bucketForm
+                .get('bucket_policy')
+                .setValue(JSON.stringify(value['bucket_policy'], null, 2));
+            }
           }
         }
         this.loadingReady();
@@ -240,6 +259,7 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     }
     const values = this.bucketForm.value;
     const xmlStrTags = this.tagsToXML(this.tags);
+    const bucketPolicy = this.getBucketPolicy();
     if (this.editing) {
       // Edit
       const versioning = this.getVersioningStatus();
@@ -258,7 +278,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['mfa-token-pin'],
           values['lock_mode'],
           values['lock_retention_period_days'],
-          xmlStrTags
+          xmlStrTags,
+          bucketPolicy
         )
         .subscribe(
           () => {
@@ -287,7 +308,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
           values['encryption_enabled'],
           values['encryption_type'],
           values['keyId'],
-          xmlStrTags
+          xmlStrTags,
+          bucketPolicy
         )
         .subscribe(
           () => {
@@ -337,6 +359,10 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
     return this.isMfaDeleteEnabled ? RgwBucketMfaDelete.ENABLED : RgwBucketMfaDelete.DISABLED;
   }
 
+  getBucketPolicy() {
+    return this.bucketForm.getValue('bucket_policy') || '{}';
+  }
+
   fileUpload(files: FileList, controlName: string) {
     const file: File = files[0];
     const reader = new FileReader();
@@ -347,6 +373,16 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
       control.markAsTouched();
       control.updateValueAndValidity();
     });
+  }
+
+  bucketPolicyOnChange() {
+    if (this.bucketPolicyTextArea) {
+      this.textAreaJsonFormatterService.format(this.bucketPolicyTextArea);
+    }
+  }
+
+  openUrl(url: string) {
+    window.open(url, '_blank');
   }
 
   openConfigModal() {
@@ -374,6 +410,8 @@ export class RgwBucketFormComponent extends CdForm implements OnInit, AfterViewC
 
   deleteTag(index: number) {
     this.tags.splice(index, 1);
+    this.bucketForm.markAsDirty();
+    this.bucketForm.updateValueAndValidity();
   }
 
   private setTag(tag: Record<string, string>, index?: number) {

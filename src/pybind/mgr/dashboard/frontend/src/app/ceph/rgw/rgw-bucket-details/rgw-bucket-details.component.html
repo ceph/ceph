@@ -102,7 +102,7 @@
         </table>
 
       <!-- Tags -->
-      <ng-container *ngIf="selection.tagset">
+      <ng-container *ngIf="(selection.tagset | keyvalue)?.length">
         <legend i18n>Tags</legend>
         <table class="table table-striped table-bordered">
           <tbody>
@@ -120,15 +120,15 @@
 
     <ng-container ngbNavItem="permissions">
       <a ngbNavLink
-         i18n>Permissions</a>
+         i18n>Policies</a>
       <ng-template ngbNavContent>
 
         <table class="table table-striped table-bordered">
           <tbody>
             <tr>
               <td i18n
-                  class="bold w-25">Policy</td>
-              <td><pre>{{ selection.policy | json}}</pre></td>
+                  class="bold w-25">Bucket policy</td>
+              <td><pre>{{ selection.bucket_policy | json}}</pre></td>
             </tr>
           </tbody>
         </table>
