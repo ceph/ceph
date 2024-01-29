@@ -15,20 +15,19 @@
                  i18n>Directory
           </label>
           <div class="cd-col-form-input">
-            <ng-template #loading>
+            <div class="input-group">
+            <input id="typeahead-http"
+                   i18n
+                   type="text"
+                   class="form-control"
+                   disabled="directoryStore.isLoading"
+                   formControlName="directory"
+                   [ngbTypeahead]="search"
+                   [placeholder]="directoryStore.isLoading ? 'Loading directories' : 'Directory search'" />
+            <div *ngIf="directoryStore.isLoading">
               <i [ngClass]="[icons.spinner, icons.spin, 'mt-2', 'me-2']"></i>
-              <span i18n>Loading directories</span>
-            </ng-template>
-            <select class="form-select"
-                    id="directory"
-                    name="directory"
-                    formControlName="directory"
-                    *ngIf="directories$ | async as directories; else loading">
-              <option [ngValue]="null"
-                      i18n>--Select a directory--</option>
-              <option *ngFor="let dir of directories"
-                      [value]="dir.path">{{ dir.path }}</option>
-            </select>
+            </div>
+          </div>
             <span class="invalid-feedback"
                   *ngIf="snapScheduleForm.showError('directory', formDir, 'required')"
                   i18n>This field is required.</span>

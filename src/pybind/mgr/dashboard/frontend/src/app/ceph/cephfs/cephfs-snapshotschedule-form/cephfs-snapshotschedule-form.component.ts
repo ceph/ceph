@@ -2,10 +2,10 @@ import { ChangeDetectorRef, Component, OnInit } from '@angular/core';
 import { AbstractControl, FormArray, FormControl, FormGroup, Validators } from '@angular/forms';
 import { NgbActiveModal, NgbDateStruct, NgbTimeStruct } from '@ng-bootstrap/ng-bootstrap';
 import { uniq } from 'lodash';
-import { Observable, timer } from 'rxjs';
-import { map, switchMap } from 'rxjs/operators';
+import { Observable, OperatorFunction, of, timer } from 'rxjs';
+import { catchError, debounceTime, distinctUntilChanged, map, switchMap } from 'rxjs/operators';
 import { CephfsSnapshotScheduleService } from '~/app/shared/api/cephfs-snapshot-schedule.service';
-import { CephfsService } from '~/app/shared/api/cephfs.service';
+import { DirectoryStoreService } from '~/app/shared/api/directory-store.service';
 import { ActionLabelsI18n, URLVerbs } from '~/app/shared/constants/app.constants';
 import { Icons } from '~/app/shared/enum/icons.enum';
 import { RepeatFrequency } from '~/app/shared/enum/repeat-frequency.enum';
@@ -13,12 +13,12 @@ import { RetentionFrequency } from '~/app/shared/enum/retention-frequency.enum';
 import { CdForm } from '~/app/shared/forms/cd-form';
 import { CdFormGroup } from '~/app/shared/forms/cd-form-group';
 import { CdTableColumn } from '~/app/shared/models/cd-table-column';
-import { CephfsDir } from '~/app/shared/models/cephfs-directory-models';
 import { FinishedTask } from '~/app/shared/models/finished-task';
 import { RetentionPolicy, SnapshotScheduleFormValue } from '~/app/shared/models/snapshot-schedule';
 import { TaskWrapperService } from '~/app/shared/services/task-wrapper.service';
 
 const VALIDATON_TIMER = 300;
+const DEBOUNCE_TIMER = 300;
 
 @Component({
   selector: 'cd-cephfs-snapshotschedule-form',
@@ -42,15 +42,14 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
   resource!: string;
 
   columns!: CdTableColumn[];
-  directories$!: Observable<CephfsDir[]>;
 
   constructor(
     public activeModal: NgbActiveModal,
     private actionLabels: ActionLabelsI18n,
-    private cephfsService: CephfsService,
     private snapScheduleService: CephfsSnapshotScheduleService,
     private taskWrapper: TaskWrapperService,
-    private cd: ChangeDetectorRef
+    private cd: ChangeDetectorRef,
+    public directoryStore: DirectoryStoreService
   ) {
     super();
     this.resource = $localize`Snapshot schedule`;
@@ -70,7 +69,7 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
 
   ngOnInit(): void {
     this.action = this.actionLabels.CREATE;
-    this.directories$ = this.cephfsService.lsDir(this.id, '/', 3);
+    this.directoryStore.loadDirectories(this.id, '/', 3);
     this.createForm();
     this.loadingReady();
   }
@@ -78,6 +77,19 @@ export class CephfsSnapshotscheduleFormComponent extends CdForm implements OnIni
   get retentionPolicies() {
     return this.snapScheduleForm.get('retentionPolicies') as FormArray;
   }
+
+  search: OperatorFunction<string, readonly string[]> = (input: Observable<string>) =>
+    input.pipe(
+      debounceTime(DEBOUNCE_TIMER),
+      distinctUntilChanged(),
+      switchMap((term) =>
+        this.directoryStore.search(term, this.id).pipe(
+          catchError(() => {
+            return of([]);
+          })
+        )
+      )
+    );
 
   createForm() {
     this.snapScheduleForm = new CdFormGroup(
