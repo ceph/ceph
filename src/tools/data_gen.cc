@@ -54,7 +54,6 @@ using std::vector;
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
 
-#if 1
 //===========================================================================
 struct Key
 {
@@ -109,9 +108,6 @@ std::ostream &operator<<(std::ostream &stream, const Key& k)
 }
 
 using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
-#endif
-
-constexpr uint64_t object_size = 64 * 1024;
 
 struct params_t {
   string   pool_name;
@@ -126,7 +122,7 @@ void print_report(const uint16_t *blocks_dups,
 		  unsigned        chunk_size,
 		  unsigned        block_count)
 {
-  constexpr unsigned ARR_SIZE = 1024;
+  constexpr unsigned ARR_SIZE = 64*1024;
   std::array<uint32_t, ARR_SIZE+1> summery;
 
   for (unsigned i = 0; i < ARR_SIZE+1; ++i) {
@@ -176,6 +172,7 @@ int generate_single_object(const uint8_t *data_buff,
 			   unsigned       chunk_size,
 			   unsigned       block_count)
 {
+  static bool first_time = true;
   uint8_t object_buff[object_size];
   uint8_t *p = object_buff;
 
@@ -188,11 +185,14 @@ int generate_single_object(const uint8_t *data_buff,
   }
 
   unsigned data_size = p-object_buff;
-  //cout << "data_size=" << data_size << " / " << object_size << std::endl;
   assert(data_size == object_size);
   bufferlist bl = bufferlist::static_from_mem((char*)object_buff, data_size);
   ioctx.write_full(oid, bl);
 
+  if (first_time) {
+    first_time = false;
+    std::cout << "object_size=" << object_size << ", block_count=" << block_count << std::endl;
+  }
   return 0;
 }
 
@@ -231,7 +231,6 @@ int generate_objects(const params_t &params, const uint8_t *data_buff, unsigned 
     return -1;
   }
   memset(blocks_dups.get(), 0, sizeof(uint16_t)*block_count);
-
   for (unsigned object_no = 0; object_no < params.objects_count; object_no++) {
     std::string oid(string("obj.") + std::to_string(object_no));
     if (object_no % 100 == 0) {
@@ -318,7 +317,7 @@ static int process_arguments(vector<const char*> &args, params_t &params)
       int count = atoi(val.c_str());
       if (count >= 1 && count <= max_objects_count) {
 	params.objects_count = count;
-	cout << "Objects Count was set to " << count << " KiB" << std::endl;
+	cout << "Objects Count was set to " << count << std::endl;
       }
       else {
 	cerr << "illegal objects-count ("<< count << ") must be between 1-" << max_objects_count << std::endl;

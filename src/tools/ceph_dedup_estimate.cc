@@ -36,6 +36,7 @@
 #include <stdexcept>
 #include <climits>
 #include <cinttypes>
+#include <cstring>
 #include <mutex>
 #include <thread>
 
@@ -67,11 +68,14 @@ using std::vector;
 
 #define dout_subsys ceph_subsys_rados
 #define dout_context g_ceph_context
-std::mutex print_mtx;
 
+std::mutex print_mtx;
+//#define DISABLE_CDC_CODE
 const string RAW_FP_NSPACE("RAW_FP");
 const string REDUCED_FP_NSPACE("REDUCED_FP");
-
+const char *HASH_PREFIX = "hash";
+const char *HASH_FORMAT = "hash%02hX.%08X";
+const unsigned HASH_OID_NAME_SIZE = 16;
 enum chunk_algo_t { CHUNK_ALGO_NONE, CHUNK_ALGO_FBC, CHUNK_ALGO_CDC };
 struct dedup_params_t {
   uint32_t max_objs    = 0;
@@ -83,6 +87,9 @@ struct dedup_params_t {
   chunk_algo_t chunk_algo = CHUNK_ALGO_NONE;
   string   pool_name;
 };
+
+
+static void run_full_scan(const dedup_params_t &params);
 
 constexpr int CHUNK_BASESIZE      = 1024;
 constexpr int SHARDS_COUNT_MAX    = 256;
@@ -194,7 +201,7 @@ static int setup_rados_objects(Rados *p_rados, IoCtx *p_itr_ioctx, IoCtx *p_obj_
 //=========================================================================
 //=========================================================================
 constexpr static uint32_t SHA1_SIZE = 20; // 160bits
-struct Key
+struct chunk_fp_t
 {
   constexpr static uint32_t FP_SIZE = SHA1_SIZE;
   static_assert(FP_SIZE % sizeof(uint32_t) == 0);
@@ -212,11 +219,11 @@ struct Key
     }
   }
 
-  Key(bufferlist::const_iterator &ci) {
+  chunk_fp_t(bufferlist::const_iterator &ci) {
     uint32_t byte_count = FP_SIZE;
     uint8_t *p_dest     = fp_buff;
     copy_from_bl_itr(ci, byte_count, p_dest);
-#ifndef FBC
+#ifndef DISABLE_CDC_CODE
     byte_count = sizeof(chunk_size);
     copy_from_bl_itr(ci, byte_count, (uint8_t*)&chunk_size);
     chunk_size = CEPHTOH_32(chunk_size);
@@ -247,7 +254,7 @@ public:
   struct KeyHash
   {
     // No need to change the endianness since it will be internally consistent
-    std::size_t operator()(const Key& k) const
+    std::size_t operator()(const chunk_fp_t& k) const
     {
       // The SHA is already a hashing function so no need for another hash
       return *(uint64_t*)(k.get_fp_buff());
@@ -256,7 +263,7 @@ public:
 
   struct KeyEqual
   {
-    bool operator()(const Key& lhs, const Key& rhs) const
+    bool operator()(const chunk_fp_t& lhs, const chunk_fp_t& rhs) const
     {
       return ((memcmp(lhs.get_fp_buff(), rhs.get_fp_buff(), lhs.FP_SIZE) == 0) &&
 	      (lhs.chunk_size == rhs.chunk_size));
@@ -264,7 +271,7 @@ public:
   };
 } __attribute__((__packed__));
 
-std::ostream &operator<<(std::ostream &stream, const Key & k)
+std::ostream &operator<<(std::ostream &stream, const chunk_fp_t & k)
 {
   stream << "[" << k.get_chunk_size() << "]" << std::hex << " 0x";
   for (unsigned i = 0; i < k.FP_SIZE; i++) {
@@ -273,11 +280,13 @@ std::ostream &operator<<(std::ostream &stream, const Key & k)
   return stream;
 }
 
-static_assert(sizeof(Key) == SHA1_SIZE + sizeof(uint32_t));
-using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
+static_assert(sizeof(chunk_fp_t) == SHA1_SIZE + sizeof(uint32_t));
+using FP_Dict = std::unordered_map<chunk_fp_t, uint32_t, chunk_fp_t::KeyHash, chunk_fp_t::KeyEqual>;
 
 //---------------------------------------------------------------------------
-[[maybe_unused]]static void print_report(const dedup_params_t &params, const FP_Dict &fp_dict, bool list)
+[[maybe_unused]]static void print_report_reduce(const FP_Dict &fp_dict,
+						bool list,
+						const dedup_params_t &params)
 {
   constexpr unsigned ARR_SIZE = (64*1024);
   std::array<uint32_t, ARR_SIZE+1> summery;
@@ -288,10 +297,16 @@ using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
   uint64_t unique_data     = 0, unique_data_chunks = 0;
 
   for (auto const& entry : fp_dict) {
-    const Key & key = entry.first;
     const unsigned count = entry.second;
-    unique_data     += key.get_chunk_size();
-    duplicated_data += (count-1)*(key.get_chunk_size());
+#ifndef DISABLE_CDC_CODE
+    const chunk_fp_t & key = entry.first;
+    unsigned chunk_size = key.get_chunk_size();
+#else
+    unsigned chunk_size = params.chunk_size;
+#endif
+    unique_data     += chunk_size;
+    duplicated_data += (count-1)*chunk_size;
+
     unique_data_chunks++;
     duplicated_data_chunks += (count-1);
     if (count < ARR_SIZE) {
@@ -313,7 +328,9 @@ using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
   std::cout << "We had a total of " << total_size/1024 << " KiB stored in the system\n";
   std::cout << "We had " << unique_data/1024 << " Unique Data KiB stored in the system\n";
   std::cout << "We had " << duplicated_data/1024 << " Duplicated KiB Bytes stored in the system\n";
-  std::cout << "Dedup Ratio = " << (double)total_size/(double)unique_data << std::endl;
+  if (unique_data) {
+    std::cout << "Dedup Ratio = " << (double)total_size/(double)unique_data << std::endl;
+  }
 #endif
   if (list) {
     for (unsigned idx = 0; idx < ARR_SIZE; idx ++) {
@@ -324,6 +341,46 @@ using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
     if (summery[ARR_SIZE] > 0) {
       std::cout << "We had " << std::setw(8) << summery[ARR_SIZE] << " keys with more than " << ARR_SIZE << " repetitions " << std::endl;
     }
+  }
+  cout << "===========================================================" << std::endl;
+}
+
+//---------------------------------------------------------------------------
+[[maybe_unused]]static void print_report_merged(const FP_Dict &fp_dict, const dedup_params_t &params)
+{
+  constexpr unsigned ARR_SIZE = (64*1024);
+  std::array<uint32_t, ARR_SIZE+1> summery;
+  for (unsigned idx = 0; idx <= ARR_SIZE; idx ++) {
+    summery[idx] = 0;
+  }
+  uint64_t duplicated_data = 0, duplicated_data_chunks = 0;
+  uint64_t unique_data     = 0, unique_data_chunks = 0;
+  for (auto const& entry : fp_dict) {
+    const unsigned count = entry.second;
+#ifndef DISABLE_CDC_CODE
+    const chunk_fp_t & key = entry.first;
+    unsigned chunk_size = key.get_chunk_size();
+#else
+    unsigned chunk_size = params.chunk_size;
+#endif
+    unique_data     += chunk_size;
+    duplicated_data += (count-1)*chunk_size;
+    ceph_assert(count == 1);
+    unique_data_chunks++;
+    duplicated_data_chunks += (count-1);
+    if (count < ARR_SIZE) {
+      summery[count]++;
+    }
+    else {
+      summery[ARR_SIZE]++;
+    }
+  }
+
+  std::cout << __func__ << "::After Merge-Reduce" << std::endl;
+  std::cout << "We got " << unique_data_chunks << " data chunks with "
+	    << params.dedup_threshold << " or more duplications" << std::endl;
+  if (duplicated_data_chunks) {
+    std::cout << "\n*** duplicated_data_chunks = " << duplicated_data_chunks << "***\n" << std::endl;
   }
 }
 
@@ -340,7 +397,9 @@ using FP_Dict = std::unordered_map<Key, uint32_t, Key::KeyHash, Key::KeyEqual>;
 //                                   C O L L E C T
 //================================================================================
 
-constexpr unsigned RADOS_OBJ_SIZE  = (4 * 1024 * 1024);
+const unsigned     FULL_OBJ_READ = (0xFFFFFFFF); // special marker indicating we process the full object
+//constexpr unsigned RADOS_OBJ_SIZE  = (4 * 1024 * 1024);
+constexpr unsigned RADOS_OBJ_SIZE  = (64 * 1024);
 constexpr unsigned MAX_CURSOR_SIZE = 1024; // TBD - find out if that is enough
 static_assert(MAX_CURSOR_SIZE % sizeof(uint64_t) == 0);
 constexpr unsigned MAX_FP          = 32; // cap fingerprint size at 32 bytes
@@ -352,8 +411,8 @@ struct FP_BUFFER {
     uint16_t fp_size;
     uint16_t cursor_len;
     uint32_t fp_count;
+    uint32_t offset_in_obj;
     uint32_t crc;
-    uint32_t pad32;
 
     DENC(FP_BUFFER_HEADER, v, p) {
       uint64_t *p_cur = (uint64_t*)v.cursor;
@@ -365,14 +424,18 @@ struct FP_BUFFER {
       denc(v.fp_size, p);
       denc(v.cursor_len, p);
       denc(v.fp_count, p);
+      denc(v.offset_in_obj, p);
       denc(v.crc, p);
-      denc(v.pad32, p);
     }
 
-  }; // 1040 Bytes
+  };// __attribute__((__packed__)); // 1040 Bytes
 
   //---------------------------------------------------------------------------
-  FP_BUFFER(unsigned fp_size, IoCtx *obj_ioctx, uint16_t thread_id, bool verbose, uint32_t part_number = 0) {
+  FP_BUFFER(unsigned fp_size,
+	    IoCtx *obj_ioctx,
+	    uint16_t thread_id,
+	    bool verbose,
+	    uint32_t part_number = 0) {
     d_byte_offset = FP_HEADER_LEN;
     d_fp_size     = fp_size;
     d_obj_ioctx   = obj_ioctx;
@@ -383,18 +446,23 @@ struct FP_BUFFER {
   }
 
   //---------------------------------------------------------------------------
-  int add_fp(const char *fp, unsigned chunk_size, const ObjectCursor &cursor) {
-    if (unlikely(d_byte_offset+d_fp_size >= sizeof(d_buffer))) {
-      if (0) {
-	std::unique_lock<std::mutex> lock(print_mtx);
-	cout << __func__ << ":: calling flush() byte_offset=" << d_byte_offset << std::endl;
-      }
-      return flush(cursor);
+  int add_fp(const char *fp,
+	     unsigned chunk_size,
+	     const ObjectCursor &cursor,
+	     uint32_t offset_in_obj) {
+#ifndef DISABLE_CDC_CODE
+    unsigned copy_size = sizeof(chunk_fp_t);
+#else
+    unsigned copy_size = d_fp_size;;
+#endif
+    if (unlikely(d_byte_offset+copy_size > sizeof(d_buffer))) {
+      // the current chunk/fp are not part of this destage
+      flush(cursor, offset_in_obj);
     }
-
+    d_fp_count ++;
     memcpy(d_buffer+d_byte_offset, fp, d_fp_size);
     d_byte_offset += d_fp_size;
-#ifndef FBC
+#ifndef DISABLE_CDC_CODE
     *(uint32_t*)(d_buffer+d_byte_offset) = HTOCEPH_32(chunk_size);
     d_byte_offset += sizeof(chunk_size);
 #endif
@@ -402,44 +470,45 @@ struct FP_BUFFER {
   }
 
   //---------------------------------------------------------------------------
-  int flush(const ObjectCursor &cursor)
+  int flush(const ObjectCursor &cursor, uint32_t offset_in_object)
   {
     struct FP_BUFFER_HEADER header;
     header.fp_size    = HTOCEPH_16(d_fp_size);
     uint16_t len      = cursor.to_str().copy(header.cursor, sizeof(header.cursor));
     header.cursor_len = HTOCEPH_16(len);
-#ifndef FBC
-    header.fp_count   = HTOCEPH_32((d_byte_offset - FP_HEADER_LEN) / sizeof(Key));
+#ifndef DISABLE_CDC_CODE
+    header.fp_count = HTOCEPH_32((d_byte_offset - FP_HEADER_LEN) / sizeof(chunk_fp_t));
 #else
-    header.fp_count   = HTOCEPH_32((d_byte_offset - FP_HEADER_LEN) / d_fp_size);
+    header.fp_count = HTOCEPH_32((d_byte_offset - FP_HEADER_LEN) / d_fp_size);
 #endif
-    header.pad32      = 0;
-    header.crc        = 0;
+    header.offset_in_obj = HTOCEPH_32(offset_in_object);
+    header.crc = 0;
     memcpy(d_buffer, (uint8_t*)&header, FP_HEADER_LEN);
     uint32_t crc = -1;
     crc = ceph_crc32c(crc, d_buffer, d_byte_offset);
     ((FP_BUFFER_HEADER*)d_buffer)->crc = HTOCEPH_32(crc);
 
-    if (0) {
-      std::unique_lock<std::mutex> lock(print_mtx);
-      cout << __func__ << ", byte_offset=" << d_byte_offset
-	   << ", crc=0x" << hex << crc << dec << std::endl;
-    }
-
-    char name_buf[16];
+    ceph_assert(header.fp_count == d_fp_count);
+    char name_buf[HASH_OID_NAME_SIZE];
     // make sure thread_id will fit in 2 hex digits
     static_assert(THREAD_LIMIT_STRICT < 0xFF);
     unsigned n = snprintf(name_buf, sizeof(name_buf),
-			  "hash%02X.%08X", d_thread_id, d_part_number);
+			  HASH_FORMAT, d_thread_id, d_part_number);
     std::string oid(name_buf, n);
     if (d_verbose) {
       std::unique_lock<std::mutex> lock(print_mtx);
-      cout << __func__ << "::oid=" << oid << std::endl;
+      cout << __func__ << "::" << d_obj_destage << "::oid=" << oid
+	   << ", cursor=" << cursor
+	   << ", offset_in_object=" << offset_in_object
+	   << ", fp_count=" << header.fp_count
+	   << " , size=" << d_byte_offset << std::endl;
     }
     bufferlist bl = bufferlist::static_from_mem((char*)d_buffer, d_byte_offset);
     d_obj_ioctx->set_namespace(RAW_FP_NSPACE);
     d_obj_ioctx->write_full(oid, bl);
+    d_obj_destage ++;
     d_byte_offset = FP_HEADER_LEN;
+    d_fp_count = 0;
     d_part_number++;
     return 0;
   }
@@ -452,34 +521,44 @@ private:
   uint16_t d_fp_size;
   uint16_t d_thread_id;
   bool     d_verbose = false;
+  uint32_t d_obj_destage = 0;
+  uint32_t d_fp_count = 0;
 };
 WRITE_CLASS_DENC(FP_BUFFER::FP_BUFFER_HEADER)
 //---------------------------------------------------------------------------
 static void calc_and_write_fp(FP_BUFFER *fp_buffer,
 			      const uint8_t *p,
 			      unsigned chunk_size,
-			      const ObjectCursor &cursor)
+			      const ObjectCursor &cursor,
+			      uint32_t offset_in_obj)
 {
   sha1_digest_t sha1 = ceph::crypto::digest<ceph::crypto::SHA1>(p, chunk_size);
-  fp_buffer->add_fp((const char*)(sha1.v), chunk_size, cursor);
+  fp_buffer->add_fp((const char*)(sha1.v), chunk_size, cursor, offset_in_obj);
 }
 
 //---------------------------------------------------------------------------
-static void calculate_fp(FP_BUFFER *fp_buffer,
-			 bufferlist &bl,
-			 unsigned chunk_size,
-			 const ObjectCursor &cursor)
+static int calculate_fp_fbc(FP_BUFFER *fp_buffer,
+			    bufferlist &bl,
+			    unsigned chunk_size,
+			    const ObjectCursor &cursor,
+			    uint32_t offset_in_obj,
+			    bool verbose)
 {
+  unsigned fp_count = 0;
   uint8_t temp[chunk_size];
   auto bl_itr = bl.cbegin();
-
-  for (unsigned i = 0; i < bl.length() / chunk_size; i++ ) {
+  for (unsigned i = 0; i < bl.length() / chunk_size; i++, offset_in_obj+=chunk_size) {
     const char *p_src = nullptr;
     size_t n = bl_itr.get_ptr_and_advance(chunk_size, &p_src);
     if (n == chunk_size) {
-      calc_and_write_fp(fp_buffer, (uint8_t*)p_src, chunk_size, cursor);
+      calc_and_write_fp(fp_buffer, (uint8_t*)p_src, chunk_size, cursor, offset_in_obj);
+      fp_count++;
     }
     else {
+      // TBD - How to test this path?
+      // It requires that rados.read() will allocate bufferlist in small chunks
+      cout << __func__ << "::***************************************::" << std::endl;
+
       memcpy(temp, p_src, n);
       uint32_t count  = chunk_size - n;
       uint8_t *p_dest = temp + n;
@@ -489,35 +568,49 @@ static void calculate_fp(FP_BUFFER *fp_buffer,
 	count  -= n;
 	p_dest += n;
       } while (count > 0);
-      calc_and_write_fp(fp_buffer, temp, chunk_size, cursor);
+      calc_and_write_fp(fp_buffer, temp, chunk_size, cursor, offset_in_obj);
+      fp_count++;
     }
   }
+  //ceph_assert(fp_count == bl.length() / chunk_size);
+  return fp_count;
 }
 
-#if 1
 //---------------------------------------------------------------------------
-static void calculate_fp_cdc(FP_BUFFER *fp_buffer,
-			     bufferlist &bl,
-			     unsigned chunk_size,
-			     const ObjectCursor &cursor)
+static int calculate_fp_cdc(FP_BUFFER *fp_buffer,
+			    bufferlist &bl,
+			    unsigned chunk_size,
+			    const ObjectCursor &cursor,
+			    uint32_t offset_in_obj,
+			    bool verbose)
 {
+  unsigned fp_count = 0;
   constexpr unsigned MAX_CHUNK_SIZE = 256*1024;
   uint8_t temp[MAX_CHUNK_SIZE];
   auto bl_itr = bl.cbegin();
 
   std::vector<std::pair<uint64_t, uint64_t>> chunks;
   std::string chunk_algo = "fastcdc";
+  // TBD
+  // !!!!!!
+  // skip offset_in_obj bytes ....
+  //
+  ceph_abort("TBD::skip offset_in_obj bytes");
   unique_ptr<CDC> cdc = CDC::create(chunk_algo, cbits(chunk_size) - 1);
   cdc->calc_chunks(bl, &chunks);
-
   for (auto &p : chunks) {
     unsigned chunk_size = p.second;
     const char *p_src = nullptr;
     size_t n = bl_itr.get_ptr_and_advance(chunk_size, &p_src);
     if (n == chunk_size) {
-      calc_and_write_fp(fp_buffer, (uint8_t*)p_src, chunk_size, cursor);
+      calc_and_write_fp(fp_buffer, (uint8_t*)p_src, chunk_size, cursor, offset_in_obj);
+      fp_count++;
     }
     else {
+      // TBD - How to test this path?
+      // It requires that rados.read() will allocate bufferlist in small chunks
+      cout << __func__ << "::***************************************::" << std::endl;
+
       memcpy(temp, p_src, n);
       uint32_t count  = chunk_size - n;
       uint8_t *p_dest = temp + n;
@@ -527,80 +620,83 @@ static void calculate_fp_cdc(FP_BUFFER *fp_buffer,
 	count  -= n;
 	p_dest += n;
       } while (count > 0);
-      calc_and_write_fp(fp_buffer, temp, chunk_size, cursor);
+      calc_and_write_fp(fp_buffer, temp, chunk_size, cursor, offset_in_obj);
+      fp_count++;
     }
+    offset_in_obj += chunk_size;
   }
+
+  return fp_count;
 }
-#else
+
 //---------------------------------------------------------------------------
-static void calculate_fp_cdc(FP_BUFFER *fp_buffer,
-			     bufferlist &bl,
-			     unsigned chunk_size,
-			     const ObjectCursor &cursor)
+static void move_itr_by_cursor(NObjectIterator &start_itr,
+			       const std::string *cursor,
+			       uint32_t *offset_in_obj,
+			       bool verbose)
 {
-  std::vector<std::pair<uint64_t, uint64_t>> chunks;
-#if 0
-  std::string chunk_algo = "fastcdc";
-  unique_ptr<CDC> cdc = CDC::create(chunk_algo, cbits(chunk_size) - 1);
-  cdc->calc_chunks(bl, &chunks);
-#else
-  size_t pos = 0;
-  size_t len = bl.length();
-  size_t last_chunk_size = (rand() % (3*chunk_size)) + chunk_size/10;
-  while (pos < len - last_chunk_size ) {
-    size_t curr_chunk_size = (rand() % (3*chunk_size)) + chunk_size/10;
-    curr_chunk_size = std::min(curr_chunk_size, len-pos);
-    chunks.push_back(std::pair<uint64_t,uint64_t>(pos, curr_chunk_size));
-    pos += curr_chunk_size;
-  }
-  if (pos < len) {
-    chunks.push_back(std::pair<uint64_t,uint64_t>(pos, len-pos));
-  }
-#endif
-
-#define CDC_DEBUG
-#ifdef  CDC_DEBUG
-  static bool first_time = true;
-  unsigned bl_len = bl.length();
-  unsigned aggregated_len = 0;
-  unsigned max_len = 0, min_len = 16*1024*1024;
-#endif
-  for (auto &p : chunks) {
-    bufferlist chunk_bl;
-#ifdef CDC_DEBUG
-    min_len = std::min(min_len, (unsigned)p.second);
-    max_len = std::max(max_len, (unsigned)p.second);
-    aggregated_len += p.second;
-#endif
-    chunk_bl.substr_of(bl, p.first, p.second);
-    calc_and_write_fp(fp_buffer, (const uint8_t*)(chunk_bl.c_str()), chunk_bl.length(), cursor);
-  }
-
-#ifdef CDC_DEBUG
-  if (first_time)
-    {
-      first_time = false;
-      cout << "bl_len = " << bl_len << ", aggregated_len = " << aggregated_len << std::endl;
-      cout << "min_len = " << min_len << ", max_len = " << max_len << std::endl;
-      cout << "avg_len = " << aggregated_len / chunks.size() << std::endl;
+  ObjectCursor delimiter;
+  if (delimiter.from_str(*cursor)) {
+    unsigned count = 0;
+    for ( ; start_itr.get_cursor() < delimiter; start_itr++) {
+      count++;
+      if(verbose) {
+	string oid = start_itr->get_oid();
+	std::unique_lock<std::mutex> lock(print_mtx);
+	std::cout << "|||" << start_itr.get_cursor() << " || " << oid << std::endl;
+      }
     }
-#endif
+    if(verbose) {
+      std::cout << "skipped " << count << " objects before cursor: " << delimiter << std::endl;
+    }
+  }
+  else {
+    std::cerr << __func__ << "::bad cursor " << *cursor << std::endl;
+    ceph_abort("bad cursor");
+  }
+  if (start_itr.get_cursor() == delimiter) {
+    if (*offset_in_obj == FULL_OBJ_READ) {
+      if (verbose) {
+	std::cout << "skipping oid: " << start_itr->get_oid()
+		  << ", cursor: " << start_itr.get_cursor() << std::endl;
+      }
+      start_itr++;
+      *offset_in_obj = 0;
+    }
+    else {
+      if (verbose) {
+	std::cout << "start oid: " << start_itr->get_oid()
+		  << ", offset_in_obj: " << *offset_in_obj << std::endl;
+      }
+    }
+  }
+  if (verbose) {
+    std::cout << "cursor=" << start_itr.get_cursor() << " || " << *cursor << std::endl;
+  }
 }
-#endif
 
 //---------------------------------------------------------------------------
-static int thread_collect(const dedup_params_t &params, unsigned thread_id, uint64_t *p_bytes_read)
+static int thread_collect(unsigned thread_id,
+			  uint64_t *p_bytes_read,
+			  const std::string *cursor,
+			  uint64_t start_part_num,
+			  uint32_t offset_in_obj,
+			  const dedup_params_t &params)
 {
   uint64_t objs_read = 0, min_size = 0xFFFFFFFF, max_size = 0;
   unsigned max_objs = params.max_objs;
+  std::vector<std::string> oid_vec;
   *p_bytes_read = 0;
   Rados rados;
   IoCtx itr_ioctx, obj_ioctx;
-  if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, params.pool_name.c_str()) != 0) {
+  const char *pool_name = params.pool_name.c_str();
+  if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, pool_name) != 0) {
     return -1;
   }
 
-  unique_ptr<FP_BUFFER> fp_buffer = std::make_unique<FP_BUFFER>(sha1_digest_t::SIZE, &obj_ioctx, thread_id, params.verbose);
+  unique_ptr<FP_BUFFER> fp_buffer = std::make_unique<FP_BUFFER>(
+    sha1_digest_t::SIZE, &obj_ioctx, thread_id, params.verbose, start_part_num);
+
   ObjectCursor split_start, split_finish;
   itr_ioctx.object_list_slice(itr_ioctx.object_list_begin(),
 			      itr_ioctx.object_list_end(),
@@ -609,57 +705,108 @@ static int thread_collect(const dedup_params_t &params, unsigned thread_id, uint
 			      &split_start,
 			      &split_finish);
   auto start_itr = itr_ioctx.nobjects_begin(split_start);
+  //start_itr.set_cursor(itr.get_cursor());
+  uint64_t fp_count = 0, fp_count_total = 0;;
+  uint64_t obj_size = 0;
+  utime_t total_time, max_time, min_time = utime_t::max();
+
+  if (cursor) {
+    move_itr_by_cursor(start_itr, cursor, &offset_in_obj, params.verbose);
+  }
+
+  unsigned skip_count = 0;
   for (auto itr = start_itr; itr.get_cursor() < split_finish; ++itr) {
     string oid = itr->get_oid();
-
+    if (itr->get_nspace() == RAW_FP_NSPACE) {
+      skip_count++;
+      if(params.verbose) {
+	std::unique_lock<std::mutex> lock(print_mtx);
+	std::cout << skip_count << "] skip oid " << oid << std::endl;
+      }
+      continue;
+    }
+    if(params.verbose) {
+      std::unique_lock<std::mutex> lock(print_mtx);
+      std::cout << itr.get_cursor() << " || " << oid << std::endl;
+    }
+    oid_vec.push_back(oid);
     obj_ioctx.set_namespace(itr->get_nspace());
     obj_ioctx.locator_set_key(itr->get_locator());
     bufferlist bl;
-    int ret = obj_ioctx.read_full(oid, bl);
+    utime_t start_time = ceph_clock_now();
+    // 0 @len means read until the end
+    int ret = obj_ioctx.read(oid, bl, 0, offset_in_obj);
+    utime_t duration = ceph_clock_now() - start_time;
     if (unlikely(ret <= 0)) {
       cerr << "failed to read file: " << cpp_strerror(ret) << std::endl;
       return ret;
     }
+    total_time += duration;
+    min_time = std::min(min_time, duration);
+    max_time = std::max(max_time, duration);
 
+    obj_size = bl.length();
     objs_read++;
     *p_bytes_read += bl.length();
     min_size = std::min(min_size, (uint64_t)bl.length());
     max_size = std::max(max_size, (uint64_t)bl.length());
     if (params.chunk_algo == CHUNK_ALGO_FBC) {
-      calculate_fp(fp_buffer.get(), bl, params.chunk_size, itr.get_cursor());
+      fp_count = calculate_fp_fbc(fp_buffer.get(), bl, params.chunk_size,
+				  itr.get_cursor(), offset_in_obj, params.verbose);
     }
     else {
       assert(params.chunk_algo == CHUNK_ALGO_CDC);
-      calculate_fp_cdc(fp_buffer.get(), bl, params.chunk_size, itr.get_cursor());
+      fp_count = calculate_fp_cdc(fp_buffer.get(), bl, params.chunk_size,
+				  itr.get_cursor(), offset_in_obj, params.verbose);
     }
-
+    ceph_assert(fp_count == obj_size / params.chunk_size || offset_in_obj != 0);
+    offset_in_obj = 0;
+    fp_count_total += fp_count;
     if (unlikely(max_objs && objs_read >= max_objs)) {
-      break;
+      //fp_buffer->flush(itr.get_cursor());
+      std::unique_lock<std::mutex> lock(print_mtx);
+      cout << std::dec << thread_id << "]DEBUG EXIT::Num Objects read=" << objs_read << std::endl;
+      return 0;
     }
   }
-  if (0) {
+
+  fp_buffer->flush(split_finish, FULL_OBJ_READ);
+  if (objs_read > 0) {
     std::unique_lock<std::mutex> lock(print_mtx);
-    cout << __func__ << ":: calling flush() " << std::endl;
-  }
-  fp_buffer->flush(split_finish);
-  if (0 && objs_read > 0) {
-    std::unique_lock<std::mutex> lock(print_mtx);
-    cout << thread_id << "] Num Objects read=" << objs_read
-	 << ", Num Bytes read=" << *p_bytes_read/(1024*1024) << " MiB"
-	 << ", Max-Size=" << max_size / 1024 << " KiB"
-	 << ", Min-Size=" << min_size / 1024 << " KiB"
-	 << std::endl;
+    if (params.verbose) {
+      cout << thread_id << " Num Objects read=" << objs_read
+	   << ", Num Bytes read=" << std::setw(4)
+	   << *p_bytes_read/(1024*1024) << " MiB"
+	   << ", Max-Size=" << max_size / 1024 << " KiB"
+	   << ", Min-Size=" << min_size / 1024 << " KiB"
+	   << ", chunks-written=" << fp_count_total
+	   << std::endl;
+      cout << thread_id
+	   << "] Total-Time=" << total_time
+	   << ", Max-Time=" << max_time
+	   << ", Min-Time=" << min_time
+	   << ", Avg-Time=" << total_time/objs_read
+	   << std::endl;
+#if 0
+      for (auto const & oid : oid_vec) {
+	std::cout << oid << std::endl;
+      }
+#endif
+    }
+    else {
+      cout << std::dec << thread_id << "]Num Objects read=" << objs_read << std::endl;
+    }
   }
 
   return 0;
 }
 
 //---------------------------------------------------------------------------
-static int collect_fingerprints(const dedup_params_t &params, uint64_t *p_total_bytes_read)
+static int collect_fingerprints(uint64_t *p_total_bytes_read, const dedup_params_t &params)
 {
   cout << "collect chunks finger prints" << std::endl;
   if (params.chunk_algo != CHUNK_ALGO_FBC && params.chunk_algo != CHUNK_ALGO_CDC) {
-    cerr << "** illegal chunking algorithm **" << std::endl;
+    cerr << "** illegal chunking algorithm [" << params.chunk_algo << "] **" << std::endl;
     usage_exit();
   }
 
@@ -673,7 +820,8 @@ static int collect_fingerprints(const dedup_params_t &params, uint64_t *p_total_
   memset(bytes_read_arr, 0, sizeof(bytes_read_arr));
 
   for (unsigned thread_id = 0; thread_id < max_threads; thread_id++) {
-    thread_arr[thread_id] = new std::thread(thread_collect, params, thread_id, bytes_read_arr+thread_id);
+    thread_arr[thread_id] = new std::thread(thread_collect, thread_id,
+					    bytes_read_arr+thread_id, nullptr, 0, 0, params);
   }
 
   for (unsigned thread_id = 0; thread_id < max_threads; thread_id++ ) {
@@ -700,8 +848,9 @@ struct REDUCED_FP_HEADER {
 
   uint32_t fp_count;
   uint32_t serial_id;
-  uint32_t crc;
   uint32_t pad32;
+  uint32_t crc;
+
 
   DENC(REDUCED_FP_HEADER, v, p) {
     denc(v.fp_size, p);
@@ -711,8 +860,8 @@ struct REDUCED_FP_HEADER {
 
     denc(v.fp_count, p);
     denc(v.serial_id, p);
-    denc(v.crc, p);
     denc(v.pad32, p);
+    denc(v.crc, p);
   }
 }; // 24 Bytes header
 WRITE_CLASS_DENC(REDUCED_FP_HEADER)
@@ -738,8 +887,8 @@ static void reduced_fp_flush(REDUCED_FP_HEADER header,
 			     uint32_t serial_id,
 			     IoCtx   &obj_ioctx)
 {
-#ifndef FBC
-  header.fp_count  = HTOCEPH_32((offset - sizeof(REDUCED_FP_HEADER)) / sizeof(Key));
+#ifndef DISABLE_CDC_CODE
+  header.fp_count  = HTOCEPH_32((offset - sizeof(REDUCED_FP_HEADER)) / sizeof(chunk_fp_t));
 #else
   header.fp_count  = HTOCEPH_32((offset - sizeof(REDUCED_FP_HEADER)) / fp_size);
 #endif
@@ -769,30 +918,30 @@ static void reduced_fp_flush(REDUCED_FP_HEADER header,
 }
 
 //---------------------------------------------------------------------------
-static int store_reduced_fingerprints(const dedup_params_t &params,
-				      const FP_Dict &fp_dict,
+static int store_reduced_fingerprints(const FP_Dict &fp_dict,
 				      unsigned shard_id,
 				      uint64_t *p_reduced_bytes,
-				      IoCtx &obj_ioctx)
+				      IoCtx &obj_ioctx,
+				      const dedup_params_t &params)
 {
   uint8_t buffer[RADOS_OBJ_SIZE];
   struct REDUCED_FP_HEADER header;
-  unsigned fp_size = Key::FP_SIZE; // TBD - use macro
+  unsigned fp_size = chunk_fp_t::FP_SIZE; // TBD - use macro
   // fixed parts of the header which can be reuse
   header.fp_size   = HTOCEPH_16(fp_size);
   header.shard_id  = HTOCEPH_16(shard_id);
   header.threshold = HTOCEPH_16(params.dedup_threshold);
   header.pad16     = 0;
   header.pad32     = 0;
-#ifndef FBC
-  unsigned key_size = sizeof(Key);
+#ifndef DISABLE_CDC_CODE
+  unsigned key_size = sizeof(chunk_fp_t);
 #else
   unsigned key_size = fp_size;
 #endif
   uint32_t serial_id = 0;
   unsigned offset    = sizeof(REDUCED_FP_HEADER);
   for (auto const& entry : fp_dict) {
-    const Key & key = entry.first;
+    const chunk_fp_t & key = entry.first;
     const unsigned count = entry.second;
     if (count >= params.dedup_threshold) {
       if (unlikely(offset+key_size >= sizeof(buffer))) {
@@ -801,7 +950,7 @@ static int store_reduced_fingerprints(const dedup_params_t &params,
       }
       memcpy(buffer+offset, key.get_fp_buff(), fp_size);
       offset += fp_size;
-#ifndef FBC
+#ifndef DISABLE_CDC_CODE
       *(uint32_t*)(buffer+offset) = HTOCEPH_32(key.get_chunk_size());
       offset += sizeof(key.get_chunk_size());
 #endif
@@ -820,24 +969,24 @@ static int store_reduced_fingerprints(const dedup_params_t &params,
 
 //---------------------------------------------------------------------------
 static int reduce_fingerprints_single_object(FP_Dict &fp_dict,
-					     const dedup_params_t &params,
 					     bufferlist &bl,
 					     unsigned shard_id,
-					     [[maybe_unused]]const ObjectCursor &cursor)
+					     [[maybe_unused]]const ObjectCursor &cursor,
+					     const dedup_params_t &params)
 {
   uint64_t uniq_cnt = 0;
   uint64_t cnt = 0;
   FP_BUFFER::FP_BUFFER_HEADER fp_header;
   auto bl_itr = bl.cbegin();
   decode(fp_header, bl_itr);
-  if (fp_header.pad32 != 0) {
-    std::string_view sv(fp_header.cursor, fp_header.cursor_len);
-    cout << "cursor   = " << sv << "\n"
-	 << "fp_size  = " << fp_header.fp_size  << "\n"
-	 << "fp_count = " << fp_header.fp_count  << "\n";
-    exit (1);
+
+  if (params.verbose) {
+    std::unique_lock<std::mutex> lock(print_mtx);
+    std::string_view cursor(fp_header.cursor, fp_header.cursor_len);
+    cout << __func__ << "::" << ", cursor=" << cursor
+	 << ", offset_in_object=" << fp_header.offset_in_obj
+	 << ", fp_count=" << fp_header.fp_count << std::endl;
   }
-  assert(fp_header.pad32 == 0);
 
 #if 0
   uint32_t buffer_crc = header.crc;
@@ -846,10 +995,12 @@ static int reduce_fingerprints_single_object(FP_Dict &fp_dict,
   //cout << "buffer_crc=" << hex << buffer_crc << ", calc_crc=" << calc_crc << dec << std::endl;
   assert(calc_crc == buffer_crc);
 #endif
-
+  unsigned fp_count = 0;
   for (unsigned fp_idx = 0; fp_idx < fp_header.fp_count; fp_idx++) {
-    Key key(bl_itr);
+    chunk_fp_t key(bl_itr);
+    ceph_assert(key.get_shard(params.num_shards) == shard_id);
     if (key.get_shard(params.num_shards) == shard_id) {
+      fp_count ++;
       auto dict_itr = fp_dict.find(key);
       if (dict_itr == fp_dict.end()) {
 	fp_dict[key] = 1;
@@ -861,13 +1012,13 @@ static int reduce_fingerprints_single_object(FP_Dict &fp_dict,
       cnt++;
     }
   }
-  return 0;
+  return fp_count;
 }
 
 //---------------------------------------------------------------------------
-static int reduce_shard_fingerprints(const dedup_params_t &params,
-				     unsigned shard_id,
-				     uint64_t *p_reduced_bytes)
+static int reduce_shard_fingerprints(unsigned shard_id,
+				     uint64_t *p_reduced_bytes,
+				     const dedup_params_t &params)
 {
   Rados rados;
   IoCtx itr_ioctx, obj_ioctx;
@@ -876,36 +1027,53 @@ static int reduce_shard_fingerprints(const dedup_params_t &params,
   }
   itr_ioctx.set_namespace(RAW_FP_NSPACE);
   FP_Dict fp_dict;
+  uint64_t count, objs_read = 0, chunks_read = 0;
+  uint64_t min_size = 0xFFFFFFFF, max_size = 0;
   auto start_itr = itr_ioctx.nobjects_begin();
   auto end_itr   = itr_ioctx.nobjects_end();
   for (auto itr = start_itr; itr != end_itr; ++itr) {
     string oid = itr->get_oid();
-    ceph_assert(oid.starts_with("hash"));
+    ceph_assert(oid.starts_with(HASH_PREFIX));
+    if(params.verbose) {
+      std::unique_lock<std::mutex> lock(print_mtx);
+      std::cout << itr.get_cursor() << " || " << oid << std::endl;
+    }
 
     obj_ioctx.set_namespace(itr->get_nspace());
     obj_ioctx.locator_set_key(itr->get_locator());
     bufferlist bl;
     int ret = obj_ioctx.read_full(oid, bl);
     if (unlikely(ret <= 0)) {
-      cerr << "failed to read file: " << cpp_strerror(ret) << std::endl;
+      cerr << "failed to read object " << oid << ", err: " << cpp_strerror(ret) << std::endl;
       return ret;
     }
-    reduce_fingerprints_single_object(fp_dict, params, bl, shard_id, itr.get_cursor());
+    objs_read++;
+    count = reduce_fingerprints_single_object(fp_dict, bl, shard_id, itr.get_cursor(), params);
+    min_size = std::min(min_size, count);
+    max_size = std::max(max_size, count);
+    chunks_read += count;
   }
   if (params.num_shards == 1) {
-    print_report(params, fp_dict, true);
+    cout << __func__ << "::single shard mode" << std::endl;
+    cout << "Num Objects read=" << objs_read
+	 << ", Max-FP=" << max_size
+	 << ", Min-FP=" << min_size
+	 << ", chunks-read=" << chunks_read
+	 << std::endl;
+
+    print_report_reduce(fp_dict, true, params);
   }
-  store_reduced_fingerprints(params, fp_dict, shard_id, p_reduced_bytes, obj_ioctx);
+  store_reduced_fingerprints(fp_dict, shard_id, p_reduced_bytes, obj_ioctx, params);
   return 0;
 }
 
 //---------------------------------------------------------------------------
-static int reduce_fingerprints(const dedup_params_t &params, uint64_t *p_reduced_bytes)
+static int reduce_fingerprints(uint64_t *p_reduced_bytes, const dedup_params_t &params)
 {
   cout << "reduce fingerprints, leaving only FP with "
        << params.dedup_threshold << " or more duplicates" << std::endl;
   for (unsigned shard_id = 0; shard_id < params.num_shards; shard_id++) {
-    reduce_shard_fingerprints(params, shard_id, p_reduced_bytes);
+    reduce_shard_fingerprints(shard_id, p_reduced_bytes, params);
   }
 
   return 0;
@@ -917,8 +1085,8 @@ static int reduce_fingerprints(const dedup_params_t &params, uint64_t *p_reduced
 
 //---------------------------------------------------------------------------
 static int merge_fingerprints_single_object(FP_Dict &fp_dict,
-					    const dedup_params_t &params,
-					    bufferlist &bl)
+					    bufferlist &bl,
+					    const dedup_params_t &params)
 {
   uint64_t uniq_cnt    = 0;
   uint64_t cnt         = 0;
@@ -936,7 +1104,7 @@ static int merge_fingerprints_single_object(FP_Dict &fp_dict,
 #endif
 
   for (unsigned fp_idx = 0; fp_idx < header.fp_count; fp_idx++) {
-    Key key(bl_itr);
+    chunk_fp_t key(bl_itr);
     auto itr = fp_dict.find(key);
     if (itr == fp_dict.end()) {
       fp_dict[key] = 1;
@@ -979,16 +1147,199 @@ static int merge_reduced_fingerprints(const dedup_params_t &params)
       cerr << "failed to read file: " << cpp_strerror(ret) << std::endl;
       return ret;
     }
-    merge_fingerprints_single_object(fp_dict, params, bl);
+    merge_fingerprints_single_object(fp_dict, bl, params);
   }
 
   //store_merged_reduced_fingerprints(params, fp_dict, shard_id);
-  print_report(params, fp_dict, false);
+  print_report_merged(fp_dict, params);
 
   return 0;
-
 }
 
+//===========================================================================
+
+//---------------------------------------------------------------------------
+static int parse_hash_object_name(const string &oid,
+				  uint16_t *p_thread_id,
+				  uint32_t *p_part_num,
+				  bool verbose)
+{
+  // convert CPP string to c style string without dynamic allocation
+  size_t size = oid.length();
+  char buff[size + 1];
+  strncpy(buff, oid.data(), size);
+  buff[size] = '\0';
+
+  sscanf(buff, HASH_FORMAT, p_thread_id, p_part_num);
+  if (verbose) {
+    cout << std::hex << "thread_id=" << *p_thread_id
+	 << ", part_number=" << *p_part_num << std::endl;
+  }
+  return 0;
+}
+
+//---------------------------------------------------------------------------
+static void find_max_part_number_per_thread(IoCtx *p_itr_ioctx,
+					    uint32_t *max_part_num_table,
+					    uint16_t *p_max_thread_id,
+					    bool verbose)
+{
+  p_itr_ioctx->set_namespace(RAW_FP_NSPACE);
+  auto start_itr = p_itr_ioctx->nobjects_begin();
+  auto end_itr   = p_itr_ioctx->nobjects_end();
+
+  for (auto itr = start_itr; itr != end_itr; ++itr) {
+    string oid = itr->get_oid();
+    if (verbose ) {
+      cout << __func__ << "::oid = " << oid << std::endl;
+    }
+    ceph_assert(oid.starts_with(HASH_PREFIX));
+
+    uint16_t thread_id;
+    uint32_t part_num;
+    parse_hash_object_name(oid, &thread_id, &part_num, verbose);
+    ceph_assert(thread_id < THREAD_LIMIT_STRICT);
+    *p_max_thread_id = std::max(*p_max_thread_id, thread_id);
+    max_part_num_table[thread_id] = std::max(max_part_num_table[thread_id], part_num);
+  }
+}
+
+//---------------------------------------------------------------------------
+static int resume_thread_collect(uint16_t thread_id,
+				 uint16_t last_part_num,
+				 IoCtx *p_obj_ioctx,
+				 uint64_t *p_bytes_read,
+				 const dedup_params_t &params)
+{
+  char name_buf[HASH_OID_NAME_SIZE];
+  unsigned n = snprintf(name_buf, sizeof(name_buf), HASH_FORMAT,
+			thread_id, last_part_num);
+  std::string oid(name_buf, n);
+  if (params.verbose ) {
+    std::cout << "recovering cursor from oid: " << oid << std::endl;
+  }
+
+  bufferlist bl;
+  // Read only the HEADER section from the object
+  int ret = p_obj_ioctx->read(oid, bl, FP_HEADER_LEN, 0);
+  if (ret != FP_HEADER_LEN) {
+    std::cerr << __func__ << "::failed obj_ioctx.read(" << oid << ")"
+	      << ", error = " << cpp_strerror(ret) << std::endl;
+    return ret;
+  }
+  FP_BUFFER::FP_BUFFER_HEADER fp_header;
+  auto bl_itr = bl.cbegin();
+  decode(fp_header, bl_itr);
+
+  std::string cursor(fp_header.cursor, fp_header.cursor_len);
+  if (params.verbose ) {
+    cout << "cursor   = " << cursor << "\n" << std::dec
+	 << "fp_size  = " << fp_header.fp_size  << "\n"
+	 << "fp_count = " << fp_header.fp_count << "\n"
+	 << "offset = " << fp_header.offset_in_obj << "\n";
+  }
+
+  return thread_collect(thread_id, p_bytes_read, &cursor, last_part_num+1,
+			fp_header.offset_in_obj, params);
+}
+
+//---------------------------------------------------------------------------
+static int recover_collect_fingerprints_step(IoCtx *p_itr_ioctx,
+					     IoCtx *p_obj_ioctx,
+					     uint64_t *p_total_bytes_read,
+					     const dedup_params_t &params)
+{
+  uint32_t last_part_num_table[THREAD_LIMIT_STRICT];
+  memset(last_part_num_table, 0x0, sizeof(last_part_num_table));
+  uint16_t max_thread_id = 0;
+  find_max_part_number_per_thread(p_itr_ioctx, last_part_num_table,
+				  &max_thread_id, params.verbose);
+  ceph_assert(max_thread_id < THREAD_LIMIT_STRICT);
+  p_obj_ioctx->set_namespace(RAW_FP_NSPACE);
+
+  std::thread* thread_arr[THREAD_LIMIT_STRICT];
+  memset(thread_arr, 0, sizeof(thread_arr));
+
+  uint64_t bytes_read_arr[THREAD_LIMIT_STRICT];
+  memset(bytes_read_arr, 0, sizeof(bytes_read_arr));
+
+  for (unsigned thread_id = 0; thread_id <= max_thread_id; thread_id++) {
+    uint32_t last_part_num = last_part_num_table[thread_id];
+    thread_arr[thread_id] = new std::thread(resume_thread_collect, thread_id, last_part_num,
+					    p_obj_ioctx, bytes_read_arr+thread_id, params);
+  }
+
+  for (unsigned thread_id = 0; thread_id <= max_thread_id; thread_id++ ) {
+    if( thread_arr[thread_id] != nullptr ) {
+      thread_arr[thread_id]->join();
+      delete thread_arr[thread_id];
+      *p_total_bytes_read += bytes_read_arr[thread_id];
+      thread_arr[thread_id] = nullptr;
+    }
+  }
+  cout << "Total size before dedup = " << *p_total_bytes_read / (1024 * 1024) << " MiB" << std::endl;
+  return 0;
+}
+
+//---------------------------------------------------------------------------
+static int recover_reduce_fingerprints_step(IoCtx *p_itr_ioctx,
+					    IoCtx *p_obj_ioctx,
+					    const dedup_params_t &params)
+{
+  return 0;
+}
+
+//---------------------------------------------------------------------------
+static bool namespace_exists(IoCtx *p_itr_ioctx, const string &nspace, bool verbose)
+{
+  p_itr_ioctx->set_namespace(nspace);
+  auto start_itr = p_itr_ioctx->nobjects_begin();
+  auto end_itr   = p_itr_ioctx->nobjects_end();
+  for (auto itr = start_itr; itr != end_itr; ++itr) {
+    string oid = itr->get_oid();
+    ceph_assert(oid.starts_with(HASH_PREFIX) || oid.starts_with("rc"));
+
+    if (verbose ) {
+      cout << __func__ << "::first oid = " << oid << std::endl;
+    }
+
+    return true;
+  }
+
+  return 0;
+}
+
+//---------------------------------------------------------------------------
+static int resume_operation(const dedup_params_t &params)
+{
+  Rados rados;
+  IoCtx itr_ioctx, obj_ioctx;
+  if (setup_rados_objects(&rados, &itr_ioctx, &obj_ioctx, params.pool_name.c_str()) != 0) {
+    return -1;
+  }
+
+  // check if we have any work done from before
+  if (namespace_exists(&itr_ioctx, RAW_FP_NSPACE, params.verbose) == false) {
+    // nothing was done, start from the beginning
+    run_full_scan(params);
+    return 0;
+  }
+
+
+  // check if the collect-fingerprints step was completed
+  if (namespace_exists(&itr_ioctx, REDUCED_FP_NSPACE, params.verbose) == false) {
+    uint64_t total_bytes_before = 0;
+    uint64_t reduced_bytes = 0;
+    recover_collect_fingerprints_step(&itr_ioctx, &obj_ioctx, &total_bytes_before, params);
+    reduce_fingerprints(&reduced_bytes, params);
+    merge_reduced_fingerprints(params);
+    return 0;
+  }
+
+  return recover_reduce_fingerprints_step(&itr_ioctx, &obj_ioctx, params);
+}
+
+//===========================================================================
 //---------------------------------------------------------------------------
 static int clean_namespace(IoCtx *p_itr_ioctx,
 			   IoCtx *p_obj_ioctx,
@@ -1000,7 +1351,7 @@ static int clean_namespace(IoCtx *p_itr_ioctx,
   auto end_itr   = p_itr_ioctx->nobjects_end();
   for (auto itr = start_itr; itr != end_itr; ++itr) {
     string oid = itr->get_oid();
-    ceph_assert(oid.starts_with("hash") || oid.starts_with("rc"));
+    ceph_assert(oid.starts_with(HASH_PREFIX) || oid.starts_with("rc"));
 
     if (verbose ) {
       cout << "removing " << oid << std::endl;
@@ -1030,6 +1381,28 @@ static int clean_intermediate_objs(const string &pool_name, bool verbose)
     return -1;
   }
   return clean_namespace(&itr_ioctx, &obj_ioctx, REDUCED_FP_NSPACE, verbose);
+}
+
+//---------------------------------------------------------------------------
+static void run_full_scan(const dedup_params_t &params)
+{
+  uint64_t total_bytes_before = 0;
+  uint64_t reduced_bytes = 0;
+
+  clean_intermediate_objs(params.pool_name, params.verbose);
+  collect_fingerprints(&total_bytes_before, params);
+  reduce_fingerprints(&reduced_bytes, params);
+  merge_reduced_fingerprints(params);
+  uint64_t bytes_after_dedup = total_bytes_before-reduced_bytes;
+  if (bytes_after_dedup) {
+    cout << "size before dedup = " << (double)total_bytes_before / (1024*1024)
+	 << " MiB, size after dedup = "
+	 << (double)bytes_after_dedup / (1024*1024)  << " MiB" << std::endl;
+    std::cout << "Unique Count = " << bytes_after_dedup/params.chunk_size
+	      << ", Dup Count = " << reduced_bytes/params.chunk_size << std::endl;
+    cout << "dedup ratio = "
+	 << ((double)total_bytes_before/(total_bytes_before-reduced_bytes)) << std::endl;
+  }
 }
 
 //================================================================================
@@ -1070,7 +1443,7 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 	cout << "Chunking algorithm was set to Content Defined Chunking(CDC)" << std::endl;
       }
       else {
-	cerr << "** illegal chunking algorithm **" << std::endl;
+	cerr << "** illegal chunking algorithm [" << val << "]**" << std::endl;
 	usage_exit();
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--shards-count", (char*)NULL)) {
@@ -1131,8 +1504,6 @@ static void process_arguments(vector<const char*> &args, map<string, string> &op
 //---------------------------------------------------------------------------
 int main(int argc, char **argv)
 {
-  uint64_t total_bytes_before = 0;
-  uint64_t reduced_bytes = 0;
   map<string, string> opts;
   vector<const char*> args = argv_to_vec(argc, argv);
   if (ceph_argparse_need_usage(args)) {
@@ -1150,31 +1521,25 @@ int main(int argc, char **argv)
   else if (strncmp(args[0], "clean", strlen("clean")) == 0) {
     clean_intermediate_objs(params.pool_name, params.verbose);
   }
+  else if (strncmp(args[0], "resume", strlen("resume")) == 0) {
+    resume_operation(params);
+  }
   else if (strncmp(args[0], "all", strlen("all")) == 0) {
-    clean_intermediate_objs(params.pool_name, params.verbose);
-    collect_fingerprints(params, &total_bytes_before);
-    reduce_fingerprints(params, &reduced_bytes);
-    merge_reduced_fingerprints(params);
-    uint64_t bytes_after_dedup = total_bytes_before-reduced_bytes;
-    if (bytes_after_dedup) {
-      cout << "size before dedup = " << (double)total_bytes_before / (1024*1024)
-	   << " MiB, size after dedup = "
-	   << (double)bytes_after_dedup / (1024*1024)  << " MiB" << std::endl;
-      std::cout << "Unique Count = " << bytes_after_dedup/params.chunk_size
-		<< ", Dup Count = " << reduced_bytes/params.chunk_size << std::endl;
-      cout << "dedup ratio = "
-	   << ((double)total_bytes_before/(total_bytes_before-reduced_bytes)) << std::endl;
-    }
+    run_full_scan(params);
   }
   else if (strncmp(args[0], "merge-reduce", strlen("merge-reduce")) == 0) {
-    reduce_fingerprints(params, &reduced_bytes);
+    uint64_t reduced_bytes = 0;
+    reduce_fingerprints(&reduced_bytes, params);
     merge_reduced_fingerprints(params);
   }
   else if (strncmp(args[0], "collect", strlen("collect")) == 0) {
-    collect_fingerprints(params, &total_bytes_before);
+    uint64_t total_bytes_before = 0;
+    clean_intermediate_objs(params.pool_name, params.verbose);
+    collect_fingerprints(&total_bytes_before, params);
   }
   else if (strncmp(args[0], "reduce", strlen("reduce")) == 0) {
-    reduce_fingerprints(params, &reduced_bytes);
+    uint64_t reduced_bytes = 0;
+    reduce_fingerprints(&reduced_bytes, params);
   }
   else if (strncmp(args[0], "merge", strlen("merge")) == 0) {
     merge_reduced_fingerprints(params);
