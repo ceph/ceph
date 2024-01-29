@@ -2,3 +2,4 @@
 asyncssh==2.9
 kubernetes==11.0.0
 urllib3==1.26.15
+pytest==7.4.4
