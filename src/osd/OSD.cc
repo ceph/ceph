@@ -3133,6 +3133,19 @@ will start to track new ops received afterwards.";
     scrub_purged_snaps();
   }
 
+  else if (prefix == "reset_purged_snaps_last") {
+    lock_guard l(osd_lock);
+    superblock.purged_snaps_last = 0;
+    ObjectStore::Transaction t;
+    dout(10) << __func__ << " updating superblock" << dendl;
+    write_superblock(cct, superblock, t);
+    ret = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+    if (ret < 0) {
+      ss << "Error writing superblock: " << cpp_strerror(ret);
+      goto out;
+    }
+  }
+
   else if (prefix == "dump_osd_network") {
     lock_guard l(osd_lock);
     int64_t value = 0;
@@ -4310,6 +4323,11 @@ void OSD::final_init()
     "scrub_purged_snaps",
     asok_hook,
     "Scrub purged_snaps vs snapmapper index");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "reset_purged_snaps_last",
+    asok_hook,
+    "Reset the superblock's purged_snaps_last");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
     "scrubdebug "						\
