@@ -4,10 +4,12 @@
       <cd-alert-panel   *ngIf="!rgwModuleStatus"
                         type="info"
                         spacingClass="mb-3"
+                        class="d-flex align-items-center"
                         i18n>In order to access the import/export feature, the rgw module must be enabled
-        <a class="text-decoration-underline"
-           (click)="enableRgwModule()">
-           Enable the Object Gateway Module</a>
+
+        <button class="btn btn-light mx-2"
+                type="button"
+                (click)="enableRgwModule()">Enable</button>
       </cd-alert-panel>
       <cd-alert-panel   *ngIf="restartGatewayMessage"
                         type="warning"
