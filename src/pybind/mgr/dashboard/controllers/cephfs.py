@@ -134,7 +134,7 @@ class CephFS(RESTController):
         if flag not in ('True', 'False'):
             raise DashboardException(msg='suppress_client_ls_errors value '
                                          'needs to be either True or False '
-                                         f'but provided {flag}',
+                                         f'but provided "{flag}"',
                                      component='cephfs')
 
         fs_id = self.fs_id_to_int(fs_id)
