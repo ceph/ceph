@@ -11921,6 +11921,7 @@ int BlueStore::_generate_read_result_bl(
       ceph_assert(p != compressed_blob_bls.end());
       bufferlist& compressed_bl = *p++;
       uint32_t offset = r2r.front().regs.front().logical_offset;
+      uint32_t blob_offset = r2r.front().regs.front().blob_xoffset;
       uint32_t length = r2r.front().regs.front().length;
       if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl, offset) < 0) {
         *csum_error = true;
@@ -11932,11 +11933,8 @@ int BlueStore::_generate_read_result_bl(
         return r;
       if (buffered) {
         bufferlist region_buffer;
-        // todo bad offset
-        region_buffer.substr_of(raw_bl, offset, length);
-        // need offset before padding
-        o->bc.did_read(o->c->cache, offset,
-                       length, std::move(region_buffer));
+        region_buffer.substr_of(raw_bl, blob_offset, length);
+        o->bc.did_read(o->c->cache, offset, region_buffer.length(), std::move(region_buffer));
       }
       for (auto& req : r2r) {
         for (auto& r : req.regs) {
