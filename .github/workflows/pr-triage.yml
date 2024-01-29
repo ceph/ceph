@@ -8,8 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Assign labels based on modified files
-        # https://github.com/marketplace/actions/labeler?version=v4.0.2
-        uses: actions/labeler@5c7539237e04b714afd8ad9b4aed733815b9fab4
+        # https://github.com/marketplace/actions/labeler?version=v5.0.0
+        uses: actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9
         with:
           sync-labels: ''
           repo-token: "${{ secrets.GITHUB_TOKEN }}"
