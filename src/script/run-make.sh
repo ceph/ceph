@@ -56,7 +56,7 @@ function prepare() {
 
     if test -f ./install-deps.sh ; then
         ci_debug "Running install-deps.sh"
-        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang"
+        INSTALL_EXTRA_PACKAGES="ccache git $which_pkg clang lvm2"
         $DRY_RUN source ./install-deps.sh || return 1
         trap clean_up_after_myself EXIT
     fi
