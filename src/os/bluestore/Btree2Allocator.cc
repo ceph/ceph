@@ -24,13 +24,15 @@ Btree2Allocator::Btree2Allocator(CephContext* _cct,
   bool with_cache,
   std::string_view name) :
     Allocator(name, device_size, block_size),
+    myTraits(RANGE_SIZE_BUCKET_COUNT),
     cct(_cct),
     range_count_cap(max_mem / sizeof(range_seg_t))
 {
   set_weight_factor(_rweight_factor);
   if (with_cache) {
-    cache = new ChunkCache();
+    cache = new OpportunisticExtentCache();
   }
+  range_size_set.resize(myTraits.num_buckets);
 }
 
 void Btree2Allocator::init_add_free(uint64_t offset, uint64_t length)
@@ -195,7 +197,7 @@ int64_t Btree2Allocator::_allocate(
         continue;
       }
     }
-    size_t bucket0 = MyTraits::_get_size_bucket(want_now);
+    size_t bucket0 = myTraits._get_p2_size_bucket(want_now);
     int64_t r = __allocate(bucket0, want_now,
       unit, extents);
     if (r < 0) {
@@ -329,7 +331,7 @@ int64_t Btree2Allocator::__allocate(
   auto rs_p = _pick_block(0, rs_tree, size);
 
   if (rs_p == rs_tree->end()) {
-    auto bucket_center = MyTraits::_get_size_bucket(weight_center);
+    auto bucket_center = myTraits._get_p2_size_bucket(weight_center);
 
     // requested size is to the left of weight center
     // hence we try to search up toward it first
@@ -356,7 +358,7 @@ int64_t Btree2Allocator::__allocate(
     bucket = dir < 0 ? bucket0 : bucket_center + 1;
     do {
       // try spilled over or different direction if bucket index is out of bounds
-      if (bucket >= MyTraits::num_size_buckets) {
+      if (bucket >= myTraits.num_buckets) {
         if (dir < 0) {
           // reached the bottom while going downhill,
           // time to try spilled over extents
@@ -376,7 +378,7 @@ int64_t Btree2Allocator::__allocate(
         dir = -dir;
         bucket = dir < 0 ? bucket0 : bucket_center + 1; // See above on new bucket
                                                         // selection rationales
-        ceph_assert(bucket < MyTraits::num_size_buckets); // this should never happen
+        ceph_assert(bucket < myTraits.num_buckets); // this should never happen
         if (dir == dir0 ) {
           // stop if both directions already attempted
           return -ENOSPC;
@@ -465,7 +467,7 @@ void Btree2Allocator::_remove_from_tree(
   uint64_t end)
 {
   range_seg_t rs(rt_p->first, rt_p->second);
-  size_t bucket = MyTraits::_get_size_bucket(rs.length());
+  size_t bucket = myTraits._get_p2_size_bucket(rs.length());
   range_size_tree_t* rs_tree = &range_size_set[bucket];
   auto rs_p = rs_tree->find(rs);
   ceph_assert(rs_p != rs_tree->end());
@@ -569,7 +571,7 @@ bool Btree2Allocator::__try_insert_range(
 void Btree2Allocator::_range_size_tree_add(const range_seg_t& rs) {
   auto l = rs.length();
   ceph_assert(rs.end > rs.start);
-  size_t bucket = MyTraits::_get_size_bucket(l);
+  size_t bucket = myTraits._get_p2_size_bucket(l);
   range_size_set[bucket].insert(rs);
   num_free += l;
 
@@ -582,7 +584,7 @@ void Btree2Allocator::_range_size_tree_add(const range_seg_t& rs) {
 }
 void Btree2Allocator::_range_size_tree_rm(const range_seg_t& rs)
 {
-  size_t bucket = MyTraits::_get_size_bucket(rs.length());
+  size_t bucket = myTraits._get_p2_size_bucket(rs.length());
   range_size_tree_t* rs_tree = &range_size_set[bucket];
   ceph_assert(rs_tree->size() > 0);
   auto rs_p = rs_tree->find(rs);
