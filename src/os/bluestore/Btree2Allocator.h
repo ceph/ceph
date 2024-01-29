@@ -14,146 +14,23 @@
 #include "include/mempool.h"
 #include "common/ceph_mutex.h"
 
-template <size_t BASE_BITS, size_t NUM_BUCKETS, size_t FACTOR = 1>
-struct SizeBucketCollectionTraits {
-  static const size_t base_bits = BASE_BITS;
-  static const size_t base = 1ull << base_bits;
-  static const size_t size_factor = FACTOR; // single bucket size range to be
-                                            // determined as [n, n * 2 * FACTOR)
-  static const size_t num_size_buckets = NUM_BUCKETS;
-  static const size_t bucket_max =
-    base << ((size_factor * (num_size_buckets - 2)));
-
-  static inline size_t _get_size_bucket(uint64_t len) {
-    size_t idx;
-    ceph_assert(size_factor);
-    if (len <= base) {
-      idx = 0;
-    } else if (len > bucket_max) {
-      idx = num_size_buckets - 1;
-    } else {
-      size_t most_bit = cbits(uint64_t(len - 1)) - 1;
-      idx = 1 + ((most_bit - base_bits) / size_factor);
-    }
-    ceph_assert(idx < num_size_buckets);
-    return idx;
-  }
-};
-
-class ChunkCache {
-public:
-  class LocklessBuf {
-    std::atomic<size_t> ref = 0;
-    size_t count = 0;
-    std::vector<uint32_t> data;
-  public:
-    void init(size_t size) {
-      ceph_assert(data.size() == 0);
-      data.resize(size);
-    }
-    bool try_put(uint32_t& v) {
-      bool done = ++ref == 1 && count < data.size();
-      if (done) {
-        data[count++] = v;
-      }
-      --ref;
-      return done;
-    }
-    bool try_get(uint32_t& v) {
-      bool done = ++ref == 1 && count > 0;
-      if (done) {
-        v = data[--count];
-      }
-      --ref;
-      return done;
-    }
-    void foreach(std::function<void(uint32_t)> notify) {
-      for (size_t i = 0; i < count; i++) {
-        notify(data[i]);
-      }
-    }
-  };
-
-  static const size_t base_bits = 12; // 4K
-  static const size_t base = 1ull << base_bits;
-  static const size_t num_buckets = 16; // [4K, 8K, 12K, ... 64K] - 16 buckets total
-  static const size_t num_chunks = 16;
-  ChunkCache() {
-    for (size_t i = 0; i < buckets.size(); i++) {
-      buckets[i].init(num_chunks);
-    }
-  }
-  bool try_put(uint64_t offset, uint64_t len) {
-    if (!lock.try_lock_shared()) {
-      return false;
-    }
-    bool ret = false;
-    ceph_assert(p2aligned(offset, base));
-    ceph_assert(p2aligned(len, base));
-    // permit caching chunks with offsets fitting (without LSBs)
-    // into 32 - bit value
-    offset = offset >> base_bits;
-    size_t idx = len >> base_bits;
-    if (offset <= std::numeric_limits<uint32_t>::max() &&
-      idx < buckets.size()) {
-      uint32_t o = offset;
-      ret = buckets[idx].try_put(o);
-    }
-    lock.unlock_shared();
-    return ret;
-  }
-  bool try_get(uint64_t* offset, uint64_t len) {
-    if (!lock.try_lock_shared()) {
-      return false;
-    }
-    bool ret = false;
-    ceph_assert(offset);
-    ceph_assert(p2aligned(len, base));
-    size_t idx = len >> base_bits;
-    if (idx < buckets.size()) {
-      uint32_t o = 0;
-      ret = buckets[idx].try_get(o);
-      if (ret) {
-        *offset = uint64_t(o) << base_bits;
-        ++hits;
-      }
-    }
-    lock.unlock_shared();
-    return ret;
-  }
-  size_t get_hit_count() const {
-    return hits.load();
-  }
-  void foreach(std::function<void(uint64_t offset, uint64_t length)> notify) {
-    std::unique_lock _lock(lock);
-    for (uint64_t i = 0; i < buckets.size(); i++) {
-      auto cb = [&](uint32_t o) {
-        notify(uint64_t(o) << base_bits, i << base_bits);
-      };
-      buckets[i].foreach(cb);
-    }
-  }
-private:
-  std::array<LocklessBuf, num_buckets> buckets;
-  std::atomic<size_t> hits = 0;
-  ceph::shared_mutex lock{
-    ceph::make_shared_mutex(std::string(), false, false, false)
-  };
-};
-
 /*
  * class Btree2Allocator
  *
  *
  */
 class Btree2Allocator : public Allocator {
-  typedef SizeBucketCollectionTraits<12, 14> MyTraits;
+  enum {
+    RANGE_SIZE_BUCKET_COUNT = 14,
+  };
+  const ExtentCollectionTraits myTraits;
+
 public:
   // Making public to share with mempools
   struct range_seg_t {
     MEMPOOL_CLASS_HELPERS();  ///< memory monitoring
-    uint64_t start;   ///< starting offset of this segment
-    uint64_t end;	    ///< ending offset (non-inclusive)
+    uint64_t start;           ///< starting offset of this segment
+    uint64_t end;	      ///< ending offset (non-inclusive)
 
     // Tree is sorted by offset, greater offsets at the end of the tree.
     struct before_t {
@@ -252,7 +129,7 @@ public:
 
 private:
   CephContext* cct = nullptr;
-  ChunkCache* cache = nullptr;
+  Allocator::OpportunisticExtentCache* cache = nullptr;
   std::mutex lock;
 
   template<class T>
@@ -276,8 +153,7 @@ private:
       range_seg_t,
       range_seg_t::shorter_t,
       pool_allocator<range_seg_t>>;
-  std::array<
-    range_size_tree_t, MyTraits::num_size_buckets> range_size_set;
+  std::vector<range_size_tree_t> range_size_set;
 
   std::atomic<uint64_t> num_free = 0;     ///< total bytes in freelist
 
