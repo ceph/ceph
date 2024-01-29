@@ -6472,8 +6472,11 @@ void BlueStore::_close_path()
   path_fd = -1;
 }
 
-int BlueStore::_write_bdev_label(CephContext *cct,
-				 const string &path, bluestore_bdev_label_t label)
+int BlueStore::_write_bdev_label(
+  CephContext *cct,
+  const string &path,
+  bluestore_bdev_label_t label,
+  std::vector<uint64_t> locations)
 {
   dout(10) << __func__ << " path " << path << " label " << label << dendl;
   bufferlist bl;
@@ -6493,26 +6496,43 @@ int BlueStore::_write_bdev_label(CephContext *cct,
     return fd;
   }
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
-  int r = bl.write_fd(fd);
-  if (r < 0) {
-    derr << __func__ << " failed to write to " << path
-	 << ": " << cpp_strerror(r) << dendl;
-    goto out;
+  int r = 0;
+  if (std::find(locations.begin(), locations.end(), BDEV_LABEL_POSITION) ==
+      locations.end()) {
+    locations.push_back(BDEV_LABEL_POSITION);
+  }
+  for (uint64_t position : locations) {
+    r = bl.write_fd(fd, position);
+    if (r < 0) {
+      derr << __func__ << " failed to write to " << path
+        << ": " << cpp_strerror(r) << dendl;
+      goto out;
+    }
   }
   r = ::fsync(fd);
   if (r < 0) {
     derr << __func__ << " failed to fsync " << path
-	 << ": " << cpp_strerror(r) << dendl;
+      << ": " << cpp_strerror(r) << dendl;
   }
 out:
   VOID_TEMP_FAILURE_RETRY(::close(fd));
   return r;
 }
+/*
+  Reads bdev label at specific position.
 
-int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
-				bluestore_bdev_label_t *label)
+  Returns:
+  0 - label read successful
+  1 - position outside device
+  <0 - error
+*/
+int BlueStore::_read_bdev_label(
+  CephContext* cct,
+  const std::string &path,
+  bluestore_bdev_label_t *label,
+  uint64_t disk_position)
 {
-  dout(10) << __func__ << dendl;
+  dout(10) << __func__ << " position=0x" << std::hex << disk_position << std::dec << dendl;
   int fd = TEMP_FAILURE_RETRY(::open(path.c_str(), O_RDONLY|O_CLOEXEC));
   if (fd < 0) {
     fd = -errno;
@@ -6521,14 +6541,32 @@ int BlueStore::_read_bdev_label(CephContext* cct, const string &path,
     return fd;
   }
   bufferlist bl;
-  int r = bl.read_fd(fd, BDEV_LABEL_BLOCK_SIZE);
-  VOID_TEMP_FAILURE_RETRY(::close(fd));
+  unique_ptr<char> buf(new char[BDEV_LABEL_BLOCK_SIZE]);
+  struct stat st;
+  int r = ::fstat(fd, &st);
   if (r < 0) {
-    derr << __func__ << " failed to read from " << path
-	 << ": " << cpp_strerror(r) << dendl;
+    r = -errno;
+    derr << __func__ << " failed to fstat " << path << ": " << cpp_strerror(r) << dendl;
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
     return r;
   }
+  if (st.st_size <= int64_t(disk_position + BDEV_LABEL_BLOCK_SIZE)) {
+    dout(10) << __func__ << " position=0x" << std::hex << disk_position
+      << " dev size=0x" << st.st_size << std::dec << dendl;
+    return 1;
+  }
 
+  r = safe_pread_exact(fd, buf.get(), BDEV_LABEL_BLOCK_SIZE, disk_position);
+  if (r < 0) {
+    derr << __func__ << " failed to read from " << path
+         << " at 0x" << std::hex << disk_position << std::dec
+         <<": " << cpp_strerror(r) << dendl;
+  }
+  VOID_TEMP_FAILURE_RETRY(::close(fd));
+  if (r < 0) {
+    return r;
+  }
+  bl.append(buf.get(), BDEV_LABEL_BLOCK_SIZE);
   uint32_t crc, expected_crc;
   auto p = bl.cbegin();
   try {
