@@ -183,6 +183,12 @@ class HealthTest(DashboardTestCase):
                     'num_osds': int,
                     'num_per_pool_osds': int,
                     'num_per_pool_omap_osds': int
+                }),
+                'meta': JObj({
+                    'stored': int,
+                    'total_used': int,
+                    'total_pgmeta': int,
+                    'other_omap': int
                 })
             }),
             'fs_map': JObj({

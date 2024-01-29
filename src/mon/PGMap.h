@@ -192,6 +192,7 @@ public:
 				   bool per_pool,
 				   bool per_pool_omap,
 				   const pg_pool_t *pool);
+  void dump_meta_pool_stats(std::stringstream* ss, ceph::Formatter* f) const;
 
   size_t get_num_pg_by_osd(int osd) const {
     auto p = num_pg_by_osd.find(osd);
