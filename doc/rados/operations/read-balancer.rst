@@ -17,9 +17,50 @@ you may want to try improving your read performance with the read balancer.
 Online Optimization
 ===================
 
-At present, there is no online option for the read balancer. However, we plan to add
-the read balancer as an option to the :ref:`balancer` in the next Ceph version
-so it can be enabled to run automatically in the background like the upmap balancer.
+Enabling
+--------
+
+To enable automatic read balancing, you must turn on the *balancer module*
+(enabled by default in new clusters) and set the mode to ``read`` or ``upmap-read``:
+
+.. prompt:: bash $
+
+   ceph balancer on
+   ceph balancer mode <read|upmap-read>
+
+Both ``read`` and ``upmap-read`` mode make use of ``pg-upmap-primary``. In order
+to use ``pg-upmap-primary``, the cluster cannot have any pre-Reef clients.
+
+If you want to use a different balancer or if you want to make your
+own custom ``pg-upmap-primary`` entries, you might want to turn off the balancer in
+order to avoid conflict:
+
+.. prompt:: bash $
+
+   ceph balancer off
+
+To allow use of the new feature on an existing cluster, you must restrict the
+cluster to supporting only Reef (and newer) clients.  To do so, run the
+following command:
+
+.. prompt:: bash $
+
+   ceph osd set-require-min-compat-client reef
+
+This command will fail if any pre-Reef clients or daemons are connected to
+the monitors. To see which client versions are in use, run the following
+command:
+
+.. prompt:: bash $
+
+   ceph features
+
+Balancer Module
+---------------
+
+The `balancer` module for ``ceph-mgr`` will automatically balance the number of
+primary PGs per OSD if set to ``read`` or ``upmap-read`` mode. See :ref:`balancer`
+for more information.
 
 Offline Optimization
 ====================

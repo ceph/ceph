@@ -113,6 +113,10 @@ CephFS: Disallow delegating preallocated inode ranges to clients. Config
 * RBD: The ``try-netlink`` mapping option for rbd-nbd has become the default
   and is now deprecated. If the NBD netlink interface is not supported by the
   kernel, then the mapping is retried using the legacy ioctl interface.
+* RADOS: Read balancing may now be managed automatically via the balancer
+  manager module. Users may choose between two new modes: ``upmap-read``, which
+  offers upmap and read optimization simultaneously, or ``read``, which may be used
+  to only optimize reads. For more detailed information see https://docs.ceph.com/en/latest/rados/operations/read-balancer/#online-optimization.
 
 >=18.0.0
 
