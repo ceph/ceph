@@ -448,6 +448,73 @@ class BucketCleanIndexCollectCR : public RGWShardCollectCR {
   }
 };
 
+struct StatusShards {
+  uint64_t generation = 0;
+  std::vector<rgw_bucket_shard_sync_info> shards;
+};
+
+class RGWReadRemoteStatusShardsCR : public RGWCoroutine {
+  const DoutPrefixProvider *dpp;
+  rgw::sal::RadosStore* const store;
+  CephContext *cct;
+  RGWHTTPManager *http;
+  std::string bucket_instance;
+  const rgw_zone_id zid;
+  const std::string& zone_id;
+  StatusShards *p;
+
+public:
+  RGWReadRemoteStatusShardsCR(const DoutPrefixProvider *dpp,
+				    rgw::sal::RadosStore* const store,
+            CephContext *cct,
+            RGWHTTPManager *http,
+				    std::string bucket_instance,
+            const rgw_zone_id zid,
+            const std::string& zone_id,
+            StatusShards *p)
+    : RGWCoroutine(cct), dpp(dpp), store(store),
+      cct(cct), http(http), bucket_instance(bucket_instance),
+      zid(zid), zone_id(zone_id), p(p) {}
+
+  int operate(const DoutPrefixProvider *dpp) override {
+    reenter(this) {
+      yield {
+        auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
+        auto ziter = zone_conn_map.find(zid);
+        if (ziter == zone_conn_map.end()) {
+          ldpp_dout(dpp, 0) << "WARNING: no connection to zone " << zid << ", can't trim bucket: " << bucket_instance << dendl;
+          return set_cr_error(-ECANCELED);
+        }
+
+        // query data sync status from each sync peer
+        rgw_http_param_pair params[] = {
+          { "type", "bucket-index" },
+          { "status", nullptr },
+          { "options", "merge" },
+          { "bucket", bucket_instance.c_str() }, /* equal to source-bucket when `options==merge` and source-bucket
+                                                    param is not provided */
+          { "source-zone", zone_id.c_str() },
+          { "version", "2" },
+          { nullptr, nullptr }
+        };
+
+        call(new RGWReadRESTResourceCR<StatusShards>(cct, ziter->second, http, "/admin/log/", params, p));
+      }
+
+      if (retcode < 0 && retcode != -ENOENT) {
+        return set_cr_error(retcode);
+      } else if (retcode == -ENOENT) {
+        p->generation = UINT64_MAX;
+        ldpp_dout(dpp, 10) << "INFO: could not read shard status for bucket:" << bucket_instance
+        << " from zone: " << zid.id << dendl;
+      }
+
+      return set_cr_done();
+    }
+    return 0;
+  }
+};
+
 
 /// trim the bilog of all of the given bucket instance's shards
 class BucketTrimInstanceCR : public RGWCoroutine {
@@ -464,12 +531,6 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   const RGWBucketInfo *pbucket_info; //< pointer to bucket instance info to locate bucket indices
   int child_ret = 0;
   const DoutPrefixProvider *dpp;
-public:
-  struct StatusShards {
-    uint64_t generation = 0;
-    std::vector<rgw_bucket_shard_sync_info> shards;
-  };
-private:
   std::vector<StatusShards> peer_status; //< sync status for each peer
   std::vector<std::string> min_markers; //< min marker per shard
 
@@ -497,6 +558,13 @@ private:
       min_generation = m->generation;
     }
 
+    if (min_generation == UINT64_MAX) {
+      // if all peers have deleted this bucket, purge the rest of our log generations
+      totrim.gen = UINT64_MAX;
+      return 0;
+    }
+
+    ldpp_dout(dpp, 10) << "min_generation is " << min_generation << dendl;
     auto& logs = pbucket_info->layout.logs;
     auto log = std::find_if(logs.begin(), logs.end(),
 			    rgw::matches_gen(min_generation));
@@ -557,8 +625,8 @@ namespace {
 int take_min_status(
   CephContext *cct,
   const uint64_t min_generation,
-  std::vector<BucketTrimInstanceCR::StatusShards>::const_iterator first,
-  std::vector<BucketTrimInstanceCR::StatusShards>::const_iterator last,
+  std::vector<StatusShards>::const_iterator first,
+  std::vector<StatusShards>::const_iterator last,
   std::vector<std::string> *status, const DoutPrefixProvider *dpp) {
   for (auto peer = first; peer != last; ++peer) {
     // Peers on later generations don't get a say in the matter
@@ -587,8 +655,8 @@ int take_min_status(
 }
 
 template<>
-inline int parse_decode_json<BucketTrimInstanceCR::StatusShards>(
-  BucketTrimInstanceCR::StatusShards& s, bufferlist& bl)
+inline int parse_decode_json<StatusShards>(
+  StatusShards& s, bufferlist& bl)
 {
   JSONParser p;
   if (!p.parse(bl.c_str(), bl.length())) {
@@ -663,31 +731,9 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
 
       peer_status.resize(zids.size());
 
-      auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
-
       auto p = peer_status.begin();
       for (auto& zid : zids) {
-        // query data sync status from each sync peer
-        rgw_http_param_pair params[] = {
-          { "type", "bucket-index" },
-          { "status", nullptr },
-          { "options", "merge" },
-          { "bucket", bucket_instance.c_str() }, /* equal to source-bucket when `options==merge` and source-bucket
-                                                    param is not provided */
-          { "source-zone", zone_id.c_str() },
-          { "version", "2" },
-          { nullptr, nullptr }
-        };
-
-        auto ziter = zone_conn_map.find(zid);
-        if (ziter == zone_conn_map.end()) {
-          ldpp_dout(dpp, 0) << "WARNING: no connection to zone " << zid << ", can't trim bucket: " << bucket << dendl;
-          return set_cr_error(-ECANCELED);
-        }
-
-	using StatusCR = RGWReadRESTResourceCR<StatusShards>;
-        spawn(new StatusCR(cct, ziter->second, http, "/admin/log/", params, &*p),
-              false);
+        spawn(new RGWReadRemoteStatusShardsCR(dpp, store, cct, http, bucket_instance, zid, zone_id, &*p), false);
         ++p;
       }
     }
@@ -794,7 +840,6 @@ int BucketTrimInstanceCR::operate(const DoutPrefixProvider *dpp)
       // there are no peers syncing from us
       min_markers.assign(std::max(1u, rgw::num_shards(totrim.layout.in_index)),
 			 RGWSyncLogTrimCR::max_marker);
-
 
       retcode = take_min_status(cct, totrim.gen, peer_status.cbegin(),
 				peer_status.cend(), &min_markers, dpp);
