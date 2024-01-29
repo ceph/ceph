@@ -15,7 +15,7 @@ options:
   type: str
   level: advanced
   desc: Host ip address where exporter is deployed
-  default: 0.0.0.0
+  default: ::
   services:
   - ceph-exporter
 - name: exporter_http_port
