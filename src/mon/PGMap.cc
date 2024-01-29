@@ -728,6 +728,9 @@ void PGMapDigest::dump_pool_stats_full(
   ceph::Formatter *f,
   bool verbose) const
 {
+  if (verbose) {
+    dump_meta_pool_stats(ss, f);
+  }
   TextTable tbl;
 
   if (f) {
@@ -810,6 +813,39 @@ void PGMapDigest::dump_pool_stats_full(
     ceph_assert(ss != nullptr);
     *ss << "--- POOLS ---\n";
     *ss << tbl;
+  }
+}
+
+void PGMapDigest::dump_meta_pool_stats(
+  stringstream* ss,
+  ceph::Formatter* f) const
+{
+  const pool_stat_t* meta_pool_stats = nullptr;
+  auto it = pg_pool_sum.find(-1);
+  if (it != pg_pool_sum.end()) {
+    meta_pool_stats = &(it->second);
+    if (f) {
+      f->open_object_section("meta");
+      f->dump_int("stored", meta_pool_stats->store_stats.data_stored);
+      f->dump_int("total_used", meta_pool_stats->store_stats.allocated);
+      f->dump_int("total_pgmeta", meta_pool_stats->store_stats.internal_metadata);
+      f->dump_int("other_omap", meta_pool_stats->store_stats.omap_allocated);
+      f->close_section();
+    } else {
+      TextTable tbl_meta;
+      tbl_meta.define_column("STORED", TextTable::RIGHT, TextTable::RIGHT);
+      tbl_meta.define_column("USED", TextTable::RIGHT, TextTable::RIGHT);
+      tbl_meta.define_column("PGMETA", TextTable::RIGHT, TextTable::RIGHT);
+      tbl_meta.define_column("OMAP", TextTable::RIGHT, TextTable::RIGHT);
+      *ss << "--- META ---\n";
+      tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.data_stored));
+      tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.allocated));
+      tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.internal_metadata));
+      tbl_meta << stringify(byte_u_t(meta_pool_stats->store_stats.omap_allocated));
+      tbl_meta << TextTable::endrow;
+      *ss << tbl_meta;
+      *ss << " \n";
+    }
   }
 }
 
@@ -1150,7 +1186,7 @@ void PGMap::apply_incremental(CephContext *cct, const Incremental& inc)
 
     auto pool_statfs_iter =
       pool_statfs.find(std::make_pair(update_pool, update_osd));
-    if (pg_pool_sum.count(update_pool)) {
+    if (pg_pool_sum.count(update_pool) || update_pool == -1) {
       pool_stat_t &pool_sum_ref = pg_pool_sum[update_pool];
       if (pool_statfs_iter == pool_statfs.end()) {
         pool_statfs.emplace(std::make_pair(update_pool, update_osd), statfs_inc);

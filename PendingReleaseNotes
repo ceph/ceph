@@ -40,6 +40,25 @@
 * RGW: GetObject and HeadObject requests now return a x-rgw-replicated-at
   header for replicated objects. This timestamp can be compared against the
   Last-Modified header to determine how long the object took to replicate.
+* ceph df detail output has got META section in plain format:
+  * new column 'STORED' - amount of metadata the cluster keeps at main space
+    (as meta objects: osdmaps, snaptrim data, etc)
+  * new column 'USED' - total space allocated for metadata in STORED
+    column above.
+  * new column 'PGMETA' - amount of PG-related metadata the cluster keeps
+    in DB (PG logs and similar)
+  * new column 'OMAP' - amount of the remaining internal metadata the cluster
+    keeps in DB as OMAP records for meta objects.
+* ceph df detail output has got 'meta' object with the following fields
+  in json format:
+  * 'stored' field  - amount of metadata the cluster keeps at main space
+    (as meta objects: osdmaps, snaptrim data, etc)
+  * 'total_used' field - total space allocated for metadata in STORED
+    column above.
+  * 'total_pgmeta' field - amount of PG-related metadata the cluster keeps
+    in DB (PG logs and similar)
+  * 'other_omap' - amount of the remaining internal metadata the cluster
+    keeps in DB as OMAP records for meta objects.
 * The cephfs-shell utility is now packaged for RHEL 9 / CentOS 9 as required
   python dependencies are now available in EPEL9.
 * RGW: S3 multipart uploads using Server-Side Encryption now replicate correctly in
