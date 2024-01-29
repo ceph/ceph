@@ -376,7 +376,7 @@ public:
       return opref.template enter_stage<>(
 	opref.get_connection_pipeline().get_pg_mapping);
     }).then([this, &opref] {
-      return get_pg_to_shard_mapping().maybe_create_pg(opref.get_pgid());
+      return get_pg_to_shard_mapping().get_or_create_pg_mapping(opref.get_pgid());
     }).then_wrapped([this, &logger, op=std::move(op)](auto fut) mutable {
       if (unlikely(fut.failed())) {
         logger.error("{}: failed before with_pg", *op);
