@@ -265,6 +265,39 @@ public:
   }
 
   /**
+   * The synchronous version of request_reservation
+   * Used to handle requests from OSDs that do not support the async interface
+   * to scrub replica reservations, but still must count towards the max
+   * active reservations.
+   */
+  bool request_reservation_or_fail(
+      T item,		     ///< [in] reservation key
+      Context *on_reserved   ///< [in] callback to be called on reservation
+  )
+  {
+    std::lock_guard l(lock);
+    ceph_assert(!queue_pointers.count(item) && !in_progress.count(item));
+
+    if (in_progress.size() >= max_allowed) {
+      rdout(10) << fmt::format("{}: request: {} denied", __func__, item)
+		<< dendl;
+      return false;
+    }
+
+    const unsigned prio = UINT_MAX;
+    Reservation r(item, prio, on_reserved, nullptr);
+    queues[prio].push_back(r);
+    queue_pointers.insert(std::make_pair(
+	item, std::make_pair(prio, --(queues[prio]).end())));
+    do_queues();
+    // the new request should be in_progress now
+    ceph_assert(in_progress.count(item));
+    rdout(10) << fmt::format("{}: request: {} granted", __func__, item)
+	      << dendl;
+    return true;
+  }
+
+  /**
    * Cancels reservation
    *
    * Frees the reservation under key for use.
