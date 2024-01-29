@@ -10,10 +10,12 @@
 #include <boost/statechart/event_base.hpp>
 #include <boost/statechart/in_state_reaction.hpp>
 #include <boost/statechart/simple_state.hpp>
+#include <boost/statechart/shallow_history.hpp>
 #include <boost/statechart/state.hpp>
 #include <boost/statechart/state_machine.hpp>
 #include <boost/statechart/transition.hpp>
 
+#include "common/fmt_common.h"
 #include "common/version.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepScrub.h"
@@ -68,6 +70,10 @@ struct OpCarryingEvent : sc::event<EV> {
   {
     *out << fmt::format("{} (from: {})", EV::event_name, m_from);
   }
+  std::string fmt_print() const
+  {
+    return fmt::format("{} (from: {})", EV::event_name, m_from);
+  }
   std::string_view print() const { return EV::event_name; }
   ~OpCarryingEvent() { on_event_discard(EV::event_name); }
 };
@@ -96,6 +102,8 @@ OP_EV(ReplicaReserveReq);
 /// explicit release request from the Primary
 OP_EV(ReplicaRelease);
 
+/// the async-reserver granted our reservation request
+OP_EV(ReserverGranted);
 
 #define MEV(E)                                          \
   struct E : sc::event<E> {                             \
@@ -222,9 +230,19 @@ struct PrimaryActive;	   ///< base state for a Primary
 struct PrimaryIdle;	   ///< ready for a new scrub request
 struct Session;            ///< either reserving or actively scrubbing
 
-// the active states for a replica:
-struct ReplicaActive;    ///< the quiescent state for a replica
+// the Replica states:
+struct ReplicaActive;  ///< base state for when peered as a replica
+
+/// Inactive replica state. Handles reservation requests
+struct ReplicaIdle;
+// its sub-states:
+struct ReplicaUnreserved;      ///< not reserved by a primary
+struct ReplicaWaitingReservation;  ///< a reservation request was received from
+struct ReplicaReserved;	       ///< we are reserved by our primary
+
+// and when handling a single chunk scrub request op:
 struct ReplicaActiveOp;
+// its sub-states:
 struct ReplicaWaitUpdates;
 struct ReplicaBuildingMap;
 
@@ -710,42 +728,63 @@ struct WaitDigestUpdate : sc::state<WaitDigestUpdate, ActiveScrubbing>,
  *   - maintain the "I am reserved by a primary" state;
  *   - handles reservation requests
  *
- *     - ReplicaIdle - ready for a new scrub request
- *          * initial state of ReplicaActive
+ *  - ReplicaIdle - ready for a new scrub request
  *
- *     - ReplicaActiveOp - handling a single map request op
- *          * ReplicaWaitUpdates
- *  	    * ReplicaBuildingMap
+ *    - initial state of ReplicaActive
+ *    - No scrubbing is performed in this state, but reservation-related
+ *      events are handled.
+ *    - uses 'shallow history', so that when returning from ReplicaActiveOp, we
+ *       return to where we were - either reserved by our primary, or unreserved.
+ *
+ *    - sub-states:
+ *      * ReplicaUnreserved - not reserved by a primary. In this state we
+ *        are waiting for either a reservation request, or a chunk scrub op.
+ *
+ *      * ReplicaWaitingReservation - a reservation request was received from
+ *        our primary. We expect a ' go ahead' from the reserver, or a
+ *        cancellation command from the primary (or an interval change).
+ *
+ *      * ReplicaReserved - we are reserved by a primary.
+ *
+ *  - ReplicaActiveOp - handling a single map request op
+ *      * ReplicaWaitUpdates
+ *      * ReplicaBuildingMap
  */
 
 struct ReplicaIdle;
 
-struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
-			 NamedSimply {
+// sc::result cannot be copied or moved, so we need to postpone
+// the creation of such objects to the moment where they are
+// returned from the react() function.
+enum class ReplicaReactCode {
+  discard,
+  goto_waiting_reservation,
+  goto_replica_reserved
+};
+
+struct ReplicaActive : sc::state<
+			   ReplicaActive,
+			   ScrubMachine,
+			   mpl::list<sc::shallow_history<ReplicaIdle>>,
+			   sc::has_shallow_history>,
+		       NamedSimply {
   explicit ReplicaActive(my_context ctx);
   ~ReplicaActive();
 
   /// handle a reservation request from a primary
-  void on_reserve_req(const ReplicaReserveReq&);
+  ReplicaReactCode on_reserve_request(
+      const ReplicaReserveReq&,
+      bool async_request);
 
   /// handle a 'release' from a primary
-  void on_release(const ReplicaRelease&);
+  void on_release(const ReplicaRelease& ev);
 
-  void check_for_updates(const StartReplica&);
+  /// cancel the reserver request.
+  /// The 'failure' re 'log_failure' is logged if we are not reserved to
+  /// begin with.
+  void clear_reservation_by_remote_primary(bool log_failure);
 
-  using reactions = mpl::list<
-      // a reservation request from the primary
-      sc::in_state_reaction<
-	  ReplicaReserveReq,
-	  ReplicaActive,
-	  &ReplicaActive::on_reserve_req>,
-      // an explicit release request from the primary
-      sc::in_state_reaction<
-	  ReplicaRelease,
-	  ReplicaActive,
-	  &ReplicaActive::on_release>,
-      // when the interval ends - we may not be a replica anymore
-      sc::transition<IntervalChanged, NotActive>>;
+  using reactions = mpl::list<sc::transition<IntervalChanged, NotActive>>;
 
  private:
   bool reserved_by_my_primary{false};
@@ -753,40 +792,105 @@ struct ReplicaActive : sc::state<ReplicaActive, ScrubMachine, ReplicaIdle>,
   // shortcuts:
   PG* m_pg;
   OSDService* m_osds;
-
-  /// a convenience internal result structure
-  struct ReservationAttemptRes {
-    MOSDScrubReserve::ReserveMsgOp op;	// GRANT or REJECT
-    std::string_view error_msg;
-    bool granted;
-  };
-
-  /// request a scrub resource from our local OSD
-  /// (after performing some checks)
-  ReservationAttemptRes get_remote_reservation();
-
-  void clear_reservation_by_remote_primary();
 };
 
 
-struct ReplicaIdle : sc::state<ReplicaIdle, ReplicaActive>, NamedSimply {
+struct ReplicaIdle : sc::state<
+			 ReplicaIdle,
+			 ReplicaActive,
+			 ReplicaUnreserved,
+			 sc::has_shallow_history>,
+		     NamedSimply {
   explicit ReplicaIdle(my_context ctx);
   ~ReplicaIdle() = default;
   void reset_ignored(const FullReset&);
+  using reactions = mpl::list<sc::in_state_reaction<
+      FullReset,
+      ReplicaIdle,
+      &ReplicaIdle::reset_ignored>>;
+};
 
-  // note the execution of check_for_updates() when transitioning to
-  // ReplicaActiveOp/ReplicaWaitUpdates. That would trigger a ReplicaPushesUpd
-  // event, which will be handled by ReplicaWaitUpdates.
+/*
+ * ReplicaUnreserved
+ *
+ * Possible events:
+ * - a reservation request from a legacy primary (i.e. a primary that does not
+ *   support queued reservations). We either deny or grant, transitioning to
+ *   ReplicaReserved directly.
+ * - a reservation request from a primary that supports queued reservations.
+ *   We transition to ReplicaWaitingReservation, and wait for the Reserver's
+ *   response.
+ * - (handled by our parent state) a chunk scrub request. We transition to
+ *   ReplicaActiveOp.
+ */
+struct ReplicaUnreserved : sc::state<ReplicaUnreserved, ReplicaIdle>,
+			   NamedSimply {
+  explicit ReplicaUnreserved(my_context ctx);
+
   using reactions = mpl::list<
-      sc::transition<
-	  StartReplica,
-	  ReplicaWaitUpdates,
-	  ReplicaActive,
-	  &ReplicaActive::check_for_updates>,
-      sc::in_state_reaction<
-	  FullReset,
-	  ReplicaIdle,
-	  &ReplicaIdle::reset_ignored>>;
+      sc::custom_reaction<ReplicaReserveReq>,
+      sc::custom_reaction<ReplicaRelease>,
+      sc::custom_reaction<ReserverGranted>,
+      sc::custom_reaction<StartReplica>>;
+
+  sc::result react(const ReplicaReserveReq& ev);
+  sc::result react(const StartReplica& ev);
+  sc::result react(const ReserverGranted&);
+  sc::result react(const ReplicaRelease&);
+};
+
+/**
+ * ReplicaWaitingReservation
+ *
+ * Possible events:
+ * - 'go ahead' from the async reserver. We send a GRANT message to the
+ *   primary & transition to ReplicaReserved.
+ * - 'cancel' from the primary. We clear our reservation state, and transition
+ *   back to ReplicaUnreserved.
+ * - a chunk request: shouldn't happen, but we handle it anyway. An error
+ *   is logged (to trigger test failures).
+ * - on interval change: handled by our parent state.
+ */
+struct ReplicaWaitingReservation
+    : sc::state<ReplicaWaitingReservation, ReplicaIdle>,
+      NamedSimply {
+  explicit ReplicaWaitingReservation(my_context ctx);
+
+  using reactions = mpl::list<
+      // the 'normal' (expected) events:
+      sc::custom_reaction<ReplicaRelease>,
+      sc::custom_reaction<StartReplica>,
+      // unexpected (bug-induced) events:
+      sc::custom_reaction<ReplicaReserveReq>,
+      sc::custom_reaction<ReserverGranted>>;
+
+  sc::result react(const ReplicaRelease& ev);
+  sc::result react(const StartReplica& ev);
+  sc::result react(const ReserverGranted&);
+  sc::result react(const ReplicaReserveReq& ev);
+};
+
+/**
+ * ReplicaReserved
+ *
+ * Possible events:
+ * - 'cancel' from the primary. We clear our reservation state, and transition
+ *   back to ReplicaUnreserved.
+ * - a chunk scrub request. We transition to ReplicaActiveOp.
+ * - on interval change: we clear our reservation state, and transition
+ *   back to ReplicaUnreserved.
+ */
+struct ReplicaReserved : sc::state<ReplicaReserved, ReplicaIdle>, NamedSimply {
+  explicit ReplicaReserved(my_context ctx);
+
+  using reactions = mpl::list<
+      sc::custom_reaction<ReplicaReserveReq>,
+      sc::custom_reaction<StartReplica>,
+      sc::custom_reaction<ReplicaRelease>>;
+
+  sc::result react(const ReplicaReserveReq&);
+  sc::result react(const ReplicaRelease&);
+  sc::result react(const StartReplica& eq);
 };
 
 
@@ -832,7 +936,6 @@ struct ReplicaWaitUpdates : sc::state<ReplicaWaitUpdates, ReplicaActiveOp>,
 
   sc::result react(const ReplicaPushesUpd&);
 };
-
 
 struct ReplicaBuildingMap : sc::state<ReplicaBuildingMap, ReplicaActiveOp>,
 			    NamedSimply {

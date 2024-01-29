@@ -19,7 +19,7 @@
 
 class MOSDScrubReserve : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 2;
+  static constexpr int HEAD_VERSION = 3;
   static constexpr int COMPAT_VERSION = 1;
 public:
   using reservation_nonce_t = uint32_t;
@@ -35,6 +35,9 @@ public:
   int32_t type;
   pg_shard_t from;
   reservation_nonce_t reservation_nonce{0};
+  /// 'false' if the (legacy) primary is expecting an immediate
+  /// granted / denied response
+  bool wait_for_resources{false};
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -48,12 +51,12 @@ public:
       map_epoch(0), type(-1) {}
   MOSDScrubReserve(spg_t pgid,
 		   epoch_t map_epoch,
-		   int type,
+		   ReserveMsgOp type_code,
 		   pg_shard_t from,
 		   reservation_nonce_t nonce)
     : MOSDFastDispatchOp{MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), map_epoch(map_epoch),
-      type(type), from(from), reservation_nonce{nonce} {}
+      type(static_cast<int32_t>(type_code)), from(from), reservation_nonce{nonce} {}
 
   std::string_view get_type_name() const {
     return "MOSDScrubReserve";
@@ -63,7 +66,7 @@ public:
     out << "MOSDScrubReserve(" << pgid << " ";
     switch (type) {
     case REQUEST:
-      out << "REQUEST ";
+      out << (wait_for_resources ? "QREQUEST " : "REQUEST ");
       break;
     case GRANT:
       out << "GRANT ";
@@ -89,10 +92,16 @@ public:
     decode(from, p);
     if (header.version >= 2) {
       decode(reservation_nonce, p);
+      if (header.version >= 3) {
+        decode(wait_for_resources, p);
+      } else {
+        wait_for_resources = false;
+      }
     } else {
       // a zero nonce (identifying legacy senders) is ignored when
       // checking the request for obsolescence
       reservation_nonce = 0;
+      wait_for_resources = false;
     }
   }
 
@@ -103,6 +112,7 @@ public:
     encode(type, payload);
     encode(from, payload);
     encode(reservation_nonce, payload);
+    encode(wait_for_resources, payload);
   }
 private:
   template<class T, typename... Args>
