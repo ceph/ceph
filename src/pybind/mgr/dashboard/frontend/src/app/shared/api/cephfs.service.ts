@@ -6,6 +6,7 @@ import { Observable } from 'rxjs';
 
 import { cdEncode } from '../decorators/cd-encode';
 import { CephfsDir, CephfsQuotas } from '../models/cephfs-directory-models';
+import { shareReplay } from 'rxjs/operators';
 
 @cdEncode
 @Injectable({
@@ -26,7 +27,7 @@ export class CephfsService {
     if (path) {
       apiPath += `&path=${encodeURIComponent(path)}`;
     }
-    return this.http.get<CephfsDir[]>(apiPath);
+    return this.http.get<CephfsDir[]>(apiPath).pipe(shareReplay());
   }
 
   getCephfs(id: number) {
