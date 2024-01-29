@@ -101,7 +101,7 @@ class CephNvmeof(ContainerDaemonForm):
                 'inspect',
                 '--format',
                 '{{index .Config.Labels "io.ceph.version"}}',
-                ctx.image,
+                container_id,
             ],
         )
         version = None
