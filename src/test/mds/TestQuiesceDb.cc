@@ -347,10 +347,22 @@ TEST_F(QuiesceDbTest, ManagerStartup) {
 TEST_F(QuiesceDbTest, SetCreation) {
   ASSERT_NO_FATAL_FAILURE(configure_cluster({ 0 }));
 
+  // create a named set by resetting roots
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set0";
+    r.reset_roots({"root1"});
+  }));
+
+  // the set must have timed out immediately since we haven't configured
+  // the expiration timeout.
+  ASSERT_TRUE(last_request->response.sets.contains("set0"));
+  EXPECT_EQ(QS_TIMEDOUT, last_request->response.sets.at("set0").rstate.state);
+  EXPECT_TRUE(db(0).sets.contains(*last_request->request.set_id));
+
   // create a named set by including roots
   ASSERT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set1";
-    r.roots.emplace("root1");
+    r.include_roots({"root1"});
   }));
 
   // the set must have timed out immediately since we haven't configured
@@ -361,13 +373,21 @@ TEST_F(QuiesceDbTest, SetCreation) {
 
   // create a new unique set by including roots
   EXPECT_EQ(OK(), run_request([](auto& r) {
-    r.roots.emplace("root2");
+    r.include_roots({"root2"});
   }));
 
   // the manager must have filled the set id with a unique value
   ASSERT_TRUE(last_request->request.set_id.has_value());
   EXPECT_TRUE(db(0).sets.contains(*last_request->request.set_id));
-  EXPECT_EQ(db(0).sets.size(), 2);
+
+  // create a new unique set by resetting roots
+  EXPECT_EQ(OK(), run_request([](auto& r) {
+    r.reset_roots({"root2"});
+  }));
+
+  // the manager must have filled the set id with a unique value
+  ASSERT_TRUE(last_request->request.set_id.has_value());
+  EXPECT_TRUE(db(0).sets.contains(*last_request->request.set_id));
 
   // prevent modification of a named set when a new set is desired
   EXPECT_EQ(ERR(ESTALE), run_request([](auto& r) {
@@ -405,11 +425,11 @@ TEST_F(QuiesceDbTest, SetCreation) {
 
   EXPECT_EQ(0, last_request->response.sets.size());
 
+  // an empty string is a valid set id.
   EXPECT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "";
     r.roots.emplace("root1");
   }));
-
 }
 
 template<class T>
@@ -734,6 +754,16 @@ TEST_F(QuiesceDbTest, SetModification)
 
   ASSERT_EQ(QuiesceState::QS_CANCELED, db(0).sets.at("set1").rstate.state);
   ASSERT_EQ(QuiesceState::QS_CANCELED, db(0).sets.at("set2").rstate.state);
+
+  // reset can be used to resurrect a set from a terminal state
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.timeout = sec(60);
+    r.expiration = sec(60);
+    r.reset_roots({ "root5" });
+  }));
+
+  ASSERT_EQ(QuiesceState::QS_QUIESCING, db(0).sets.at("set1").rstate.state);
 }
 
 /* ================================================================ */
@@ -757,10 +787,17 @@ TEST_F(QuiesceDbTest, Timeouts) {
 
   ASSERT_EQ(QuiesceState::QS_EXPIRED, db(0).sets.at("set1").rstate.state);
 
+  // reset can be used to resurrect a set from a terminal state
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set1";
+    r.reset_roots({ "root5" });
+  }));
+  ASSERT_EQ(QuiesceState::QS_QUIESCING, last_request->response.sets.at("set1").rstate.state);
+
   ASSERT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set2";
-    r.timeout = sec(100.1);
-    r.expiration = sec(100.1);
+    r.timeout = sec(0.1);
+    r.expiration = sec(0.1);
     r.include_roots({ "root1" });
     r.await = sec(1);
   }));
@@ -779,19 +816,31 @@ TEST_F(QuiesceDbTest, Timeouts) {
 
   std::this_thread::sleep_for(sec(0.15));
 
-  ASSERT_EQ(QuiesceState::QS_EXPIRED, db(0).sets.at("set1").rstate.state);
+  ASSERT_EQ(QuiesceState::QS_EXPIRED, db(0).sets.at("set2").rstate.state);
+
+  // reset can be used to resurrect a set from a terminal state
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set2";
+    r.reset_roots({ "root1" });
+  }));
+  ASSERT_EQ(QuiesceState::QS_QUIESCING, last_request->response.sets.at("set2").rstate.state);
 
   ASSERT_EQ(OK(), run_request([](auto& r) {
     r.set_id = "set3";
     r.timeout = sec(0.1);
-    r.roots.emplace("root1");
+    r.include_roots({ "root1" });
   }));
 
   ASSERT_EQ(QuiesceState::QS_QUIESCING, db(0).sets.at("set3").rstate.state);
 
   std::this_thread::sleep_for(sec(0.15));
 
-  ASSERT_EQ(QuiesceState::QS_TIMEDOUT, db(0).sets.at("set3").rstate.state);
+  ASSERT_EQ(QuiesceState::QS_TIMEDOUT, db(0).sets.at("set3").rstate.state);  // reset can be used to resurrect a set from a terminal state
+  ASSERT_EQ(OK(), run_request([](auto& r) {
+    r.set_id = "set3";
+    r.reset_roots({ "root1" });
+  }));
+  ASSERT_EQ(QuiesceState::QS_QUIESCING, last_request->response.sets.at("set3").rstate.state);
 }
 
 /* ================================================================ */
@@ -983,9 +1032,13 @@ TEST_F(QuiesceDbTest, RepeatedQuiesceAwait) {
   // sustain the loop for arbitrarily long
   for (int i = 0; i < 10; i++) {
     std::this_thread::sleep_for(expiration/2);
-    ASSERT_EQ(OK(), run_request([](auto& r) {
+    ASSERT_EQ(OK(), run_request([i](auto& r) {
       r.set_id = "set1";
-      r.await = sec(0.1);
+      if (i % 2) {
+        // this shouldn't affect anything
+        r.reset_roots({"root1"});
+      }
+      r.await = sec(0);
     }));
   }
 

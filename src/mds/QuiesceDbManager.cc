@@ -519,16 +519,27 @@ int QuiesceDbManager::leader_update_set(Db::Sets::value_type& set_it, const Quie
         return EPERM;
     }
   } else {
-    // only active or new sets can be modified
-    if (!set.is_active() && set.db_version > 0) {
-      dout(2) << dset("rejecting modification in the terminal state: ") << set.rstate.state << dendl;
-      return EPERM;
-    } else if (request.includes_roots() && set.is_releasing()) {
-      dout(2) << dset("rejecting new roots in the QS_RELEASING state") << dendl;
-      return EPERM;
-    }
-
     const auto db_age = db.get_age();
+    bool reset = false;
+
+    if (!request.is_reset()) {
+      // only active or new sets can be modified
+      if (!set.is_active() && set.db_version > 0) {
+        dout(2) << dset("rejecting modification in the terminal state: ") << set.rstate.state << dendl;
+        return EPERM;
+      } else if (request.includes_roots() && set.is_releasing()) {
+        dout(2) << dset("rejecting new roots in the QS_RELEASING state") << dendl;
+        return EPERM;
+      }
+    } else {
+      // a reset request can be used to resurrect a set from whichever state it's in now
+      if (set.rstate.state > QS_QUIESCED) {
+        dout(5) << dset("reset back to a QUIESCING state") << dendl;
+        did_update = set.rstate.update(QS_QUIESCING, db_age);
+        ceph_assert(did_update);
+        reset = true;
+      }
+    }
 
     if (request.timeout) {
       set.timeout = *request.timeout;
@@ -550,13 +561,27 @@ int QuiesceDbManager::leader_update_set(Db::Sets::value_type& set_it, const Quie
       } else if (!info.excluded) {
         included_count ++;
 
-        QuiesceState min_reported_state;
-        QuiesceState max_reported_state;
-        size_t reporting_peers = check_peer_reports(set_id, set, root, info, min_reported_state, max_reported_state);
+        QuiesceState effective_member_state;
 
-        if (reporting_peers == peers.size() && max_reported_state < QS__FAILURE) {
-          min_member_state = std::min(min_member_state, min_reported_state);
+        if (reset) {
+          dout(5) << dsetroot("reset back to a QUIESCING state") << dendl;
+          info.rstate.state = QS_QUIESCING;
+          info.rstate.at_age = db_age;
+          did_update_roots = true;
+          effective_member_state = info.rstate.state;
+        } else {
+          QuiesceState min_reported_state;
+          QuiesceState max_reported_state;
+          size_t reporting_peers = check_peer_reports(set_id, set, root, info, min_reported_state, max_reported_state);
+
+          if (reporting_peers == peers.size() && max_reported_state < QS__FAILURE) {
+            effective_member_state = min_reported_state;
+          } else {
+            effective_member_state = info.rstate.state;
+          }
         }
+
+        min_member_state = std::min(min_member_state, effective_member_state);
       }
     }
 

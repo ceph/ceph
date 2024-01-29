@@ -69,6 +69,18 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
     return;
   }
 
+  if (op_reset && !set_id) {
+    bufferlist bl;
+    on_finish(-EINVAL, "Operation `reset` requires a `--set-id`", bl);
+    return;
+  }
+
+  if (op_reset && roots.empty()) {
+    bufferlist bl;
+    on_finish(-EINVAL, "Operation `reset` expects at least one root", bl);
+    return;
+  }
+
   if (op_query && roots.size() > 0) {
     bufferlist bl;
     on_finish(-EINVAL, "Operation `query` doesn't take any roots", bl);
@@ -191,7 +203,7 @@ void MDSRank::command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int,
     }
   });
 
-  dout(20) << "Submitting a quiesce db request for setid: " << set_id << ", operation: " << ctx->request.op_string() << dendl;
+  dout(20) << "Submitting a quiesce db request " << (set_id ? "for" : "without a") << " setid " << set_id.value_or("") << ", operation: " << ctx->request.op_string() << dendl;
   int rc = quiesce_db_manager->submit_request(ctx);
   if (rc != 0) {
     bufferlist bl;
