@@ -129,7 +129,7 @@ class HostDetails:
         return _cls
 
     @staticmethod
-    def yaml_representer(dumper: 'yaml.SafeDumper', data: 'HostDetails') -> Any:
+    def yaml_representer(dumper: 'yaml.Dumper', data: 'HostDetails') -> yaml.Node:
         return dumper.represent_dict(cast(Mapping, data.to_json().items()))
 
 
@@ -139,7 +139,7 @@ yaml.add_representer(HostDetails, HostDetails.yaml_representer)
 class DaemonFields(enum.Enum):
     service_name = 'service_name'
     daemon_type = 'daemon_type'
-    name = 'name'
+    name = 'name'  # type: ignore
     host = 'host'
     status = 'status'
     refreshed = 'refreshed'
