@@ -11269,7 +11269,7 @@ int64_t Client::_preadv_pwritev_locked(Fh *fh, const struct iovec *iov,
         }
 
         client_lock.unlock();
-        copy_bufferlist_to_iovec(iov, iovcnt, &bl, r);
+        copy_bufferlist_to_iovec(iov, iovcnt, blp ? blp : &bl, r);
         client_lock.lock();
         return r;
     }
