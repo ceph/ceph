@@ -44,7 +44,7 @@ Commands
 
    show help
 
-:command:`fsck` [ --deep ]
+:command:`fsck` [ --deep ] *(on|off) or (yes|no) or (1|0) or (true|false)*
 
    run consistency check on BlueStore metadata.  If *--deep* is specified, also read all object data and verify checksums.
 
