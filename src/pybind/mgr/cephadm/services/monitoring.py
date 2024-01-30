@@ -121,10 +121,11 @@ class GrafanaService(CephadmService):
         return config_file, sorted(deps)
 
     def prepare_certificates(self, daemon_spec: CephadmDaemonDeploySpec) -> Tuple[str, str]:
-        cert_path = f'{daemon_spec.host}/grafana_crt'
-        key_path = f'{daemon_spec.host}/grafana_key'
-        cert = self.mgr.get_store(cert_path)
-        pkey = self.mgr.get_store(key_path)
+        # TODO: move these variables to migrations
+        # cert_path = f'{daemon_spec.host}/grafana_crt'
+        # key_path = f'{daemon_spec.host}/grafana_key'
+        cert = self.mgr.cert_key_store.get_cert('grafana_cert', host=daemon_spec.host)
+        pkey = self.mgr.cert_key_store.get_key('grafana_key', host=daemon_spec.host)
         certs_present = (cert and pkey)
         is_valid_certificate = False
         (org, cn) = (None, None)
@@ -148,8 +149,8 @@ class GrafanaService(CephadmService):
             logger.info('Regenerating cephadm self-signed grafana TLS certificates')
             host_fqdn = socket.getfqdn(daemon_spec.host)
             cert, pkey = create_self_signed_cert('Ceph', host_fqdn)
-            self.mgr.set_store(cert_path, cert)
-            self.mgr.set_store(key_path, pkey)
+            self.mgr.cert_key_store.save_cert('grafana_cert', cert, host=daemon_spec.host)
+            self.mgr.cert_key_store.save_key('grafana_key', pkey, host=daemon_spec.host)
             if 'dashboard' in self.mgr.get('mgr_map')['modules']:
                 self.mgr.check_mon_command({
                     'prefix': 'dashboard set-grafana-api-ssl-verify',
@@ -203,10 +204,8 @@ class GrafanaService(CephadmService):
         """
         if daemon.hostname is not None:
             # delete cert/key entires for this grafana daemon
-            cert_path = f'{daemon.hostname}/grafana_crt'
-            key_path = f'{daemon.hostname}/grafana_key'
-            self.mgr.set_store(cert_path, None)
-            self.mgr.set_store(key_path, None)
+            self.mgr.cert_key_store.rm_cert('grafana_cert', host=daemon.hostname)
+            self.mgr.cert_key_store.rm_key('grafana_key', host=daemon.hostname)
 
     def ok_to_stop(self,
                    daemon_ids: List[str],
