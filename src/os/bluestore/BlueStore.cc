@@ -6678,8 +6678,12 @@ int BlueStore::_read_main_bdev_label(
             *out_is_multi = true;
           }
           if(out_valid_positions) {
-            out_valid_positions->push_back(position);
+            // clear out old versions
+            out_valid_positions->clear();
           }
+        }
+        if(v == epoch && out_valid_positions) {
+          out_valid_positions->push_back(position);
         }
       }
     } else if (r == 1) {
