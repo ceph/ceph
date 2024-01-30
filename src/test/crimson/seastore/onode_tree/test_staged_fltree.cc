@@ -1317,7 +1317,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert:\n");
-      auto padding = std::string(250, '_');
+      auto padding = std::string(226, '_');
       auto keys = build_key_set({2, 6}, {2, 5}, {2, 5}, padding, true);
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 2, 2));
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 3, 3));
@@ -1325,11 +1325,11 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
       keys.erase(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 2, 2));
       keys.erase(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 3, 3));
       keys.erase(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 4, 4));
-      auto padding_s = std::string(257, '_');
+      auto padding_s = std::string(230, '_');
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
-      auto padding_e = std::string(247, '_');
+      auto padding_e = std::string(215, '_');
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 2, 2));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 3, 3));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding_e, 4, 4));
@@ -1339,7 +1339,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
                     "\nsplit at stage 2; insert to right front at stage 0, 1, 2, 1, 0\n");
       pool.split_merge(make_ghobj(3, 3, 3, "ns4", "oid4" + padding, 5, 5), {2, {0, {0}}},
                        {2u, 0u, false, InsertType::BEGIN}).get();
-      pool.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5", 3, 3), {2, {0, {0}}},
+      pool.split_merge(make_ghobj(3, 3, 3, "ns5", "oid5_", 3, 3), {2, {0, {0}}},
                        {2u, 1u, false, InsertType::BEGIN}).get();
       pool.split_merge(make_ghobj(3, 4, 4, "ns3", "oid3", 3, 3), {2, {0, {0}}},
                        {2u, 2u, false, InsertType::BEGIN}).get();
@@ -1385,7 +1385,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
                        {0u, 0u, true, InsertType::MID}).get();
       pool.split_merge(make_ghobj(2, 2, 2, "ns5", "oid5", 3, 3), {1, {0, {0}}},
                        {0u, 1u, true, InsertType::MID}).get();
-      pool.split_merge(make_ghobj(2, 2, 3, "ns3", "oid3" + std::string(80, '_'), 3, 3), {1, {0, {0}}} ,
+      pool.split_merge(make_ghobj(2, 2, 3, "ns3", "oid3" + std::string(72, '_'), 3, 3), {1, {0, {0}}} ,
                       {0u, 2u, true, InsertType::MID}).get();
       pool.split_merge(make_ghobj(3, 3, 3, "ns1", "oid1", 3, 3), {1, {0, {0}}},
                        {0u, 1u, true, InsertType::MID}).get();
@@ -1401,7 +1401,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (1):\n");
-      auto padding = std::string(244, '_');
+      auto padding = std::string(216, '_');
       auto keys = build_key_set({2, 6}, {2, 5}, {2, 5}, padding, true);
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 5, 5));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 6, 6));
@@ -1428,23 +1428,23 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (2):\n");
-      auto padding = std::string(243, '_');
+      auto padding = std::string(216, '_');
       auto keys = build_key_set({2, 6}, {2, 5}, {2, 5}, padding, true);
-      keys.insert(make_ghobj(4, 4, 4, "n", "o", 3, 3));
+      //keys.insert(make_ghobj(4, 4, 4, "n", "o", 3, 3));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 5, 5));
       keys.insert(make_ghobj(5, 5, 5, "ns4", "oid4" + padding, 6, 6));
       pool.build_tree(keys).unsafe_get0();
 
       logger().info("\n---------------------------------------------"
                     "\nsplit at stage 2; insert to left back at stage (0, 1, 2, 1,) 0\n");
-      pool.split_merge(make_ghobj(4, 4, 4, "n", "o", 2, 2), {2, {0, {0}}},
-                       {2u, 0u, true, InsertType::LAST}).get();
+      pool.split_merge(make_ghobj(4, 4, 4, "n", "o" + padding, 2, 2), {2, {0, {0}}},
+                       {2u, 1u, true, InsertType::LAST}).get();
     }
 
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (3):\n");
-      auto padding = std::string(419, '_');
+      auto padding = std::string(394, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding, true);
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 2, 2));
       keys.erase(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 3, 3));
@@ -1455,7 +1455,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
                     "\nsplit at stage 1; insert to right front at stage 0, 1, 0\n");
       pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid2" + padding, 5, 5), {1, {1, {0}}},
                        {1u, 0u, false, InsertType::BEGIN}).get();
-      pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3), {1, {1, {0}}},
+      pool.split_merge(make_ghobj(3, 3, 3, "ns2", "oid3_", 3, 3), {1, {1, {0}}},
                        {1u, 1u, false, InsertType::BEGIN}).get();
       pool.split_merge(make_ghobj(3, 3, 3, "ns3", "oid3" + padding, 1, 1), {1, {1, {0}}},
                        {1u, 0u, false, InsertType::BEGIN}).get();
@@ -1464,12 +1464,12 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (4):\n");
-      auto padding = std::string(361, '_');
+      auto padding = std::string(330, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding, true);
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 2, 2));
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 3, 3));
       keys.erase(make_ghobj(2, 2, 2, "ns2", "oid2" + padding, 4, 4));
-      auto padding_s = std::string(386, '_');
+      auto padding_s = std::string(396, '_');
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 2, 2));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 3, 3));
       keys.insert(make_ghobj(2, 2, 2, "ns2", "oid2" + padding_s, 4, 4));
@@ -1484,7 +1484,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nfix end index from stage 0 to 0, 1, 2\n");
-      auto padding1 = std::string(400, '_');
+      auto padding1 = std::string(392, '_');
       pool.fix_index(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5),
                      {2, {2, {2}}}, false).get();
       pool.fix_index(make_ghobj(4, 4, 4, "ns5", "oid5" + padding1, 3, 3),
@@ -1496,7 +1496,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (5):\n");
-      auto padding = std::string(412, '_');
+      auto padding = std::string(382, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding);
       keys.insert(make_ghobj(3, 3, 3, "ns2", "oid3", 3, 3));
       keys.insert(make_ghobj(4, 4, 4, "ns3", "oid3" + padding, 5, 5));
@@ -1515,9 +1515,9 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (6):\n");
-      auto padding = std::string(328, '_');
+      auto padding = std::string(307, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding);
-      keys.insert(make_ghobj(5, 5, 5, "ns3", "oid3" + std::string(270, '_'), 3, 3));
+      keys.insert(make_ghobj(5, 5, 5, "ns3", "oid3" + std::string(220, '_'), 3, 3));
       keys.insert(make_ghobj(9, 9, 9, "ns~last", "oid~last", 9, 9));
       pool.build_tree(keys).unsafe_get0();
 
@@ -1528,7 +1528,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nfix end index from stage 2 to 0, 1, 2\n");
-      auto padding1 = std::string(400, '_');
+      auto padding1 = std::string(392, '_');
       pool.fix_index(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5),
                      {3, {0, {0}}}, false).get();
       pool.fix_index(make_ghobj(4, 4, 4, "ns5", "oid5" + padding1, 3, 3),
@@ -1540,7 +1540,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
     {
       logger().info("\n---------------------------------------------"
                     "\nbefore internal node insert (7):\n");
-      auto padding = std::string(323, '_');
+      auto padding = std::string(300, '_');
       auto keys = build_key_set({2, 5}, {2, 5}, {2, 5}, padding);
       keys.insert(make_ghobj(4, 4, 4, "ns5", "oid5" + padding, 3, 3));
       keys.insert(make_ghobj(9, 9, 9, "ns~last", "oid~last", 9, 9));
@@ -1548,7 +1548,7 @@ TEST_F(c_dummy_test_t, 5_split_merge_internal_node)
 
       logger().info("\n---------------------------------------------"
                     "\nfix end index from stage 1 to 0, 1, 2\n");
-      auto padding1 = std::string(400, '_');
+      auto padding1 = std::string(392, '_');
       pool.fix_index(make_ghobj(4, 4, 4, "ns4", "oid4" + padding, 5, 5),
                      {2, {3, {0}}}, false).get();
       pool.fix_index(make_ghobj(4, 4, 4, "ns6", "oid6" + padding1, 3, 3),
