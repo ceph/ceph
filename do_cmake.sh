@@ -5,8 +5,8 @@ if [ -d .git ]; then
     git submodule update --init --recursive --progress
 fi
 
-: ${BUILD_DIR:=build}
-: ${CEPH_GIT_DIR:=..}
+: "${BUILD_DIR:=build}"
+: "${CEPH_GIT_DIR:=..}"
 
 if [ -e $BUILD_DIR ]; then
     echo "'$BUILD_DIR' dir already exists; either rm -rf '$BUILD_DIR' and re-run, or set BUILD_DIR env var to a different directory name"
@@ -67,7 +67,7 @@ cxx_compiler="g++"
 c_compiler="gcc"
 # 20 is used for more future-proof
 for i in $(seq 20 -1 11); do
-  if type -t gcc-$i > /dev/null; then
+  if type -t "gcc-$i" > /dev/null; then
     cxx_compiler="g++-$i"
     c_compiler="gcc-$i"
     break
@@ -83,7 +83,7 @@ if type cmake3 > /dev/null 2>&1 ; then
 else
     CMAKE=cmake
 fi
-${CMAKE} $ARGS "$@" $CEPH_GIT_DIR || exit 1
+${CMAKE} "$ARGS" "$@" "${CEPH_GIT_DIR}" || exit 1
 set +x
 
 # minimal config to find plugins
@@ -95,7 +95,7 @@ EOF
 
 echo done.
 
-if [[ ! "$ARGS $@" =~ "-DCMAKE_BUILD_TYPE" ]]; then
+if [[ ! "$ARGS $*" =~ "-DCMAKE_BUILD_TYPE" ]]; then
   cat <<EOF
 
 ****
