@@ -5,7 +5,7 @@ rgw-final-workload:
   full_sequential:
   - ragweed:
       client.1:
-        default-branch: ceph-pacific
+        default-branch: ceph-octopus
         rgw_server: client.1
         stages: check
   - print: "**** done ragweed check 4-final-workload"
