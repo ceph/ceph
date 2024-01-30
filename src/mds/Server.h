@@ -236,6 +236,9 @@ public:
   void handle_client_removexattr(MDRequestRef& mdr);
 
   void handle_client_fsync(MDRequestRef& mdr);
+  
+  // check layout
+  bool is_valid_layout(file_layout_t *layout);
 
   // open
   void handle_client_open(MDRequestRef& mdr);
