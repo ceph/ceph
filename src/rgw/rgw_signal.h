@@ -19,6 +19,7 @@
 namespace rgw {
 namespace signal {
 
+void sig_handler_noop(int signum);
 void signal_shutdown();
 void wait_shutdown();
 int signal_fd_init();
