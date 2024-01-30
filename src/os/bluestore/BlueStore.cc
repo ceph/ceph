@@ -131,6 +131,16 @@ const string PREFIX_SHARED_BLOB = "X"; // u64 SB id -> shared_blob_t
 
 const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
 
+// Label offsets where they might be replicated. It is possible on previous versions where these offsets
+// were already used so labels won't exist there.
+static constexpr uint64_t _1G = uint64_t(1024)*1024*1024;
+const vector<uint64_t> bdev_label_positions = {
+  BDEV_LABEL_POSITION,
+  _1G,
+  10*_1G,
+  100*_1G,
+  1000*_1G};
+
 #define OBJECT_MAX_SIZE 0xffffffff // 32 bits
 
 
@@ -6677,6 +6687,60 @@ int BlueStore::_read_main_bdev_label(
   return all_labels_valid ? 0 : 1;
 }
 
+void BlueStore::_main_bdev_label_try_reserve()
+{
+  // Try to mark bdev label locations as used.
+  // This is possible if location is not allocated.
+  // If location us used, remove it from list of places to write label.
+  // We operate on BlueStore's main device allocator `alloc`.
+  ceph_assert(alloc);
+  ceph_assert(bdev);
+  ceph_assert(bdev_label_multi == true);
+  vector<uint64_t> candidate_positions;
+  vector<uint64_t> accepted_positions;
+  uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+  for (size_t i = 1; i < bdev_label_positions.size(); i++) {
+    uint64_t location = bdev_label_positions[i];
+    if (location + lsize <= bdev->get_size()) {
+      candidate_positions.push_back(location);
+    }
+  }
+  auto look_for_bdev = [&](uint64_t free_location, uint64_t free_length) {
+    for (size_t i = 0; i < candidate_positions.size();) {
+      uint64_t location = candidate_positions[i];
+      if (free_location <= location &&
+          location + lsize <= free_location + free_length) {
+        accepted_positions.push_back(location);
+        candidate_positions.erase(candidate_positions.begin() + i);
+      } else {
+        ++i;
+      }
+    }
+  };
+  alloc->foreach(look_for_bdev);
+  for (auto& location : accepted_positions) {
+    alloc->init_rm_free(location, lsize);
+  }
+
+  for (size_t i = 0; i < candidate_positions.size(); i++) {
+    uint64_t location = candidate_positions[i];
+    derr << __func__ << " bdev label location 0x" << std::hex << location << std::dec
+         << " occupied by BlueStore object or BlueFS file, disabling" << dendl;
+    std::erase(bdev_label_valid_locations, candidate_positions[i]);
+  }
+}
+
+void BlueStore::_main_bdev_label_remove(Allocator* an_alloc)
+{
+  ceph_assert(bdev_label_multi == true);
+  uint64_t lsize = std::max(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+
+  for (size_t location : bdev_label_valid_locations) {
+    if (location != BDEV_LABEL_POSITION)
+      an_alloc->init_add_free(location, lsize);
+  }
+}
+
 int BlueStore::_check_or_set_bdev_label(
   string path, uint64_t size, string desc, bool create)
 {
@@ -6884,19 +6948,15 @@ int BlueStore::_open_fm(KeyValueDB::Transaction t,
 
     fm->create(bdev->get_size(), alloc_size, t);
 
-    // allocate superblock reserved space.  note that we do not mark
-    // bluefs space as allocated in the freelist; we instead rely on
-    // bluefs doing that itself.
     auto reserved = _get_ondisk_reserved();
     if (fm_restore) {
       // we need to allocate the full space in restore case
       // as later we will add free-space marked in the allocator file
       fm->allocate(0, bdev->get_size(), t);
     } else {
-      // allocate superblock reserved space.  note that we do not mark
-      // bluefs space as allocated in the freelist; we instead rely on
-      // bluefs doing that itself.
-      fm->allocate(0, reserved, t);
+      // allocate bdev label + bluefs superblock reserved space.
+      fm->allocate(BDEV_LABEL_POSITION, reserved, t);
+      // we do not mark other label positions
     }
     r = _write_out_fm_meta(0);
     ceph_assert(r == 0);
@@ -7029,6 +7089,9 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
 	return -ENOTRECOVERABLE;
       }
     }
+  }
+  if (bdev_label_multi) {
+    _main_bdev_label_try_reserve();
   }
   dout(1) << __func__
           << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
@@ -8273,9 +8336,24 @@ int BlueStore::mkfs()
     goto out_close_bdev;
   }
 
+  // initialize alloc, remove regions taken
   reserved = _get_ondisk_reserved();
-  alloc->init_add_free(reserved,
-    p2align(bdev->get_size(), min_alloc_size) - reserved);
+  // full free
+  alloc->init_add_free(0, p2align(bdev->get_size(), min_alloc_size));
+  // allocate bdev label + bluefs superblock reserved space.
+  alloc->init_rm_free(BDEV_LABEL_POSITION, reserved);
+
+  // take possible bdev locations, so it will not be used
+  if (cct->_conf.get_val<bool>("bluestore_bdev_label_multi")) {
+    // take space for other bdev label copies
+    for (size_t i = 1; i < bdev_label_positions.size(); i++) {
+    uint64_t location = bdev_label_positions[i];
+    uint64_t size = p2roundup(BDEV_LABEL_BLOCK_SIZE, min_alloc_size);
+    if (location + size > bdev->get_size()) continue;
+    ceph_assert(p2align(location, min_alloc_size) == location);
+    alloc->init_rm_free(location, size);
+    }
+  }
 
   r = _open_db(true);
   if (r < 0)
@@ -19073,6 +19151,10 @@ int BlueStore::store_allocator(Allocator* src_allocator)
   if (!allocator) {
     bluefs->close_writer(p_handle);
     return -1;
+  }
+  // remove allocations that are used by bdev label copies
+  if (bdev_label_multi == true) {
+    _main_bdev_label_remove(allocator.get());
   }
 
   // store all extents (except for the bluefs extents we removed) in a single flat file

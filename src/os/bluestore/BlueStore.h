@@ -2788,6 +2788,8 @@ private:
     bool* out_is_cloned = nullptr,
     int64_t* out_epoch = nullptr);
   int _set_bdev_label_size(const std::string& path, uint64_t size);
+  void _main_bdev_label_try_reserve();
+  void _main_bdev_label_remove(Allocator* alloc);
 
   int _open_super_meta();
 
