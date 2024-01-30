@@ -264,7 +264,7 @@ class NodeProxyEndpoint:
         self.validate_node_proxy_data(data)
         if 'patch' not in data.keys():
             raise cherrypy.HTTPError(400, 'Malformed data received.')
-        host = data['cephx']['name']
+        host = data['cephx']['name'][11:]
         self.mgr.node_proxy_cache.save(host, data['patch'])
         self.raise_alert(data)
 
