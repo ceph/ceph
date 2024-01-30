@@ -511,7 +511,7 @@ public:
                               GenContext<ThreadPool::TPHandle&> *c,
                               uint64_t cost,
 			      int priority);
-  void queue_for_snap_trim(PG *pg);
+  void queue_for_snap_trim(PG *pg, uint64_t cost);
   void queue_for_scrub(PG* pg, Scrub::scrub_prio_t with_priority);
 
   void queue_scrub_after_repair(PG* pg, Scrub::scrub_prio_t with_priority);
