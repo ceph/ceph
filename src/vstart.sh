@@ -1816,6 +1816,7 @@ do_rgw_create_users()
     # Create S3-test users
     # See: https://github.com/ceph/s3-tests
     debug echo "setting up s3-test users"
+
     $CEPH_BIN/radosgw-admin user create \
         --uid 0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef \
         --access-key ABCDEFGHIJKLMNOPQRST \
@@ -1835,6 +1836,28 @@ do_rgw_create_users()
         --secret opqrstuvwxyzabcdefghijklmnopqrstuvwxyzab \
         --display-name tenanteduser \
         --email tenanteduser@example.com -c $conf_fn > /dev/null
+
+    if [ "$rgw_store" == "rados" ] ; then
+        # create accounts/users for iam s3tests
+        a1_akey='AAAAAAAAAAAAAAAAAAaa'
+        a1_skey='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa'
+        $CEPH_BIN/radosgw-admin account create --account-id RGW11111111111111111 --account-name Account1 --email account1@ceph.com -c $conf_fn > /dev/null
+        $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1root --account-root \
+            --display-name 'Account1Root' --access-key $a1_akey --secret $a1_skey -c $conf_fn > /dev/null
+
+        a2_akey='BBBBBBBBBBBBBBBBBBbb'
+        a2_skey='bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb'
+        $CEPH_BIN/radosgw-admin account create --account-id RGW22222222222222222 --account-name Account2 --email account2@ceph.com -c $conf_fn > /dev/null
+        $CEPH_BIN/radosgw-admin user create --account-id RGW22222222222222222 --uid testacct2root --account-root \
+            --display-name 'Account2Root' --access-key $a2_akey --secret $a2_skey -c $conf_fn > /dev/null
+
+        a1u_akey='CCCCCCCCCCCCCCCCCCcc'
+        a1u_skey='cccccccccccccccccccccccccccccccccccccccc'
+        $CEPH_BIN/radosgw-admin user create --account-id RGW11111111111111111 --uid testacct1user \
+            --display-name 'Account1User' --access-key $a1u_akey --secret $a1u_skey -c $conf_fn > /dev/null
+        $CEPH_BIN/radosgw-admin user policy attach --uid testacct1user \
+            --policy-arn arn:aws:iam::aws:policy/AmazonS3FullAccess -c $conf_fn > /dev/null
+    fi
 
     # Create Swift user
     debug echo "setting up user tester"
