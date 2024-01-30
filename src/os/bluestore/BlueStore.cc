@@ -6007,16 +6007,15 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
-    int r = _read_main_bdev_label(cct, p, &bdev_label,
+    _read_main_bdev_label(cct, p, &bdev_label,
       &bdev_label_valid_locations, &bdev_label_multi, &bdev_label_epoch);
-    ceph_assert(r == 0);
   }
   if (!bdev_label_valid_locations.empty()) {
     bdev_label.meta[key] = value;
     if (bdev_label_multi) {
       bdev_label.meta["epoch"] = std::to_string(bdev_label_epoch);
     }
-    int r = _write_bdev_label(cct, p, bdev_label);
+    int r = _write_bdev_label(cct, p, bdev_label, bdev_label_valid_locations);
     ceph_assert(r == 0);
   }
   return ObjectStore::write_meta(key, value);
@@ -6026,9 +6025,8 @@ int BlueStore::read_meta(const std::string& key, std::string *value)
 {
   string p = path + "/block";
   if (bdev_label_valid_locations.empty()) {
-    int r = _read_main_bdev_label(cct, p, &bdev_label,
+    _read_main_bdev_label(cct, p, &bdev_label,
       &bdev_label_valid_locations, &bdev_label_multi, &bdev_label_epoch);
-    ceph_assert(r == 0);
   }
   if (!bdev_label_valid_locations.empty()) {
     auto i = bdev_label.meta.find(key);
