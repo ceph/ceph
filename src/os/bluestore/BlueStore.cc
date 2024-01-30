@@ -6512,12 +6512,22 @@ int BlueStore::_write_bdev_label(
       locations.end()) {
     locations.push_back(BDEV_LABEL_POSITION);
   }
+  struct stat st;
+  r = ::fstat(fd, &st);
+  if (r < 0) {
+    r = -errno;
+    derr << __func__ << " failed to fstat " << path << ": " << cpp_strerror(r) << dendl;
+    VOID_TEMP_FAILURE_RETRY(::close(fd));
+    return r;
+  }
   for (uint64_t position : locations) {
-    r = bl.write_fd(fd, position);
-    if (r < 0) {
-      derr << __func__ << " failed to write to " << path
-        << ": " << cpp_strerror(r) << dendl;
-      goto out;
+    if (int64_t(position + BDEV_LABEL_BLOCK_SIZE) <= st.st_size) {
+      r = bl.write_fd(fd, position);
+      if (r < 0) {
+        derr << __func__ << " failed to write to " << path
+          << ": " << cpp_strerror(r) << dendl;
+        goto out;
+      }
     }
   }
   r = ::fsync(fd);
