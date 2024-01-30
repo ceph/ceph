@@ -23,8 +23,8 @@
 #include "common/safe_io.h"
 #include "mds/mdstypes.h"
 #include "mds/LogEvent.h"
-#include "mds/JournalPointer.h"
-#include "osdc/Journaler.h"
+#include "mds/RadosJournalPointerStore.h"
+#include "osdc/RadosJournaler.h"
 #include "mon/MonClient.h"
 
 #include "Dumper.h"
@@ -48,13 +48,13 @@ int Dumper::init(mds_role_t role_, const std::string &type)
   auto& fs =  fsmap->get_filesystem(role.fscid);
 
   if (type == "mdlog") {
-    JournalPointer jp(role.rank, fs.get_mds_map().get_metadata_pool());
-    int jp_load_result = jp.load(objecter);
+    RadosJournalPointerStore jps(role.rank, fs.get_mds_map().get_metadata_pool(), objecter);
+    int jp_load_result = jps.load();
     if (jp_load_result != 0) {
       std::cerr << "Error loading journal: " << cpp_strerror(jp_load_result) << std::endl;
       return jp_load_result;
     } else {
-      ino = jp.front;
+      ino = jps.pointer.front;
     }
   } else if (type == "purge_queue") {
     ino = MDS_INO_PURGE_QUEUE + role.rank;
@@ -89,7 +89,7 @@ int Dumper::dump(const char *dump_file)
 
   auto& fs = fsmap->get_filesystem(role.fscid);
 
-  Journaler journaler("dumper", ino, fs.get_mds_map().get_metadata_pool(),
+  RadosJournaler journaler("dumper", ino, fs.get_mds_map().get_metadata_pool(),
                       CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,
                       &finisher);
   r = recover_journal(&journaler);
@@ -204,7 +204,7 @@ int Dumper::undump(const char *dump_file, bool force)
 
   int r = 0;
   // try get layout info from cluster
-  Journaler journaler("umdumper", ino, fs.get_mds_map().get_metadata_pool(),
+  RadosJournaler journaler("umdumper", ino, fs.get_mds_map().get_metadata_pool(),
                       CEPH_FS_ONDISK_MAGIC, objecter, 0, 0,
                       &finisher);
   int recovered = recover_journal(&journaler);

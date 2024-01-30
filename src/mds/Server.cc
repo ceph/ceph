@@ -393,7 +393,7 @@ class C_MDS_session_finish : public ServerLogContext {
   interval_set<inodeno_t> inos_to_free;
   version_t inotablev;
   interval_set<inodeno_t> inos_to_purge;
-  LogSegment *ls = nullptr;
+  AutoSharedLogSegment ls = nullptr;
   Context *fin;
 public:
   C_MDS_session_finish(Server *srv, Session *se, uint64_t sseq, bool s, version_t mv, Context *fin_ = nullptr) :
@@ -487,7 +487,7 @@ void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaim
     if (reply) {
       int64_t session_id = session->get_client().v;
       send_reply = new LambdaContext([this, session_id, reply](int r) {
-	    ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+	    ceph_assert(ceph_mutex_is_locked_by_me(mds->get_lock()));
 	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
 	    if (!session) {
 	      return;
@@ -1383,7 +1383,7 @@ void Server::handle_conf_change(const std::set<std::string>& changed) {
  */
 void Server::kill_session(Session *session, Context *on_safe)
 {
-  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->get_lock()));
 
   if ((session->is_opening() ||
        session->is_open() ||

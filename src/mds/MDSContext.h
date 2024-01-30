@@ -23,8 +23,12 @@
 #include "include/elist.h"
 #include "include/spinlock.h"
 #include "common/ceph_time.h"
+#include "include/auto_shared_ptr.h"
 
+class MDSRankBase;
 class MDSRank;
+class LogSegment;
+using AutoSharedLogSegment = auto_shared_ptr<LogSegment>;
 
 /**
  * Completion which has access to a reference to the global MDS instance.
@@ -45,7 +49,7 @@ template<template<typename> class A>
   using que = que_alloc<std::allocator>;
 
   void complete(int r) override;
-  virtual MDSRank *get_mds() = 0;
+  virtual MDSRankBase *get_mds() = 0;
 };
 
 /* Children of this could have used multiple inheritance with MDSHolder and
@@ -55,17 +59,18 @@ template<class T>
 class MDSHolder : public T
 {
 public:
-  MDSRank* get_mds() override {
+  MDSRankBase* get_mds() override {
     return mds;
   }
 
 protected:
   MDSHolder() = delete;
-  MDSHolder(MDSRank* mds) : mds(mds) {
+  MDSHolder(MDSRankBase* mds) : mds(mds) {
     ceph_assert(mds != nullptr);
   }
+  MDSHolder(MDSRank* mds);
 
-  MDSRank* mds;
+  MDSRankBase* mds;
 };
 
 /**
@@ -77,6 +82,7 @@ public:
   MDSInternalContext() = delete;
 
 protected:
+  explicit MDSInternalContext(MDSRankBase *mds_) : MDSHolder(mds_) {}
   explicit MDSInternalContext(MDSRank *mds_) : MDSHolder(mds_) {}
 };
 
@@ -90,7 +96,21 @@ protected:
   Context *fin = nullptr;
   void finish(int r) override;
 public:
+  MDSInternalContextWrapper(MDSRankBase *m, Context *c) : MDSInternalContext(m), fin(c) {}
   MDSInternalContextWrapper(MDSRank *m, Context *c) : MDSInternalContext(m), fin(c) {}
+};
+
+class MDSInternalLockingWrapper : public Context
+{
+ protected:
+  MDSInternalContext *internal_context = nullptr;
+  void complete(int r) override;
+  void finish(int r) override
+  {
+    ceph_abort("this shouldn't be called");
+  }
+ public:
+  MDSInternalLockingWrapper(MDSInternalContext *fin) : internal_context(fin) {}
 };
 
 class MDSIOContextBase : public MDSContext
@@ -123,15 +143,20 @@ private:
 class MDSLogContextBase : public MDSIOContextBase
 {
 protected:
-  uint64_t write_pos = 0;
+  AutoSharedLogSegment log_segment;
+  uint64_t event_start_pos = 0;
+  uint64_t event_end_pos = 0;
 public:
   MDSLogContextBase() = default;
   void complete(int r) final;
-  void set_write_pos(uint64_t wp) { write_pos = wp; }
-  virtual void pre_finish(int r) {}
-  void print(std::ostream& out) const override {
-    out << "log_event(" << write_pos << ")";
+  void set_event_bounds(const AutoSharedLogSegment& ls, uint64_t event_start, uint64_t event_end)
+  {  
+    log_segment = ls;
+    event_start_pos = event_start;
+    event_end_pos = event_end;
   }
+  virtual void pre_finish(int r) {}
+  void print(std::ostream& out) const override;
 };
 
 /**
@@ -141,6 +166,7 @@ public:
 class MDSIOContext : public MDSHolder<MDSIOContextBase>
 {
 public:
+  explicit MDSIOContext(MDSRankBase *mds_) : MDSHolder(mds_) {}
   explicit MDSIOContext(MDSRank *mds_) : MDSHolder(mds_) {}
 };
 
@@ -153,6 +179,7 @@ class MDSIOContextWrapper : public MDSHolder<MDSIOContextBase>
 protected:
   Context *fin;
 public:
+  MDSIOContextWrapper(MDSRankBase *m, Context *c) : MDSHolder(m), fin(c) {}
   MDSIOContextWrapper(MDSRank *m, Context *c) : MDSHolder(m), fin(c) {}
   void finish(int r) override;
   void print(std::ostream& out) const override {
@@ -169,7 +196,7 @@ public:
   void finish(int r) override {}
   void complete(int r) override { delete this; }
 protected:
-  MDSRank* get_mds() override final {ceph_abort();}
+  MDSRankBase* get_mds() override final {ceph_abort();}
 };
 
 
@@ -187,6 +214,10 @@ protected:
     wrapped = nullptr;
   }
 public:
+  C_IO_Wrapper(MDSRankBase *mds_, Context *wrapped_) :
+    MDSIOContext(mds_), async(true), wrapped(wrapped_) {
+    ceph_assert(wrapped != NULL);
+  }
   C_IO_Wrapper(MDSRank *mds_, Context *wrapped_) :
     MDSIOContext(mds_), async(true), wrapped(wrapped_) {
     ceph_assert(wrapped != NULL);

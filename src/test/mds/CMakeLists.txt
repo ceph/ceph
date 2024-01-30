@@ -14,3 +14,22 @@ add_executable(unittest_mds_sessionfilter
 add_ceph_unittest(unittest_mds_sessionfilter)
 target_link_libraries(unittest_mds_sessionfilter mds osdc ceph-common global ${BLKID_LIBRARIES})
 
+add_executable(unittest_memory_journaler
+  TestMemoryJournaler.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_memory_journaler)
+target_link_libraries(unittest_memory_journaler osdc ceph-common global)
+
+add_executable(unittest_mdlog
+  TestMDLog.cc
+  stubs/journal.cc
+  ../../mds/MDLog.cc
+  ../../mds/MDSContext.cc
+  ../../mds/LogEvent.cc
+  ../../mds/events/serializers.cc
+  ../../mds/events/test_instances.cc
+  $<TARGET_OBJECTS:unit-main>
+)
+add_ceph_unittest(unittest_mdlog)
+target_link_libraries(unittest_mdlog osdc ceph-common global)

@@ -20,7 +20,7 @@
 #include "mds/mdstypes.h"
 #include "msg/Messenger.h"
 
-#include "mds/JournalPointer.h"
+#include "RadosJournalPointerStore.h"
 
 
 #define dout_context g_ceph_context
@@ -28,8 +28,7 @@
 #undef dout_prefix
 #define dout_prefix *_dout << objecter->messenger->get_myname() << ".journalpointer "
 
-
-std::string JournalPointer::get_object_id() const
+std::string RadosJournalPointerStore::get_object_id() const
 {
   inodeno_t const pointer_ino = MDS_INO_LOG_POINTER_OFFSET + node_id;
   char buf[32];
@@ -42,7 +41,7 @@ std::string JournalPointer::get_object_id() const
 /**
  * Blocking read of JournalPointer for this MDS
  */
-int JournalPointer::load(Objecter *objecter)
+int RadosJournalPointerStore::load()
 {
   ceph_assert(objecter != NULL);
 
@@ -59,7 +58,7 @@ int JournalPointer::load(Objecter *objecter)
   if (r == 0) {
     auto q = data.cbegin();
     try {
-      decode(q);
+      pointer.decode(q);
     } catch (const buffer::error &e) {
       return -CEPHFS_EINVAL;
     }
@@ -75,29 +74,13 @@ int JournalPointer::load(Objecter *objecter)
  *
  * @return objecter write op status code
  */
-int JournalPointer::save(Objecter *objecter) const
+int RadosJournalPointerStore::save() const
 {
-  ceph_assert(objecter != NULL);
-  // It is not valid to persist a null pointer
-  ceph_assert(!is_null());
-
-  // Serialize JournalPointer object
-  bufferlist data;
-  encode(data);
-
-  // Write to RADOS and wait for durability
-  std::string const object_id = get_object_id();
-  dout(4) << "Writing pointer object '" << object_id << "': 0x"
-    << std::hex << front << ":0x" << back << std::dec << dendl;
-
   C_SaferCond waiter;
-  objecter->write_full(object_t(object_id), object_locator_t(pool_id),
-		       SnapContext(), data,
-		       ceph::real_clock::now(), 0,
-		       &waiter);
+  save(&waiter);
   int write_result = waiter.wait();
   if (write_result < 0) {
-    derr << "Error writing pointer object '" << object_id << "': " << cpp_strerror(write_result) << dendl;
+    derr << "Error writing pointer object '" << get_object_id() << "': " << cpp_strerror(write_result) << dendl;
   }
   return write_result;
 }
@@ -107,16 +90,23 @@ int JournalPointer::save(Objecter *objecter) const
  * Non-blocking variant of save() that assumes objecter lock already held by
  * caller
  */
-void JournalPointer::save(Objecter *objecter, Context *completion) const
+void RadosJournalPointerStore::save(Context* completion) const
 {
   ceph_assert(objecter != NULL);
+  // It is not valid to persist a null pointer
+  ceph_assert(!pointer.is_null());
 
   bufferlist data;
-  encode(data);
+  pointer.encode(data);
 
-  objecter->write_full(object_t(get_object_id()), object_locator_t(pool_id),
-		       SnapContext(), data,
-		       ceph::real_clock::now(), 0,
-		       completion);
+  // Write to RADOS and wait for durability
+  std::string const object_id = get_object_id();
+  dout(4) << "Writing pointer object '" << object_id << "': 0x"
+          << std::hex << pointer.front << ":0x" << pointer.back << std::dec << dendl;
+
+  objecter->write_full(object_t(object_id), object_locator_t(pool_id),
+      SnapContext(), data,
+      ceph::real_clock::now(), 0,
+      completion);
 }
 

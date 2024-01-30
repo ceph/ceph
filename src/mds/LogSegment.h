@@ -18,6 +18,7 @@
 #include "include/elist.h"
 #include "include/interval_set.h"
 #include "include/Context.h"
+#include "include/auto_shared_ptr.h"
 #include "MDSContext.h"
 #include "mdstypes.h"
 #include "CInode.h"
@@ -25,33 +26,30 @@
 #include "CDir.h"
 
 #include "include/unordered_set.h"
+#include <atomic>
 
 using ceph::unordered_set;
 
 class CDir;
 class CInode;
 class CDentry;
-class MDSRank;
+class MDSRankBase;
 struct MDPeerUpdate;
 
-class LogSegment {
+using AutoSharedLogSegment = auto_shared_ptr<LogSegment>;
+using WeakLogSegment = std::weak_ptr<LogSegment>;
+
+class LogSegment: public std::enable_shared_from_this<LogSegment> {
  public:
   using seq_t = uint64_t;
+  constexpr static const seq_t SEQ_MAX = UINT64_MAX;
 
-  LogSegment(uint64_t _seq, loff_t off=-1) :
-    seq(_seq), offset(off), end(off),
-    dirty_dirfrags(member_offset(CDir, item_dirty)),
-    new_dirfrags(member_offset(CDir, item_new)),
-    dirty_inodes(member_offset(CInode, item_dirty)),
-    dirty_dentries(member_offset(CDentry, item_dirty)),
-    open_files(member_offset(CInode, item_open_file)),
-    dirty_parent_inodes(member_offset(CInode, item_dirty_parent)),
-    dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
-    dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
-    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree))
-  {}
+  [[nodiscard]] static AutoSharedLogSegment create(uint64_t _seq, std::optional<uint64_t> off = std::nullopt)
+  {
+    return std::shared_ptr<LogSegment>(new LogSegment(_seq, off));
+  }
 
-  void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
+  void try_to_expire(MDSRankBase *mds, MDSGatherBuilder &gather_bld, int op_prio);
   void purge_inodes_finish(interval_set<inodeno_t>& inos){
     purging_inodes.subtract(inos);
     if (NULL != purged_cb &&
@@ -62,14 +60,28 @@ class LogSegment {
     ceph_assert(purged_cb == NULL);
     purged_cb = c;
   }
-  void wait_for_expiry(MDSContext *c)
+  void bounds_upkeep(uint64_t start_pos, uint64_t end_pos)
   {
-    ceph_assert(c != NULL);
-    expiry_waiters.push_back(c);
+    if (bounds.has_value()) {
+      uint64_t offset = get_offset();
+      ceph_assert(offset <= start_pos);
+      uint64_t end = std::max(get_end(), end_pos);
+      bounds = {offset, end};
+    } else {
+      bounds = {start_pos, end_pos};
+    }
+
   }
+  void bounds_upkeep(uint64_t pos)
+  {
+    bounds_upkeep(pos, pos);
+  }
+  inline uint64_t get_offset() const { return bounds.value().first; }
+  inline uint64_t get_end() const { return bounds.value().second; }
+  inline bool has_bounds() const { return bounds.has_value(); }
+  inline bool end_is_safe(uint64_t safe_pos) { return has_bounds() && get_end() <= safe_pos; }
 
   const seq_t seq;
-  uint64_t offset, end;
   uint64_t num_events = 0;
 
   // dirty items
@@ -103,11 +115,31 @@ class LogSegment {
   version_t sessionmapv = 0;
   std::map<int,version_t> tablev;
 
-  MDSContext::vec expiry_waiters;
+ private:
+  std::optional<std::pair<uint64_t, uint64_t>> bounds;
+  // clients should use the `create` method
+  LogSegment(uint64_t _seq, std::optional<uint64_t> off = std::nullopt)
+      : seq(_seq)
+      , dirty_dirfrags(member_offset(CDir, item_dirty))
+      , new_dirfrags(member_offset(CDir, item_new))
+      , dirty_inodes(member_offset(CInode, item_dirty))
+      , dirty_dentries(member_offset(CDentry, item_dirty))
+      , open_files(member_offset(CInode, item_open_file))
+      , dirty_parent_inodes(member_offset(CInode, item_dirty_parent))
+      , dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir))
+      , dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest))
+      , dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree))
+  {
+    if (off.has_value()) {
+      bounds = {off.value(), off.value()};
+    } else {
+      bounds = std::nullopt;
+    }
+  }
 };
 
 static inline std::ostream& operator<<(std::ostream& out, const LogSegment& ls) {
-  return out << "LogSegment(" << ls.seq << "/0x" << std::hex << ls.offset
+  return out << "LogSegment(" << ls.seq << "/0x" << std::hex << ls.get_offset()
              << std::dec << " events=" << ls.num_events << ")";
 }
 

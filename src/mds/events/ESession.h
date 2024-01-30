@@ -16,7 +16,9 @@
 #define CEPH_MDS_ESESSION_H
 
 #include "common/config.h"
-#include "include/types.h"
+#include "include/fs_types.h"
+#include "include/interval_set.h"
+#include "mds/mdstypes.h"
 
 #include "../LogEvent.h"
 
@@ -63,7 +65,7 @@ class ESession : public LogEvent {
   }
   
   void update_segment() override;
-  void replay(MDSRank *mds) override;
+  void replay(MDSRankBase *mdsb) override;
   entity_inst_t get_client_inst() const {return client_inst;}
 };
 WRITE_CLASS_ENCODER_FEATURES(ESession)

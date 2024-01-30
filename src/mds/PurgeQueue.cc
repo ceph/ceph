@@ -583,7 +583,7 @@ void PurgeQueue::_commit_ops(int r, const std::vector<PurgeItemCommitOp>& ops_ve
     // expire_pos doesn't fall too far behind our progress when consuming
     // a very long queue.
     if (!readonly &&
-        (in_flight.empty() || journaler.write_head_needed())) {
+        (in_flight.empty() || journaler.is_write_head_needed())) {
       journaler.write_head(nullptr);
     }
   }), &finisher));

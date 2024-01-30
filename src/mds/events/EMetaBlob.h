@@ -407,7 +407,7 @@ private:
     truncate_finish[ino] = segoff;
   }
   
-  bool rewrite_truncate_finish(MDSRank const *mds, std::map<uint64_t, uint64_t> const &old_to_new);
+  bool rewrite_truncate_finish(MDSRankBase const *mds, std::map<uint64_t, uint64_t> const &old_to_new);
 
   void add_destroyed_inode(inodeno_t ino) {
     destroyed_inodes.push_back(ino);
@@ -603,7 +603,7 @@ private:
   }
 
   void update_segment(LogSegment *ls);
-  void replay(MDSRank *mds, LogSegment *ls, int type, MDPeerUpdate *su=NULL);
+  void replay(MDSRankBase *mdsb, LogSegment *ls, int type, MDPeerUpdate *su=NULL);
 };
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob)
 WRITE_CLASS_ENCODER_FEATURES(EMetaBlob::fullbit)
