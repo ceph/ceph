@@ -1597,3 +1597,41 @@ options:
   - mds
   flags:
   - runtime
+- name: mds_log_trim_threshold
+  type: size
+  level: advanced
+  desc: MDS log trim threshold
+  long_desc: The threshold of the number of log segment that can be trimmed.
+  default: 128
+  min: 1
+  services:
+  - mds
+  see_also:
+  - mds_log_max_events
+  - mds_log_max_segments
+  flags:
+  - runtime
+- name: mds_log_trim_decay_rate
+  type: float
+  level: advanced
+  desc: MDS log trim decay rate
+  long_desc: The decay rate for trimming the MDS log. Increasing this value leads to the MDS spending less time in trimming the log.
+  default: 1.0
+  min: 0.01
+  services:
+  - mds
+  see_also:
+  - mds_log_max_events
+  - mds_log_max_segments
+  flags:
+  - runtime
+- name: mds_log_trim_upkeep_interval
+  type: millisecs
+  level: advanced
+  desc: MDS log trimming interval
+  long_desc: Interval in milliseconds to trim MDS logs.
+  default: 1000
+  services:
+  - mds
+  flags:
+  - runtime
