@@ -592,7 +592,7 @@ cluster map, the client doesn't know anything about object locations.**
 
 **Object locations must be computed.**
 
-The client requies only the object ID and the name of the pool in order to
+The client requires only the object ID and the name of the pool in order to
 compute the object location.
 
 Ceph stores data in named pools (for example,  "liverpool"). When a client
