@@ -2775,10 +2775,10 @@ public:
     CephContext* cct, const std::string &path,
     bluestore_bdev_label_t *label, uint64_t disk_position = BDEV_LABEL_POSITION);
 private:
-  int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
+  int _check_or_set_bdev_label(const std::string& path, uint64_t size, std::string desc,
 			       bool create);
   int _check_or_set_main_bdev_label(
-    std::string path,
+    const std::string& path,
     uint64_t size,
     bool create);
   static int _read_main_bdev_label(

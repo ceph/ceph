@@ -6759,7 +6759,7 @@ void BlueStore::_main_bdev_label_remove(Allocator* an_alloc)
 }
 
 int BlueStore::_check_or_set_bdev_label(
-  string path, uint64_t size, string desc, bool create)
+  const string& path, uint64_t size, string desc, bool create)
 {
   bluestore_bdev_label_t label;
   if (create) {
@@ -6787,7 +6787,7 @@ int BlueStore::_check_or_set_bdev_label(
 }
 
 int BlueStore::_check_or_set_main_bdev_label(
-  string path, uint64_t size, bool create)
+  const string& path, uint64_t size, bool create)
 {
   if (create) {
     bdev_label_valid_locations.clear();
