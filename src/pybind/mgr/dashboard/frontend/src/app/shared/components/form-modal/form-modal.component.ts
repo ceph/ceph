@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { UntypedFormControl, ValidatorFn, Validators } from '@angular/forms';
+import { AsyncValidatorFn, UntypedFormControl, ValidatorFn, Validators } from '@angular/forms';
 
 import { NgbActiveModal } from '@ng-bootstrap/ng-bootstrap';
 import _ from 'lodash';
@@ -47,18 +47,22 @@ export class FormModalComponent implements OnInit {
 
   private createFormControl(field: CdFormModalFieldConfig): UntypedFormControl {
     let validators: ValidatorFn[] = [];
+    let asyncValidators: AsyncValidatorFn[] = [];
     if (_.isBoolean(field.required) && field.required) {
       validators.push(Validators.required);
     }
     if (field.validators) {
       validators = validators.concat(field.validators);
     }
+    if (field.asyncValidators) {
+      asyncValidators = asyncValidators.concat(field.asyncValidators);
+    }
     return new UntypedFormControl(
       _.defaultTo(
         field.type === 'binary' ? this.dimlessBinaryPipe.transform(field.value) : field.value,
         null
       ),
-      { validators }
+      { validators, asyncValidators }
     );
   }
 
