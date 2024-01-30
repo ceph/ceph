@@ -11,6 +11,9 @@ updates:
       - "dashboard"
     pull-request-branch-name:
       separator: "-"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -20,3 +23,6 @@ updates:
       prefix: ".github:"
     pull-request-branch-name:
       separator: "-"
+    ignore:
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
