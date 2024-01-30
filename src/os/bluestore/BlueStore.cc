@@ -6592,6 +6592,91 @@ int BlueStore::_read_bdev_label(
   return 0;
 }
 
+/**
+  Reads device label.
+  cct             - CephContext, as usual
+  path            - Path to block device, as conf.bluestore_block_path defines.
+  *out_label      - Filled if reading of label is considered successful.
+  *out_valid_positions - List of locations that contained valid labels.
+  *out_is_multi  -  Whether the label is regular or multi label with epoch.
+  *out_epoch     -  Epoch of label.
+
+  Returns:
+  0    When all label are read
+  1    When some, but not all labels are read
+  -ENOENT Otherwise
+
+*/
+int BlueStore::_read_main_bdev_label(
+  CephContext* cct,
+  const string &path,
+  bluestore_bdev_label_t *out_label,
+  std::vector<uint64_t>* out_valid_positions,
+  bool* out_is_multi,
+  int64_t* out_epoch)
+{
+  dout(10) << __func__ << dendl;
+  ceph_assert(out_label);
+  // go and try read all possible bdev labels.
+  // if only first bdev label is correct, it must not have "multi=yes" key.
+  int64_t epoch = -1;
+  bool all_labels_valid = true;
+  for (uint64_t position : bdev_label_positions) {
+    bluestore_bdev_label_t label;
+    int r = _read_bdev_label(cct, path, &label, position);
+    if (r == 0) {
+      auto i = label.meta.find("multi");
+      bool is_multi = i != label.meta.end() && i->second == "yes";
+      if (position == BDEV_LABEL_POSITION && !is_multi) {
+        // we have a single-label case
+        *out_label = label;
+        is_multi = false;
+        if (out_is_multi) {
+          *out_is_multi = false;
+        }
+        if(out_valid_positions) {
+          out_valid_positions->push_back(position);
+        }
+        goto done;
+      }
+      if (!is_multi) {
+        // for not base bdev position, it has to be cloned to be considered
+        continue;
+      }
+      i = label.meta.find("epoch");
+      if (i != label.meta.end()) {
+        int64_t v = atoll(i->second.c_str());
+        if (v > epoch) {
+          epoch = v;
+          *out_label = label;
+          if (out_epoch) {
+            *out_epoch = epoch;
+          }
+          is_multi = true;
+          if (out_is_multi) {
+            *out_is_multi = true;
+          }
+          if(out_valid_positions) {
+            out_valid_positions->push_back(position);
+          }
+        }
+      }
+    } else if (r == 1) {
+      // tried to read but no disk
+    } else {
+      all_labels_valid = false;
+    }
+  }
+  if (epoch == -1) {
+    // not even one label read properly
+    derr << "No valid bdev label found" << dendl;
+    return -ENOENT;
+  }
+  done:
+  dout(10) << __func__ << " got " << *out_label << dendl;
+  return all_labels_valid ? 0 : 1;
+}
+
 int BlueStore::_check_or_set_bdev_label(
   string path, uint64_t size, string desc, bool create)
 {
@@ -6615,6 +6700,44 @@ int BlueStore::_check_or_set_bdev_label(
       derr << __func__ << " bdev " << path << " fsid " << label.osd_uuid
 	   << " does not match our fsid " << fsid << dendl;
       return -EIO;
+    }
+  }
+  return 0;
+}
+
+int BlueStore::_check_or_set_main_bdev_label(
+  string path, uint64_t size, bool create)
+{
+  bluestore_bdev_label_t label;
+  if (create) {
+    label.osd_uuid = fsid;
+    label.size = size;
+    label.btime = ceph_clock_now();
+    label.description = "main";
+    if (cct->_conf.get_val<bool>("bluestore_bdev_label_multi")) {
+      label.meta["multi"] = "yes";
+      label.meta["epoch"] = "1";
+    }
+    int r = _write_bdev_label(cct, path, label, bdev_label_positions);
+    if (r < 0)
+      return r;
+  } else {
+    int r = _read_main_bdev_label(cct, path, &bdev_label, &bdev_label_valid_locations);
+    if (r < 0)
+      return r;
+    if (cct->_conf->bluestore_debug_permit_any_bdev_label) {
+      dout(20) << __func__ << " bdev " << path << " fsid " << label.osd_uuid
+	   << " and fsid " << fsid << " check bypassed" << dendl;
+    } else if (label.osd_uuid != fsid) {
+      derr << __func__ << " bdev " << path << " fsid " << label.osd_uuid
+	   << " does not match our fsid " << fsid << dendl;
+      return -EIO;
+    }
+    if (cct->_conf.get_val<bool>("bluestore_bdev_label_require_all")) {
+      if (r != 0) {
+        derr << __func__ << "not all labels read properly" << dendl;
+        return -EIO;
+      }
     }
   }
   return 0;
@@ -6669,7 +6792,7 @@ int BlueStore::_open_bdev(bool create)
   }
 
   if (bdev->supported_bdev_label()) {
-    r = _check_or_set_bdev_label(p, bdev->get_size(), "main", create);
+    r = _check_or_set_main_bdev_label(p, bdev->get_size(), create);
     if (r < 0)
       goto fail_close;
   }

@@ -2440,8 +2440,10 @@ private:
   std::atomic<uint32_t> config_changed = {0}; ///< Counter to determine if there is a configuration change.
 
   // caching of bdev_label
-  bool                   bdev_label_valid = false; // indicator if
-  bluestore_bdev_label_t bdev_label;               // this value is valid
+  bluestore_bdev_label_t bdev_label;                 // this value is valid if
+  std::vector<uint64_t>  bdev_label_valid_locations; // this has any elements
+  bool bdev_label_multi = false;
+  int64_t bdev_label_epoch = -1;
 
   typedef std::map<uint64_t, volatile_statfs> osd_pools_map;
 
@@ -2774,6 +2776,17 @@ public:
 private:
   int _check_or_set_bdev_label(std::string path, uint64_t size, std::string desc,
 			       bool create);
+  int _check_or_set_main_bdev_label(
+    std::string path,
+    uint64_t size,
+    bool create);
+  static int _read_main_bdev_label(
+    CephContext* cct,
+    const std::string &path,
+    bluestore_bdev_label_t *out_label,
+    std::vector<uint64_t>* out_valid_positions = nullptr,
+    bool* out_is_cloned = nullptr,
+    int64_t* out_epoch = nullptr);
   int _set_bdev_label_size(const std::string& path, uint64_t size);
 
   int _open_super_meta();
