@@ -6013,6 +6013,7 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
   if (!bdev_label_valid_locations.empty()) {
     bdev_label.meta[key] = value;
     if (bdev_label_multi) {
+      bdev_label_epoch++;
       bdev_label.meta["epoch"] = std::to_string(bdev_label_epoch);
     }
     int r = _write_bdev_label(cct, p, bdev_label, bdev_label_valid_locations);
