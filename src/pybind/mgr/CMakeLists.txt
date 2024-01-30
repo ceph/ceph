@@ -46,6 +46,7 @@ set(mgr_modules
   rgw
   # rook (optional)
   selftest
+  smb
   snap_schedule
   stats
   status
