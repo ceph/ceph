@@ -29,6 +29,7 @@
 
 #include "BlueStore.h"
 #include "bluestore_common.h"
+#include "os/bluestore/bluestore_types.h"
 #include "simple_bitmap.h"
 #include "os/kv.h"
 #include "include/compat.h"
@@ -6005,14 +6006,16 @@ int BlueStore::_set_cache_sizes()
 int BlueStore::write_meta(const std::string& key, const std::string& value)
 {
   string p = path + "/block";
-  if (!bdev_label_valid) {
-    int r = _read_bdev_label(cct, p, &bdev_label);
-    if (r == 0) {
-      bdev_label_valid = true;
-    }
+  if (bdev_label_valid_locations.empty()) {
+    int r = _read_main_bdev_label(cct, p, &bdev_label,
+      &bdev_label_valid_locations, &bdev_label_multi, &bdev_label_epoch);
+    ceph_assert(r == 0);
   }
-  if (bdev_label_valid) {
+  if (!bdev_label_valid_locations.empty()) {
     bdev_label.meta[key] = value;
+    if (bdev_label_multi) {
+      bdev_label.meta["epoch"] = std::to_string(bdev_label_epoch);
+    }
     int r = _write_bdev_label(cct, p, bdev_label);
     ceph_assert(r == 0);
   }
@@ -6021,20 +6024,20 @@ int BlueStore::write_meta(const std::string& key, const std::string& value)
 
 int BlueStore::read_meta(const std::string& key, std::string *value)
 {
-  if (!bdev_label_valid) {
-    string p = path + "/block";
-    int r = _read_bdev_label(cct, p, &bdev_label);
-    if (r < 0) {
-      return ObjectStore::read_meta(key, value);
+  string p = path + "/block";
+  if (bdev_label_valid_locations.empty()) {
+    int r = _read_main_bdev_label(cct, p, &bdev_label,
+      &bdev_label_valid_locations, &bdev_label_multi, &bdev_label_epoch);
+    ceph_assert(r == 0);
+  }
+  if (!bdev_label_valid_locations.empty()) {
+    auto i = bdev_label.meta.find(key);
+    if (i != bdev_label.meta.end()) {
+      *value = i->second;
+      return 0;
     }
-    bdev_label_valid = true;
   }
-  auto i = bdev_label.meta.find(key);
-  if (i == bdev_label.meta.end()) {
-    return ObjectStore::read_meta(key, value);
-  }
-  *value = i->second;
-  return 0;
+  return ObjectStore::read_meta(key, value);
 }
 
 
