@@ -10358,7 +10358,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   if (bdev_label_multi) {
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t location = bdev_label_positions[i];
-      if (location > bdev->get_size()) {
+      if (location + BDEV_LABEL_BLOCK_SIZE > bdev->get_size()) {
         continue;
       }
       if (std::find(
@@ -10427,11 +10427,13 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t position = bdev_label_positions[i];
       uint64_t length = std::max<uint64_t>(BDEV_LABEL_BLOCK_SIZE, alloc_size);
-      apply_for_bitset_range(position, length, alloc_size, used_blocks,
-        [&](uint64_t pos, mempool_dynamic_bitset& bs) {
-          bs.set(pos);
-        }
-      );
+      if (position + length <= bdev->get_size()) {
+        apply_for_bitset_range(position, length, alloc_size, used_blocks,
+          [&](uint64_t pos, mempool_dynamic_bitset& bs) {
+            bs.set(pos);
+          }
+        );
+      }
     }
   }
 
