@@ -6787,8 +6787,8 @@ int BlueStore::_check_or_set_bdev_label(
 int BlueStore::_check_or_set_main_bdev_label(
   string path, uint64_t size, bool create)
 {
-  bluestore_bdev_label_t label;
   if (create) {
+    bluestore_bdev_label_t label;
     label.osd_uuid = fsid;
     label.size = size;
     label.btime = ceph_clock_now();
