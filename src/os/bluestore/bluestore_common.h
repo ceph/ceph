@@ -70,7 +70,9 @@ static constexpr uint64_t BDEV_LABEL_BLOCK_SIZE = 4096;
 
 // reserved for standalone DB volume:
 // label (4k) + bluefs super (4k), which means we start at 8k.
-#define DB_SUPER_RESERVED  (BDEV_LABEL_BLOCK_SIZE + 4096)
+static constexpr uint64_t BLUEFS_SUPER_POSITION = 4096;
+static constexpr uint64_t BLUEFS_SUPER_BLOCK_SIZE = 4096;
+static constexpr uint64_t SUPER_RESERVED = BDEV_LABEL_BLOCK_SIZE + BLUEFS_SUPER_BLOCK_SIZE;
 
 
 #endif
