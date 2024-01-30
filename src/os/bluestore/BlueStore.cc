@@ -6789,7 +6789,8 @@ int BlueStore::_check_or_set_main_bdev_label(
   string path, uint64_t size, bool create)
 {
   if (create) {
-    bluestore_bdev_label_t label;
+    bdev_label_valid_locations.clear();
+    bluestore_bdev_label_t& label = bdev_label;
     label.osd_uuid = fsid;
     label.size = size;
     label.btime = ceph_clock_now();
@@ -6797,8 +6798,17 @@ int BlueStore::_check_or_set_main_bdev_label(
     if (cct->_conf.get_val<bool>("bluestore_bdev_label_multi")) {
       label.meta["multi"] = "yes";
       label.meta["epoch"] = "1";
+      bdev_label_multi = true;
+      bdev_label_epoch = 1;
+      for (uint64_t position : bdev_label_positions) {
+        if (int64_t(position + BDEV_LABEL_BLOCK_SIZE) <= size) {
+          bdev_label_valid_locations.push_back(position);
+        }
+      }
+    } else {
+      bdev_label_valid_locations.push_back(BDEV_LABEL_POSITION);
     }
-    int r = _write_bdev_label(cct, path, label, bdev_label_positions);
+    int r = _write_bdev_label(cct, path, label, bdev_label_valid_locations);
     if (r < 0)
       return r;
   } else {
@@ -6806,10 +6816,10 @@ int BlueStore::_check_or_set_main_bdev_label(
     if (r < 0)
       return r;
     if (cct->_conf->bluestore_debug_permit_any_bdev_label) {
-      dout(20) << __func__ << " bdev " << path << " fsid " << label.osd_uuid
+      dout(20) << __func__ << " bdev " << path << " fsid " << bdev_label.osd_uuid
 	   << " and fsid " << fsid << " check bypassed" << dendl;
-    } else if (label.osd_uuid != fsid) {
-      derr << __func__ << " bdev " << path << " fsid " << label.osd_uuid
+    } else if (bdev_label.osd_uuid != fsid) {
+      derr << __func__ << " bdev " << path << " fsid " << bdev_label.osd_uuid
 	   << " does not match our fsid " << fsid << dendl;
       return -EIO;
     }
