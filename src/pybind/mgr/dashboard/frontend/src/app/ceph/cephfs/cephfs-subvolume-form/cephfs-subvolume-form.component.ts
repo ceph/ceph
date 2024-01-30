@@ -108,7 +108,8 @@ export class CephfsSubvolumeFormComponent extends CdForm implements OnInit {
             this.cephFsSubvolumeService,
             null,
             null,
-            this.fsName
+            this.fsName,
+            this.subVolumeGroupName
           )
         ]
       }),
