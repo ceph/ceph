@@ -33,6 +33,10 @@ static int signal_fd[2] = {0, 0};
 namespace rgw {
 namespace signal {
 
+void sig_handler_noop(int signum) {
+  /* NOP */
+} /* sig_handler_noop */
+
 void sighup_handler(int signum) {
     if (rgw::AppMain::ops_log_file != nullptr) {
         rgw::AppMain::ops_log_file->reopen();
