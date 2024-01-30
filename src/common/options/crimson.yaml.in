@@ -19,17 +19,18 @@ options:
   default: 6
   flags:
   - startup
-- name: crimson_seastar_smp
-  type: uint
+- name: crimson_seastar_cpu_cores
+  type: str
   level: advanced
-  desc: Number of seastar reactor threads to use for the osd
-  default: 1
+  desc: CPU cores on which seastar reactor threads will run in cpuset(7) format, smp::count is deduced from this option
   flags:
   - startup
 - name: crimson_alien_thread_cpu_cores
   type: str
   level: advanced
   desc: CPU cores on which alienstore threads will run in cpuset(7) format
+  flags:
+  - startup
 - name: seastore_segment_size
   type: size
   desc: Segment size to use for SegmentManager

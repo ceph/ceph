@@ -362,7 +362,7 @@ namespace {
 seastar::future<> OSD::start()
 {
   LOG_PREFIX(OSD::start);
-  INFO();
+  INFO("seastar::smp::count {}", seastar::smp::count);
 
   startup_time = ceph::mono_clock::now();
   ceph_assert(seastar::this_shard_id() == PRIMARY_CORE);
