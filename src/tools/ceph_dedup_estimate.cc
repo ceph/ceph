@@ -572,7 +572,7 @@ static int calculate_fp_fbc(FP_BUFFER *fp_buffer,
       fp_count++;
     }
   }
-  //ceph_assert(fp_count == bl.length() / chunk_size);
+
   return fp_count;
 }
 
@@ -586,16 +586,12 @@ static int calculate_fp_cdc(FP_BUFFER *fp_buffer,
 {
   unsigned fp_count = 0;
   constexpr unsigned MAX_CHUNK_SIZE = 256*1024;
+  ceph_assert(chunk_size*2 < MAX_CHUNK_SIZE);
   uint8_t temp[MAX_CHUNK_SIZE];
   auto bl_itr = bl.cbegin();
 
   std::vector<std::pair<uint64_t, uint64_t>> chunks;
   std::string chunk_algo = "fastcdc";
-  // TBD
-  // !!!!!!
-  // skip offset_in_obj bytes ....
-  //
-  ceph_abort("TBD::skip offset_in_obj bytes");
   unique_ptr<CDC> cdc = CDC::create(chunk_algo, cbits(chunk_size) - 1);
   cdc->calc_chunks(bl, &chunks);
   for (auto &p : chunks) {
@@ -609,7 +605,7 @@ static int calculate_fp_cdc(FP_BUFFER *fp_buffer,
     else {
       // TBD - How to test this path?
       // It requires that rados.read() will allocate bufferlist in small chunks
-      cout << __func__ << "::***************************************::" << std::endl;
+      cout << __func__ << "::***************************************::\n\n" << std::endl;
 
       memcpy(temp, p_src, n);
       uint32_t count  = chunk_size - n;
@@ -707,7 +703,6 @@ static int thread_collect(unsigned thread_id,
   auto start_itr = itr_ioctx.nobjects_begin(split_start);
   //start_itr.set_cursor(itr.get_cursor());
   uint64_t fp_count = 0, fp_count_total = 0;;
-  uint64_t obj_size = 0;
   utime_t total_time, max_time, min_time = utime_t::max();
 
   if (cursor) {
@@ -745,7 +740,6 @@ static int thread_collect(unsigned thread_id,
     min_time = std::min(min_time, duration);
     max_time = std::max(max_time, duration);
 
-    obj_size = bl.length();
     objs_read++;
     *p_bytes_read += bl.length();
     min_size = std::min(min_size, (uint64_t)bl.length());
@@ -759,7 +753,7 @@ static int thread_collect(unsigned thread_id,
       fp_count = calculate_fp_cdc(fp_buffer.get(), bl, params.chunk_size,
 				  itr.get_cursor(), offset_in_obj, params.verbose);
     }
-    ceph_assert(fp_count == obj_size / params.chunk_size || offset_in_obj != 0);
+
     offset_in_obj = 0;
     fp_count_total += fp_count;
     if (unlikely(max_objs && objs_read >= max_objs)) {
@@ -1159,6 +1153,14 @@ static int merge_reduced_fingerprints(const dedup_params_t &params)
 //===========================================================================
 
 //---------------------------------------------------------------------------
+static int recover_reduce_fingerprints_step(IoCtx *p_itr_ioctx,
+					    IoCtx *p_obj_ioctx,
+					    const dedup_params_t &params)
+{
+  return 0;
+}
+
+//---------------------------------------------------------------------------
 static int parse_hash_object_name(const string &oid,
 				  uint16_t *p_thread_id,
 				  uint32_t *p_part_num,
@@ -1278,14 +1280,6 @@ static int recover_collect_fingerprints_step(IoCtx *p_itr_ioctx,
     }
   }
   cout << "Total size before dedup = " << *p_total_bytes_read / (1024 * 1024) << " MiB" << std::endl;
-  return 0;
-}
-
-//---------------------------------------------------------------------------
-static int recover_reduce_fingerprints_step(IoCtx *p_itr_ioctx,
-					    IoCtx *p_obj_ioctx,
-					    const dedup_params_t &params)
-{
   return 0;
 }
 

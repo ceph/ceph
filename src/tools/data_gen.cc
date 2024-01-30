@@ -114,6 +114,7 @@ struct params_t {
   uint64_t chunk_size    = 8*1024;
   uint64_t objects_count = 2*1024;
   uint64_t object_size   = 256*1024;
+  uint64_t bytes_shift   = 0;
   float    dup_ratio     = 1.5;
 };
 
@@ -165,19 +166,31 @@ void print_report(const uint16_t *blocks_dups,
 
 //---------------------------------------------------------------------------
 int generate_single_object(const uint8_t *data_buff,
-			   uint64_t       object_size,
+			   const params_t &params,
 			   IoCtx         &ioctx,
 			   const string   oid,
 			   uint16_t      *blocks_dups,
 			   unsigned       chunk_size,
 			   unsigned       block_count)
 {
-  static bool first_time = true;
-  uint8_t object_buff[object_size];
+  uint64_t object_size = params.object_size;
+  uint64_t bytes_shift = params.bytes_shift;
+  unsigned chunks_count = object_size/chunk_size;
+
+  // TBD: probably better to use dynamic allocation as stack size is limited
+  uint8_t object_buff[object_size+chunks_count*bytes_shift*2];
   uint8_t *p = object_buff;
 
-  for (unsigned i = 0; i < object_size/chunk_size; i++) {
+  for (unsigned i = 0; i < chunks_count; i++) {
     unsigned idx = rand() % block_count;
+    unsigned dups_count = blocks_dups[idx];
+    if (dups_count) {
+      unsigned bytes = (dups_count % 2 == 0) ? bytes_shift*2 : bytes_shift;
+      for (unsigned i = 0; i < bytes; i++) {
+	*p = rand();
+	p++;
+      }
+    }
     const uint8_t *p_chunk = data_buff + (idx * chunk_size);
     memcpy(p, p_chunk, chunk_size);
     p += chunk_size;
@@ -185,14 +198,9 @@ int generate_single_object(const uint8_t *data_buff,
   }
 
   unsigned data_size = p-object_buff;
-  assert(data_size == object_size);
   bufferlist bl = bufferlist::static_from_mem((char*)object_buff, data_size);
   ioctx.write_full(oid, bl);
 
-  if (first_time) {
-    first_time = false;
-    std::cout << "object_size=" << object_size << ", block_count=" << block_count << std::endl;
-  }
   return 0;
 }
 
@@ -236,7 +244,7 @@ int generate_objects(const params_t &params, const uint8_t *data_buff, unsigned 
     if (object_no % 100 == 0) {
       cout << "generate_single_object(" << oid << ")" << std::endl;
     }
-    generate_single_object(data_buff, params.object_size, ioctx, oid,
+    generate_single_object(data_buff, params, ioctx, oid,
 			   blocks_dups.get(), chunk_size, block_count);
   }
 
@@ -284,6 +292,8 @@ int usage(char* argv[])
     "        set the number of objects to be generated\n"
     "   --object-size=size\n"
     "        set object size (must be a full multiplication of 1024 Bytes)\n"
+    "   --bytes-shift=count\n"
+    "        set the number of bytes to shift before the actual data (CDC)\n"
     "   --dup-ratio=ratio\n"
     "        set the dedup ratio (1-100)" << std::endl;
 
@@ -296,6 +306,7 @@ static int process_arguments(vector<const char*> &args, params_t &params)
   constexpr int   basesize          = 1024;
   constexpr int   max_objects_count = 1024*1024;
   constexpr int   max_object_size   = 4*1024*1024;
+  constexpr int   max_bytes_shift   = 1024;
   constexpr float max_dup_ratio     = 100;
   std::string val;
   std::vector<const char*>::iterator i;
@@ -321,6 +332,16 @@ static int process_arguments(vector<const char*> &args, params_t &params)
       }
       else {
 	cerr << "illegal objects-count ("<< count << ") must be between 1-" << max_objects_count << std::endl;
+	return -1;
+      }
+    } else if (ceph_argparse_witharg(args, i, &val, "--bytes-shift", (char*)NULL)) {
+      int count = atoi(val.c_str());
+      if (count >= 1 && count <= max_bytes_shift) {
+	params.bytes_shift = count;
+	cout << "Bytes shift was set to " << count << std::endl;
+      }
+      else {
+	cerr << "illegal Bytes-shift ("<< count << ") must be between 1-" << max_bytes_shift << std::endl;
 	return -1;
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--object-size", (char*)NULL)) {
