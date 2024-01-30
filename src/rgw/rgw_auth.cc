@@ -71,6 +71,17 @@ static bool match_owner(const rgw_owner& owner, const rgw_user& uid,
       ), owner);
 }
 
+static bool match_account_or_tenant(const rgw_account_id& account_id,
+                                    std::string_view tenant,
+                                    std::string_view expected)
+{
+  if (!account_id.empty()) {
+    return account_id == expected;
+  } else {
+    return tenant == expected;
+  }
+}
+
 std::unique_ptr<rgw::auth::Identity>
 transform_old_authinfo(CephContext* const cct,
                        const rgw_user& auth_id,
@@ -143,7 +154,8 @@ transform_old_authinfo(CephContext* const cct,
       if (p.is_wildcard()) {
         return true;
       } else if (p.is_account()) {
-        return p.get_account() == id.tenant;
+        return match_account_or_tenant(account_id, id.tenant,
+                                       p.get_account());
       } else if (p.is_user()) {
         std::string_view no_subuser;
         // account users can match both account- and tenant-based arns
@@ -870,7 +882,9 @@ bool rgw::auth::LocalApplier::is_identity(const Principal& p) const {
   if (p.is_wildcard()) {
     return true;
   } else if (p.is_account()) {
-    return p.get_account() == user_info.user_id.tenant;
+    return match_account_or_tenant(user_info.account_id,
+                                   user_info.user_id.tenant,
+                                   p.get_account());
   } else if (p.is_user()) {
     // account users can match both account- and tenant-based arns
     if (!user_info.account_id.empty() &&
