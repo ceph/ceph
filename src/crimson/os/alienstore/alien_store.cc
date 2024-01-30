@@ -105,17 +105,11 @@ seastar::future<> AlienStore::start()
     get_conf<std::string>("crimson_alien_thread_cpu_cores"));
   //  crimson_alien_thread_cpu_cores are assigned to alien threads.
   if (!cpu_cores.has_value()) {
-    // no core isolation by default, cores [0, seastar::smp::count)
-    // will be shared between both alien and seastar reactor threads.
-    seastar::resource::cpuset cpuset;
-    std::copy(boost::counting_iterator<unsigned>(0),
-	      boost::counting_iterator<unsigned>(seastar::smp::count - 1),
-	      std::inserter(cpuset, cpuset.end()));
-    if (cpuset.empty()) {
-      logger().error("{}: unable to get nproc: {}", __func__, errno);
-    } else {
-      cpu_cores = cpuset;
-    }
+    // no core isolation by default, seastar_cpu_cores will be
+    // shared between both alien and seastar reactor threads.
+    cpu_cores = seastar::resource::parse_cpuset(
+      get_conf<std::string>("crimson_seastar_cpu_cores"));
+    ceph_assert(cpu_cores.has_value());
   }
   const auto num_threads =
     get_conf<uint64_t>("crimson_alien_op_num_threads");
