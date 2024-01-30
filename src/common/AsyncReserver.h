@@ -113,8 +113,10 @@ class AsyncReserver {
       if (it->second.empty()) {
 	queues.erase(it);
       }
-      f->queue(p.grant);
-      p.grant = nullptr;
+      if (p.grant) {
+	f->queue(p.grant);
+	p.grant = nullptr;
+      }
       in_progress[p.item] = p;
       if (p.preempt) {
 	preempt_by_prio.insert(std::make_pair(p.prio, p.item));
@@ -274,8 +276,7 @@ public:
    * active reservations.
    */
   bool request_reservation_or_fail(
-      T item,		     ///< [in] reservation key
-      Context *on_reserved   ///< [in] callback to be called on reservation
+      T item		     ///< [in] reservation key
   )
   {
     std::lock_guard l(lock);
@@ -288,7 +289,7 @@ public:
     }
 
     const unsigned prio = UINT_MAX;
-    Reservation r(item, prio, on_reserved, nullptr);
+    Reservation r(item, prio, nullptr, nullptr);
     queues[prio].push_back(r);
     queue_pointers.insert(std::make_pair(
 	item, std::make_pair(prio, --(queues[prio]).end())));
