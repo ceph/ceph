@@ -101,6 +101,7 @@ class D4NFilterObject : public FilterObject {
   private:
     D4NFilterDriver* driver;
     std::string version;
+    std::string prefix;
 
   public:
     struct D4NFilterReadOp : FilterReadOp {
@@ -108,7 +109,6 @@ class D4NFilterObject : public FilterObject {
 	class D4NFilterGetCB: public RGWGetDataCB {
 	  private:
 	    D4NFilterDriver* filter;
-	    std::string prefix;
 	    D4NFilterObject* source;
 	    RGWGetDataCB* client_cb;
 	    uint64_t ofs = 0, len = 0;
@@ -130,7 +130,6 @@ class D4NFilterObject : public FilterObject {
               this->y = y;
             }
 	    void set_ofs(uint64_t ofs) { this->ofs = ofs; }
-      void set_prefix(const std::string& prefix) { this->prefix = prefix; }
 	    int flush_last_part();
 	    void bypass_cache_write() { this->write_to_cache = false; }
 	};
@@ -154,10 +153,11 @@ class D4NFilterObject : public FilterObject {
         std::unique_ptr<rgw::Aio> aio;
 	uint64_t offset = 0; // next offset to write to client
         rgw::AioResultList completed; // completed read results, sorted by offset
+      std::unordered_map<uint64_t, std::pair<uint64_t,uint64_t>> blocks_info;
 
-	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results);
+	int flush(const DoutPrefixProvider* dpp, rgw::AioResultList&& results, optional_yield y);
 	void cancel();
-	int drain(const DoutPrefixProvider* dpp);
+	int drain(const DoutPrefixProvider* dpp, optional_yield y);
     };
 
     struct D4NFilterDeleteOp : FilterDeleteOp {
@@ -209,6 +209,9 @@ class D4NFilterObject : public FilterObject {
 
     void set_object_version(const std::string& version) { this->version = version; }
     const std::string get_object_version() { return this->version; }
+
+    void set_prefix(const std::string& prefix) { this->prefix = prefix; }
+    const std::string get_prefix() { return this->prefix; }
 };
 
 class D4NFilterWriter : public FilterWriter {
