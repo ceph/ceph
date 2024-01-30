@@ -351,6 +351,30 @@ Description: debugging symbols for ceph-mgr
  .
  This package contains the debugging symbols for ceph-mgr.
 
+Package: ceph-exporter
+Architecture: linux-any
+Depends: ceph-base (= ${binary:Version}),
+Description: metrics exporter for the ceph distributed storage system
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the metrics exporter daemon, which is used to expose
+ the performance metrics.
+
+Package: ceph-exporter-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-exporter (= ${binary:Version}),
+         ${misc:Depends},
+Description: debugging symbols for ceph-exporter
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the debugging symbols for ceph-exporter.
+
 Package: ceph-mon
 Architecture: linux-any
 Depends: ceph-base (= ${binary:Version}),
