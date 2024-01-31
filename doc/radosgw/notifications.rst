@@ -159,7 +159,7 @@ updating, use the name of an existing topic and different endpoint values).
    [&Attributes.entry.12.key=time_to_live&Attributes.entry.12.value=<seconds to live>]
    [&Attributes.entry.13.key=max_retries&Attributes.entry.13.value=<retries number>]
    [&Attributes.entry.14.key=retry_sleep_duration&Attributes.entry.14.value=<sleep seconds>]
-   [&Attributes.entry.14.key=Policy&Attributes.entry.14.value=<policy-JSON-string>]
+   [&Attributes.entry.15.key=Policy&Attributes.entry.15.value=<policy-JSON-string>]
 
 Request parameters:
 
