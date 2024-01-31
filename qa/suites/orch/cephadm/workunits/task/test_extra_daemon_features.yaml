@@ -1,0 +1,121 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+tasks:
+- install:
+- cephadm:
+- exec:
+    all-hosts:
+      - mkdir /etc/cephadm_testing
+- cephadm.apply:
+    specs:
+      - service_type: mon
+        placement:
+          host_pattern: '*'
+        extra_container_args:
+          - "--cpus=2"
+        extra_entrypoint_args:
+          - "--debug_ms 10"
+      - service_type: container
+        service_id: foo
+        placement:
+          host_pattern: '*'
+        spec:
+          image: "quay.io/fedora/fedora:latest"
+          entrypoint: "bash"
+        extra_container_args:
+          - "-v"
+          - "/etc/cephadm_testing:/root/cephadm_testing"
+        extra_entrypoint_args:
+          - "/root/write_thing_to_file.sh"
+          - "-c"
+          - "testing_custom_containers"
+          - "-o"
+          - "/root/cephadm_testing/testing.txt"
+        custom_configs:
+          - mount_path: "/root/write_thing_to_file.sh"
+            content: |
+              while getopts "o:c:" opt; do
+                case ${opt} in
+                o )
+                  OUT_FILE=${OPTARG}
+                  ;;
+                c )
+                  CONTENT=${OPTARG}
+                esac
+              done
+              echo $CONTENT > $OUT_FILE
+              sleep infinity
+      - service_type: container
+        service_id: bar
+        placement:
+          host_pattern: '*'
+        spec:
+          image: "quay.io/fedora/fedora:latest"
+          entrypoint: "bash"
+          dirs:
+            - data
+          volume_mounts:
+            data: /var/cache/bar:z
+          init_containers:
+            # use a different image, just for checking it can be passed
+            - image: quay.io/centos/centos:latest
+              entrypoint: bash
+              entrypoint_args:
+                - argument: "-c"
+                - argument: ". /etc/os-release && echo from=$ID > /var/cache/bar/from.txt"
+              volume_mounts:
+                data: /var/cache/bar:z
+            # ensure from.txt got created, run 2nd init step
+            - entrypoint: bash
+              entrypoint_args:
+                - argument: "-c"
+                - argument: "test -f /var/cache/bar/from.txt && truncate -s 102400 /var/cache/bar/presized.dat"
+              volume_mounts:
+                data: /var/cache/bar:z
+          # end init_containers
+        extra_entrypoint_args:
+          - "/root/init_check.sh"
+        custom_configs:
+          - mount_path: "/root/init_check.sh"
+            content: |
+              set -e
+              test -f /var/cache/bar/from.txt
+              test -f /var/cache/bar/presized.dat
+              echo ok > /var/cache/bar/primary.txt
+              sleep infinity
+- cephadm.wait_for_service:
+    service: mon
+- cephadm.wait_for_service:
+    service: container.foo
+- cephadm.wait_for_service:
+    service: container.bar
+- exec:
+    host.a:
+      - |
+        set -ex
+        FSID=$(/home/ubuntu/cephtest/cephadm shell -- ceph fsid)
+        sleep 60
+        # check extra container and entrypoint args written to mon unit run file
+        grep "\-\-cpus=2" /var/lib/ceph/$FSID/mon.*/unit.run
+        grep "\-\-debug_ms 10" /var/lib/ceph/$FSID/mon.*/unit.run
+        # check that custom container properly wrote content to file.
+        # This requires the custom config, extra container args, and
+        # entrypoint args to all be working in order for this to have
+        # been written. The container entrypoint was set up with custom_configs,
+        # the content and where to write to with the entrypoint args, and the mounting
+        # of the /etc/cephadm_testing dir with extra container args
+        grep "testing_custom_containers" /etc/cephadm_testing/testing.txt
+        # Verify that container bar's init containers and primary container
+        # ran successfully
+        dir=$(find /var/lib/ceph/$FSID -maxdepth 1 -type d -name 'container.bar.*')
+        test -n "$dir"
+        grep ok ${dir}/data/primary.txt
+        grep from=centos ${dir}/data/from.txt
+        test -s ${dir}/data/presized.dat

@@ -1,0 +1,40 @@
+roles:
+- - host.a
+  - mon.a
+  - mgr.a
+  - osd.0
+- - host.b
+  - mon.b
+  - mgr.b
+  - osd.1
+- - host.c
+  - mon.c
+  - osd.2
+tasks:
+- install:
+- cephadm:
+- cephadm.shell:
+    host.a:
+      - ceph mgr module enable rgw
+- rgw_module.apply:
+    specs:
+      - rgw_realm: myrealm1
+        rgw_zonegroup: myzonegroup1
+        rgw_zone: myzone1
+        spec:
+          rgw_frontend_port: 5500
+- cephadm.shell:
+    host.a:
+      - |
+        set -e
+        set -x
+        while true; do TOKEN=$(ceph rgw realm tokens | jq -r '.[0].token'); echo $TOKEN; if [ "$TOKEN" != "master zone has no endpoint" ]; then break; fi; sleep 5; done
+        TOKENS=$(ceph rgw realm tokens)
+        echo $TOKENS | jq --exit-status '.[0].realm == "myrealm1"'
+        echo $TOKENS | jq --exit-status '.[0].token'
+        TOKEN_JSON=$(ceph rgw realm tokens | jq -r '.[0].token' | base64 --decode)
+        echo $TOKEN_JSON | jq --exit-status '.realm_name == "myrealm1"'
+        echo $TOKEN_JSON | jq --exit-status '.endpoint | test("http://.+:\\d+")'
+        echo $TOKEN_JSON | jq --exit-status '.realm_id | test("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")'
+        echo $TOKEN_JSON | jq --exit-status '.access_key'
+        echo $TOKEN_JSON | jq --exit-status '.secret'
