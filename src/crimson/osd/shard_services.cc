@@ -764,8 +764,7 @@ seastar::future<> ShardServices::dispatch_context_transaction(
   DEBUG("do_transaction ...");
   auto ret = get_store().do_transaction(
     col,
-    std::move(ctx.transaction));
-  ctx.reset_transaction();
+    ctx.transaction.claim_and_reset());
   return ret;
 }
 

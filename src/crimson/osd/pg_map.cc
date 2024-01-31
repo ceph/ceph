@@ -47,14 +47,17 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
       DEBUG("mapping pg {} to core: {} with num_pgs of: {}",
             pgid, insert_iter->second, core_iter->second);
       return primary_mapping.container().invoke_on_others(
-        [pgid = insert_iter->first, core = insert_iter->second]
+        [pgid = insert_iter->first, core = insert_iter->second, FNAME]
         (auto &other_mapping) {
         ceph_assert_always(core != NULL_CORE);
         auto [insert_iter, inserted] = other_mapping.pg_to_core.emplace(pgid, core);
         ceph_assert_always(inserted);
+        DEBUG("mapping pg {} to core: {}", pgid, core);
       });
-    }).then([this, pgid] {
+    }).then([this, pgid, FNAME] {
       auto find_iter = pg_to_core.find(pgid);
+      ceph_assert_always(find_iter != pg_to_core.end());
+      DEBUG("returning pg {} mapping to core {}", pgid, find_iter->second);
       return seastar::make_ready_future<core_id_t>(find_iter->second);
     });
   }
@@ -63,7 +66,7 @@ seastar::future<core_id_t> PGShardMapping::get_or_create_pg_mapping(
 seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
   LOG_PREFIX(PGShardMapping::remove_pg_mapping);
   DEBUG("{}", pgid);
-  return container().invoke_on(0, [pgid](auto &primary_mapping) {
+  return container().invoke_on(0, [pgid, FNAME](auto &primary_mapping) {
     auto iter = primary_mapping.pg_to_core.find(pgid);
     ceph_assert_always(iter != primary_mapping.pg_to_core.end());
     ceph_assert_always(iter->second != NULL_CORE);
@@ -72,12 +75,14 @@ seastar::future<> PGShardMapping::remove_pg_mapping(spg_t pgid) {
     ceph_assert_always(count_iter->second > 0);
     --(count_iter->second);
     primary_mapping.pg_to_core.erase(iter);
+    DEBUG("pg {} mapping erased", pgid);
     return primary_mapping.container().invoke_on_others(
-      [pgid](auto &other_mapping) {
+      [pgid, FNAME](auto &other_mapping) {
       auto iter = other_mapping.pg_to_core.find(pgid);
       ceph_assert_always(iter != other_mapping.pg_to_core.end());
       ceph_assert_always(iter->second != NULL_CORE);
       other_mapping.pg_to_core.erase(iter);
+      DEBUG("pg {} mapping erased", pgid);
     });
   });
 }

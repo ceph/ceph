@@ -434,7 +434,7 @@ PG::do_delete_work(ceph::os::Transaction &t, ghobject_t _next)
     t.remove(coll_ref->get_cid(), pgmeta_oid);
     t.remove_collection(coll_ref->get_cid());
     (void) shard_services.get_store().do_transaction(
-      coll_ref, std::move(t)).then([this] {
+      coll_ref, t.claim_and_reset()).then([this] {
       return shard_services.remove_pg(pgid);
     });
     return {next, false};
