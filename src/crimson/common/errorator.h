@@ -587,6 +587,10 @@ private:
                     "ErrorT is not enlisted in errorator");
     }
 
+    void set_coroutine(seastar::task& coroutine) noexcept {
+      base_t::set_coroutine(coroutine);
+    }
+
     template <class ValueFuncT, class ErrorVisitorT>
     auto safe_then(ValueFuncT&& valfunc, ErrorVisitorT&& errfunc) {
       static_assert((... && std::is_invocable_v<ErrorVisitorT,
