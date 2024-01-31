@@ -5341,8 +5341,8 @@ int OSDMap::calc_desired_primary_distribution_osdsize_opt(
     }
     int write_ratio = 100 - read_ratio;
     ldout(cct, 30) << __func__ << " Pool: " << pid << " read ratio: " << read_ratio << " write ratio: " << write_ratio << dendl;
-    auto num_osds = osds.size();
-    if (pg_num != (pool->get_pgp_num_mask() + 1)) {
+    int num_osds = osds.size();
+    if (pg_num != int((pool->get_pgp_num_mask() + 1))) {
       // TODO: handle pgs with different sizes
       //pool_t op:  unsigned get_pg_num_divisor(pg_t pgid) const;
       ldout(cct, 10) << __func__ << " number of PGs for pool '"
@@ -6451,7 +6451,7 @@ int OSDMap::calc_rbs_fair(CephContext *cct, OSDMap& tmp_osd_map, int64_t pool_id
     }
   }
 
-  auto num_osds = pgs_by_osd.size();
+  int num_osds = pgs_by_osd.size();
 
   float avg_prims_per_osd = (float)num_pgs / (float)num_osds;
   uint64_t max_prims_per_osd = 0;
@@ -6586,8 +6586,8 @@ int OSDMap::calc_rbs_size_optimal(CephContext *cct, OSDMap& tmp_osd_map, int64_t
   pgs_by_osd = tmp_osd_map.get_pgs_by_osd(cct, pool_id, &prim_pgs_by_osd, &acting_prims_by_osd);
   auto num_osds = pgs_by_osd.size();
   int64_t num_pg_osd_legs = 0;
-  for (auto i = 0 ; i < num_osds ; i++) {
-    if (get_primary_affinity(i) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+  for (uint64_t i = 0 ; i < num_osds ; i++) {
+    if (get_primary_affinity(int(i)) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
       if (cct != nullptr) {
         ldout(cct, 30) << __func__ << " pool " << pool_id
                            << " has primary_affinity set to non-default value on some OSDs" << dendl;
