@@ -7638,7 +7638,14 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
 	   << (inc ? "link ":"unlink ")
 	   << *dn << " to " << *targeti << dendl;
 
+  CInode *newi = nullptr;
   CDentry::linkage_t *dnl = dn->get_projected_linkage();
+
+  // create referent inode.
+  if (inc) {
+    newi = prepare_new_inode(mdr, dn->get_dir(), 0, targeti->inode->mode);
+    ceph_assert(newi);
+  }
 
   // 1. send LinkPrepare to dest (journal nlink++ prepare)
   mds_rank_t linkauth = targeti->authority().first;
@@ -7655,11 +7662,19 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     int op;
     if (inc)
       op = MMDSPeerRequest::OP_LINKPREP;
-    else 
+    else
       op = MMDSPeerRequest::OP_UNLINKPREP;
     auto req = make_message<MMDSPeerRequest>(mdr->reqid, mdr->attempt, op);
     targeti->set_object_info(req->get_object_info());
     req->op_stamp = mdr->get_op_stamp();
+    if (inc)
+      req->referent_ino = newi->ino();
+    else {
+      if (dnl->is_referent()) {
+        CInode *ref_in = dnl->get_referent_inode();
+	req->referent_ino = ref_in->ino();
+      }
+    }
     if (auto& desti_srnode = mdr->more()->desti_srnode)
       encode(*desti_srnode, req->desti_snapbl);
     mds->send_message_mds(req, linkauth);
@@ -7690,20 +7705,13 @@ void Server::_link_remote(const MDRequestRef& mdr, bool inc, CDentry *dn, CInode
     mdcache->add_uncommitted_leader(mdr->reqid, mdr->ls, mdr->more()->witnessed);
   }
 
-  CInode *newi = nullptr;
   if (inc) {
     version_t dnpv = dn->pre_dirty();
-    // create inode.
-    newi = prepare_new_inode(mdr, dn->get_dir(), 0, targeti->inode->mode);
-    ceph_assert(newi);
 
+    //referent inode stuff
     auto _inode = newi->_get_inode();
     _inode->version = dnpv;
     _inode->update_backtrace();
-
-    //TODO
-    //pi.inode->add_referent_ino(newi->ino());
-    //dout(20) << "_link_local " << " referent_inodes " << pi.inode->get_referent_inodes() << " referent ino " << newi->ino() << dendl;
 
     mdcache->predirty_journal_parents(mdr, &le->metablob, targeti, dn->get_dir(), PREDIRTY_DIR, 1);
     le->metablob.add_remote_dentry(dn, true, targeti->ino(), targeti->d_type()); // new remote
@@ -7882,9 +7890,15 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
   bool inc;
   bool adjust_realm = false;
   bool realm_projected = false;
+  inodeno_t referent_ino = mdr->peer_request->referent_ino;
   if (mdr->peer_request->get_op() == MMDSPeerRequest::OP_LINKPREP) {
     inc = true;
     pi.inode->nlink++;
+
+    // Link referent inode to the primary inode (targeti)
+    ceph_assert(referent_ino);
+    pi.inode->add_referent_ino(referent_ino);
+    dout(20) << "handle_peer_link_prep " << "referent_inodes " << pi.inode->get_referent_inodes() << " referent ino added " << referent_ino << dendl;
 
     CDentry *target_pdn = targeti->get_projected_parent_dn();
     SnapRealm *target_realm = target_pdn->get_dir()->inode->find_snaprealm();
@@ -7898,6 +7912,12 @@ void Server::handle_peer_link_prep(const MDRequestRef& mdr)
   } else {
     inc = false;
     pi.inode->nlink--;
+
+    // Remove referent inode from primary inode (targeti)
+    ceph_assert(referent_ino);
+    pi.inode->remove_referent_ino(referent_ino);
+    dout(20) << "handle_peer_link_prep " << "referent inodes " << pi.inode->get_referent_inodes() << " referent ino removed " << referent_ino << dendl;
+
     if (targeti->is_projected_snaprealm_global()) {
       ceph_assert(mdr->peer_request->desti_snapbl.length());
       auto p = mdr->peer_request->desti_snapbl.cbegin();
@@ -8396,7 +8416,7 @@ void Server::_unlink_local(const MDRequestRef& mdr, CDentry *dn, CDentry *strayd
   // Remove referent inode from primary link
   if (dnl->is_referent()) {
     pi.inode->remove_referent_ino(ref_in->ino());
-    dout(20) << "_unlink_local referent inodes " << pi.inode->get_referent_inodes() << dendl;
+    dout(20) << "_unlink_local " << "referent inodes " << pi.inode->get_referent_inodes() << " removed referent inode " << ref_in->ino() << dendl;
   }
 
   if (mdr->more()->desti_srnode) {
