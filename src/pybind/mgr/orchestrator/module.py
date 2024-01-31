@@ -1099,6 +1099,47 @@ class OrchestratorCli(OrchestratorClientMixin, MgrModule,
 
             return HandleCommandResult(stdout=table.get_string())
 
+    @_cli_read_command('orch cert-store cert ls')
+    def _cert_store_cert_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_cert_ls()
+        cert_ls = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(cert_ls, format, many=False, cls=None))
+        else:
+            result_str = ''
+            # TODO: the nested if-else cases here look similar
+            # can this be simplified?
+            for k in cert_ls.keys():
+                if not isinstance(cert_ls[k], dict):
+                    result_str += f'{k} - {cert_ls[k]}\n'
+                else:
+                    result_str += f'{k}\n'
+                    for k2 in cert_ls[k].keys():
+                        if not isinstance(cert_ls[k][k2], dict):
+                            result_str += f'  {k2} - {cert_ls[k][k2]}\n'
+                        else:
+                            result_str += f'  {k2}\n'
+                            for k3 in cert_ls[k][k2].keys():
+                                result_str += f'    {k3} - {cert_ls[k][k2][k3]}\n'
+            return HandleCommandResult(stdout=result_str)
+
+    @_cli_read_command('orch cert-store key ls')
+    def _cert_store_key_ls(self, format: Format = Format.plain) -> HandleCommandResult:
+        completion = self.cert_store_key_ls()
+        key_ls = raise_if_exception(completion)
+        if format != Format.plain:
+            return HandleCommandResult(stdout=to_format(key_ls, format, many=False, cls=None))
+        else:
+            result_str = ''
+            for k in key_ls.keys():
+                if not isinstance(key_ls[k], dict):
+                    result_str += f'{k} - {key_ls[k]}\n'
+                else:
+                    result_str += f'{k}\n'
+                    for k2 in key_ls[k].keys():
+                        result_str += f'  {k2} - {key_ls[k][k2]}\n'
+            return HandleCommandResult(stdout=result_str)
+
     def _get_credentials(self, username: Optional[str] = None, password: Optional[str] = None, inbuf: Optional[str] = None) -> Tuple[str, str]:
 
         _username = username
