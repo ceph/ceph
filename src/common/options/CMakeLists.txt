@@ -92,6 +92,7 @@ add_options(mon)
 add_options(osd)
 add_options(rbd)
 add_options(rbd-mirror)
+add_options(dedup)
 add_options(immutable-object-cache)
 add_options(ceph-exporter)
 

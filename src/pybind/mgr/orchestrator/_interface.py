@@ -42,7 +42,8 @@ from ceph.deployment.service_spec import (
     SNMPGatewaySpec,
     ServiceSpec,
     TunedProfileSpec,
-    NvmeofServiceSpec
+    NvmeofServiceSpec,
+    DedupSpec
 )
 from ceph.deployment.drive_group import DriveGroupSpec
 from ceph.deployment.hostspec import HostSpec, SpecValidationError
@@ -502,6 +503,7 @@ class Orchestrator(object):
             'loki': self.apply_loki,
             'promtail': self.apply_promtail,
             'rbd-mirror': self.apply_rbd_mirror,
+            'dedup': self.apply_dedup,
             'rgw': self.apply_rgw,
             'ingress': self.apply_ingress,
             'snmp-gateway': self.apply_snmp_gateway,
@@ -671,6 +673,10 @@ class Orchestrator(object):
         """Update rbd-mirror cluster"""
         raise NotImplementedError()
 
+    def apply_dedup(self, spec: DedupSpec) -> OrchResult[str]:
+        """Update dedup cluster"""
+        raise NotImplementedError()
+
     def apply_nfs(self, spec: NFSServiceSpec) -> OrchResult[str]:
         """Update NFS cluster"""
         raise NotImplementedError()
@@ -816,6 +822,7 @@ def daemon_type_to_service(dtype: str) -> str:
         'nvmeof': 'nvmeof',
         'rbd-mirror': 'rbd-mirror',
         'cephfs-mirror': 'cephfs-mirror',
+        'dedup': 'dedup',
         'nfs': 'nfs',
         'grafana': 'grafana',
         'alertmanager': 'alertmanager',
@@ -849,6 +856,7 @@ def service_to_daemon_types(stype: str) -> List[str]:
         'nvmeof': ['nvmeof'],
         'rbd-mirror': ['rbd-mirror'],
         'cephfs-mirror': ['cephfs-mirror'],
+        'dedup': ['dedup'],
         'nfs': ['nfs'],
         'grafana': ['grafana'],
         'alertmanager': ['alertmanager'],

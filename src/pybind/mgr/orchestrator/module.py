@@ -32,7 +32,7 @@ from ._interface import OrchestratorClientMixin, DeviceLightLoc, _cli_read_comma
     RGWSpec, InventoryFilter, InventoryHost, HostSpec, CLICommandMeta, \
     ServiceDescription, DaemonDescription, IscsiServiceSpec, json_to_generic_spec, \
     GenericSpec, DaemonDescriptionStatus, SNMPGatewaySpec, MDSSpec, TunedProfileSpec, \
-    NvmeofServiceSpec
+    NvmeofServiceSpec, DedupSpec
 
 
 def nice_delta(now: datetime.datetime, t: Optional[datetime.datetime], suffix: str = '') -> str:
@@ -153,6 +153,7 @@ class ServiceType(enum.Enum):
     mon = 'mon'
     mgr = 'mgr'
     rbd_mirror = 'rbd-mirror'
+    dedup = 'dedup'
     cephfs_mirror = 'cephfs-mirror'
     crash = 'crash'
     alertmanager = 'alertmanager'
@@ -1538,6 +1539,29 @@ Usage:
         )
 
         spec.validate()  # force any validation exceptions to be caught correctly
+
+        return self._apply_misc([spec], dry_run, format, no_overwrite)
+
+    @_cli_write_command('orch apply dedup')
+    def _apply_dedup(self,
+                     pool: str,
+                     unmanaged: bool = False,
+                     dry_run: bool = False,
+                     format: Format = Format.plain,
+                     no_overwrite: bool = False,
+                     inbuf: Optional[str] = None) -> HandleCommandResult:
+        """Scale a dedup service"""
+        if inbuf:
+            raise OrchestratorValidationError('unrecognized command -i; -h or --help for usage')
+
+        spec = DedupSpec(
+            service_id=pool,
+            pool=pool,
+            unmanaged=unmanaged,
+            preview_only=dry_run
+        )
+
+        spec.validate()
 
         return self._apply_misc([spec], dry_run, format, no_overwrite)
 

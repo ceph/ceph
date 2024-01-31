@@ -755,8 +755,8 @@ class ServiceSpec(object):
     KNOWN_SERVICE_TYPES = 'alertmanager crash grafana iscsi nvmeof loki promtail mds mgr mon nfs ' \
                           'node-exporter osd prometheus rbd-mirror rgw agent ceph-exporter ' \
                           'container ingress cephfs-mirror snmp-gateway jaeger-tracing ' \
-                          'elasticsearch jaeger-agent jaeger-collector jaeger-query'.split()
-    REQUIRES_SERVICE_ID = 'iscsi nvmeof mds nfs rgw container ingress '.split()
+                          'elasticsearch jaeger-agent jaeger-collector jaeger-query dedup'.split()
+    REQUIRES_SERVICE_ID = 'iscsi nvmeof mds nfs rgw container ingress dedup'.split()
     MANAGED_CONFIG_OPTIONS = [
         'mds_join_fs',
     ]
@@ -788,6 +788,7 @@ class ServiceSpec(object):
             'jaeger-collector': TracingSpec,
             'jaeger-query': TracingSpec,
             'jaeger-tracing': TracingSpec,
+            'dedup': DedupSpec
         }.get(service_type, cls)
         if ret == ServiceSpec and not service_type:
             raise SpecValidationError('Spec needs a "service_type" key.')
@@ -2134,6 +2135,31 @@ class MONSpec(ServiceSpec):
 
 
 yaml.add_representer(MONSpec, ServiceSpec.yaml_representer)
+
+
+class DedupSpec(ServiceSpec):
+    def __init__(self,
+                 service_type: str = 'dedup',
+                 service_id: Optional[str] = None,
+                 pool: Optional[str] = None,
+                 config: Optional[Dict[str, str]] = None,
+                 unmanaged: bool = False,
+                 preview_only: bool = False,
+                 networks: Optional[List[str]] = None,
+                 extra_container_args: Optional[GeneralArgList] = None,
+                 extra_entrypoint_args: Optional[GeneralArgList] = None,
+                 custom_configs: Optional[List[CustomConfig]] = None,
+                 ):
+        assert service_type == 'dedup'
+        super(DedupSpec, self).__init__('dedup', service_id=service_id,
+                                        config=config,
+                                        unmanaged=unmanaged,
+                                        preview_only=preview_only,
+                                        networks=networks,
+                                        extra_container_args=extra_container_args,
+                                        extra_entrypoint_args=extra_entrypoint_args,
+                                        custom_configs=custom_configs)
+        self.pool = pool
 
 
 class TracingSpec(ServiceSpec):

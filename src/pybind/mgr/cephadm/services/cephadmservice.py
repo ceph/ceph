@@ -40,7 +40,7 @@ def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEnt
     """
     # despite this mapping entity names to daemons, self.TYPE within
     # the CephService class refers to service types, not daemon types
-    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'nvmeof', 'ingress', 'ceph-exporter']:
+    if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'nvmeof', 'ingress', 'ceph-exporter', 'dedup']:
         return AuthEntity(f'client.{daemon_type}.{daemon_id}')
     elif daemon_type in ['crash', 'agent']:
         if host == "":
@@ -1135,6 +1135,38 @@ class RbdMirrorService(CephService):
         # if only 1 rbd-mirror, alert user (this is not passable with --force)
         warn, warn_message = self._enough_daemons_to_stop(
             self.TYPE, daemon_ids, 'Rbdmirror', 1, True)
+        if warn:
+            return HandleCommandResult(-errno.EBUSY, '', warn_message)
+        return HandleCommandResult(0, warn_message, '')
+
+
+class DedupService(CephService):
+    TYPE = 'dedup'
+
+    def allow_colo(self) -> bool:
+        return False
+
+    def prepare_create(self, daemon_spec: CephadmDaemonDeploySpec) -> CephadmDaemonDeploySpec:
+        assert self.TYPE == daemon_spec.daemon_type
+
+        keyring = self.get_keyring_with_caps(self.get_auth_entity(daemon_spec.daemon_id),
+                                             ['mon', 'allow r',
+                                              'osd', 'allow rw'])
+
+        daemon_spec.keyring = keyring
+
+        daemon_spec.final_config, daemon_spec.deps = self.generate_config(daemon_spec)
+
+        return daemon_spec
+
+    def ok_to_stop(
+            self,
+            daemon_ids: List[str],
+            force: bool = False,
+            known: Optional[List[str]] = None  # output argument
+    ) -> HandleCommandResult:
+        warn, warn_message = self._enough_daemons_to_stop(
+            self.TYPE, daemon_ids, 'Dedup', 1, True)
         if warn:
             return HandleCommandResult(-errno.EBUSY, '', warn_message)
         return HandleCommandResult(0, warn_message, '')
