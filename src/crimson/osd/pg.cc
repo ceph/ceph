@@ -663,6 +663,11 @@ seastar::future<> PG::read_state(crimson::os::FuturizedStore::Shard* store)
 	PeeringState::Initialize());
 
     return seastar::now();
+  }).then([this, store]() {
+    logger().debug("{} setting collection options", __func__);
+    return store->set_collection_opts(
+          coll_ref,
+          get_pgpool().info.opts);
   });
 }
 
@@ -721,6 +726,16 @@ seastar::future<> PG::handle_initialize(PeeringCtx &rctx)
   return seastar::async([this, &rctx] {
     peering_state.handle_event(PeeringState::Initialize{}, &rctx);
   });
+}
+
+void PG::init_collection_pool_opts()
+{
+  std::ignore = shard_services.get_store().set_collection_opts(coll_ref, get_pgpool().info.opts);
+}
+
+void PG::on_pool_change()
+{
+  init_collection_pool_opts();
 }
 
 

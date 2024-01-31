@@ -311,9 +311,8 @@ public:
 
   unsigned get_target_pg_log_entries() const final;
 
-  void on_pool_change() final {
-    // Not needed yet
-  }
+  void init_collection_pool_opts();
+  void on_pool_change();
   void on_role_change() final {
     // Not needed yet
   }
