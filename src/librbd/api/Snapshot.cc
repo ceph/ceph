@@ -378,7 +378,9 @@ int Snapshot<I>::remove(I *ictx, const char *snap_name, uint32_t flags,
 template <typename I>
 int Snapshot<I>::get_timestamp(I *ictx, uint64_t snap_id, struct timespec *timestamp) {
   auto snap_it = ictx->snap_info.find(snap_id);
-  ceph_assert(snap_it != ictx->snap_info.end());
+  if (snap_it == ictx->snap_info.end()) {
+    return -ENOENT;
+  }
   utime_t time = snap_it->second.timestamp;
   time.to_timespec(timestamp);
   return 0;
