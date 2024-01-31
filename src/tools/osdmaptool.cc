@@ -69,6 +69,7 @@ void usage()
   cout << "   --save                  write modified osdmap with upmap or crush-adjust changes" << std::endl;
   cout << "   --read <file>           calculate pg upmap entries to balance pg primaries" << std::endl;
   cout << "   --read-pool <poolname>  specify which pool the read balancer should adjust" << std::endl;
+  cout << "   --osd-size-aware        account for devices of different sizes, applicable to read mode only" << std::endl;
   cout << "   --vstart                prefix upmap and read output with './bin/'" << std::endl;
   exit(1);
 }
@@ -181,6 +182,7 @@ int main(int argc, const char **argv)
   bool test_map_pgs_dump_all = false;
   bool save = false;
   bool vstart = false;
+  bool osd_size_aware = false;
 
   std::string val;
   std::ostringstream err;
@@ -292,6 +294,8 @@ int main(int argc, const char **argv)
       save = true;
     } else if (ceph_argparse_flag(args, i, "--vstart", (char*)NULL)) {
       vstart = true;
+    } else if (ceph_argparse_flag(args, i, "--osd-size-aware", (char*)NULL)) {
+      osd_size_aware = true;
     } else {
       ++i;
     }
@@ -306,6 +310,10 @@ int main(int argc, const char **argv)
   }
   if (upmap_deviation < 1) {
     cerr << me << ": upmap-deviation must be >= 1" << std::endl;
+    usage();
+  }
+  if (!read && osd_size_aware) {
+    cerr << me << ": osd-size-aware is only applicable to read mode" << std::endl;
     usage();
   }
   fn = args[0];
@@ -484,6 +492,19 @@ int main(int argc, const char **argv)
       exit(1);
     }
 
+    int64_t read_ratio = 0;
+    if (osd_size_aware) {
+      pool->opts.get(pool_opts_t::READ_RATIO, &read_ratio);
+      if (read_ratio <= 0 || read_ratio > 100) {
+	cerr << "The read ratio for pool " << read_pool << " is unset or invalid."
+	     << " To set read ratio, please run 'ceph osd pool set <pool name> read_ratio <value>'." << std::endl;
+	exit(1);
+      } else {
+	cout << "Accounting for devices of different sizes on pool " << read_pool
+	     << " with a read ratio of " << read_ratio << "." << std::endl;
+      }
+    }
+
     OSDMap tmp_osd_map;
     tmp_osd_map.deepish_copy_from(osdmap);
 
@@ -498,8 +519,13 @@ int main(int argc, const char **argv)
     ceph_assert(read_balance_score_before >= 0);
 
     // Calculate read balancer
+    int num_changes = 0;
     OSDMap::Incremental pending_inc(osdmap.get_epoch()+1);
-    int num_changes = osdmap.balance_primaries(g_ceph_context, pid, &pending_inc, tmp_osd_map);
+    if (osd_size_aware) { // account for different device sizes
+      num_changes = osdmap.balance_primaries(g_ceph_context, pid, &pending_inc, tmp_osd_map, OSDMap::RB_OSDSIZEOPT);
+    } else { // default
+      num_changes = osdmap.balance_primaries(g_ceph_context, pid, &pending_inc, tmp_osd_map);
+    }
 
     if (num_changes < 0) {
       cerr << "Error balancing primaries. Rerun with at least --debug-osd=10 for more details." << std::endl;
