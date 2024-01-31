@@ -287,6 +287,12 @@ MDRequestImpl::More* MDRequestImpl::more()
   return _more;
 }
 
+MDRequestImpl::More const* MDRequestImpl::more() const
+{
+  ceph_assert(_more);
+  return _more;
+}
+
 bool MDRequestImpl::has_more() const
 {
   return _more != nullptr;
@@ -373,14 +379,14 @@ void MDRequestImpl::drop_local_auth_pins()
   MutationImpl::drop_local_auth_pins();
 }
 
-const filepath& MDRequestImpl::get_filepath()
+const filepath& MDRequestImpl::get_filepath() const
 {
   if (client_request)
     return client_request->get_filepath();
   return more()->filepath1;
 }
 
-const filepath& MDRequestImpl::get_filepath2()
+const filepath& MDRequestImpl::get_filepath2() const
 {
   if (client_request)
     return client_request->get_filepath2();
@@ -549,6 +555,16 @@ void MDRequestImpl::_dump_op_descriptor(ostream& os) const
     os << "peer_request:" << reqid;
   } else if (internal_op >= 0) {
     os << "internal op " << ceph_mds_op_name(internal_op) << ":" << reqid;
+    if (has_more()) {
+      auto& fp = get_filepath();
+      if (!fp.empty()) {
+        os << " fp=" << fp;
+      }
+      auto& fp2 = get_filepath2();
+      if (!fp2.empty()) {
+        os << " fp2=" << fp2;
+      }
+    }
   } else {
     // drat, it's triggered by a peer request, but we don't have a message
     // FIXME
