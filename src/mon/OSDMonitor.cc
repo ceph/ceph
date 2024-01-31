@@ -395,7 +395,7 @@ void LastEpochClean::report(unsigned pg_num, const pg_t& pg,
   return lec.report(pg_num, pg.ps(), last_epoch_clean);
 }
 
-epoch_t LastEpochClean::get_lower_bound(const OSDMap& latest) const
+epoch_t LastEpochClean::get_lower_bound_by_pool(const OSDMap& latest) const
 {
   auto floor = latest.get_epoch();
   for (auto& pool : latest.get_pools()) {
@@ -2331,7 +2331,7 @@ version_t OSDMonitor::get_trim_to() const
 
 epoch_t OSDMonitor::get_min_last_epoch_clean() const
 {
-  auto floor = last_epoch_clean.get_lower_bound(osdmap);
+  auto floor = last_epoch_clean.get_lower_bound_by_pool(osdmap);
   // also scan osd epochs
   // don't trim past the oldest reported osd epoch
   for (auto [osd, epoch] : osd_epochs) {
