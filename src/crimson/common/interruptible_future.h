@@ -420,6 +420,10 @@ public:
     : core_type(std::move(base))
   {}
 
+  void set_coroutine(seastar::task& coroutine) noexcept {
+    core_type::set_coroutine(coroutine);
+  }
+
   using value_type = typename seastar::future<T>::value_type;
   using tuple_type = typename seastar::future<T>::tuple_type;
 
@@ -771,6 +775,10 @@ public:
   [[gnu::always_inline]]
   interruptible_future_detail(exception_future_marker, std::exception_ptr&& ep) noexcept
     : core_type(::seastar::futurize<core_type>::make_exception_future(std::move(ep))) {
+  }
+
+  void set_coroutine(seastar::task& coroutine) noexcept {
+    core_type::set_coroutine(coroutine);
   }
 
   template<bool interruptible = true, typename ValueInterruptCondT, typename ErrorVisitorT,
