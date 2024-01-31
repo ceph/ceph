@@ -2466,6 +2466,93 @@ Example calls for supported scenarios:
             '--devs-source', '/var/lib/ceph/osd/ceph-2/block.wal']
 
     @patch('os.getuid')
+    def test_migrate_wal_to_db(self,
+                                m_getuid,
+                                monkeypatch,
+                                capsys):
+        m_getuid.return_value = 0
+
+        source_tags = 'ceph.osd_id=2,ceph.type=data,ceph.osd_fsid=1234,' \
+        'ceph.cluster_name=ceph,' \
+        'ceph.wal_uuid=waluuid,ceph.wal_device=wal_dev'
+        source_wal_tags = 'ceph.osd_id=2,ceph.type=wal,ceph.osd_fsid=1234,' \
+        'ceph.cluster_name=ceph,' \
+        'ceph.wal_uuid=waluuid,ceph.wal_device=wal_dev'
+
+        data_vol = api.Volume(lv_name='volume1',
+                              lv_uuid='datauuid',
+                              vg_name='vg',
+                              lv_path='/dev/VolGroup/lv1',
+                              lv_tags=source_tags)
+
+        wal_vol = api.Volume(lv_name='volume3',
+                             lv_uuid='waluuid',
+                             vg_name='vg',
+                             lv_path='/dev/VolGroup/lv3',
+                             lv_tags=source_wal_tags)
+
+        self.mock_single_volumes = {
+            '/dev/VolGroup/lv1': data_vol,
+            '/dev/VolGroup/lv3': wal_vol,
+        }
+        monkeypatch.setattr(migrate.api, 'get_single_lv',
+            self.mock_get_single_lv)
+
+        self.mock_volume = data_vol
+        monkeypatch.setattr(api, 'get_lv_by_fullname',
+            self.mock_get_lv_by_fullname)
+
+        self.mock_process_input = []
+        monkeypatch.setattr(process, 'call', self.mock_process)
+
+        devices = []
+        devices.append([Device('/dev/VolGroup/lv1'), 'block'])
+        devices.append([Device('/dev/VolGroup/lv3'), 'wal'])
+
+        monkeypatch.setattr(migrate, 'find_associated_devices',
+            lambda osd_id, osd_fsid: devices)
+
+        monkeypatch.setattr("ceph_volume.systemd.systemctl.osd_is_active",
+            lambda id: False)
+
+        monkeypatch.setattr(migrate, 'get_cluster_name',
+            lambda osd_id, osd_fsid: 'ceph')
+        monkeypatch.setattr(system, 'chown', lambda path: 0)
+        m = migrate.Migrate(argv=[
+            '--osd-id', '2',
+            '--osd-fsid', '1234',
+            '--from', 'wal',
+            '--target', 'vgname/data'])
+
+        m.main()
+
+        n = len(self.mock_process_input)
+        assert n >= 1
+        for s in self.mock_process_input:
+            print(s)
+
+        assert self. mock_process_input[n-3] == [
+            'lvchange',
+            '--deltag', 'ceph.osd_id=2',
+            '--deltag', 'ceph.type=wal',
+            '--deltag', 'ceph.osd_fsid=1234',
+            '--deltag', 'ceph.cluster_name=ceph',
+            '--deltag', 'ceph.wal_uuid=waluuid',
+            '--deltag', 'ceph.wal_device=wal_dev',
+            '/dev/VolGroup/lv3']
+        assert self. mock_process_input[n-2] == [
+            'lvchange',
+            '--deltag', 'ceph.wal_uuid=waluuid',
+            '--deltag', 'ceph.wal_device=wal_dev',
+            '/dev/VolGroup/lv1']
+        assert self. mock_process_input[n-1] == [
+            'ceph-bluestore-tool',
+            '--path', '/var/lib/ceph/osd/ceph-2',
+            '--dev-target', '/var/lib/ceph/osd/ceph-2/block',
+            '--command', 'bluefs-bdev-migrate',
+            '--devs-source', '/var/lib/ceph/osd/ceph-2/block.wal']
+
+    @patch('os.getuid')
     def test_migrate_data_wal_to_db_encrypted(self,
                                               m_getuid,
                                               monkeypatch,
