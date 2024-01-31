@@ -26,6 +26,8 @@ import { MgrModuleService } from '~/app/shared/api/mgr-module.service';
 import { NotificationService } from '~/app/shared/services/notification.service';
 import { BlockUI, NgBlockUI } from 'ng-block-ui';
 import { NotificationType } from '~/app/shared/enum/notification-type.enum';
+import { ActionLabelsI18n } from '~/app/shared/constants/app.constants';
+import { CephfsSnapshotscheduleFormComponent } from '../cephfs-snapshotschedule-form/cephfs-snapshotschedule-form.component';
 
 @Component({
   selector: 'cd-cephfs-snapshotschedule-list',
@@ -36,6 +38,7 @@ export class CephfsSnapshotscheduleListComponent
   extends CdForm
   implements OnInit, OnChanges, OnDestroy {
   @Input() fsName!: string;
+  @Input() id!: number;
 
   @ViewChild('pathTpl', { static: true })
   pathTpl: any;
@@ -65,7 +68,8 @@ export class CephfsSnapshotscheduleListComponent
     private authStorageService: AuthStorageService,
     private modalService: ModalService,
     private mgrModuleService: MgrModuleService,
-    private notificationService: NotificationService
+    private notificationService: NotificationService,
+    private actionLables: ActionLabelsI18n
   ) {
     super();
     this.permissions = this.authStorageService.getPermissions();
@@ -112,7 +116,14 @@ export class CephfsSnapshotscheduleListComponent
       { prop: 'created', name: $localize`Created`, cellTransformation: CellTemplate.timeAgo }
     ];
 
-    this.tableActions = [];
+    this.tableActions = [
+      {
+        name: this.actionLables.CREATE,
+        permission: 'create',
+        icon: Icons.add,
+        click: () => this.openModal(true)
+      }
+    ];
   }
 
   ngOnDestroy(): void {
@@ -129,9 +140,11 @@ export class CephfsSnapshotscheduleListComponent
 
   openModal(edit = false) {
     this.modalService.show(
-      {},
+      CephfsSnapshotscheduleFormComponent,
       {
-        fsName: 'fs1',
+        fsName: this.fsName,
+        id: this.id,
+        path: this.selection?.first()?.path,
         isEdit: edit
       },
       { size: 'lg' }

@@ -1,0 +1,179 @@
+<cd-modal [modalRef]="activeModal">
+  <ng-container i18n="form title"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+    <ng-container class="modal-content"
+                  *cdFormLoading="loading">
+    <form name="snapScheduleForm"
+          #formDir="ngForm"
+          [formGroup]="snapScheduleForm"
+          novalidate>
+      <div class="modal-body">
+        <!-- Directory -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="directory"
+                 i18n>Directory
+          </label>
+          <div class="cd-col-form-input">
+            <ng-template #loading>
+              <i [ngClass]="[icons.spinner, icons.spin, 'mt-2', 'me-2']"></i>
+              <span i18n>Loading directories</span>
+            </ng-template>
+            <select class="form-select"
+                    id="directory"
+                    name="directory"
+                    formControlName="directory"
+                    *ngIf="directories$ | async as directories; else loading">
+              <option [ngValue]="null"
+                      i18n>--Select a directory--</option>
+              <option *ngFor="let dir of directories"
+                      [value]="dir.path">{{ dir.path }}</option>
+            </select>
+            <span class="invalid-feedback"
+                  *ngIf="snapScheduleForm.showError('directory', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="snapScheduleForm.showError('directory', formDir, 'notUnique')"
+                  i18n>A snapshot schedule for this path already exists.</span>
+          </div>
+        </div>
+        <!--Start date -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="startDate"
+                 i18n>Start date
+          </label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input class="form-control"
+                     placeholder="yyyy-mm-dd"
+                     name="startDate"
+                     id="startDate"
+                     formControlName="startDate"
+                     [minDate]="minDate"
+                     ngbDatepicker
+                     #d="ngbDatepicker"
+                     (click)="d.open()">
+              <button type="button"
+                      class="btn btn-light"
+                      (click)="d.toggle()"
+                      title="Open">
+                <i [ngClass]="icons.calendar"></i>
+              </button>
+            </div>
+            <span class="invalid-feedback"
+                  *ngIf="snapScheduleForm.showError('startDate', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+        <!-- Start time -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="startTime"
+                 i18n>Start time
+            <cd-helper>The time zone is assumed to be UTC.</cd-helper>
+          </label>
+          <div class="cd-col-form-input">
+            <ngb-timepicker [spinners]="false"
+                            [seconds]="false"
+                            [meridian]="true"
+                            formControlName="startTime"
+                            id="startTime"
+                            name="startTime"></ngb-timepicker>
+            <span class="invalid-feedback"
+                  *ngIf="snapScheduleForm.showError('startTime', formDir, 'required')"
+                  i18n>This field is required.</span>
+          </div>
+        </div>
+        <!-- Repeat interval -->
+        <div class="form-group row">
+          <label class="cd-col-form-label required"
+                 for="repeatInterval"
+                 i18n>Schedule
+          </label>
+          <div class="cd-col-form-input">
+            <div class="input-group">
+              <input class="form-control"
+                     type="number"
+                     min="1"
+                     id="repeatInterval"
+                     name="repeatInterval"
+                     formControlName="repeatInterval">
+              <select [ngClass]="['form-select', 'me-5']"
+                      id="repeatFrequency"
+                      name="repeatFrequency"
+                      formControlName="repeatFrequency"
+                      *ngIf="repeatFrequencies">
+                <option *ngFor="let freq of repeatFrequencies"
+                        [value]="freq[1]"
+                        i18n>{{ freq[0] }}</option>
+              </select>
+            </div>
+            <span class="invalid-feedback"
+                  *ngIf="snapScheduleForm.showError('repeatFrequency', formDir, 'notUnique')"
+                  i18n>This schedule already exists for the selected directory.</span>
+            <span class="invalid-feedback"
+                  *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'required')"
+                  i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="snapScheduleForm.showError('repeatInterval', formDir, 'min')"
+                  i18n>Choose a value greater than 0.</span>
+          </div>
+        </div>
+        <!-- Retention policies -->
+        <ng-container formArrayName="retentionPolicies"
+                      *ngFor="let retentionPolicy of retentionPolicies.controls; index as i">
+          <ng-container [formGroupName]="i">
+            <div class="form-group row">
+              <label [ngClass]="{'cd-col-form-label': true, 'visible': i == 0, 'invisible': i > 0}"
+                    for="retentionInterval"
+                    i18n>Retention policy
+              </label>
+              <div class="cd-col-form-input">
+                <div class="input-group">
+                  <input class="form-control"
+                         type="number"
+                         min="1"
+                         id="retentionInterval"
+                         name="retentionInterval"
+                         formControlName="retentionInterval">
+                  <select class="form-select"
+                          id="retentionFrequency"
+                          name="retentionFrequency"
+                          formControlName="retentionFrequency"
+                          *ngIf="retentionFrequencies">
+                    <option *ngFor="let freq of retentionFrequencies"
+                            [value]="freq[1]"
+                            i18n>{{ freq[0] }}</option>
+                  </select>
+                  <button class="btn btn-light"
+                          type="button"
+                          (click)="removeRetentionPolicy(i)">
+                    <i [ngClass]="[icons.trash]"></i>
+                  </button>
+                </div>
+                <span class="invalid-feedback"
+                      *ngIf="snapScheduleForm.controls['retentionPolicies'].controls[i].invalid"
+                      i18n>This retention policy already exists for the selected directory.</span>
+              </div>
+            </div>
+          </ng-container>
+        </ng-container>
+        <div class="d-flex flex-row align-content-center justify-content-end">
+          <button class="btn btn-light"
+                  type="button"
+                  (click)="addRetentionPolicy()">
+            <i [ngClass]="[icons.add, 'me-2']"></i>
+            <span i18n>Add retention policy</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="modal-footer">
+        <cd-form-button-panel (submitActionEvent)="submit()"
+                              [form]="snapScheduleForm"
+                              [submitText]="(action | titlecase) + ' ' + (resource | upperFirst)"></cd-form-button-panel>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>
