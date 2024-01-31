@@ -389,6 +389,7 @@ struct MDRequestImpl : public MutationImpl {
   ~MDRequestImpl() override;
   
   More* more();
+  More const* more() const;
   bool has_more() const;
   bool has_witnesses();
   bool peer_did_prepare();
@@ -400,8 +401,8 @@ struct MDRequestImpl : public MutationImpl {
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
   void clear_ambiguous_auth();
-  const filepath& get_filepath();
-  const filepath& get_filepath2();
+  const filepath& get_filepath() const;
+  const filepath& get_filepath2() const;
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
