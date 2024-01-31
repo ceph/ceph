@@ -129,6 +129,8 @@ public:
   ceph::buffer::list srci_snapbl;
   ceph::buffer::list desti_snapbl;
 
+  inodeno_t referent_ino; //referent inode
+
 public:
   metareqid_t get_reqid() const { return reqid; }
   __u32 get_attempt() const { return attempt; }
@@ -194,6 +196,7 @@ public:
     encode(srci_snapbl, payload);
     encode(desti_snapbl, payload);
     encode(alternate_name, payload);
+    encode(referent_ino, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -216,6 +219,7 @@ public:
     decode(srci_snapbl, p);
     decode(desti_snapbl, p);
     decode(alternate_name, p);
+    decode(referent_ino, p);
   }
 
   std::string_view get_type_name() const override { return "peer_request"; }
