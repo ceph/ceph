@@ -400,9 +400,15 @@ public:
 
   ECCommon::UnstableHashInfoRegistry unstable_hashinfo_registry;
 
-  int object_stat(const hobject_t &hoid, struct stat* st);
+
+  std::tuple<
+    int,
+    std::map<std::string, ceph::bufferlist, std::less<>>,
+    size_t
+  > get_attrs_n_size_from_disk(const hobject_t& hoid);
 
 public:
+  int object_stat(const hobject_t &hoid, struct stat* st);
   ECBackend(
     PGBackend::Listener *pg,
     const coll_t &coll,

@@ -52,6 +52,7 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
   */
  class PGBackend {
  public:
+  virtual int object_stat(const hobject_t &hoid, struct stat* st) { return -1;};
    CephContext* cct;
  protected:
    ObjectStore *store;
