@@ -57,6 +57,14 @@ void OsdScrub::dump_scrubs(ceph::Formatter* f) const
   m_queue.dump_scrubs(f);
 }
 
+void OsdScrub::dump_scrub_reservations(ceph::Formatter* f) const
+{
+  m_resource_bookkeeper.dump_scrub_reservations(f);
+  f->open_array_section("remote_scrub_reservations");
+  m_osd_svc.get_scrub_reserver().dump(f);
+  f->close_section();
+}
+
 void OsdScrub::log_fwd(std::string_view text)
 {
   dout(20) << text << dendl;
@@ -466,21 +474,6 @@ std::unique_ptr<Scrub::LocalResourceWrapper> OsdScrub::inc_scrubs_local(
 void OsdScrub::dec_scrubs_local()
 {
   m_resource_bookkeeper.dec_scrubs_local();
-}
-
-bool OsdScrub::inc_scrubs_remote(pg_t pgid)
-{
-  return m_resource_bookkeeper.inc_scrubs_remote(pgid);
-}
-
-void OsdScrub::enqueue_remote_reservation(pg_t pgid)
-{
-  m_resource_bookkeeper.enqueue_remote_reservation(pgid);
-}
-
-void OsdScrub::dec_scrubs_remote(pg_t pgid)
-{
-  m_resource_bookkeeper.dec_scrubs_remote(pgid);
 }
 
 void OsdScrub::mark_pg_scrub_blocked(spg_t blocked_pg)

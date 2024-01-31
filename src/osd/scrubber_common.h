@@ -3,10 +3,11 @@
 #pragma once
 
 #include <fmt/ranges.h>
-
 #include "common/ceph_time.h"
+#include "common/fmt_common.h"
 #include "common/scrub_types.h"
 #include "include/types.h"
+#include "messages/MOSDScrubReserve.h"
 #include "os/ObjectStore.h"
 
 #include "OpRequest.h"
@@ -23,6 +24,32 @@ namespace Scrub {
   class ReplicaReservations;
   struct ReplicaActive;
 }
+
+/// reservation-related data sent by the primary to the replicas,
+/// and used to match the responses to the requests
+struct AsyncScrubResData {
+  spg_t pgid;
+  pg_shard_t from;
+  epoch_t request_epoch;
+  MOSDScrubReserve::reservation_nonce_t nonce;
+  AsyncScrubResData(
+      spg_t pgid,
+      pg_shard_t from,
+      epoch_t request_epoch,
+      MOSDScrubReserve::reservation_nonce_t nonce)
+      : pgid{pgid}
+      , from{from}
+      , request_epoch{request_epoch}
+      , nonce{nonce}
+  {}
+  template <typename FormatContext>
+  auto fmt_print_ctx(FormatContext& ctx) const
+  {
+    return fmt::format_to(
+	ctx.out(), "pg[{}],f:{},ep:{},n:{}", pgid, from, request_epoch, nonce);
+  }
+};
+
 
 /// Facilitating scrub-related object access to private PG data
 class ScrubberPasskey {
@@ -316,6 +343,8 @@ struct ScrubPgIF {
   virtual void send_get_next_chunk(epoch_t epoch_queued) = 0;
 
   virtual void send_scrub_is_finished(epoch_t epoch_queued) = 0;
+
+  virtual void send_granted_by_reserver(const AsyncScrubResData& req) = 0;
 
   virtual void on_applied_when_primary(const eversion_t& applied_version) = 0;
 

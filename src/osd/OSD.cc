@@ -273,6 +273,8 @@ OSDService::OSDService(OSD *osd, ceph::async::io_context_pool& poolctx) :
 		  cct->_conf->osd_min_recovery_priority),
   snap_reserver(cct, &reserver_finisher,
 		cct->_conf->osd_max_trimming_pgs),
+  scrub_reserver(cct, &reserver_finisher,
+		cct->_conf->osd_max_scrubs),
   recovery_ops_active(0),
   recovery_ops_reserved(0),
   recovery_paused(false),
@@ -2891,7 +2893,7 @@ will start to track new ops received afterwards.";
     f->close_section();
   } else if (prefix == "dump_scrub_reservations") {
     f->open_object_section("scrub_reservations");
-    service.get_scrub_services().resource_bookkeeper().dump_scrub_reservations(f);
+    service.get_scrub_services().dump_scrub_reservations(f);
     f->close_section();
   } else if (prefix == "get_latest_osdmap") {
     get_latest_osdmap();
@@ -9888,6 +9890,9 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
   }
   if (changed.count("osd_max_trimming_pgs")) {
     service.snap_reserver.set_max(cct->_conf->osd_max_trimming_pgs);
+  }
+  if (changed.count("osd_max_scrubs")) {
+    service.scrub_reserver.set_max(cct->_conf->osd_max_scrubs);
   }
   if (changed.count("osd_op_complaint_time") ||
       changed.count("osd_op_log_threshold")) {

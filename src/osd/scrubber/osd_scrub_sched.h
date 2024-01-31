@@ -108,6 +108,7 @@ ScrubQueue interfaces (main functions):
 // clang-format on
 
 #include <optional>
+#include "common/AsyncReserver.h"
 #include "utime.h"
 #include "osd/scrubber/scrub_job.h"
 #include "osd/PG.h"
@@ -134,6 +135,12 @@ class ScrubSchedListener {
    * returns nullopt if failing to lock.
    */
   virtual std::optional<PGLockWrapper> get_locked_pg(spg_t pgid) = 0;
+
+  /**
+   * allow access to the scrub_reserver, the AsyncReserver that keeps track
+   * of 'remote replica reservations'.
+   */
+  virtual AsyncReserver<spg_t, Finisher>& get_scrub_reserver() = 0;
 
   virtual ~ScrubSchedListener() {}
 };
