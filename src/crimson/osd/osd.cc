@@ -934,13 +934,36 @@ seastar::future<MessageURef> OSD::get_stats()
   ).then([this, m=std::move(m)](auto &&stats) mutable {
     min_last_epoch_clean = osdmap->get_epoch();
     min_last_epoch_clean_pgs.clear();
+    std::set<int64_t> pool_set;
     for (auto [pgid, stat] : stats) {
       min_last_epoch_clean = std::min(min_last_epoch_clean,
                                       stat.get_effective_last_epoch_clean());
       min_last_epoch_clean_pgs.push_back(pgid);
+      int64_t pool_id = pgid.pool();
+      pool_set.emplace(pool_id);
     }
     m->pg_stat = std::move(stats);
-    return seastar::make_ready_future<MessageURef>(std::move(m));
+    return std::make_pair(pool_set, std::move(m));
+  }).then([this] (auto message) mutable {
+    std::map<int64_t, store_statfs_t> pool_stat;
+    auto pool_set = message.first;
+    auto m = std::move(message.second);
+    return seastar::do_with(std::move(m), 
+                            pool_stat, 
+                            pool_set, [this] (auto &&msg, 
+                                             auto &pool_stat,
+                                             auto &pool_set) {
+      return seastar::do_for_each(pool_set, [this, &pool_stat]
+      (auto& pool_id) {
+        return store.pool_statfs(pool_id).then([pool_id, &pool_stat](
+        store_statfs_t st) mutable {
+          pool_stat[pool_id] = st;
+        });
+      }).then([&pool_stat, msg=std::move(msg)] () mutable {
+        msg->pool_stat = std::move(pool_stat);
+        return seastar::make_ready_future<MessageURef>(std::move(msg));
+      });
+    });
   });
 }
 

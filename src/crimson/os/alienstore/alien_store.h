@@ -75,6 +75,8 @@ public:
   seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
   seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
   seastar::future<std::vector<coll_core_t>> list_collections() final;
+  seastar::future<> set_collection_opts(CollectionRef c,
+                                        const pool_opts_t& opts) final;
 
   seastar::future<> do_transaction_no_callbacks(
     CollectionRef c,
@@ -90,6 +92,7 @@ public:
     const std::string& key) final;
   uuid_d get_fsid() const final;
   seastar::future<store_statfs_t> stat() const final;
+  seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const final;
   unsigned get_max_attr_name_length() const final;
   seastar::future<struct stat> stat(
     CollectionRef,
