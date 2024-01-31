@@ -28,7 +28,6 @@ from functools import wraps
 from glob import glob
 from io import StringIO
 from threading import Thread, Event
-from urllib.request import urlopen, Request
 from pathlib import Path
 
 from cephadmlib.constants import (
@@ -176,7 +175,9 @@ from cephadmlib.daemons import (
     NFSGanesha,
     SNMPGateway,
     Tracing,
+    NodeProxy,
 )
+from cephadmlib.agent import http_query
 
 
 FuncT = TypeVar('FuncT', bound=Callable)
@@ -225,6 +226,7 @@ def get_supported_daemons():
     supported_daemons.append(CephadmAgent.daemon_type)
     supported_daemons.append(SNMPGateway.daemon_type)
     supported_daemons.extend(Tracing.components)
+    supported_daemons.append(NodeProxy.daemon_type)
     assert len(supported_daemons) == len(set(supported_daemons))
     return supported_daemons
 
@@ -799,6 +801,10 @@ def create_daemon_dirs(
         sg = SNMPGateway.init(ctx, fsid, ident.daemon_id)
         sg.create_daemon_conf()
 
+    elif daemon_type == NodeProxy.daemon_type:
+        node_proxy = NodeProxy.init(ctx, fsid, ident.daemon_id)
+        node_proxy.create_daemon_dirs(data_dir, uid, gid)
+
     _write_custom_conf_files(ctx, ident, uid, gid)
 
 
@@ -1279,12 +1285,13 @@ class MgrListener(Thread):
                         conn.send(err_str.encode())
                         logger.error(err_str)
                     else:
-                        conn.send(b'ACK')
-                        if 'config' in data:
-                            self.agent.wakeup()
-                        self.agent.ls_gatherer.wakeup()
-                        self.agent.volume_gatherer.wakeup()
-                        logger.debug(f'Got mgr message {data}')
+                        if 'counter' in data:
+                            conn.send(b'ACK')
+                            if 'config' in data:
+                                self.agent.wakeup()
+                            self.agent.ls_gatherer.wakeup()
+                            self.agent.volume_gatherer.wakeup()
+                            logger.debug(f'Got mgr message {data}')
             except Exception as e:
                 logger.error(f'Mgr Listener encountered exception: {e}')
 
@@ -1292,17 +1299,20 @@ class MgrListener(Thread):
         self.stop = True
 
     def handle_json_payload(self, data: Dict[Any, Any]) -> None:
-        self.agent.ack = int(data['counter'])
-        if 'config' in data:
-            logger.info('Received new config from mgr')
-            config = data['config']
-            for filename in config:
-                if filename in self.agent.required_files:
-                    file_path = os.path.join(self.agent.daemon_dir, filename)
-                    with write_new(file_path) as f:
-                        f.write(config[filename])
-            self.agent.pull_conf_settings()
-            self.agent.wakeup()
+        if 'counter' in data:
+            self.agent.ack = int(data['counter'])
+            if 'config' in data:
+                logger.info('Received new config from mgr')
+                config = data['config']
+                for filename in config:
+                    if filename in self.agent.required_files:
+                        file_path = os.path.join(self.agent.daemon_dir, filename)
+                        with write_new(file_path) as f:
+                            f.write(config[filename])
+                self.agent.pull_conf_settings()
+                self.agent.wakeup()
+        else:
+            raise RuntimeError('No valid data received.')
 
 
 @register_daemon_form
@@ -1357,6 +1367,9 @@ class CephadmAgent(DaemonForm):
         self.recent_iteration_run_times: List[float] = [0.0, 0.0, 0.0]
         self.recent_iteration_index: int = 0
         self.cached_ls_values: Dict[str, Dict[str, str]] = {}
+        self.ssl_ctx = ssl.create_default_context()
+        self.ssl_ctx.check_hostname = True
+        self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
 
     def validate(self, config: Dict[str, str] = {}) -> None:
         # check for the required files
@@ -1452,6 +1465,7 @@ class CephadmAgent(DaemonForm):
 
     def run(self) -> None:
         self.pull_conf_settings()
+        self.ssl_ctx.load_verify_locations(self.ca_path)
 
         try:
             for _ in range(1001):
@@ -1472,11 +1486,6 @@ class CephadmAgent(DaemonForm):
 
         if not self.volume_gatherer.is_alive():
             self.volume_gatherer.start()
-
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.check_hostname = True
-        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        ssl_ctx.load_verify_locations(self.ca_path)
 
         while not self.stop:
             start_time = time.monotonic()
@@ -1503,15 +1512,19 @@ class CephadmAgent(DaemonForm):
                                'port': self.listener_port})
             data = data.encode('ascii')
 
-            url = f'https://{self.target_ip}:{self.target_port}/data/'
             try:
-                req = Request(url, data, {'Content-Type': 'application/json'})
                 send_time = time.monotonic()
-                with urlopen(req, context=ssl_ctx) as response:
-                    response_str = response.read()
-                    response_json = json.loads(response_str)
-                    total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
-                    logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
+                status, response = http_query(addr=self.target_ip,
+                                              port=self.target_port,
+                                              data=data,
+                                              endpoint='/data',
+                                              ssl_ctx=self.ssl_ctx)
+                response_json = json.loads(response)
+                if status != 200:
+                    logger.error(f'HTTP error {status} while querying agent endpoint: {response}')
+                    raise RuntimeError
+                total_request_time = datetime.timedelta(seconds=(time.monotonic() - send_time)).total_seconds()
+                logger.info(f'Received mgr response: "{response_json["result"]}" {total_request_time} seconds after sending request.')
             except Exception as e:
                 logger.error(f'Failed to send metadata to mgr: {e}')
 
@@ -2917,6 +2930,10 @@ def command_bootstrap(ctx):
                 'For more information see:\n\n'
                 '\thttps://docs.ceph.com/en/latest/mgr/telemetry/\n')
     logger.info('Bootstrap complete.')
+
+    if getattr(ctx, 'deploy_cephadm_agent', None):
+        cli(['config', 'set', 'mgr', 'mgr/cephadm/use_agent', 'true'])
+
     return ctx.error_code
 
 ##################################
@@ -5276,6 +5293,10 @@ def _get_parser():
         '--log-to-file',
         action='store_true',
         help='configure cluster to log to traditional log files in /var/log/ceph/$fsid')
+    parser_bootstrap.add_argument(
+        '--deploy-cephadm-agent',
+        action='store_true',
+        help='deploy the cephadm-agent')
 
     parser_deploy = subparsers.add_parser(
         'deploy', help='deploy a daemon')
