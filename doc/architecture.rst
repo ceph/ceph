@@ -38,9 +38,8 @@ A Ceph Storage Cluster consists of multiple types of daemons:
 .. _arch_monitor:
 
 Ceph Monitors maintain the master copy of the cluster map, which they provide
-to Ceph clients. Provisioning multiple monitors within the Ceph cluster ensures
-availability in the event that one of the monitor daemons or its host fails.
-The Ceph monitor provides copies of the cluster map to storage cluster clients.
+to Ceph clients. The existence of multiple monitors in the Ceph cluster ensures
+availability if one of the monitor daemons or its host fails.
 
 A Ceph OSD Daemon checks its own state and the state of other OSDs and reports
 back to monitors.
@@ -52,10 +51,11 @@ A Ceph Metadata Server (MDS) manages file metadata when CephFS is used to
 provide file services.
 
 Storage cluster clients and :term:`Ceph OSD Daemon`\s use the CRUSH algorithm
-to compute information about data location. This means that clients and OSDs
-are not bottlenecked by a central lookup table. Ceph's high-level features
-include a native interface to the Ceph Storage Cluster via ``librados``, and a
-number of service interfaces built on top of ``librados``.
+to compute information about the location of data. Use of the CRUSH algoritm
+means that clients and OSDs are not bottlenecked by a central lookup table.
+Ceph's high-level features include a native interface to the Ceph Storage
+Cluster via ``librados``, and a number of service interfaces built on top of
+``librados``.
 
 Storing Data
 ------------
