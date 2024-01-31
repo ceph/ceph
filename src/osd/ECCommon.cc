@@ -998,6 +998,8 @@ ECUtil::HashInfoRef ECCommon::UnstableHashInfoRegistry::get_hash_info(
         dout(0) << __func__ << ": Mismatch of total_chunk_size "
       		       << hinfo.get_total_chunk_size() << dendl;
         return ECUtil::HashInfoRef();
+      } else {
+        create = true;
       }
     } else if (size == 0) { // If empty object and no hinfo, create it
       create = true;
