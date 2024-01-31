@@ -1444,6 +1444,25 @@ struct ECClassicalOp : ECCommon::RMWPipeline::Op {
   }
 };
 
+std::tuple<
+  int,
+  map<string, bufferlist, less<>>,
+  size_t
+> ECBackend::get_attrs_n_size_from_disk(const hobject_t& hoid)
+{
+  struct stat st;
+  if (int r = object_stat(hoid, &st); r < 0) {
+    dout(10) << __func__ << ": stat error " << r << " on" << hoid << dendl;
+    return { r, {}, 0 };
+  }
+  map<string, bufferlist, less<>> real_attrs;
+  if (int r = PGBackend::objects_get_attrs(hoid, &real_attrs); r < 0) {
+    dout(10) << __func__ << ": get attr error " << r << " on" << hoid << dendl;
+    return { r, {}, 0 };
+  }
+  return { 0, real_attrs, st.st_size };
+}
+
 void ECBackend::submit_transaction(
   const hobject_t &hoid,
   const object_stat_sum_t &delta_stats,
@@ -1479,11 +1498,15 @@ void ECBackend::submit_transaction(
     sinfo,
     *(op->t),
     [&](const hobject_t &i) {
-      ECUtil::HashInfoRef ref = unstable_hashinfo_registry.get_hash_info(
-	i,
-	true,
-	op->t->obc_map[hoid]->attr_cache,
-	op->t->obc_map[hoid]->obs.oi.size);
+      dout(10) << "submit_transaction: obtaining hash info for get_write_plan" << dendl;
+      ECUtil::HashInfoRef ref;
+      if (auto [r, attrs, size] = get_attrs_n_size_from_disk(i); r >= 0 || r == -ENOENT) {
+        ref = unstable_hashinfo_registry.get_hash_info(
+	  i,
+	  true,
+	  attrs, //op->t->obc_map[hoid]->attr_cache,
+	  size); //op->t->obc_map[hoid]->obs.oi.size);
+      }
       if (!ref) {
 	derr << __func__ << ": get_hash_info(" << i << ")"
 	     << " returned a null pointer and there is no "
