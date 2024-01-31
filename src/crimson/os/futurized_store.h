@@ -102,6 +102,9 @@ public:
 
     virtual seastar::future<CollectionRef> open_collection(const coll_t& cid) = 0;
 
+    virtual seastar::future<> set_collection_opts(CollectionRef c,
+                                        const pool_opts_t& opts) = 0;
+
   protected:
     virtual seastar::future<> do_transaction_no_callbacks(
       CollectionRef ch,
@@ -180,6 +183,8 @@ public:
   virtual mkfs_ertr::future<> mkfs(uuid_d new_osd_fsid) = 0;
 
   virtual seastar::future<store_statfs_t> stat() const = 0;
+
+  virtual seastar::future<store_statfs_t> pool_statfs(int64_t pool_id) const = 0;
 
   virtual uuid_d get_fsid() const  = 0;
 

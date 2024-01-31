@@ -71,6 +71,11 @@ seastar::future<store_statfs_t> CyanStore::stat() const
   });
 }
 
+seastar::future<store_statfs_t> CyanStore::pool_statfs(int64_t pool_id) const
+{
+  return stat();
+}
+
 
 CyanStore::mkfs_ertr::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
@@ -256,6 +261,16 @@ CyanStore::Shard::exists(
     return base_errorator::make_ready_future<bool>(false);
   }
   return base_errorator::make_ready_future<bool>(true);
+}
+
+seastar::future<>
+CyanStore::Shard::set_collection_opts(CollectionRef ch,
+                                      const pool_opts_t& opts)
+{
+  auto c = static_cast<Collection*>(ch.get());
+  logger().debug("{} {}", __func__, c->get_cid());
+  c->pool_opts = opts;
+  return seastar::now();
 }
 
 CyanStore::Shard::read_errorator::future<ceph::bufferlist>
