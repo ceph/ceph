@@ -6,7 +6,7 @@ workload:
   - sequential:
     - ragweed:
         client.1:
-          default-branch: ceph-pacific
+          default-branch: ceph-nautilus
           rgw_server: client.1
           stages: prepare
     - print: "**** done rgw ragweed prepare 2-workload"
