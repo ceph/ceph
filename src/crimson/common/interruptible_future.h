@@ -1096,6 +1096,9 @@ struct interruptor
 public:
   using condition = InterruptCond;
 
+  template <typename T>
+  using future = interruptible_future<InterruptCond, T>;
+
   static const void *get_interrupt_cond() {
     return (const void*)interrupt_cond<InterruptCond>.interrupt_cond.get();
   }
