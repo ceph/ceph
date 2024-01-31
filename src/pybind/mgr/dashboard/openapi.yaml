@@ -7418,6 +7418,550 @@ paths:
       summary: Updates an NFS-Ganesha export
       tags:
       - NFS-Ganesha
+  /api/nvmeof/gateway/info:
+    get:
+      description: "\n            Get NVMeoF gateway information\n            "
+      parameters: []
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/hosts:
+    post:
+      description: "\n            Create a new NVMeoF host\n            :param subsystem_nqn:\
+        \ NVMeoF subsystem NQN\n            :param host_nqn: NVMeoF host NQN\n   \
+        \         "
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                host_nqn:
+                  type: string
+                subsystem_nqn:
+                  type: string
+              required:
+              - subsystem_nqn
+              - host_nqn
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/hosts/{subsystem_nqn}:
+    get:
+      description: "\n            List all NVMeoF hosts\n            :param subsystem_nqn:\
+        \ NVMeoF subsystem NQN\n            "
+      parameters:
+      - in: path
+        name: subsystem_nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/hosts/{subsystem_nqn}/{host_nqn}:
+    delete:
+      description: "\n            Delete an existing NVMeoF host\n            :param\
+        \ subsystem_nqn: NVMeoF subsystem NQN\n            :param host_nqn: NVMeoF\
+        \ host NQN\n            "
+      parameters:
+      - in: path
+        name: subsystem_nqn
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: host_nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/listener:
+    get:
+      description: "\n            List all NVMeoF listeners\n            :param nqn:\
+        \ NVMeoF subsystem NQN\n            "
+      parameters:
+      - in: query
+        name: subsystem_nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+    post:
+      description: "\n            Create a new NVMeoF listener\n            :param\
+        \ nqn: NVMeoF subsystem NQN\n            :param gateway: NVMeoF gateway\n\
+        \            :param traddr: NVMeoF transport address\n            :param trtype:\
+        \ NVMeoF transport type\n            :param adrfam: NVMeoF address family\n\
+        \            :param trsvcid: NVMeoF transport service ID\n            :param\
+        \ auto_ha_state: NVMeoF auto HA state\n            "
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                adrfam:
+                  default: IPV4
+                  type: string
+                auto_ha_state:
+                  default: AUTO_HA_UNSET
+                  type: string
+                gateway:
+                  type: string
+                nqn:
+                  type: string
+                traddr:
+                  type: string
+                trsvcid:
+                  default: 4420
+                  type: integer
+                trtype:
+                  default: TCP
+                  type: string
+              required:
+              - nqn
+              - gateway
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/listener/{nqn}/{gateway}:
+    delete:
+      description: "\n            Delete an existing NVMeoF listener\n           \
+        \ :param nqn: NVMeoF subsystem NQN\n            :param gateway: NVMeoF gateway\n\
+        \            :param traddr: NVMeoF transport address\n            :param transport_type:\
+        \ NVMeoF transport type\n            :param addr_family: NVMeoF address family\n\
+        \            :param transport_svc_id: NVMeoF transport service ID\n      \
+        \      "
+      parameters:
+      - in: path
+        name: nqn
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: gateway
+        required: true
+        schema:
+          type: string
+      - allowEmptyValue: true
+        in: query
+        name: traddr
+        schema:
+          type: string
+      - default: TCP
+        in: query
+        name: transport_type
+        schema:
+          type: string
+      - default: IPV4
+        in: query
+        name: addr_family
+        schema:
+          type: string
+      - default: 4420
+        in: query
+        name: transport_svc_id
+        schema:
+          type: integer
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/namespace:
+    post:
+      description: "\n            Create a new NVMeoF namespace\n            :param\
+        \ rbd_pool: RBD pool name\n            :param rbd_image: RBD image name\n\
+        \            :param subsystem_nqn: NVMeoF subsystem NQN\n            :param\
+        \ create_image: Create RBD image\n            :param image_size: RBD image\
+        \ size\n            :param block_size: NVMeoF namespace block size\n     \
+        \       :param nsid: NVMeoF namespace ID\n            :param uuid: NVMeoF\
+        \ namespace UUID\n            :param anagrpid: NVMeoF namespace ANA group\
+        \ ID\n            "
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                anagrpid:
+                  default: 1
+                  type: integer
+                block_size:
+                  default: 512
+                  type: integer
+                create_image:
+                  default: true
+                  type: boolean
+                image_size:
+                  default: 1024
+                  type: integer
+                nsid:
+                  default: 1
+                  type: integer
+                rbd_image:
+                  type: string
+                rbd_pool:
+                  type: string
+                subsystem_nqn:
+                  type: string
+                uuid:
+                  type: string
+              required:
+              - rbd_pool
+              - rbd_image
+              - subsystem_nqn
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/namespace/{subsystem_nqn}:
+    get:
+      description: "\n            List all NVMeoF namespaces\n            "
+      parameters:
+      - in: path
+        name: subsystem_nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/namespace/{subsystem_nqn}/{nsid}:
+    delete:
+      description: "\n            Delete an existing NVMeoF namespace\n          \
+        \  :param subsystem_nqn: NVMeoF subsystem NQN\n            :param nsid: NVMeoF\
+        \ namespace ID\n            "
+      parameters:
+      - in: path
+        name: subsystem_nqn
+        required: true
+        schema:
+          type: string
+      - in: path
+        name: nsid
+        required: true
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/subsystem:
+    get:
+      parameters:
+      - allowEmptyValue: true
+        description: NVMeoF subsystem NQN
+        in: query
+        name: subsystem_nqn
+        schema:
+          type: string
+      - allowEmptyValue: true
+        description: NVMeoF subsystem serial number
+        in: query
+        name: serial_number
+        schema:
+          type: string
+      responses:
+        '200':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: OK
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      summary: List all NVMeoF gateways
+      tags:
+      - NVMe-oF
+    post:
+      description: "\n            Create a new NVMeoF subsystem\n\n            :param\
+        \ subsystem_nqn: NVMeoF subsystem NQN\n            :param serial_number: NVMeoF\
+        \ subsystem serial number\n            :param max_namespaces: NVMeoF subsystem\
+        \ maximum namespaces\n            :param ana_reporting: NVMeoF subsystem ANA\
+        \ reporting\n            :param enable_ha: NVMeoF subsystem enable HA\n  \
+        \          "
+      parameters: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              properties:
+                ana_reporting:
+                  default: false
+                  type: boolean
+                enable_ha:
+                  default: false
+                  type: boolean
+                max_namespaces:
+                  default: 256
+                  type: integer
+                serial_number:
+                  type: integer
+                subsystem_nqn:
+                  type: string
+              required:
+              - subsystem_nqn
+              type: object
+      responses:
+        '201':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource created.
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
+  /api/nvmeof/subsystem/{subsystem_nqn}:
+    delete:
+      description: "\n            Delete an existing NVMeoF subsystem\n          \
+        \  :param subsystem_nqn: NVMeoF subsystem NQN\n            "
+      parameters:
+      - in: path
+        name: subsystem_nqn
+        required: true
+        schema:
+          type: string
+      responses:
+        '202':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Operation is still executing. Please check the task queue.
+        '204':
+          content:
+            application/vnd.ceph.api.v1.0+json:
+              type: object
+          description: Resource deleted.
+        '400':
+          description: Operation exception. Please check the response body for details.
+        '401':
+          description: Unauthenticated access. Please login first.
+        '403':
+          description: Unauthorized access. Please check your permissions.
+        '500':
+          description: Unexpected error. Please check the response body for the stack
+            trace.
+      security:
+      - jwt: []
+      tags:
+      - NVMe-oF
   /api/osd:
     get:
       parameters: []
@@ -13282,6 +13826,8 @@ tags:
   name: Monitor
 - description: NFS-Ganesha Cluster Management API
   name: NFS-Ganesha
+- description: NVMe-oF Gateway Management API
+  name: NVMe-oF
 - description: OSD management API
   name: OSD
 - description: OSD Perf Counters Management API
