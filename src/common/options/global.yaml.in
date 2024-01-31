@@ -2550,6 +2550,18 @@ options:
   - mon
   flags:
   - runtime
+- name: osd_pool_default_read_ratio
+  type: uint
+  level: advanced
+  desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+  long_desc: Default read ratio (the percent of read IOs out of all IOs) for a pool.
+    applicable to replicated pools only. This value is used to improve read balancing
+    when OSDs have different weights.
+  default: 70
+  services:
+  - mon
+  flags:
+  - runtime
 - name: osd_erasure_code_plugins
   type: str
   level: advanced

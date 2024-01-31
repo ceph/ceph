@@ -926,16 +926,15 @@ class Module(MgrModule):
             try:
                 read_balance_scores = pi['read_balance']
                 pe.read_balance_score_acting_by_pool[pool] = read_balance_scores['score_acting']
-                pe.read_balance_score_by_pool[pool] = {
-                    'score_acting': read_balance_scores['score_acting'],
-                    'score_stable': read_balance_scores['score_stable'],
-                    'optimal_score': read_balance_scores['optimal_score'],
-                    'raw_score_acting': read_balance_scores['raw_score_acting'],
-                    'raw_score_stable': read_balance_scores['raw_score_stable'],
-                    'primary_affinity_weighted': read_balance_scores['primary_affinity_weighted'],
-                    'average_primary_affinity': read_balance_scores['average_primary_affinity'],
-                    'average_primary_affinity_weighted': read_balance_scores['average_primary_affinity_weighted']
-                }
+                score_keys = ['score_type', 'score_acting', 'score_stable',
+                              'optimal_score', 'raw_score_acting', 'raw_score_stable',
+                              'primary_affinity_weighted', 'average_primary_affinity',
+                              'average_primary_affinity_weighted', 'average_osd_load',
+                              'most_loaded_osd', 'most_loaded_acting_osd']
+                pe.read_balance_score_by_pool[pool] = {}
+                for key in score_keys:
+                    if key in read_balance_scores:
+                        pe.read_balance_score_by_pool[pool][key] = read_balance_scores[key]
             except KeyError:
                 self.log.debug("Skipping pool '{}' since it does not have a read_balance_score, "
                                "likely because it is not replicated.".format(pool))
@@ -1101,8 +1100,9 @@ class Module(MgrModule):
             if 'read_balance' in p:
                 if 'error_message' in p['read_balance']:
                     rb_error_message[p['pool_name']] = p['read_balance']['error_message']
-                elif p['read_balance']['score_acting'] == p['read_balance']['optimal_score']:
-                    replicated_pools_with_optimal_score.append(p['pool_name'])
+                elif 'optimal_score' in p['read_balance']:
+                    if p['read_balance']['score_acting'] == p['read_balance']['optimal_score']:
+                        replicated_pools_with_optimal_score.append(p['pool_name'])
         for pool in pools:
             if pool not in crush_rule_by_pool_name:
                 self.log.debug('pool %s does not exist' % pool)
