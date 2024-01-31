@@ -42,6 +42,109 @@
 
 using namespace std;
 
+template <class HASHFLAVOR, rgw::auth::swift::SignatureFlavor SIGNATUREFLAVOR>
+class FormPostSignatureT: public rgw::auth::swift::FormatSignature<HASHFLAVOR,SIGNATUREFLAVOR>
+{
+  using UCHARPTR = const unsigned char*;
+  using base_t = rgw::auth::swift::SignatureHelperT<HASHFLAVOR>;
+  using format_signature_t = rgw::auth::swift::FormatSignature<HASHFLAVOR,SIGNATUREFLAVOR>;
+public:
+  const char* calc(const std::string& key,
+      const std::string_view& path_info,
+      const std::string_view& redirect,
+      const std::string_view& max_file_size,
+      const std::string_view& max_file_count,
+      const std::string_view& expires) {
+    HASHFLAVOR hmac((UCHARPTR) key.data(), key.size());
+
+    hmac.Update((UCHARPTR) path_info.data(), path_info.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) redirect.data(), redirect.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) max_file_size.data(), max_file_size.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) max_file_count.data(), max_file_count.size());
+    hmac.Update((UCHARPTR) "\n", 1);
+
+    hmac.Update((UCHARPTR) expires.data(), expires.size());
+
+    hmac.Final(base_t::dest);
+
+    return format_signature_t::result();
+  }
+};
+class RGWFormPost::SignatureHelper {
+public:
+  virtual ~SignatureHelper() {};
+  virtual const char* calc(const std::string& key,
+    const std::string_view& path_info,
+    const std::string_view& redirect,
+    const std::string_view& max_file_size,
+    const std::string_view& max_file_count,
+    const std::string_view& expires) {
+    return nullptr;
+  };
+  virtual const char* get_signature() const {
+    return nullptr;
+  };
+  virtual bool is_equal_to(const std::string& rhs) {
+    return false;
+  };
+  static std::unique_ptr<SignatureHelper> get_sig_helper(std::string_view x);
+};
+template<typename HASHFLAVOR, rgw::auth::swift::SignatureFlavor SIGNATUREFLAVOR>
+class RGWFormPost::SignatureHelper_x : public RGWFormPost::SignatureHelper
+{
+  friend RGWFormPost;
+private:
+  FormPostSignatureT<HASHFLAVOR,SIGNATUREFLAVOR> d;
+public:
+  ~SignatureHelper_x() { };
+  SignatureHelper_x() {};
+  virtual const char* calc(const std::string& key,
+    const std::string_view& path_info,
+    const std::string_view& redirect,
+    const std::string_view& max_file_size,
+    const std::string_view& max_file_count,
+    const std::string_view& expires) {
+    return d.calc(key,path_info,redirect,
+      max_file_size,max_file_count,expires) ;
+  };
+  virtual const char* get_signature() const {
+    return d.get_signature();
+  };
+  virtual bool is_equal_to(const std::string& rhs) {
+    return d.is_equal_to(rhs);
+  };
+};
+
+std::unique_ptr<RGWFormPost::SignatureHelper> RGWFormPost::SignatureHelper::get_sig_helper(std::string_view x) {
+  size_t pos = x.find(':');
+  if (pos == x.npos || pos <= 0) {
+    switch(x.length()) {
+    case CEPH_CRYPTO_HMACSHA1_DIGESTSIZE*2:
+      return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA1,rgw::auth::swift::SignatureFlavor::BARE_HEX>>();
+    case CEPH_CRYPTO_HMACSHA256_DIGESTSIZE*2:
+      return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA256,rgw::auth::swift::SignatureFlavor::BARE_HEX>>();
+    case CEPH_CRYPTO_HMACSHA512_DIGESTSIZE*2:
+      return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA512,rgw::auth::swift::SignatureFlavor::BARE_HEX>>();
+    }
+    return std::make_unique<BadSignatureHelper>();
+  }
+  std::string_view type { x.substr(0,pos) };
+  if (type == "sha1") {
+    return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA1,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
+  } else if (type == "sha256") {
+    return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA256,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
+  } else if (type == "sha512") {
+    return std::make_unique<SignatureHelper_x<ceph::crypto::HMACSHA512,rgw::auth::swift::SignatureFlavor::NAMED_BASE64>>();
+  }
+  return std::make_unique<BadSignatureHelper>();
+};
+
 int RGWListBuckets_ObjStore_SWIFT::get_params(optional_yield y)
 {
   prefix = s->info.args.get("prefix");
@@ -2034,6 +2137,7 @@ bool RGWFormPost::is_non_expired()
 bool RGWFormPost::is_integral()
 {
   const std::string form_signature = get_part_str(ctrl_parts, "signature");
+  bool r = false;
 
   try {
     get_owner_info(s, s->user->get_info());
@@ -2051,28 +2155,31 @@ bool RGWFormPost::is_integral()
       continue;
     }
 
-    SignatureHelper sig_helper;
-    sig_helper.calc(temp_url_key,
+    auto sig_helper{ RGWFormPost::SignatureHelper::get_sig_helper(form_signature) };
+    sig_helper->calc(temp_url_key,
                     s->info.request_uri,
                     get_part_str(ctrl_parts, "redirect"),
                     get_part_str(ctrl_parts, "max_file_size", "0"),
                     get_part_str(ctrl_parts, "max_file_count", "0"),
                     get_part_str(ctrl_parts, "expires", "0"));
 
-    const auto local_sig = sig_helper.get_signature();
+    const char* local_sig = sig_helper->get_signature();
+    if (!local_sig) local_sig = "???";
 
     ldpp_dout(this, 20) << "FormPost signature [" << temp_url_key_num << "]"
                       << " (calculated): " << local_sig << dendl;
 
-    if (sig_helper.is_equal_to(form_signature)) {
-      return true;
-    } else {
+    r = sig_helper->is_equal_to(form_signature);
+    if (!r) {
       ldpp_dout(this, 5) << "FormPost's signature mismatch: "
                        << local_sig << " != " << form_signature << dendl;
     }
+    if (r) {
+      break;
+    }
   }
 
-  return false;
+  return r;
 }
 
 void RGWFormPost::get_owner_info(const req_state* const s,
