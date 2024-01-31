@@ -903,12 +903,7 @@ void OSDMonitor::update_from_paxos(bool *need_bootstrap)
       if (state & CEPH_OSD_UP) {
 	// could be marked up *or* down, but we're too lazy to check which
 	last_osd_report.erase(osd);
-      }
-    }
-    for (auto [osd, weight] : inc.new_weight) {
-      if (weight == CEPH_OSD_OUT) {
-        // manually marked out, so drop it
-        osd_epochs.erase(osd);
+	osd_epochs.erase(osd);
       }
     }
   }
@@ -2338,6 +2333,7 @@ epoch_t OSDMonitor::get_min_last_epoch_clean() const
   // don't trim past the oldest reported osd epoch
   for (auto [osd, epoch] : osd_epochs) {
     if (epoch < floor) {
+      ceph_assert(osdmap.is_up(osd));
       floor = epoch;
     }
   }
@@ -4420,9 +4416,8 @@ bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
 
   last_osd_report[from].first = ceph_clock_now();
   last_osd_report[from].second = beacon->osd_beacon_report_interval;
-  if (osdmap.is_in(from)) {
-    osd_epochs[from] = beacon->version;
-  }
+  ceph_assert(osdmap.is_up(from));
+  osd_epochs[from] = beacon->version;
   for (const auto& pg : beacon->pgs) {
     if (auto* pool = osdmap.get_pg_pool(pg.pool()); pool != nullptr) {
       unsigned pg_num = pool->get_pg_num();
