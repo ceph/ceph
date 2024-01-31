@@ -227,6 +227,8 @@ class PgScrubber : public ScrubPgIF,
 
   void send_scrub_is_finished(epoch_t epoch_queued) final;
 
+  void send_granted_by_reserver(const AsyncScrubResData& req) final;
+
   /**
    *  we allow some number of preemptions of the scrub, which mean we do
    *  not block.  Then we start to block.  Once we start blocking, we do

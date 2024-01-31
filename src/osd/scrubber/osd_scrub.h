@@ -51,6 +51,8 @@ class OsdScrub {
 
   void dump_scrubs(ceph::Formatter* f) const;  ///< fwd to the queue
 
+  void dump_scrub_reservations(ceph::Formatter* f) const;
+
   /**
    * on_config_change() (the refactored "OSD::sched_all_scrubs()")
    *
@@ -69,9 +71,6 @@ class OsdScrub {
   std::unique_ptr<Scrub::LocalResourceWrapper> inc_scrubs_local(
       bool is_high_priority);
   void dec_scrubs_local();
-  bool inc_scrubs_remote(pg_t pgid);
-  void enqueue_remote_reservation(pg_t pgid);
-  void dec_scrubs_remote(pg_t pgid);
 
   // counting the number of PGs stuck while scrubbing, waiting for objects
   void mark_pg_scrub_blocked(spg_t blocked_pg);

@@ -37,7 +37,7 @@ public:
   reservation_nonce_t reservation_nonce{0};
   /// 'false' if the (legacy) primary is expecting an immediate
   /// granted / denied response
-  bool wait_for_resources{false};
+  bool wait_for_resources{true};
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -63,23 +63,23 @@ public:
   }
 
   void print(std::ostream& out) const {
-    out << "MOSDScrubReserve(" << pgid << " ";
+    out << "MOSDScrubReserve(" << pgid << ",";
     switch (type) {
     case REQUEST:
-      out << (wait_for_resources ? "QREQUEST " : "REQUEST ");
+      out << (wait_for_resources ? "QREQUEST" : "REQUEST");
       break;
     case GRANT:
-      out << "GRANT ";
+      out << "GRANT";
       break;
     case REJECT:
-      out << "REJECT ";
+      out << "REJECT";
       break;
     case RELEASE:
-      out << "RELEASE ";
+      out << "RELEASE";
       break;
     }
-    out << "e" << map_epoch << " from: " << from
-	<< " reservation_nonce: " << reservation_nonce << ")";
+    out << ",e:" << map_epoch << ",from:" << from
+	<< ",reservation_nonce:" << reservation_nonce << ")";
     return;
   }
 

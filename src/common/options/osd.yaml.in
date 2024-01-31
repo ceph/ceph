@@ -535,6 +535,16 @@ options:
   see_also:
   - osd_scrub_slow_reservation_response
   with_legacy: false
+- name: osd_scrub_disable_reservation_queuing
+  type: bool
+  level: advanced
+  desc: Disable queuing of scrub reservations
+  long_desc: When set - scrub replica reservations are responded to immediately, with
+    either success or failure (the pre-Squid version behaviour). This configuration
+    option is introduced to support mixed-version clusters and debugging, and will
+    be removed in the next release.
+  default: false
+  with_legacy: false
 # where rados plugins are stored
 - name: osd_class_dir
   type: str

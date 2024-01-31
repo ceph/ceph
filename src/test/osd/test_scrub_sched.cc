@@ -10,6 +10,7 @@
 
 #include "common/async/context_pool.h"
 #include "common/ceph_argparse.h"
+#include "common/Finisher.h"
 #include "global/global_context.h"
 #include "global/global_init.h"
 #include "include/utime_fmt.h"
@@ -109,9 +110,17 @@ class FakeOsd : public Scrub::ScrubSchedListener {
     return std::nullopt;
   }
 
+  AsyncReserver<spg_t, Finisher>& get_scrub_reserver() final
+  {
+    return m_scrub_reserver;
+  }
+
  private:
   int m_osd_num;
   std::map<spg_t, schedule_result_t> m_next_response;
+  Finisher reserver_finisher{g_ceph_context};
+  AsyncReserver<spg_t, Finisher> m_scrub_reserver{
+      g_ceph_context, &reserver_finisher, 1};
 };
 
 
