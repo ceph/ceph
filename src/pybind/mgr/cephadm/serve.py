@@ -113,8 +113,14 @@ class CephadmServe:
                     if self.mgr.agent_helpers._handle_use_agent_setting():
                         continue
 
+                    if self.mgr.node_proxy_service.handle_hw_monitoring_setting():
+                        continue
+
                     if self.mgr.upgrade.continue_upgrade():
                         continue
+
+                    # refresh node-proxy cache
+                    self.mgr.node_proxy_cache.load()
 
             except OrchestratorError as e:
                 if e.event_subject:

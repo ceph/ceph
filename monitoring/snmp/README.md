@@ -40,6 +40,7 @@ internet private enterprise   ceph   ceph    Notifications   Prometheus  Notific
                                                                             .10  (Rados)
                                                                             .11 (cephadm)
                                                                             .12 (prometheus)
+                                                                            .13 (hardware)
 
 ```
 Individual alerts are placed within the appropriate alert category. For example, to add

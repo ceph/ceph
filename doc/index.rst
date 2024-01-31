@@ -121,5 +121,6 @@ about Ceph, see our `Architecture`_ section.
    releases/general
    releases/index
    security/index
+   hardware-monitoring/index
    Glossary <glossary>
    Tracing <jaegertracing/index>

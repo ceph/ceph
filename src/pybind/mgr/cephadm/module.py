@@ -11,6 +11,7 @@ from configparser import ConfigParser
 from contextlib import contextmanager
 from functools import wraps
 from tempfile import TemporaryDirectory, NamedTemporaryFile
+from urllib.error import HTTPError
 from threading import Event
 
 from cephadm.service_discovery import ServiceDiscovery
@@ -72,9 +73,10 @@ from .services.osd import OSDRemovalQueue, OSDService, OSD, NotFoundError
 from .services.monitoring import GrafanaService, AlertmanagerService, PrometheusService, \
     NodeExporterService, SNMPGatewayService, LokiService, PromtailService
 from .services.jaeger import ElasticSearchService, JaegerAgentService, JaegerCollectorService, JaegerQueryService
+from .services.node_proxy import NodeProxy
 from .schedule import HostAssignment
 from .inventory import Inventory, SpecStore, HostCache, AgentCache, EventStore, \
-    ClientKeyringStore, ClientKeyringSpec, TunedProfileStore
+    ClientKeyringStore, ClientKeyringSpec, TunedProfileStore, NodeProxyCache
 from .upgrade import CephadmUpgrade
 from .template import TemplateMgr
 from .utils import CEPH_IMAGE_TYPES, RESCHEDULE_FROM_OFFLINE_HOSTS_TYPES, forall_hosts, \
@@ -444,6 +446,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             desc='Multiplied by agent refresh rate to calculate how long agent must not report before being marked down'
         ),
         Option(
+            'hw_monitoring',
+            type='bool',
+            default=False,
+            desc='Deploy hw monitoring daemon on every host.'
+        ),
+        Option(
             'max_osd_draining_count',
             type='int',
             default=10,
@@ -486,6 +494,12 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             default='',
             desc="Destination for cephadm command's persistent logging",
             enum_allowed=['file', 'syslog', 'file,syslog'],
+        ),
+        Option(
+            'oob_default_addr',
+            type='str',
+            default='169.254.1.1',
+            desc="Default address for RedFish API (oob management)."
         ),
     ]
 
@@ -560,6 +574,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.agent_refresh_rate = 0
             self.agent_down_multiplier = 0.0
             self.agent_starting_port = 0
+            self.hw_monitoring = False
             self.service_discovery_port = 0
             self.secure_monitoring_stack = False
             self.apply_spec_fails: List[Tuple[str, str]] = []
@@ -570,6 +585,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             self.log_refresh_metadata = False
             self.default_cephadm_command_timeout = 0
             self.cephadm_log_destination = ''
+            self.oob_default_addr = ''
 
         self.notify(NotifyType.mon_map, None)
         self.config_notify()
@@ -599,6 +615,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.cache = HostCache(self)
         self.cache.load()
+
+        self.node_proxy_cache = NodeProxyCache(self)
+        self.node_proxy_cache.load()
 
         self.agent_cache = AgentCache(self)
         self.agent_cache.load()
@@ -637,7 +656,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
             PrometheusService, NodeExporterService, LokiService, PromtailService, CrashService, IscsiService,
             IngressService, CustomContainerService, CephfsMirrorService, NvmeofService,
             CephadmAgent, CephExporterService, SNMPGatewayService, ElasticSearchService,
-            JaegerQueryService, JaegerAgentService, JaegerCollectorService
+            JaegerQueryService, JaegerAgentService, JaegerCollectorService, NodeProxy
         ]
 
         # https://github.com/python/mypy/issues/8993
@@ -648,6 +667,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         self.osd_service: OSDService = cast(OSDService, self.cephadm_services['osd'])
         self.iscsi_service: IscsiService = cast(IscsiService, self.cephadm_services['iscsi'])
         self.nvmeof_service: NvmeofService = cast(NvmeofService, self.cephadm_services['nvmeof'])
+        self.node_proxy_service: NodeProxy = cast(NodeProxy, self.cephadm_services['node-proxy'])
 
         self.scheduled_async_actions: List[Callable] = []
 
@@ -660,6 +680,9 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
 
         self.http_server = CephadmHttpServer(self)
         self.http_server.start()
+
+        self.node_proxy = NodeProxy(self)
+
         self.agent_helpers = CephadmAgentHelpers(self)
         if self.use_agent:
             self.agent_helpers._apply_agent()
@@ -826,7 +849,7 @@ class CephadmOrchestrator(orchestrator.Orchestrator, MgrModule,
         Generate a unique random service name
         """
         suffix = daemon_type not in [
-            'mon', 'crash', 'ceph-exporter',
+            'mon', 'crash', 'ceph-exporter', 'node-proxy',
             'prometheus', 'node-exporter', 'grafana', 'alertmanager',
             'container', 'agent', 'snmp-gateway', 'loki', 'promtail',
             'elasticsearch', 'jaeger-collector', 'jaeger-agent', 'jaeger-query'
@@ -1613,6 +1636,18 @@ Then run the following:
         if spec.hostname in self.inventory and self.inventory.get_addr(spec.hostname) != spec.addr:
             self.cache.refresh_all_host_info(spec.hostname)
 
+        if spec.oob:
+            if not spec.oob.get('addr'):
+                spec.oob['addr'] = self.oob_default_addr
+            if not spec.oob.get('port'):
+                spec.oob['port'] = '443'
+            host_oob_info = dict()
+            host_oob_info['addr'] = spec.oob['addr']
+            host_oob_info['port'] = spec.oob['port']
+            host_oob_info['username'] = spec.oob['username']
+            host_oob_info['password'] = spec.oob['password']
+            self.node_proxy_cache.update_oob(spec.hostname, host_oob_info)
+
         # prime crush map?
         if spec.location:
             self.check_mon_command({
@@ -1635,6 +1670,67 @@ Then run the following:
     @handle_orch_error
     def add_host(self, spec: HostSpec) -> str:
         return self._add_host(spec)
+
+    @handle_orch_error
+    def hardware_light(self, light_type: str, action: str, hostname: str, device: Optional[str] = None) -> Dict[str, Any]:
+        try:
+            result = self.node_proxy.led(light_type=light_type,
+                                         action=action,
+                                         hostname=hostname,
+                                         device=device)
+        except RuntimeError as e:
+            self.log.error(e)
+            raise OrchestratorValidationError(f'Make sure the node-proxy agent is deployed and running on {hostname}')
+        except HTTPError as e:
+            self.log.error(e)
+            raise OrchestratorValidationError(f"http error while querying node-proxy API: {e}")
+        return result
+
+    @handle_orch_error
+    def hardware_shutdown(self, hostname: str, force: Optional[bool] = False, yes_i_really_mean_it: bool = False) -> str:
+        if not yes_i_really_mean_it:
+            raise OrchestratorError("you must pass --yes-i-really-mean-it")
+
+        try:
+            self.node_proxy.shutdown(hostname, force)
+        except RuntimeError as e:
+            self.log.error(e)
+            raise OrchestratorValidationError(f'Make sure the node-proxy agent is deployed and running on {hostname}')
+        except HTTPError as e:
+            self.log.error(e)
+            raise OrchestratorValidationError(f"Can't shutdown node {hostname}: {e}")
+        return f'Shutdown scheduled on {hostname}'
+
+    @handle_orch_error
+    def hardware_powercycle(self, hostname: str, yes_i_really_mean_it: bool = False) -> str:
+        if not yes_i_really_mean_it:
+            raise OrchestratorError("you must pass --yes-i-really-mean-it")
+
+        try:
+            self.node_proxy.powercycle(hostname)
+        except RuntimeError as e:
+            self.log.error(e)
+            raise OrchestratorValidationError(f'Make sure the node-proxy agent is deployed and running on {hostname}')
+        except HTTPError as e:
+            self.log.error(e)
+            raise OrchestratorValidationError(f"Can't perform powercycle on node {hostname}: {e}")
+        return f'Powercycle scheduled on {hostname}'
+
+    @handle_orch_error
+    def node_proxy_summary(self, hostname: Optional[str] = None) -> Dict[str, Any]:
+        return self.node_proxy_cache.summary(hostname=hostname)
+
+    @handle_orch_error
+    def node_proxy_firmwares(self, hostname: Optional[str] = None) -> Dict[str, Any]:
+        return self.node_proxy_cache.firmwares(hostname=hostname)
+
+    @handle_orch_error
+    def node_proxy_criticals(self, hostname: Optional[str] = None) -> Dict[str, Any]:
+        return self.node_proxy_cache.criticals(hostname=hostname)
+
+    @handle_orch_error
+    def node_proxy_common(self, category: str, hostname: Optional[str] = None) -> Dict[str, Any]:
+        return self.node_proxy_cache.common(category, hostname=hostname)
 
     @handle_orch_error
     def remove_host(self, host: str, force: bool = False, offline: bool = False, rm_crush_entry: bool = False) -> str:
@@ -2692,6 +2788,15 @@ Then run the following:
                 pass
             deps = sorted([self.get_mgr_ip(), server_port, root_cert,
                            str(self.device_enhanced_scan)])
+        elif daemon_type == 'node-proxy':
+            root_cert = ''
+            server_port = ''
+            try:
+                server_port = str(self.http_server.agent.server_port)
+                root_cert = self.http_server.agent.ssl_certs.get_root_cert()
+            except Exception:
+                pass
+            deps = sorted([self.get_mgr_ip(), server_port, root_cert])
         elif daemon_type == 'iscsi':
             if spec:
                 iscsi_spec = cast(IscsiServiceSpec, spec)
