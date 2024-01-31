@@ -3132,6 +3132,14 @@ Then run the following:
                 'certificate': self.http_server.service_discovery.ssl_certs.get_root_cert()}
 
     @handle_orch_error
+    def cert_store_cert_ls(self) -> Dict[str, Any]:
+        return self.cert_key_store.cert_ls()
+
+    @handle_orch_error
+    def cert_store_key_ls(self) -> Dict[str, Any]:
+        return self.cert_key_store.key_ls()
+
+    @handle_orch_error
     def apply_mon(self, spec: ServiceSpec) -> str:
         return self._apply(spec)
 
