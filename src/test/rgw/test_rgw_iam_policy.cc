@@ -99,6 +99,7 @@ using rgw::IAM::iamGetRolePolicy;
 using rgw::IAM::iamGetOIDCProvider;
 using rgw::IAM::iamGetUser;
 using rgw::IAM::iamListUserPolicies;
+using rgw::IAM::iamListAttachedUserPolicies;
 using rgw::IAM::iamListRoles;
 using rgw::IAM::iamListRolePolicies;
 using rgw::IAM::iamListOIDCProviders;
@@ -799,6 +800,7 @@ TEST_F(ManagedPolicyTest, IAMReadOnlyAccess)
   act[iamGetOIDCProvider] = 1;
   act[iamGetUser] = 1;
   act[iamListUserPolicies] = 1;
+  act[iamListAttachedUserPolicies] = 1;
   act[iamListRoles] = 1;
   act[iamListRolePolicies] = 1;
   act[iamListOIDCProviders] = 1;
