@@ -134,6 +134,9 @@ static const actpair actpairs[] =
  { "s3:PutPublicAccessBlock", s3PutPublicAccessBlock },
  { "s3:PutReplicationConfiguration", s3PutReplicationConfiguration },
  { "s3:RestoreObject", s3RestoreObject },
+ { "s3:DescribeJob", s3DescribeJob },
+ { "s3-object-lambda:GetObject", s3objectlambdaGetObject },
+ { "s3-object-lambda:ListBucket", s3objectlambdaListBucket },
  { "iam:PutUserPolicy", iamPutUserPolicy },
  { "iam:GetUserPolicy", iamGetUserPolicy },
  { "iam:DeleteUserPolicy", iamDeleteUserPolicy },
@@ -164,6 +167,10 @@ static const actpair actpairs[] =
  { "iam:UpdateAccessKey", iamUpdateAccessKey},
  { "iam:DeleteAccessKey", iamDeleteAccessKey},
  { "iam:ListAccessKeys", iamListAccessKeys},
+ { "iam:GenerateCredentialReport", iamGenerateCredentialReport},
+ { "iam:GenerateServiceLastAccessedDetails", iamGenerateServiceLastAccessedDetails},
+ { "iam:SimulateCustomPolicy", iamSimulateCustomPolicy},
+ { "iam:SimulatePrincipalPolicy", iamSimulatePrincipalPolicy},
  { "sts:AssumeRole", stsAssumeRole},
  { "sts:AssumeRoleWithWebIdentity", stsAssumeRoleWithWebIdentity},
  { "sts:GetSessionToken", stsGetSessionToken},
@@ -173,6 +180,17 @@ static const actpair actpairs[] =
  { "sns:Publish", snsPublish},
  { "sns:SetTopicAttributes", snsSetTopicAttributes},
  { "sns:CreateTopic", snsCreateTopic},
+ { "sns:ListTopics", snsListTopics},
+ { "organizations:DescribeAccount", organizationsDescribeAccount},
+ { "organizations:DescribeOrganization", organizationsDescribeOrganization},
+ { "organizations:DescribeOrganizationalUnit", organizationsDescribeOrganizationalUnit},
+ { "organizations:DescribePolicy", organizationsDescribePolicy},
+ { "organizations:ListChildren", organizationsListChildren},
+ { "organizations:ListParents", organizationsListParents},
+ { "organizations:ListPoliciesForTarget", organizationsListPoliciesForTarget},
+ { "organizations:ListRoots", organizationsListRoots},
+ { "organizations:ListPolicies", organizationsListPolicies},
+ { "organizations:ListTargetsForPolicy", organizationsListTargetsForPolicy},
 };
 
 struct PolicyParser;
@@ -606,6 +624,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         if ((t->notaction & s3AllValue) == s3AllValue) {
           t->notaction[s3All] = 1;
         }
+        if ((t->action & s3objectlambdaAllValue) == s3objectlambdaAllValue) {
+          t->action[s3objectlambdaAll] = 1;
+        }
+        if ((t->notaction & s3objectlambdaAllValue) == s3objectlambdaAllValue) {
+          t->notaction[s3objectlambdaAll] = 1;
+        }
         if ((t->action & iamAllValue) == iamAllValue) {
           t->action[iamAll] = 1;
         }
@@ -623,6 +647,12 @@ bool ParseState::do_string(CephContext* cct, const char* s, size_t l) {
         }
         if ((t->notaction & snsAllValue) == snsAllValue) {
           t->notaction[snsAll] = 1;
+        }
+        if ((t->action & organizationsAllValue) == organizationsAllValue) {
+          t->action[organizationsAll] = 1;
+        }
+        if ((t->notaction & organizationsAllValue) == organizationsAllValue) {
+          t->notaction[organizationsAll] = 1;
         }
       }
     }
@@ -1415,6 +1445,15 @@ const char* action_bit_string(uint64_t action) {
   case s3BypassGovernanceRetention:
     return "s3:BypassGovernanceRetention";
 
+  case s3DescribeJob:
+    return "s3:DescribeJob";
+
+  case s3objectlambdaGetObject:
+    return "s3-object-lambda:GetObject";
+
+  case s3objectlambdaListBucket:
+    return "s3-object-lambda:ListBucket";
+
   case iamPutUserPolicy:
     return "iam:PutUserPolicy";
 
@@ -1505,6 +1544,18 @@ const char* action_bit_string(uint64_t action) {
   case iamListAccessKeys:
     return "iam:ListAccessKeys";
 
+  case iamGenerateCredentialReport:
+    return "iam:GenerateCredentialReport";
+
+  case iamGenerateServiceLastAccessedDetails:
+    return "iam:GenerateServiceLastAccessedDetails";
+
+  case iamSimulateCustomPolicy:
+    return "iam:SimulateCustomPolicy";
+
+  case iamSimulatePrincipalPolicy:
+    return "iam:SimulatePrincipalPolicy";
+
   case stsAssumeRole:
     return "sts:AssumeRole";
 
@@ -1531,6 +1582,39 @@ const char* action_bit_string(uint64_t action) {
 
   case snsCreateTopic:
     return "sns:CreateTopic";
+
+  case snsListTopics:
+    return "sns:ListTopics";
+
+  case organizationsDescribeAccount:
+    return "organizations:DescribeAccount";
+
+  case organizationsDescribeOrganization:
+    return "organizations:DescribeOrganization";
+
+  case organizationsDescribeOrganizationalUnit:
+    return "organizations:DescribeOrganizationalUnit";
+
+  case organizationsDescribePolicy:
+    return "organizations:DescribePolicy";
+
+  case organizationsListChildren:
+    return "organizations:ListChildren";
+
+  case organizationsListParents:
+    return "organizations:ListParents";
+
+  case organizationsListPoliciesForTarget:
+    return "organizations:ListPoliciesForTarget";
+
+  case organizationsListRoots:
+    return "organizations:ListRoots";
+
+  case organizationsListPolicies:
+    return "organizations:ListPolicies";
+
+  case organizationsListTargetsForPolicy:
+    return "organizations:ListTargetsForPolicy";
   }
   return "s3Invalid";
 }

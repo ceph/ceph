@@ -113,7 +113,12 @@ enum {
   s3DeleteBucketPublicAccessBlock,
   s3GetBucketEncryption,
   s3PutBucketEncryption,
+  s3DescribeJob,
   s3All,
+
+  s3objectlambdaGetObject,
+  s3objectlambdaListBucket,
+  s3objectlambdaAll,
 
   iamPutUserPolicy,
   iamGetUserPolicy,
@@ -145,6 +150,10 @@ enum {
   iamUpdateAccessKey,
   iamDeleteAccessKey,
   iamListAccessKeys,
+  iamGenerateCredentialReport,
+  iamGenerateServiceLastAccessedDetails,
+  iamSimulateCustomPolicy,
+  iamSimulatePrincipalPolicy,
   iamAll,
 
   stsAssumeRole,
@@ -158,7 +167,20 @@ enum {
   snsPublish,
   snsSetTopicAttributes,
   snsCreateTopic,
+  snsListTopics,
   snsAll,
+
+  organizationsDescribeAccount,
+  organizationsDescribeOrganization,
+  organizationsDescribeOrganizationalUnit,
+  organizationsDescribePolicy,
+  organizationsListChildren,
+  organizationsListParents,
+  organizationsListPoliciesForTarget,
+  organizationsListRoots,
+  organizationsListPolicies,
+  organizationsListTargetsForPolicy,
+  organizationsAll,
 
   allCount
 };
@@ -181,9 +203,11 @@ constexpr std::bitset<N> set_cont_bits(size_t start, size_t end)
 
 static const Action_t None(0);
 static const Action_t s3AllValue = set_cont_bits<allCount>(0,s3All);
-static const Action_t iamAllValue = set_cont_bits<allCount>(s3All+1,iamAll);
+static const Action_t s3objectlambdaAllValue = set_cont_bits<allCount>(s3All+1,s3objectlambdaAll);
+static const Action_t iamAllValue = set_cont_bits<allCount>(s3objectlambdaAll+1,iamAll);
 static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
-static const Action_t snsAllValue = set_cont_bits<allCount>(stsAll + 1, snsAll);
+static const Action_t snsAllValue = set_cont_bits<allCount>(stsAll+1, snsAll);
+static const Action_t organizationsAllValue = set_cont_bits<allCount>(snsAll+1,organizationsAll);
 static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
