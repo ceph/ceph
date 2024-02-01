@@ -610,15 +610,23 @@ seastar::future<Ref<PG>> ShardServices::make_pg(
 
 seastar::future<Ref<PG>> ShardServices::handle_pg_create_info(
   std::unique_ptr<PGCreateInfo> info) {
-  LOG_PREFIX(OSDSingletonState::trim_maps);
   return seastar::do_with(
     std::move(info),
-    [FNAME, this](auto &info)
+    [this](auto &info)
     -> seastar::future<Ref<PG>> {
       return get_map(info->epoch).then(
-	[&info, FNAME, this](cached_map_t startmap)
+	[&info, this](cached_map_t startmap)
 	-> seastar::future<std::tuple<Ref<PG>, cached_map_t>> {
+	  LOG_PREFIX(ShardServices::handle_pg_create_info);
 	  const spg_t &pgid = info->pgid;
+	  if (!get_map()->is_up_acting_osd_shard(pgid, local_state.whoami)
+	      || !startmap->is_up_acting_osd_shard(pgid, local_state.whoami)) {
+	    DEBUG("ignore pgid {}, doesn't exist anymore, discarding");
+	    local_state.pg_map.pg_creation_canceled(pgid);
+	    return seastar::make_ready_future<
+	      std::tuple<Ref<PG>, OSDMapService::cached_map_t>
+	      >(std::make_tuple(Ref<PG>(), startmap));
+	  }
 	  if (info->by_mon) {
 	    int64_t pool_id = pgid.pgid.pool();
 	    const pg_pool_t *pool = get_map()->get_pg_pool(pool_id);
