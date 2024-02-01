@@ -45,7 +45,8 @@ import { CephfsSnapshotscheduleFormComponent } from './cephfs-snapshotschedule-f
     NgbTooltipModule,
     DataTableModule,
     NgbDatepickerModule,
-    NgbTimepickerModule
+    NgbTimepickerModule,
+    NgbTypeaheadModule
   ],
   declarations: [
     CephfsDetailComponent,
