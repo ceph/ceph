@@ -535,12 +535,11 @@ int RGWREST_STS::verify_permission(optional_yield y)
     return ret;
   }
   string policy = role->get_assume_role_policy();
-  buffer::list bl = buffer::list::static_from_string(policy);
 
   //Parse the policy
   //TODO - This step should be part of Role Creation
   try {
-    const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), bl, false);
+    const rgw::IAM::Policy p(s->cct, s->user->get_tenant(), policy, false);
     if (!s->principal_tags.empty()) {
       auto res = p.eval(s->env, *s->auth.identity, rgw::IAM::stsTagSession, boost::none);
       if (res != rgw::IAM::Effect::Allow) {
@@ -656,10 +655,9 @@ int RGWSTSAssumeRoleWithWebIdentity::get_params()
   }
 
   if (! policy.empty()) {
-    bufferlist bl = bufferlist::static_from_string(policy);
     try {
       const rgw::IAM::Policy p(
-	s->cct, s->user->get_tenant(), bl,
+	s->cct, s->user->get_tenant(), policy,
 	s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     }
     catch (rgw::IAM::PolicyParseException& e) {
@@ -718,10 +716,9 @@ int RGWSTSAssumeRole::get_params()
   }
 
   if (! policy.empty()) {
-    bufferlist bl = bufferlist::static_from_string(policy);
     try {
       const rgw::IAM::Policy p(
-	s->cct, s->user->get_tenant(), bl,
+	s->cct, s->user->get_tenant(), policy,
 	s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     }
     catch (rgw::IAM::PolicyParseException& e) {

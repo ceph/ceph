@@ -86,11 +86,10 @@ bool topics_has_endpoint_secret(const rgw_pubsub_topics& topics) {
 }
 
 std::optional<rgw::IAM::Policy> get_policy_from_text(req_state* const s,
-                                                     std::string& policy_text) {
-  const auto bl = bufferlist::static_from_string(policy_text);
+                                                     const std::string& policy_text) {
   try {
     return rgw::IAM::Policy(
-        s->cct, s->auth.identity->get_tenant(), bl,
+        s->cct, s->auth.identity->get_tenant(), policy_text,
         s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (rgw::IAM::PolicyParseException& e) {
     ldout(s->cct, 1) << "failed to parse policy: '" << policy_text
@@ -122,9 +121,7 @@ int verify_topic_owner_or_policy(req_state* const s,
     s->err.message = "Topic was created by another user.";
     return -EACCES;
   }
-  // bufferlist::static_from_string wants non const string
-  std::string policy_text(topic.policy_text);
-  const auto p = get_policy_from_text(s, policy_text);
+  const auto p = get_policy_from_text(s, topic.policy_text);
   rgw::IAM::PolicyPrincipal princ_type = rgw::IAM::PolicyPrincipal::Other;
   const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, zonegroup_name,
                      s->user->get_tenant(), topic.name);
