@@ -6777,10 +6777,9 @@ int main(int argc, const char **argv)
         cerr << "ERROR: assume role policy document is empty" << std::endl;
         return -EINVAL;
       }
-      bufferlist bl = bufferlist::static_from_string(assume_role_doc);
       try {
         const rgw::IAM::Policy p(
-	  g_ceph_context, tenant, bl,
+	  g_ceph_context, tenant, assume_role_doc,
 	  g_ceph_context->_conf.get_val<bool>(
 	    "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
@@ -6838,9 +6837,8 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      bufferlist bl = bufferlist::static_from_string(assume_role_doc);
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, bl,
+        const rgw::IAM::Policy p(g_ceph_context, tenant, assume_role_doc,
 				 g_ceph_context->_conf.get_val<bool>(
 				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {
@@ -6925,19 +6923,17 @@ int main(int argc, const char **argv)
         return -EINVAL;
       }
 
-      bufferlist bl;
       if (!infile.empty()) {
+        bufferlist bl;
         int ret = read_input(infile, bl);
         if (ret < 0) {
           cerr << "ERROR: failed to read input policy document: " << cpp_strerror(-ret) << std::endl;
           return -ret;
         }
         perm_policy_doc = bl.to_str();
-      } else {
-        bl = bufferlist::static_from_string(perm_policy_doc);
       }
       try {
-        const rgw::IAM::Policy p(g_ceph_context, tenant, bl,
+        const rgw::IAM::Policy p(g_ceph_context, tenant, perm_policy_doc,
 				 g_ceph_context->_conf.get_val<bool>(
 				   "rgw_policy_reject_invalid_principals"));
       } catch (rgw::IAM::PolicyParseException& e) {

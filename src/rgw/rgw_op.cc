@@ -323,12 +323,13 @@ static int get_obj_policy_from_attr(const DoutPrefixProvider *dpp,
 }
 
 
-static boost::optional<Policy> get_iam_policy_from_attr(CephContext* cct,
-							map<string, bufferlist>& attrs,
-							const string& tenant) {
-  auto i = attrs.find(RGW_ATTR_IAM_POLICY);
-  if (i != attrs.end()) {
-    return Policy(cct, tenant, i->second, false);
+static boost::optional<Policy>
+get_iam_policy_from_attr(CephContext* cct,
+                         const map<string, bufferlist>& attrs,
+                         const string& tenant)
+{
+  if (auto i = attrs.find(RGW_ATTR_IAM_POLICY); i != attrs.end()) {
+    return Policy(cct, tenant, i->second.to_str(), false);
   } else {
     return none;
   }
@@ -352,18 +353,15 @@ get_public_access_conf_from_attr(const map<string, bufferlist>& attrs)
 }
 
 vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
-                        map<string, bufferlist>& attrs,
+                        const map<string, bufferlist>& attrs,
                         const string& tenant) {
   vector<Policy> policies;
-  if (auto it = attrs.find(RGW_ATTR_USER_POLICY); it != attrs.end()) {
-   bufferlist out_bl = attrs[RGW_ATTR_USER_POLICY];
-   map<string, string> policy_map;
-   decode(policy_map, out_bl);
-   for (auto& it : policy_map) {
-     bufferlist bl = bufferlist::static_from_string(it.second);
-     Policy p(cct, tenant, bl, false);
-     policies.push_back(std::move(p));
-   }
+  if (auto bl = attrs.find(RGW_ATTR_USER_POLICY); bl != attrs.end()) {
+    map<string, string> policy_map;
+    decode(policy_map, bl->second);
+    for (const auto& [name, policy] : policy_map) {
+      policies.emplace_back(cct, tenant, policy, false);
+    }
   }
   return policies;
 }
@@ -8508,7 +8506,7 @@ void RGWPutBucketPolicy::execute(optional_yield y)
 
   try {
     const Policy p(
-      s->cct, s->bucket_tenant, data,
+      s->cct, s->bucket_tenant, data.to_str(),
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     rgw::sal::Attrs attrs(s->bucket_attrs);
     if (s->bucket_access_conf &&
