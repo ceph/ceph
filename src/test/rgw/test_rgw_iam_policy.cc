@@ -12,6 +12,8 @@
  *
  */
 
+#include "rgw_iam_policy.h"
+
 #include <string>
 
 #include <boost/intrusive_ptr.hpp>
@@ -26,7 +28,7 @@
 #include "global/global_init.h"
 #include "rgw_auth.h"
 #include "rgw_auth_registry.h"
-#include "rgw_iam_policy.h"
+#include "rgw_iam_managed_policy.h"
 #include "rgw_op.h"
 #include "rgw_process_env.h"
 #include "rgw_sal_rados.h"
@@ -127,6 +129,8 @@ using rgw::IAM::stsAllValue;
 using rgw::IAM::snsAllValue;
 using rgw::IAM::organizationsAllValue;
 using rgw::IAM::allValue;
+
+using rgw::IAM::get_managed_policy;
 
 class FakeIdentity : public Identity {
   const Principal id;
@@ -760,6 +764,139 @@ TEST_F(PolicyTest, Eval7) {
 		       "", arbitrary_tenant, "mybucket/*");
   EXPECT_EQ(p.eval(e, sub2acct, s3ListBucket, arn3),
 	    Effect::Pass);
+}
+
+
+class ManagedPolicyTest : public ::testing::Test {
+protected:
+  intrusive_ptr<CephContext> cct;
+public:
+  ManagedPolicyTest() : cct(new CephContext(CEPH_ENTITY_TYPE_CLIENT)) {}
+};
+
+TEST_F(ManagedPolicyTest, IAMFullAccess)
+{
+  auto p = get_managed_policy(cct.get(), "arn:aws:iam::aws:policy/IAMFullAccess");
+  ASSERT_TRUE(p);
+
+  Action_t act = iamAllValue | organizationsAllValue;
+  act[iamAll] = 1;
+  act[organizationsAll] = 1;
+  EXPECT_EQ(act, p->statements[0].action);
+}
+
+TEST_F(ManagedPolicyTest, IAMReadOnlyAccess)
+{
+  auto p = get_managed_policy(cct.get(), "arn:aws:iam::aws:policy/IAMReadOnlyAccess");
+  ASSERT_TRUE(p);
+
+  Action_t act;
+  act[iamGenerateCredentialReport] = 1;
+  act[iamGenerateServiceLastAccessedDetails] = 1;
+  act[iamGetUserPolicy] = 1;
+  act[iamGetRole] = 1;
+  act[iamGetRolePolicy] = 1;
+  act[iamGetOIDCProvider] = 1;
+  act[iamGetUser] = 1;
+  act[iamListUserPolicies] = 1;
+  act[iamListRoles] = 1;
+  act[iamListRolePolicies] = 1;
+  act[iamListOIDCProviders] = 1;
+  act[iamListRoleTags] = 1;
+  act[iamListUsers] = 1;
+  act[iamListAccessKeys] = 1;
+  act[iamSimulateCustomPolicy] = 1;
+  act[iamSimulatePrincipalPolicy] = 1;
+
+  EXPECT_EQ(act, p->statements[0].action);
+}
+
+TEST_F(ManagedPolicyTest, AmazonSNSFullAccess)
+{
+  auto p = get_managed_policy(cct.get(), "arn:aws:iam::aws:policy/AmazonSNSFullAccess");
+  ASSERT_TRUE(p);
+
+  Action_t act = snsAllValue;
+  act[snsAll] = 1;
+  EXPECT_EQ(act, p->statements[0].action);
+}
+
+TEST_F(ManagedPolicyTest, AmazonSNSReadOnlyAccess)
+{
+  auto p = get_managed_policy(cct.get(), "arn:aws:iam::aws:policy/AmazonSNSReadOnlyAccess");
+  ASSERT_TRUE(p);
+
+  Action_t act;
+  // sns:GetTopicAttributes
+  act[snsGetTopicAttributes] = 1;
+  // sns:List*
+  act[snsListTopics] = 1;
+
+  EXPECT_EQ(act, p->statements[0].action);
+}
+
+TEST_F(ManagedPolicyTest, AmazonS3FullAccess)
+{
+  auto p = get_managed_policy(cct.get(), "arn:aws:iam::aws:policy/AmazonS3FullAccess");
+  ASSERT_TRUE(p);
+
+  Action_t act = s3AllValue | s3objectlambdaAllValue;
+  act[s3All] = 1;
+  act[s3objectlambdaAll] = 1;
+  EXPECT_EQ(act, p->statements[0].action);
+}
+
+TEST_F(ManagedPolicyTest, AmazonS3ReadOnlyAccess)
+{
+  auto p = get_managed_policy(cct.get(), "arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess");
+  ASSERT_TRUE(p);
+
+  Action_t act;
+  // s3:Get*
+  act[s3GetObject] = 1;
+  act[s3GetObjectVersion] = 1;
+  act[s3GetObjectAcl] = 1;
+  act[s3GetObjectVersionAcl] = 1;
+  act[s3GetObjectTorrent] = 1;
+  act[s3GetObjectVersionTorrent] = 1;
+  act[s3GetAccelerateConfiguration] = 1;
+  act[s3GetBucketAcl] = 1;
+  act[s3GetBucketOwnershipControls] = 1;
+  act[s3GetBucketCORS] = 1;
+  act[s3GetBucketVersioning] = 1;
+  act[s3GetBucketRequestPayment] = 1;
+  act[s3GetBucketLocation] = 1;
+  act[s3GetBucketPolicy] = 1;
+  act[s3GetBucketNotification] = 1;
+  act[s3GetBucketLogging] = 1;
+  act[s3GetBucketTagging] = 1;
+  act[s3GetBucketWebsite] = 1;
+  act[s3GetLifecycleConfiguration] = 1;
+  act[s3GetReplicationConfiguration] = 1;
+  act[s3GetObjectTagging] = 1;
+  act[s3GetObjectVersionTagging] = 1;
+  act[s3GetBucketObjectLockConfiguration] = 1;
+  act[s3GetObjectRetention] = 1;
+  act[s3GetObjectLegalHold] = 1;
+  act[s3GetBucketPolicyStatus] = 1;
+  act[s3GetPublicAccessBlock] = 1;
+  act[s3GetBucketPublicAccessBlock] = 1;
+  act[s3GetBucketEncryption] = 1;
+  // s3:List*
+  act[s3ListMultipartUploadParts] = 1;
+  act[s3ListBucket] = 1;
+  act[s3ListBucketVersions] = 1;
+  act[s3ListAllMyBuckets] = 1;
+  act[s3ListBucketMultipartUploads] = 1;
+  // s3:Describe*
+  act[s3DescribeJob] = 1;
+  // s3-object-lambda:Get*
+  act[s3objectlambdaGetObject] = 1;
+  // s3-object-lambda:List*
+  act[s3objectlambdaListBucket] = 1;
+  act[s3objectlambdaAll] = 1;
+
+  EXPECT_EQ(act, p->statements[0].action);
 }
 
 const string PolicyTest::arbitrary_tenant = "arbitrary_tenant";
