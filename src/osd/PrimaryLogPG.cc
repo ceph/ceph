@@ -10379,6 +10379,12 @@ int PrimaryLogPG::start_cls_gather(OpContext *ctx, std::map<std::string, bufferl
 
   ObjectContextRef obc = get_object_context(soid, false);
   C_GatherBuilder gather(cct);
+  if (cls_gather_ops.count(soid)) {
+    auto gather_op_iter = cls_gather_ops.find(soid);
+    vector<ceph_tid_t> tids;
+    cancel_cls_gather(gather_op_iter, false, &tids);
+    osd->objecter->op_cancel(tids, -ECANCELED);
+  }
 
   auto [iter, inserted] = cls_gather_ops.emplace(soid, CLSGatherOp(ctx, obc, op));
   ceph_assert(inserted);
