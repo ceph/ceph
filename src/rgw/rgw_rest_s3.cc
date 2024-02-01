@@ -5169,7 +5169,8 @@ void update_attribute_map(const std::string& input, AttributeMap& map) {
   auto pos = key_or_value.find("=");
   if (pos != std::string::npos) {
     const auto key_or_value_lhs = key_or_value.substr(0, pos);
-    const auto key_or_value_rhs = url_decode(key_or_value.substr(pos + 1, key_or_value.size() - 1));
+    constexpr bool in_query = true; // replace '+' with ' '
+    const auto key_or_value_rhs = url_decode(key_or_value.substr(pos + 1, key_or_value.size() - 1), in_query);
     const auto map_it = map.find(idx);
     if (map_it == map.end()) {
       // new entry
