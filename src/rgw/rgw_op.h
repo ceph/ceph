@@ -2071,7 +2071,7 @@ extern int rgw_build_object_policies(const DoutPrefixProvider *dpp, rgw::sal::Dr
 extern void rgw_build_iam_environment(rgw::sal::Driver* driver,
 				      req_state* s);
 extern std::vector<rgw::IAM::Policy> get_iam_user_policy_from_attr(CephContext* cct,
-                        std::map<std::string, bufferlist>& attrs,
+                        const std::map<std::string, bufferlist>& attrs,
                         const std::string& tenant);
 
 inline int get_system_versioning_params(req_state *s,

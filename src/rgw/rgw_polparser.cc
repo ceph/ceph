@@ -26,7 +26,7 @@ bool parse(CephContext* cct, const std::string& tenant,
   bl.append(in);
   try {
     auto p = rgw::IAM::Policy(
-      cct, tenant, bl,
+      cct, tenant, bl.to_str(),
       cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   } catch (const rgw::IAM::PolicyParseException& e) {
     std::cerr << fname << ": " << e.what() << std::endl;

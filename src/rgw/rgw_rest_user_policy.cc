@@ -133,8 +133,6 @@ int RGWPutUserPolicy::get_params()
 
 void RGWPutUserPolicy::execute(optional_yield y)
 {
-  bufferlist bl = bufferlist::static_from_string(policy);
-
   op_ret = rgw_forward_request_to_master(this, *s->penv.site, s->user->get_id(),
                                          nullptr, nullptr, s->info, y);
   if (op_ret < 0) {
@@ -144,7 +142,7 @@ void RGWPutUserPolicy::execute(optional_yield y)
 
   try {
     const rgw::IAM::Policy p(
-      s->cct, s->user->get_tenant(), bl,
+      s->cct, s->user->get_tenant(), policy,
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
     std::map<std::string, std::string> policies;
     if (auto it = user->get_attrs().find(RGW_ATTR_USER_POLICY); it != user->get_attrs().end()) {

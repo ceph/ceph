@@ -191,10 +191,9 @@ int RGWCreateRole::init_processing(optional_yield y)
     s->err.message = "Missing required element AssumeRolePolicyDocument";
     return -EINVAL;
   }
-  bufferlist bl = bufferlist::static_from_string(trust_policy);
   try {
     const rgw::IAM::Policy p(
-      s->cct, s->user->get_tenant(), bl,
+      s->cct, s->user->get_tenant(), trust_policy,
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   }
   catch (rgw::IAM::PolicyParseException& e) {
@@ -552,10 +551,9 @@ int RGWPutRolePolicy::init_processing(optional_yield y)
     s->err.message = "Missing required element PolicyDocument";
     return -EINVAL;
   }
-  bufferlist bl = bufferlist::static_from_string(perm_policy);
   try {
     const rgw::IAM::Policy p(
-      s->cct, s->user->get_tenant(), bl,
+      s->cct, s->user->get_tenant(), perm_policy,
       s->cct->_conf.get_val<bool>("rgw_policy_reject_invalid_principals"));
   }
   catch (rgw::IAM::PolicyParseException& e) {
