@@ -1153,7 +1153,7 @@ Effect evaluate_iam_policies(
     const DoutPrefixProvider* dpp,
     const rgw::IAM::Environment& env,
     const rgw::auth::Identity& identity,
-    uint64_t op, const rgw::ARN& arn,
+    bool account_root, uint64_t op, const rgw::ARN& arn,
     const boost::optional<Policy>& resource_policy,
     const vector<Policy>& identity_policies,
     const vector<Policy>& session_policies)
@@ -1220,6 +1220,11 @@ Effect evaluate_iam_policies(
     return Effect::Allow;
   }
 
+  if (account_root) {
+    ldpp_dout(dpp, 10) << __func__ << ": granted to account root" << dendl;
+    return Effect::Allow;
+  }
+
   ldpp_dout(dpp, 10) << __func__ << ": implicit deny from identity-based policy" << dendl;
   return Effect::Pass;
 }
@@ -1233,8 +1238,10 @@ bool verify_user_permission(const DoutPrefixProvider* dpp,
                             const uint64_t op,
                             bool mandatory_policy)
 {
-  const auto effect = evaluate_iam_policies(dpp, s->env, *s->identity, op, res,
-                                            {}, user_policies, session_policies);
+  const bool account_root = (s->identity->get_identity_type() == TYPE_ROOT);
+  const auto effect = evaluate_iam_policies(dpp, s->env, *s->identity,
+                                            account_root, op, res, {},
+                                            user_policies, session_policies);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -1318,6 +1325,7 @@ bool verify_requester_payer_permission(struct perm_state_base *s)
 bool verify_bucket_permission(const DoutPrefixProvider* dpp,
                               struct perm_state_base * const s,
 			      const rgw_bucket& bucket,
+                              bool account_root,
                               const RGWAccessControlPolicy& user_acl,
                               const RGWAccessControlPolicy& bucket_acl,
 			      const boost::optional<Policy>& bucket_policy,
@@ -1333,8 +1341,8 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
 		       << " resource: " << ARN(bucket) << dendl;
   }
   const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->identity, op, ARN(bucket), bucket_policy,
-      identity_policies, session_policies);
+      dpp, s->env, *s->identity, account_root, op, ARN(bucket),
+      bucket_policy, identity_policies, session_policies);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -1359,24 +1367,26 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp,
   perm_state_from_req_state ps(s);
 
   if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
     if (!ps.identity->is_owner_of(s->bucket_owner.id)) {
       ldpp_dout(dpp, 4) << "cross-account request for bucket owner "
           << s->bucket_owner.id << " != " << s->owner.id << dendl;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
-      return verify_bucket_permission(dpp, &ps, bucket, {}, {}, {},
+      return verify_bucket_permission(dpp, &ps, bucket, account_root, {}, {}, {},
                                       user_policies, session_policies, op)
-          && verify_bucket_permission(dpp, &ps, bucket, user_acl,
+          && verify_bucket_permission(dpp, &ps, bucket, false, user_acl,
                                       bucket_acl, bucket_policy, {}, {}, op);
     } else {
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
-      return verify_bucket_permission(dpp, &ps, bucket, {}, {},
+      return verify_bucket_permission(dpp, &ps, bucket, account_root, {}, {},
                                       bucket_policy, user_policies,
                                       session_policies, op);
     }
   }
-  return verify_bucket_permission(dpp, &ps, bucket,
+  constexpr bool account_root = false;
+  return verify_bucket_permission(dpp, &ps, bucket, account_root,
                                   user_acl, bucket_acl,
                                   bucket_policy, user_policies,
                                   session_policies, op);
@@ -1447,9 +1457,10 @@ bool verify_bucket_permission(const DoutPrefixProvider* dpp, req_state * const s
 int verify_bucket_owner_or_policy(const DoutPrefixProvider* dpp,
                                   req_state* const s, const uint64_t op)
 {
+  constexpr bool account_root = false; // just match owner below
   const auto arn = ARN(s->bucket->get_key());
   const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->auth.identity, op, arn,
+      dpp, s->env, *s->auth.identity, account_root, op, arn,
       s->iam_policy, s->iam_user_policies, s->session_policies);
   if (effect == Effect::Deny) {
     return -EACCES;
@@ -1477,7 +1488,7 @@ static inline bool check_deferred_bucket_only_acl(const DoutPrefixProvider* dpp,
 }
 
 bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_base * const s,
-			      const rgw_obj& obj,
+			      const rgw_obj& obj, bool account_root,
                               const RGWAccessControlPolicy& user_acl,
                               const RGWAccessControlPolicy& bucket_acl,
                               const RGWAccessControlPolicy& object_acl,
@@ -1490,8 +1501,8 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, struct perm_state_b
     return false;
 
   const auto effect = evaluate_iam_policies(
-      dpp, s->env, *s->identity, op, ARN(obj), bucket_policy,
-      identity_policies, session_policies);
+      dpp, s->env, *s->identity, account_root, op, ARN(obj),
+      bucket_policy, identity_policies, session_policies);
   if (effect == Effect::Deny) {
     return false;
   }
@@ -1517,6 +1528,8 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
   perm_state_from_req_state ps(s);
 
   if (std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    const bool account_root = (ps.identity->get_identity_type() == TYPE_ROOT);
+
     const rgw_owner& object_owner = !object_acl.get_owner().empty() ?
         object_acl.get_owner().id : s->bucket_owner.id;
     if (!ps.identity->is_owner_of(object_owner)) {
@@ -1524,20 +1537,21 @@ bool verify_object_permission(const DoutPrefixProvider* dpp, req_state * const s
           << object_owner << " != " << s->owner.id << dendl;
       // cross-account requests evaluate the identity-based policies separately
       // from the resource-based policies and require Allow from both
-      return verify_object_permission(dpp, &ps, obj, {}, {}, {}, {},
+      return verify_object_permission(dpp, &ps, obj, account_root, {}, {}, {}, {},
                                       identity_policies, session_policies, op)
-          && verify_object_permission(dpp, &ps, obj,
+          && verify_object_permission(dpp, &ps, obj, false,
                                       user_acl, bucket_acl, object_acl,
                                       bucket_policy, {}, {}, op);
     } else {
       // don't consult acls for same-account access. require an Allow from
       // either identity- or resource-based policy
-      return verify_object_permission(dpp, &ps, obj, {}, {}, {},
+      return verify_object_permission(dpp, &ps, obj, account_root, {}, {}, {},
                                       bucket_policy, identity_policies,
                                       session_policies, op);
     }
   }
-  return verify_object_permission(dpp, &ps, obj,
+  constexpr bool account_root = false;
+  return verify_object_permission(dpp, &ps, obj, account_root,
                                   user_acl, bucket_acl,
                                   object_acl, bucket_policy,
                                   identity_policies, session_policies, op);
