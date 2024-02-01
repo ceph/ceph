@@ -708,9 +708,9 @@ ShardServices::get_or_create_pg(
   std::unique_ptr<PGCreateInfo> info)
 {
   if (info) {
-    auto [fut, creating] = local_state.pg_map.wait_for_pg(
+    auto [fut, existed] = local_state.pg_map.wait_for_pg(
       std::move(trigger), pgid);
-    if (!creating) {
+    if (!existed) {
       local_state.pg_map.set_creating(pgid);
       (void)handle_pg_create_info(
 	std::move(info));
