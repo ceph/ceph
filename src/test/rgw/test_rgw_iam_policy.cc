@@ -48,7 +48,7 @@ using rgw::IAM::Environment;
 using rgw::Partition;
 using rgw::IAM::Policy;
 using rgw::IAM::s3All;
-using rgw::IAM::s3All;
+using rgw::IAM::s3objectlambdaAll;
 using rgw::IAM::s3GetAccelerateConfiguration;
 using rgw::IAM::s3GetBucketAcl;
 using rgw::IAM::s3GetBucketOwnershipControls;
@@ -86,6 +86,27 @@ using rgw::IAM::s3PutBucketPolicy;
 using rgw::IAM::s3GetBucketObjectLockConfiguration;
 using rgw::IAM::s3GetObjectRetention;
 using rgw::IAM::s3GetObjectLegalHold;
+using rgw::IAM::s3DescribeJob;
+using rgw::IAM::s3objectlambdaGetObject;
+using rgw::IAM::s3objectlambdaListBucket;
+using rgw::IAM::iamGenerateCredentialReport;
+using rgw::IAM::iamGenerateServiceLastAccessedDetails;
+using rgw::IAM::iamGetUserPolicy;
+using rgw::IAM::iamGetRole;
+using rgw::IAM::iamGetRolePolicy;
+using rgw::IAM::iamGetOIDCProvider;
+using rgw::IAM::iamGetUser;
+using rgw::IAM::iamListUserPolicies;
+using rgw::IAM::iamListRoles;
+using rgw::IAM::iamListRolePolicies;
+using rgw::IAM::iamListOIDCProviders;
+using rgw::IAM::iamListRoleTags;
+using rgw::IAM::iamListUsers;
+using rgw::IAM::iamListAccessKeys;
+using rgw::IAM::iamSimulateCustomPolicy;
+using rgw::IAM::iamSimulatePrincipalPolicy;
+using rgw::IAM::snsGetTopicAttributes;
+using rgw::IAM::snsListTopics;
 using rgw::Service;
 using rgw::IAM::TokenID;
 using rgw::IAM::Version;
@@ -96,7 +117,16 @@ using rgw::IAM::iamDeleteRole;
 using rgw::IAM::iamAll;
 using rgw::IAM::stsAll;
 using rgw::IAM::snsAll;
+using rgw::IAM::organizationsAll;
 using rgw::IAM::allCount;
+
+using rgw::IAM::s3AllValue;
+using rgw::IAM::s3objectlambdaAllValue;
+using rgw::IAM::iamAllValue;
+using rgw::IAM::stsAllValue;
+using rgw::IAM::snsAllValue;
+using rgw::IAM::organizationsAllValue;
+using rgw::IAM::allValue;
 
 class FakeIdentity : public Identity {
   const Principal id;
@@ -592,7 +622,7 @@ TEST_F(PolicyTest, Parse5) {
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
   Action_t act;
-  for (auto i = s3All+1; i <= iamAll; i++)
+  for (auto i = s3objectlambdaAll+1; i <= iamAll; i++)
     act[i] = 1;
   EXPECT_EQ(p->statements[0].action, act);
   EXPECT_EQ(p->statements[0].notaction, None);
@@ -642,7 +672,7 @@ TEST_F(PolicyTest, Parse6) {
   EXPECT_TRUE(p->statements[0].noprinc.empty());
   EXPECT_EQ(p->statements[0].effect, Effect::Allow);
   Action_t act;
-  for (auto i = 0U; i <= snsAll; i++)
+  for (auto i = 0U; i <= organizationsAll; i++)
     act[i] = 1;
   EXPECT_EQ(p->statements[0].action, act);
   EXPECT_EQ(p->statements[0].notaction, None);
@@ -1301,14 +1331,13 @@ Action_t set_range_bits(std::uint64_t start, std::uint64_t end)
   return result;
 }
 
-using rgw::IAM::s3AllValue;
-using rgw::IAM::stsAllValue;
-using rgw::IAM::allValue;
-using rgw::IAM::iamAllValue;
 TEST(set_cont_bits, iamconsts)
 {
   EXPECT_EQ(s3AllValue, set_range_bits(0, s3All));
-  EXPECT_EQ(iamAllValue, set_range_bits(s3All+1, iamAll));
+  EXPECT_EQ(s3objectlambdaAllValue, set_range_bits(s3All+1, s3objectlambdaAll));
+  EXPECT_EQ(iamAllValue, set_range_bits(s3objectlambdaAll+1, iamAll));
   EXPECT_EQ(stsAllValue, set_range_bits(iamAll+1, stsAll));
+  EXPECT_EQ(snsAllValue, set_range_bits(stsAll+1, snsAll));
+  EXPECT_EQ(organizationsAllValue, set_range_bits(snsAll+1, organizationsAll));
   EXPECT_EQ(allValue , set_range_bits(0, allCount));
 }
