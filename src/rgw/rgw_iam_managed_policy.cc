@@ -174,4 +174,18 @@ auto get_managed_policy(CephContext* cct, std::string_view arn)
   return {};
 }
 
+void encode(const ManagedPolicies& m, bufferlist& bl, uint64_t f)
+{
+  ENCODE_START(1, 1, bl);
+  encode(m.arns, bl);
+  ENCODE_FINISH(bl);
+}
+
+void decode(ManagedPolicies& m, bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(m.arns, bl);
+  DECODE_FINISH(bl);
+}
+
 } // namespace rgw::IAM
