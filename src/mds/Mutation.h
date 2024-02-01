@@ -15,6 +15,8 @@
 #ifndef CEPH_MDS_MUTATION_H
 #define CEPH_MDS_MUTATION_H
 
+#include <limits>
+
 #include "include/interval_set.h"
 #include "include/elist.h"
 #include "include/filepath.h"
@@ -74,6 +76,12 @@ public:
     bool is_state_pin() const { return !!(flags & STATE_PIN); }
     bool operator<(const LockOp& r) const {
       return lock < r.lock;
+    }
+
+    void print(std::ostream& out) const {
+      CachedStackStringStream css;
+      *css << "0x" << std::hex << flags;
+      out << "LockOp(l=" << *lock << ",f=" << css->strv() << ",wt=" << wrlock_target << ")";
     }
 
     SimpleLock* lock;
@@ -220,10 +228,14 @@ public:
     out << "mutation(" << this << ")";
   }
 
-  virtual void dump(ceph::Formatter *f) const {}
+  virtual void dump(ceph::Formatter *f) const {
+    _dump(f);
+  }
+  using TrackedOp::dump;
   void _dump_op_descriptor(std::ostream& stream) const override;
 
   metareqid_t reqid;
+  int result = std::numeric_limits<int>::min();
   __u32 attempt = 0;      // which attempt for this request
   LogSegment *ls = nullptr;  // the log segment i'm committing to
 
@@ -329,6 +341,8 @@ struct MDRequestImpl : public MutationImpl {
 
     MDSContext::vec waiting_for_finish;
 
+    std::map<CInode*, metareqid_t> quiesce_ops;
+
     // export & fragment
     CDir* export_dir = nullptr;
     dirfrag_t fragment_base;
@@ -354,6 +368,9 @@ struct MDRequestImpl : public MutationImpl {
     const utime_t& get_dispatch_stamp() const {
       return dispatched;
     }
+    bool is_continuous() const {
+      return continuous;
+    }
     metareqid_t reqid;
     __u32 attempt = 0;
     ceph::cref_t<MClientRequest> client_req;
@@ -362,6 +379,7 @@ struct MDRequestImpl : public MutationImpl {
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
     int internal_op = -1;
+    bool continuous = false;
   };
   MDRequestImpl(const Params* params, OpTracker *tracker) :
     MutationImpl(tracker, params->initiated,
@@ -371,6 +389,7 @@ struct MDRequestImpl : public MutationImpl {
   ~MDRequestImpl() override;
   
   More* more();
+  More const* more() const;
   bool has_more() const;
   bool has_witnesses();
   bool peer_did_prepare();
@@ -382,8 +401,8 @@ struct MDRequestImpl : public MutationImpl {
   void drop_local_auth_pins();
   void set_ambiguous_auth(CInode *inode);
   void clear_ambiguous_auth();
-  const filepath& get_filepath();
-  const filepath& get_filepath2();
+  const filepath& get_filepath() const;
+  const filepath& get_filepath2() const;
   void set_filepath(const filepath& fp);
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
@@ -537,9 +556,4 @@ struct MDLockCache : public MutationImpl {
 typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 typedef boost::intrusive_ptr<MDRequestImpl> MDRequestRef;
 
-inline std::ostream& operator<<(std::ostream &out, const MutationImpl &mut)
-{
-  mut.print(out);
-  return out;
-}
 #endif

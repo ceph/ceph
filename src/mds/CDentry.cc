@@ -38,8 +38,8 @@ ostream& CDentry::print_db_line_prefix(ostream& out) const
   return out << ceph_clock_now() << " mds." << dir->mdcache->mds->get_nodeid() << ".cache.den(" << dir->ino() << " " << name << ") ";
 }
 
-LockType CDentry::lock_type(CEPH_LOCK_DN);
-LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
+const LockType CDentry::lock_type(CEPH_LOCK_DN);
+const LockType CDentry::versionlock_type(CEPH_LOCK_DVERSION);
 
 
 // CDentry

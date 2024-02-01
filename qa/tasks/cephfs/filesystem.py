@@ -1314,7 +1314,9 @@ class Filesystem(MDSCluster):
         info = self.get_rank(rank=rank, status=status)
         return self.json_asok(command, 'mds', info['name'], timeout=timeout)
 
-    def rank_tell(self, command, rank=0, status=None, timeout=120):
+    def rank_tell(self, command, rank=None, status=None, timeout=120):
+        if rank is None:
+            rank = 0
         try:
             out = self.get_ceph_cmd_stdout("tell", f"mds.{self.id}:{rank}", *command, timeout=timeout)
             return json.loads(out)
@@ -1778,3 +1780,15 @@ class Filesystem(MDSCluster):
             return result
         else:
             return self.rank_tell(['damage', 'ls'], rank=rank)
+
+    def get_ops(self, locks=False, rank=None):
+        cmd = ['ops']
+        if locks:
+            cmd.append('--flags=locks')
+        return self.rank_tell(cmd, rank=rank)
+
+    def get_op(self, reqid, rank=None):
+        return self.rank_tell(['op', 'get', reqid], rank=rank)
+
+    def kill_op(self, reqid, rank=None):
+        return self.rank_tell(['op', 'kill', reqid], rank=rank)

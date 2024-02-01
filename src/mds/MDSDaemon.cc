@@ -264,6 +264,17 @@ void MDSDaemon::set_up_admin_socket()
                                      asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("op kill "
+                                     "name=id,type=CephString,req=true",
+				     asok_hook,
+				     "kill op");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("op get "
+				     "name=flags,type=CephChoices,strings=locks,n=N,req=false "
+                                     "name=id,type=CephString,req=true",
+				     asok_hook,
+				     "get op");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("dump_blocked_ops",
       asok_hook,
       "show the blocked ops currently in flight");
@@ -339,6 +350,12 @@ void MDSDaemon::set_up_admin_socket()
   r = admin_socket->register_command("cache status",
                                      asok_hook,
                                      "show cache status");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("quiesce path"
+                                     " name=path,type=CephString,req=true"
+                                     " name=wait,type=CephBool,req=false"
+				     ,asok_hook
+				     ,"quiesce a subtree");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump tree "
 				     "name=root,type=CephString,req=true "

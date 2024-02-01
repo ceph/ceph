@@ -57,6 +57,7 @@ int SimpleLock::get_wait_shift() const {
     case CEPH_LOCK_INEST:    return 8 + 9*SimpleLock::WAIT_BITS;
     case CEPH_LOCK_IFLOCK:   return 8 +10*SimpleLock::WAIT_BITS;
     case CEPH_LOCK_IPOLICY:  return 8 +11*SimpleLock::WAIT_BITS;
+    case CEPH_LOCK_IQUIESCE: return 8 +12*SimpleLock::WAIT_BITS;
     default:
       ceph_abort();
   }
@@ -106,4 +107,30 @@ std::vector<MDLockCache*> SimpleLock::get_active_caches() {
     }
   }
   return result;
+}
+
+void SimpleLock::_print(std::ostream& out) const
+{
+  out << get_lock_type_name(get_type()) << " ";
+  out << get_state_name(get_state());
+  if (!get_gather_set().empty())
+    out << " g=" << get_gather_set();
+  if (is_leased())
+    out << " l";
+  if (is_rdlocked())
+    out << " r=" << get_num_rdlocks();
+  if (is_wrlocked())
+    out << " w=" << get_num_wrlocks();
+  if (is_xlocked()) {
+    out << " x=" << get_num_xlocks();
+    if (auto mut = get_xlock_by(); mut) {
+      out << " by " << *mut;
+    }
+  }
+#if 0
+  if (is_stable())
+    out << " stable";
+  else
+    out << " unstable";
+#endif
 }

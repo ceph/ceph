@@ -333,18 +333,24 @@ extern const char *ceph_mds_state_name(int s);
  */
 #define CEPH_LOCK_DN          (1 << 0)
 #define CEPH_LOCK_DVERSION    (1 << 1)
-#define CEPH_LOCK_ISNAP       (1 << 4)  /* snapshot lock. MDS internal */
-#define CEPH_LOCK_IPOLICY     (1 << 5)  /* policy lock on dirs. MDS internal */
-#define CEPH_LOCK_IFILE       (1 << 6)
-#define CEPH_LOCK_INEST       (1 << 7)  /* mds internal */
-#define CEPH_LOCK_IDFT        (1 << 8)  /* dir frag tree */
-#define CEPH_LOCK_IAUTH       (1 << 9)
-#define CEPH_LOCK_ILINK       (1 << 10)
-#define CEPH_LOCK_IXATTR      (1 << 11)
-#define CEPH_LOCK_IFLOCK      (1 << 12)  /* advisory file locks */
-#define CEPH_LOCK_IVERSION    (1 << 13)  /* mds internal */
+#define CEPH_LOCK_IQUIESCE    (1 << 4)  /* mds internal */
+#define CEPH_LOCK_ISNAP       (1 << 5)  /* snapshot lock. MDS internal */
+#define CEPH_LOCK_IPOLICY     (1 << 6)  /* policy lock on dirs. MDS internal */
+#define CEPH_LOCK_IFILE       (1 << 7)
+#define CEPH_LOCK_INEST       (1 << 8)  /* mds internal */
+#define CEPH_LOCK_IDFT        (1 << 9)  /* dir frag tree */
+#define CEPH_LOCK_IAUTH       (1 << 10)
+#define CEPH_LOCK_ILINK       (1 << 11)
+#define CEPH_LOCK_IXATTR      (1 << 12)
+#define CEPH_LOCK_IFLOCK      (1 << 13)  /* advisory file locks */
+#define CEPH_LOCK_IVERSION    (1 << 14)  /* mds internal */
 
-#define CEPH_LOCK_IFIRST      CEPH_LOCK_ISNAP
+#define CEPH_LOCK_IFIRST      CEPH_LOCK_IQUIESCE
+#define CEPH_LOCK_ILAST       CEPH_LOCK_IVERSION
+
+static inline bool is_inode_lock(int l) {
+  return (CEPH_LOCK_IFIRST <= l && l <= CEPH_LOCK_ILAST);
+}
 
 
 /* client_session ops */
@@ -430,7 +436,9 @@ enum {
 	CEPH_MDS_OP_ENQUEUE_SCRUB  = 0x01503,
 	CEPH_MDS_OP_REPAIR_FRAGSTATS = 0x01504,
 	CEPH_MDS_OP_REPAIR_INODESTATS = 0x01505,
-	CEPH_MDS_OP_RDLOCK_FRAGSSTATS = 0x01507
+	CEPH_MDS_OP_RDLOCK_FRAGSSTATS = 0x01507,
+	CEPH_MDS_OP_QUIESCE_SUBVOLUME = 0x01508,
+	CEPH_MDS_OP_QUIESCE_SUBVOLUME_INODE = 0x01509,
 };
 
 #define IS_CEPH_MDS_OP_NEWINODE(op) (op == CEPH_MDS_OP_CREATE     || \

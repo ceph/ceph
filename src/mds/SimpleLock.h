@@ -41,6 +41,7 @@ struct LockType {
   explicit LockType(int t) : type(t) {
     switch (type) {
     case CEPH_LOCK_DN:
+    case CEPH_LOCK_IQUIESCE:
     case CEPH_LOCK_IAUTH:
     case CEPH_LOCK_ILINK:
     case CEPH_LOCK_IXATTR:
@@ -150,6 +151,7 @@ public:
       case CEPH_LOCK_ISNAP: return "isnap";
       case CEPH_LOCK_IFLOCK: return "iflock";
       case CEPH_LOCK_IPOLICY: return "ipolicy";
+      case CEPH_LOCK_IQUIESCE: return "iquiesce";
       default: return "unknown";
     }
   }
@@ -173,7 +175,7 @@ public:
     }
   }
 
-  SimpleLock(MDSCacheObject *o, LockType *lt) :
+  SimpleLock(MDSCacheObject *o, const LockType *lt) :
     type(lt),
     parent(o)
   {}
@@ -564,28 +566,7 @@ public:
     return false;
   }
 
-  void _print(std::ostream& out) const {
-    out << get_lock_type_name(get_type()) << " ";
-    out << get_state_name(get_state());
-    if (!get_gather_set().empty())
-      out << " g=" << get_gather_set();
-    if (is_leased())
-      out << " l";
-    if (is_rdlocked()) 
-      out << " r=" << get_num_rdlocks();
-    if (is_wrlocked()) 
-      out << " w=" << get_num_wrlocks();
-    if (is_xlocked()) {
-      out << " x=" << get_num_xlocks();
-      if (get_xlock_by())
-	out << " by " << get_xlock_by();
-    }
-    /*if (is_stable())
-      out << " stable";
-    else
-      out << " unstable";
-    */
-  }
+  void _print(std::ostream& out) const;
 
   /**
    * Write bare values (caller must be in an object section)
@@ -599,7 +580,7 @@ public:
     out << ")";
   }
 
-  LockType *type;
+  const LockType *type;
 
 protected:
   // parent (what i lock)
@@ -660,9 +641,4 @@ private:
 };
 WRITE_CLASS_ENCODER(SimpleLock)
 
-inline std::ostream& operator<<(std::ostream& out, const SimpleLock& l) 
-{
-  l.print(out);
-  return out;
-}
 #endif

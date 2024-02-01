@@ -48,6 +48,7 @@ static inline const auto MDS_FEATURE_INCOMPAT_NOANCHOR = CompatSet::Feature(8, "
 static inline const auto MDS_FEATURE_INCOMPAT_FILE_LAYOUT_V2 = CompatSet::Feature(9, "file layout v2");
 static inline const auto MDS_FEATURE_INCOMPAT_SNAPREALM_V2 = CompatSet::Feature(10, "snaprealm v2");
 static inline const auto MDS_FEATURE_INCOMPAT_MINORLOGSEGMENTS = CompatSet::Feature(11, "minor log segments");
+static inline const auto MDS_FEATURE_INCOMPAT_QUIESCE_SUBVOLUMES = CompatSet::Feature(12, "quiesce subvolumes");
 
 #define MDS_FS_NAME_DEFAULT "cephfs"
 

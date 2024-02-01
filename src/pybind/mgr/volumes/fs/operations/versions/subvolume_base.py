@@ -69,6 +69,19 @@ class SubvolumeBase(object):
     def config_path(self):
         return os.path.join(self.base_path, b".meta")
 
+    def mark_meta(self):
+        """
+        Set "ceph.quiesce.block" flag on the .meta file inode.  It must remain
+        available while a subvolume is quiesced in order to allow some
+        interactions with the subvolume, snapshots in particular.
+        """
+        try:
+            self.fs.setxattr(self.config_path, 'ceph.quiesce.block', b'1', 0)
+        except cephfs.InvalidValue:
+            raise VolumeException(-errno.EINVAL, "invalid value specified for ceph.quiesce.block")
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
     @property
     def legacy_dir(self):
         return (os.path.join(self.vol_spec.base_dir.encode('utf-8'),

@@ -367,8 +367,8 @@ public:
   elist<CDentry*>::item item_stray;
 
   // lock
-  static LockType lock_type;
-  static LockType versionlock_type;
+  static const LockType lock_type;
+  static const LockType versionlock_type;
 
   SimpleLock lock; // FIXME referenced containers not in mempool
   LocalLockC versionlock; // FIXME referenced containers not in mempool

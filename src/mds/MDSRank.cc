@@ -2653,6 +2653,82 @@ void MDSRankDispatcher::handle_asok_command(
     if (!op_tracker.dump_ops_in_flight(f, false, {""}, false, lambda)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
     }
+  } else if (command == "op get") {
+    vector<string> flags;
+    cmd_getval(cmdmap, "flags", flags);
+
+    std::string id;
+    if(!cmd_getval(cmdmap, "id", id)) {
+      *css << "malformed id";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    metareqid_t mrid;
+    try {
+      mrid = metareqid_t(id);
+    } catch (const std::exception& e) {
+      *css << "malformed id: " << e.what();
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+
+    auto dumper = OpTracker::default_dumper;
+    if (flags.size()) {
+      if (flags.size()) {
+        /* use std::function if we actually want to capture flags someday */
+        dumper = [](const TrackedOp& op, Formatter* f) {
+          auto* req = dynamic_cast<const MDRequestImpl*>(&op);
+          if (req) {
+            req->dump_with_mds_lock(f);
+          } else {
+            op.dump_type(f);
+          }
+        };
+      }
+    }
+
+    std::lock_guard l(mds_lock);
+    if (!mdcache->have_request(mrid)) {
+      *css << "request does not exist";
+      r = -CEPHFS_ENOENT;
+      goto out;
+    }
+    auto mdr = mdcache->request_get(mrid);
+
+    f->open_object_section("op");
+    mdr->dump(ceph_clock_now(), f, dumper);
+    f->close_section();
+    r = 0;
+  } else if (command == "op kill") {
+    std::string id;
+    if(!cmd_getval(cmdmap, "id", id)) {
+      *css << "malformed id";
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    metareqid_t mrid;
+    try {
+      mrid = metareqid_t(id);
+    } catch (const std::exception& e) {
+      *css << "malformed id: " << e.what();
+      r = -CEPHFS_EINVAL;
+      goto out;
+    }
+    std::lock_guard l(mds_lock);
+    if (!mdcache->have_request(mrid)) {
+      *css << "request does not exist";
+      r = -CEPHFS_ENOENT;
+      goto out;
+    }
+    auto mdr = mdcache->request_get(mrid);
+    {
+      f->open_object_section("result");
+      f->dump_int("result", 0);
+      f->dump_object("request", *mdr);
+      f->close_section();
+    }
+    mdcache->request_kill(mdr);
+    r = 0;
   } else if (command == "dump_blocked_ops") {
     if (!op_tracker.dump_ops_in_flight(f, true)) {
       *css << "op_tracker disabled; set mds_enable_op_tracker=true to enable";
@@ -2885,6 +2961,8 @@ void MDSRankDispatcher::handle_asok_command(
   } else if (command == "cache status") {
     std::lock_guard l(mds_lock);
     mdcache->cache_status(f);
+  } else if (command == "quiesce path") {
+    r = command_quiesce_subvolume(f, cmdmap, *css);
   } else if (command == "dump tree") {
     command_dump_tree(cmdmap, *css, f);
   } else if (command == "dump loads") {
@@ -3346,6 +3424,54 @@ void MDSRank::command_openfiles_ls(Formatter *f)
 {
   std::lock_guard l(mds_lock);
   mdcache->dump_openfiles(f);
+}
+
+class C_MDS_QuiesceSubvolumeCommand : public MDCache::C_MDS_QuiesceSubvolume {
+public:
+  C_MDS_QuiesceSubvolumeCommand(MDCache* cache, Context* fin) : C_MDS_QuiesceSubvolume(cache), finisher(fin) {}
+  void finish(int rc) override {
+    if (finisher) {
+      finisher->complete(rc);
+      finisher = nullptr;
+    }
+  }
+private:
+  Context* finisher = nullptr;
+};
+
+int MDSRank::command_quiesce_subvolume(Formatter* f, const cmdmap_t& cmdmap, std::ostream& ss)
+{
+  std::string path;
+  {
+    bool got = cmd_getval(cmdmap, "path", path);
+    if (!got) {
+      ss << "missing path";
+      return -CEPHFS_EINVAL;
+    }
+  }
+
+  bool wait = false;
+  cmd_getval(cmdmap, "wait", wait);
+
+  C_SaferCond cond;
+  auto* finisher = new C_MDS_QuiesceSubvolumeCommand(mdcache, wait ? &cond : nullptr);
+  MDRequestRef mdr;
+  f->open_object_section("quiesce");
+  {
+    std::lock_guard l(mds_lock);
+    mdr = mdcache->quiesce_subvolume(filepath(path), finisher, f);
+    if (!wait) {
+      f->dump_object("op", *mdr);
+    }
+  }
+  if (wait) {
+    cond.wait();
+    std::lock_guard l(mds_lock);
+    f->dump_object("op", *mdr);
+  }
+  f->dump_object("state", finisher->qs);
+  f->close_section();
+  return 0;
 }
 
 void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss)
