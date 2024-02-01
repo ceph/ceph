@@ -37,7 +37,7 @@ std::unique_ptr<CrushWrapper> build_indep_map(CephContext *cct, int num_rack,
 
   int rootno;
   c->add_bucket(0, CRUSH_BUCKET_STRAW, CRUSH_HASH_RJENKINS1,
-		5, 0, NULL, NULL, &rootno);
+		5, 0, nullptr, nullptr, &rootno);
   c->set_item_name(rootno, "default");
 
   map<string,string> loc;
@@ -115,7 +115,7 @@ protected:
 TEST_F(CRUSHTest, indep_toosmall) {
   std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 1, 3, 1));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
-  c->dump_tree(&cout, NULL);
+  c->dump_tree(&cout, nullptr);
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
@@ -134,7 +134,7 @@ TEST_F(CRUSHTest, indep_toosmall) {
 TEST_F(CRUSHTest, indep_basic) {
   std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   vector<__u32> weight(c->get_max_devices(), 0x10000);
-  c->dump_tree(&cout, NULL);
+  c->dump_tree(&cout, nullptr);
 
   for (int x = 0; x < 100; ++x) {
     vector<int> out;
@@ -158,7 +158,7 @@ TEST_F(CRUSHTest, indep_out_alt) {
   int num = 3*3*3;
   for (int i=0; i<num / 2; ++i)
     weight[i*2] = 0;
-  c->dump_tree(&cout, NULL);
+  c->dump_tree(&cout, nullptr);
 
   // need more retries to get 9/9 hosts for x in 0..99
   c->set_choose_total_tries(100);
@@ -184,7 +184,7 @@ TEST_F(CRUSHTest, indep_out_contig) {
   int num = 3*3*3;
   for (int i=0; i<num / 3; ++i)
     weight[i] = 0;
-  c->dump_tree(&cout, NULL);
+  c->dump_tree(&cout, nullptr);
 
   c->set_choose_total_tries(100);
   for (int x = 0; x < 100; ++x) {
@@ -206,7 +206,7 @@ TEST_F(CRUSHTest, indep_out_progressive) {
   std::unique_ptr<CrushWrapper> c(build_indep_map(cct, 3, 3, 3));
   c->set_choose_total_tries(100);
   vector<__u32> tweight(c->get_max_devices(), 0x10000);
-  c->dump_tree(&cout, NULL);
+  c->dump_tree(&cout, nullptr);
 
   int tchanged = 0;
   for (int x = 1; x < 5; ++x) {
