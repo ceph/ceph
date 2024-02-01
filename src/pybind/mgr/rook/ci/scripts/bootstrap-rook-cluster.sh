@@ -44,6 +44,7 @@ build_ceph_image() {
     mkdir -p tmp_build/orchestrator
     cp ./../../orchestrator/*.py tmp_build/orchestrator
     cp ../*.py tmp_build/rook
+    cp -r ../../../../../src/python-common/ceph/ tmp_build/
 
     # we use the following tag to trick the Docker
     # running inside minikube so it uses this image instead
