@@ -1630,9 +1630,9 @@ ostream& operator <<(ostream& m, const Statement& s) {
 }
 
 Policy::Policy(CephContext* cct, const string& tenant,
-	       const bufferlist& _text,
+	       std::string _text,
 	       bool reject_invalid_principals)
-  : text(_text.to_str()) {
+  : text(std::move(_text)) {
   StringStream ss(text.data());
   PolicyParser pp(cct, tenant, *this, reject_invalid_principals);
   auto pr = Reader{}.Parse<kParseNumbersAsStringsFlag |
