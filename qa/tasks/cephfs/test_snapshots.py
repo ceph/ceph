@@ -376,7 +376,7 @@ class TestSnapshots(CephFSTestCase):
         self.mount_a.write_test_pattern("d0/d1/file_a", 8 * 1024 * 1024)
         self.mount_a.run_shell(["mkdir", "d0/.snap/s1"])
         self.mount_a.run_shell(["rm", "-f", "d0/d1/file_a"])
-        self.mount_a.validate_test_pattern("d0/.snap/s1/d1/file_a", 8 * 1024 * 1024)
+        self.mount_a.validate_test_pattern("d0/.snap/s1/d1/file_a", 8 * 1024 * 1024, timeout=20)
 
         self.mount_a.run_shell(["rmdir", "d0/.snap/s1"])
         self.mount_a.run_shell(["rm", "-rf", "d0"])

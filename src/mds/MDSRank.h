@@ -151,6 +151,8 @@ class MgrClient;
 class Finisher;
 class ScrubStack;
 class C_ExecAndReply;
+class QuiesceDbManager;
+class QuiesceAgent;
 
 /**
  * The public part of this class's interface is what's exposed to all
@@ -433,6 +435,9 @@ class MDSRank {
 
     bool cluster_degraded = false;
 
+    std::shared_ptr<QuiesceDbManager> quiesce_db_manager;
+    std::shared_ptr<QuiesceAgent> quiesce_agent;
+
     Finisher *finisher;
   protected:
     typedef enum {
@@ -525,6 +530,7 @@ class MDSRank {
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_dump_dir(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
+    void command_quiesce_db(const cmdmap_t& cmdmap, std::function<void(int, const std::string&, bufferlist&)> on_finish);
 
     // FIXME the state machine logic should be separable from the dispatch
     // logic that calls it.
@@ -562,6 +568,9 @@ class MDSRank {
 
     void handle_mds_recovery(mds_rank_t who);
     void handle_mds_failure(mds_rank_t who);
+
+    void quiesce_cluster_update();
+    void quiesce_agent_setup();
 
     /* Update MDSMap export_targets for this rank. Called on ::tick(). */
     void update_targets();

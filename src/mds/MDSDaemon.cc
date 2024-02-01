@@ -475,6 +475,25 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Respawn this MDS");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("quiesce db "
+                                     "name=roots,type=CephString,n=N,req=false "
+                                     "-- "
+                                     "name=set_id,type=CephString,req=false "
+                                     "name=timeout,type=CephFloat,range=0,req=false "
+                                     "name=expiration,type=CephFloat,range=0,req=false "
+                                     "name=await_for,type=CephFloat,range=0,req=false "
+                                     "name=await,type=CephBool,req=false "
+                                     "name=if_version,type=CephInt,range=0,req=false "
+                                     "name=include,type=CephBool,req=false "
+                                     "name=exclude,type=CephBool,req=false "
+                                     "name=reset,type=CephBool,req=false "
+                                     "name=release,type=CephBool,req=false "
+                                     "name=query,type=CephBool,req=false "
+                                     "name=all,type=CephBool,req=false "
+                                     "name=cancel,type=CephBool,req=false",
+      asok_hook,
+      "submit queries to the local QuiesceDbManager");
+  ceph_assert(r == 0);
   r = admin_socket->register_command(
     "heap " \
     "name=heapcmd,type=CephChoices,strings="				\

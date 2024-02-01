@@ -18,6 +18,7 @@
 #include "common/errno.h"
 #include "common/likely.h"
 #include "common/async/blocked_completion.h"
+#include "common/cmdparse.h"
 
 #include "messages/MClientRequestForward.h"
 #include "messages/MMDSLoadTargets.h"
@@ -42,8 +43,12 @@
 #include "events/ELid.h"
 #include "Mutation.h"
 
-
 #include "MDSRank.h"
+
+#include "QuiesceDbManager.h"
+#include "QuiesceAgent.h"
+
+#include <cmath>
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
@@ -548,6 +553,8 @@ MDSRank::MDSRank(
   server = new Server(this, &metrics_handler);
   locker = new Locker(this, mdcache);
 
+  quiesce_db_manager.reset(new QuiesceDbManager());
+
   _heartbeat_reset_grace = g_conf().get_val<uint64_t>("mds_heartbeat_reset_grace");
   heartbeat_grace = g_conf().get_val<double>("mds_heartbeat_grace");
   op_tracker.set_complaint_and_threshold(cct->_conf->mds_op_complaint_time,
@@ -859,12 +866,21 @@ void MDSRankDispatcher::shutdown()
 
   progress_thread.shutdown();
 
+  if (quiesce_db_manager) {
+    // shutdown the manager
+    quiesce_db_manager->update_membership({});
+  }
+
   // release mds_lock for finisher/messenger threads (e.g.
   // MDSDaemon::ms_handle_reset called from Messenger).
   mds_lock.unlock();
 
   // shut down messenger
   messenger->shutdown();
+  if (quiesce_agent) {
+    // reset any tracked roots
+    quiesce_agent->shutdown();
+  }
 
   mds_lock.lock();
 
@@ -2131,6 +2147,8 @@ void MDSRank::active_start()
   mdcache->reissue_all_caps();
 
   finish_contexts(g_ceph_context, waiting_for_active);  // kick waiters
+
+  quiesce_agent_setup();
 }
 
 void MDSRank::recovery_done(int oldstate)
@@ -2588,6 +2606,8 @@ void MDSRankDispatcher::handle_mds_map(
     metric_aggregator->notify_mdsmap(*mdsmap);
   }
   metrics_handler.notify_mdsmap(*mdsmap);
+
+  quiesce_cluster_update();
 }
 
 void MDSRank::handle_mds_recovery(mds_rank_t who)
@@ -3013,6 +3033,9 @@ void MDSRankDispatcher::handle_asok_command(
       goto out;
     }
     damage_table.erase(id);
+  } else if (command == "quiesce db") {
+    command_quiesce_db(cmdmap, on_finish);
+    return;
   } else {
     r = -CEPHFS_ENOSYS;
   }
