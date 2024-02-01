@@ -12,6 +12,7 @@
 #include "rgw_string.h"
 
 #include "rgw_common.h"
+#include "rgw_iam_managed_policy.h"
 #include "rgw_op.h"
 #include "rgw_process_env.h"
 #include "rgw_rest.h"
@@ -334,4 +335,297 @@ void RGWDeleteUserPolicy::execute(optional_yield y)
   s->formatter->dump_string("RequestId", s->trans_id);
   s->formatter->close_section();
   s->formatter->close_section();
+}
+
+
+class RGWAttachUserPolicy_IAM : public RGWRestUserPolicy {
+  bufferlist post_body;
+  std::string policy_arn;
+
+  int get_params() override;
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site);
+ public:
+  explicit RGWAttachUserPolicy_IAM(const ceph::bufferlist& post_body)
+    : RGWRestUserPolicy(rgw::IAM::iamAttachUserPolicy, RGW_CAP_WRITE),
+      post_body(post_body) {}
+
+  void execute(optional_yield y) override;
+  const char* name() const override { return "attach_user_policy"; }
+  RGWOpType get_type() override { return RGW_OP_ATTACH_USER_POLICY; }
+};
+
+int RGWAttachUserPolicy_IAM::get_params()
+{
+  policy_arn = s->info.args.get("PolicyArn");
+  if (!validate_iam_policy_arn(policy_arn, s->err.message)) {
+    return -EINVAL;
+  }
+
+  return RGWRestUserPolicy::get_params();
+}
+
+int RGWAttachUserPolicy_IAM::forward_to_master(optional_yield y, const rgw::SiteConfig& site)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("UserName");
+  s->info.args.remove("PolicyArn");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
+void RGWAttachUserPolicy_IAM::execute(optional_yield y)
+{
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site);
+    if (op_ret) {
+      return;
+    }
+  }
+
+  try {
+    const auto p = rgw::IAM::get_managed_policy(s->cct, policy_arn);
+    if (!p) {
+      op_ret = ERR_NO_SUCH_ENTITY;
+      s->err.message = "The requested PolicyArn is not recognized";
+      return;
+    }
+
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+    policies.arns.insert(policy_arn);
+
+    bufferlist in_bl;
+    encode(policies, in_bl);
+    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+
+    op_ret = user->store_user(this, s->yield, false);
+    if (op_ret < 0) {
+      op_ret = -ERR_INTERNAL_ERROR;
+    }
+  } catch (buffer::error& err) {
+    ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+    op_ret = -EIO;
+  } catch (rgw::IAM::PolicyParseException& e) {
+    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
+    s->err.message = e.what();
+    op_ret = -ERR_MALFORMED_DOC;
+  }
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section_in_ns("AttachUserPolicyResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+
+class RGWRestAttachedUserPolicy : public RGWRestUserPolicy {
+ public:
+  using RGWRestUserPolicy::RGWRestUserPolicy;
+  int init_processing(optional_yield y) override;
+};
+
+int RGWRestAttachedUserPolicy::init_processing(optional_yield y)
+{
+  // managed policy is only supported for account users. adding them to
+  // non-account roles would give blanket permissions to all buckets
+  if (!std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    s->err.message = "Managed policies are only supported for account users";
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
+  return RGWRestUserPolicy::init_processing(y);
+}
+
+class RGWDetachUserPolicy_IAM : public RGWRestAttachedUserPolicy {
+  bufferlist post_body;
+  std::string policy_arn;
+
+  int get_params() override;
+  int forward_to_master(optional_yield y, const rgw::SiteConfig& site);
+ public:
+  explicit RGWDetachUserPolicy_IAM(const bufferlist& post_body)
+    : RGWRestAttachedUserPolicy(rgw::IAM::iamDetachUserPolicy, RGW_CAP_WRITE),
+      post_body(post_body) {}
+
+  void execute(optional_yield y) override;
+  const char* name() const override { return "detach_user_policy"; }
+  RGWOpType get_type() override { return RGW_OP_DETACH_USER_POLICY; }
+};
+
+int RGWDetachUserPolicy_IAM::get_params()
+{
+  policy_arn = s->info.args.get("PolicyArn");
+  if (!validate_iam_policy_arn(policy_arn, s->err.message)) {
+    return -EINVAL;
+  }
+
+  return RGWRestAttachedUserPolicy::get_params();
+}
+
+int RGWDetachUserPolicy_IAM::forward_to_master(optional_yield y, const rgw::SiteConfig& site)
+{
+  RGWXMLDecoder::XMLParser parser;
+  if (!parser.init()) {
+    ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+    return -EINVAL;
+  }
+
+  s->info.args.remove("UserName");
+  s->info.args.remove("PolicyArn");
+  s->info.args.remove("Action");
+  s->info.args.remove("Version");
+
+  int r = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                        post_body, parser, s->info, y);
+  if (r < 0) {
+    ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
+void RGWDetachUserPolicy_IAM::execute(optional_yield y)
+{
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    op_ret = forward_to_master(y, site);
+    if (op_ret) {
+      return;
+    }
+  }
+
+  try {
+    rgw::IAM::ManagedPolicies policies;
+    auto& attrs = user->get_attrs();
+    if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+      decode(policies, it->second);
+    }
+
+    auto i = policies.arns.find(policy_arn);
+    if (i == policies.arns.end()) {
+      op_ret = ERR_NO_SUCH_ENTITY;
+      return;
+    }
+    policies.arns.erase(i);
+
+    bufferlist in_bl;
+    encode(policies, in_bl);
+    attrs[RGW_ATTR_MANAGED_POLICY] = in_bl;
+
+    op_ret = user->store_user(this, s->yield, false);
+    if (op_ret < 0) {
+      op_ret = -ERR_INTERNAL_ERROR;
+    }
+  } catch (buffer::error& err) {
+    ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+    op_ret = -EIO;
+  }
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section_in_ns("DetachUserPolicyResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+
+class RGWListAttachedUserPolicies_IAM : public RGWRestAttachedUserPolicy {
+  std::string marker;
+  int max_items = 100;
+  int get_params() override;
+ public:
+  RGWListAttachedUserPolicies_IAM()
+   : RGWRestAttachedUserPolicy(rgw::IAM::iamListAttachedUserPolicies, RGW_CAP_READ)
+  {}
+  void execute(optional_yield y) override;
+  const char* name() const override { return "list_attached_user_policies"; }
+  RGWOpType get_type() override { return RGW_OP_LIST_ATTACHED_USER_POLICIES; }
+};
+
+int RGWListAttachedUserPolicies_IAM::get_params()
+{
+  marker = s->info.args.get("Marker");
+
+  int r = s->info.args.get_int("MaxItems", &max_items, max_items);
+  if (r < 0 || max_items > 1000) {
+    s->err.message = "Invalid value for MaxItems";
+    return -EINVAL;
+  }
+
+  return RGWRestAttachedUserPolicy::get_params();
+}
+
+void RGWListAttachedUserPolicies_IAM::execute(optional_yield y)
+{
+  rgw::IAM::ManagedPolicies policies;
+  const auto& attrs = user->get_attrs();
+  if (auto it = attrs.find(RGW_ATTR_MANAGED_POLICY); it != attrs.end()) {
+    try {
+      decode(policies, it->second);
+    } catch (buffer::error& err) {
+      ldpp_dout(this, 0) << "ERROR: failed to decode user policies" << dendl;
+      op_ret = -EIO;
+      return;
+    }
+  }
+
+  s->formatter->open_object_section_in_ns("ListAttachedUserPoliciesResponse", RGW_REST_IAM_XMLNS);
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section();
+  s->formatter->open_object_section("ListAttachedUserPoliciesResult");
+  s->formatter->open_array_section("AttachedPolicies");
+  auto policy = policies.arns.lower_bound(marker);
+  for (; policy != policies.arns.end() && max_items > 0; ++policy, --max_items) {
+    s->formatter->open_object_section("member");
+    std::string_view arn = *policy;
+    if (auto p = arn.find('/'); p != arn.npos) {
+      s->formatter->dump_string("PolicyName", arn.substr(p + 1));
+    }
+    s->formatter->dump_string("PolicyArn", arn);
+    s->formatter->close_section(); // member
+  }
+  s->formatter->close_section(); // AttachedPolicies
+  const bool is_truncated = (policy != policies.arns.end());
+  encode_json("IsTruncated", is_truncated, s->formatter);
+  if (is_truncated) {
+    encode_json("Marker", *policy, s->formatter);
+  }
+  s->formatter->close_section(); // ListAttachedUserPoliciesResult
+  s->formatter->close_section(); // ListAttachedUserPoliciesResponse
+}
+
+
+RGWOp* make_iam_attach_user_policy_op(const ceph::bufferlist& post_body) {
+  return new RGWAttachUserPolicy_IAM(post_body);
+}
+
+RGWOp* make_iam_detach_user_policy_op(const ceph::bufferlist& post_body) {
+  return new RGWDetachUserPolicy_IAM(post_body);
+}
+
+RGWOp* make_iam_list_attached_user_policies_op(const ceph::bufferlist& unused) {
+  return new RGWListAttachedUserPolicies_IAM();
 }

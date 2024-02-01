@@ -56,6 +56,7 @@
 #include "rgw_torrent.h"
 #include "rgw_lua_data_filter.h"
 #include "rgw_lua.h"
+#include "rgw_iam_managed_policy.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -361,6 +362,15 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
     decode(policy_map, bl->second);
     for (const auto& [name, policy] : policy_map) {
       policies.emplace_back(cct, tenant, policy, false);
+    }
+  }
+  if (auto bl = attrs.find(RGW_ATTR_MANAGED_POLICY); bl != attrs.end()) {
+    rgw::IAM::ManagedPolicies policy_set;
+    decode(policy_set, bl->second);
+    for (const auto& arn : policy_set.arns) {
+      if (auto p = rgw::IAM::get_managed_policy(cct, arn); p) {
+        policies.push_back(std::move(*p));
+      }
     }
   }
   return policies;

@@ -20,6 +20,7 @@
 #include "common/errno.h"
 #include "rgw_arn.h"
 #include "rgw_common.h"
+#include "rgw_iam_managed_policy.h"
 #include "rgw_op.h"
 #include "rgw_process_env.h"
 #include "rgw_rest.h"
@@ -571,6 +572,20 @@ int RGWDeleteUser_IAM::check_empty()
 
     if (!policies.empty()) {
       s->err.message = "The user cannot be deleted until all user policies are removed";
+      return -ERR_DELETE_CONFLICT;
+    }
+  }
+  if (auto p = attrs.find(RGW_ATTR_MANAGED_POLICY); p != attrs.end()) {
+    rgw::IAM::ManagedPolicies policies;
+    try {
+      decode(policies, p->second);
+    } catch (const buffer::error&) {
+      ldpp_dout(this, 0) << "ERROR: failed to decode managed policies" << dendl;
+      return -EIO;
+    }
+
+    if (!policies.arns.empty()) {
+      s->err.message = "The user cannot be deleted until all managed policies are detached";
       return -ERR_DELETE_CONFLICT;
     }
   }

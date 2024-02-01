@@ -65,3 +65,7 @@ public:
   const char* name() const override { return "delete_user_policy"; }
   RGWOpType get_type() override { return RGW_OP_DELETE_USER_POLICY; }
 };
+
+RGWOp* make_iam_attach_user_policy_op(const ceph::bufferlist& post_body);
+RGWOp* make_iam_detach_user_policy_op(const ceph::bufferlist& post_body);
+RGWOp* make_iam_list_attached_user_policies_op(const ceph::bufferlist& unused);
