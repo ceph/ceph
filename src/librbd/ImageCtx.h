@@ -146,6 +146,7 @@ namespace librbd {
                        // parent_md and parent
 
     ceph::shared_mutex timestamp_lock; // protects (create/access/modify)_timestamp
+                                       // and internal diff_iterate_lock_timestamp
     ceph::mutex async_ops_lock; // protects async_ops and async_requests
     ceph::mutex copyup_list_lock; // protects copyup_waiting_list
 
@@ -171,6 +172,7 @@ namespace librbd {
     utime_t create_timestamp;
     utime_t access_timestamp;
     utime_t modify_timestamp;
+    utime_t diff_iterate_lock_timestamp;
 
     file_layout_t layout;
 
