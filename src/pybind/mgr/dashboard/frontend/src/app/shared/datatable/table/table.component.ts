@@ -329,10 +329,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     } else {
       this.useData();
     }
-
-    if (this.selectionType === 'single') {
-      this.table.selectCheck = this.singleSelectCheck.bind(this);
-    }
   }
 
   initUserConfig() {
@@ -764,10 +760,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
       this.selection.selected = $event['selected'];
     }
     this.updateSelection.emit(_.clone(this.selection));
-  }
-
-  private singleSelectCheck(row: any) {
-    return this.selection.selected.indexOf(row) === -1;
   }
 
   toggleColumn(column: CdTableColumn) {
