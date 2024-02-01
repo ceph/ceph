@@ -167,10 +167,10 @@ class MonCapTester:
         fsnames = get_fsnames_from_moncap(moncap)
         if fsnames == []:
             log.info('no FS name is mentioned in moncap, client has '
-                     'permission to list all files. moncap -\n{moncap}')
+                     f'permission to list all files. moncap -\n{moncap}')
             return
 
-        log.info('FS names are mentioned in moncap. moncap -\n{moncap}')
+        log.info(f'FS names are mentioned in moncap. moncap -\n{moncap}')
         log.info('testing for presence of these FS names in output of '
                  '"fs ls" command run by client.')
         for fsname in fsnames:
