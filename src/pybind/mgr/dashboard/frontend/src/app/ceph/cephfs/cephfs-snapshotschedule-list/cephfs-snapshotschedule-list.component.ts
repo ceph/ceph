@@ -121,6 +121,12 @@ export class CephfsSnapshotscheduleListComponent
         name: this.actionLables.CREATE,
         permission: 'create',
         icon: Icons.add,
+        click: () => this.openModal(false)
+      },
+      {
+        name: this.actionLables.EDIT,
+        permission: 'update',
+        icon: Icons.edit,
         click: () => this.openModal(true)
       }
     ];
@@ -145,6 +151,10 @@ export class CephfsSnapshotscheduleListComponent
         fsName: this.fsName,
         id: this.id,
         path: this.selection?.first()?.path,
+        schedule: this.selection?.first()?.schedule,
+        retention: this.selection?.first()?.retention,
+        start: this.selection?.first()?.start,
+        status: this.selection?.first()?.status,
         isEdit: edit
       },
       { size: 'lg' }
