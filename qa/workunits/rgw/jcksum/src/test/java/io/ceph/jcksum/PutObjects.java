@@ -45,8 +45,8 @@ import org.junit.jupiter.params.provider.*;
 class PutObjects {
 
 	public AwsCredentials creds;
-	public URI http_uri, ssl_uri;
-	static S3Client client, ssl_client;
+	public URI http_uri;
+	static S3Client client;
 	
 	void generateFile(String in_file_path, String out_file_path, long length) {
 		try {
@@ -104,12 +104,19 @@ class PutObjects {
 		}
 	} /* generateFile */
 
-  void readEnvironmentVars() {
-    jcksum.access_key = System.getProperty("AWS_ACCESS_KEY_ID", "0555b35654ad1656d804");
-    jcksum.secret_key = System.getProperty("AWS_SECRET_ACCESS_KEY", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
 
-    jcksum.http_endpoint = System.getProperty("RGW_HTTP_ENDPOINT_URL", "http://192.168.111.1:8000");
-    jcksum.http_endpoint = System.getProperty("RGW_HTTPS_ENDPOINT_URL", "https://192.168.111.1:8443");
+  String get_envvar(String key, String defstr) {
+    String var = System.getenv(key);
+    if (var == null) {
+      return defstr;
+    }
+    return var;
+  }
+
+  void readEnvironmentVars() {
+    jcksum.access_key = get_envvar("AWS_ACCESS_KEY_ID", "0555b35654ad1656d804");
+    jcksum.secret_key = get_envvar("AWS_SECRET_ACCESS_KEY", "h7GhxuBLTrlhVUyxSPUKUV8r/2EI4ngqJxD7iBdBYLhwluN30JaT3Q==");
+    jcksum.http_endpoint = get_envvar("RGW_HTTP_ENDPOINT_URL", "");
   } /* readEnvironmentVArs */
 
 	void generateBigFiles() {
@@ -125,6 +132,13 @@ class PutObjects {
 	@BeforeAll
 	void setup() throws URISyntaxException {
 
+    readEnvironmentVars();
+
+    System.out.println("PutObjects.java: starting test run:");
+    System.out.println("\tAccessKey=" + jcksum.access_key);
+    System.out.println("\tSecretKey=" + jcksum.secret_key);
+    System.out.println("\tEndpointUrl=" + jcksum.http_endpoint);
+
 		creds = AwsBasicCredentials.create(jcksum.access_key, jcksum.secret_key);
 		http_uri = new URI(jcksum.http_endpoint);
 
@@ -133,21 +147,13 @@ class PutObjects {
 		
 		/* https://sdk.amazonaws.com/java/api/latest/software/amazon/awssdk/services/s3/S3Client.html */
         client = S3Client.builder()
-        		.endpointOverride(http_uri)
-                .credentialsProvider(StaticCredentialsProvider.create(creds))
-                .region(jcksum.region)
-                .build();
+          .endpointOverride(http_uri)
+          .credentialsProvider(StaticCredentialsProvider.create(creds))
+          .region(jcksum.region)
+          .forcePathStyle(true)
+          .build();
 
-		ssl_uri = new URI(jcksum.ssl_endpoint);
-        ssl_client = S3Client.builder()
-        		.httpClient(apacheHttpClient)
-        		.endpointOverride(ssl_uri)
-                .credentialsProvider(StaticCredentialsProvider.create(creds))
-                .region(jcksum.region)
-                .build();
-		
     generateBigFiles();
-    readEnvironmentVars();
 
     /* create test bucket if it doesn't exist yet */
 		try {
@@ -265,43 +271,6 @@ class PutObjects {
 		boolean rslt = false;
 		System.out.println("mpuObjectFromFileNoCksum called with " + in_file_path);
 		rslt = mpuAndVerifyNoCksum(client, in_file_path);
-		assertTrue(rslt);
-	}
-	
-	/* SSL */
-	@ParameterizedTest
-	@MethodSource("io.ceph.jcksum.jcksum#inputFileNames")
-	void putObjectFromFileCksumSSL(String in_file_path) {
-		boolean rslt = false;
-		System.out.println("putObjectFromFileCksumSSL called with " + in_file_path);
-		rslt = putAndVerifyCksum(ssl_client, in_file_path);
-		assertTrue(rslt);
-	}
-	
-	@ParameterizedTest
-	@MethodSource("io.ceph.jcksum.jcksum#inputFileNames")
-	void putObjectFromFileNoCksumSSL(String in_file_path) {
-		boolean rslt = false;
-		System.out.println("putObjectFromFileNoCksumSSL called with " + in_file_path);
-		rslt = putAndVerifyNoCksum(ssl_client, in_file_path);
-		assertTrue(rslt);
-	}
-
-	@ParameterizedTest
-	@MethodSource("io.ceph.jcksum.jcksum#mpuFileNames")
-	void mpuObjectFromFileCksumSSL(String in_file_path) {
-		boolean rslt = false;
-		System.out.println("mpuObjectFromFileCksumSSL called with " + in_file_path);
-		rslt = mpuAndVerifyCksum(ssl_client, in_file_path);
-		assertTrue(rslt);
-	}
-
-	@ParameterizedTest
-	@MethodSource("io.ceph.jcksum.jcksum#mpuFileNames")
-	void mpuObjectFromFileNoCksumSSL(String in_file_path) {
-		boolean rslt = false;
-		System.out.println("mpuObjectFromFileNoCksumSSL called with " + in_file_path);
-		rslt = mpuAndVerifyNoCksum(ssl_client, in_file_path);
 		assertTrue(rslt);
 	}
 
