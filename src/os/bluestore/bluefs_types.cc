@@ -228,10 +228,10 @@ std::ostream& operator<<(std::ostream& out, const bluefs_fnode_delta_t& delta)
 
 // bluefs_transaction_t
 
-DENC_HELPERS
 void bluefs_transaction_t::bound_encode(size_t &s) const {
   uint32_t crc = op_bl.crc32c(-1);
-  DENC_START(1, 1, s);
+  // struct_v, struct_compat, and len
+  s += 2 + 4;
   denc(uuid, s);
   denc_varint(seq, s);
   // not using bufferlist encode method, as it merely copies the bufferptr and not
@@ -242,7 +242,6 @@ void bluefs_transaction_t::bound_encode(size_t &s) const {
     s += it.length();
   }
   denc(crc, s);
-  DENC_FINISH(s);
 }
 
 void bluefs_transaction_t::encode(bufferlist& bl) const
