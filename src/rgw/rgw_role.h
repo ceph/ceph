@@ -11,6 +11,7 @@
 #include "common/ceph_context.h"
 #include "rgw_rados.h"
 #include "rgw_metadata.h"
+#include "rgw_iam_managed_policy.h"
 
 class RGWRados;
 
@@ -23,7 +24,10 @@ struct RGWRoleInfo
   std::string arn;
   std::string creation_date;
   std::string trust_policy;
+  // map from PolicyName to an inline policy document from PutRolePolicy
   std::map<std::string, std::string> perm_policy_map;
+  // set of managed policy arns from AttachRolePolicy
+  rgw::IAM::ManagedPolicies managed_policies;
   std::string tenant;
   std::string description;
   uint64_t max_session_duration = 0;
@@ -50,6 +54,7 @@ struct RGWRoleInfo
     encode(max_session_duration, bl);
     encode(account_id, bl);
     encode(description, bl);
+    encode(managed_policies, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -71,6 +76,7 @@ struct RGWRoleInfo
     if (struct_v >= 4) {
       decode(account_id, bl);
       decode(description, bl);
+      decode(managed_policies, bl);
     }
     DECODE_FINISH(bl);
   }
