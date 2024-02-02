@@ -7,5 +7,6 @@
     (import 'dashboards/rbd.libsonnet') +
     (import 'dashboards/rgw.libsonnet') +
     (import 'dashboards/ceph-cluster.libsonnet') +
+    (import 'dashboards/multi-cluster.libsonnet') +
     { _config:: $._config },
 }
