@@ -1296,3 +1296,13 @@ class TestMirroring(CephFSTestCase):
         self.disable_mirroring(self.primary_fs_name, self.primary_fs_id)
         self.mount_a.run_shell(["rmdir", "l1/.snap/snap0"])
         self.mount_a.run_shell(["rmdir", "l1"])
+
+    def test_get_set_mirror_dirty_snap_id(self):
+        """
+        That get/set ceph.mirror.dirty_snap_id attribute succeeds in a remote filesystem.
+        """
+        self.mount_b.run_shell(["mkdir", "-p", "d1/d2/d3"])
+        attr = str(random.randint(1, 10))
+        self.mount_b.setfattr("d1/d2/d3", "ceph.mirror.dirty_snap_id", attr)
+        val = self.mount_b.getfattr("d1/d2/d3", "ceph.mirror.dirty_snap_id")
+        self.assertEqual(attr, val, f"Mismatch for ceph.mirror.dirty_snap_id value: {attr} vs {val}")
