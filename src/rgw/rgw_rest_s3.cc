@@ -1736,11 +1736,7 @@ void RGWListBucket_ObjStore_S3::send_common_versioned_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      if (encode_key) {
-        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
-      } else {
-        s->formatter->dump_string("Prefix", pref_iter->first);
-      }
+      dump_urlsafe(s, encode_key, "Prefix", pref_iter->first, false);
 
       s->formatter->close_section();
       }
@@ -1758,7 +1754,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
   s->formatter->dump_string("KeyMarker", marker.name);
   s->formatter->dump_string("VersionIdMarker", marker.instance);
   if (is_truncated && !next_marker.empty()) {
-    s->formatter->dump_string("NextKeyMarker", next_marker.name);
+    dump_urlsafe(s ,encode_key, "NextKeyMarker", next_marker.name);
     if (next_marker.instance.empty()) {
       s->formatter->dump_string("NextVersionIdMarker", "null");
     }
@@ -1781,14 +1777,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
         s->formatter->dump_bool("IsDeleteMarker", iter->is_delete_marker());
       }
       rgw_obj_key key(iter->key);
-      if (encode_key) {
-        string key_name;
-        url_encode(key.name, key_name);
-        s->formatter->dump_string("Key", key_name);
-      }
-      else {
-        s->formatter->dump_string("Key", key.name);
-      }
+      dump_urlsafe(s ,encode_key, "Key", key.name);
       string version_id = key.instance;
       if (version_id.empty()) {
         version_id = "null";
@@ -1836,11 +1825,7 @@ void RGWListBucket_ObjStore_S3::send_common_response()
   s->formatter->dump_string("Prefix", prefix);
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty()) {
-    if (encode_key) {
-      s->formatter->dump_string("Delimiter", url_encode(delimiter, false));
-    } else {
-      s->formatter->dump_string("Delimiter", delimiter);
-    }
+    dump_urlsafe(s, encode_key, "Delimiter", delimiter, false);
   }
   s->formatter->dump_string("IsTruncated", (max && is_truncated ? "true"
               : "false"));
@@ -1850,11 +1835,7 @@ void RGWListBucket_ObjStore_S3::send_common_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      if (encode_key) {
-        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
-      } else {
-        s->formatter->dump_string("Prefix", pref_iter->first);
-      }
+      dump_urlsafe(s, encode_key, "Prefix", pref_iter->first, false);
       s->formatter->close_section();
       }
     }
@@ -1895,13 +1876,6 @@ void RGWListBucket_ObjStore_S3::send_response()
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
 
       rgw_obj_key key(iter->key);
-      std::string key_name;
-
-      if (encode_key) {
-	url_encode(key.name, key_name);
-      } else {
-	key_name = key.name;
-      }
       /* conditionally format JSON in the obvious way--I'm unsure if
        * AWS actually does this */
       if (s->format == RGWFormat::XML) {
@@ -1910,7 +1884,7 @@ void RGWListBucket_ObjStore_S3::send_response()
 	// json
 	s->formatter->open_object_section("dummy");
       }
-      s->formatter->dump_string("Key", key_name);
+      dump_urlsafe(s ,encode_key, "Key", key.name);
       dump_time(s, "LastModified", iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
@@ -1934,7 +1908,7 @@ void RGWListBucket_ObjStore_S3::send_response()
   }
   s->formatter->dump_string("Marker", marker.name);
   if (is_truncated && !next_marker.empty()) {
-    s->formatter->dump_string("NextMarker", next_marker.name);
+    dump_urlsafe(s, encode_key, "NextMarker", next_marker.name);
   }
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
@@ -1970,14 +1944,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
         s->formatter->dump_bool("IsDeleteContinuationToken", iter->is_delete_marker());
       }
       rgw_obj_key key(iter->key);
-      if (encode_key) {
-        string key_name;
-        url_encode(key.name, key_name);
-        s->formatter->dump_string("Key", key_name);
-      }
-      else {
-        s->formatter->dump_string("Key", key.name);
-      }
+      dump_urlsafe(s, encode_key, "Key", key.name);
       string version_id = key.instance;
       if (version_id.empty()) {
         version_id = "null";
@@ -2015,11 +1982,7 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
       for (pref_iter = common_prefixes.begin();
       pref_iter != common_prefixes.end(); ++pref_iter) {
       s->formatter->open_array_section("CommonPrefixes");
-      if (encode_key) {
-        s->formatter->dump_string("Prefix", url_encode(pref_iter->first, false));
-      } else {
-        s->formatter->dump_string("Prefix", pref_iter->first);
-      }
+      dump_urlsafe(s, encode_key, "Prefix", pref_iter->first, false);
 
       s->formatter->dump_int("KeyCount",objs.size());
       if (start_after_exist) {
@@ -2065,14 +2028,7 @@ void RGWListBucket_ObjStore_S3v2::send_response()
     for (iter = objs.begin(); iter != objs.end(); ++iter) {
       rgw_obj_key key(iter->key);
       s->formatter->open_array_section("Contents");
-      if (encode_key) {
-        string key_name;
-        url_encode(key.name, key_name);
-        s->formatter->dump_string("Key", key_name);
-      }
-      else {
-        s->formatter->dump_string("Key", key.name);
-      }
+      dump_urlsafe(s, encode_key, "Key", key.name);
       dump_time(s, "LastModified", iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
       s->formatter->dump_int("Size", iter->meta.accounted_size);
@@ -4151,11 +4107,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     for (iter = uploads.begin(); iter != uploads.end(); ++iter) {
       rgw::sal::MultipartUpload* upload = iter->get();
       s->formatter->open_array_section("Upload");
-      if (encode_url) {
-        s->formatter->dump_string("Key", url_encode(upload->get_key(), false));
-      } else {
-        s->formatter->dump_string("Key", upload->get_key());
-      }
+      dump_urlsafe(s, encode_url, "Key", upload->get_key(), false);
       s->formatter->dump_string("UploadId", upload->get_upload_id());
       const ACLOwner& owner = upload->get_owner();
       dump_owner(s, owner.id, owner.display_name, "Initiator");
@@ -4167,11 +4119,7 @@ void RGWListBucketMultiparts_ObjStore_S3::send_response()
     if (!common_prefixes.empty()) {
       s->formatter->open_array_section("CommonPrefixes");
       for (const auto& kv : common_prefixes) {
-        if (encode_url) {
-          s->formatter->dump_string("Prefix", url_encode(kv.first, false));
-        } else {
-          s->formatter->dump_string("Prefix", kv.first);
-        }
+        dump_urlsafe(s, encode_url, "Prefix", kv.first, false);
       }
       s->formatter->close_section();
     }
