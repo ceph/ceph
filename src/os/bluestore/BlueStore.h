@@ -2770,7 +2770,7 @@ public:
     CephContext* cct,
     const std::string &path,
     bluestore_bdev_label_t label,
-    std::vector<uint64_t> locations = std::vector<uint64_t>(BDEV_LABEL_POSITION));
+    std::vector<uint64_t> locations = std::vector<uint64_t>({BDEV_LABEL_POSITION}));
   static int _read_bdev_label(
     CephContext* cct, const std::string &path,
     bluestore_bdev_label_t *label, uint64_t disk_position = BDEV_LABEL_POSITION);

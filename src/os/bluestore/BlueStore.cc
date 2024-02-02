@@ -6509,10 +6509,7 @@ int BlueStore::_write_bdev_label(
   }
   bl.rebuild_aligned_size_and_memory(BDEV_LABEL_BLOCK_SIZE, BDEV_LABEL_BLOCK_SIZE, IOV_MAX);
   int r = 0;
-  if (std::find(locations.begin(), locations.end(), BDEV_LABEL_POSITION) ==
-      locations.end()) {
-    locations.push_back(BDEV_LABEL_POSITION);
-  }
+  ceph_assert(locations.size() > 0);
   struct stat st;
   r = ::fstat(fd, &st);
   if (r < 0) {
