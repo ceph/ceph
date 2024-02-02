@@ -153,5 +153,36 @@ OpenIDConnectProvider
 | **ListOpenIDConnectProviders**  |                                          |
 +---------------------------------+------------------------------------------+
 
+Managed Policies
+----------------
+
+The following managed policies are available for use with ``AttachGroupPolicy``,
+``AttachRolePolicy`` and ``AttachUserPolicy``:
+
+IAMFullAccess
+	:Arn: ``arn:aws:iam::aws:policy/IAMFullAccess``
+	:Version: v2 (default)
+
+IAMReadOnlyAccess
+	:Arn: ``arn:aws:iam::aws:policy/IAMReadOnlyAccess``
+	:Version: v4 (default)
+
+AmazonSNSFullAccess
+	:Arn: ``arn:aws:iam::aws:policy/AmazonSNSFullAccess``
+	:Version: v1 (default)
+
+AmazonSNSReadOnlyAccess
+	:Arn: ``arn:aws:iam::aws:policy/AmazonSNSReadOnlyAccess``
+	:Version: v1 (default)
+
+AmazonS3FullAccess
+	:Arn: ``arn:aws:iam::aws:policy/AmazonS3FullAccess``
+	:Version: v2 (default)
+
+AmazonS3ReadOnlyAccess
+	:Arn: ``arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess``
+	:Version: v3 (default)
+
+
 .. _Amazon IAM API: https://docs.aws.amazon.com/IAM/latest/APIReference/welcome.html
 .. _Ceph Object Gateway S3 API: ../s3/
