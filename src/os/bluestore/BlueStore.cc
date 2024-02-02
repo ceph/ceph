@@ -6733,7 +6733,6 @@ void BlueStore::_main_bdev_label_try_reserve()
   alloc->foreach(look_for_bdev);
   for (auto& location : accepted_positions) {
     alloc->init_rm_free(location, lsize);
-    bdev_label_valid_locations.push_back(location);
   }
 
   for (size_t i = 0; i < candidate_positions.size(); i++) {
