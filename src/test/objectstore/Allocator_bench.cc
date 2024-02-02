@@ -292,18 +292,22 @@ struct OverwriteTextContext : public Thread {
   }
 
   void build_histogram() {
-    size_t num_buckets = 8;
-    Allocator::FreeStateHistogram hist;
-    hist.resize(num_buckets);
-    alloc->build_free_state_histogram(alloc_unit, hist);
-    for (size_t i = 0; i < num_buckets; i++) {
-      uint64_t a_bytes = (hist[i].alloc_units * alloc_unit);
-      std::cout << "<=" << hist[i].get_max(i, num_buckets)
-	<< " -> " << hist[i].total << "/" << hist[i].aligned
-	<< " a_bytes " << a_bytes
-	<< " " << ((float)a_bytes / alloc->get_capacity() * 100) << "%"
-	<< std::endl;
-    }
+    const size_t num_buckets = 8;
+    Allocator::FreeStateHistogram hist(num_buckets);
+    alloc->foreach(
+      [&](size_t off, size_t len) {
+	hist.record_extent(uint64_t(alloc_unit), off, len);
+      });
+
+    hist.foreach(
+      [&](uint64_t max_len, uint64_t total, uint64_t aligned, uint64_t units) {
+	uint64_t a_bytes = units * alloc_unit;
+	std::cout << "<=" << max_len
+	  << " -> " << total << "/" << aligned
+	  << " a_bytes " << a_bytes
+	  << " " << ((float)a_bytes / alloc->get_capacity() * 100) << "%"
+	  << std::endl;
+      });
   }
 
   void* entry() override {

@@ -773,20 +773,23 @@ int main(int argc, char **argv)
         std::cout << "Allocation unit:" << alloc_unit
                   << std::endl;
 
-        Allocator::FreeStateHistogram hist;
-        hist.resize(num_buckets);
-        a->build_free_state_histogram(alloc_unit, hist);
+        Allocator::FreeStateHistogram hist(num_buckets);
+        a->foreach(
+          [&](size_t off, size_t len) {
+            hist.record_extent(uint64_t(alloc_unit), off, len);
+          });
 
         uint64_t s = 0;
-        for(int i = 0; i < num_buckets; i++) {
-          uint64_t e = hist[i].get_max(i, num_buckets);
-	  std::cout << "(" << s << ".." << e << "]"
-                    << " -> " << hist[i].total
-                    << " chunks, " << hist[i].aligned << " aligned with "
-                    << hist[i].alloc_units << " alloc_units."
-		    << std::endl;
-          s = e;
-        }
+        hist.foreach(
+          [&](uint64_t max_len, uint64_t total, uint64_t aligned, uint64_t units) {
+            uint64_t e = max_len;
+            std::cout << "(" << s << ".." << e << "]"
+              << " -> " << total
+              << " chunks, " << aligned << " aligned with "
+              << units << " alloc_units."
+              << std::endl;
+            s = e;
+          });
 	return 0;
     });
   } else if (strcmp(argv[2], "export_binary") == 0) {
