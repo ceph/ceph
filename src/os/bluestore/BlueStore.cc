@@ -7114,9 +7114,6 @@ int BlueStore::_init_alloc(std::map<uint64_t, uint64_t> *zone_adjustments)
       }
     }
   }
-  if (bdev_label_multi) {
-    _main_bdev_label_try_reserve();
-  }
   dout(1) << __func__
           << " loaded " << byte_u_t(bytes) << " in " << num << " extents"
           << std::hex
@@ -7612,6 +7609,10 @@ int BlueStore::_open_db_and_around(bool read_only, bool to_repair)
 
   if (!read_only) {
     _post_init_alloc(zone_adjustments);
+  }
+
+  if (bdev_label_multi) {
+    _main_bdev_label_try_reserve();
   }
 
   // when function is called in repair mode (to_repair=true) we skip db->open()/create()
