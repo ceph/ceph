@@ -16899,17 +16899,7 @@ int BlueStore::_do_remove(
       dout(20) << __func__ << "  unsharing " << e << dendl;
       bluestore_blob_t& blob = e.blob->dirty_blob();
       blob.clear_flag(bluestore_blob_t::FLAG_SHARED);
-      if (e.blob->get_shared_blob()->nref > 1) {
-	// Each blob on creation gets its own unique (empty) shared_blob.
-	// In function ExtentMap::dup() we sometimes merge 2 blobs,
-	// so they share common shared_blob used for ref counting.
-	// Imagine 2 blobs having same shared_blob, and shared blob gets just unshared.
-	// We cleared shared_blob content so it is now logically empty,
-	// but now those 2 blobs share it.
-	// This is illegal, as empty shared blobs should be unique.
-	// Fixing by re-creation.
-        e.blob->get_dirty_shared_blob() = nullptr;
-      }
+      e.blob->get_dirty_shared_blob() = nullptr;
       h->extent_map.dirty_range(e.logical_offset, 1);
     }
   }
