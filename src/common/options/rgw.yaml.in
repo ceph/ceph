@@ -2642,6 +2642,16 @@ options:
   - rgw
   - rgw
   min: 30
+- name: rgw_debug_inject_latency_bi_unlink
+  type: uint
+  level: dev
+  desc: Latency (in seconds) injected before rgw bucket index unlink op calls to simulate
+    queueing latency and validate behavior of simultaneuous delete requests which
+    target the same object.
+  default: 0
+  with_legacy: true
+  services:
+  - rgw
 - name: rgw_debug_inject_set_olh_err
   type: uint
   level: dev

@@ -8387,6 +8387,12 @@ int RGWRados::unlink_obj_instance(const DoutPrefixProvider *dpp, RGWObjectCtx& o
     }
 
     string olh_tag(state->olh_tag.c_str(), state->olh_tag.length());
+    
+    if (cct->_conf->rgw_debug_inject_latency_bi_unlink) {
+      // simulates queue latency for unlink ops to validate behavior with
+      // concurrent delete requests for the same object version instance
+      std::this_thread::sleep_for(cct->_conf->rgw_debug_inject_latency_bi_unlink * std::chrono::seconds{1});
+    }
 
     ret = bucket_index_unlink_instance(dpp, bucket_info, target_obj, op_tag, olh_tag, olh_epoch, y, zones_trace, log_op);
     if (ret < 0) {
