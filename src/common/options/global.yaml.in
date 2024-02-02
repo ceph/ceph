@@ -4407,6 +4407,16 @@ options:
   flags:
   - runtime
   with_legacy: false
+- name: bluestore_bdev_label_multi_upgrade
+  type: bool
+  level: advanced
+  desc: Let repair upgrade to multi label.
+  long_desc: By default single label is preserved.
+    Setting this variable before running fsck-repair upgrades single label into multi label.
+  default: false
+  flags:
+  - startup
+  with_legacy: false
 # whether preallocate space if block/db_path/wal_path is file rather that block device.
 - name: bluestore_block_preallocate_file
   type: bool
