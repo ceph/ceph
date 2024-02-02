@@ -4243,7 +4243,8 @@ int RadosRole::delete_obj(const DoutPrefixProvider *dpp, optional_yield y)
     return ret;
   }
 
-  if (! info.perm_policy_map.empty()) {
+  if (!info.perm_policy_map.empty() ||
+      !info.managed_policies.arns.empty()) {
     return -ERR_DELETE_CONFLICT;
   }
 
