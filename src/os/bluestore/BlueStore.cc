@@ -11388,7 +11388,7 @@ void BlueStore::inject_bluefs_file(std::string_view dir, std::string_view name, 
   auto ret = bluefs->open_for_write(dir, name, &p_handle, false);
   ceph_assert(ret == 0);
 
-  std::string s('0', new_size);
+  std::string s(new_size, '0');
   bufferlist bl;
   bl.append(s);
   p_handle->append(bl);
