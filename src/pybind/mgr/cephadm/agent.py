@@ -16,14 +16,15 @@ import time
 
 from orchestrator import DaemonDescriptionStatus
 from orchestrator._interface import daemon_type_to_service
-from ceph.utils import datetime_now
+from ceph.utils import datetime_now, http_req
 from ceph.deployment.inventory import Devices
 from ceph.deployment.service_spec import ServiceSpec, PlacementSpec
 from cephadm.services.cephadmservice import CephadmDaemonDeploySpec
 from cephadm.ssl_cert_utils import SSLCerts
 from mgr_util import test_port_allocation, PortAlreadyInUse
 
-from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional
+from urllib.error import HTTPError, URLError
+from typing import Any, Dict, List, Set, TYPE_CHECKING, Optional, MutableMapping
 
 if TYPE_CHECKING:
     from cephadm.module import CephadmOrchestrator
@@ -53,11 +54,10 @@ class AgentEndpoint:
         self.server_addr = self.mgr.get_mgr_ip()
 
     def configure_routes(self) -> None:
-        d = cherrypy.dispatch.RoutesDispatcher()
-        d.connect(name='host-data', route='/data/',
-                  controller=self.host_data.POST,
-                  conditions=dict(method=['POST']))
-        cherrypy.tree.mount(None, '/', config={'/': {'request.dispatch': d}})
+        conf = {'/': {'tools.trailing_slash.on': False}}
+
+        cherrypy.tree.mount(self.host_data, '/data', config=conf)
+        cherrypy.tree.mount(self.node_proxy_endpoint, '/node-proxy', config=conf)
 
     def configure_tls(self, server: Server) -> None:
         old_cert = self.mgr.get_store(self.KV_STORE_AGENT_ROOT_CERT)
@@ -88,8 +88,538 @@ class AgentEndpoint:
     def configure(self) -> None:
         self.host_data = HostData(self.mgr, self.server_port, self.server_addr)
         self.configure_tls(self.host_data)
+        self.node_proxy_endpoint = NodeProxyEndpoint(self.mgr)
         self.configure_routes()
         self.find_free_port()
+
+
+class NodeProxyEndpoint:
+    def __init__(self, mgr: "CephadmOrchestrator"):
+        self.mgr = mgr
+        self.ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
+        self.ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        self.ssl_ctx.check_hostname = False
+        self.ssl_ctx.verify_mode = ssl.CERT_NONE
+        # self.ssl_ctx = ssl.create_default_context()
+        # self.ssl_ctx.check_hostname = True
+        # self.ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        # self.ssl_ctx.load_verify_locations(cadata=self.ssl_root_crt)
+        self.redfish_token: str = ''
+        self.redfish_session_location: str = ''
+
+    def _cp_dispatch(self, vpath: List[str]) -> "NodeProxyEndpoint":
+        if len(vpath) > 1:  # /{hostname}/<endpoint>
+            hostname = vpath.pop(0)  # /<endpoint>
+            cherrypy.request.params['hostname'] = hostname
+            # /{hostname}/led/{type}/{drive} eg: /{hostname}/led/chassis or /{hostname}/led/drive/{id}
+            if vpath[0] == 'led' and len(vpath) > 1:  # /led/{type}/{id}
+                _type = vpath[1]
+                cherrypy.request.params['type'] = _type
+                vpath.pop(1)  # /led/{id} or # /led
+                if _type == 'drive' and len(vpath) > 1:  # /led/{id}
+                    _id = vpath[1]
+                    vpath.pop(1)  # /led
+                    cherrypy.request.params['id'] = _id
+        # /<endpoint>
+        return self
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['POST'])
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def oob(self) -> Dict[str, Any]:
+        """
+        Get the out-of-band management tool details for a given host.
+
+        :return: oob details.
+        :rtype: dict
+        """
+        data: Dict[str, Any] = cherrypy.request.json
+        results: Dict[str, Any] = {}
+
+        self.validate_node_proxy_data(data)
+
+        # expecting name to be "node-proxy.<hostname>"
+        hostname = data['cephx']['name'][11:]
+        results['result'] = self.mgr.node_proxy_cache.oob.get(hostname, '')
+        if not results['result']:
+            raise cherrypy.HTTPError(400, 'The provided host has no iDrac details.')
+        return results
+
+    def validate_node_proxy_data(self, data: Dict[str, Any]) -> None:
+        """
+        Validate received data.
+
+        :param data: data to validate.
+        :type data: dict
+
+        :raises cherrypy.HTTPError 400: If the data is not valid (missing fields)
+        :raises cherrypy.HTTPError 403: If the secret provided is wrong.
+        """
+        cherrypy.response.status = 200
+        try:
+            if 'cephx' not in data.keys():
+                raise cherrypy.HTTPError(400, 'The field \'cephx\' must be provided.')
+            elif 'name' not in data['cephx'].keys():
+                cherrypy.response.status = 400
+                raise cherrypy.HTTPError(400, 'The field \'name\' must be provided.')
+            # expecting name to be "node-proxy.<hostname>"
+            hostname = data['cephx']['name'][11:]
+            if 'secret' not in data['cephx'].keys():
+                raise cherrypy.HTTPError(400, 'The node-proxy keyring must be provided.')
+            elif not self.mgr.node_proxy_cache.keyrings.get(hostname, ''):
+                raise cherrypy.HTTPError(502, f'Make sure the node-proxy is running on {hostname}')
+            elif data['cephx']['secret'] != self.mgr.node_proxy_cache.keyrings[hostname]:
+                raise cherrypy.HTTPError(403, f'Got wrong keyring from agent on host {hostname}.')
+        except AttributeError:
+            raise cherrypy.HTTPError(400, 'Malformed data received.')
+
+    # TODO(guits): refactor this
+    # TODO(guits): use self.node_proxy.get_critical_from_host() ?
+    def get_nok_members(self,
+                        data: Dict[str, Any]) -> List[Dict[str, str]]:
+        """
+        Retrieves members whose status is not 'ok'.
+
+        :param data: Data containing information about members.
+        :type data: dict
+
+        :return: A list containing dictionaries of members whose status is not 'ok'.
+        :rtype: List[Dict[str, str]]
+
+        :return: None
+        :rtype: None
+        """
+        nok_members: List[Dict[str, str]] = []
+
+        for member in data.keys():
+            _status = data[member]['status']['health'].lower()
+            if _status.lower() != 'ok':
+                state = data[member]['status']['state']
+                _member = dict(
+                    member=member,
+                    status=_status,
+                    state=state
+                )
+                nok_members.append(_member)
+
+        return nok_members
+
+    def raise_alert(self, data: Dict[str, Any]) -> None:
+        """
+        Raises hardware alerts based on the provided patch status.
+
+        :param data: Data containing patch status information.
+        :type data: dict
+
+        This function iterates through the provided status
+        information to raise hardware alerts.
+        For each component in the provided data, it removes any
+        existing health warnings associated with it and checks
+        for non-okay members using the `get_nok_members` method.
+        If non-okay members are found, it sets a new health
+        warning for that component and generates a report detailing
+        the non-okay members' statuses.
+
+        Note: This function relies on the `get_nok_members` method to
+        identify non-okay members.
+
+        :return: None
+        :rtype: None
+        """
+
+        for component in data['patch']['status'].keys():
+            alert_name = f"HARDWARE_{component.upper()}"
+            self.mgr.remove_health_warning(alert_name)
+            nok_members = self.get_nok_members(data['patch']['status'][component])
+
+            if nok_members:
+                count = len(nok_members)
+                self.mgr.set_health_warning(
+                    alert_name,
+                    summary=f'{count} {component} member{"s" if count > 1 else ""} {"are" if count > 1 else "is"} not ok',
+                    count=count,
+                    detail=[f"{member['member']} is {member['status']}: {member['state']}" for member in nok_members],
+                )
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['POST'])
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def data(self) -> None:
+        """
+        Handles incoming data via a POST request.
+
+        This function is exposed to handle POST requests and expects incoming
+        JSON data. It processes the incoming data by first validating it
+        through the `validate_node_proxy_data` method. Subsequently, it
+        extracts the hostname from the data and saves the information
+        using `mgr.node_proxy.save`. Finally, it raises alerts based on the
+        provided status through the `raise_alert` method.
+
+        :return: None
+        :rtype: None
+        """
+        data: Dict[str, Any] = cherrypy.request.json
+        self.validate_node_proxy_data(data)
+        if 'patch' not in data.keys():
+            raise cherrypy.HTTPError(400, 'Malformed data received.')
+        host = data['cephx']['name'][11:]
+        self.mgr.node_proxy_cache.save(host, data['patch'])
+        self.raise_alert(data)
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET', 'PATCH'])
+    @cherrypy.tools.json_in()
+    @cherrypy.tools.json_out()
+    def led(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles enclosure LED operations for the specified hostname.
+
+        This function handles GET and PATCH requests related to LED status for a
+        specific hostname. It identifies the request method and provided hostname.
+        If the hostname is missing, it logs an error and returns an error message.
+
+        For PATCH requests, it prepares authorization headers based on the
+        provided ID and password, encodes them, and constructs the authorization
+        header.
+
+        After processing, it queries the endpoint and returns the result.
+
+        :param kw: Keyword arguments including 'hostname'.
+        :type kw: dict
+
+        :return: Result of the LED-related operation.
+        :rtype: dict[str, Any]
+        """
+        method: str = cherrypy.request.method
+        header: MutableMapping[str, str] = {}
+        hostname: Optional[str] = kw.get('hostname')
+        led_type: Optional[str] = kw.get('type')
+        id_drive: Optional[str] = kw.get('id')
+        payload: Optional[Dict[str, str]] = None
+        endpoint: List[Any] = ['led', led_type]
+        device: str = id_drive if id_drive else ''
+
+        ssl_root_crt = self.mgr.http_server.agent.ssl_certs.get_root_cert()
+        ssl_ctx = ssl.create_default_context()
+        ssl_ctx.check_hostname = True
+        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
+        ssl_ctx.load_verify_locations(cadata=ssl_root_crt)
+
+        if not hostname:
+            msg: str = "listing enclosure LED status for all nodes is not implemented."
+            self.mgr.log.debug(msg)
+            raise cherrypy.HTTPError(501, msg)
+
+        if not led_type:
+            msg = "the led type must be provided (either 'chassis' or 'drive')."
+            self.mgr.log.debug(msg)
+            raise cherrypy.HTTPError(400, msg)
+
+        if led_type == 'drive' and not id_drive:
+            msg = "the id of the drive must be provided when type is 'drive'."
+            self.mgr.log.debug(msg)
+            raise cherrypy.HTTPError(400, msg)
+
+        if led_type == 'drive':
+            endpoint.append(device)
+
+        if hostname not in self.mgr.node_proxy_cache.data.keys():
+            # TODO(guits): update unit test for this
+            msg = f"'{hostname}' not found."
+            self.mgr.log.debug(msg)
+            raise cherrypy.HTTPError(400, msg)
+
+        addr: str = self.mgr.inventory.get_addr(hostname)
+
+        if method == 'PATCH':
+            # TODO(guits): need to check the request is authorized
+            # allowing a specific keyring only ? (client.admin or client.agent.. ?)
+            data: Dict[str, Any] = cherrypy.request.json
+            if 'state' not in data.keys():
+                msg = "'state' key not provided."
+                raise cherrypy.HTTPError(400, msg)
+            if 'keyring' not in data.keys():
+                msg = "'keyring' key must be provided."
+                raise cherrypy.HTTPError(400, msg)
+            if data['keyring'] != self.mgr.node_proxy_cache.keyrings.get(hostname):
+                msg = 'wrong keyring provided.'
+                raise cherrypy.HTTPError(401, msg)
+            payload = {}
+            payload['state'] = data['state']
+
+            if led_type == 'drive':
+                if id_drive not in self.mgr.node_proxy_cache.data[hostname]['status']['storage'].keys():
+                    # TODO(guits): update unit test for this
+                    msg = f"'{id_drive}' not found."
+                    self.mgr.log.debug(msg)
+                    raise cherrypy.HTTPError(400, msg)
+
+        endpoint = f'/{"/".join(endpoint)}'
+        header = self.mgr.node_proxy.generate_auth_header(hostname)
+
+        try:
+            headers, result, status = http_req(hostname=addr,
+                                               port='8080',
+                                               headers=header,
+                                               method=method,
+                                               data=json.dumps(payload),
+                                               endpoint=endpoint,
+                                               ssl_ctx=ssl_ctx)
+            response_json = json.loads(result)
+        except HTTPError as e:
+            self.mgr.log.debug(e)
+        except URLError:
+            raise cherrypy.HTTPError(502, f'Make sure the node-proxy agent is deployed and running on {hostname}')
+
+        return response_json
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def fullreport(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve a full report.
+
+        This function is exposed to handle GET requests and retrieves a comprehensive
+        report using the 'fullreport' method from the NodeProxyCache class.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: The full report data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.fullreport(**kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def criticals(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve critical information.
+
+        This function is exposed to handle GET requests and fetches critical data
+        using the 'criticals' method from the NodeProxyCache class.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Critical information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.criticals(**kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def summary(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve summary information.
+
+        This function is exposed to handle GET requests and fetches summary
+        data using the 'summary' method from the NodeProxyCache class.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Summary information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.summary(**kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def memory(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.common('memory', **kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def network(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.common('network', **kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def processors(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.common('processors', **kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def storage(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.common('storage', **kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def power(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.common('power', **kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def fans(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve specific information.
+
+        This function is exposed to handle GET requests
+        and fetch specific data using the 'common' method
+        from the NodeProxyCache class with.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Specific information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.common('fans', **kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
+
+    @cherrypy.expose
+    @cherrypy.tools.allow(methods=['GET'])
+    @cherrypy.tools.json_out()
+    def firmwares(self, **kw: Any) -> Dict[str, Any]:
+        """
+        Handles GET request to retrieve firmware information.
+
+        This function is exposed to handle GET requests and fetches firmware data using
+        the 'firmwares' method from the NodeProxyCache class.
+
+        :param kw: Keyword arguments for the request.
+        :type kw: dict
+
+        :return: Firmware information data.
+        :rtype: dict[str, Any]
+
+        :raises cherrypy.HTTPError 404: If the passed hostname is not found.
+        """
+        try:
+            results = self.mgr.node_proxy_cache.firmwares(**kw)
+        except KeyError:
+            raise cherrypy.HTTPError(404, f"{kw.get('hostname')} not found.")
+        return results
 
 
 class HostData(Server):
@@ -109,9 +639,11 @@ class HostData(Server):
         self.unsubscribe()
         super().stop()
 
+    @cherrypy.tools.allow(methods=['POST'])
     @cherrypy.tools.json_in()
     @cherrypy.tools.json_out()
-    def POST(self) -> Dict[str, Any]:
+    @cherrypy.expose
+    def index(self) -> Dict[str, Any]:
         data: Dict[str, Any] = cherrypy.request.json
         results: Dict[str, Any] = {}
         try:
@@ -234,6 +766,7 @@ class AgentMessageThread(threading.Thread):
         self.port = port
         self.data: str = json.dumps(data)
         self.daemon_spec: Optional[CephadmDaemonDeploySpec] = daemon_spec
+        self.agent_response: str = ''
         super().__init__(target=self.run)
 
     def run(self) -> None:
@@ -286,8 +819,8 @@ class AgentMessageThread(threading.Thread):
                 secure_agent_socket.connect((self.addr, self.port))
                 msg = (bytes_len + self.data)
                 secure_agent_socket.sendall(msg.encode('utf-8'))
-                agent_response = secure_agent_socket.recv(1024).decode()
-                self.mgr.log.debug(f'Received "{agent_response}" from agent on host {self.host}')
+                self.agent_response = secure_agent_socket.recv(1024).decode()
+                self.mgr.log.debug(f'Received "{self.agent_response}" from agent on host {self.host}')
                 if self.daemon_spec:
                     self.mgr.agent_cache.agent_config_successfully_delivered(self.daemon_spec)
                 self.mgr.agent_cache.sending_agent_message[self.host] = False
@@ -306,6 +839,9 @@ class AgentMessageThread(threading.Thread):
         self.mgr.log.error(f'Could not connect to agent on host {self.host}')
         self.mgr.agent_cache.sending_agent_message[self.host] = False
         return
+
+    def get_agent_response(self) -> str:
+        return self.agent_response
 
 
 class CephadmAgentHelpers:
@@ -403,10 +939,11 @@ class CephadmAgentHelpers:
             if 'agent' in self.mgr.spec_store:
                 self.mgr.spec_store.rm('agent')
                 need_apply = True
-            self.mgr.agent_cache.agent_counter = {}
-            self.mgr.agent_cache.agent_timestamp = {}
-            self.mgr.agent_cache.agent_keys = {}
-            self.mgr.agent_cache.agent_ports = {}
+            if not self.mgr.cache.get_daemons_by_service('agent'):
+                self.mgr.agent_cache.agent_counter = {}
+                self.mgr.agent_cache.agent_timestamp = {}
+                self.mgr.agent_cache.agent_keys = {}
+                self.mgr.agent_cache.agent_ports = {}
         return need_apply
 
     def _check_agent(self, host: str) -> bool:

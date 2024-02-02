@@ -470,5 +470,8 @@ Useful queries
   rate(ceph_rbd_read_latency_sum[30s]) / rate(ceph_rbd_read_latency_count[30s]) * on (instance) group_left (ceph_daemon) ceph_rgw_metadata
 
 
+Hardware monitoring
+===================
 
+See :ref:`hardware-monitoring`
 

@@ -614,6 +614,68 @@ groups:
         labels:
           severity: "warning"
           type: "ceph_default"
+  - name: "hardware"
+    rules:
+      - alert: "HardwareStorageError"
+        annotations:
+          description: "Some storage devices are in error. Check `ceph health detail`."
+          summary: "Storage devices error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_STORAGE\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.1"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwareMemoryError"
+        annotations:
+          description: "DIMM error(s) detected. Check `ceph health detail`."
+          summary: "DIMM error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_MEMORY\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.2"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwareProcessorError"
+        annotations:
+          description: "Processor error(s) detected. Check `ceph health detail`."
+          summary: "Processor error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_PROCESSOR\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.3"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwareNetworkError"
+        annotations:
+          description: "Network error(s) detected. Check `ceph health detail`."
+          summary: "Network error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_NETWORK\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.4"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwarePowerError"
+        annotations:
+          description: "Power supply error(s) detected. Check `ceph health detail`."
+          summary: "Power supply error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_POWER\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.5"
+          severity: "critical"
+          type: "ceph_default"
+      - alert: "HardwareFanError"
+        annotations:
+          description: "Fan error(s) detected. Check `ceph health detail`."
+          summary: "Fan error(s) detected"
+        expr: "ceph_health_detail{name=\"HARDWARE_FANS\"} > 0"
+        for: "30s"
+        labels:
+          oid: "1.3.6.1.4.1.50495.1.2.1.13.6"
+          severity: "critical"
+          type: "ceph_default"
   - name: "PrometheusServer"
     rules:
       - alert: "PrometheusJobMissing"

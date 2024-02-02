@@ -41,7 +41,7 @@ def get_auth_entity(daemon_type: str, daemon_id: str, host: str = "") -> AuthEnt
     # the CephService class refers to service types, not daemon types
     if daemon_type in ['rgw', 'rbd-mirror', 'cephfs-mirror', 'nfs', "iscsi", 'nvmeof', 'ingress', 'ceph-exporter']:
         return AuthEntity(f'client.{daemon_type}.{daemon_id}')
-    elif daemon_type in ['crash', 'agent']:
+    elif daemon_type in ['crash', 'agent', 'node-proxy']:
         if host == "":
             raise OrchestratorError(
                 f'Host not provided to generate <{daemon_type}> auth entity name')

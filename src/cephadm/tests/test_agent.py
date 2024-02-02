@@ -527,7 +527,7 @@ def test_agent_run(_pull_conf_settings, _port_in_use, _gatherer_start,
            'port': str(open_listener_port)
         }
         _RQ_init.assert_called_with(
-            f'https://{target_ip}:{target_port}/data/',
+            f'https://{target_ip}:{target_port}/data',
             json.dumps(expected_data).encode('ascii'),
             {'Content-Type': 'application/json'}
         )
