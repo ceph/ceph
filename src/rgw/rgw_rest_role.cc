@@ -956,3 +956,266 @@ void RGWUpdateRole::execute(optional_yield y)
   s->formatter->close_section();
   s->formatter->close_section();
 }
+
+static bool validate_policy_arn(const std::string& arn, std::string& err)
+{
+  if (arn.empty()) {
+    err = "Missing required element PolicyArn";
+    return false;
+  }
+
+  if (arn.size() > 2048) {
+    err = "PolicyArn must be at most 2048 characters long";
+    return false;
+  }
+
+  if (arn.size() < 20) {
+    err = "PolicyArn must be at least 20 characters long";
+    return false;
+  }
+
+  return true;
+}
+
+class RGWAttachRolePolicy_IAM : public RGWRestRole {
+  bufferlist bl_post_body;
+  std::string role_name;
+  std::string policy_arn;
+  std::unique_ptr<rgw::sal::RGWRole> role;
+public:
+  explicit RGWAttachRolePolicy_IAM(const bufferlist& bl_post_body)
+    : RGWRestRole(rgw::IAM::iamAttachRolePolicy, RGW_CAP_WRITE),
+      bl_post_body(bl_post_body) {}
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "attach_role_policy"; }
+  RGWOpType get_type() override { return RGW_OP_ATTACH_ROLE_POLICY; }
+};
+
+int RGWAttachRolePolicy_IAM::init_processing(optional_yield y)
+{
+  // managed policy is only supported for account users. adding them to
+  // non-account users would give blanket permissions to all buckets
+  if (!std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    s->err.message = "Managed policies are only supported for account users";
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
+  role_name = s->info.args.get("RoleName");
+  if (!validate_iam_role_name(role_name, s->err.message)) {
+    return -EINVAL;
+  }
+
+  policy_arn = s->info.args.get("PolicyArn");
+  if (!validate_policy_arn(policy_arn, s->err.message)) {
+    return -EINVAL;
+  }
+
+  return load_role(this, y, driver, s->owner.id, account_id,
+                   s->user->get_tenant(), role_name, role, resource,
+                   s->err.message);
+}
+
+void RGWAttachRolePolicy_IAM::execute(optional_yield y)
+{
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("PolicyArn");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+
+    op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                           bl_post_body, parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
+  }
+
+  try {
+    // make sure the policy exists
+    if (!rgw::IAM::get_managed_policy(s->cct, policy_arn)) {
+      op_ret = ERR_NO_SUCH_ENTITY;
+      s->err.message = "The requested PolicyArn is not recognized";
+      return;
+    }
+  } catch (rgw::IAM::PolicyParseException& e) {
+    ldpp_dout(this, 5) << "failed to parse policy: " << e.what() << dendl;
+    s->err.message = e.what();
+    op_ret = -ERR_MALFORMED_DOC;
+    return;
+  }
+
+  // insert the policy arn. if it's already there, just return success
+  auto &policies = role->get_info().managed_policies;
+  const bool inserted = policies.arns.insert(policy_arn).second;
+  if (inserted) {
+    op_ret = role->update(this, y);
+  }
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section_in_ns("AttachRolePolicyResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+class RGWDetachRolePolicy_IAM : public RGWRestRole {
+  bufferlist bl_post_body;
+  std::string role_name;
+  std::string policy_arn;
+  std::unique_ptr<rgw::sal::RGWRole> role;
+public:
+  explicit RGWDetachRolePolicy_IAM(const bufferlist& bl_post_body)
+    : RGWRestRole(rgw::IAM::iamDetachRolePolicy, RGW_CAP_WRITE),
+      bl_post_body(bl_post_body) {}
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "detach_role_policy"; }
+  RGWOpType get_type() override { return RGW_OP_DETACH_ROLE_POLICY; }
+};
+
+int RGWDetachRolePolicy_IAM::init_processing(optional_yield y)
+{
+  // managed policy is only supported for account users. adding them to
+  // non-account users would give blanket permissions to all buckets
+  if (!std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    s->err.message = "Managed policies are only supported for account users";
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
+  role_name = s->info.args.get("RoleName");
+  if (!validate_iam_role_name(role_name, s->err.message)) {
+    return -EINVAL;
+  }
+
+  policy_arn = s->info.args.get("PolicyArn");
+  if (!validate_policy_arn(policy_arn, s->err.message)) {
+    return -EINVAL;
+  }
+
+  return load_role(this, y, driver, s->owner.id, account_id,
+                   s->user->get_tenant(), role_name, role, resource,
+                   s->err.message);
+}
+
+void RGWDetachRolePolicy_IAM::execute(optional_yield y)
+{
+  const rgw::SiteConfig& site = *s->penv.site;
+  if (!site.is_meta_master()) {
+    RGWXMLDecoder::XMLParser parser;
+    if (!parser.init()) {
+      ldpp_dout(this, 0) << "ERROR: failed to initialize xml parser" << dendl;
+      op_ret = -EINVAL;
+      return;
+    }
+
+    bufferlist data;
+    s->info.args.remove("RoleName");
+    s->info.args.remove("PolicyArn");
+    s->info.args.remove("Action");
+    s->info.args.remove("Version");
+
+    op_ret = forward_iam_request_to_master(this, site, s->user->get_info(),
+                                           bl_post_body, parser, s->info, y);
+    if (op_ret < 0) {
+      ldpp_dout(this, 20) << "ERROR: forward_iam_request_to_master failed with error code: " << op_ret << dendl;
+      return;
+    }
+  }
+
+  auto &policies = role->get_info().managed_policies;
+  auto p = policies.arns.find(policy_arn);
+  if (p == policies.arns.end()) {
+    op_ret = -ERR_NO_SUCH_ENTITY;
+    s->err.message = "The requested PolicyArn is not attached to the role";
+    return;
+  }
+  policies.arns.erase(p);
+  op_ret = role->update(this, y);
+
+  if (op_ret == 0) {
+    s->formatter->open_object_section_in_ns("DetachRolePolicyResponse", RGW_REST_IAM_XMLNS);
+    s->formatter->open_object_section("ResponseMetadata");
+    s->formatter->dump_string("RequestId", s->trans_id);
+    s->formatter->close_section();
+    s->formatter->close_section();
+  }
+}
+
+class RGWListAttachedRolePolicies_IAM : public RGWRestRole {
+  std::string role_name;
+  std::unique_ptr<rgw::sal::RGWRole> role;
+public:
+  RGWListAttachedRolePolicies_IAM()
+    : RGWRestRole(rgw::IAM::iamListAttachedRolePolicies, RGW_CAP_WRITE)
+  {}
+  int init_processing(optional_yield y) override;
+  void execute(optional_yield y) override;
+  const char* name() const override { return "list_attached_role_policies"; }
+  RGWOpType get_type() override { return RGW_OP_LIST_ATTACHED_ROLE_POLICIES; }
+};
+
+int RGWListAttachedRolePolicies_IAM::init_processing(optional_yield y)
+{
+  // managed policy is only supported for account roles. adding them to
+  // non-account roles would give blanket permissions to all buckets
+  if (!std::holds_alternative<rgw_account_id>(s->owner.id)) {
+    s->err.message = "Managed policies are only supported for account roles";
+    return -ERR_METHOD_NOT_ALLOWED;
+  }
+
+  role_name = s->info.args.get("RoleName");
+  if (!validate_iam_role_name(role_name, s->err.message)) {
+    return -EINVAL;
+  }
+
+  return load_role(this, y, driver, s->owner.id, account_id,
+                   s->user->get_tenant(), role_name, role, resource,
+                   s->err.message);
+}
+
+void RGWListAttachedRolePolicies_IAM::execute(optional_yield y)
+{
+  s->formatter->open_object_section_in_ns("ListAttachedRolePoliciesResponse", RGW_REST_IAM_XMLNS);
+  s->formatter->open_object_section("ResponseMetadata");
+  s->formatter->dump_string("RequestId", s->trans_id);
+  s->formatter->close_section(); // ResponseMetadata
+  s->formatter->open_object_section("ListAttachedRolePoliciesResult");
+  s->formatter->open_array_section("AttachedPolicies");
+  for (const auto& policy : role->get_info().managed_policies.arns) {
+    s->formatter->open_object_section("member");
+    std::string_view arn = policy;
+    if (auto p = arn.find('/'); p != arn.npos) {
+      s->formatter->dump_string("PolicyName", arn.substr(p + 1));
+    }
+    s->formatter->dump_string("PolicyArn", arn);
+    s->formatter->close_section(); // member
+  }
+  s->formatter->close_section(); // AttachedPolicies
+  s->formatter->close_section(); // ListAttachedRolePoliciesResult
+  s->formatter->close_section(); // ListAttachedRolePoliciesResponse
+}
+
+RGWOp* make_iam_attach_role_policy_op(const ceph::bufferlist& post_body) {
+  return new RGWAttachRolePolicy_IAM(post_body);
+}
+
+RGWOp* make_iam_detach_role_policy_op(const ceph::bufferlist& post_body) {
+  return new RGWDetachRolePolicy_IAM(post_body);
+}
+
+RGWOp* make_iam_list_attached_role_policies_op(const ceph::bufferlist& unused) {
+  return new RGWListAttachedRolePolicies_IAM();
+}

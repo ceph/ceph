@@ -10,6 +10,7 @@
 #include "rgw_quota.h"
 #include "rgw_user.h"
 #include "rgw_http_client.h"
+#include "rgw_iam_managed_policy.h"
 #include "rgw_keystone.h"
 #include "rgw_sal.h"
 #include "rgw_log.h"
@@ -949,8 +950,15 @@ ACLOwner rgw::auth::RoleApplier::get_aclowner() const
 
 void rgw::auth::RoleApplier::to_str(std::ostream& out) const {
   out << "rgw::auth::RoleApplier(role name =" << role.name;
-  for (auto& policy: role.role_policies) {
+  for (auto& policy: role.inline_policies) {
     out << ", role policy =" << policy;
+  }
+  for (std::string_view arn : role.managed_policies) {
+    if (auto p = arn.find('/'); p != arn.npos) {
+      out << ", managed policy =" << arn.substr(p + 1);
+    } else {
+      out << ", managed policy =" << arn;
+    }
   }
   out << ", token policy =" << token_attrs.token_policy;
   out << ")";
@@ -987,10 +995,21 @@ void rgw::auth::RoleApplier::load_acct_info(const DoutPrefixProvider* dpp, RGWUs
 
 void rgw::auth::RoleApplier::modify_request_state(const DoutPrefixProvider *dpp, req_state* s) const
 {
-  for (const auto& policy : role.role_policies) {
+  for (const auto& policy : role.inline_policies) {
     try {
       const rgw::IAM::Policy p(s->cct, role.tenant, policy, false);
       s->iam_user_policies.push_back(std::move(p));
+    } catch (rgw::IAM::PolicyParseException& e) {
+      //Control shouldn't reach here as the policy has already been
+      //verified earlier
+      ldpp_dout(dpp, 20) << "failed to parse role policy: " << e.what() << dendl;
+    }
+  }
+  for (const auto& arn : role.managed_policies) {
+    try {
+      if (auto p = rgw::IAM::get_managed_policy(s->cct, arn); p) {
+        s->iam_user_policies.push_back(std::move(*p));
+      }
     } catch (rgw::IAM::PolicyParseException& e) {
       //Control shouldn't reach here as the policy has already been
       //verified earlier

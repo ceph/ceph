@@ -153,6 +153,9 @@ static const actpair actpairs[] =
  { "iam:GetRolePolicy", iamGetRolePolicy},
  { "iam:ListRolePolicies", iamListRolePolicies},
  { "iam:DeleteRolePolicy", iamDeleteRolePolicy},
+ { "iam:AttachRolePolicy", iamAttachRolePolicy },
+ { "iam:DetachRolePolicy", iamDetachRolePolicy },
+ { "iam:ListAttachedRolePolicies", iamListAttachedRolePolicies },
  { "iam:CreateOIDCProvider", iamCreateOIDCProvider},
  { "iam:DeleteOIDCProvider", iamDeleteOIDCProvider},
  { "iam:GetOIDCProvider", iamGetOIDCProvider},
@@ -1504,6 +1507,15 @@ const char* action_bit_string(uint64_t action) {
 
   case iamDeleteRolePolicy:
     return "iam:DeleteRolePolicy";
+
+  case iamAttachRolePolicy:
+    return "iam:AttachRolePolicy";
+
+  case iamDetachRolePolicy:
+    return "iam:DetachRolePolicy";
+
+  case iamListAttachedRolePolicies:
+    return "iam:ListAttachedRolePolicies";
 
   case iamCreateOIDCProvider:
     return "iam:CreateOIDCProvider";

@@ -727,7 +727,8 @@ public:
     std::string id;
     std::string name;
     std::string tenant;
-    std::vector<std::string> role_policies;
+    std::vector<std::string> inline_policies;
+    std::vector<std::string> managed_policies;
   };
   struct TokenAttrs {
     rgw_user user_id;

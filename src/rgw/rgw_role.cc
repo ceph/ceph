@@ -64,6 +64,13 @@ void RGWRoleInfo::dump(Formatter *f) const
     }
     f->close_section();
   }
+  if (!managed_policies.arns.empty()) {
+    f->open_array_section("ManagedPermissionPolicies");
+    for (const auto& arn : managed_policies.arns) {
+      encode_json("PolicyArn", arn, f);
+    }
+    f->close_section();
+  }
   if (!tags.empty()) {
     f->open_array_section("Tags");
     for (const auto& it : tags) {
@@ -101,8 +108,8 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
     }
   }
 
-  auto perm_policy_iter = obj->find_first("PermissionPolicies");
-  if (!perm_policy_iter.end()) {
+  if (auto perm_policy_iter = obj->find_first("PermissionPolicies");
+      !perm_policy_iter.end()) {
     JSONObj* perm_policies = *perm_policy_iter;
     auto iter = perm_policies->find_first();
 
@@ -111,6 +118,13 @@ void RGWRoleInfo::decode_json(JSONObj *obj)
       JSONDecoder::decode_json("PolicyName", policy_name, *iter);
       JSONDecoder::decode_json("PolicyValue", policy_val, *iter);
       this->perm_policy_map.emplace(policy_name, policy_val);
+    }
+  }
+
+  if (auto p = obj->find_first("ManagedPermissionPolicies"); !p.end()) {
+    for (auto iter = (*p)->find_first(); !iter.end(); ++iter) {
+      std::string arn = (*iter)->get_data();
+      this->managed_policies.arns.insert(std::move(arn));
     }
   }
 

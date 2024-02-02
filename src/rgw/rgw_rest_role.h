@@ -206,3 +206,7 @@ public:
   const char* name() const override { return "update_role"; }
   RGWOpType get_type() override { return RGW_OP_UPDATE_ROLE; }
 };
+
+RGWOp* make_iam_attach_role_policy_op(const ceph::bufferlist& post_body);
+RGWOp* make_iam_detach_role_policy_op(const ceph::bufferlist& post_body);
+RGWOp* make_iam_list_attached_role_policies_op(const ceph::bufferlist& unused);

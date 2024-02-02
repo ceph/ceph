@@ -6469,12 +6469,11 @@ rgw::auth::s3::STSEngine::authenticate(
     r.name = role->get_name();
     r.tenant = role->get_tenant();
 
-    vector<string> role_policy_names = role->get_role_policy_names();
-    for (auto& policy_name : role_policy_names) {
-      string perm_policy;
-      if (int ret = role->get_role_policy(dpp, policy_name, perm_policy); ret == 0) {
-        r.role_policies.push_back(std::move(perm_policy));
-      }
+    for (auto& [name, policy] : role->get_info().perm_policy_map) {
+      r.inline_policies.push_back(std::move(policy));
+    }
+    for (auto& arn : role->get_info().managed_policies.arns) {
+      r.managed_policies.push_back(std::move(arn));
     }
   }
 
