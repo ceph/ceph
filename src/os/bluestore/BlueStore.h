@@ -2445,6 +2445,7 @@ private:
   std::vector<uint64_t>  bdev_label_valid_locations; // this has any elements
   bool bdev_label_multi = false;
   int64_t bdev_label_epoch = -1;
+  bool bluestore_bdev_label_require_all = false;
 
   typedef std::map<uint64_t, volatile_statfs> osd_pools_map;
 

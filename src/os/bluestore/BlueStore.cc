@@ -5660,6 +5660,7 @@ BlueStore::BlueStore(CephContext *cct,
   _init_logger();
   cct->_conf.add_observer(this);
   set_cache_shards(1);
+  bluestore_bdev_label_require_all = cct->_conf.get_val<bool>("bluestore_bdev_label_require_all");
 }
 
 BlueStore::~BlueStore()
@@ -6820,7 +6821,7 @@ int BlueStore::_check_or_set_main_bdev_label(
 	   << " does not match our fsid " << fsid << dendl;
       return -EIO;
     }
-    if (cct->_conf.get_val<bool>("bluestore_bdev_label_require_all")) {
+    if (bluestore_bdev_label_require_all) {
       if (r != 0) {
         derr << __func__ << "not all labels read properly" << dendl;
         return -EIO;
@@ -10260,7 +10261,13 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
       derr << __func__ << " fsck error: no valid block device label found" << dendl;
       return r;
     }
+    // hack - sanitize check for bdev label
+    bluestore_bdev_label_require_all = false;
   }
+
+  auto restore_option = make_scope_guard([&] {
+    bluestore_bdev_label_require_all = cct->_conf.get_val<bool>("bluestore_bdev_label_require_all");
+  });
 
   // in deep mode we need R/W write access to be able to replay deferred ops
   const bool read_only = !(repair || depth == FSCK_DEEP);
