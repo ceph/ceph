@@ -10359,6 +10359,15 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   auto alloc_size = fm->get_alloc_size();
 
   // Delayed action, we could not do it in _fsck().
+  if (repair && !bdev_label_multi &&
+    cct->_conf.get_val<bool>("bluestore_bdev_label_multi_upgrade")) {
+    // upgrade to multi
+    bdev_label.meta["multi"] = "yes";
+    bdev_label.meta["epoch"] = "1";
+    bdev_label_multi = true;
+    bdev_labels_broken.push_back(BDEV_LABEL_POSITION);
+    errors++;
+  }
   if (bdev_label_multi) {
     for (size_t i = 0; i < bdev_label_positions.size(); i++) {
       uint64_t location = bdev_label_positions[i];
