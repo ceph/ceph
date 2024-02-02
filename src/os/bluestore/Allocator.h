@@ -67,6 +67,16 @@ protected:
       return idx;
     }
     /*
+     * returns upper bound of the bucket with log2(len) indexing.
+     */
+    inline size_t _get_p2_size_bucket_max(size_t bucket) const {
+      return
+        bucket < num_buckets - 1 ?
+        base << (factor * bucket) :
+        std::numeric_limits<uint64_t>::max();
+    };
+
+    /*
      * Determines bucket index for a given extent's length in a bucket collection
      * with linear (len / min_extent_size) indexing.
      * The last bucket index is returned for lengths above the maximum.
@@ -76,6 +86,16 @@ protected:
       idx = idx < num_buckets ? idx : num_buckets - 1;
       return idx;
     }
+    /*
+     * returns upper bound of the bucket with
+     * linear(len / min_extent_size) indexing.
+     */
+    inline size_t _get_linear_size_bucket_max(size_t bucket) const {
+      return
+        bucket < num_buckets - 1 ?
+        base * factor * (1 + bucket) :
+        std::numeric_limits<uint64_t>::max();
+    };
   };
 
   /*
@@ -264,7 +284,7 @@ public:
     return block_size;
   }
 
-  // The following code build Allocator's free extents histogram.
+  // The following class implements Allocator's free extents histogram.
   // Which is a set of N buckets to track extents layout.
   // Extent matches a bucket depending on its length using the following
   // length spans:
@@ -274,26 +294,29 @@ public:
   // - amount of extents aligned with allocation boundary
   // - amount of allocation units in aligned extents
   //
-  struct free_state_hist_bucket {
-    static const size_t base_bits = 12;
-    static const size_t base = 1ull << base_bits;
-    static const size_t mux = 2;
-
-    size_t total = 0;
-    size_t aligned = 0;
-    size_t alloc_units = 0;
-
-    // returns upper bound of the bucket
-    static size_t get_max(size_t bucket, size_t num_buckets) {
-      return
-        bucket < num_buckets - 1 ?
-          base << (mux * bucket) :
-          std::numeric_limits<uint64_t>::max();
+  class FreeStateHistogram {
+    const Allocator::ExtentCollectionTraits myTraits;
+    enum {
+      BASE_BITS = 12, // 4096 bytes
+      FACTOR = 2,
     };
-  };
+    struct free_state_hist_bucket {
+      size_t total = 0;
+      size_t aligned = 0;
+      size_t alloc_units = 0;
+    };
+    std::vector<free_state_hist_bucket> buckets;
+  public:
 
-  typedef std::vector<free_state_hist_bucket> FreeStateHistogram;
-  void build_free_state_histogram(size_t alloc_unit, FreeStateHistogram& hist);
+    FreeStateHistogram(size_t num_buckets)
+      : myTraits(num_buckets, BASE_BITS, FACTOR) {
+      buckets.resize(num_buckets);
+    }
+
+    void record_extent(uint64_t alloc_unit, uint64_t off, uint64_t len);
+    void foreach(
+      std::function<void(uint64_t, uint64_t, uint64_t, uint64_t)> cb);
+  };
 
 private:
   class SocketHook;
