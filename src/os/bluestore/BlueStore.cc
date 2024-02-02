@@ -11095,7 +11095,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     repaired = repairer.apply(db);
     dout(5) << __func__ << " repair applied" << dendl;
   }
-  if (repair) {
+  if (repair && bdev_labels_in_repair.size() > 0) {
     // Now fix bdev_labels that were detected to be broken & repairable.
     string p = path + "/block";
     _write_bdev_label(cct, p, bdev_label, bdev_labels_in_repair);
