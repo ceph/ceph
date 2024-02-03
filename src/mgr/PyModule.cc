@@ -357,10 +357,6 @@ int PyModule::load(PyThreadState *pMainThreadState)
       return -EINVAL;
     } else {
       pMyThreadState.set(thread_state);
-      // Some python modules do not cope with an unpopulated argv, so lets
-      // fake one.  This step also picks up site-packages into sys.path.
-      const wchar_t *argv[] = {L"ceph-mgr"};
-      PySys_SetArgv(1, (wchar_t**)argv);
       // Configure sys.path to include mgr_module_path
       string paths = (g_conf().get_val<std::string>("mgr_module_path") + ':' +
                       get_site_packages() + ':');
