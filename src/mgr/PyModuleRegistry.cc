@@ -14,6 +14,7 @@
 #include "PyModuleRegistry.h"
 
 #include <filesystem>
+#include <boost/scope_exit.hpp>
 
 #include "include/stringify.h"
 #include "common/errno.h"
@@ -46,21 +47,37 @@ void PyModuleRegistry::init()
 
   // Set up global python interpreter
 #define WCHAR(s) L ## #s
-  Py_SetProgramName(const_cast<wchar_t*>(WCHAR(MGR_PYTHON_EXECUTABLE)));
-#undef WCHAR
+  PyConfig py_config;
+  // do not enable isolated mode, otherwise we would not be able to have access
+  // to the site packages. since we cannot import any module before initializing
+  // the interpreter, we would not be able to use "site" module for retrieving
+  // the path to site packager. we import "site" module for retrieving
+  // sitepackages in Python < 3.8 though, this does not apply to the
+  // initialization with PyConfig.
+  PyConfig_InitPythonConfig(&py_config);
+  BOOST_SCOPE_EXIT_ALL(&py_config) {
+    PyConfig_Clear(&py_config);
+  };
+#if PY_VERSION_HEX >= 0x030b0000
+  py_config.safe_path = 0;
+#endif
+  py_config.parse_argv = 0;
+  py_config.configure_c_stdio = 0;
+  py_config.install_signal_handlers = 0;
+  py_config.pathconfig_warnings = 0;
+
+  PyStatus status;
+  status = PyConfig_SetString(&py_config, &py_config.program_name, WCHAR(MGR_PYTHON_EXECUTABLE));
+  ceph_assertf(!PyStatus_Exception(status), "PyConfig_SetString: %s:%s", status.func, status.err_msg);
   // Add more modules
   if (g_conf().get_val<bool>("daemonize")) {
     PyImport_AppendInittab("ceph_logger", PyModule::init_ceph_logger);
   }
   PyImport_AppendInittab("ceph_module", PyModule::init_ceph_module);
-  Py_InitializeEx(0);
-#if PY_VERSION_HEX < 0x03090000
-  // Let CPython know that we will be calling it back from other
-  // threads in future.
-  if (! PyEval_ThreadsInitialized()) {
-    PyEval_InitThreads();
-  }
-#endif
+  status = Py_InitializeFromConfig(&py_config);
+  ceph_assertf(!PyStatus_Exception(status), "Py_InitializeFromConfig: %s:%s", status.func, status.err_msg);
+#undef WCHAR
+
   // Drop the GIL and remember the main thread state (current
   // thread state becomes NULL)
   pMainThreadState = PyEval_SaveThread();
